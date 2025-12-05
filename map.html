@@ -6,165 +6,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-        }
-
-        #map {
-            height: 100vh;
-            width: 100%;
-        }
-
-        .status-panel {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            z-index: 1000;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .legend-panel {
-            position: absolute;
-            top: 80px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            max-width: 250px;
-        }
-
-        .legend-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            margin-right: 10px;
-            display: inline-block;
-        }
-
-        .legend-color.blue {
-            background-color: #2196F3;
-        }
-
-        .legend-color.green {
-            background-color: #4CAF50;
-        }
-
-        .legend-color.orange {
-            background-color: #FF9800;
-        }
-
-        .legend-color.red {
-            background-color: #f44336;
-        }
-
-        .controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 10px;
-            display: flex;
-            gap: 10px;
-            z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .controls button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s;
-        }
-
-        .controls button:hover {
-            opacity: 0.9;
-        }
-
-        #pauseBtn {
-            background-color: #4CAF50;
-            color: white;
-        }
-
-        .return {
-            background-color: #2196F3;
-            color: white;
-        }
-
-        .info-panel {
-            position: absolute;
-            top: 80px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            max-width: 300px;
-        }
-
-        .info-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
-
-        .info-label {
-            color: #666;
-        }
-
-        .info-value {
-            font-weight: bold;
-            color: #333;
-        }
-
-        .runner-marker {
-            border: 3px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 12px;
-            color: white;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="map"></div>
@@ -217,11 +59,14 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        console.log('🚀 Запуск трекера Красмарафона');
+        
         // ====== КОНФИГУРАЦИЯ ======
         const CONFIG = {
             API_URL: 'http://localhost:5000/api/runners',
             UPDATE_INTERVAL: 5000,
-            RACE_TRACK: [
+            OSM_WAY_ID: 181589417, // ID маршрута в OpenStreetMap
+            BACKUP_TRACK: [
                 [56.028855, 92.946101],
                 [56.02996, 92.949893],
                 [56.031108, 92.951328],
@@ -236,7 +81,7 @@
                 [56.03227, 92.953744],
                 [56.031108, 92.951328],
                 [56.02996, 92.949893],
-                [56.028855, 92.946101]
+                [56.028855, 92.946101] // Последняя точка дублирует первую
             ]
         };
 
@@ -253,15 +98,76 @@
         let routeLine = null;
         let updateInterval = null;
         let isPaused = false;
+        let raceTrack = CONFIG.BACKUP_TRACK; // По умолчанию используем резервный маршрут
+        let isRouteLoaded = false;
 
-        // ====== ФУНКЦИИ ======
+        // ====== ФУНКЦИИ ЗАГРУЗКИ МАРШРУТА ======
+
+        /**
+         * Получение данных о маршруте из OpenStreetMap через Overpass API
+         * С несколькими стратегиями загрузки для надежности
+         */
+        async function fetchRouteFromOSM(wayId) {
+            console.log('🔄 Попытка загрузить маршрут из OpenStreetMap');
+            document.getElementById('statusPanel').innerHTML = 
+                '<strong>Загрузка маршрута из OpenStreetMap...</strong>';
+            
+            // Стратегия 1: Попытка прямого запроса (работает в некоторых браузерах)
+            try {
+                console.log('🔧 Стратегия 1: Прямой запрос к Overpass API');
+                const url = `https://overpass-api.de/api/interpreter?data=[out:json];way(${wayId});(._;>;);out;`;
+                const response = await fetch(url);
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ Прямой запрос успешен');
+                    return processRouteData(data);
+                }
+            } catch (error) {
+                console.warn('⚠️ Стратегия 1 не сработала:', error.message);
+            }
+            
+            // Если все стратегии не сработали
+            throw new Error('Все методы загрузки маршрута не сработали');
+        }
+        
+        /**
+         * Обработка данных маршрута из API
+         */
+        function processRouteData(data) {
+            // Извлекаем все узлы (nodes)
+            const nodes = {};
+            data.elements.forEach(element => {
+                if (element.type === 'node') {
+                    nodes[element.id] = [element.lat, element.lon];
+                }
+            });
+            
+            // Извлекаем координаты пути
+            const way = data.elements.find(element => element.type === 'way' && element.id === CONFIG.OSM_WAY_ID);
+            if (way && way.nodes) {
+                // Преобразуем ссылки на узлы в координаты
+                const coords = way.nodes.map(nodeId => nodes[nodeId]);
+                
+                console.log(`✅ Загружено ${coords.length} точек маршрута`);
+                return coords;
+            } else {
+                throw new Error('Маршрут не найден в ответе API');
+            }
+        }
+
+        // ====== ИНИЦИАЛИЗАЦИЯ МАРШРУТА ======
 
         /**
          * Инициализация маршрута на карте
          */
-        function initializeRoute() {
+        function initializeRoute(track) {
+            // Удаляем старый маршрут, если есть
+            if (routeLine) {
+                map.removeLayer(routeLine);
+            }
+            
             // Отрисовка маршрута
-            routeLine = L.polyline(CONFIG.RACE_TRACK, {
+            routeLine = L.polyline(track, {
                 color: '#2196F3',
                 weight: 6,
                 opacity: 0.8,
@@ -276,11 +182,11 @@
                 iconAnchor: [13, 13]
             });
 
-            L.marker(CONFIG.RACE_TRACK[0], { icon: startIcon })
+            L.marker(track[0], { icon: startIcon })
                 .bindPopup('<strong>СТАРТ</strong><br>Начало забега')
                 .addTo(map);
 
-            // Добавляем финишную точку
+            // Добавляем финишную точку (только один финиш)
             const finishIcon = L.divIcon({
                 className: 'finish-marker',
                 html: '<div style="background: red; border: 3px solid white; border-radius: 50%; width: 20px; height: 20px;"></div>',
@@ -288,26 +194,45 @@
                 iconAnchor: [13, 13]
             });
 
-            L.marker(CONFIG.RACE_TRACK[CONFIG.RACE_TRACK.length - 1], { icon: finishIcon })
+            // Добавляем финиш только в конечной точке (предпоследней, если маршрут замкнут)
+            const finishIndex = track.length > 1 && 
+                track[0][0] === track[track.length-1][0] && 
+                track[0][1] === track[track.length-1][1] ? 
+                track.length - 2 : track.length - 1;
+            
+            L.marker(track[finishIndex], { icon: finishIcon })
                 .bindPopup('<strong>ФИНИШ</strong><br>Конец забега')
                 .addTo(map);
 
             // Центрируем карту на маршруте
             map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+            
+            return track;
         }
 
+        // ====== ОСНОВНЫЕ ФУНКЦИИ ======
+        // ... остальные функции остаются без изменений (fetchRunnersData, createRunnerMarker, и т.д.) ...
+        
         /**
          * Получение данных участников
          */
         async function fetchRunnersData() {
             try {
+                console.log("🔄 Запрос данных участников...");
+                document.getElementById('statusPanel').innerHTML = 
+                    `<strong>Загрузка данных об участниках...</strong>`;
+                
                 const response = await fetch(CONFIG.API_URL);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                return await response.json();
+                const data = await response.json();
+                console.log(`✅ Получено участников: ${data.length}`);
+                return data;
             } catch (error) {
-                console.error('Ошибка при получении данных:', error);
+                console.error('❌ Ошибка при получении данных об участниках:', error);
+                document.getElementById('statusPanel').innerHTML = 
+                    `<strong style="color: red;">Ошибка загрузки участников: ${error.message}</strong>`;
                 return [];
             }
         }
@@ -334,6 +259,13 @@
                         background: ${color};
                         width: 24px;
                         height: 24px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-weight: bold;
+                        font-size: 12px;
+                        border-radius: 50%;
                     ">
                         ${runner.dorsal}
                     </div>
@@ -344,7 +276,7 @@
 
             // Создаем маркер
             const marker = L.marker(
-                [runner.position?.lat || 56.03266, runner.position?.lng || 92.95386],
+                [runner.position?.lat || raceTrack[0][0], runner.position?.lng || raceTrack[0][1]],
                 { icon }
             );
 
@@ -418,8 +350,8 @@
                     if (markers[runner.id]) {
                         // Обновляем позицию существующего маркера
                         markers[runner.id].setLatLng([
-                            runner.position?.lat || 56.03266,
-                            runner.position?.lng || 92.95386
+                            runner.position?.lat || raceTrack[0][0],
+                            runner.position?.lng || raceTrack[0][1]
                         ]);
 
                         // Обновляем всплывающую подсказку
@@ -508,54 +440,37 @@
         });
 
         // ====== ЗАПУСК ПРИЛОЖЕНИЯ ======
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Инициализация трекера Красмарафона');
+        document.addEventListener('DOMContentLoaded', async function() {
+        console.log('🚀 Инициализация трекера Красмарафона');
+            
+            // Пытаемся загрузить маршрут из OpenStreetMap в фоновом режиме
+            try {
+                console.log(`🔄 Пытаемся загрузить маршрут с ID: ${CONFIG.OSM_WAY_ID}`);
+                const loadedTrack = await fetchRouteFromOSM(CONFIG.OSM_WAY_ID);
+                isRouteLoaded = true;
+                
+                // Обновляем маршрут на карте
+                raceTrack = loadedTrack;
+                initializeRoute(raceTrack);
 
-            // Инициализируем маршрут
-            initializeRoute();
+                document.getElementById('statusPanel').innerHTML =
+                '<strong style="color: green;">Маршрут из OpenStreetMap успешно загружен</strong>';
+                console.log('✅ Маршрут из OpenStreetMap успешно загружен');
+            } 
+            catch (error) {
+                raceTrack = CONFIG.BACKUP_TRACK;
+                initializeRoute(raceTrack);
+                console.error('❌ Ошибка загрузки маршрута:', error);
+                document.getElementById('statusPanel').innerHTML =
+                `<strong style="color: orange;">Ошибка загрузки маршрута: ${error.message}. Используется резервный маршрут.</strong>`;
+                console.log('ℹ️ Используется резервный маршрут');
+            }
 
-            // Начинаем обновления
+            // Запускаем обновления данных
             startUpdates();
-
             console.log('✅ Трекер запущен');
         });
-
-        async function fetchRunnersData() {
-    try {
-        console.log("🔄 Запрос к API:", CONFIG.API_URL);
-
-        const response = await fetch(CONFIG.API_URL, {
-            mode: 'cors',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        console.log("📡 Ответ сервера:", response.status, response.statusText);
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("✅ Получено данных:", data.length || "0");
-
-        if (data.length > 0) {
-            console.log("📊 Первый участник:", data[0]);
-        } else {
-            console.warn("⚠️ Нет данных об участниках");
-        }
-
-        return data;
-
-    } catch (error) {
-        console.error('❌ Ошибка при получении данных:', error);
-        document.getElementById('statusPanel').innerHTML =
-            `<strong style="color: red;">Ошибка: ${error.message}</strong>`;
-        return [];
-    }
-}
-
+        
     </script>
 </body>
 </html>
