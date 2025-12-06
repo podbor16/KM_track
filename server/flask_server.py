@@ -8,8 +8,8 @@ import os
 import time
 import threading
 import logging
-from ParsingRaceInMap import CopernicoParser
-
+import random  # Добавлен импорт для генерации случайных чисел
+from ParsingRaceInMap import CopernicoParser  # Исправлено название файла
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,10 +33,139 @@ REQUEST_MIN_INTERVAL = 2
 # OSM конфигурация
 OSM_WAY_ID = 181589417
 osm_route_data = None
+ROUTE_CACHE_DURATION = 3600  # кэшировать маршрут 1 час
+last_route_fetch_time = 0
 
 # Выбранные участники. Глобальная переменная для хранения выбранных участников
 selected_runners = set()
 MAX_SELECTED_RUNNERS = 5
+
+
+def process_osm_route_data(data):
+    """Обработка данных маршрута из OSM"""
+    try:
+        # Ищем узлы (nodes), которые составляют путь
+        nodes = {}
+        for element in data['elements']:
+            if element['type'] == 'node':
+                nodes[element['id']] = {
+                    'lat': element['lat'],
+                    'lon': element['lon']
+                }
+
+        # Ищем сам путь (way) и его узлы
+        way_nodes = []
+        for element in data['elements']:
+            if element['type'] == 'way' and element['id'] == OSM_WAY_ID:
+                way_nodes = element['nodes']
+                break
+
+        if not way_nodes:
+            logger.warning("⚠️ Не найдены узлы для маршрута в данных OSM")
+            return None
+
+        # Создаем массив координат маршрута
+        route_coords = []
+        for node_id in way_nodes:
+            if node_id in nodes:
+                route_coords.append([
+                    nodes[node_id]['lat'],
+                    nodes[node_id]['lon']
+                ])
+
+        if len(route_coords) < 2:
+            logger.warning("⚠️ Недостаточно точек для построения маршрута")
+            return None
+
+        logger.info(f"✅ Обработан маршрут с {len(route_coords)} точками")
+        return route_coords
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обработке данных маршрута: {type(e).__name__}: {e}")
+        return None
+
+
+def get_fallback_route():
+    """Резервный маршрут на случай ошибки загрузки из OSM"""
+    logger.info("🛡️ Используем резервный маршрут")
+    return [
+        [56.028855, 92.946101],  # Старт
+        [56.02996, 92.949893],  # 1.75 км
+        [56.031108, 92.951328],  # 3.5 км
+        [56.02996, 92.949893],  # 5.25 км
+        [56.028855, 92.946101]  # Финиш
+    ]
+
+
+# Модифицированный endpoint для получения маршрута
+@app.route('/api/route')
+def get_route():
+    """Получение данных маршрута"""
+    try:
+        route_data = fetch_route_from_osm()
+
+        if route_data:
+            return jsonify({
+                'coordinates': route_data,
+                'distance': race_config.total_distance,
+                'way_id': OSM_WAY_ID
+            })
+        else:
+            return jsonify({
+                'coordinates': get_fallback_route(),
+                'distance': race_config.total_distance,
+                'way_id': OSM_WAY_ID,
+                'fallback': True
+            }), 503
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка в /api/route: {type(e).__name__}: {e}")
+        return jsonify({
+            'coordinates': get_fallback_route(),
+            'distance': race_config.total_distance,
+            'error': str(e)
+        }), 500
+
+
+def fetch_route_from_osm():
+    """Получение данных маршрута из OpenStreetMap"""
+    global osm_route_data, last_route_fetch_time
+
+    current_time = time.time()
+    # Если данные есть в кэше и не истекло время кэширования
+    if osm_route_data and (current_time - last_route_fetch_time) < ROUTE_CACHE_DURATION:
+        logger.info("🗺️ Используем кэшированные данные маршрута")
+        return osm_route_data
+
+    try:
+        logger.info(f"🌍 Запрос маршрута из OpenStreetMap (Way ID: {OSM_WAY_ID})")
+        url = f"https://overpass-api.de/api/interpreter?data=  [out:json];way({OSM_WAY_ID});(._;>;);out;"
+
+        headers = {
+            'User-Agent': 'KrasmarathonTracker/1.0 (contact@example.com)'
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        data = response.json()
+        logger.info(f"✅ Получены данные маршрута, количество точек: {len(data.get('elements', []))}")
+
+        # Обработка данных маршрута
+        processed_route = process_osm_route_data(data)
+
+        if processed_route:
+            osm_route_data = processed_route
+            last_route_fetch_time = current_time
+            return processed_route
+        else:
+            logger.warning("⚠️ Не удалось обработать данные маршрута из OSM")
+            return None
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при загрузке маршрута из OSM: {type(e).__name__}: {e}")
+        # Если ошибка, используем резервные координаты
+        return get_fallback_route()
 
 
 # Конфигурация забега
@@ -55,7 +184,7 @@ class RaceConfig:
 
 
 race_config = RaceConfig()
-ParsingRaceInMap = CopernicoParser(race_config)
+copernico_parser = CopernicoParser(race_config)  # Исправлено имя экземпляра
 
 # Блокировка
 cache_lock = threading.Lock()
@@ -67,18 +196,18 @@ def fetch_copernico_data():
         if not os.path.exists(RACE_DATA_FILE):
             logger.error(f"❌ Файл НЕ НАЙДЕН: {os.path.abspath(RACE_DATA_FILE)}")
             return []
-        
+
         with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
+
         # Исправлено: ключ "data" вместо "data"
         raw_data = data.get("data", [])
-        
+
         if not isinstance(raw_data, list):
             logger.error(f"⚠️ Неверный формат данных. Ожидался список, получен: {type(raw_data)}")
             logger.debug(f"Структура данных: {json.dumps(data, ensure_ascii=False, indent=2)[:500]}...")
             return []
-        
+
         logger.info(f"✅ Успешно загружено {len(raw_data)} участников из файла")
         return raw_data
 
@@ -88,7 +217,7 @@ def fetch_copernico_data():
         with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
             logger.error(f.read()[:500])
         return []
-    
+
     except Exception as e:
         logger.exception(f"❌ Неожиданная ошибка при чтении файла: {str(e)}")
         return []
@@ -97,6 +226,7 @@ def fetch_copernico_data():
 def transform_copernico_data(raw_data):
     """Трансформация данных из Copernico в наш формат"""
     runners = []
+    current_time = datetime.now().isoformat()
 
     if not isinstance(raw_data, list):
         logger.warning(f"⚠️ Неожиданный формат данных: {type(raw_data)}")
@@ -106,8 +236,16 @@ def transform_copernico_data(raw_data):
 
     for i, item in enumerate(raw_data):
         try:
-            runner = ParsingRaceInMap.parse_runner_data(item)
+            runner = copernico_parser.parse_runner_data(item)
             if runner:
+                # ДОБАВЛЕНО: Инициализация времени последнего обновления
+                if 'last_update' not in runner:
+                    runner['last_update'] = current_time
+
+                # ДОБАВЛЕНО: Инициализация текущей дистанции для новых участников
+                if 'current_distance' not in runner:
+                    runner['current_distance'] = 0.0
+
                 runners.append(runner)
         except Exception as e:
             logger.error(f"⚠️ Ошибка обработки спортсмена {i}: {type(e).__name__}: {e}")
@@ -154,32 +292,121 @@ def serve_index():
         return error_msg, 404
 
 
+def calculate_runner_speed(runner):
+    """Рассчитывает случайную скорость для участника на трассе"""
+    base_speed = 10.0  # базовая скорость 10 км/ч (темп 6:00 мин/км)
+
+    # Если участник на трассе, генерируем случайную скорость
+    if runner.get('status') in ['started', 'running']:
+        # Случайный коэффициент от 0.75 до 1.5 (7.5-15 км/ч)
+        speed_factor = random.uniform(0.75, 1.5)
+        actual_speed = base_speed * speed_factor
+
+        # Рассчитываем темп в мин/км
+        pace = 60 / actual_speed
+
+        return {
+            'speed': round(actual_speed, 2),  # км/ч
+            'pace': round(pace, 2),  # мин/км
+            'speed_factor': round(speed_factor, 2)
+        }
+
+    # Для остальных статусов возвращаем базовые значения
+    return {
+        'speed': base_speed,
+        'pace': 6.0,
+        'speed_factor': 1.0
+    }
+
+
+def update_runner_positions(runners):
+    """Обновляет позиции участников на трассе с учетом их скорости и времени"""
+    current_time = datetime.now()
+
+    for runner in runners:
+        # 1. Инициализация времени последнего обновления, если отсутствует
+        if 'last_update' not in runner:
+            runner['last_update'] = current_time.isoformat()
+
+        # 2. Корректная проверка статуса (используем реальные статусы из данных)
+        is_on_track = runner.get('status') in ['started', 'running', 'notstarted'] and runner.get('current_distance',
+                                                                                                  0) > 0
+
+        # 3. Рассчитываем скорость ТОЛЬКО для участников на трассе
+        if is_on_track:
+            speed_info = calculate_runner_speed(runner)
+            runner.update(speed_info)
+
+            # 4. Рассчитываем время с последнего обновления
+            last_update = datetime.fromisoformat(runner['last_update'])
+            time_diff_hours = (current_time - last_update).total_seconds() / 3600
+
+            # 5. Дополнительное расстояние
+            additional_distance = runner['speed'] * time_diff_hours
+
+            # 6. Новая позиция
+            new_distance = min(runner.get('current_distance', 0) + additional_distance, race_config.total_distance)
+            runner['current_distance'] = new_distance
+
+            # 7. ОБЯЗАТЕЛЬНОЕ: проверяем, что метод возвращает правильный формат
+            position = copernico_parser._calculate_position(new_distance)
+
+            # 8. Защита от некорректного формата позиции
+            if isinstance(position, dict) and 'lat' in position and 'lng' in position:
+                runner['position'] = position
+            else:
+                # Используем резервные координаты
+                checkpoint = race_config.checkpoints[min(int(new_distance / 1.75), len(race_config.checkpoints) - 1)]
+                runner['position'] = {'lat': checkpoint['coord'][0], 'lng': checkpoint['coord'][1]}
+
+        # 9. Обновляем время последнего обновления ВСЕГДА
+        runner['last_update'] = current_time.isoformat()
+
+    return runners
+
 
 @app.route('/api/runners', methods=['GET'])
 def get_runners():
-    """Основной endpoint для получения данных участников"""
+    """Основной endpoint для получения данных участников с расчетом позиций"""
     global cache_data, cache_time
 
-    current_time = datetime.now()
+    try:
+        current_time = datetime.now()
 
-    with cache_lock:
-        if cache_data and cache_time:
-            elapsed = (current_time - cache_time).total_seconds()
-            if elapsed < CACHE_DURATION:
-                logger.info(f"📦 Используем кешированные данные ({elapsed:.1f} сек)")
-                return jsonify(cache_data)
+        with cache_lock:
+            if cache_data and cache_time:
+                elapsed = (current_time - cache_time).total_seconds()
+                if elapsed < CACHE_DURATION:
+                    # Обновляем позиции для участников на трассе
+                    cache_data = update_runner_positions(cache_data)
+                    logger.info(f"🔄 Обновлены позиции участников в кэше ({elapsed:.1f} сек)")
+                    return jsonify(cache_data)
 
-    # Получаем данные из Copernico
-    raw_data = fetch_copernico_data()
-    runners = transform_copernico_data(raw_data)
+        # Получаем данные из Copernico
+        raw_data = fetch_copernico_data()
 
-    # Сохраняем в кеш
-    with cache_lock:
-        cache_data = runners
-        cache_time = current_time
+        if not raw_data:
+            logger.warning("⚠️ Нет данных из Copernico, используем пустой список")
+            runners = []
+        else:
+            # Трансформируем данные
+            runners = transform_copernico_data(raw_data)
 
-    logger.info(f"✅ Отправляем {len(runners)} участников")
-    return jsonify(runners)
+        # Обновляем позиции с учетом скорости
+        runners = update_runner_positions(runners)
+
+        # Сохраняем в кеш
+        with cache_lock:
+            cache_data = runners
+            cache_time = current_time
+
+        logger.info(f"✅ Отправляем {len(runners)} участников с обновленными позициями")
+        return jsonify(runners)
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка в /api/runners: {type(e).__name__}: {e}")
+        # Возвращаем пустой список при ошибке
+        return jsonify([])
 
 
 @app.route('/api/search-runners', methods=['GET'])
@@ -188,61 +415,52 @@ def search_runners():
     global cache_data  # Убедитесь, что эта строка есть в начале функции
 
     try:
-        query = request.args.get('q', '').strip()
+        query = request.args.get('q', '').strip().lower()
         if not query or cache_data is None:  # ИСПРАВЛЕНО: cache_ → cache_data
             logger.debug("🔍 Пустой запрос или отсутствуют данные для поиска")
             return jsonify([])
-        
-        query_lower = query.lower()
+
         logger.debug(f"🔍 Поиск участников по запросу: '{query}'")
         results = []
 
         # ИСПРАВЛЕНО: cache_ → cache_data
         for runner in cache_data or []:
             # 1. Поиск по dorsal (основное поле)
-            dorsal_value = str(runner.get('dorsal', '')).strip()
+            dorsal_value = str(runner.get('dorsal', '')).strip().lower()
             if dorsal_value.startswith(query):
                 results.append(runner)
                 continue
-                
+
             # 2. Поиск по фамилии
             surname_value = str(runner.get('surname', '')).strip().lower()
-            if surname_value.startswith(query_lower):
+            if surname_value.startswith(query):
                 results.append(runner)
                 continue
-                
-            # 3. Поиск по полному имени
-            full_name_value = str(runner.get('full_name', '')).strip().lower()
-            if query_lower in full_name_value:
-                results.append(runner)
 
         # Сортировка результатов
         def sort_key(runner):
-            dorsal_match = str(runner.get('dorsal', '')).startswith(query)
-            surname_match = str(runner.get('surname', '')).lower().startswith(query_lower)
-            
-            if dorsal_match:
+            dorsal_value = str(runner.get('dorsal', '')).strip().lower()
+            if dorsal_value.startswith(query):
                 return (0, str(runner.get('dorsal', '')))
-            elif surname_match:
-                return (1, runner.get('surname', ''))
             else:
-                return (2, runner.get('full_name', ''))
+                return (1, runner.get('surname', ''))
 
         results.sort(key=sort_key)
-        
+
         # Безопасное логирование результатов
         results_preview = [
-            f"{r.get('dorsal', '')} - {r.get('full_name', '')}" 
+            f"{r.get('dorsal', '')} - {r.get('full_name', '')}"
             for r in results[:5]
         ]
         logger.info(f"✅ Найдено {len(results)} участников по запросу '{query}'")
         logger.debug(f"Результаты (первые 5): {results_preview}")
-        
+
         return jsonify(results[:20])
 
     except Exception as e:
         logger.exception(f"❌ Критическая ошибка в поиске: {str(e)}")
         return jsonify([])
+
 
 @app.route('/api/select-runner', methods=['POST'])
 def select_runner():
@@ -266,7 +484,7 @@ def select_runner():
         # Добавляем участника
         selected_runners.add(runner_id)
         logger.info(f"✅ Добавлен участник {runner_id}. Всего: {len(selected_runners)}")
-        
+
         return jsonify({
             'success': True,
             'selected_count': len(selected_runners),
@@ -287,11 +505,11 @@ def get_selected_runners():
         with cache_lock:
             if not cache_data:
                 return jsonify([])
-            
+
             # Фильтруем только выбранных участников
             selected_data = [
                 runner for runner in cache_data
-                if str(runner.get('id')) in selected_runners
+                if str(runner.get('id', '')).strip() in selected_runners
             ]
 
             # ДОБАВЛЕНО: Логирование для отладки
@@ -301,6 +519,7 @@ def get_selected_runners():
     except Exception as e:
         logger.error(f"❌ Ошибка получения выбранных участников: {e}")
         return jsonify([]), 500
+
 
 @app.route('/api/deselect-runner', methods=['POST'])
 def deselect_runner():
@@ -325,6 +544,7 @@ def deselect_runner():
         logger.error(f"❌ Ошибка удаления участника: {e}")
         return jsonify({'error': str(e), 'success': False}), 500
 
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Статистика по участникам"""
@@ -341,8 +561,8 @@ def get_stats():
                 })
 
             total = len(cache_data)
-            not_started = sum(1 for r in cache_data if r.get('Status') == 'Not started')
-            finished = sum(1 for r in cache_data if r.get('Status') == 'Finished')
+            not_started = sum(1 for r in cache_data if r.get('status') == 'notstarted')
+            finished = sum(1 for r in cache_data if r.get('status') == 'finished')
             on_track = total - not_started - finished
 
             return jsonify({
@@ -355,27 +575,28 @@ def get_stats():
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}")
         return jsonify({'error': str(e)}), 500
-    
+
+
 @app.route('/api/debug-data-structure', methods=['GET'])
 def debug_data_structure():
     """Отладочный endpoint для проверки структуры данных"""
     global cache_data
-    
+
     if not cache_data:
         return jsonify({"error": "Нет данных в кеше"})
-    
+
     # Берем первого участника для анализа структуры
     sample_runner = cache_data[0] if cache_data else {}
-    
+
     return jsonify({
         "total_runners": len(cache_data),
         "sample_runner_keys": list(sample_runner.keys()),
         "sample_runner": sample_runner,
         "search_fields_available": {
-            "has_bib": "bib" in sample_runner,
+            "has_dorsal": "dorsal" in sample_runner,
             "has_surname": "surname" in sample_runner,
             "has_full_name": "full_name" in sample_runner,
-            "bib_type": type(sample_runner.get('bib')).__name__,
+            "dorsal_type": type(sample_runner.get('dorsal')).__name__,
             "surname_type": type(sample_runner.get('surname')).__name__
         }
     })

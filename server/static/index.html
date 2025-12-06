@@ -5,8 +5,26 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Трекер Снежной семерки</title>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
         <link rel="stylesheet" href="tracker.css">
+        <style>
+          @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+        }
+          @keyframes slow-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(255, 165, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); }
+        }
+        .runner-marker {
+            transition: transform 0.3s ease-out;
+        }
+        .runner-marker:hover {
+            transform: scale(1.2);
+        }
+        </style>
     </head>
     <body>
         <div class="container">
@@ -228,72 +246,82 @@
 
             // Обновление маркеров на карте
             function updateRunnerMarkers(runners) {
-                // Удаляем старые маркеры
-                Object.values(runnerMarkers).forEach(marker => {
+            // Удаляем старые маркеры
+            Object.values(runnerMarkers).forEach(marker => {
+                if (marker) {
                     map.removeLayer(marker);
-                });
-                runnerMarkers = {};
+                }
+            });
+            runnerMarkers = {};
 
-                // Добавляем новые маркеры
-                runners.forEach(runner => {
-                    if (runner.position && runner.position.lat && runner.position.lng) {
-                        const color = STATUS_COLORS[runner.status] || '#2196F3';
+            // Добавляем новые маркеры
+            runners.forEach(runner => {
+                if (runner.position && runner.position.lat && runner.position.lng) {
+                    const color = STATUS_COLORS[runner.status] || '#2196F3';
 
-                        // Создаем маркер с номером
-                        const icon = L.divIcon({
-                            className: 'runner-marker',
-                            html: `
-                                <div style="
-                                    background: ${color};
-                                    width: 32px;
-                                    height: 32px;
-                                    border-radius: 50%;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    color: white;
-                                    font-weight: bold;
-                                    font-size: 14px;
-                                    border: 3px solid white;
-                                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                                ">
-                                    ${runner.dorsal}
-                                </div>
-                            `,
-                            iconSize: [38, 38],
-                            iconAnchor: [19, 19]
-                        });
-
-                        const marker = L.marker(
-                            [runner.position.lat, runner.position.lng],
-                            { icon }
-                        ).addTo(map);
-
-                        // Всплывающая подсказка
-                        // Всплывающая подсказка
-                        // Всплывающая подсказка
-                        const popupContent = `
-                            <div style="min-width: 200px;">
-                                <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
-                                    №${runner.dorsal} - ${runner.full_name || 'Участник'}
-                                </div>
-                                <div style="font-size: 14px; margin-bottom: 10px;">
-                                    <div><strong>Категория:</strong> ${runner.category || 'N/A'}</div>
-                                    <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                                    <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1) || 0} км</div>
-                                    <div><strong>Темп:</strong> ${runner.pace || '--:--'} мин/км</div>
-                                </div>
-                                <div style="font-size: 12px; color: #666;">
-                                    Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
-                                </div>
-                            </div>
-                        `;
-
-                        marker.bindPopup(popupContent);
-                        runnerMarkers[runner.id] = marker;
+                    // Визуальная индикация скорости
+                    let pulseAnimation = '';
+                    if (runner.speed && runner.speed > 12) { // Быстрые участники
+                        pulseAnimation = 'animation: pulse 1.5s infinite;';
+                    } else if (runner.speed && runner.speed < 8) { // Медленные участники
+                        pulseAnimation = 'animation: slow-pulse 2s infinite;';
                     }
-                });
-            }
+
+                    // Создаем маркер с номером
+                    const icon = L.divIcon({
+                        className: 'runner-marker',
+                        html: `
+                            <div style="
+                                background: ${color};
+                                width: 32px;
+                                height: 32px;
+                                border-radius: 50%;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                color: white;
+                                font-weight: bold;
+                                font-size: 14px;
+                                border: 3px solid white;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                                ${pulseAnimation}
+                            ">
+                                ${runner.dorsal}
+                            </div>
+                        `,
+                        iconSize: [38, 38],
+                        iconAnchor: [19, 19]
+                    });
+
+                    const marker = L.marker(
+                        [runner.position.lat, runner.position.lng],
+                        { icon }
+                    ).addTo(map);
+
+                    // Всплывающая подсказка
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
+                                №${runner.dorsal} - ${runner.full_name}
+                            </div>
+                            <div style="font-size: 14px; margin-bottom: 10px;">
+                                <div><strong>Категория:</strong> ${runner.category}</div>
+                                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                                <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1)} км</div>
+                                <div><strong>Скорость:</strong> ${runner.speed?.toFixed(1)} км/ч</div>
+                                <div><strong>Темп:</strong> ${runner.pace?.toFixed(2)} мин/км</div>
+                            </div>
+                            <div style="font-size: 12px; color: #666;">
+                                Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
+                            </div>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent);
+                    runnerMarkers[runner.id] = marker;
+                }
+            });
+        }
 
             // Обновление списка выбранных участников
             // Обновление списка выбранных участников

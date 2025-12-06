@@ -1,4 +1,4 @@
-# server/copernico_parser.py
+# server/ParcingRaceInMap.py
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
@@ -16,7 +16,7 @@ class CopernicoParser:
             # Извлечение и обработка номера участника (dorsal)
             dorsal_value = raw_runner.get('dorsal', 0)
             runner_id = str(dorsal_value)
-            
+
             # Стандартизация номера для bib
             try:
                 if isinstance(dorsal_value, str):
@@ -114,70 +114,62 @@ class CopernicoParser:
         Возвращает статус в оригинальном формате Copernico API.
         """
         status_raw = str(status_raw).lower().strip()
-        
+
         # Просто возвращаем оригинальный статус без изменений
         return status_raw
 
     # ИСПРАВЛЕНО: СИГНАТУРА МЕТОДА СООТВЕТСТВУЕТ ВЫЗОВУ
     def _calculate_current_distance(
-        self, 
-        start_time: str, 
-        kt2_time: str, 
-        finish_time: str, 
-        status: str
+            self,
+            start_time: str,
+            kt2_time: str,
+            finish_time: str,
+            status: str
     ) -> float:
         """Расчет текущей дистанции на основе временных меток"""
         # Если финишировал - полная дистанция
         if status == 'finished':
             return self.race_config.total_distance
-        
+
         # Если не стартовал - 0 км
         if status == 'notstarted' or not start_time:
             return 0.0
-        
+
         # Если есть время на 3.5 км (kt2) и нет финиша
         if kt2_time and not finish_time:
             return self.race_config.lap_distance + 1.0  # ~4.5 км
-        
+
         # Если только стартовал
         return 1.75  # ~1.75 км (половина первого круга)
 
     def _calculate_position(self, distance: float) -> Dict[str, float]:
-        """Расчет координат на карте по пройденной дистанции"""
-        # Координаты контрольных точек маршрута
-        checkpoints = [
-            {'distance': 0.0, 'coord': [56.028855, 92.946101]},  # Старт
-            {'distance': 1.75, 'coord': [56.02996, 92.949893]},  # 1.75 км
-            {'distance': 3.5, 'coord': [56.031108, 92.951328]},  # 3.5 км
-            {'distance': 5.25, 'coord': [56.02996, 92.949893]},  # 5.25 км
-            {'distance': 7.0, 'coord': [56.028855, 92.946101]}   # Финиш
-        ]
-
-        # Нормализация дистанции в пределах трассы
-        total_distance = checkpoints[-1]['distance']
+        """Расчет координат на карте по пройденной дистанции С ГАРАНТИРОВАННЫМ ФОРМАТОМ"""
+        # Защита от некорректных входных данных
         if distance < 0:
             distance = 0.0
-        elif distance > total_distance:
-            distance = total_distance
+        elif distance > self.race_config.total_distance:
+            distance = self.race_config.total_distance
 
-        # Поиск сегмента для интерполяции
-        for i in range(len(checkpoints) - 1):
-            cp1 = checkpoints[i]
-            cp2 = checkpoints[i + 1]
-            
+        # Найти ближайшие точки для интерполяции
+        for i in range(len(self.race_config.checkpoints) - 1):
+            cp1 = self.race_config.checkpoints[i]
+            cp2 = self.race_config.checkpoints[i + 1]
+
             if cp1['distance'] <= distance <= cp2['distance']:
-                # Расчет коэффициента интерполяции
+                # Рассчитываем коэффициент интерполяции
                 segment_length = cp2['distance'] - cp1['distance']
                 ratio = (distance - cp1['distance']) / segment_length if segment_length > 0 else 0
-                
-                # Интерполяция координат
+
+                # Интерполируем координаты
                 lat = cp1['coord'][0] + (cp2['coord'][0] - cp1['coord'][0]) * ratio
                 lng = cp1['coord'][1] + (cp2['coord'][1] - cp1['coord'][1]) * ratio
-                
-                return {'lat': lat, 'lng': lng}
 
-        # Защита от некорректных значений
-        return {'lat': checkpoints[0]['coord'][0], 'lng': checkpoints[0]['coord'][1]}
+                # ГАРАНТИРУЕМ правильный формат
+                return {'lat': round(lat, 6), 'lng': round(lng, 6)}
+
+        # Если не нашли сегмент, возвращаем начальную точку
+        start_point = self.race_config.checkpoints[0]['coord']
+        return {'lat': round(start_point[0], 6), 'lng': round(start_point[1], 6)}
 
     def parse_all_runners(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Массовый парсинг всех участников"""
