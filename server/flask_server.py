@@ -1,59 +1,62 @@
 # server/flask_server.py
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import requests
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import time
 import threading
 import logging
-import math
+from copernico_parser import CopernicoParser
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Получаем абсолютный путь к корневой папке проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-app = Flask(__name__,
-            static_folder=BASE_DIR,
-            static_url_path='')
+app = Flask(__name__, static_folder=os.path.join(BASE_DIR, 'server', 'static'))
 CORS(app)
 
-# Конфигурация Copernico API
+# Конфигурация
 COPERNICO_API_URL = "https://public-api.copernico.cloud/api/races/--2025-70363/preset/podbor250718@gmail.com:::Снежная 7 трекер/7%20km"
-# COPERNICO_API_URL = "https://api.copernico.cloud/api/v2/races/---2025-89449/7km"  # Альтернативный URL
 
 # Конфигурация кеширования
 cache_data = None
 cache_time = None
-CACHE_DURATION = 10  # секунд
+CACHE_DURATION = 10
 LAST_COPERNICO_REQUEST = 0
-REQUEST_MIN_INTERVAL = 2  # минимальный интервал между запросами к Copernico в секундах
+REQUEST_MIN_INTERVAL = 2
 
-# Структура маршрута для Снежной семерки (7 км, 2 круга по 3.5 км)
-RACE_CONFIG = {
-    'total_distance': 7.0,  # общая дистанция в км
-    'lap_distance': 3.5,  # дистанция одного круга в км
-    'event_name': 'Снежная семерка',
-    'checkpoints': [
-        {'id': 'start', 'distance': 0.0, 'name': 'Старт', 'coord': [56.028855, 92.946101]},
-        {'id': 'turn1', 'distance': 1.75, 'name': '1.75 км (разворот)', 'coord': [56.02996, 92.949893]},
-        {'id': 'lap_end', 'distance': 3.5, 'name': '3.5 км (конец 1 круга)', 'coord': [56.0295, 92.947]},
-        {'id': 'turn2', 'distance': 5.25, 'name': '5.25 км (разворот)', 'coord': [56.02996, 92.949893]},
-        {'id': 'finish', 'distance': 7.0, 'name': 'Финиш', 'coord': [56.028855, 92.946101]}
-    ],
-    'segments': [
-        {'from': 'start', 'to': 'turn1', 'distance': 1.75, 'direction': 'forward'},
-        {'from': 'turn1', 'to': 'lap_end', 'distance': 1.75, 'direction': 'backward'},
-        {'from': 'lap_end', 'to': 'turn2', 'distance': 1.75, 'direction': 'forward'},
-        {'from': 'turn2', 'to': 'finish', 'distance': 1.75, 'direction': 'backward'}
-    ]
-}
+# OSM конфигурация
+OSM_WAY_ID = 181589417
+osm_route_data = None
 
-# Блокировка для потокобезопасного доступа к кешу
+# Выбранные участники
+selected_runners = set()
+MAX_SELECTED_RUNNERS = 5
+
+
+# Конфигурация забега
+class RaceConfig:
+    def __init__(self):
+        self.total_distance = 7.0
+        self.lap_distance = 3.5
+        self.event_name = "Снежная семерка"
+        self.checkpoints = [
+            {'id': 'start', 'distance': 0.0, 'name': 'Старт', 'coord': [56.028855, 92.946101]},
+            {'id': 'turn1', 'distance': 1.75, 'name': '1.75 км (разворот)', 'coord': [56.02996, 92.949893]},
+            {'id': 'lap_end', 'distance': 3.5, 'name': '3.5 км (конец 1 круга)', 'coord': [56.0295, 92.947]},
+            {'id': 'turn2', 'distance': 5.25, 'name': '5.25 км (разворот)', 'coord': [56.02996, 92.949893]},
+            {'id': 'finish', 'distance': 7.0, 'name': 'Финиш', 'coord': [56.028855, 92.946101]}
+        ]
+
+
+race_config = RaceConfig()
+copernico_parser = CopernicoParser(race_config)
+
+# Блокировка
 cache_lock = threading.Lock()
 
 
@@ -62,17 +65,16 @@ def fetch_copernico_data():
     global LAST_COPERNICO_REQUEST
 
     try:
-        # Проверка интервала между запросами
         current_time = time.time()
         time_since_last_request = current_time - LAST_COPERNICO_REQUEST
 
         if time_since_last_request < REQUEST_MIN_INTERVAL:
             wait_time = REQUEST_MIN_INTERVAL - time_since_last_request
-            logger.info(f"⏳ Ожидание {wait_time:.1f} сек перед следующим запросом к Copernico")
+            logger.info(f"⏳ Ожидание {wait_time:.1f} сек")
             time.sleep(wait_time)
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json'
         }
 
@@ -80,18 +82,11 @@ def fetch_copernico_data():
         response = requests.get(COPERNICO_API_URL, headers=headers, timeout=15)
         response.raise_for_status()
 
-        # Проверяем, что это действительно JSON
-        content_type = response.headers.get('content-type', '')
-        if 'application/json' not in content_type.lower():
-            logger.warning(f"⚠️ Ответ не JSON: {content_type}")
-            logger.debug(f"📄 Ответ (первые 500 символов): {response.text[:500]}")
-            return []
-
         LAST_COPERNICO_REQUEST = time.time()
         data = response.json()
-        logger.info(
-            f"✅ Успешно получены данные из Copernico, количество участников: {len(data) if isinstance(data, list) else 'неизвестно'}")
 
+        logger.info(
+            f"✅ Успешно получены данные, количество участников: {len(data) if isinstance(data, list) else 'неизвестно'}")
         return data
 
     except Exception as e:
@@ -99,263 +94,93 @@ def fetch_copernico_data():
         return []
 
 
-def parse_runner_data(raw_runner):
-    """Парсинг данных одного спортсмена из формата Copernico"""
-    try:
-        # Извлекаем базовые данные
-        runner_id = raw_runner.get('Id') or raw_runner.get('id') or raw_runner.get('dorsal') or 0
-        dorsal = raw_runner.get('dorsal') or runner_id
-        name = raw_runner.get('Name') or raw_runner.get('name', '')
-        surname = raw_runner.get('Surname') or raw_runner.get('surname', '')
-        full_name = raw_runner.get('Full name') or raw_runner.get('full_name') or f"{surname} {name}".strip()
-
-        if not full_name:
-            full_name = f"Участник {dorsal}"
-
-        category = raw_runner.get('Category') or raw_runner.get('category', 'Не указана')
-        gender = raw_runner.get('Gender') or raw_runner.get('gender', 'unknown')
-        status = raw_runner.get('Status') or raw_runner.get('status', 'started')
-        status = 'finished' if status.lower() in ['finished', 'финишировал'] else 'started'
-
-        # Извлекаем данные о контрольных точках
-        checkpoints = []
-        checkpoint_mapping = {
-            'start': {
-                'official': 'Start.toficial',
-                'real': 'Start.treal',
-                'pos': 'Start.pos',
-                'distance': 0.0,
-                'name': 'Старт'
-            },
-            'turn1': {
-                'official': '1.75km.toficial',
-                'real': '1.75km.treal',
-                'pos': '1.75km.pos',
-                'distance': 1.75,
-                'name': '1.75 км'
-            },
-            'lap_end': {
-                'official': '3.5km.toficial',
-                'real': '3.5km.treal',
-                'pos': '3.5km.pos',
-                'distance': 3.5,
-                'name': '3.5 км'
-            },
-            'turn2': {
-                'official': '5.25km.toficial',
-                'real': '5.25km.treal',
-                'pos': '5.25km.pos',
-                'distance': 5.25,
-                'name': '5.25 км'
-            },
-            'finish': {
-                'official': 'Finish.toficial',
-                'real': 'Finish.treal',
-                'pos': 'Finish.pos',
-                'distance': 7.0,
-                'name': 'Финиш'
-            }
-        }
-
-        for cp_id, cp_info in checkpoint_mapping.items():
-            cp_time_official = raw_runner.get(cp_info['official'])
-            cp_time_real = raw_runner.get(cp_info['real'])
-            cp_pos = raw_runner.get(cp_info['pos'])
-
-            checkpoint = {
-                'id': cp_id,
-                'name': cp_info['name'],
-                'distance': cp_info['distance'],
-                'passed': False,
-                'time': None,
-                'timestamp': None,
-                'position': cp_pos if cp_pos and cp_pos != '-' else None
-            }
-
-            # Проверяем, прошел ли спортсмен эту точку
-            if cp_time_official and cp_time_official != '-' and cp_time_official.strip():
-                try:
-                    # Формат времени: "ЧЧ:ММ:СС" или "ММ:СС"
-                    time_parts = cp_time_official.split(':')
-                    if len(time_parts) == 2:  # ММ:СС
-                        minutes, seconds = map(int, time_parts)
-                        total_seconds = minutes * 60 + seconds
-                    elif len(time_parts) == 3:  # ЧЧ:ММ:СС
-                        hours, minutes, seconds = map(int, time_parts)
-                        total_seconds = hours * 3600 + minutes * 60 + seconds
-                    else:
-                        total_seconds = 0
-
-                    # Время в миллисекундах с начала дня
-                    start_time = datetime.strptime("10:00:00", "%H:%M:%S")
-                    checkpoint_time = start_time + timedelta(seconds=total_seconds)
-                    checkpoint['time'] = int(checkpoint_time.timestamp() * 1000)
-                    checkpoint['timestamp'] = checkpoint_time.isoformat()
-                    checkpoint['passed'] = True
-                except (ValueError, TypeError) as e:
-                    logger.debug(f"⚠️ Ошибка парсинга времени для точки {cp_id}: {e}")
-
-            checkpoints.append(checkpoint)
-
-        # Рассчитываем текущую дистанцию и позицию
-        current_distance = 0.0
-        for cp in reversed(checkpoints):
-            if cp['passed']:
-                current_distance = cp['distance']
-                break
-
-        # Определяем текущий сегмент
-        current_segment = None
-        for segment in RACE_CONFIG['segments']:
-            start_cp = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == segment['from'])
-            end_cp = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == segment['to'])
-
-            if start_cp['distance'] <= current_distance <= end_cp['distance']:
-                current_segment = segment
-                break
-
-        # Рассчитываем прогресс на текущем сегменте
-        segment_progress = 0.0
-        if current_segment:
-            start_cp = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == current_segment['from'])
-            end_cp = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == current_segment['to'])
-
-            if end_cp['distance'] > start_cp['distance']:
-                segment_progress = (current_distance - start_cp['distance']) / (
-                            end_cp['distance'] - start_cp['distance'])
-            else:
-                segment_progress = (start_cp['distance'] - current_distance) / (
-                            start_cp['distance'] - end_cp['distance'])
-
-        # Рассчитываем позицию на карте
-        position = calculate_position_by_distance(current_distance)
-
-        # Получаем темп из данных Copernico
-        finish_avg_pace = raw_runner.get('Finish.avg') or raw_runner.get('avg_pace')
-        pace = 6.0  # Темп по умолчанию 6:00 мин/км
-        if finish_avg_pace and finish_avg_pace != '-':
-            try:
-                # Формат: "ММ'СС""/Км"
-                pace_parts = finish_avg_pace.replace('"', '').replace("'", ":").split(':')
-                if len(pace_parts) >= 2:
-                    minutes = int(pace_parts[0])
-                    seconds = int(pace_parts[1])
-                    pace = minutes + seconds / 60
-            except (ValueError, TypeError) as e:
-                logger.debug(f"⚠️ Ошибка парсинга темпа: {e}")
-
-        # Формируем объект спортсмена
-        runner = {
-            'id': runner_id,
-            'dorsal': dorsal,
-            'name': name,
-            'surname': surname,
-            'full_name': full_name,
-            'category': category,
-            'gender': gender,
-            'status': status,
-            'pace': round(pace, 2),
-            'current_distance': round(current_distance, 2),
-            'checkpoints': checkpoints,
-            'last_update': datetime.now().isoformat(),
-            'position': {
-                'lat': position[0],
-                'lng': position[1]
-            }
-        }
-
-        return runner
-
-    except Exception as e:
-        logger.error(f"⚠️ Ошибка обработки спортсмена: {type(e).__name__}: {e}")
-        return None
-
-
-def calculate_distance_between_points(point1, point2):
-    """Рассчитывает расстояние между двумя точками в км (упрощенно)"""
-    # Используем упрощенную формулу для небольших расстояний
-    lat1, lon1 = point1
-    lat2, lon2 = point2
-
-    # Приблизительное расстояние в км (1 градус широты ≈ 111 км)
-    lat_distance = (lat2 - lat1) * 111
-    lon_distance = (lon2 - lon1) * 111 * math.cos(math.radians((lat1 + lat2) / 2))
-
-    return math.sqrt(lat_distance ** 2 + lon_distance ** 2)
-
-
-def find_segment_by_distance(distance):
-    """Находит сегмент маршрута по пройденной дистанции"""
-    for segment in RACE_CONFIG['segments']:
-        start_point = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == segment['from'])
-        end_point = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == segment['to'])
-
-        if start_point['distance'] <= distance <= end_point['distance']:
-            return {
-                'segment': segment,
-                'start_point': start_point,
-                'end_point': end_point,
-                'segment_progress': (distance - start_point['distance']) / segment['distance']
-            }
-
-    # Если дистанция больше общей длины, возвращаем последний сегмент
-    last_segment = RACE_CONFIG['segments'][-1]
-    last_start = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == last_segment['from'])
-    last_end = next(cp for cp in RACE_CONFIG['checkpoints'] if cp['id'] == last_segment['to'])
-
-    return {
-        'segment': last_segment,
-        'start_point': last_start,
-        'end_point': last_end,
-        'segment_progress': 1.0
-    }
-
-
-def calculate_position_by_distance(distance):
-    """Рассчитывает координаты по пройденной дистанции"""
-    segment_info = find_segment_by_distance(distance)
-
-    if segment_info['segment_progress'] >= 1.0:
-        return segment_info['end_point']['coord']
-
-    start_coord = segment_info['start_point']['coord']
-    end_coord = segment_info['end_point']['coord']
-    progress = segment_info['segment_progress']
-
-    # Линейная интерполяция между точками
-    lat = start_coord[0] + (end_coord[0] - start_coord[0]) * progress
-    lng = start_coord[1] + (end_coord[1] - start_coord[1]) * progress
-
-    return [lat, lng]
-
-
 def transform_copernico_data(raw_data):
     """Трансформация данных из Copernico в наш формат"""
     runners = []
 
     if not isinstance(raw_data, list):
-        logger.warning(f"⚠️ Неожиданный формат данных из Copernico: {type(raw_data)}")
+        logger.warning(f"⚠️ Неожиданный формат данных: {type(raw_data)}")
         return runners
 
-    logger.info(f"🔄 Обработка {len(raw_data)} спортсменов из Copernico")
+    logger.info(f"🔄 Обработка {len(raw_data)} спортсменов")
 
     for i, item in enumerate(raw_data):
         try:
-            runner = parse_runner_data(item)
+            runner = copernico_parser.parse_runner_data(item)
             if runner:
                 runners.append(runner)
         except Exception as e:
             logger.error(f"⚠️ Ошибка обработки спортсмена {i}: {type(e).__name__}: {e}")
-            logger.debug(f"   Данные спортсмена: {item}")
 
     logger.info(f"✅ Успешно обработано {len(runners)} спортсменов")
     return runners
 
 
+def generate_test_data():
+    """Генерация тестовых данных для разработки"""
+    import random
+    from datetime import datetime, timedelta
+
+    test_runners = []
+
+    # Используем реальные данные из CSV для имен
+    test_names = [
+        {"Bib": 212, "Name": "Ирина", "Surname": "Дементьева", "full_name": "Ирина Дементьева", "Category": "Женщины"},
+        {"Bib": 592, "Name": "Николай", "Surname": "Бывальцев", "full_name": "Николай Бывальцев",
+         "Category": "Мужчины"},
+        {"Bib": 2, "Name": "Сергей", "Surname": "Кольга", "full_name": "Сергей Кольга", "Category": "Мужчины"},
+        {"Bib": 93, "Name": "Татьяна", "Surname": "Шелкунова", "full_name": "Татьяна Шелкунова", "Category": "Женщины"},
+        {"Bib": 349, "Name": "Игорь", "Surname": "Копачев", "full_name": "Игорь Копачев", "Category": "Мужчины"},
+    ]
+
+    for i, name_data in enumerate(test_names):
+        # Случайная дистанция и статус
+        if i == 0:
+            status = "Finished"
+            distance = 7.0
+        elif i == 1:
+            status = "Started"
+            distance = random.uniform(3.0, 6.5)
+        else:
+            status = random.choice(["Not started", "Started"])
+            distance = random.uniform(0.0, 6.5) if status == "Started" else 0.0
+
+        # Время
+        start_time = "10:00:00" if status in ["Started", "Finished"] else ""
+        finish_time = "10:45:00" if status == "Finished" else ""
+
+        # Позиция
+        position = copernico_parser._calculate_position(distance)
+
+        runner = {
+            'Id': f"test_{name_data['Bib']}",
+            'Bib': name_data['Bib'],
+            'Name': name_data['Name'],
+            'Surname': name_data['Surname'],
+            'Full name': name_data['full_name'],
+            'Category': name_data['Category'],
+            'Gender': 'Female' if name_data['Category'] == 'Женщины' else 'Male',
+            'Status': status,
+            'Start': {'treal': start_time if start_time else None},
+            'kt2': {'treal': start_time if distance > 3.5 else None},
+            'Finish': {'treal': finish_time if finish_time else None},
+            'Position': position,
+            'last_update': datetime.now().isoformat()
+        }
+
+        if distance > 0:
+            runner['current_distance'] = distance
+
+        test_runners.append(runner)
+
+    return test_runners
+
+
+# API Endpoints
 @app.route('/')
-def serve_index():
+def serve_map():
     """Отдача главной страницы"""
-    return send_from_directory(BASE_DIR, 'map.html')
+    return send_from_directory(app.static_folder, 'tilda-embed.html')
 
 
 @app.route('/api/runners', methods=['GET'])
@@ -366,7 +191,6 @@ def get_runners():
     try:
         current_time = datetime.now()
 
-        # Проверяем кеш
         with cache_lock:
             if cache_data and cache_time:
                 elapsed = (current_time - cache_time).total_seconds()
@@ -378,40 +202,15 @@ def get_runners():
         raw_data = fetch_copernico_data()
 
         if not raw_data:
-            logger.warning("⚠️ Нет данных от Copernico")
+            logger.warning("⚠️ Нет данных от Copernico, используем тестовые данные")
+            runners = generate_test_data()
+        else:
+            # Трансформируем данные
+            runners = transform_copernico_data(raw_data)
 
-            # Если нет данных, но есть кеш - вернем его даже если просрочен
-            with cache_lock:
-                if cache_data:
-                    logger.info("📦 Возвращаем устаревшие кешированные данные")
-                    return jsonify(cache_data)
-
-            return jsonify([])
-
-        # Трансформируем данные
-        runners = transform_copernico_data(raw_data)
-
-        # Если не удалось получить участников, используем минимальные тестовые данные
-        if not runners:
-            logger.warning("⚠️ Не удалось преобразовать данные, используем минимальные тестовые данные")
-            runners = [{
-                'id': 1,
-                'dorsal': 1,
-                'name': 'Тест',
-                'surname': 'Участник',
-                'full_name': 'Тест Участник',
-                'category': 'Тестовая категория',
-                'gender': 'male',
-                'status': 'started',
-                'pace': 6.0,
-                'current_distance': 0.1,
-                'checkpoints': [],
-                'last_update': current_time.isoformat(),
-                'position': {
-                    'lat': RACE_CONFIG['checkpoints'][0]['coord'][0],
-                    'lng': RACE_CONFIG['checkpoints'][0]['coord'][1]
-                }
-            }]
+            if not runners:
+                logger.warning("⚠️ Не удалось преобразовать данные, используем тестовые данные")
+                runners = generate_test_data()
 
         # Сохраняем в кеш
         with cache_lock:
@@ -424,60 +223,159 @@ def get_runners():
     except Exception as e:
         logger.error(f"❌ Ошибка в /api/runners: {type(e).__name__}: {e}")
 
-        # В случае ошибки вернем пустой список или кеш
         with cache_lock:
             if cache_data:
                 logger.info("📦 Возвращаем кешированные данные из-за ошибки")
                 return jsonify(cache_data)
 
-        return jsonify({"error": str(e), "message": "Ошибка сервера"}), 500
+        return jsonify(generate_test_data())
+
+
+@app.route('/api/search-runners', methods=['GET'])
+def search_runners():
+    """Поиск участников по номеру или фамилии"""
+    global cache_data
+
+    try:
+        query = request.args.get('q', '').strip().lower()
+        if not query or not cache_data:
+            return jsonify([])
+
+        results = []
+
+        for runner in cache_data:
+            # Поиск по номеру (начинается с введенного текста)
+            if str(runner.get('Bib', '')).startswith(query):
+                results.append(runner)
+                continue
+
+            # Поиск по фамилии (начинается с введенного текста)
+            surname = runner.get('Surname', '').lower()
+            if surname.startswith(query):
+                results.append(runner)
+
+        # Сортируем: сначала по номеру, потом по фамилии
+        results.sort(key=lambda x: (
+            not str(x.get('Bib', '')).startswith(query),
+            x.get('Bib', 9999),
+            x.get('Surname', '')
+        ))
+
+        return jsonify(results[:20])
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка поиска: {e}")
+        return jsonify([])
+
+
+@app.route('/api/select-runner', methods=['POST'])
+def select_runner():
+    """Выбор участника для отслеживания"""
+    global selected_runners
+
+    try:
+        data = request.get_json()
+        runner_id = str(data.get('runner_id'))
+
+        if not runner_id:
+            return jsonify({'error': 'No runner_id provided'}), 400
+
+        if len(selected_runners) >= MAX_SELECTED_RUNNERS:
+            return jsonify({
+                'error': f'Максимум можно отслеживать {MAX_SELECTED_RUNNERS} участников'
+            }), 400
+
+        selected_runners.add(runner_id)
+
+        return jsonify({
+            'success': True,
+            'selected_count': len(selected_runners),
+            'selected_ids': list(selected_runners)
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка выбора участника: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/selected-runners', methods=['GET'])
+def get_selected_runners():
+    """Получение данных только выбранных участников"""
+    global cache_data, selected_runners
+
+    try:
+        with cache_lock:
+            if not cache_data:
+                return jsonify([])
+
+            selected_data = [
+                runner for runner in cache_data
+                if str(runner.get('Bib')) in selected_runners
+            ]
+
+            return jsonify(selected_data)
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения выбранных участников: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Статистика по участникам"""
+    global cache_data
+
+    try:
+        with cache_lock:
+            if not cache_data:
+                return jsonify({
+                    'total': 0,
+                    'not_started': 0,
+                    'on_track': 0,
+                    'finished': 0
+                })
+
+            total = len(cache_data)
+            not_started = sum(1 for r in cache_data if r.get('Status') == 'Not started')
+            finished = sum(1 for r in cache_data if r.get('Status') == 'Finished')
+            on_track = total - not_started - finished
+
+            return jsonify({
+                'total': total,
+                'not_started': not_started,
+                'on_track': on_track,
+                'finished': finished
+            })
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения статистики: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/race-config', methods=['GET'])
 def get_race_config():
     """Endpoint для получения конфигурации забега"""
     return jsonify({
-        'total_distance': RACE_CONFIG['total_distance'],
-        'lap_distance': RACE_CONFIG['lap_distance'],
-        'event_name': RACE_CONFIG['event_name'],
-        'checkpoints': [
-            {
-                'id': cp['id'],
-                'distance': cp['distance'],
-                'name': cp['name'],
-                'coord': cp['coord']
-            } for cp in RACE_CONFIG['checkpoints']
-        ],
-        'segments': RACE_CONFIG['segments']
+        'event_name': race_config.event_name,
+        'total_distance': race_config.total_distance,
+        'lap_distance': race_config.lap_distance,
+        'checkpoints': race_config.checkpoints
     })
 
 
 @app.route('/api/test', methods=['GET'])
 def test_endpoint():
-    """Тестовый endpoint для проверки"""
+    """Тестовый endpoint"""
     return jsonify({
-        "status": "ok",
-        "message": "Сервер работает",
-        "timestamp": datetime.now().isoformat(),
-        "race_config": {
-            'event_name': RACE_CONFIG['event_name'],
-            'total_distance': RACE_CONFIG['total_distance'],
-            'checkpoints_count': len(RACE_CONFIG['checkpoints'])
-        }
+        'status': 'ok',
+        'message': 'Сервер работает',
+        'timestamp': datetime.now().isoformat()
     })
 
 
 if __name__ == '__main__':
-    print("🚀 Запуск обновленного сервера для Снежной семерки (7 км, 2 круга)")
-    print("=" * 70)
-    print(f"🌐 Главная страница: http://localhost:5000/")
-    print(f"📡 API участников: http://localhost:5000/api/runners")
-    print(f"⚙️ API конфигурации: http://localhost:5000/api/race-config")
-    print(f"🧪 Тестовый endpoint: http://localhost:5000/api/test")
-    print("=" * 70)
-    print(f"📋 Забег: {RACE_CONFIG['event_name']}")
-    print(f"📏 Общая длина: {RACE_CONFIG['total_distance']} км (2 круга по {RACE_CONFIG['lap_distance']} км)")
-    print(f"🎯 Ключевые точки: Старт → 1.75 км → 3.5 км → 5.25 км → Финиш")
-    print("=" * 70)
-
+    print("🚀 Запуск трекера Снежной семерки")
+    print(f"📡 API доступен по адресу: http://localhost:5000")
+    print(f"🏃 Забег: {race_config.event_name} ({race_config.total_distance} км)")
+    print("=" * 50)
     app.run(host='0.0.0.0', port=5000, debug=True)

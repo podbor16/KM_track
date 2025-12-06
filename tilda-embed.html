@@ -1,0 +1,98 @@
+<!-- tilda-embed.html - Минимальный код для вставки в Tilda -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #snow7-tracker {
+        width: 100%;
+        max-width: 1000px;
+        margin: 0 auto;
+        font-family: Arial, sans-serif;
+    }
+    #map {
+        height: 500px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
+    }
+    .control-panel {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+    }
+    .control-panel input,
+    .control-panel button {
+        padding: 10px 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .control-panel input {
+        flex: 1;
+        min-width: 200px;
+    }
+    .control-panel button {
+        background: #4CAF50;
+        color: white;
+        border: none;
+        cursor: pointer;
+    }
+    .control-panel button:hover {
+        background: #45a049;
+    }
+    .stats-panel {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .stat-box {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 6px;
+        text-align: center;
+    }
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2196F3;
+    }
+    .selected-runners {
+        background: #f9f9f9;
+        padding: 15px;
+        border-radius: 6px;
+        margin-top: 15px;
+    }
+    .runner-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+    }
+    .runner-item:last-child {
+        border-bottom: none;
+    }
+</style>
+
+<div id="snow7-tracker">
+    <div class="stats-panel" id="statsPanel">
+        <!-- Статистика будет загружена через JS -->
+    </div>
+
+    <div class="control-panel">
+        <input type="text" id="searchInput" placeholder="Поиск по номеру или фамилии...">
+        <button onclick="searchRunners()">Найти</button>
+        <button onclick="clearSelection()">Очистить выбор</button>
+        <div id="searchResults" style="display:none; width:100%;"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="selected-runners" id="selectedRunners">
+        <h3>Отслеживаемые участники (макс. 5):</h3>
+        <div id="selectedList"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://ваш-сервер.com/static/tracker.js"></script>
