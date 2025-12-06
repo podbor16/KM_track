@@ -6,7 +6,6 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
 class CopernicoParser:
     def __init__(self, race_config):
         self.race_config = race_config
@@ -14,11 +13,12 @@ class CopernicoParser:
     def parse_runner_data(self, raw_runner: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Парсинг данных одного спортсмена из Copernico"""
         try:
-            # Базовые данные
-            runner_id = raw_runner.get('Id', '').strip()
-            bib = raw_runner.get('Bib', 0)
-
-            # Обработка номера - может быть строкой или числом
+            # --- АДАПТАЦИЯ ПОД СТРУКТУРУ race_data.json ---
+            # Извлекаем данные из оригинальной структуры Copernico
+            runner_id = str(raw_runner.get('dorsal', ''))
+            bib = raw_runner.get('dorsal', 0)
+            
+            # Обработка номера
             try:
                 if isinstance(bib, str):
                     bib = int(bib.strip()) if bib.strip() else 0
@@ -27,23 +27,46 @@ class CopernicoParser:
             except (ValueError, TypeError):
                 bib = 0
 
-            name = raw_runner.get('Name', '').strip()
-            surname = raw_runner.get('Surname', '').strip()
-            full_name = raw_runner.get('Full name', '').strip()
+            name = raw_runner.get('name', '').strip()
+            surname = raw_runner.get('surname', '').strip()
+            full_name = raw_runner.get('fullName', '').strip()
 
             if not full_name and (name or surname):
                 full_name = f"{name} {surname}".strip()
             elif not full_name:
                 full_name = f"Участник {bib}"
 
-            category = raw_runner.get('Category', 'Не указана')
-            gender = raw_runner.get('Gender', 'unknown').capitalize()
+            category = raw_runner.get('category', 'Не указана')
+            gender = raw_runner.get('gender', 'unknown').capitalize()
 
-            # Статус участника
-            status = self._parse_status(raw_runner.get('Status', 'Not started'))
+            # Статус участника (адаптация под Copernico)
+            status_raw = raw_runner.get('status', 'notstarted').lower()
+            status = self._parse_status(status_raw)
+
+            # --- НОВЫЙ БЛОК: ИЗВЛЕЧЕНИЕ ВРЕМЕННЫХ ДАННЫХ ---
+            times = {
+                'start': {
+                    'treal': raw_runner.get('times.real_:::start:::', ''),
+                    'tofficial': raw_runner.get('times.official_:::start:::', '')
+                },
+                'kt2': {
+                    'treal': raw_runner.get('times.real_kt2', ''),
+                    'tofficial': raw_runner.get('times.official_kt2', ''),
+                    'avg': raw_runner.get('intervalaverages_kt2', '')
+                },
+                'finish': {
+                    'treal': raw_runner.get('times.real_:::finish:::', ''),
+                    'tofficial': raw_runner.get('times.official_:::finish:::', ''),
+                    'avg': raw_runner.get('intervalaverages_:::full-1:::', '')
+                }
+            }
 
             # Рассчитываем текущую дистанцию
-            current_distance = self._calculate_current_distance(raw_runner, status)
+            current_distance = self._calculate_current_distance(
+                times, 
+                status,
+                raw_runner.get('startRawTime')
+            )
 
             # Расчет позиции на карте
             position = self._calculate_position(current_distance)
@@ -57,20 +80,9 @@ class CopernicoParser:
                 'Category': category,
                 'Gender': gender,
                 'Status': status,
-                'Start': {
-                    'treal': raw_runner.get('Start.treal', ''),
-                    'tofficial': raw_runner.get('Start.tofficial', '')
-                },
-                'kt2': {
-                    'treal': raw_runner.get('kt2.treal', ''),
-                    'tofficial': raw_runner.get('kt2.tofficial', ''),
-                    'avg': raw_runner.get('kt2.avg', '')
-                },
-                'Finish': {
-                    'treal': raw_runner.get('Finish.treal', ''),
-                    'tofficial': raw_runner.get('Finish.tofficial', ''),
-                    'avg': raw_runner.get('Finish.avg', '')
-                },
+                'Start': times['start'],
+                'kt2': times['kt2'],
+                'Finish': times['finish'],
                 'Position': position,
                 'current_distance': current_distance,
                 'last_update': datetime.now().isoformat(),
@@ -85,44 +97,33 @@ class CopernicoParser:
             return None
 
     def _parse_status(self, status_raw: str) -> str:
-        """Парсинг статуса участника"""
-        status_raw = status_raw.lower()
-
-        if 'finish' in status_raw:
+        """Парсинг статуса участника (адаптировано под Copernico)"""
+        if 'finished' in status_raw or 'complete' in status_raw:
             return 'Finished'
-        elif 'start' in status_raw and 'not' not in status_raw:
+        elif 'started' in status_raw or 'running' in status_raw:
             return 'Started'
-        else:
-            return 'Not started'
+        return 'Not started'
 
-    def _calculate_current_distance(self, runner_data: Dict[str, Any], status: str) -> float:
-        """Расчет текущей дистанции на основе данных из Copernico"""
-
+    def _calculate_current_distance(self, times: Dict, status: str, start_time: Optional[str]) -> float:
+        """Расчет текущей дистанции с учетом структуры Copernico"""
         # Если финишировал - дистанция = полная
         if status == 'Finished':
-            if runner_data.get('Finish', {}).get('treal'):
-                return self.race_config.total_distance
-            return self.race_config.total_distance * 0.95  # Почти финишировал
+            return self.race_config.total_distance
 
         # Если не стартовал - дистанция = 0
-        if status == 'Not started' or not runner_data.get('Start', {}).get('treal'):
+        if status == 'Not started' or not start_time:
             return 0.0
 
-        # Для стартовавших рассчитываем по времени
-        start_time = runner_data.get('Start', {}).get('treal', '')
-        kt2_time = runner_data.get('kt2', {}).get('treal', '')
-        finish_time = runner_data.get('Finish', {}).get('treal', '')
+        # Для стартовавших рассчитываем по контрольным точкам
+        kt2_time = times['kt2']['treal']
+        finish_time = times['finish']['treal']
 
         # Если есть время на 3.5 км (kt2), то прошел первый круг
-        if kt2_time:
-            # Если есть время финиша, то почти финишировал
-            if finish_time:
-                return self.race_config.total_distance
-            # Иначе на втором круге
+        if kt2_time and not finish_time:
             return self.race_config.lap_distance + 1.0  # Примерно 4.5 км
 
         # Если только стартовал, то на первом круге
-        return 1.75  # Примерно 1.75 км (половина первого круга)
+        return 1.75  # Примерно 1.75 км
 
     def _calculate_position(self, distance: float):
         """Расчет позиции на карте по дистанции"""

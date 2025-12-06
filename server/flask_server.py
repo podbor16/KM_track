@@ -10,6 +10,7 @@ import threading
 import logging
 from copernico_parser import CopernicoParser
 
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -19,8 +20,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__, static_folder=os.path.join(BASE_DIR, 'server', 'static'))
 CORS(app)
 
-# Конфигурация
-COPERNICO_API_URL = "https://public-api.copernico.cloud/api/races/--2025-70363/preset/podbor250718@gmail.com:::Снежная 7 трекер/7%20km"
+# --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: ПУТЬ К ЛОКАЛЬНОМУ ФАЙЛУ ---
+RACE_DATA_FILE = os.path.join(BASE_DIR, "race_data.json")  # Путь к файлу
 
 # Конфигурация кеширования
 cache_data = None
@@ -61,36 +62,35 @@ cache_lock = threading.Lock()
 
 
 def fetch_copernico_data():
-    """Получение данных из Copernico API"""
-    global LAST_COPERNICO_REQUEST
-
+    """Получение данных из локального файла race_data.json"""
     try:
-        current_time = time.time()
-        time_since_last_request = current_time - LAST_COPERNICO_REQUEST
+        if not os.path.exists(RACE_DATA_FILE):
+            logger.error(f"❌ Файл НЕ НАЙДЕН: {os.path.abspath(RACE_DATA_FILE)}")
+            return []
+        
+        with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Исправлено: ключ "data" вместо "data"
+        raw_data = data.get("data", [])
+        
+        if not isinstance(raw_data, list):
+            logger.error(f"⚠️ Неверный формат данных. Ожидался список, получен: {type(raw_data)}")
+            logger.debug(f"Структура данных: {json.dumps(data, ensure_ascii=False, indent=2)[:500]}...")
+            return []
+        
+        logger.info(f"✅ Успешно загружено {len(raw_data)} участников из файла")
+        return raw_data
 
-        if time_since_last_request < REQUEST_MIN_INTERVAL:
-            wait_time = REQUEST_MIN_INTERVAL - time_since_last_request
-            logger.info(f"⏳ Ожидание {wait_time:.1f} сек")
-            time.sleep(wait_time)
-
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json'
-        }
-
-        logger.info(f"🌐 Запрос данных из Copernico API: {COPERNICO_API_URL}")
-        response = requests.get(COPERNICO_API_URL, headers=headers, timeout=15)
-        response.raise_for_status()
-
-        LAST_COPERNICO_REQUEST = time.time()
-        data = response.json()
-
-        logger.info(
-            f"✅ Успешно получены данные, количество участников: {len(data) if isinstance(data, list) else 'неизвестно'}")
-        return data
-
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Ошибка разбора JSON: {str(e)}")
+        logger.error(f"Содержимое файла (первые 500 символов):")
+        with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
+            logger.error(f.read()[:500])
+        return []
+    
     except Exception as e:
-        logger.error(f"❌ Ошибка при получении данных из Copernico: {e}")
+        logger.exception(f"❌ Неожиданная ошибка при чтении файла: {str(e)}")
         return []
 
 
