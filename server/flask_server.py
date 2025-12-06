@@ -8,7 +8,7 @@ import os
 import time
 import threading
 import logging
-from copernico_parser import CopernicoParser
+from ParsingRaceInMap import CopernicoParser
 
 
 # Настройка логирования
@@ -55,7 +55,7 @@ class RaceConfig:
 
 
 race_config = RaceConfig()
-copernico_parser = CopernicoParser(race_config)
+ParsingRaceInMap = CopernicoParser(race_config)
 
 # Блокировка
 cache_lock = threading.Lock()
@@ -106,7 +106,7 @@ def transform_copernico_data(raw_data):
 
     for i, item in enumerate(raw_data):
         try:
-            runner = copernico_parser.parse_runner_data(item)
+            runner = ParsingRaceInMap.parse_runner_data(item)
             if runner:
                 runners.append(runner)
         except Exception as e:
@@ -150,7 +150,7 @@ def generate_test_data():
         finish_time = "10:45:00" if status == "Finished" else ""
 
         # Позиция
-        position = copernico_parser._calculate_position(distance)
+        position = ParsingRaceInMap._calculate_position(distance)
 
         runner = {
             'Id': f"test_{name_data['Bib']}",
@@ -178,9 +178,41 @@ def generate_test_data():
 
 # API Endpoints
 @app.route('/')
-def serve_map():
-    """Отдача главной страницы"""
-    return send_from_directory(app.static_folder, 'tilda-embed.html')
+def serve_index():
+    static_path = os.path.join(app.static_folder, 'index.html')
+    print(f"🔍 Пытаемся найти файл: {static_path}")
+
+    if os.path.exists(static_path):
+        return send_from_directory(app.static_folder, 'index.html')
+    else:
+        # Попробуем найти файл в альтернативных путях
+        alternative_paths = [
+            os.path.join(os.path.dirname(__file__), 'static', 'index.html'),
+            os.path.join(os.getcwd(), 'server', 'static', 'index.html'),
+            os.path.join(os.getcwd(), 'static', 'index.html')
+        ]
+
+        for path in alternative_paths:
+            print(f"🔍 Проверяем альтернативный путь: {path}")
+            if os.path.exists(path):
+                folder = os.path.dirname(path)
+                return send_from_directory(folder, 'index.html')
+
+        # Если ничего не найдено
+        error_msg = f"""
+        <h1>❌ 404 Файл не найден</h1>
+        <p>Flask не может найти index.html. Проверьте файловую структуру.</p>
+        <h3>Проверенные пути:</h3>
+        <ul>
+            <li>{static_path}</li>
+        </ul>
+        <h3>Текущая структура папки:</h3>
+        <ul>
+        {''.join(f'<li>{item}</li>' for item in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, item)))}
+        </ul>
+        """
+        return error_msg, 404
+
 
 
 @app.route('/api/runners', methods=['GET'])
@@ -233,40 +265,65 @@ def get_runners():
 
 @app.route('/api/search-runners', methods=['GET'])
 def search_runners():
-    """Поиск участников по номеру или фамилии"""
-    global cache_data
+    """Поиск участников по номеру (dorsal) или фамилии (исправлены переменные)"""
+    global cache_data  # Убедитесь, что эта строка есть в начале функции
 
     try:
-        query = request.args.get('q', '').strip().lower()
-        if not query or not cache_data:
+        query = request.args.get('q', '').strip()
+        if not query or cache_data is None:  # ИСПРАВЛЕНО: cache_ → cache_data
+            logger.debug("🔍 Пустой запрос или отсутствуют данные для поиска")
             return jsonify([])
-
+        
+        query_lower = query.lower()
+        logger.debug(f"🔍 Поиск участников по запросу: '{query}'")
         results = []
 
-        for runner in cache_data:
-            # Поиск по номеру (начинается с введенного текста)
-            if str(runner.get('Bib', '')).startswith(query):
+        # ИСПРАВЛЕНО: cache_ → cache_data
+        for runner in cache_data or []:
+            # 1. Поиск по dorsal (основное поле)
+            dorsal_value = str(runner.get('dorsal', '')).strip()
+            if dorsal_value.startswith(query):
                 results.append(runner)
                 continue
-
-            # Поиск по фамилии (начинается с введенного текста)
-            surname = runner.get('Surname', '').lower()
-            if surname.startswith(query):
+                
+            # 2. Поиск по фамилии
+            surname_value = str(runner.get('surname', '')).strip().lower()
+            if surname_value.startswith(query_lower):
+                results.append(runner)
+                continue
+                
+            # 3. Поиск по полному имени
+            full_name_value = str(runner.get('full_name', '')).strip().lower()
+            if query_lower in full_name_value:
                 results.append(runner)
 
-        # Сортируем: сначала по номеру, потом по фамилии
-        results.sort(key=lambda x: (
-            not str(x.get('Bib', '')).startswith(query),
-            x.get('Bib', 9999),
-            x.get('Surname', '')
-        ))
+        # Сортировка результатов
+        def sort_key(runner):
+            dorsal_match = str(runner.get('dorsal', '')).startswith(query)
+            surname_match = str(runner.get('surname', '')).lower().startswith(query_lower)
+            
+            if dorsal_match:
+                return (0, str(runner.get('dorsal', '')))
+            elif surname_match:
+                return (1, runner.get('surname', ''))
+            else:
+                return (2, runner.get('full_name', ''))
 
+        results.sort(key=sort_key)
+        
+        # Безопасное логирование результатов
+        results_preview = [
+            f"{r.get('dorsal', '')} - {r.get('full_name', '')}" 
+            for r in results[:5]
+        ]
+        logger.info(f"✅ Найдено {len(results)} участников по запросу '{query}'")
+        logger.debug(f"Результаты (первые 5): {results_preview}")
+        
         return jsonify(results[:20])
 
     except Exception as e:
-        logger.error(f"❌ Ошибка поиска: {e}")
+        logger.exception(f"❌ Критическая ошибка в поиске: {str(e)}")
         return jsonify([])
-
 
 @app.route('/api/select-runner', methods=['POST'])
 def select_runner():
@@ -350,6 +407,30 @@ def get_stats():
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/debug-data-structure', methods=['GET'])
+def debug_data_structure():
+    """Отладочный endpoint для проверки структуры данных"""
+    global cache_data
+    
+    if not cache_data:
+        return jsonify({"error": "Нет данных в кеше"})
+    
+    # Берем первого участника для анализа структуры
+    sample_runner = cache_data[0] if cache_data else {}
+    
+    return jsonify({
+        "total_runners": len(cache_data),
+        "sample_runner_keys": list(sample_runner.keys()),
+        "sample_runner": sample_runner,
+        "search_fields_available": {
+            "has_bib": "bib" in sample_runner,
+            "has_surname": "surname" in sample_runner,
+            "has_full_name": "full_name" in sample_runner,
+            "bib_type": type(sample_runner.get('bib')).__name__,
+            "surname_type": type(sample_runner.get('surname')).__name__
+        }
+    })
 
 
 @app.route('/api/race-config', methods=['GET'])
