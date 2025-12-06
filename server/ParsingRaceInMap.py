@@ -48,9 +48,9 @@ class CopernicoParser:
             else:
                 gender = 'Unknown'
 
-            # Статус участника
-            status_raw = raw_runner.get('status', 'notstarted').lower()
-            status = self._parse_status(status_raw)
+            # --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: СТАТУС БЕЗ ПРЕОБРАЗОВАНИЯ ---
+            # Используем статус напрямую из API (без вызова _parse_status)
+            status = raw_runner.get('status', 'notstarted').lower().strip()
 
             # Безопасное извлечение временных данных (обработка null)
             def safe_get(field, default=''):
@@ -79,7 +79,7 @@ class CopernicoParser:
                 'full_name': full_name,
                 'category': category,
                 'gender': gender,
-                'status': status,
+                'status': status,  # ОРИГИНАЛЬНЫЙ СТАТУС ИЗ API
                 'start': {
                     'treal': start_treal,
                     'tofficial': safe_get('times.official_:::start:::')
@@ -107,13 +107,16 @@ class CopernicoParser:
             logger.debug(f"Данные участника: {raw_runner}")
             return None
 
+    # --- ДОБАВЛЕН МЕТОД _parse_status ДЛЯ СОВМЕСТИМОСТИ ---
     def _parse_status(self, status_raw: str) -> str:
-        """Преобразование статуса из формата Copernico в стандартный"""
-        if 'finished' in status_raw or 'complete' in status_raw or status_raw == 'finished':
-            return 'Finished'
-        elif 'started' in status_raw or 'running' in status_raw or (status_raw == 'started' or status_raw == 'running'):
-            return 'Started'
-        return 'Not started'
+        """
+        СОВМЕСТИМОСТИ СО СТАРЫМ КОДОМ.
+        Возвращает статус в оригинальном формате Copernico API.
+        """
+        status_raw = str(status_raw).lower().strip()
+        
+        # Просто возвращаем оригинальный статус без изменений
+        return status_raw
 
     # ИСПРАВЛЕНО: СИГНАТУРА МЕТОДА СООТВЕТСТВУЕТ ВЫЗОВУ
     def _calculate_current_distance(
@@ -125,11 +128,11 @@ class CopernicoParser:
     ) -> float:
         """Расчет текущей дистанции на основе временных меток"""
         # Если финишировал - полная дистанция
-        if status == 'Finished':
+        if status == 'finished':
             return self.race_config.total_distance
         
         # Если не стартовал - 0 км
-        if status == 'Not started' or not start_time:
+        if status == 'notstarted' or not start_time:
             return 0.0
         
         # Если есть время на 3.5 км (kt2) и нет финиша

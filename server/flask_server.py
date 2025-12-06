@@ -34,7 +34,7 @@ REQUEST_MIN_INTERVAL = 2
 OSM_WAY_ID = 181589417
 osm_route_data = None
 
-# Выбранные участники
+# Выбранные участники. Глобальная переменная для хранения выбранных участников
 selected_runners = set()
 MAX_SELECTED_RUNNERS = 5
 
@@ -116,66 +116,6 @@ def transform_copernico_data(raw_data):
     return runners
 
 
-def generate_test_data():
-    """Генерация тестовых данных для разработки"""
-    import random
-    from datetime import datetime, timedelta
-
-    test_runners = []
-
-    # Используем реальные данные из CSV для имен
-    test_names = [
-        {"Bib": 212, "Name": "Ирина", "Surname": "Дементьева", "full_name": "Ирина Дементьева", "Category": "Женщины"},
-        {"Bib": 592, "Name": "Николай", "Surname": "Бывальцев", "full_name": "Николай Бывальцев",
-         "Category": "Мужчины"},
-        {"Bib": 2, "Name": "Сергей", "Surname": "Кольга", "full_name": "Сергей Кольга", "Category": "Мужчины"},
-        {"Bib": 93, "Name": "Татьяна", "Surname": "Шелкунова", "full_name": "Татьяна Шелкунова", "Category": "Женщины"},
-        {"Bib": 349, "Name": "Игорь", "Surname": "Копачев", "full_name": "Игорь Копачев", "Category": "Мужчины"},
-    ]
-
-    for i, name_data in enumerate(test_names):
-        # Случайная дистанция и статус
-        if i == 0:
-            status = "Finished"
-            distance = 7.0
-        elif i == 1:
-            status = "Started"
-            distance = random.uniform(3.0, 6.5)
-        else:
-            status = random.choice(["Not started", "Started"])
-            distance = random.uniform(0.0, 6.5) if status == "Started" else 0.0
-
-        # Время
-        start_time = "10:00:00" if status in ["Started", "Finished"] else ""
-        finish_time = "10:45:00" if status == "Finished" else ""
-
-        # Позиция
-        position = ParsingRaceInMap._calculate_position(distance)
-
-        runner = {
-            'Id': f"test_{name_data['Bib']}",
-            'Bib': name_data['Bib'],
-            'Name': name_data['Name'],
-            'Surname': name_data['Surname'],
-            'Full name': name_data['full_name'],
-            'Category': name_data['Category'],
-            'Gender': 'Female' if name_data['Category'] == 'Женщины' else 'Male',
-            'Status': status,
-            'Start': {'treal': start_time if start_time else None},
-            'kt2': {'treal': start_time if distance > 3.5 else None},
-            'Finish': {'treal': finish_time if finish_time else None},
-            'Position': position,
-            'last_update': datetime.now().isoformat()
-        }
-
-        if distance > 0:
-            runner['current_distance'] = distance
-
-        test_runners.append(runner)
-
-    return test_runners
-
-
 # API Endpoints
 @app.route('/')
 def serve_index():
@@ -220,47 +160,26 @@ def get_runners():
     """Основной endpoint для получения данных участников"""
     global cache_data, cache_time
 
-    try:
-        current_time = datetime.now()
+    current_time = datetime.now()
 
-        with cache_lock:
-            if cache_data and cache_time:
-                elapsed = (current_time - cache_time).total_seconds()
-                if elapsed < CACHE_DURATION:
-                    logger.info(f"📦 Используем кешированные данные ({elapsed:.1f} сек)")
-                    return jsonify(cache_data)
-
-        # Получаем данные из Copernico
-        raw_data = fetch_copernico_data()
-
-        if not raw_data:
-            logger.warning("⚠️ Нет данных от Copernico, используем тестовые данные")
-            runners = generate_test_data()
-        else:
-            # Трансформируем данные
-            runners = transform_copernico_data(raw_data)
-
-            if not runners:
-                logger.warning("⚠️ Не удалось преобразовать данные, используем тестовые данные")
-                runners = generate_test_data()
-
-        # Сохраняем в кеш
-        with cache_lock:
-            cache_data = runners
-            cache_time = current_time
-
-        logger.info(f"✅ Отправляем {len(runners)} участников")
-        return jsonify(runners)
-
-    except Exception as e:
-        logger.error(f"❌ Ошибка в /api/runners: {type(e).__name__}: {e}")
-
-        with cache_lock:
-            if cache_data:
-                logger.info("📦 Возвращаем кешированные данные из-за ошибки")
+    with cache_lock:
+        if cache_data and cache_time:
+            elapsed = (current_time - cache_time).total_seconds()
+            if elapsed < CACHE_DURATION:
+                logger.info(f"📦 Используем кешированные данные ({elapsed:.1f} сек)")
                 return jsonify(cache_data)
 
-        return jsonify(generate_test_data())
+    # Получаем данные из Copernico
+    raw_data = fetch_copernico_data()
+    runners = transform_copernico_data(raw_data)
+
+    # Сохраняем в кеш
+    with cache_lock:
+        cache_data = runners
+        cache_time = current_time
+
+    logger.info(f"✅ Отправляем {len(runners)} участников")
+    return jsonify(runners)
 
 
 @app.route('/api/search-runners', methods=['GET'])
@@ -327,23 +246,27 @@ def search_runners():
 
 @app.route('/api/select-runner', methods=['POST'])
 def select_runner():
-    """Выбор участника для отслеживания"""
+    """Выбор участника для отслеживания (исправленная версия)"""
     global selected_runners
 
     try:
         data = request.get_json()
-        runner_id = str(data.get('runner_id'))
+        runner_id = str(data.get('runner_id', '')).strip()
 
         if not runner_id:
-            return jsonify({'error': 'No runner_id provided'}), 400
+            return jsonify({'error': 'Не указан runner_id'}), 400
 
+        # Проверяем лимит
         if len(selected_runners) >= MAX_SELECTED_RUNNERS:
             return jsonify({
-                'error': f'Максимум можно отслеживать {MAX_SELECTED_RUNNERS} участников'
+                'error': f'Максимум можно отслеживать {MAX_SELECTED_RUNNERS} участников',
+                'success': False
             }), 400
 
+        # Добавляем участника
         selected_runners.add(runner_id)
-
+        logger.info(f"✅ Добавлен участник {runner_id}. Всего: {len(selected_runners)}")
+        
         return jsonify({
             'success': True,
             'selected_count': len(selected_runners),
@@ -352,30 +275,55 @@ def select_runner():
 
     except Exception as e:
         logger.error(f"❌ Ошибка выбора участника: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'success': False}), 500
 
 
 @app.route('/api/selected-runners', methods=['GET'])
 def get_selected_runners():
-    """Получение данных только выбранных участников"""
+    """Получение данных только выбранных участников (исправленная версия)"""
     global cache_data, selected_runners
 
     try:
         with cache_lock:
             if not cache_data:
                 return jsonify([])
-
+            
+            # Фильтруем только выбранных участников
             selected_data = [
                 runner for runner in cache_data
-                if str(runner.get('Bib')) in selected_runners
+                if str(runner.get('id')) in selected_runners
             ]
 
+            # ДОБАВЛЕНО: Логирование для отладки
+            logger.info(f"🔍 Запрошено {len(selected_data)} выбранных участников")
             return jsonify(selected_data)
 
     except Exception as e:
         logger.error(f"❌ Ошибка получения выбранных участников: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify([]), 500
 
+@app.route('/api/deselect-runner', methods=['POST'])
+def deselect_runner():
+    """Удаление участника из отслеживаемых"""
+    global selected_runners
+
+    try:
+        data = request.get_json()
+        runner_id = str(data.get('runner_id', '')).strip()
+
+        if runner_id in selected_runners:
+            selected_runners.remove(runner_id)
+            logger.info(f"❌ Удален участник {runner_id}. Осталось: {len(selected_runners)}")
+
+        return jsonify({
+            'success': True,
+            'selected_count': len(selected_runners),
+            'selected_ids': list(selected_runners)
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка удаления участника: {e}")
+        return jsonify({'error': str(e), 'success': False}), 500
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():

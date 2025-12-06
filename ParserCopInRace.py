@@ -105,7 +105,7 @@ def main():
         logging.info("\nПрограмма остановлена пользователем")
     except Exception as e:
         logging.exception(f"Критическая ошибка: {str(e)}")
-    finally:
+    finally:    
         logging.info("Программа завершена")
 
 if __name__ == "__main__":

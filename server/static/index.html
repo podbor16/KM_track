@@ -23,21 +23,31 @@
                 <div class="map-container">
                     <div id="map"></div>
                 </div>
-
                 <div class="controls-panel">
+                    <!-- Поисковая строка и результаты -->
                     <div class="search-box">
                         <input type="text" id="searchInput" placeholder="Поиск по номеру или фамилии...">
                         <div class="search-results" id="searchResults"></div>
                     </div>
 
-                    <div class="selected-runners">
-                        <div class="selected-title">Отслеживаемые участники (<span id="selectedCount">0</span>/5)</div>
+                    <!-- Контейнер для выбранных участников (между поиском и кнопками) -->
+                    <div class="selected-runners-container">
+                        <div class="selected-title">
+                            <div class="title-text">Отслеживаемые участники</div>
+                            <div class="count-container">
+                                (<span id="selectedCount">0</span>/ 5 )
+                                <span id="selection-limit-warning" class="limit-warning" style="display: none;">
+                                    Достигнут лимит!
+                                </span>
+                            </div>
+                        </div>
                         <div class="selected-list" id="selectedList">
                             <div class="empty-selection">Нет выбранных участников</div>
                         </div>
                     </div>
 
-                    <div class="controls">
+                    <!-- Кнопки (теперь в самом низу) -->
+                    <div class="controls-buttons">
                         <button class="control-btn primary" onclick="centerMap()">Центрировать карту</button>
                         <button class="control-btn secondary" onclick="clearSelection()">Очистить выбор</button>
                     </div>
@@ -68,9 +78,10 @@
 
             // Цвета для статусов
             const STATUS_COLORS = {
-                'not_started': '#9E9E9E',  // серый
-                'started': '#4CAF50',      // зеленый
-                'finished': '#F44336'      // красный
+                'notstarted': '#9E9E9E',  // серый для "notstarted"
+                'started': '#4CAF50',      // зеленый для "started"
+                'running': '#4CAF50',      // зеленый для "running"
+                'finished': '#F44336'      // красный для "finished"
             };
 
             // Инициализация
@@ -98,8 +109,9 @@
                 // Центр карты - Красноярск, парк Снежная семерка
                 map = L.map('map').setView([56.03266, 92.95386], 15);
 
+                map.attributionControl.setPrefix(''); // убрать "Leaflet"
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
+                    attribution: '© OpenStreetMap' // или любой свой текст / пустая строка
                 }).addTo(map);
 
                 // Добавляем простой маршрут (для демонстрации)
@@ -198,15 +210,19 @@
                 try {
                     const response = await fetch(`${CONFIG.API_BASE}/selected-runners`);
                     const selectedRunners = await response.json();
-
-                    // Обновляем маркеры на карте
-                    updateRunnerMarkers(selectedRunners);
-
-                    // Обновляем список выбранных
+                    
+                    console.log('Полученные выбранные участники:', selectedRunners); // ДЛЯ ОТЛАДКИ
+                    
+                    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем локальный набор ID
+                    selectedRunnerIds = new Set(selectedRunners.map(r => r.id));
+                    
+                    // Обновляем интерфейс
                     updateSelectedList(selectedRunners);
-
+                    updateRunnerMarkers(selectedRunners);
+                    
                 } catch (error) {
                     console.error('Ошибка загрузки выбранных участников:', error);
+                    updateStatus('Ошибка загрузки выбранных участников');
                 }
             }
 
@@ -254,19 +270,21 @@
                         ).addTo(map);
 
                         // Всплывающая подсказка
+                        // Всплывающая подсказка
+                        // Всплывающая подсказка
                         const popupContent = `
                             <div style="min-width: 200px;">
                                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
-                                    №${runner.dorsal} - ${runner.full_name}
+                                    №${runner.dorsal} - ${runner.full_name || 'Участник'}
                                 </div>
                                 <div style="font-size: 14px; margin-bottom: 10px;">
-                                    <div><strong>Категория:</strong> ${runner.category}</div>
+                                    <div><strong>Категория:</strong> ${runner.category || 'N/A'}</div>
                                     <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                                    <div><strong>Дистанция:</strong> ${runner.current_distance} км</div>
-                                    <div><strong>Темп:</strong> ${runner.pace} мин/км</div>
+                                    <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1) || 0} км</div>
+                                    <div><strong>Темп:</strong> ${runner.pace || '--:--'} мин/км</div>
                                 </div>
                                 <div style="font-size: 12px; color: #666;">
-                                    Обновлено: ${new Date(runner.last_update).toLocaleTimeString()}
+                                    Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
                                 </div>
                             </div>
                         `;
@@ -278,28 +296,47 @@
             }
 
             // Обновление списка выбранных участников
+            // Обновление списка выбранных участников
             function updateSelectedList(selectedRunners) {
                 const selectedList = document.getElementById('selectedList');
                 const selectedCount = document.getElementById('selectedCount');
+                const limitWarning = document.getElementById('selection-limit-warning');
 
-                selectedCount.textContent = selectedRunners.length;
+                // Обновляем счетчик и предупреждение о лимите
+                const currentCount = selectedRunners.length;
+                selectedCount.textContent = currentCount;
                 selectedRunnerIds = new Set(selectedRunners.map(r => r.id));
+                
+                // Отображаем предупреждение при достижении лимита
+                if (limitWarning) {
+                    limitWarning.style.display = currentCount >= CONFIG.MAX_SELECTED ? 'block' : 'none';
+                }
 
+                // Отключаем кнопки при пустом выборе
+                document.querySelector('.control-btn.secondary').disabled = currentCount === 0;
+
+                // Отображаем сообщение при пустом списке
                 if (selectedRunners.length === 0) {
                     selectedList.innerHTML = '<div class="empty-selection">Нет выбранных участников</div>';
                     return;
                 }
 
+                // Формируем HTML для каждого участника
                 let html = '';
                 selectedRunners.forEach(runner => {
+                    const statusClass = runner.status === 'finished' ? 'finished' : 
+                                    runner.status === 'started' ? 'started' : 'not-started';
+                    
                     html += `
                         <div class="selected-runner">
                             <div class="runner-info">
                                 <div class="runner-number">№${runner.dorsal}</div>
                                 <div class="runner-name">${runner.full_name}</div>
-                                <div class="runner-category">${runner.category} • ${getStatusText(runner.status)}</div>
+                                <div class="runner-category">${runner.category} • 
+                                    <span class="${statusClass}">${getStatusText(runner.status)}</span>
+                                </div>
                             </div>
-                            <button class="remove-btn" onclick="deselectRunner('${runner.id}')">✕</button>
+                            <button class="remove-btn" title="Удалить из отслеживаемых" onclick="deselectRunner('${runner.id}')">✕</button>
                         </div>
                     `;
                 });
@@ -362,13 +399,23 @@
             }
 
             // Выбор участника
+            // Выбор участника
             async function selectRunner(runnerId) {
+                // Проверяем локальный лимит
                 if (selectedRunnerIds.size >= CONFIG.MAX_SELECTED) {
                     alert(`Максимум можно выбрать ${CONFIG.MAX_SELECTED} участников`);
+                    document.getElementById('selection-limit-warning').style.display = 'block';
+                    return;
+                }
+
+                // Проверяем, не выбран ли уже этот участник
+                if (selectedRunnerIds.has(runnerId)) {
+                    alert('Этот участник уже добавлен в отслеживаемые');
                     return;
                 }
 
                 try {
+                    // Отправляем запрос на сервер
                     const response = await fetch(`${CONFIG.API_BASE}/select-runner`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -376,19 +423,25 @@
                     });
 
                     const result = await response.json();
+                    console.log('Ответ сервера:', result); // ДЛЯ ОТЛАДКИ
 
                     if (result.success) {
-                        // Обновляем поиск и загружаем выбранных
-                        await searchRunners();
+                        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем ID в локальный набор
+                        selectedRunnerIds.add(runnerId);
+                        
+                        // Обновляем интерфейс
                         await loadSelectedRunners();
-                        updateStatus('Участник добавлен');
+                        updateStatus(`Участник №${runnerId} добавлен в отслеживаемые`);
                     } else {
-                        alert(result.error || 'Ошибка выбора участника');
+                        alert(result.error || 'Ошибка добавления участника');
+                        if (result.error?.includes('максимум')) {
+                            document.getElementById('selection-limit-warning').style.display = 'block';
+                        }
                     }
 
                 } catch (error) {
                     console.error('Ошибка выбора участника:', error);
-                    alert('Ошибка выбора участника');
+                    alert('Ошибка связи с сервером. Проверьте консоль разработчика (F12)');
                 }
             }
 
@@ -470,11 +523,13 @@
             // Вспомогательные функции
             function getStatusText(status) {
                 const statusMap = {
-                    'not_started': 'Не стартовал',
+                    'notstarted': 'Не стартовал',
                     'started': 'На трассе',
+                    'running': 'На трассе',
                     'finished': 'Финишировал'
                 };
-                return statusMap[status] || status;
+                
+                return statusMap[status] || status || 'Неизвестно';
             }
 
             function updateStatus(message) {
