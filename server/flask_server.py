@@ -238,6 +238,10 @@ def transform_copernico_data(raw_data):
         try:
             runner = copernico_parser.parse_runner_data(item)
             if runner:
+                # Добавляем базовые значения для скорости и темпа
+                runner['speed'] = 10.0
+                runner['pace'] = 6.0
+
                 # ДОБАВЛЕНО: Инициализация времени последнего обновления
                 if 'last_update' not in runner:
                     runner['last_update'] = current_time
@@ -296,8 +300,10 @@ def calculate_runner_speed(runner):
     """Рассчитывает случайную скорость для участника на трассе"""
     base_speed = 10.0  # базовая скорость 10 км/ч (темп 6:00 мин/км)
 
+    status = runner.get('status', '').lower()
+
     # Если участник на трассе, генерируем случайную скорость
-    if runner.get('status') in ['started', 'running']:
+    if status in ['started', 'running', 'notstarted'] and runner.get('current_distance', 0) > 0:
         # Случайный коэффициент от 0.75 до 1.5 (7.5-15 км/ч)
         speed_factor = random.uniform(0.75, 1.5)
         actual_speed = base_speed * speed_factor
@@ -322,15 +328,16 @@ def calculate_runner_speed(runner):
 def update_runner_positions(runners):
     """Обновляет позиции участников на трассе с учетом их скорости и времени"""
     current_time = datetime.now()
+    current_time_iso = current_time.isoformat()
 
     for runner in runners:
         # 1. Инициализация времени последнего обновления, если отсутствует
         if 'last_update' not in runner:
-            runner['last_update'] = current_time.isoformat()
+            runner['last_update'] = current_time_iso
 
-        # 2. Корректная проверка статуса (используем реальные статусы из данных)
-        is_on_track = runner.get('status') in ['started', 'running', 'notstarted'] and runner.get('current_distance',
-                                                                                                  0) > 0
+        # Проверяем, является ли участник активным на трассе
+        status = runner.get('status', '').lower()
+        is_on_track = status in ['started', 'running', 'notstarted'] and runner.get('current_distance', 0) > 0
 
         # 3. Рассчитываем скорость ТОЛЬКО для участников на трассе
         if is_on_track:
@@ -338,29 +345,20 @@ def update_runner_positions(runners):
             runner.update(speed_info)
 
             # 4. Рассчитываем время с последнего обновления
-            last_update = datetime.fromisoformat(runner['last_update'])
-            time_diff_hours = (current_time - last_update).total_seconds() / 3600
+            last_update = datetime.fromisoformat(runner.get('last_update', current_time.isoformat()))
+            time_diff = (current_time - last_update).total_seconds() / 3600 # в часах
 
             # 5. Дополнительное расстояние
-            additional_distance = runner['speed'] * time_diff_hours
+            additional_distance = runner['speed'] * time_diff
 
             # 6. Новая позиция
             new_distance = min(runner.get('current_distance', 0) + additional_distance, race_config.total_distance)
             runner['current_distance'] = new_distance
 
-            # 7. ОБЯЗАТЕЛЬНОЕ: проверяем, что метод возвращает правильный формат
-            position = copernico_parser._calculate_position(new_distance)
-
-            # 8. Защита от некорректного формата позиции
-            if isinstance(position, dict) and 'lat' in position and 'lng' in position:
-                runner['position'] = position
-            else:
-                # Используем резервные координаты
-                checkpoint = race_config.checkpoints[min(int(new_distance / 1.75), len(race_config.checkpoints) - 1)]
-                runner['position'] = {'lat': checkpoint['coord'][0], 'lng': checkpoint['coord'][1]}
-
-        # 9. Обновляем время последнего обновления ВСЕГДА
-        runner['last_update'] = current_time.isoformat()
+            # Обновляем координаты
+            new_position = copernico_parser._calculate_position(new_distance)
+            runner['position'] = new_position
+            runner['last_update'] = current_time_iso
 
     return runners
 

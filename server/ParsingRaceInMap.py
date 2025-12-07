@@ -100,6 +100,9 @@ class CopernicoParser:
                 'source_data': raw_runner
             }
 
+            runner['speed'] = 10.0
+            runner['pace'] = 6.0
+
             return runner
 
         except Exception as e:
