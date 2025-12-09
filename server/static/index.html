@@ -24,6 +24,9 @@
         .runner-marker:hover {
             transform: scale(1.2);
         }
+        .moving-marker {
+            transition: transform 2s cubic-bezier(0.2, 0, 0.2, 1);
+        }
         </style>
     </head>
     <body>
@@ -82,7 +85,7 @@
             // Конфигурация
             const CONFIG = {
                 API_BASE: 'http://localhost:5000/api',
-                UPDATE_INTERVAL: 10000,
+                UPDATE_INTERVAL: 5000,
                 MAX_SELECTED: 5
             };
 
@@ -110,8 +113,8 @@
                 initMap();
 
                 // Загрузка данных
-                await loadStats();
                 await loadAllRunners();
+                await loadStats();
 
                 // Настройка поиска
                 setupSearch();
@@ -207,21 +210,36 @@
                 }
             }
 
-            // Загрузка всех участников (для поиска)
+           // Загрузка всех участников (для фонового обновления)
             async function loadAllRunners() {
                 try {
                     const response = await fetch(`${CONFIG.API_BASE}/runners`);
                     allRunners = await response.json();
-                    console.log(`Загружено участников: ${allRunners.length}`);
+                    console.log(`Загружено ВСЕХ участников: ${allRunners.length}`);
 
-                    // Обновляем выбранных участников
-                    await loadSelectedRunners();
+                    // Обновляем ВЫБРАННЫХ участников на карте
+                    updateSelectedRunnersMarkers();
 
                 } catch (error) {
                     console.error('Ошибка загрузки участников:', error);
                     updateStatus('Ошибка загрузки данных');
                 }
             }
+
+            // Обновление ТОЛЬКО ВЫБРАННЫХ участников на карте
+            function updateSelectedRunnersMarkers() {
+                // Фильтруем только выбранных участников из всех данных
+                const selectedRunners = allRunners.filter(runner =>
+                    selectedRunnerIds.has(String(runner.id))
+                );
+
+                console.log(`Обновление маркеров для ${selectedRunners.length} выбранных участников`);
+                console.log('Выбранные участники:', selectedRunners);
+
+                // Обновляем маркеры ТОЛЬКО для выбранных участников
+                updateRunnerMarkers(selectedRunners);
+        }
+
 
             // Загрузка выбранных участников
             async function loadSelectedRunners() {
@@ -244,19 +262,24 @@
                 }
             }
 
-            // Обновление маркеров на карте
-            function updateRunnerMarkers(runners) {
-            // Удаляем старые маркеры
-            Object.values(runnerMarkers).forEach(marker => {
-                if (marker) {
-                    map.removeLayer(marker);
-                }
-            });
-            runnerMarkers = {};
 
-            // Добавляем новые маркеры
-            runners.forEach(runner => {
-                if (runner.position && runner.position.lat && runner.position.lng) {
+            // Обновление маркеров НА КАРТЕ (только для переданных участников)
+            function updateRunnerMarkers(runners) {
+                // Удаляем старые маркеры
+                Object.values(runnerMarkers).forEach(marker => {
+                    if (marker) {
+                        map.removeLayer(marker);
+                    }
+                });
+                runnerMarkers = {};
+
+                // Создаем или обновляем маркеры ТОЛЬКО для переданных участников
+                runners.forEach(runner => {
+                    if (!runner.position || !runner.position.lat || !runner.position.lng) {
+                        console.log(`Пропущен участник без позиции: ${runner.id}`);
+                        return;
+                    }
+
                     const color = STATUS_COLORS[runner.status] || '#2196F3';
 
                     // Визуальная индикация скорости
@@ -267,9 +290,9 @@
                         pulseAnimation = 'animation: slow-pulse 2s infinite;';
                     }
 
-                    // Создаем маркер с номером
+                    // Создаем или обновляем иконку
                     const icon = L.divIcon({
-                        className: 'runner-marker',
+                        className: `runner-marker moving-marker`,
                         html: `
                             <div style="
                                 background: ${color};
@@ -286,91 +309,104 @@
                                 box-shadow: 0 2px 4px rgba(0,0,0,0.3);
                                 ${pulseAnimation}
                             ">
-                                ${runner.dorsal}
+                                ${runner.dorsal || runner.id}
                             </div>
                         `,
                         iconSize: [38, 38],
                         iconAnchor: [19, 19]
                     });
 
+                    // Создаем новый маркер (не пытаемся обновить существующий)
                     const marker = L.marker(
                         [runner.position.lat, runner.position.lng],
                         { icon }
                     ).addTo(map);
 
-                    // Всплывающая подсказка
-                    const popupContent = `
-                        <div style="min-width: 200px;">
-                            <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
-                                №${runner.dorsal} - ${runner.full_name}
-                            </div>
-                            <div style="font-size: 14px; margin-bottom: 10px;">
-                                <div><strong>Категория:</strong> ${runner.category}</div>
-                                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                                <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1)} км</div>
-                                <div><strong>Скорость:</strong> ${runner.speed?.toFixed(1)} км/ч</div>
-                                <div><strong>Темп:</strong> ${runner.pace?.toFixed(2)} мин/км</div>
-                            </div>
-                            <div style="font-size: 12px; color: #666;">
-                                Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
-                            </div>
-                        </div>
-                    `;
-
+                    // Добавляем всплывающую подсказку
+                    const popupContent = createPopupContent(runner);
                     marker.bindPopup(popupContent);
+
+                    // Сохраняем маркер
                     runnerMarkers[runner.id] = marker;
-                }
-            });
-        }
-
-            // Обновление списка выбранных участников
-            // Обновление списка выбранных участников
-            function updateSelectedList(selectedRunners) {
-                const selectedList = document.getElementById('selectedList');
-                const selectedCount = document.getElementById('selectedCount');
-                const limitWarning = document.getElementById('selection-limit-warning');
-
-                // Обновляем счетчик и предупреждение о лимите
-                const currentCount = selectedRunners.length;
-                selectedCount.textContent = currentCount;
-                selectedRunnerIds = new Set(selectedRunners.map(r => r.id));
-                
-                // Отображаем предупреждение при достижении лимита
-                if (limitWarning) {
-                    limitWarning.style.display = currentCount >= CONFIG.MAX_SELECTED ? 'block' : 'none';
-                }
-
-                // Отключаем кнопки при пустом выборе
-                document.querySelector('.control-btn.secondary').disabled = currentCount === 0;
-
-                // Отображаем сообщение при пустом списке
-                if (selectedRunners.length === 0) {
-                    selectedList.innerHTML = '<div class="empty-selection">Нет выбранных участников</div>';
-                    return;
-                }
-
-                // Формируем HTML для каждого участника
-                let html = '';
-                selectedRunners.forEach(runner => {
-                    const statusClass = runner.status === 'finished' ? 'finished' : 
-                                    runner.status === 'started' ? 'started' : 'not-started';
-                    
-                    html += `
-                        <div class="selected-runner">
-                            <div class="runner-info">
-                                <div class="runner-number">№${runner.dorsal}</div>
-                                <div class="runner-name">${runner.full_name}</div>
-                                <div class="runner-category">${runner.category} • 
-                                    <span class="${statusClass}">${getStatusText(runner.status)}</span>
-                                </div>
-                            </div>
-                            <button class="remove-btn" title="Удалить из отслеживаемых" onclick="deselectRunner('${runner.id}')">✕</button>
-                        </div>
-                    `;
+                    console.log(`Создан маркер для участника ${runner.id}, позиция: ${runner.position.lat}, ${runner.position.lng}`);
                 });
-
-                selectedList.innerHTML = html;
             }
+
+            // Создание всплывающей подсказки
+            function createPopupContent(runner) {
+                return `
+                    <div style="min-width: 200px;">
+                        <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
+                            №${runner.dorsal || runner.id} - ${runner.full_name || 'Участник'}
+                        </div>
+                        <div style="font-size: 14px; margin-bottom: 10px;">
+                            <div><strong>Категория:</strong> ${runner.category || 'N/A'}</div>
+                            <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                            <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1) || 0} км</div>
+                            <div><strong>Скорость:</strong> ${runner.speed?.toFixed(1) || '--'} км/ч</div>
+                            <div><strong>Темп:</strong> ${runner.pace?.toFixed(2) || '--.--'} мин/км</div>
+                        </div>
+                        <div style="font-size: 12px; color: #666;">
+                            Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Обновление списка выбранных участников
+        function updateSelectedList() {
+            const selectedList = document.getElementById('selectedList');
+            const selectedCount = document.getElementById('selectedCount');
+            const limitWarning = document.getElementById('selection-limit-warning');
+
+            // Фильтруем выбранных участников из всех данных
+            const selectedRunners = allRunners.filter(runner =>
+                selectedRunnerIds.has(String(runner.id))
+            );
+
+            // Обновляем счетчик и предупреждение о лимите
+            const currentCount = selectedRunners.length;
+            selectedCount.textContent = currentCount;
+
+            // Отображаем предупреждение при достижении лимита
+            if (limitWarning) {
+                limitWarning.style.display = currentCount >= CONFIG.MAX_SELECTED ? 'block' : 'none';
+            }
+
+            // Отключаем кнопки при пустом выборе
+            document.querySelector('.control-btn.secondary').disabled = currentCount === 0;
+
+            // Отображаем сообщение при пустом списке
+            if (currentCount === 0) {
+                selectedList.innerHTML = '<div class="empty-selection">Нет выбранных участников</div>';
+                return;
+            }
+
+            // Формируем HTML для каждого участника
+            let html = '';
+            selectedRunners.forEach(runner => {
+                const statusClass = runner.status === 'finished' ? 'finished' :
+                                runner.status === 'started' ? 'started' : 'not-started';
+
+                html += `
+                    <div class="selected-runner">
+                        <div class="runner-info">
+                            <div class="runner-number">№${runner.dorsal}</div>
+                            <div class="runner-name">${runner.full_name}</div>
+                            <div class="runner-category">${runner.category} •
+                                <span class="${statusClass}">${getStatusText(runner.status)}</span>
+                            </div>
+                        </div>
+                        <button class="remove-btn" title="Удалить из отслеживаемых" onclick="deselectRunner('${runner.id}')">✕</button>
+                    </div>
+                `;
+            });
+
+            selectedList.innerHTML = html;
+
+            // Обновляем маркеры на карте ТОЛЬКО для выбранных участников
+            updateSelectedRunnersMarkers();
+        }
 
             // Поиск участников
             async function searchRunners() {
