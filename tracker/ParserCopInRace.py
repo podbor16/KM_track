@@ -6,11 +6,18 @@ from datetime import datetime
 import os
 
 # Настройка логирования
+import os
+from logging.handlers import RotatingFileHandler
+
+# Создаем специальный обработчик с явной кодировкой Windows-1251
+log_file_path = os.path.join(os.path.dirname(__file__), "race_data_fetcher.log")
+file_handler = RotatingFileHandler(log_file_path, encoding='windows-1251', maxBytes=10*1024*1024, backupCount=5)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("race_data_fetcher.log"),
+        file_handler,
         logging.StreamHandler()
     ]
 )
@@ -19,7 +26,7 @@ logging.basicConfig(
 URL = "https://public-api.copernico.cloud/api/races/--2025-70363/preset/podbor250718@gmail.com:::%D0%A1%D0%BD%D0%B5%D0%B6%D0%BD%D0%B0%D1%8F%207%20%D1%82%D1%80%D0%B5%D0%BA%D0%B5%D1%80/7%20km"
 # [Внимание] Этот URL содержит пробелы и специальные символы. Возможно, требуется URL-кодирование.
 
-OUTPUT_FILE = "race_data.json"
+OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "race_data.json")
 REQUEST_INTERVAL = 10  # секунд
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # секунд между попытками
