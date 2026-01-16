@@ -204,7 +204,7 @@ if __name__ == "__main__":
                         # ВАЖНО: используем отдельный курсор для нового запроса
                         cursor2 = connection.cursor(buffered=True)
                         try:
-                            cursor2.execute(f"SELECT * FROM `{first_table}` LIMIT 5")
+                            cursor2.execute(f"SELECT * FROM `{first_table}` LIMIT 25")
                             records = cursor2.fetchall()  # Читаем ВСЕ результаты
 
                             print(f"\nПервые 5 записей из таблицы '{first_table}':")
