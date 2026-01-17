@@ -174,7 +174,7 @@ if __name__ == "__main__":
     if connection:
         try:
             # СОЗДАЕМ КУРСОР С buffered=True
-            cursor = connection.cursor(buffered=True)
+            cursor = connection.cursor(dictionary=True, buffered=True)
 
             try:
                 # Выполняем универсальный запрос для получения информации о структуре БД
