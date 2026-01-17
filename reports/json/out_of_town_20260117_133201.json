@@ -1,0 +1,21 @@
+{
+  "out_of_town_count": 2,
+  "local_count": 15,
+  "total_participants": 17,
+  "out_of_town_percentage": 11.76,
+  "local_percentage": 88.24,
+  "local_city": "Красноярск",
+  "race_name": null,
+  "cities_by_participants": [
+    {
+      "city": "Красноярск",
+      "participants_count": 15,
+      "is_local": true
+    },
+    {
+      "city": "None",
+      "participants_count": 2,
+      "is_local": false
+    }
+  ]
+}
