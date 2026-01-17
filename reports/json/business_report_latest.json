@@ -1,10 +1,18 @@
 {
-  "generated_at": "2026-01-17T13:30:47.740194",
+  "generated_at": "2026-01-17T15:00:52.351760",
   "new_users": {
-    "new_users_count": 0,
-    "total_users": 0,
-    "percentage": 0.0,
-    "error": "1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'AND t1.`created_at` = (\n                    SELECT MIN(t2.`created_at`)\n        ' at line 10"
+    "new_users_count": 9,
+    "total_users": 9,
+    "total_all_time_users": 9,
+    "percentage": 100.0,
+    "start_date": null,
+    "end_date": null,
+    "calculation_method": "Уникальность определяется по name + surname + birthday",
+    "filters_applied": {
+      "name_not_null": true,
+      "surname_not_null": true,
+      "exclude_none_strings": true
+    }
   },
   "customer_lifecycle": {
     "average_lifecycle_days": 0,
@@ -37,9 +45,9 @@
       }
     },
     "average_races_per_customer": {
-      "average_races_per_customer": 1.0,
+      "average_races": 1.0,
       "total_customers_with_races": 7,
-      "total_races": 7,
+      "total_races_count": 7,
       "min_races": 1,
       "max_races": 1,
       "median_races": 1
@@ -80,10 +88,10 @@
   },
   "out_of_town": {
     "overall": {
-      "out_of_town_count": 2,
+      "total_out_of_town": 2,
+      "total_registrations": 17,
       "local_count": 15,
-      "total_participants": 17,
-      "out_of_town_percentage": 11.76,
+      "percentage": 11.76,
       "local_percentage": 88.24,
       "local_city": "Красноярск",
       "race_name": null,
@@ -98,6 +106,12 @@
           "participants_count": 2,
           "is_local": false
         }
+      ],
+      "out_of_town_cities": [
+        {
+          "city": "None",
+          "participants_count": 2
+        }
       ]
     },
     "by_race": {
@@ -105,25 +119,25 @@
       "races": [
         {
           "race_name": "[\"Тест Матвей=0\"]",
-          "out_of_town_count": 0,
-          "local_count": 5,
           "total_participants": 5,
+          "local_count": 5,
+          "out_of_town_count": 0,
           "out_of_town_percentage": 0.0,
           "local_percentage": 100.0
         },
         {
           "race_name": "2000-01-01 00:00:00",
-          "out_of_town_count": 0,
-          "local_count": 3,
           "total_participants": 3,
+          "local_count": 3,
+          "out_of_town_count": 0,
           "out_of_town_percentage": 0.0,
           "local_percentage": 100.0
         },
         {
           "race_name": "None",
-          "out_of_town_count": 2,
-          "local_count": 2,
           "total_participants": 4,
+          "local_count": 2,
+          "out_of_town_count": 2,
           "out_of_town_percentage": 50.0,
           "local_percentage": 50.0
         }
@@ -135,6 +149,6 @@
     "start_date": null,
     "end_date": null,
     "year": 2026,
-    "generated_at": "2026-01-17T13:30:55.218774"
+    "generated_at": "2026-01-17T15:01:03.710323"
   }
 }

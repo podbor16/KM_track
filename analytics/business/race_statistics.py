@@ -293,11 +293,12 @@ class RaceStatisticsAnalytics:
         finally:
             if connection.is_connected():
                 connection.close()
-    
+
+    # В методе get_average_races_per_customer в race_statistics.py
     def get_average_races_per_customer(self) -> Dict[str, Any]:
         """
         Получить среднее количество забегов на клиента
-        
+
         Returns:
             Словарь со статистикой среднего количества забегов
         """
@@ -305,11 +306,11 @@ class RaceStatisticsAnalytics:
         if not connection:
             logger.error("Не удалось подключиться к базе данных")
             return {'error': 'Database connection failed'}
-        
+
         try:
             cursor = connection.cursor(buffered=True, dictionary=True)
             user_key_expr = self._get_user_key()
-            
+
             # Получаем количество забегов для каждого клиента
             query = f"""
                 SELECT 
@@ -318,44 +319,55 @@ class RaceStatisticsAnalytics:
                 FROM `{self.table_name}`
                 WHERE `{self.race_column}` IS NOT NULL 
                   AND `{self.race_column}` != ''
+                  AND `{self.race_column}` != 'NULL'
                 GROUP BY {user_key_expr}
+                HAVING races_count > 0
             """
-            
+
             cursor.execute(query)
             results = cursor.fetchall()
-            
+
             if not results:
+                cursor.close()
                 return {
-                    'average_races_per_customer': 0,
+                    'average_races': 0.0,
                     'total_customers_with_races': 0,
-                    'total_races': 0,
+                    'total_races_count': 0,
                     'min_races': 0,
                     'max_races': 0,
                     'median_races': 0
                 }
-            
+
             races_counts = [r['races_count'] for r in results]
             total_customers = len(races_counts)
             total_races = sum(races_counts)
             average_races = total_races / total_customers if total_customers > 0 else 0
-            
+
+            # Вычисляем медиану
             sorted_counts = sorted(races_counts)
-            median_races = sorted_counts[len(sorted_counts) // 2] if sorted_counts else 0
-            
+            n = len(sorted_counts)
+            if n % 2 == 1:
+                median_races = sorted_counts[n // 2]
+            else:
+                median_races = (sorted_counts[n // 2 - 1] + sorted_counts[n // 2]) / 2
+
             cursor.close()
-            
+
             return {
-                'average_races_per_customer': round(average_races, 2),
+                'average_races': round(average_races, 2),
                 'total_customers_with_races': total_customers,
-                'total_races': total_races,
+                'total_races_count': total_races,
                 'min_races': min(races_counts) if races_counts else 0,
                 'max_races': max(races_counts) if races_counts else 0,
-                'median_races': median_races
+                'median_races': round(median_races, 2)
             }
-            
+
         except Error as e:
             logger.error(f"Ошибка при выполнении запроса: {e}")
-            return {'error': str(e)}
+            return {
+                'average_races': 0.0,
+                'error': str(e)
+            }
         finally:
             if connection.is_connected():
                 connection.close()

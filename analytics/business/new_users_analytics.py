@@ -15,11 +15,10 @@ logger = logging.getLogger(__name__)
 class NewUsersAnalytics:
     """
     Класс для анализа новых пользователей
-    Учитывает, что один email может иметь несколько регистраций (разные люди)
     Уникальность пользователя определяется по комбинации name + surname + birthday
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  table_name: str = 'Тестовая',
                  registration_date_column: str = 'created_at',
                  name_column: str = 'name',
@@ -28,7 +27,7 @@ class NewUsersAnalytics:
                  birthday_column: str = 'birthday'):
         """
         Инициализация модуля
-        
+
         Args:
             table_name: название таблицы (по умолчанию 'Тестовая')
             registration_date_column: название колонки с датой регистрации
@@ -42,23 +41,41 @@ class NewUsersAnalytics:
         self.surname_column = surname_column
         self.email_column = email_column
         self.birthday_column = birthday_column
-    
-    def get_new_users_count(self, 
+
+    def _get_user_key_expr(self) -> str:
+        """
+        Возвращает выражение для уникального ключа пользователя
+        Упрощенная версия без преобразования дат
+        """
+        return f"""
+        CONCAT(
+            COALESCE(`{self.name_column}`, ''),
+            '|',
+            COALESCE(`{self.surname_column}`, ''),
+            '|',
+            COALESCE(`{self.birthday_column}`, '')
+        )
+        """
+
+    def _format_date_for_display(self, dt: Optional[datetime]) -> Optional[str]:
+        """Форматирует дату для отображения"""
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%d')
+
+    def get_new_users_count(self,
                            start_date: Optional[datetime] = None,
                            end_date: Optional[datetime] = None) -> Dict[str, Any]:
         """
         Получить количество новых пользователей за период
-        Новый пользователь = первая регистрация (email + name + surname)
-        
+        Новый пользователь = первая регистрация пользователя
+
         Args:
             start_date: начальная дата периода (если None, то с начала всех времен)
             end_date: конечная дата периода (если None, то до текущей даты)
-        
+
         Returns:
-            Словарь с данными:
-            - new_users_count: абсолютное количество новых пользователей
-            - total_users: общее количество уникальных пользователей на конец периода
-            - percentage: процент новых пользователей от общего числа
+            Словарь с данными
         """
         connection = create_connection()
         if not connection:
@@ -69,137 +86,113 @@ class NewUsersAnalytics:
                 'percentage': 0.0,
                 'error': 'Database connection failed'
             }
-        
+
         try:
-            cursor = connection.cursor(buffered=True)
-            
-            # Формируем условия для дат
-            date_conditions = []
+            cursor = connection.cursor(buffered=True, dictionary=True)
+
+            # 1. Находим первые регистрации для каждого пользователя
+            user_key_expr = self._get_user_key_expr()
+
+            # Базовый запрос для нахождения первых регистраций
+            base_query = f"""
+            SELECT 
+                {user_key_expr} as user_key,
+                MIN(`{self.registration_date_column}`) as first_registration_date
+            FROM `{self.table_name}`
+            WHERE `{self.name_column}` IS NOT NULL 
+              AND `{self.name_column}` != ''
+              AND `{self.name_column}` != 'None'
+              AND `{self.surname_column}` IS NOT NULL 
+              AND `{self.surname_column}` != ''
+              AND `{self.surname_column}` != 'None'
+            GROUP BY {user_key_expr}
+            """
+
+            # 2. Считаем новых пользователей в периоде
+            new_users_query = f"""
+            WITH first_registrations AS (
+                {base_query}
+            )
+            SELECT COUNT(*) as new_users_count
+            FROM first_registrations
+            WHERE 1=1
+            """
+
             params = []
-            
+
             if start_date:
-                date_conditions.append(f"`{self.registration_date_column}` >= %s")
+                new_users_query += " AND first_registration_date >= %s"
                 params.append(start_date)
-            
+
             if end_date:
-                date_conditions.append(f"`{self.registration_date_column}` <= %s")
+                new_users_query += " AND first_registration_date <= %s"
                 params.append(end_date)
-            
-            where_clause = ""
-            if date_conditions:
-                where_clause = "WHERE " + " AND ".join(date_conditions)
-            
-            # Количество новых пользователей за период
-            # Новый пользователь = первая регистрация этого человека (email + name + surname)
-            new_users_query = f"""
-                SELECT COUNT(DISTINCT CONCAT(
-                    COALESCE(`{self.email_column}`, ''),
-                    '|',
-                    COALESCE(`{self.name_column}`, ''),
-                    '|',
-                    COALESCE(`{self.surname_column}`, '')
-                ))
-                FROM `{self.table_name}`
-                {where_clause}
-                AND CONCAT(
-                    COALESCE(`{self.email_column}`, ''),
-                    '|',
-                    COALESCE(`{self.name_column}`, ''),
-                    '|',
-                    COALESCE(`{self.surname_column}`, '')
-                ) IN (
-                    SELECT DISTINCT CONCAT(
-                        COALESCE(`{self.email_column}`, ''),
-                        '|',
-                        COALESCE(`{self.name_column}`, ''),
-                        '|',
-                        COALESCE(`{self.surname_column}`, '')
-                    )
-                    FROM `{self.table_name}` t2
-                    WHERE t2.`{self.registration_date_column}` = (
-                        SELECT MIN(t3.`{self.registration_date_column}`)
-                        FROM `{self.table_name}` t3
-                        WHERE CONCAT(
-                            COALESCE(t3.`{self.email_column}`, ''),
-                            '|',
-                            COALESCE(t3.`{self.name_column}`, ''),
-                            '|',
-                            COALESCE(t3.`{self.surname_column}`, '')
-                        ) = CONCAT(
-                            COALESCE(t2.`{self.email_column}`, ''),
-                            '|',
-                            COALESCE(t2.`{self.name_column}`, ''),
-                            '|',
-                            COALESCE(t2.`{self.surname_column}`, '')
-                        )
-                    )
-                    {where_clause.replace('WHERE', 'AND') if where_clause else ''}
-                )
-            """
-            
-            # Упрощенный вариант: считаем уникальных пользователей, у которых первая регистрация в этом периоде
-            new_users_query = f"""
-                SELECT COUNT(DISTINCT CONCAT(
-                    COALESCE(`{self.email_column}`, ''),
-                    '|',
-                    COALESCE(`{self.name_column}`, ''),
-                    '|',
-                    COALESCE(`{self.surname_column}`, '')
-                ))
-                FROM `{self.table_name}` t1
-                {where_clause}
-                AND t1.`{self.registration_date_column}` = (
-                    SELECT MIN(t2.`{self.registration_date_column}`)
-                    FROM `{self.table_name}` t2
-                    WHERE CONCAT(
-                        COALESCE(t2.`{self.email_column}`, ''),
-                        '|',
-                        COALESCE(t2.`{self.name_column}`, ''),
-                        '|',
-                        COALESCE(t2.`{self.surname_column}`, '')
-                    ) = CONCAT(
-                        COALESCE(t1.`{self.email_column}`, ''),
-                        '|',
-                        COALESCE(t1.`{self.name_column}`, ''),
-                        '|',
-                        COALESCE(t1.`{self.surname_column}`, '')
-                    )
-                )
-            """
-            
+
+            logger.info(f"Выполняется запрос для новых пользователей")
             cursor.execute(new_users_query, params)
-            new_users_count = cursor.fetchone()[0] if cursor.rowcount > 0 else 0
-            
-            # Общее количество уникальных пользователей на конец периода
-            end_date_for_total = end_date if end_date else datetime.now()
+            new_users_result = cursor.fetchone()
+            new_users_count = new_users_result['new_users_count'] if new_users_result else 0
+
+            # 3. Считаем общее количество уникальных пользователей
             total_users_query = f"""
-                SELECT COUNT(DISTINCT CONCAT(
-                    COALESCE(`{self.email_column}`, ''),
-                    '|',
-                    COALESCE(`{self.name_column}`, ''),
-                    '|',
-                    COALESCE(`{self.surname_column}`, '')
-                ))
-                FROM `{self.table_name}`
-                WHERE `{self.registration_date_column}` <= %s
+            SELECT COUNT(DISTINCT {user_key_expr}) as total_users
+            FROM `{self.table_name}`
+            WHERE `{self.name_column}` IS NOT NULL 
+              AND `{self.name_column}` != ''
+              AND `{self.name_column}` != 'None'
+              AND `{self.surname_column}` IS NOT NULL 
+              AND `{self.surname_column}` != ''
+              AND `{self.surname_column}` != 'None'
             """
-            
-            cursor.execute(total_users_query, (end_date_for_total,))
-            total_users = cursor.fetchone()[0] if cursor.rowcount > 0 else 0
-            
-            # Вычисляем процент
-            percentage = (new_users_count / total_users * 100) if total_users > 0 else 0.0
-            
+
+            cursor.execute(total_users_query)
+            total_users_result = cursor.fetchone()
+            total_users = total_users_result['total_users'] if total_users_result else 0
+
+            # 4. Для расчета процента используем пользователей на конец периода
+            total_users_in_period_query = f"""
+            SELECT COUNT(DISTINCT {user_key_expr}) as total_users_in_period
+            FROM `{self.table_name}`
+            WHERE `{self.name_column}` IS NOT NULL 
+              AND `{self.name_column}` != ''
+              AND `{self.name_column}` != 'None'
+              AND `{self.surname_column}` IS NOT NULL 
+              AND `{self.surname_column}` != ''
+              AND `{self.surname_column}` != 'None'
+            """
+
+            period_params = []
+            if end_date:
+                total_users_in_period_query += f" AND `{self.registration_date_column}` <= %s"
+                period_params.append(end_date)
+
+            cursor.execute(total_users_in_period_query, period_params)
+            total_users_in_period_result = cursor.fetchone()
+            total_users_in_period = total_users_in_period_result['total_users_in_period'] if total_users_in_period_result else 0
+
+            # 5. Расчет процента
+            percentage = 0.0
+            if total_users_in_period > 0:
+                percentage = (new_users_count / total_users_in_period) * 100
+
             cursor.close()
-            
+            connection.close()
+
             return {
                 'new_users_count': new_users_count,
-                'total_users': total_users,
+                'total_users': total_users_in_period,
+                'total_all_time_users': total_users,
                 'percentage': round(percentage, 2),
-                'start_date': start_date.isoformat() if start_date else None,
-                'end_date': end_date.isoformat() if end_date else None
+                'start_date': self._format_date_for_display(start_date),
+                'end_date': self._format_date_for_display(end_date),
+                'calculation_method': 'Уникальность определяется по name + surname + birthday',
+                'filters_applied': {
+                    'name_not_null': True,
+                    'surname_not_null': True,
+                    'exclude_none_strings': True
+                }
             }
-            
+
         except Error as e:
             logger.error(f"Ошибка при выполнении запроса: {e}")
             return {
@@ -211,17 +204,17 @@ class NewUsersAnalytics:
         finally:
             if connection.is_connected():
                 connection.close()
-    
-    def get_new_users_by_period(self, 
+
+    def get_new_users_by_period(self,
                                 period: str = 'month',
                                 periods_count: int = 12) -> Dict[str, Any]:
         """
         Получить статистику новых пользователей по периодам
-        
+
         Args:
             period: тип периода ('day', 'week', 'month', 'year')
             periods_count: количество периодов для анализа
-        
+
         Returns:
             Словарь с данными по каждому периоду
         """
@@ -229,10 +222,11 @@ class NewUsersAnalytics:
         if not connection:
             logger.error("Не удалось подключиться к базе данных")
             return {'periods': [], 'error': 'Database connection failed'}
-        
+
         try:
-            cursor = connection.cursor(buffered=True)
-            
+            cursor = connection.cursor(buffered=True, dictionary=True)
+            user_key_expr = self._get_user_key_expr()
+
             # Определяем формат даты для группировки
             date_format_map = {
                 'day': '%Y-%m-%d',
@@ -240,50 +234,54 @@ class NewUsersAnalytics:
                 'month': '%Y-%m',
                 'year': '%Y'
             }
-            
+
             date_format = date_format_map.get(period, '%Y-%m')
-            
-            # Считаем новых пользователей по периодам (первая регистрация)
+
+            # Находим первые регистрации и группируем по периодам
             query = f"""
+            WITH first_registrations AS (
                 SELECT 
-                    DATE_FORMAT(first_reg.period_date, %s) as period,
-                    COUNT(DISTINCT first_reg.user_key) as new_users_count
-                FROM (
-                    SELECT 
-                        CONCAT(
-                            COALESCE(`{self.email_column}`, ''),
-                            '|',
-                            COALESCE(`{self.name_column}`, ''),
-                            '|',
-                            COALESCE(`{self.surname_column}`, '')
-                        ) as user_key,
-                        MIN(`{self.registration_date_column}`) as period_date
-                    FROM `{self.table_name}`
-                    WHERE `{self.registration_date_column}` >= DATE_SUB(NOW(), INTERVAL %s {period.upper()})
-                    GROUP BY user_key
-                ) as first_reg
-                GROUP BY period
-                ORDER BY period DESC
-                LIMIT %s
+                    {user_key_expr} as user_key,
+                    MIN(`{self.registration_date_column}`) as first_registration_date
+                FROM `{self.table_name}`
+                WHERE `{self.name_column}` IS NOT NULL 
+                  AND `{self.name_column}` != ''
+                  AND `{self.name_column}` != 'None'
+                  AND `{self.surname_column}` IS NOT NULL 
+                  AND `{self.surname_column}` != ''
+                  AND `{self.surname_column}` != 'None'
+                GROUP BY {user_key_expr}
+            )
+            SELECT 
+                DATE_FORMAT(first_registration_date, %s) as period,
+                COUNT(*) as new_users_count
+            FROM first_registrations
+            WHERE first_registration_date IS NOT NULL
+            GROUP BY DATE_FORMAT(first_registration_date, %s)
+            ORDER BY period DESC
+            LIMIT %s
             """
-            
-            cursor.execute(query, (date_format, periods_count, periods_count))
+
+            cursor.execute(query, (date_format, date_format, periods_count))
             results = cursor.fetchall()
-            
+
             periods_data = []
             for row in results:
                 periods_data.append({
-                    'period': row[0],
-                    'new_users_count': row[1]
+                    'period': row['period'],
+                    'new_users_count': row['new_users_count']
                 })
-            
+
             cursor.close()
-            
+            connection.close()
+
             return {
                 'period_type': period,
+                'periods_count': periods_count,
+                'total_new_users': sum(item['new_users_count'] for item in periods_data),
                 'periods': periods_data
             }
-            
+
         except Error as e:
             logger.error(f"Ошибка при выполнении запроса: {e}")
             return {'periods': [], 'error': str(e)}
