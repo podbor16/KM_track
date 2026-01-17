@@ -21,6 +21,7 @@ let selectedRunnerIds = new Set();
 let allRunners = [];
 let isUpdating = false;
 let routeType = 'loop';
+let activePopups = new Map(); // Хранит активные всплывающие окна
 
 // Цвета для статусов
 const STATUS_COLORS = {
@@ -230,12 +231,49 @@ function updateSelectedRunnersMarkers() {
     updateRunnerMarkers(selectedRunners);
 }
 
-function updateRunnerMarkers(runners) {
-    Object.values(runnerMarkers).forEach(marker => {
-        if (marker) map.removeLayer(marker);
-    });
-    runnerMarkers = {};
+// Функция для принудительного закрытия всех всплывающих окон
+function closeAllPopupsForRefresh() {
+    // Сохраняем список активных popup'ов перед закрытием
+    const currentlyOpen = new Map(activePopups);
     
+    // Закрываем все открытые всплывающие окна
+    for (const [id, popup] of currentlyOpen) {
+        const marker = runnerMarkers[id];
+        if (marker && marker._popup) {
+            marker.closePopup();
+        }
+    }
+    
+    // Очищаем карту активных popup'ов
+    activePopups.clear();
+}
+
+function updateRunnerMarkers(runners) {
+    // Сохраняем состояние открытых всплывающих окон перед обновлением
+    const openPopups = new Map();
+    for (const [id, marker] of Object.entries(runnerMarkers)) {
+        if (marker._popup && marker._popup.isOpen && marker._popup.isOpen()) {
+            openPopups.set(id, true);
+        }
+    }
+    
+    // Удаляем маркеры, которых больше нет в списке runners
+    const runnerIds = new Set(runners.map(runner => runner.id));
+    for (const [id, marker] of Object.entries(runnerMarkers)) {
+        if (!runnerIds.has(Number(id))) {
+            // Закрываем всплывающее окно, если оно было открыто
+            if (marker._popup && marker._popup.isOpen && marker._popup.isOpen()) {
+                marker.closePopup();
+            }
+            map.removeLayer(marker);
+            delete runnerMarkers[id];
+            
+            // Удаляем из activePopups, если был там
+            activePopups.delete(id);
+        }
+    }
+    
+    // Обновляем существующие маркеры или создаем новые
     runners.forEach(runner => {
         if (!runner.position || !runner.position.lat || !runner.position.lng) {
             return;
@@ -275,15 +313,48 @@ function updateRunnerMarkers(runners) {
             iconAnchor: [19, 19]
         });
         
-        const marker = L.marker(
-            [runner.position.lat, runner.position.lng],
-            { icon }
-        ).addTo(map);
+        let marker = runnerMarkers[runner.id];
         
-        const popupContent = createPopupContent(runner);
-        marker.bindPopup(popupContent);
+        if (marker) {
+            // Обновляем позицию существующего маркера
+            marker.setLatLng([runner.position.lat, runner.position.lng]);
+            
+            // Обновляем иконку
+            marker.setIcon(icon);
+            
+            // Обновляем содержимое всплывающего окна
+            const popupContent = createPopupContent(runner);
+            marker.getPopup().setContent(popupContent);
+        } else {
+            // Создаем новый маркер с всплывающим окном
+            marker = L.marker(
+                [runner.position.lat, runner.position.lng],
+                { icon }
+            ).addTo(map);
+            
+            const popupContent = createPopupContent(runner);
+            marker.bindPopup(popupContent, {
+                closeOnClick: false,
+                autoClose: false,
+                closeButton: true
+            });
+            
+            // Добавляем обработчики событий для отслеживания состояния всплывающего окна
+            marker.on('popupopen', function(e) {
+                activePopups.set(runner.id, e.popup);
+            });
+            
+            marker.on('popupclose', function(e) {
+                activePopups.delete(runner.id);
+            });
+            
+            runnerMarkers[runner.id] = marker;
+        }
         
-        runnerMarkers[runner.id] = marker;
+        // Если всплывающее окно было открыто ранее, открываем его снова
+        if (openPopups.has(String(runner.id))) {
+            marker.openPopup();
+        }
     });
 }
 
@@ -547,6 +618,21 @@ function getStatusText(status) {
 function updateStatus(message) {
     const statusPanel = document.getElementById('statusPanel');
     if (statusPanel) statusPanel.textContent = message;
+}
+
+// ============================================
+// УПРАВЛЕНИЕ ВСПЛЫВАЮЩИМИ ОКНАМИ
+// ============================================
+
+function closeAllPopups() {
+    // Закрываем все активные всплывающие окна
+    for (const [id, popup] of activePopups) {
+        const marker = runnerMarkers[id];
+        if (marker && marker._popup) {
+            marker.closePopup();
+        }
+    }
+    activePopups.clear();
 }
 
 // ============================================

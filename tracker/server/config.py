@@ -12,7 +12,7 @@ RACE_DATA_FILE = os.path.join(BASE_DIR, "race_data.json")
 
 # --- ГЛОБАЛЬНЫЕ НАСТРОЙКИ СИМУЛЯЦИИ ---
 MANUAL_SPEED_KMH = 15.0       # Скорость в км/ч (поставьте 50.0 для быстрого теста)
-USE_MANUAL_SPEED = True       # True = все бегут с заданной скоростью. False = случайная скорость.
+USE_MANUAL_SPEED = False       # True = все бегут с заданной скоростью. False = случайная скорость.
 
 # Настройки геометрии трассы
 ONE_WAY_LENGTH_KM = 1.75      # Длина отрисованной линии (в одну сторону)
