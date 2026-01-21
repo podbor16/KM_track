@@ -11,9 +11,10 @@ from datetime import datetime
 from config import BASE_DIR, EVENTS_CONFIG, CURRENT_EVENT, CACHE_DURATION, MAX_SELECTED_RUNNERS
 from routes_service import fetch_route_from_osm, get_route_calculator
 from runners_service import (
-    fetch_copernico_data, transform_copernico_data, 
+    fetch_copernico_data, transform_copernico_data,
     update_runner_positions, race_config
 )
+from analytics_service import get_formatted_analytics
 import config
 
 logger = logging.getLogger(__name__)
@@ -221,3 +222,23 @@ def init_routes(app):
                 'way_id': config['osm_way_id']
             })
         return jsonify({'events': events, 'current': CURRENT_EVENT})
+
+    @app.route('/api/analytics', methods=['GET'])
+    def get_analytics():
+        """Получить аналитику по всем участникам"""
+        try:
+            analytics_data = get_formatted_analytics()
+            return jsonify(analytics_data)
+        except Exception as e:
+            logger.error(f"❌ Ошибка в /api/analytics: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/analytics/refresh', methods=['POST'])
+    def refresh_analytics():
+        """Обновить аналитику (вручную вызвать пересчет)"""
+        try:
+            analytics_data = get_formatted_analytics()
+            return jsonify(analytics_data)
+        except Exception as e:
+            logger.error(f"❌ Ошибка в /api/analytics/refresh: {e}")
+            return jsonify({'error': str(e)}), 500

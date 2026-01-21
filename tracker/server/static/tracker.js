@@ -98,6 +98,7 @@ async function init() {
     
     setupSearch();
     startAutoUpdate();
+    loadAnalytics(); // Загружаем аналитику после инициализации
     updateStatus('Трекер запущен');
 }
 
@@ -194,30 +195,168 @@ async function loadStats() {
             not_started: runners.filter(r => r.status === 'notstarted').length
         };
         
-        const statsPanel = document.getElementById('statsPanel');
-        if (statsPanel) {
-            statsPanel.innerHTML = `
-                <div class="stat-box">
-                    <div class="stat-value">${stats.total}</div>
-                    <div class="stat-label">Всего участников</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${stats.on_track}</div>
-                    <div class="stat-label">На трассе</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${stats.finished}</div>
-                    <div class="stat-label">Финишировали</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${stats.not_started}</div>
-                    <div class="stat-label">Не стартовали</div>
-                </div>
-            `;
+        // Обновляем значения в аналитическом блоке (который теперь содержит статистику)
+        const totalRunnersElement = document.getElementById('total-runners-value');
+        if (totalRunnersElement) {
+            totalRunnersElement.textContent = stats.total;
+        }
+        
+        const notStartedElement = document.getElementById('not-started-value');
+        if (notStartedElement) {
+            notStartedElement.textContent = stats.not_started;
+        }
+        
+        const onTrackElement = document.getElementById('on-track-value');
+        if (onTrackElement) {
+            onTrackElement.textContent = stats.on_track;
+        }
+        
+        const finishedElement = document.getElementById('finished-value');
+        if (finishedElement) {
+            finishedElement.textContent = stats.finished;
         }
     } catch (error) {
         console.error('Ошибка загрузки статистики:', error);
     }
+}
+
+async function loadAnalytics() {
+    try {
+        // Загружаем аналитику
+        const analyticsResponse = await fetch(`${CONFIG.API_BASE}/analytics`);
+        const analyticsData = await analyticsResponse.json();
+        
+        // Загружаем статистику участников
+        const statsResponse = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}`);
+        const runners = await statsResponse.json();
+        
+        const stats = {
+            total: runners.length,
+            on_track: runners.filter(r => ['started', 'running'].includes(r.status)).length,
+            finished: runners.filter(r => r.status === 'finished').length,
+            not_started: runners.filter(r => r.status === 'notstarted').length
+        };
+        
+        const analyticsPanel = document.getElementById('analyticsContent');
+        if (analyticsPanel) {
+            analyticsPanel.innerHTML = renderAnalyticsHTML(analyticsData);
+            
+            // Обновляем значения общей статистики
+            document.getElementById('total-runners-value').textContent = stats.total;
+            document.getElementById('not-started-value').textContent = stats.not_started;
+            document.getElementById('on-track-value').textContent = stats.on_track;
+            document.getElementById('finished-value').textContent = stats.finished;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки аналитики:', error);
+        const analyticsPanel = document.getElementById('analyticsContent');
+        if (analyticsPanel) {
+            analyticsPanel.innerHTML = `<p>Ошибка загрузки аналитических данных: ${error.message}</p>`;
+        }
+    }
+}
+
+function renderAnalyticsHTML(data) {
+    if (!data || data.error) {
+        return `<p>Ошибка: ${data?.error || 'Нет данных для отображения'}</p>`;
+    }
+    
+    // Общая статистика участников (перенесена из верхней части)
+    // Загружаем данные напрямую из runners, так как они доступны в loadStats
+    // Для этого нужно обновить функцию, чтобы она получала и статистику участников
+    const generalStatsHTML = `
+        <div class="analytics-section">
+            <h3>📈 Общая статистика участников</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-value" id="total-runners-value">0</div>
+                    <div class="stat-card-label">Всего участников</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="not-started-value">0</div>
+                    <div class="stat-card-label">Не стартовали</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="on-track-value">0</div>
+                    <div class="stat-card-label">На трассе</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" id="finished-value">0</div>
+                    <div class="stat-card-label">Финишировали</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Статистика по полу
+    const genderStatsHTML = `
+        <div class="analytics-section">
+            <h3>👥 Статистика по полу</h3>
+            <div class="gender-stats">
+                <div class="gender-stat">
+                    <div class="gender-title">Мужчины</div>
+                    <div class="gender-count">${data.gender_stats.male_count}</div>
+                    <div class="gender-avg-time">Среднее время: ${data.gender_stats.male_avg_time}</div>
+                </div>
+                <div class="gender-stat">
+                    <div class="gender-title">Женщины</div>
+                    <div class="gender-count">${data.gender_stats.female_count}</div>
+                    <div class="gender-avg-time">Среднее время: ${data.gender_stats.female_avg_time}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Топ-3 финишёров
+    const topFinishersHTML = `
+        <div class="analytics-section">
+            <h3>🏆 Топ-3 финишёров</h3>
+            <div class="top-finishers">
+                <div>
+                    <h4>Общий зачёт</h4>
+                    ${renderTopFinishers(data.top_finishers.overall, 'overall')}
+                </div>
+                <div>
+                    <h4>Мужчины</h4>
+                    ${renderTopFinishers(data.top_finishers.male, 'male')}
+                </div>
+                <div>
+                    <h4>Женщины</h4>
+                    ${renderTopFinishers(data.top_finishers.female, 'female')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return generalStatsHTML + genderStatsHTML + topFinishersHTML;
+}
+
+function renderTopFinishers(finishers, category) {
+    if (!finishers || finishers.length === 0) {
+        return '<p>Нет данных</p>';
+    }
+    
+    let html = '';
+    finishers.slice(0, 3).forEach((runner, index) => {
+        let medalClass = '';
+        if (index === 0) {
+            medalClass = 'gold';  // Золото для первого места
+        } else if (index === 1) {
+            medalClass = 'silver';  // Серебро для второго места
+        } else if (index === 2) {
+            medalClass = 'bronze';  // Бронза для третьего места
+        }
+        
+        html += `
+            <div class="finisher-item ${medalClass}">
+                <div class="finisher-place">${index + 1}</div>
+                <div class="finisher-name">${runner.name} ${runner.surname}</div>
+                <div class="finisher-time">${runner.time_str}</div>
+            </div>
+        `;
+    });
+    
+    return html;
 }
 
 // ============================================
@@ -590,6 +729,7 @@ function startAutoUpdate() {
         try {
             await loadAllRunners();
             await loadStats();
+            await loadAnalytics(); // Обновляем аналитику вместе с другими данными
             updateStatus('Обновлено ' + new Date().toLocaleTimeString());
         } catch (error) {
             console.error('Ошибка автообновления:', error);

@@ -418,3 +418,149 @@ body {
     padding: 2px 6px;
     border-radius: 4px;
 }
+
+/* Стили для блока аналитики */
+.analytics-panel {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-top: 20px;
+}
+
+.analytics-panel h2 {
+    color: #2196F3;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.analytics-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    background-color: #fafafa;
+}
+
+.analytics-section h3 {
+    color: #1976D2;
+    margin-bottom: 10px;
+    font-size: 18px; /* Увеличенный размер шрифта */
+    text-align: center; /* Центрирование заголовков */
+}
+
+.top-finishers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    justify-items: center; /* Центрирование элементов по горизонтали */
+}
+
+.finisher-item {
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    border-left: 3px solid #4CAF50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 200px;
+}
+
+.finisher-item.gold {
+    border-left: 3px solid gold;
+}
+
+.finisher-item.silver {
+    border-left: 3px solid silver;
+}
+
+.finisher-item.bronze {
+    border-left: 3px solid #CD7F32;
+}
+
+.finisher-place {
+    font-weight: bold;
+    color: #1976D2;
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+.finisher-name {
+    font-weight: bold;
+    margin-bottom: 3px;
+}
+
+.finisher-time {
+    color: #666;
+    font-size: 14px;
+}
+
+.top-finishers > div {
+    text-align: center; /* Центрирование подзаголовков */
+}
+
+.top-finishers h4 {
+    margin-bottom: 10px; /* Отступ между подзаголовком и информацией */
+    color: #1976D2;
+    font-weight: bold;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.stat-card {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-top: 3px solid #2196F3;
+}
+
+.stat-card-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: #2196F3;
+}
+
+.stat-card-label {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+
+.gender-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.gender-stat {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.gender-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #1976D2;
+}
+
+.gender-count {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2196F3;
+}
+
+.gender-avg-time {
+    font-size: 14px;
+    color: #666;
+    margin-top: 5px;
+}
