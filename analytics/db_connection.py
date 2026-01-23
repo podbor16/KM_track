@@ -175,11 +175,12 @@ if __name__ == "__main__":
         try:
             # СОЗДАЕМ КУРСОР С buffered=True
             cursor = connection.cursor(dictionary=True, buffered=True)
-
+            
             try:
                 # Выполняем универсальный запрос для получения информации о структуре БД
                 cursor.execute("SHOW TABLES")
-                tables = [table[0] for table in cursor.fetchall()]  # Читаем ВСЕ результаты
+                tables_result = cursor.fetchall()
+                tables = [list(table.values())[0] for table in tables_result]  # Читаем ВСЕ результаты
 
                 print(f"\nНайдено таблиц в базе данных: {len(tables)}")
                 print("Список таблиц в базе данных:")
@@ -234,3 +235,38 @@ if __name__ == "__main__":
     else:
         logger.error("Не удалось установить соединение с базой данных")
         print("\nНе удалось установить соединение с базой данных")
+
+
+def get_test_table_data():
+    """
+    Получает все данные из таблицы 'Тестовая'
+    """
+    connection = create_connection()
+    
+    if connection:
+        try:
+            cursor = connection.cursor(dictionary=True, buffered=True)
+            
+            try:
+                # Выполняем запрос к таблице "Тестовая"
+                cursor.execute("SELECT * FROM `Тестовая`")
+                records = cursor.fetchall()
+                
+                return records
+                
+            except Error as e:
+                error_msg = f"Ошибка выполнения SQL запроса к таблице 'Тестовая': {e}"
+                logger.error(error_msg)
+                print(f"\n{error_msg}")
+                return []
+                
+            finally:
+                cursor.close()
+                
+        finally:
+            if connection.is_connected():
+                connection.close()
+                logger.info("Соединение с базой данных закрыто")
+    else:
+        logger.error("Не удалось установить соединение с базой данных")
+        return []

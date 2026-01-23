@@ -4,6 +4,7 @@ import json
 import time
 import requests
 import logging
+import urllib3
 from config import (
     BASE_DIR, EVENTS_CONFIG, ROUTE_CACHE_DURATION,
     ONE_WAY_LENGTH_KM
@@ -112,7 +113,14 @@ def fetch_route_from_osm(event_name='snow7'):
         logger.info(f"🌍 Запрос маршрута из OpenStreetMap (Way ID: {way_id})")
         url = f"https://overpass-api.de/api/interpreter?data=[out:json];way({way_id});(._;>;);out;"
         headers = {'User-Agent': 'KrasmarathonTracker/1.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        # Try with SSL verification first, fallback to unverified if needed
+        try:
+            response = requests.get(url, headers=headers, timeout=15, verify=True)
+        except requests.exceptions.SSLError as ssl_error:
+            logger.warning(f"⚠️ SSL ошибка при подключении к OSM: {ssl_error}. Пробуем без проверки сертификата...")
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            response = requests.get(url, headers=headers, timeout=15, verify=False)
         response.raise_for_status()
 
         data = response.json()
@@ -125,6 +133,9 @@ def fetch_route_from_osm(event_name='snow7'):
         else:
             return None
 
+    except requests.exceptions.RequestException as req_error:
+        logger.error(f"❌ Ошибка при запросе маршрута из OSM: {req_error}")
+        return get_fallback_route()
     except Exception as e:
         logger.error(f"❌ Ошибка при загрузке маршрута из OSM: {e}")
         return get_fallback_route()

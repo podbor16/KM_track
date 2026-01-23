@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Стартовый список и результаты забега</title>
+    <link rel="stylesheet" href="static/analytics.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Стартовый список и результаты забега Красмарафон</h1>
+        
+        <div class="mode-selector">
+            <button id="beforeModeBtn" class="mode-btn active" onclick="switchMode('before')">Стартовый список</button>
+            <button id="duringModeBtn" class="mode-btn" onclick="switchMode('during')">Результаты</button>
+        </div>
+        
+       <div class="filters">
+           <div class="filter-group">
+               <label for="genderFilter">Пол:</label>
+               <select id="genderFilter" onchange="applyFilters()">
+                   <option value="male">Мужской</option>
+                   <option value="female">Женский</option>
+               </select>
+           </div>
+           
+           <div class="filter-group">
+               <label for="ageGroupFilter">Возрастная группа:</label>
+               <select id="ageGroupFilter" onchange="applyFilters()">
+                   <!-- Возрастные группы будут заполнены динамически -->
+               </select>
+           </div>
+       </div>
+       
+       <div id="loadingIndicator" class="loading" style="display: none;">Загрузка данных...</div>
+       <div id="errorIndicator" class="error" style="display: none;"></div>
+       
+       <table id="dataTable">
+           <thead>
+               <tr id="tableHeader">
+                   <th>№</th>
+                   <th>Фамилия</th>
+                   <th>Имя</th>
+                   <th>Год рождения</th>
+                   <th>Дистанция</th>
+                   <th>Пол</th>
+                   <th>Возрастная группа</th>
+                   <th>Статус</th>
+                   <th>Время</th>
+               </tr>
+           </thead>
+           <tbody id="tableBody">
+               <!-- Данные будут добавлены через JavaScript -->
+           </tbody>
+       </table>
+    </div>
+
+    <script src="static/analytics.js"></script>
+</body>
+</html>

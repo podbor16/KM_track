@@ -29,9 +29,9 @@ init_routes(app)
 
 
 if __name__ == '__main__':
-    print("🚀 Запуск трекера Красмарафон")
-    print(f"🔧 Режим скорости: {'РУЧНОЙ' if USE_MANUAL_SPEED else 'АВТО'}")
-    print(f"⚡ Скорость: {MANUAL_SPEED_KMH} км/ч")
+    print("Запуск трекера Красмарафон")
+    print(f"Режим скорости: {'РУЧНОЙ' if USE_MANUAL_SPEED else 'АВТО'}")
+    print(f"Скорость: {MANUAL_SPEED_KMH} км/ч")
     print("=" * 50)
     
     # Предварительная загрузка маршрута при старте

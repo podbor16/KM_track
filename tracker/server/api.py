@@ -15,6 +15,7 @@ from runners_service import (
     update_runner_positions, race_config
 )
 from analytics_service import get_formatted_analytics
+from analytics.db_connection import get_test_table_data
 import config
 
 logger = logging.getLogger(__name__)
@@ -232,6 +233,47 @@ def init_routes(app):
         except Exception as e:
             logger.error(f"❌ Ошибка в /api/analytics: {e}")
             return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/registered-runners', methods=['GET'])
+    def get_registered_runners():
+        """Получить зарегистрированных участников из таблицы 'Тестовая'"""
+        try:
+            runners_data = get_test_table_data()
+            return jsonify(runners_data)
+        except Exception as e:
+            logger.error(f"❌ Ошибка в /api/registered-runners: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/race-results', methods=['GET'])
+    def get_race_results():
+        """Получить результаты гонки из race_data.json"""
+        try:
+            import json
+            with open('tracker/race_data.json', 'r', encoding='utf-8') as file:
+                data = json.load(file)
+            return jsonify(data.get('data', []))
+        except Exception as e:
+            logger.error(f"❌ Ошибка в /api/race-results: {e}")
+            return jsonify([]), 500
+
+    @app.route('/analytics', methods=['GET'])
+    def serve_analytics_page():
+        """Обслуживание страницы аналитики участников"""
+        from flask import send_from_directory
+        import os
+        
+        analytics_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'personal')
+        return send_from_directory(analytics_dir, 'start_list.html')
+
+    # Маршрут для статических файлов аналитики
+    @app.route('/analytics/static/<path:filename>')
+    def serve_analytics_static(filename):
+        """Обслуживание статических файлов для страницы аналитики"""
+        from flask import send_from_directory
+        import os
+        
+        static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'personal', 'static')
+        return send_from_directory(static_dir, filename)
 
     @app.route('/api/analytics/refresh', methods=['POST'])
     def refresh_analytics():
