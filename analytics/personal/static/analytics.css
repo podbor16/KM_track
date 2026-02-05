@@ -142,7 +142,7 @@ table {
 
 th, td {
     padding: 16px 14px;
-    text-align: left;
+    text-align: center;
     border-bottom: 1px solid #e0e0e0;
 }
 
@@ -156,6 +156,14 @@ th {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+th:hover {
+    background: linear-gradient(to bottom, #3498db, #2980b9);
+    opacity: 0.8;
 }
 
 tr:nth-child(even) {
@@ -167,15 +175,37 @@ tr:hover {
     transition: background-color 0.3s;
 }
 
-.age-group-tag {
+.gender-tag {
     display: inline-block;
     padding: 5px 12px;
-    background: linear-gradient(to right, #e3f2fd, #bbdefb);
-    color: #0d47a1;
     border-radius: 20px;
     font-size: 13px;
     font-weight: 500;
-    border: 1px solid #bbdefb;
+    border: 1px solid transparent;
+}
+
+.gender-male {
+    background: linear-gradient(to right, #e3f2fd, #bbdefb);
+    color: #0d47a1;
+    border-color: #bbdefb;
+}
+
+.gender-female {
+    background: linear-gradient(to right, #fce4ec, #f8bbd0);
+    color: #880e4f;
+    border-color: #f8bbd0;
+}
+
+.age-group-tag {
+    display: inline-block;
+    padding: 5px 12px;
+    background: linear-gradient(to right, #fff3e0, #ffe0b2);
+    color: #e65100;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #ffe0b2;
+}
 }
 
 .status-registered {

@@ -6,6 +6,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Трекер забега Снежная Семёрка</title>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+        <link rel="stylesheet" href="/static/navigation.css">
         <link rel="stylesheet" href="/static/tracker.css">
         <style>
           @keyframes pulse {
@@ -30,6 +31,29 @@
         </style>
     </head>
     <body>
+        <!-- Навигационная панель -->
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a href="/" class="navbar-brand">
+                    <span class="navbar-brand-icon">🏃</span>
+                    <span class="navbar-brand-text">Красмарафон</span>
+                </a>
+                <button class="navbar-toggle" id="navbarToggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="navbar-menu" id="navbarMenu">
+                    <li class="navbar-item">
+                        <a href="/" class="navbar-link active">🗺️ Трекер</a>
+                    </li>
+                    <li class="navbar-item">
+                        <a href="/analytics" class="navbar-link">📊 Результаты</a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
         <div class="container">
             <div class="header">
                 <h1 id="eventTitle">🏃 Трекер забега</h1>
@@ -86,6 +110,21 @@
 
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
+            // Мобильное меню
+            const navbarToggle = document.getElementById('navbarToggle');
+            const navbarMenu = document.getElementById('navbarMenu');
+            
+            navbarToggle.addEventListener('click', () => {
+                navbarMenu.classList.toggle('active');
+            });
+
+            // Закрываем меню при клике на ссылку
+            document.querySelectorAll('.navbar-link').forEach(link => {
+                link.addEventListener('click', () => {
+                    navbarMenu.classList.remove('active');
+                });
+            });
+
             // Загружаем событие с сервера
             let eventLoaded = false;
             fetch('/api/current-event')

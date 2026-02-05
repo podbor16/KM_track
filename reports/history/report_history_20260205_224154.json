@@ -51,5 +51,10 @@
     "end_date": null,
     "year": 2026,
     "generated_at": "2026-02-05T22:41:54.207135"
+  },
+  "_metadata": {
+    "saved_at": "2026-02-05T22:41:54.210860",
+    "version": "1.0",
+    "source": "business_analytics"
   }
 }

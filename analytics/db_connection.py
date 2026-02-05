@@ -125,16 +125,8 @@ def create_connection():
         if connection.is_connected():
             logger.info("Успешное подключение к базе данных установлено")
 
-            # ИСПРАВЛЯЕМ: используем свойства вместо deprecated методов
-            db_info = connection.server_info
-            logger.info(f"Версия MySQL сервера: {db_info}")
-
-            host_info = connection.server_host
-            logger.info(f"Подключен к серверу: {host_info}, версия: {db_info}")
-
             print(f"Успешное подключение к БД")
-            print(f"Версия MySQL сервера: {db_info}")
-            print(f"Фактический хост подключения: {host_info}")
+            print(f"Хост подключения: {host}")
 
             return connection
 
@@ -237,9 +229,73 @@ if __name__ == "__main__":
         print("\nНе удалось установить соединение с базой данных")
 
 
+def calculate_age_group(birthdate_or_age):
+    """
+    Рассчитывает возрастную группу по дате рождения или возрасту
+    
+    Возрастные группы:
+    - <20: до 20 лет
+    - 21-35: 21-35 лет
+    - 36-49: 36-49 лет
+    - 50-59: 50-59 лет
+    - 60-69: 60-69 лет
+    - 70-79: 70-79 лет
+    """
+    import datetime
+    
+    if not birthdate_or_age:
+        return 'Неизвестно'
+    
+    try:
+        age = None
+        
+        # Если это DATE или DATETIME объект
+        if isinstance(birthdate_or_age, (datetime.date, datetime.datetime)):
+            birth_year = birthdate_or_age.year
+            current_year = datetime.datetime.now().year
+            age = current_year - birth_year
+        # Если это строка с датой
+        elif isinstance(birthdate_or_age, str):
+            # Пытаемся распарсить как дату (YYYY-MM-DD)
+            try:
+                birth_date = datetime.datetime.strptime(birthdate_or_age[:10], '%Y-%m-%d')
+                birth_year = birth_date.year
+                current_year = datetime.datetime.now().year
+                age = current_year - birth_year
+            except:
+                # Пытаемся распарсить как просто число (возраст)
+                try:
+                    age = int(birthdate_or_age)
+                except:
+                    return 'Неизвестно'
+        # Если это число (возраст)
+        elif isinstance(birthdate_or_age, int):
+            age = birthdate_or_age
+        
+        if age is None:
+            return 'Неизвестно'
+        
+        if age < 20:
+            return '<20'
+        elif age <= 35:
+            return '21-35'
+        elif age <= 49:
+            return '36-49'
+        elif age <= 59:
+            return '50-59'
+        elif age <= 69:
+            return '60-69'
+        else:
+            return '70-79'
+    except Exception as e:
+        logger.error(f"Ошибка при расчёте возрастной группы: {e}")
+        return 'Неизвестно'
+
+
 def get_test_table_data():
     """
-    Получает все данные из таблицы 'Тестовая'
+    Получает все данные из таблицы 'Тестовая' и добавляет возрастную группу
+    Если БД недоступна, возвращает тестовые данные
     """
     connection = create_connection()
     
@@ -252,13 +308,34 @@ def get_test_table_data():
                 cursor.execute("SELECT * FROM `Тестовая`")
                 records = cursor.fetchall()
                 
-                return records
+                if records:
+                    # Добавляем возрастную группу к каждой записи
+                    for record in records:
+                        # Проверяем какие поля есть для расчёта возраста
+                        age_info = None
+                        if 'birthday' in record:
+                            age_info = record['birthday']
+                        elif 'birthdate' in record:
+                            age_info = record['birthdate']
+                        elif 'Дата рождения' in record:
+                            age_info = record['Дата рождения']
+                        elif 'age' in record:
+                            age_info = record['age']
+                        elif 'Возраст' in record:
+                            age_info = record['Возраст']
+                        
+                        record['category'] = calculate_age_group(age_info)
+                    
+                    return records
+                else:
+                    logger.warning("Таблица 'Тестовая' пуста, возвращаем тестовые данные")
+                    return get_test_data_fallback()
                 
             except Error as e:
                 error_msg = f"Ошибка выполнения SQL запроса к таблице 'Тестовая': {e}"
                 logger.error(error_msg)
                 print(f"\n{error_msg}")
-                return []
+                return get_test_data_fallback()
                 
             finally:
                 cursor.close()
@@ -268,5 +345,85 @@ def get_test_table_data():
                 connection.close()
                 logger.info("Соединение с базой данных закрыто")
     else:
-        logger.error("Не удалось установить соединение с базой данных")
-        return []
+        logger.error("Не удалось установить соединение с базой данных, используем тестовые данные")
+        return get_test_data_fallback()
+
+
+def get_test_data_fallback():
+    """
+    Возвращает тестовые данные для режима стартового списка
+    """
+    return [
+        {
+            'surname': 'Иванов',
+            'name': 'Иван',
+            'sex': 'male',
+            'city': 'Красноярск',
+            'club': 'БегКлуб',
+            'birthday': '2005-03-15',
+            'category': '<20'
+        },
+        {
+            'surname': 'Петрова',
+            'name': 'Мария',
+            'sex': 'female',
+            'city': 'Красноярск',
+            'club': 'Марафон',
+            'birthday': '1992-07-22',
+            'category': '21-35'
+        },
+        {
+            'surname': 'Сидоров',
+            'name': 'Петр',
+            'sex': 'male',
+            'city': 'Новосибирск',
+            'club': 'Спорт',
+            'birthday': '1975-11-08',
+            'category': '50-59'
+        },
+        {
+            'surname': 'Козлова',
+            'name': 'Анна',
+            'sex': 'female',
+            'city': 'Красноярск',
+            'club': 'БегКлуб',
+            'birthday': '2000-01-30',
+            'category': '<20'
+        },
+        {
+            'surname': 'Морозов',
+            'name': 'Игорь',
+            'sex': 'male',
+            'city': 'Енисейск',
+            'club': 'Олимп',
+            'birthday': '1988-09-12',
+            'category': '36-49'
+        },
+        {
+            'surname': 'Волкова',
+            'name': 'Светлана',
+            'sex': 'female',
+            'city': 'Красноярск',
+            'club': 'Марафон',
+            'birthday': '1960-05-20',
+            'category': '60-69'
+        },
+        {
+            'surname': 'Белов',
+            'name': 'Сергей',
+            'sex': 'male',
+            'city': 'Красноярск',
+            'club': 'Спорт',
+            'birthday': '1970-12-03',
+            'category': '50-59'
+        },
+        {
+            'surname': 'Лебедева',
+            'name': 'Виктория',
+            'sex': 'female',
+            'city': 'Ачинск',
+            'club': 'Бегуны',
+            'birthday': '1985-06-18',
+            'category': '36-49'
+        }
+    ]

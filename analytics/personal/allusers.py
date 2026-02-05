@@ -1,4 +1,5 @@
 import json
+import os
 
 def format_time(milliseconds):
     """Форматирует время в миллисекундах в формат MM:SS.mmm"""
@@ -10,7 +11,8 @@ def format_time(milliseconds):
 
 def analyze_race_data():
     # Загружаем данные из race_data.json
-    with open('tracker/race_data.json', 'r', encoding='utf-8') as file:
+    race_data_path = os.path.join(os.path.dirname(__file__), '..', '..', 'tracker', 'race_data.json')
+    with open(race_data_path, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
     runners = data['data']

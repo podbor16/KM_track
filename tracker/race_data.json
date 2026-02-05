@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-01-12T13:54:59.837500Z",
+  "last_updated": "2026-02-05T14:12:47.602753Z",
   "data": [
     {
       "surname": "Дементьева",
@@ -12,7 +12,7 @@
       "dorsal": 212,
       "category": "Женщины",
       "gunTime": "2025-12-07T04:00:00.000Z",
-      "status": "running",
+      "status": "finished",
       "startRawTime": 1765080744127,
       "times.official_:::start:::": 744127,
       "times.real_:::start:::": 0,
@@ -48,7 +48,7 @@
       "dorsal": 592,
       "category": "Мужчины",
       "gunTime": "2025-12-07T04:00:00.000Z",
-      "status": "running",
+      "status": "finished",
       "startRawTime": 1765080588922,
       "times.official_:::start:::": 588922,
       "times.real_:::start:::": 0,

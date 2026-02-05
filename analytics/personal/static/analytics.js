@@ -1,11 +1,15 @@
-// JavaScript для страницы стартового списка и результатов забега
-
-let currentMode = 'before'; // 'before' или 'during'
+// Функция заново загружает данные из основного источника (race_data.json)
+let currentMode = 'during'; // По умолчанию режим "результаты"
 let allRunners = [];
 let filteredRunners = [];
+let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
 
 // Инициализация страницы
 document.addEventListener('DOMContentLoaded', function() {
+    // Устанавливаем правильную активную кнопку при загрузке
+    document.getElementById('beforeModeBtn').classList.toggle('active', currentMode === 'before');
+    document.getElementById('duringModeBtn').classList.toggle('active', currentMode === 'during');
+    
     loadRunnersData();
 });
 
@@ -17,10 +21,14 @@ function switchMode(mode) {
     document.getElementById('beforeModeBtn').classList.toggle('active', mode === 'before');
     document.getElementById('duringModeBtn').classList.toggle('active', mode === 'during');
     
-    // Обновляем классы контейнера для скрытия/показа столбцов
-    const tableContainer = document.querySelector('.container');
-    tableContainer.classList.toggle('before-mode', mode === 'before');
-    tableContainer.classList.toggle('during-mode', mode === 'during');
+    // Пока скрываем оба режима
+    document.getElementById('startListTable').style.display = 'none';
+    document.getElementById('resultsTable').style.display = 'none';
+    
+    // Сбрасываем фильтры и сортировку
+    document.getElementById('genderFilter').value = '';
+    document.getElementById('ageGroupFilter').value = '';
+    sortState = { column: null, direction: 'asc' };
     
     // Перезагружаем данные в зависимости от режима
     loadRunnersData();
@@ -60,12 +68,14 @@ async function loadRunnersData() {
             console.log('Пример первого элемента:', allRunners[0]);
         }
         
+        // Заполняем фильтры для обоих режимов
         populateAgeGroups(allRunners);
+        
         applyFilters();
+        showLoading(false);
     } catch (error) {
         console.error('Ошибка загрузки данных:', error);
         showError('Ошибка загрузки данных: ' + error.message);
-    } finally {
         showLoading(false);
     }
 }
@@ -73,21 +83,42 @@ async function loadRunnersData() {
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
+    const savedValue = ageGroupSelect.value; // Сохраняем текущее выбранное значение
     const ageGroups = new Set();
     
     runners.forEach(runner => {
         // Проверяем различные возможные названия полей для возрастной категории
-        if (runner.category) {
-            ageGroups.add(runner.category);
-        } else if (runner.age_group) {
-            ageGroups.add(runner.age_group);
-        } else if (runner['Возрастная категория']) {
-            ageGroups.add(runner['Возрастная категория']);
+        let category = null;
+        
+        if (currentMode === 'before') {
+            // Для стартового списка используем поле 'category' (рассчитанное на сервере)
+            if (runner.category) {
+                category = runner.category;
+            }
+        } else {
+            // Для результатов используем 'category'
+            if (runner.category) {
+                category = runner.category;
+            } else if (runner.age_group) {
+                category = runner.age_group;
+            } else if (runner['Возрастная категория']) {
+                category = runner['Возрастная категория'];
+            }
+        }
+        
+        if (category) {
+            ageGroups.add(category);
         }
     });
     
     // Очищаем текущие опции
     ageGroupSelect.innerHTML = '';
+    
+    // Добавляем опцию "Все" первой
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'Все';
+    ageGroupSelect.appendChild(allOption);
     
     // Добавляем уникальные возрастные группы
     const sortedGroups = Array.from(ageGroups).sort();
@@ -97,6 +128,11 @@ function populateAgeGroups(runners) {
         option.textContent = group;
         ageGroupSelect.appendChild(option);
     });
+    
+    // Восстанавливаем сохраненное значение
+    if (savedValue) {
+        ageGroupSelect.value = savedValue;
+    }
 }
 
 // Применяем фильтры к данным
@@ -107,17 +143,24 @@ function applyFilters() {
     filteredRunners = allRunners.filter(runner => {
         // Фильтр по полу - проверяем различные возможные названия полей
         let runnerGender = '';
-        if (runner.gender) {
-            runnerGender = runner.gender;
-        } else if (runner.sex) {
-            runnerGender = runner.sex;
+        if (currentMode === 'before') {
+            // Для стартового списка используем поле 'sex'
+            runnerGender = runner.sex ? runner.sex.toLowerCase() : '';
+        } else {
+            // Для результатов используем 'gender' - приводим в нижний регистр
+            if (runner.gender) {
+                runnerGender = runner.gender.toLowerCase();
+            } else if (runner.sex) {
+                runnerGender = runner.sex.toLowerCase();
+            }
         }
         
-        if (genderFilter && runnerGender !== genderFilter) {
+        // Пропускаем только если выбран конкретный пол
+        if (genderFilter !== '' && runnerGender !== genderFilter) {
             return false;
         }
         
-        // Фильтр по возрастной группе - проверяем различные возможные названия полей
+        // Фильтр по возрастной группе (для обоих режимов)
         let runnerCategory = '';
         if (runner.category) {
             runnerCategory = runner.category;
@@ -127,100 +170,225 @@ function applyFilters() {
             runnerCategory = runner['Возрастная категория'];
         }
         
-        if (ageGroupFilter && runnerCategory !== ageGroupFilter) {
+        if (ageGroupFilter !== '' && runnerCategory !== ageGroupFilter) {
             return false;
         }
         
         return true;
     });
     
-    renderTable(filteredRunners);
+    // Заполняем фильтры возрастных групп
+    populateAgeGroups(filteredRunners);
+    
+    // Рендерим в зависимости от режима
+    if (currentMode === 'before') {
+        renderStartList(filteredRunners);
+    } else {
+        renderResultsTable(filteredRunners);
+        // Автоматически сортируем по темпу (от минимального к максимальному) только для режима 'during'
+        sortState.column = 'pace';
+        sortState.direction = 'asc';
+        sortTable('pace');
+    }
 }
 
-// Отрисовываем таблицу
-function renderTable(runners) {
-    const tbody = document.getElementById('tableBody');
+// Функция для форматирования времени из миллисекунд в чч:мм:сс
+function formatTime(milliseconds) {
+    if (!milliseconds) return '-';
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Функция для расчета темпа (минут на км)
+function calculatePace(milliseconds, distanceStr) {
+    if (!milliseconds || !distanceStr) return '-';
+    const distance = parseFloat(distanceStr);
+    if (distance <= 0) return '-';
+    const totalMinutes = milliseconds / 1000 / 60;
+    const pace = totalMinutes / distance;
+    return pace.toFixed(2);
+}
+
+// Функция сортировки таблицы
+function sortTable(columnName) {
+    // Если кликнули на тот же столбец - меняем направление
+    if (sortState.column === columnName) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        // Новый столбец - начинаем с ascending
+        sortState.column = columnName;
+        sortState.direction = 'asc';
+    }
+    
+    // Копируем filtered runners и сортируем
+    let toSort = [...filteredRunners];
+    
+    toSort.sort((a, b) => {
+        let valA, valB;
+        
+        // Для режима 'before' - используем другие поля
+        if (currentMode === 'before') {
+            switch(columnName) {
+                case 'index':
+                    valA = 0;
+                    valB = 0;
+                    break;
+                case 'surname':
+                    valA = (a.surname || '').toLowerCase();
+                    valB = (b.surname || '').toLowerCase();
+                    break;
+                case 'name':
+                    valA = (a.name || '').toLowerCase();
+                    valB = (b.name || '').toLowerCase();
+                    break;
+                case 'birthdate':
+                    valA = a.birthdate || a.birthday ? new Date(a.birthdate || a.birthday).getFullYear() : 0;
+                    valB = b.birthdate || b.birthday ? new Date(b.birthdate || b.birthday).getFullYear() : 0;
+                    break;
+                case 'distance':
+                    valA = 0;
+                    valB = 0;
+                    break;
+                case 'category':
+                    valA = (a.category || '').toLowerCase();
+                    valB = (b.category || '').toLowerCase();
+                    break;
+                case 'sex':
+                    valA = (a.sex || '').toLowerCase();
+                    valB = (b.sex || '').toLowerCase();
+                    break;
+                case 'city':
+                    valA = (a.city || a.City || '').toLowerCase();
+                    valB = (b.city || b.City || '').toLowerCase();
+                    break;
+                case 'club':
+                    valA = (a.club || a.Club || '').toLowerCase();
+                    valB = (b.club || b.Club || '').toLowerCase();
+                    break;
+                default:
+                    return 0;
+            }
+        } else {
+            // Для режима 'during'
+            switch(columnName) {
+                case 'index':
+                    valA = 0;
+                    valB = 0;
+                    break;
+                case 'surname':
+                    valA = (a.surname || '').toLowerCase();
+                    valB = (b.surname || '').toLowerCase();
+                    break;
+                case 'name':
+                    valA = (a.name || '').toLowerCase();
+                    valB = (b.name || '').toLowerCase();
+                    break;
+                case 'birthdate':
+                    valA = a.birthdate ? new Date(a.birthdate).getFullYear() : 0;
+                    valB = b.birthdate ? new Date(b.birthdate).getFullYear() : 0;
+                    break;
+                case 'event':
+                    valA = (a.event || '').toLowerCase();
+                    valB = (b.event || '').toLowerCase();
+                    break;
+                case 'gender':
+                    valA = (a.gender || '').toLowerCase();
+                    valB = (b.gender || '').toLowerCase();
+                    break;
+                case 'category':
+                    valA = (a.category || '').toLowerCase();
+                    valB = (b.category || '').toLowerCase();
+                    break;
+                case 'status':
+                    valA = (a.status || '').toLowerCase();
+                    valB = (b.status || '').toLowerCase();
+                    break;
+                case 'pace':
+                    const pace1 = calculatePace(a['times.official_:::finish:::'], a.event);
+                    const pace2 = calculatePace(b['times.official_:::finish:::'], b.event);
+                    valA = pace1 === '-' ? Infinity : parseFloat(pace1);
+                    valB = pace2 === '-' ? Infinity : parseFloat(pace2);
+                    break;
+            }
+        }
+        
+        // Сравнение
+        if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+    
+    // Рендерим в зависимости от режима
+    if (currentMode === 'before') {
+        renderStartList(toSort);
+    } else {
+        renderResultsTable(toSort);
+    }
+}
+
+// Отрисовываем таблицу результатов (режим 'during')
+function renderResultsTable(runners) {
+    const tbody = document.getElementById('resultsTableBody');
     tbody.innerHTML = '';
+    
+    // Показываем таблицу результатов
+    document.getElementById('resultsTable').style.display = 'table';
+    document.getElementById('startListTable').style.display = 'none';
     
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
         
-        // Вычисляем возраст - проверяем различные возможные названия полей
+        // Год рождения
         let birthYear = 'N/A';
         if (runner.birthdate) {
-            birthYear = new Date(runner.birthdate).getFullYear();
-        } else if (runner.birth_date) {
-            birthYear = new Date(runner.birth_date).getFullYear();
-        } else if (runner['Дата рождения']) {
-            birthYear = new Date(runner['Дата рождения']).getFullYear();
+            const year = new Date(runner.birthdate).getFullYear();
+            birthYear = year > 0 ? year : 'N/A';
         }
         
-        const currentYear = new Date().getFullYear();
-        const age = birthYear !== 'N/A' ? currentYear - birthYear : 'N/A';
-        
-        // Определяем статус и время в зависимости от режима
+        // Статус и время
         let status = '';
         let time = '';
+        let pace = '-';
         let statusClass = '';
         
-        if (currentMode === 'before') {
-            status = 'Зарегистрирован';
-            time = '-';
-            statusClass = 'status-registered';
-        } else {
-            status = runner.status || 'Неизвестно';
-            statusClass = `status-${runner.status || 'unknown'}`;
-            
-            if (runner.status === 'finished' && runner.times && runner.times['real_:::finish:::']) {
-                const finishTime = runner.times['real_:::finish:::'];
-                const startTime = runner.times['real_:::start:::'] || 0;
-                const netTime = finishTime - startTime;
-                
-                // Форматируем время в формат MM:SS
-                const minutes = Math.floor(netTime / 60000);
-                const seconds = Math.floor((netTime % 60000) / 1000);
-                time = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            } else if (runner.status === 'running') {
-                time = 'В пути';
-            } else if (runner.status === 'notstarted') {
-                time = 'Не стартовал';
-            } else if (runner.status === 'disqualified') {
-                time = 'Дисквалифицирован';
+        // Переводим статусы на русский
+        let statusRu = runner.status || 'Неизвестно';
+        if (runner.status === 'finished') statusRu = 'Финишировал';
+        if (runner.status === 'notstarted') statusRu = 'Не стартовал';
+        if (runner.status === 'disqualified') statusRu = 'Дисквалифицирован';
+        if (runner.status === 'running') statusRu = 'Бежит';
+        
+        status = statusRu;
+        statusClass = `status-${runner.status || 'unknown'}`;
+        const finishTime = runner['times.official_:::finish:::'];
+        time = formatTime(finishTime);
+        pace = calculatePace(finishTime, runner.event);
+        
+        // Фамилия, имя, пол
+        let firstName = runner.name || 'N/A';
+        let lastName = runner.surname || 'N/A';
+        let genderClass = '';
+        let genderText = 'N/A';
+        
+        if (runner.gender) {
+            if (runner.gender === 'male') {
+                genderText = 'Мужской';
+                genderClass = 'gender-male';
+            } else if (runner.gender === 'female') {
+                genderText = 'Женский';
+                genderClass = 'gender-female';
             } else {
-                time = '-';
+                genderText = runner.gender;
+                genderClass = '';
             }
         }
         
-        // Определяем имя и фамилию - проверяем различные возможные названия полей
-        let firstName = 'N/A';
-        let lastName = 'N/A';
-        let genderText = 'N/A';
-        
-        if (runner.name) {
-            firstName = runner.name;
-        } else if (runner.first_name) {
-            firstName = runner.first_name;
-        } else if (runner['Имя пользователя']) {
-            firstName = runner['Имя пользователя'];
-        }
-        
-        if (runner.surname) {
-            lastName = runner.surname;
-        } else if (runner.last_name) {
-            lastName = runner.last_name;
-        } else if (runner['Фамилия пользователя']) {
-            lastName = runner['Фамилия пользователя'];
-        }
-        
-        if (runner.gender) {
-            genderText = runner.gender === 'male' ? 'Мужской' : runner.gender === 'female' ? 'Женский' : runner.gender;
-        } else if (runner.sex) {
-            genderText = runner.sex === 'male' ? 'Мужской' : runner.sex === 'female' ? 'Женский' : runner.sex;
-        }
-        
-        // Определяем дистанцию и возрастную группу
-        let distance = runner.event || runner.distance || runner['Дистанция'] || '7 km';
-        let category = runner.category || runner.age_group || runner['Возрастная категория'] || '';
+        // Дистанция и возрастная группа
+        let distance = runner.event || '7 km';
+        let category = runner.category || '';
         
         let rowHTML = `
             <td>${index + 1}</td>
@@ -228,18 +396,92 @@ function renderTable(runners) {
             <td>${firstName}</td>
             <td>${birthYear}</td>
             <td class="distance-col">${distance}</td>
-            <td>${genderText}</td>
-            <td><span class="age-group-tag">${category}</span></td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
+            <td>${category}</td>
             <td class="${statusClass} status-col">${status}</td>
             <td class="time-cell time-col">${time}</td>
+            <td class="pace-cell pace-col">${pace}</td>
         `;
         
         row.innerHTML = rowHTML;
         tbody.appendChild(row);
     });
     
-    // Добавим сообщение о количестве отрисованных строк
-    console.log(`Отрисовано ${runners.length} строк таблицы`);
+    console.log(`Отрисовано ${runners.length} строк таблицы результатов`);
+}
+
+// Отрисовываем таблицу стартового списка (режим 'before')
+function renderStartList(runners) {
+    const tbody = document.getElementById('startListBody');
+    tbody.innerHTML = '';
+    
+    // Показываем таблицу стартового списка
+    document.getElementById('startListTable').style.display = 'table';
+    document.getElementById('resultsTable').style.display = 'none';
+    
+    runners.forEach((runner, index) => {
+        const row = document.createElement('tr');
+        
+        // Фамилия, имя
+        let firstName = runner.name || 'N/A';
+        let lastName = runner.surname || 'N/A';
+        
+        // Год рождения
+        let birthYear = 'N/A';
+        if (runner.birthdate || runner.birthday) {
+            try {
+                const dateStr = runner.birthdate || runner.birthday;
+                const year = new Date(dateStr).getFullYear();
+                birthYear = year > 0 ? year : 'N/A';
+            } catch (e) {
+                birthYear = 'N/A';
+            }
+        }
+        
+        // Дистанция (пока прочерк)
+        let distance = '-';
+        
+        // Возрастная группа
+        let category = runner.category || 'Неизвестно';
+        
+        // Пол
+        let genderClass = '';
+        let genderText = 'N/A';
+        
+        if (runner.sex) {
+            if (runner.sex.toLowerCase() === 'male' || runner.sex === 'М') {
+                genderText = 'Мужской';
+                genderClass = 'gender-male';
+            } else if (runner.sex.toLowerCase() === 'female' || runner.sex === 'Ж') {
+                genderText = 'Женский';
+                genderClass = 'gender-female';
+            } else {
+                genderText = runner.sex;
+                genderClass = '';
+            }
+        }
+        
+        // Город, клуб
+        let city = runner.city || runner.City || 'N/A';
+        let club = runner.club || runner.Club || 'N/A';
+        
+        let rowHTML = `
+            <td>${index + 1}</td>
+            <td>${lastName}</td>
+            <td>${firstName}</td>
+            <td>${birthYear}</td>
+            <td>${distance}</td>
+            <td><span class="age-group-tag">${category}</span></td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
+            <td>${city}</td>
+            <td>${club}</td>
+        `;
+        
+        row.innerHTML = rowHTML;
+        tbody.appendChild(row);
+    });
+    
+    console.log(`Отрисовано ${runners.length} строк таблицы стартового списка`);
 }
 
 // Показываем индикатор загрузки

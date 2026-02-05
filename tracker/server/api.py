@@ -249,7 +249,7 @@ def init_routes(app):
         """Получить результаты гонки из race_data.json"""
         try:
             import json
-            with open('tracker/race_data.json', 'r', encoding='utf-8') as file:
+            with open(config.RACE_DATA_FILE, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             return jsonify(data.get('data', []))
         except Exception as e:
@@ -262,7 +262,7 @@ def init_routes(app):
         from flask import send_from_directory
         import os
         
-        analytics_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'personal')
+        analytics_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'analytics', 'personal')
         return send_from_directory(analytics_dir, 'start_list.html')
 
     # Маршрут для статических файлов аналитики
@@ -272,7 +272,7 @@ def init_routes(app):
         from flask import send_from_directory
         import os
         
-        static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'personal', 'static')
+        static_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'analytics', 'personal', 'static')
         return send_from_directory(static_dir, filename)
 
     @app.route('/api/analytics/refresh', methods=['POST'])

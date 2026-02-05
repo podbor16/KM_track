@@ -5,12 +5,13 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from analytics.personal.allusers import analyze_race_data, format_time
+from config import RACE_DATA_FILE
 
 def get_formatted_analytics():
     """Получить аналитику в формате, подходящем для веб-интерфейса"""
     
     # Загружаем данные из race_data.json
-    with open('tracker/race_data.json', 'r', encoding='utf-8') as file:
+    with open(RACE_DATA_FILE, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
     runners = data['data']
