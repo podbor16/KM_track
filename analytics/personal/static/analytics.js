@@ -1,5 +1,5 @@
 // Функция заново загружает данные из основного источника (race_data.json)
-let currentMode = 'during'; // По умолчанию режим "результаты"
+let currentMode = 'before'; // По умолчанию режим "результаты"
 let allRunners = [];
 let filteredRunners = [];
 let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки

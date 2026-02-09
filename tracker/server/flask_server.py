@@ -21,7 +21,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Инициализация Flask
-app = Flask(__name__, static_folder=os.path.join(BASE_DIR, 'server', 'static'))
+templates_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+app = Flask(__name__, 
+    static_folder=os.path.join(BASE_DIR, 'server', 'static'),
+    template_folder=templates_path)
 CORS(app)
 
 # Регистрируем все API routes
@@ -32,9 +35,10 @@ if __name__ == '__main__':
     print("Запуск трекера Красмарафон")
     print(f"Режим скорости: {'РУЧНОЙ' if USE_MANUAL_SPEED else 'АВТО'}")
     print(f"Скорость: {MANUAL_SPEED_KMH} км/ч")
+    print(f"Текущее событие: {CURRENT_EVENT}")
     print("=" * 50)
     
     # Предварительная загрузка маршрута при старте
-    fetch_route_from_osm()
+    fetch_route_from_osm(CURRENT_EVENT)
     
     app.run(host='0.0.0.0', port=5000, debug=True)

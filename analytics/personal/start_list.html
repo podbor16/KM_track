@@ -6,14 +6,24 @@
     <title>Стартовый список и результаты забега</title>
     <link rel="stylesheet" href="/static/navigation.css">
     <link rel="stylesheet" href="/analytics/static/analytics.css">
+    <style>
+        @font-face {
+            font-family: 'Houschka Pro';
+            src: url('/static/houschkapro_demibold.otf') format('opentype');
+            font-weight: 600;
+            font-style: normal;
+        }
+        * {
+            font-family: 'Houschka Pro', Arial, sans-serif;
+        }
+    </style>
 </head>
 <body>
     <!-- Навигационная панель -->
     <nav class="navbar">
         <div class="navbar-container">
             <a href="/" class="navbar-brand">
-                <span class="navbar-brand-icon">🏃</span>
-                <span class="navbar-brand-text">Красмарафон</span>
+                <img src="/static/logo.png" alt="Логотип" class="navbar-logo" style="width: 50%;">
             </a>
             <button class="navbar-toggle" id="navbarToggle">
                 <span></span>
@@ -25,7 +35,7 @@
                     <a href="/" class="navbar-link">🗺️ Трекер</a>
                 </li>
                 <li class="navbar-item">
-                    <a href="/analytics" class="navbar-link active">📊 Результаты</a>
+                    <a href="/analytics" class="navbar-link">📊 Результаты</a>
                 </li>
             </ul>
         </div>
@@ -120,6 +130,13 @@
                 });
             });
         }
+
+        // Установить активный класс для текущей страницы
+        const navbarLinks = document.querySelectorAll('.navbar-link');
+        navbarLinks.forEach(link => {
+            link.classList.remove('active');
+        });
+        navbarLinks[1].classList.add('active'); // Результаты (второй элемент)
     </script>
 </body>
 </html>

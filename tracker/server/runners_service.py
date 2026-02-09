@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from config import (
     RACE_DATA_FILE, USE_MANUAL_SPEED, MANUAL_SPEED_KMH,
-    EVENTS_CONFIG, CURRENT_EVENT, CACHE_DURATION
+    EVENTS_CONFIG, CURRENT_EVENT, CACHE_DURATION, ONE_WAY_LENGTH_KM
 )
 from ParsingRaceInMap import CopernicoParser
 from models import RaceConfig, RouteCalculator
@@ -111,13 +111,17 @@ def update_runner_positions(runners, event_name=CURRENT_EVENT):
 
     is_loop = event_name == 'rosneft'
     total_race_distance = event_config.get('total_race_km', 7.0)
+    one_way_length = event_config.get('one_way_length_km', ONE_WAY_LENGTH_KM)
 
     for runner in runners:
         status = runner.get('status', '').lower()
 
         if status == 'finished':
             runner['current_distance'] = total_race_distance
-            coords = route_calc.get_position_on_loop(total_race_distance) if is_loop else route_calc.get_shuttle_position(total_race_distance)
+            if is_loop:
+                coords = route_calc.get_position_on_loop(total_race_distance)
+            else:
+                coords = route_calc.get_shuttle_position(total_race_distance, one_way_length, total_race_distance)
             if coords:
                 runner['position'] = {'lat': coords[0], 'lng': coords[1]}
             continue
@@ -142,7 +146,10 @@ def update_runner_positions(runners, event_name=CURRENT_EVENT):
             
             runner['current_distance'] = new_dist
             
-            lat_lon = route_calc.get_position_on_loop(new_dist) if is_loop else route_calc.get_shuttle_position(new_dist)
+            if is_loop:
+                lat_lon = route_calc.get_position_on_loop(new_dist)
+            else:
+                lat_lon = route_calc.get_shuttle_position(new_dist, one_way_length, total_race_distance)
             if lat_lon:
                 runner['position'] = {'lat': lat_lon[0], 'lng': lat_lon[1]}
 

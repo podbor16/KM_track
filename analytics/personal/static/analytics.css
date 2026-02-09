@@ -3,7 +3,7 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
-    padding: 20px;
+    padding: 0;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     min-height: 100vh;
     color: #333;
@@ -49,9 +49,9 @@ h1 {
 }
 
 .mode-btn.active {
-    background-color: #3498db;
+    background-color: #EE2D62;
     color: white;
-    box-shadow: 0 6px 8px rgba(52, 152, 219, 0.3);
+    box-shadow: 0 6px 8px rgba(238, 45, 98, 0.3);
 }
 
 .mode-btn:hover {
@@ -61,7 +61,7 @@ h1 {
 }
 
 .mode-btn.active:hover {
-    background-color: #2980b9;
+    background-color: #1a1a1a;
     transform: translateY(-3px);
 }
 
@@ -92,7 +92,7 @@ h1 {
 
 .filter-group select {
     padding: 10px 15px;
-    border: 2px solid #3498db;
+    border: 2px solid #EE2D62;
     border-radius: 8px;
     background-color: white;
     font-size: 15px;
@@ -104,7 +104,7 @@ h1 {
 }
 
 .filter-group select:focus {
-    border-color: #2980b9;
+    border-color: #1a1a1a;
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
 }
 
@@ -112,7 +112,7 @@ h1 {
     text-align: center;
     padding: 40px;
     font-size: 20px;
-    color: #3498db;
+    color: #EE2D62;
     font-weight: 500;
     background-color: rgba(248, 249, 250, 0.7);
     border-radius: 12px;
@@ -147,7 +147,7 @@ th, td {
 }
 
 th {
-    background: linear-gradient(to bottom, #3498db, #2980b9);
+    background: linear-gradient(to bottom, #EE2D62, #1a1a1a);
     color: white;
     font-weight: 600;
     position: sticky;
@@ -162,7 +162,7 @@ th {
 }
 
 th:hover {
-    background: linear-gradient(to bottom, #3498db, #2980b9);
+    background: linear-gradient(to bottom, #EE2D62, #1a1a1a);
     opacity: 0.8;
 }
 
@@ -186,7 +186,7 @@ tr:hover {
 
 .gender-male {
     background: linear-gradient(to right, #e3f2fd, #bbdefb);
-    color: #0d47a1;
+    color: #EE2D62;
     border-color: #bbdefb;
 }
 
@@ -206,7 +206,7 @@ tr:hover {
     font-weight: 500;
     border: 1px solid #ffe0b2;
 }
-}
+
 
 .status-registered {
     color: #27ae60;

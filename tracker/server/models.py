@@ -55,22 +55,32 @@ class RouteCalculator:
         distance_on_current_lap = total_distance_run % self.total_path_length
         return self._interpolate_coords(distance_on_current_lap)
 
-    def get_shuttle_position(self, total_distance_run):
+    def get_shuttle_position(self, total_distance_run, one_way_length=None, total_race_distance=None):
         """
         Преобразует пробежавшее расстояние в координату на линии с учетом направления.
-        Для челночных маршрутов (Снежная семерка)
+        Для челночных маршрутов (Снежная семерка, Ночной забег)
+        
+        Args:
+            total_distance_run: сколько км пробежал участник
+            one_way_length: длина маршрута в одну сторону (если None, использует глобальную)
+            total_race_distance: полная дистанция гонки (если None, использует глобальную)
         """
-        total_distance_run = max(0, min(total_distance_run, TOTAL_RACE_KM))
+        if one_way_length is None:
+            one_way_length = ONE_WAY_LENGTH_KM
+        if total_race_distance is None:
+            total_race_distance = TOTAL_RACE_KM
+            
+        total_distance_run = max(0, min(total_distance_run, total_race_distance))
         
         # Определяем, на каком мы отрезке (плече)
-        leg_index = int(total_distance_run // ONE_WAY_LENGTH_KM)
-        dist_in_leg = total_distance_run % ONE_WAY_LENGTH_KM
+        leg_index = int(total_distance_run // one_way_length)
+        dist_in_leg = total_distance_run % one_way_length
         
         # Вычисляем позицию на геометрии линии
         if leg_index % 2 == 0:
             geometry_dist = dist_in_leg  # Четный: вперед
         else:
-            geometry_dist = ONE_WAY_LENGTH_KM - dist_in_leg  # Нечетный: назад
+            geometry_dist = one_way_length - dist_in_leg  # Нечетный: назад
 
         geometry_dist = max(0, min(geometry_dist, self.total_path_length))
         return self._interpolate_coords(geometry_dist)

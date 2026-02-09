@@ -1,12 +1,20 @@
 /* Глобальная навигация для всех страниц */
 
+/* Подключение кустомного шрифта */
+@font-face {
+    font-family: 'Houschka Pro';
+    src: url('/static/houschkapro_demibold.otf') format('opentype');
+    font-weight: 600;
+    font-style: normal;
+}
+
 :root {
-    --primary-color: #2196F3;
-    --primary-dark: #1976D2;
-    --secondary-color: #4CAF50;
+    --primary-color: #EE2D62;
+    --primary-dark: #1a1a1a;
+    --secondary-color: #EE2D62;
     --text-dark: #333;
     --text-light: #666;
-    --background: #f5f5f5;
+    --background: #faf8fa;
     --white: #ffffff;
     --shadow: 0 2px 8px rgba(0,0,0,0.1);
     --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
@@ -14,7 +22,7 @@
 
 /* Навигационная панель */
 .navbar {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    background: linear-gradient(135deg, #1a1a1a 0%, #EE2D62 100%);
     padding: 0;
     margin: 0;
     box-shadow: var(--shadow);
@@ -52,11 +60,19 @@
     font-size: 28px;
 }
 
+.navbar-logo {
+    height: 45px;
+    width: auto;
+    object-fit: contain;
+    drop-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 .navbar-brand-text {
-    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--white);
+    font-family: 'Houschka Pro', Arial, sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
 }
 
 .navbar-menu {

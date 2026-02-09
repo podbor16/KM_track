@@ -85,9 +85,13 @@ def load_route_from_json(event_name):
         return None
 
 
-def fetch_route_from_osm(event_name='snow7'):
+def fetch_route_from_osm(event_name=None):
     """Получение данных маршрута из OpenStreetMap или JSON"""
+    from config import CURRENT_EVENT
     global osm_route_data, last_route_fetch_time
+
+    if event_name is None:
+        event_name = CURRENT_EVENT
 
     current_time = time.time()
     
@@ -106,7 +110,10 @@ def fetch_route_from_osm(event_name='snow7'):
             return json_route
 
     # Если JSON нет, загружаем из OSM
-    event_config = EVENTS_CONFIG.get(event_name, EVENTS_CONFIG['snow7'])
+    event_config = EVENTS_CONFIG.get(event_name, {})
+    if not event_config:
+        logger.warning(f"⚠️ Мероприятие '{event_name}' не найдено в конфигурации")
+        return get_fallback_route()
     way_id = event_config['osm_way_id']
 
     try:

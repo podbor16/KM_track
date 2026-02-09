@@ -2,7 +2,7 @@
 """
 API endpoints для трекера забега
 """
-from flask import jsonify, request, send_from_directory
+from flask import jsonify, request, send_from_directory, render_template
 import os
 import threading
 import logging
@@ -32,6 +32,27 @@ selected_runners = set()
 def init_routes(app):
     """Регистрирует все API routes в Flask приложении"""
 
+    # ===== СТРАНИЦЫ (ШАБЛОНЫ) =====
+    @app.route('/')
+    @app.route('/tracker')
+    def tracker_main():
+        """Главная страница трекера - текущее событие"""
+        return tracker_event(config.CURRENT_EVENT)
+
+    @app.route('/tracker/<event>')
+    def tracker_event(event):
+        """Страница трекера для конкретного события"""
+        if event not in EVENTS_CONFIG:
+            event = config.CURRENT_EVENT
+        
+        event_config = EVENTS_CONFIG.get(event, {})
+        return render_template('tracker.html', 
+            event_name=event,
+            event_title=event_config.get('title', f'Трекер забега {event}'),
+            event_description=event_config.get('description', '')
+        )
+
+    # ===== API ENDPOINTS =====
     @app.route('/api/current-event')
     def get_current_event():
         """Получить текущее событие из конфига"""
