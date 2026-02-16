@@ -1,14 +1,14 @@
 """
 Пример использования модулей бизнес-аналитики
-Работает с таблицей Тестовая
+Работает с таблицей Все заявки
 """
 from datetime import datetime, timedelta
 from .business_analytics import BusinessAnalytics
 
 # Инициализация модуля бизнес-аналитики
-# Все настройки по умолчанию соответствуют таблице Тестовая
+# Все настройки по умолчанию соответствуют таблице Все заявки
 analytics = BusinessAnalytics(
-    table_name='Тестовая',  # название таблицы
+    table_name='Все заявки',  # название таблицы
     registration_date_column='created_at',  # дата регистрации
     name_column='name',  # имя
     surname_column='surname',  # фамилия

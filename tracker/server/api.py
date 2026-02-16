@@ -257,7 +257,7 @@ def init_routes(app):
 
     @app.route('/api/registered-runners', methods=['GET'])
     def get_registered_runners():
-        """Получить зарегистрированных участников из таблицы 'Тестовая'"""
+        """Получить зарегистрированных участников из таблицы 'Все заявки'"""
         try:
             runners_data = get_test_table_data()
             return jsonify(runners_data)
@@ -280,11 +280,7 @@ def init_routes(app):
     @app.route('/analytics', methods=['GET'])
     def serve_analytics_page():
         """Обслуживание страницы аналитики участников"""
-        from flask import send_from_directory
-        import os
-        
-        analytics_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'analytics', 'personal')
-        return send_from_directory(analytics_dir, 'start_list.html')
+        return render_template('analytics.html')
 
     # Маршрут для статических файлов аналитики
     @app.route('/analytics/static/<path:filename>')

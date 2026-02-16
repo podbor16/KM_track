@@ -275,18 +275,18 @@ def calculate_age_group(birthdate_or_age):
         if age is None:
             return 'Неизвестно'
         
-        if age < 20:
-            return '<20'
-        elif age <= 35:
-            return '21-35'
-        elif age <= 49:
-            return '36-49'
+        if age < 49:
+            return '<49'
         elif age <= 59:
             return '50-59'
+        elif age <= 64:
+            return '60-64'
         elif age <= 69:
-            return '60-69'
+            return '65-69'
+        elif age <= 74:
+            return '70-74'
         else:
-            return '70-79'
+            return '>75'
     except Exception as e:
         logger.error(f"Ошибка при расчёте возрастной группы: {e}")
         return 'Неизвестно'
@@ -294,7 +294,7 @@ def calculate_age_group(birthdate_or_age):
 
 def get_test_table_data():
     """
-    Получает все данные из таблицы 'Тестовая' и добавляет возрастную группу
+    Получает все данные из таблицы 'Все заявки' и добавляет возрастную группу
     Если БД недоступна, возвращает тестовые данные
     """
     connection = create_connection()
@@ -304,8 +304,8 @@ def get_test_table_data():
             cursor = connection.cursor(dictionary=True, buffered=True)
             
             try:
-                # Выполняем запрос к таблице "Тестовая"
-                cursor.execute("SELECT * FROM `Тестовая`")
+                # Выполняем запрос к таблице "Все заявки"
+                cursor.execute("SELECT * FROM `Все заявки`")
                 records = cursor.fetchall()
                 
                 if records:
@@ -328,11 +328,11 @@ def get_test_table_data():
                     
                     return records
                 else:
-                    logger.warning("Таблица 'Тестовая' пуста, возвращаем тестовые данные")
+                    logger.warning("Таблица 'Все заявки' пуста, возвращаем тестовые данные")
                     return get_test_data_fallback()
                 
             except Error as e:
-                error_msg = f"Ошибка выполнения SQL запроса к таблице 'Тестовая': {e}"
+                error_msg = f"Ошибка выполнения SQL запроса к таблице 'Все заявки': {e}"
                 logger.error(error_msg)
                 print(f"\n{error_msg}")
                 return get_test_data_fallback()

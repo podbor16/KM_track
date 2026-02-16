@@ -1,6 +1,6 @@
 """
 Модуль для анализа жизненного цикла клиента
-Работает с таблицей Тестовая, где каждая строка = одна регистрация на забег
+Работает с таблицей Все заявки, где каждая строка = одна регистрация на забег
 Регистрация = покупка (created_at)
 """
 import logging
@@ -21,7 +21,7 @@ class CustomerLifecycleAnalytics:
     """
     
     def __init__(self,
-                 table_name: str = 'Тестовая',
+                 table_name: str = 'Все заявки',
                  registration_date_column: str = 'created_at',
                  name_column: str = 'name',
                  surname_column: str = 'surname',
@@ -31,7 +31,7 @@ class CustomerLifecycleAnalytics:
         Инициализация модуля
         
         Args:
-            table_name: название таблицы (по умолчанию 'Тестовая')
+            table_name: название таблицы (по умолчанию 'Все заявки')
             registration_date_column: название колонки с датой регистрации (покупки)
             name_column: название колонки с именем
             surname_column: название колонки с фамилией

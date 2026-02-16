@@ -1,6 +1,6 @@
 """
 Модуль для статистики по забегам
-Работает с таблицей Тестовая, где каждая строка = одна регистрация на забег
+Работает с таблицей Все заявки, где каждая строка = одна регистрация на забег
 Забег определяется по полю products
 """
 import logging
@@ -19,7 +19,7 @@ class RaceStatisticsAnalytics:
     """
     
     def __init__(self,
-                 table_name: str = 'Тестовая',
+                 table_name: str = 'Все заявки',
                  race_column: str = 'products',
                  registration_date_column: str = 'created_at',
                  name_column: str = 'name',
@@ -29,7 +29,7 @@ class RaceStatisticsAnalytics:
         Инициализация модуля
         
         Args:
-            table_name: название таблицы (по умолчанию 'Тестовая')
+            table_name: название таблицы (по умолчанию 'Все заявки')
             race_column: название колонки с названием забега (products)
             registration_date_column: название колонки с датой регистрации
             name_column: название колонки с именем

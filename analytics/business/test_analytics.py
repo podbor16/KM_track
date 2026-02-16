@@ -234,14 +234,14 @@ def test_database_connection():
         cursor = connection.cursor(buffered=True)
 
         # Проверяем наличие таблицы
-        cursor.execute("SHOW TABLES LIKE 'Тестовая'")
+        cursor.execute("SHOW TABLES LIKE 'Все заявки'")
         result = cursor.fetchone()
 
         if result:
-            print("✅ Таблица 'Тестовая' найдена")
+            print("✅ Таблица 'Все заявки' найдена")
 
             # Проверяем структуру таблицы
-            cursor.execute("DESCRIBE `Тестовая`")
+            cursor.execute("DESCRIBE `Все заявки`")
             columns = cursor.fetchall()
             print(f"\nКолонки в таблице ({len(columns)}):")
 
@@ -255,12 +255,12 @@ def test_database_connection():
                 print(f"   ... и еще {len(columns) - 10} колонок")
 
             # Проверяем количество записей
-            cursor.execute("SELECT COUNT(*) FROM `Тестовая`")
+            cursor.execute("SELECT COUNT(*) FROM `Все заявки`")
             count_result = cursor.fetchone()
             count = count_result[0] if count_result else 0
             print(f"\n✅ Количество записей в таблице: {count}")
         else:
-            print("❌ Таблица 'Тестовая' не найдена")
+            print("❌ Таблица 'Все заявки' не найдена")
 
         cursor.close()
         connection.close()
@@ -291,4 +291,4 @@ if __name__ == "__main__":
         print("   Убедитесь, что:")
         print("   1. Файл .env существует в корне проекта")
         print("   2. В .env указаны правильные настройки подключения к БД")
-        print("   3. База данных доступна и содержит таблицу 'Тестовая'")
+        print("   3. База данных доступна и содержит таблицу 'Все заявки'")

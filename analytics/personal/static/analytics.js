@@ -140,6 +140,8 @@ function applyFilters() {
     const genderFilter = document.getElementById('genderFilter').value;
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     
+    console.log('Применение фильтров:', { genderFilter, ageGroupFilter, currentMode, totalRunners: allRunners.length });
+    
     filteredRunners = allRunners.filter(runner => {
         // Фильтр по полу - проверяем различные возможные названия полей
         let runnerGender = '';
@@ -157,6 +159,7 @@ function applyFilters() {
         
         // Пропускаем только если выбран конкретный пол
         if (genderFilter !== '' && runnerGender !== genderFilter) {
+            console.log(`Пропущен по полу: ${runner.name} (${runnerGender} != ${genderFilter})`);
             return false;
         }
         
@@ -176,6 +179,8 @@ function applyFilters() {
         
         return true;
     });
+    
+    console.log(`Результат фильтрации: ${filteredRunners.length} из ${allRunners.length} участников`);
     
     // Заполняем фильтры возрастных групп
     populateAgeGroups(filteredRunners);
@@ -375,10 +380,10 @@ function renderResultsTable(runners) {
         
         if (runner.gender) {
             if (runner.gender === 'male') {
-                genderText = 'Мужской';
+                genderText = 'мужчина';
                 genderClass = 'gender-male';
             } else if (runner.gender === 'female') {
-                genderText = 'Женский';
+                genderText = 'женщина';
                 genderClass = 'gender-female';
             } else {
                 genderText = runner.gender;
@@ -450,10 +455,10 @@ function renderStartList(runners) {
         
         if (runner.sex) {
             if (runner.sex.toLowerCase() === 'male' || runner.sex === 'М') {
-                genderText = 'Мужской';
+                genderText = 'мужчина';
                 genderClass = 'gender-male';
             } else if (runner.sex.toLowerCase() === 'female' || runner.sex === 'Ж') {
-                genderText = 'Женский';
+                genderText = 'женщина';
                 genderClass = 'gender-female';
             } else {
                 genderText = runner.sex;

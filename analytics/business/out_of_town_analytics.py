@@ -1,6 +1,6 @@
 """
 Модуль для анализа иногородних участников
-Работает с таблицей Тестовая
+Работает с таблицей Все заявки
 """
 import logging
 from typing import Dict, Any, Optional
@@ -17,7 +17,7 @@ class OutOfTownAnalytics:
     """
     
     def __init__(self,
-                 table_name: str = 'Тестовая',
+                 table_name: str = 'Все заявки',
                  city_column: str = 'city',
                  race_column: str = 'products',
                  local_city: str = 'Красноярск'):
@@ -25,7 +25,7 @@ class OutOfTownAnalytics:
         Инициализация модуля
         
         Args:
-            table_name: название таблицы (по умолчанию 'Тестовая')
+            table_name: название таблицы (по умолчанию 'Все заявки')
             city_column: название колонки с городом
             race_column: название колонки с названием забега (products)
             local_city: название локального города (по умолчанию Красноярск)

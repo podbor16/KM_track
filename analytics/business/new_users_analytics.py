@@ -1,6 +1,6 @@
 """
 Модуль для анализа новых пользователей
-Работает с таблицей Тестовая, где каждая строка = одна регистрация на забег
+Работает с таблицей Все заявки, где каждая строка = одна регистрация на забег
 """
 import logging
 from datetime import datetime, timedelta
@@ -19,7 +19,7 @@ class NewUsersAnalytics:
     """
 
     def __init__(self,
-                 table_name: str = 'Тестовая',
+                 table_name: str = 'Все заявки',
                  registration_date_column: str = 'created_at',
                  name_column: str = 'name',
                  surname_column: str = 'surname',
@@ -29,7 +29,7 @@ class NewUsersAnalytics:
         Инициализация модуля
 
         Args:
-            table_name: название таблицы (по умолчанию 'Тестовая')
+            table_name: название таблицы (по умолчанию 'Все заявки')
             registration_date_column: название колонки с датой регистрации
             name_column: название колонки с именем
             surname_column: название колонки с фамилией

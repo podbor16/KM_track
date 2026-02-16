@@ -19,27 +19,8 @@
     </style>
 </head>
 <body>
-    <!-- Навигационная панель -->
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-brand">
-                <img src="/static/logo.png" alt="Логотип" class="navbar-logo" style="width: 50%;">
-            </a>
-            <button class="navbar-toggle" id="navbarToggle">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
-            <ul class="navbar-menu" id="navbarMenu">
-                <li class="navbar-item">
-                    <a href="/" class="navbar-link">🗺️ Трекер</a>
-                </li>
-                <li class="navbar-item">
-                    <a href="/analytics" class="navbar-link">📊 Результаты</a>
-                </li>
-            </ul>
-        </div>
-    </nav>
+    <!-- Включаем единый хэдер -->
+    {% include 'header.html' %}
 
     <div class="container">
         <h1>Стартовый список и результаты забега Красмарафон</h1>
@@ -57,6 +38,9 @@
                    <option value="male">мужчина</option>
                    <option value="female">женщина</option>
                </select>
+           </div>
+           
+           <div class="filter-group" id="ageGroupFilterGroup">
                <label for="ageGroupFilter">Возрастная группа:</label>
                <select id="ageGroupFilter" onchange="applyFilters()">
                    <!-- Возрастные группы будут заполнены динамически -->
@@ -111,23 +95,6 @@
 
     <script src="/analytics/static/analytics.js"></script>
     <script>
-        // Мобильное меню
-        const navbarToggle = document.getElementById('navbarToggle');
-        const navbarMenu = document.getElementById('navbarMenu');
-        
-        if (navbarToggle && navbarMenu) {
-            navbarToggle.addEventListener('click', () => {
-                navbarMenu.classList.toggle('active');
-            });
-
-            // Закрываем меню при клике на ссылку
-            document.querySelectorAll('.navbar-link').forEach(link => {
-                link.addEventListener('click', () => {
-                    navbarMenu.classList.remove('active');
-                });
-            });
-        }
-
         // Установить активный класс для текущей страницы
         const navbarLinks = document.querySelectorAll('.navbar-link');
         navbarLinks.forEach(link => {
