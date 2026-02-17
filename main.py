@@ -1,41 +1,29 @@
-# KM_track/main.py (исправленная версия)
+# KM_track/main.py - FastAPI Server Entry Point
+"""
+FastAPI сервер для трекинга бегов и аналитики
+Запускает сервер на http://localhost:8000
+"""
+import datetime
+import uvicorn
 import sys
 import os
-import json
-import logging
-from datetime import datetime, date
 from pathlib import Path
-from typing import Dict, Any, Optional
 
-# Добавляем текущую директорию в путь Python
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Добавляем src директорию в путь Python
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root / "src"))
 
-from analytics.business.business_analytics import BusinessAnalytics
-
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('analytics.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+if __name__ == "__main__":
+    # Запускаем FastAPI сервер
+    uvicorn.run(
+        "tracker.app:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,  # Отключаем hot-reload для продакшена
+        log_level="info",
+    )
 
 
-class ReportManager:
-    """Класс для управления отчетами"""
-
-    def __init__(self, reports_dir: str = "reports"):
-        """
-        Инициализация менеджера отчетов
-
-        Args:
-            reports_dir: директория для хранения отчетов
-        """
-        self.reports_dir = Path(reports_dir)
-        self.ensure_directories()
 
     def ensure_directories(self):
         """Создает необходимые директории, если они не существуют"""

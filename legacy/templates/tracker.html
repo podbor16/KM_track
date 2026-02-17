@@ -1,0 +1,106 @@
+<!-- legacy/templates/tracker.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ event_title }}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="/legacy/static/navigation.css">
+    <link rel="stylesheet" href="/legacy/static/tracker.css">
+</head>
+<body>
+    <!-- Включаем единый хэдер -->
+    {% include 'header.html' %}
+
+    <div class="container">
+        <div class="header">
+            <h1 id="eventTitle">🏃 Трекер забега</h1>
+            <p id="eventDescription">Загрузка...</p>
+        </div>
+
+        <div class="tracker-container">
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+            <div class="controls-panel">
+                <!-- Поисковая строка и результаты -->
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Поиск по номеру или фамилии...">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+
+                <!-- Контейнер для выбранных участников (между поиском и кнопками) -->
+                <div class="selected-runners-container">
+                    <div class="selected-title">
+                        <div class="title-text">Отслеживаемые участники</div>
+                        <div class="count-container">
+                            (<span id="selectedCount">0</span>/ 5 )
+                            <span id="selection-limit-warning" class="limit-warning" style="display: none;">
+                                Достигнут лимит!
+                            </span>
+                        </div>
+                    </div>
+                    <div class="selected-list" id="selectedList">
+                        <div class="empty-selection">Нет выбранных участников</div>
+                    </div>
+                </div>
+
+                <!-- Кнопки (теперь в самом низу) -->
+                <div class="controls-buttons">
+                    <button class="control-btn primary" onclick="centerMap()">Центрировать карту</button>
+                    <button class="control-btn secondary" onclick="clearSelection()">Очистить выбор</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-panel" id="statusPanel">
+            Загрузка данных...
+        </div>
+
+        <!-- Блок с аналитикой -->
+        <div class="analytics-panel" id="analyticsPanel">
+            <h2>📊 Аналитика по всем участникам</h2>
+            <div id="analyticsContent">
+                <p>Загрузка аналитических данных...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Загружаем событие с сервера
+        let eventLoaded = false;
+        fetch('/api/current-event')
+            .then(r => r.json())
+            .then(data => {
+                window.INITIAL_EVENT = data.event;
+                window.INITIAL_STORAGE = data.storage_key;
+                // Обновляем заголовок и описание
+                document.getElementById('eventTitle').textContent = data.title;
+                document.getElementById('eventDescription').textContent = data.description;
+                eventLoaded = true;
+            })
+            .catch(err => {
+                console.error('Ошибка загрузки события:', err);
+                // Используем undefined, трекер будет ждать данные с сервера
+                eventLoaded = true;
+            });
+    </script>
+    <script src="/legacy/static/tracker.js"></script>
+    <script>
+        // Ждем загрузки события с сервера
+        const waitForEvent = setInterval(() => {
+            if (eventLoaded && window.INITIAL_EVENT) {
+                CONFIG.EVENT_NAME = window.INITIAL_EVENT;
+                CONFIG.STORAGE_KEY = window.INITIAL_STORAGE;
+                clearInterval(waitForEvent);
+                console.log('✓ Событие загружено:', CONFIG.EVENT_NAME);
+                
+                // Запускаем инициализацию ПОСЛЕ установки правильного EVENT_NAME
+                init();
+            }
+        }, 100);
+    </script>
+</body>
+</html>
