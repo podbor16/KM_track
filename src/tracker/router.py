@@ -510,27 +510,51 @@ async def refresh_analytics(
 @router.get("/api/registered-runners", response_model=RegisteredRunnersListResponse, tags=["Analytics"])
 async def get_registered_runners(
     limit: int = Query(10000, ge=1, le=10000),
+    event_name: str = Query("Ночной забег"),
+    event_year: int = Query(2026),
 ) -> RegisteredRunnersListResponse:
     """
     Получить список зарегистрированных участников из БД MySQL
     Интегрирована работа с базой данных через db_connection модуль
+    
+    Фильтры:
+    - event_name: "Ночной забег" (по умолчанию)
+    - event_year: 2026 (по умолчанию)
     """
     try:
         from src.analytics.db_connection import get_test_table_data
         from src.tracker.models.analytics import RegisteredRunnerInfo
         
-        logger.info(f"Fetching registered runners (limit: {limit})")
+        logger.info(f"Fetching registered runners (limit: {limit}, event_name: {event_name}, event_year: {event_year})")
         
         # Получаем данные из БД (или тестовые, если БД недоступна)
-        runners_data = get_test_table_data()
+        all_runners_data = get_test_table_data()
+        
+        # Применяем фильтры: event_name и event_year
+        filtered_runners = []
+        for runner_data in all_runners_data:
+            # Проверяем фильтры event_name и event_year если они присутствуют в БД
+            if 'event_name' in runner_data:
+                if runner_data.get('event_name') != event_name:
+                    continue
+            
+            if 'event_year' in runner_data:
+                try:
+                    runner_year = int(runner_data.get('event_year', 0))
+                    if runner_year != event_year:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            
+            filtered_runners.append(runner_data)
         
         # Применяем лимит если нужно
-        if limit and len(runners_data) > limit:
-            runners_data = runners_data[:limit]
+        if limit and len(filtered_runners) > limit:
+            filtered_runners = filtered_runners[:limit]
         
         # Преобразуем в список объектов RegisteredRunnerInfo
         runners: List[RegisteredRunnerInfo] = []
-        for idx, runner_data in enumerate(runners_data):
+        for idx, runner_data in enumerate(filtered_runners):
             full_name = f"{runner_data.get('surname', '')} {runner_data.get('name', '')}".strip()
             
             # Конвертируем birthday в строку (может быть datetime.date или строка)
@@ -538,6 +562,9 @@ async def get_registered_runners(
             if birthday and hasattr(birthday, 'isoformat'):
                 birthday = birthday.isoformat()  # datetime.date -> строка "YYYY-MM-DD"
             birthday = str(birthday) if birthday else ''
+            
+            # Получаем дистанцию из БД
+            distance = str(runner_data.get('event_distance', runner_data.get('distance', ''))).strip()
             
             runner_info = RegisteredRunnerInfo(
                 id=str(idx + 1),
@@ -549,11 +576,12 @@ async def get_registered_runners(
                 sex=runner_data.get('sex', ''),
                 club=runner_data.get('club', ''),
                 birthday=birthday,
+                distance=distance,
                 registration_date=None,  # Может быть добавлено из БД если есть
             )
             runners.append(runner_info)
         
-        logger.info(f"Successfully fetched {len(runners)} registered runners from database")
+        logger.info(f"Successfully fetched {len(runners)} registered runners from database (filtered: {event_name}, {event_year})")
         
         return RegisteredRunnersListResponse(
             total=len(runners),

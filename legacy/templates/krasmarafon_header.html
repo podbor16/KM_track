@@ -1,0 +1,307 @@
+<!-- Красмарафон Header - официальный хэдер с навигацией -->
+<div id="krasmarafon-header" class="krasmarafon-header-wrapper">
+    <!-- Логотип и основное меню -->
+    <div id="krasmarafon-header-main" style="background-color:#222222; padding-bottom:0px; border: 1px solid #222222">
+        <div class="krasmarafon-container" style="height: 30px;">
+            <div class="krasmarafon-logo-wrapper">
+                <a class="krasmarafon-logo-link" href="https://krasmarafon.ru">
+                    <img class="krasmarafon-logo-img"
+                        src="/legacy/static/images/krasmarafon-logo.png"
+                        alt="Красмарафон" style="max-width: 200px; width: 100%;">
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основная навигация (для десктопа) -->
+    <div id="krasmarafon-nav-main" class="krasmarafon-nav-main" style="background-color: rgba(34,34,34,1);">
+        <div class="krasmarafon-container">
+            <nav class="krasmarafon-nav-list">
+                <a class="krasmarafon-nav-link" href="https://krasmarafon.ru/members/" target="_blank">Личный кабинет</a>
+                <div class="krasmarafon-dropdown">
+                    <a class="krasmarafon-nav-link" href="#">Регистрация ▼</a>
+                    <div class="krasmarafon-dropdown-menu">
+                        <a href="https://krasmarafon.ru/ski">Лыжня России</a>
+                        <a href="https://krasmarafon.ru/ski25">Преодолей себя</a>
+                        <a href="https://krasmarafon.ru/nightrun">Ночной забег</a>
+                        <a href="https://krasmarafon.ru/1may">Первомайский полумарафон</a>
+                        <a href="https://krasmarafon.ru/vesna">Весна</a>
+                        <a href="https://krasmarafon.ru/5dayswind">5 дней ветра</a>
+                        <a href="https://krasmarafon.ru/colorrun">Красочный забег</a>
+                        <a href="https://krasmarafon.ru/girlseven">Женская семерка</a>
+                        <a href="https://krasmarafon.ru/zhara">Красмарафон Жара</a>
+                        <a href="https://krasmarafon.ru/kids">Детский забег</a>
+                        <a href="https://krasmarafon.ru/xtrailrun">Х Трейл</a>
+                        <a href="https://krasmarafon.ru/snow7">Снежная семерка</a>
+                    </div>
+                </div>
+                <a class="krasmarafon-nav-link" href="https://krasmarafon.ru/results">Результаты</a>
+                <div class="krasmarafon-dropdown">
+                    <a class="krasmarafon-nav-link" href="#">Календарь стартов ▼</a>
+                    <div class="krasmarafon-dropdown-menu">
+                        <a href="https://krasmarafon.ru/calendar">Красноярск</a>
+                        <a href="https://krasmarafon.ru/calendar_nsk">Новосибирск</a>
+                        <a href="https://krasmarafon.ru/calendar_tomsk">Томск</a>
+                        <a href="https://krasmarafon.ru/calendar_kmr">Кемерово</a>
+                        <a href="https://krasmarafon.ru/calendar_abk">Абакан</a>
+                    </div>
+                </div>
+                <a class="krasmarafon-nav-link" href="https://krsk.ilovesupersport.ru" target="_blank">Подготовка к забегам</a>
+                <a class="krasmarafon-nav-link" href="https://triatleta.ru" target="_blank">Спортивный магазин</a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Вторичная навигация (для десктопа) -->
+    <div id="krasmarafon-nav-secondary" class="krasmarafon-nav-secondary" style="background-color: rgba(34,34,34,1);">
+        <div class="krasmarafon-container">
+            <nav class="krasmarafon-nav-list-secondary">
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/zhara">Красмарафон Жара</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/ski">Лыжня России</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/ski25">Преодолей себя</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/nightrun">Ночной забег</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/1may">Первомайский полумарафон</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/vesna">Весна</a>
+                <a class="krasmarafon-nav-link-secondary" href="https://krasmarafon.ru/5dayswind">5 дней ветра</a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Мобильное меню -->
+    <div id="krasmarafon-mobile-menu" class="krasmarafon-mobile-menu" style="background-color: rgba(34,34,34,1); display: none;">
+        <div class="krasmarafon-burger" onclick="toggleKrasmarafonMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <nav id="krasmarafon-mobile-nav" class="krasmarafon-mobile-nav-list">
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/members/" target="_blank">Личный кабинет</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/ski">Лыжня России</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/ski25">Преодолей себя</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/nightrun">Ночной забег</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/1may">Первомайский полумарафон</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/vesna">Весна</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/5dayswind">5 дней ветра</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/results">Результаты</a>
+            <a class="krasmarafon-mobile-nav-link" href="https://krasmarafon.ru/calendar">Календарь</a>
+        </nav>
+    </div>
+</div>
+
+<style>
+    /* Контейнер Красмарафона */
+    .krasmarafon-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* Логотип Красмарафона */
+    .krasmarafon-logo-wrapper {
+        padding: 15px 10px 0 10px;
+    }
+
+    .krasmarafon-logo-link {
+        display: inline-block;
+        text-decoration: none;
+    }
+
+    .krasmarafon-logo-img {
+        display: block;
+        height: auto;
+    }
+
+    /* Основная навигация */
+    .krasmarafon-nav-main {
+        height: 25px;
+        display: flex;
+        align-items: center;
+    }
+
+    .krasmarafon-nav-list {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        width: 100%;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex-wrap: wrap;
+    }
+
+    .krasmarafon-nav-link {
+        font-size: 14px;
+        color: #ffffff;
+        font-weight: 500;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition: color 0.3s;
+        position: relative;
+        padding: 0 5px;
+    }
+
+    .krasmarafon-nav-link:hover {
+        color: #cccccc;
+    }
+
+    /* Dropdown меню */
+    .krasmarafon-dropdown {
+        position: relative;
+        display: inline-block;
+    }
+
+    .krasmarafon-dropdown-menu {
+        display: none;
+        position: absolute;
+        background-color: #222222;
+        min-width: 200px;
+        top: 100%;
+        left: 0;
+        z-index: 1000;
+        flex-direction: column;
+        border: 1px solid #444444;
+    }
+
+    .krasmarafon-dropdown:hover .krasmarafon-dropdown-menu {
+        display: flex;
+    }
+
+    .krasmarafon-dropdown-menu a {
+        color: #ffffff;
+        padding: 12px 15px;
+        text-decoration: none;
+        display: block;
+        font-size: 12px;
+        text-transform: uppercase;
+        transition: background-color 0.2s;
+        white-space: nowrap;
+    }
+
+    .krasmarafon-dropdown-menu a:hover {
+        background-color: #333333;
+    }
+
+    /* Вторичная навигация */
+    .krasmarafon-nav-secondary {
+        height: 30px;
+        display: flex;
+        align-items: center;
+    }
+
+    .krasmarafon-nav-list-secondary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        width: 100%;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex-wrap: wrap;
+    }
+
+    .krasmarafon-nav-link-secondary {
+        font-size: 14px;
+        color: #7c7c7c;
+        font-weight: 400;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition: color 0.3s;
+    }
+
+    .krasmarafon-nav-link-secondary:hover {
+        color: #ffffff;
+    }
+
+    /* Мобильное меню */
+    .krasmarafon-burger {
+        display: none;
+        flex-direction: column;
+        cursor: pointer;
+        padding: 10px;
+        gap: 5px;
+    }
+
+    .krasmarafon-burger span {
+        width: 25px;
+        height: 3px;
+        background-color: #ffffff;
+        transition: all 0.3s;
+    }
+
+    .krasmarafon-mobile-nav-list {
+        display: none;
+        flex-direction: column;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .krasmarafon-mobile-nav-link {
+        color: #ffffff;
+        padding: 12px 20px;
+        text-decoration: none;
+        display: block;
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 1px solid #333333;
+    }
+
+    /* Адаптивность */
+    @media screen and (max-width: 980px) {
+        .krasmarafon-nav-main,
+        .krasmarafon-nav-secondary {
+            display: none;
+        }
+
+        .krasmarafon-mobile-menu {
+            display: flex !important;
+            align-items: center;
+            padding: 0 10px;
+        }
+
+        .krasmarafon-burger {
+            display: flex;
+        }
+
+        .krasmarafon-mobile-nav-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: #222222;
+        }
+
+        .krasmarafon-mobile-nav-list.active {
+            display: flex;
+        }
+
+        .krasmarafon-logo-wrapper {
+            flex: 1;
+        }
+    }
+</style>
+
+<script>
+    function toggleKrasmarafonMenu() {
+        const mobileNav = document.getElementById('krasmarafon-mobile-nav');
+        if (mobileNav) {
+            mobileNav.classList.toggle('active');
+        }
+    }
+
+    // Закрываем меню при клике на ссылку
+    document.addEventListener('DOMContentLoaded', function() {
+        const mobileLinks = document.querySelectorAll('.krasmarafon-mobile-nav-link');
+        mobileLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                const mobileNav = document.getElementById('krasmarafon-mobile-nav');
+                if (mobileNav) {
+                    mobileNav.classList.remove('active');
+                }
+            });
+        });
+    });
+</script>

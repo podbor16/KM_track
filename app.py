@@ -71,6 +71,7 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 LEGACY_STATIC_DIR = BASE_DIR / "legacy" / "static"
+OLD_TEMPLATES_DIR = BASE_DIR / "old_templates"
 TEMPLATES_DIR = BASE_DIR / "templates"
 LEGACY_TEMPLATES_DIR = BASE_DIR / "legacy" / "templates"
 
@@ -83,6 +84,11 @@ if STATIC_DIR.exists():
 if LEGACY_STATIC_DIR.exists():
     app.mount("/legacy/static", StaticFiles(directory=str(LEGACY_STATIC_DIR)), name="legacy_static")
     settings.logger.info(f"Legacy static files mounted: {LEGACY_STATIC_DIR}")
+
+# Подключение old_templates (Красмарафон)
+if OLD_TEMPLATES_DIR.exists():
+    app.mount("/old_templates", StaticFiles(directory=str(OLD_TEMPLATES_DIR)), name="old_templates")
+    settings.logger.info(f"Old templates mounted: {OLD_TEMPLATES_DIR}")
 
 # Подключение шаблонов (текущих и legacy)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

@@ -87,6 +87,7 @@ class RegisteredRunnerInfo(BaseModel):
     sex: Optional[str] = Field(None, description="Пол (Мужчина/Женщина)")
     club: Optional[str] = Field(None, description="Клуб")
     birthday: Optional[str] = Field(None, description="Дата рождения")
+    distance: Optional[str] = Field(None, description="Дистанция забега (км)")
     registration_date: Optional[str] = Field(None, description="Дата регистрации")
 
 

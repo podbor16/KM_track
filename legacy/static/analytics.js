@@ -345,8 +345,8 @@ function sortTable(columnName) {
                     valB = b.birthdate || b.birthday ? new Date(b.birthdate || b.birthday).getFullYear() : 0;
                     break;
                 case 'distance':
-                    valA = 0;
-                    valB = 0;
+                    valA = (a.event_distance || '').toLowerCase();
+                    valB = (b.event_distance || '').toLowerCase();
                     break;
                 case 'category':
                     valA = (a.category || '').toLowerCase();

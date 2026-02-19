@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Стартовый список и результаты забега</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
     <link rel="stylesheet" href="/legacy/static/navigation.css">
     <link rel="stylesheet" href="/legacy/static/analytics.css">
 </head>
 <body>
-    <!-- Включаем единый хэдер -->
+    <!-- Включаем хэдер Красмарафона -->
+    {% include 'krasmarafon_header.html' %}
     {% include 'header.html' %}
 
     <div class="container">
@@ -109,5 +111,8 @@
     </div>
 
     <script src="/legacy/static/analytics.js"></script>
+
+    <!-- Включаем официальный футер Красмарафона -->
+    {% include 'krasmarafon_footer.html' %}
 </body>
 </html>

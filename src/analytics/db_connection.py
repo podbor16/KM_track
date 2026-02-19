@@ -313,7 +313,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'БегКлуб',
             'birthday': '2005-03-15',
-            'category': '<49'
+            'category': '<49',
+            'event_distance': '5 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Петрова',
@@ -322,7 +325,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Марафон',
             'birthday': '1992-07-22',
-            'category': '<49'
+            'category': '<49',
+            'event_distance': '10 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Сидоров',
@@ -331,7 +337,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Новосибирск',
             'club': 'Спорт',
             'birthday': '1975-11-08',
-            'category': '50-59'
+            'category': '50-59',
+            'event_distance': '21 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Козлова',
@@ -340,7 +349,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'БегКлуб',
             'birthday': '2000-01-30',
-            'category': '<49'
+            'category': '<49',
+            'event_distance': '5 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Морозов',
@@ -349,7 +361,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Енисейск',
             'club': 'Олимп',
             'birthday': '1988-09-12',
-            'category': '<49'
+            'category': '<49',
+            'event_distance': '10 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Волкова',
@@ -358,7 +373,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Марафон',
             'birthday': '1960-05-20',
-            'category': '60-64'
+            'category': '60-64',
+            'event_distance': '5 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Белов',
@@ -367,7 +385,10 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Спорт',
             'birthday': '1970-12-03',
-            'category': '50-59'
+            'category': '50-59',
+            'event_distance': '21 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         },
         {
             'surname': 'Лебедева',
@@ -376,6 +397,9 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Ачинск',
             'club': 'Бегуны',
             'birthday': '1985-06-18',
-            'category': '<49'
+            'category': '<49',
+            'event_distance': '10 км',
+            'event_name': 'Ночной забег',
+            'event_year': 2026
         }
     ]

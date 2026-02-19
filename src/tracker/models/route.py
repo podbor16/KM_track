@@ -69,21 +69,21 @@ class RaceConfig(BaseModel):
     checkpoints: List[Checkpoint] = Field(default_factory=list, description="Контрольные точки")
     
     class Config:
-        json_schema_extra = {
-            "example": {
-                "total_distance": 7.0,
-                "event_name": "Снежная семерка",
-                "event_id": "snow7",
-                "route_type": "shuttle",
-                "one_way_length": 1.75,
-                "laps": 4,
-                "checkpoints": [
-                    {"id": "start", "distance": 0.0, "name": "Старт"},
-                    {"id": "turn", "distance": 1.75, "name": "Разворот"},
-                    {"id": "finish", "distance": 7.0, "name": "Финиш"}
-                ]
+            json_schema_extra = {
+                "example": {
+                    "total_distance": 7.0,
+                    "event_name": "Снежная семерка",
+                    "event_id": "snow7",
+                    "route_type": "shuttle",
+                    "one_way_length": 1.75,
+                    "laps": 4,
+                    "checkpoints": [
+                        {"id": "start", "distance": 0.0, "name": "Старт"},
+                        {"id": "turn", "distance": 1.75, "name": "Разворот"},
+                        {"id": "finish", "distance": 7.0, "name": "Финиш"}
+                    ]
+                }
             }
-        }
 
 
 class RouteResponse(BaseModel):

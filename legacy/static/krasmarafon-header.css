@@ -1,0 +1,314 @@
+/* Красмарафон Header Styles */
+
+/* Переопределяем стили для лучшей интеграции */
+#krasmarafon-header {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Заголовок верхний уровень */
+#krasmarafon-header-main {
+    border-bottom: 1px solid #444444;
+}
+
+/* Быстрые стили для дропдауна */
+@media screen and (max-width: 1024px) {
+    .krasmarafon-nav-list,
+    .krasmarafon-nav-list-secondary {
+        gap: 10px;
+    }
+
+    .krasmarafon-nav-link,
+    .krasmarafon-nav-link-secondary {
+        font-size: 12px;
+        padding: 0 8px;
+    }
+
+    .krasmarafon-dropdown-menu {
+        min-width: 150px;
+    }
+
+    .krasmarafon-dropdown-menu a {
+        padding: 10px 12px;
+        font-size: 11px;
+    }
+}
+
+/* Комбинирование с нашими стилями */
+.container {
+    margin-top: 10px;
+}
+
+/* Плавный переход при загрузке */
+#krasmarafon-header {
+    animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Улучшение доступности */
+.krasmarafon-nav-link:focus,
+.krasmarafon-nav-link-secondary:focus,
+.krasmarafon-mobile-nav-link:focus {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+/* Адаптивный логотип */
+.krasmarafon-logo-wrapper {
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+}
+
+.krasmarafon-logo-link {
+    display: inline-block;
+}
+
+@media screen and (max-width: 768px) {
+    .krasmarafon-logo-img {
+        max-width: 150px !important;
+    }
+}
+
+/* Фиксированный хэдер (опционально) */
+.krasmarafon-header-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Улучшение для мобильных устройств */
+@media screen and (max-width: 480px) {
+    .krasmarafon-nav-link,
+    .krasmarafon-nav-link-secondary {
+        font-size: 11px;
+        padding: 0 4px;
+    }
+
+    .krasmarafon-dropdown-menu {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: auto;
+        width: auto;
+        min-width: auto;
+    }
+
+    .krasmarafon-mobile-menu {
+        justify-content: space-between;
+        min-height: 50px;
+    }
+
+    .krasmarafon-mobile-nav-list {
+        width: 100%;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    /* Контейнер Красмарафона */
+    .krasmarafon-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+        width: 100%;
+    }
+
+    /* Логотип Красмарафона */
+    .krasmarafon-logo-wrapper {
+        padding: 15px 10px 0 10px;
+    }
+
+    .krasmarafon-logo-link {
+        display: inline-block;
+        text-decoration: none;
+    }
+
+    .krasmarafon-logo-img {
+        display: block;
+        height: auto;
+    }
+
+    /* Основная навигация */
+    .krasmarafon-nav-main {
+        height: 25px;
+        display: flex;
+        align-items: center;
+    }
+
+    .krasmarafon-nav-list {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        width: 100%;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex-wrap: wrap;
+    }
+
+    .krasmarafon-nav-link {
+        font-size: 14px;
+        color: #ffffff;
+        font-weight: 500;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition: color 0.3s;
+        position: relative;
+        padding: 0 5px;
+    }
+
+    .krasmarafon-nav-link:hover {
+        color: #cccccc;
+    }
+
+    /* Dropdown меню */
+    .krasmarafon-dropdown {
+        position: relative;
+        display: inline-block;
+    }
+
+    .krasmarafon-dropdown-menu {
+        display: none;
+        position: absolute;
+        background-color: #222222;
+        min-width: 200px;
+        top: 100%;
+        left: 0;
+        z-index: 1000;
+        flex-direction: column;
+        border: 1px solid #444444;
+    }
+
+    .krasmarafon-dropdown:hover .krasmarafon-dropdown-menu {
+        display: flex;
+    }
+
+    .krasmarafon-dropdown-menu a {
+        color: #ffffff;
+        padding: 12px 15px;
+        text-decoration: none;
+        display: block;
+        font-size: 12px;
+        text-transform: uppercase;
+        transition: background-color 0.2s;
+        white-space: nowrap;
+    }
+
+    .krasmarafon-dropdown-menu a:hover {
+        background-color: #333333;
+    }
+
+    /* Вторичная навигация */
+    .krasmarafon-nav-secondary {
+        height: 30px;
+        display: flex;
+        align-items: center;
+    }
+
+    .krasmarafon-nav-list-secondary {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        width: 100%;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        flex-wrap: wrap;
+    }
+
+    .krasmarafon-nav-link-secondary {
+        font-size: 14px;
+        color: #7c7c7c;
+        font-weight: 400;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition: color 0.3s;
+    }
+
+    .krasmarafon-nav-link-secondary:hover {
+        color: #ffffff;
+    }
+
+    /* Мобильное меню */
+    .krasmarafon-burger {
+        display: none;
+        flex-direction: column;
+        cursor: pointer;
+        padding: 10px;
+        gap: 5px;
+    }
+
+    .krasmarafon-burger span {
+        width: 25px;
+        height: 3px;
+        background-color: #ffffff;
+        transition: all 0.3s;
+    }
+
+    .krasmarafon-mobile-nav-list {
+        display: none;
+        flex-direction: column;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .krasmarafon-mobile-nav-link {
+        color: #ffffff;
+        padding: 12px 20px;
+        text-decoration: none;
+        display: block;
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 1px solid #333333;
+    }
+
+    /* Адаптивность */
+    @media screen and (max-width: 980px) {
+        .krasmarafon-nav-main,
+        .krasmarafon-nav-secondary {
+            display: none;
+        }
+
+        .krasmarafon-mobile-menu {
+            display: flex !important;
+            align-items: center;
+            padding: 0 10px;
+        }
+
+        .krasmarafon-burger {
+            display: flex;
+        }
+
+        .krasmarafon-mobile-nav-list {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: #222222;
+        }
+
+        .krasmarafon-mobile-nav-list.active {
+            display: flex;
+        }
+
+        .krasmarafon-logo-wrapper {
+            flex: 1;
+        }
+    }
+}
