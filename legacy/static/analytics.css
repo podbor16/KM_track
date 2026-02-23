@@ -1,4 +1,8 @@
 /* Стили для страницы стартового списка и результатов забега */
+:root {
+    --primary-color: #EE2D62;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -53,7 +57,7 @@ h1 {
 }
 
 .mode-btn.active {
-    background-color: #EE2D62;
+    background-color: var(--primary-color);
     color: white;
     box-shadow: 0 6px 8px rgba(238, 45, 98, 0.3);
 }
@@ -92,11 +96,16 @@ h1 {
     font-weight: 600;
     color: #2c3e50;
     font-size: 15px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    white-space: nowrap;
 }
 
 .filter-group select {
     padding: 10px 15px;
-    border: 2px solid #EE2D62;
+    border: 2px solid var(--primary-color);
     border-radius: 8px;
     background-color: white;
     font-size: 15px;
@@ -133,7 +142,7 @@ h1 {
 
 .surname-search-input {
     padding: 10px 15px;
-    border: 2px solid #EE2D62;
+    border: 2px solid var(--primary-color);
     border-radius: 8px;
     background-color: white;
     font-size: 15px;
@@ -155,11 +164,54 @@ h1 {
     background-color: #f9f9f9;
 }
 
+/* Стили для выпадающего списка выбора события */
+.event-selector-section {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+    margin-top: 20px;
+}
+
+.event-filter-group {
+    width: 100%;
+    max-width: 600px;
+    flex-direction: row;
+}
+
+.event-filter-group label {
+    white-space: nowrap;
+    margin-right: 10px;
+}
+
+.event-selector-input {
+    padding: 10px 15px;
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    background-color: white;
+    font-size: 15px;
+    color: #2c3e50;
+    flex: 1;
+    outline: none;
+    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    cursor: pointer;
+}
+
+.event-selector-input:hover {
+    border-color: #1a1a1a;
+}
+
+.event-selector-input:focus {
+    border-color: #1a1a1a;
+    box-shadow: 0 0 0 3px rgba(238, 45, 98, 0.1);
+    background-color: #f9f9f9;
+}
+
 .loading {
     text-align: center;
     padding: 40px;
     font-size: 20px;
-    color: #EE2D62;
+    color: var(--primary-color);
     font-weight: 500;
     background-color: rgba(248, 249, 250, 0.7);
     border-radius: 12px;
@@ -200,7 +252,7 @@ th, td {
 }
 
 th {
-    background: linear-gradient(to bottom, #EE2D62, #1a1a1a);
+    background: linear-gradient(to bottom, var(--primary-color), #1a1a1a);
     color: white;
     font-weight: 600;
     position: sticky;
@@ -215,7 +267,7 @@ th {
 }
 
 th:hover {
-    background: linear-gradient(to bottom, #EE2D62, #1a1a1a);
+    background: linear-gradient(to bottom, var(--primary-color), #1a1a1a);
     opacity: 0.8;
 }
 
@@ -239,7 +291,7 @@ tr:hover {
 
 .gender-male {
     background: linear-gradient(to right, #e3f2fd, #bbdefb);
-    color: #EE2D62;
+    color: #1976d2;
     border-color: #bbdefb;
 }
 
@@ -339,4 +391,96 @@ tr:hover {
         font-size: 11px;
         padding: 3px 8px;
     }
+}
+
+/* Карточка события на странице результатов */
+.event-card {
+    position: relative;
+    margin: 0 auto 30px auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 30px;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    max-width: 980px;
+}
+
+.event-card-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: none;
+    z-index: 1;
+}
+
+.event-card-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.event-selector-group,
+.year-selector-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+}
+
+.event-selector-group label,
+.year-selector-group label {
+    font-weight: 600;
+    color: #333;
+    font-size: 15px;
+}
+
+.event-selector-input,
+.year-selector-input {
+    padding: 10px 14px;
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    background-color: white;
+    color: #333;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    min-width: 220px;
+    height: 38px;
+    line-height: 38px;
+}
+
+.year-selector-input {
+    min-width: 140px;
+}
+
+.event-selector-input:hover,
+.year-selector-input:hover {
+    border-color: #d41f52;
+    box-shadow: 0 4px 12px rgba(238, 45, 98, 0.25);
+}
+
+.event-selector-input:focus,
+.year-selector-input:focus {
+    outline: none;
+    border-color: #d41f52;
+    box-shadow: 0 0 0 4px rgba(238, 45, 98, 0.15);
 }

@@ -236,7 +236,17 @@
         font-weight: 400;
         text-transform: uppercase;
         text-decoration: none;
-        transition: color 0.3s;
+        transition: color 0.3s;    background-color: #222222;
+    padding-bottom: 0px;
+    border: 1px solid #222222;
+}
+
+#krasmarafon-header-main .krasmarafon-container {
+    height: 30px;
+}
+
+#krasmarafon-header-main {
+
     }
 
     .krasmarafon-nav-link-secondary:hover {
@@ -256,7 +266,8 @@
         width: 25px;
         height: 3px;
         background-color: #ffffff;
-        transition: all 0.3s;
+        transition: all 0./* ===== Мобильное меню (базовые стили) ===== */
+
     }
 
     .krasmarafon-mobile-nav-list {

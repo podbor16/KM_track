@@ -84,17 +84,38 @@ async def tracker_main(request: Request):
 
 @router.get("/analytics", response_class=HTMLResponse, tags=["Pages"])
 async def analytics_page(request: Request):
-    """Страница аналитики"""
+    """Страница аналитики (перенаправлено на /start_list для обратной совместимости)"""
+    # Для совместимости перенаправляем старый маршрут на новый
     context = {
         "request": request,
         "event": settings.CURRENT_EVENT,
     }
-    return legacy_templates.TemplateResponse("analytics.html", context)
+    return legacy_templates.TemplateResponse("start_list.html", context)
 
 
 @router.get("/start_list", response_class=HTMLResponse, tags=["Pages"])
 async def start_list_page(request: Request):
-    """Оригинальная страница стартового списка - возвращает статический HTML"""
+    """Страница стартового списка"""
+    context = {
+        "request": request,
+        "event": settings.CURRENT_EVENT,
+    }
+    return legacy_templates.TemplateResponse("start_list.html", context)
+
+
+@router.get("/results", response_class=HTMLResponse, tags=["Pages"])
+async def results_page(request: Request):
+    """Страница результатов забега"""
+    context = {
+        "request": request,
+        "event": settings.CURRENT_EVENT,
+    }
+    return legacy_templates.TemplateResponse("results.html", context)
+
+
+@router.get("/old_pages_start_list", response_class=HTMLResponse, tags=["Pages"])
+async def old_start_list_page(request: Request):
+    """Оригинальная страница стартового списка - возвращает статический HTML из old_templates"""
     from pathlib import Path
     start_list_path = Path(__file__).resolve().parent.parent.parent.parent / "analytics" / "personal" / "start_list.html"
     
@@ -595,12 +616,20 @@ async def get_registered_runners(
 @router.get("/api/race-results", response_model=RaceResultsResponse, tags=["Analytics"])
 async def get_race_results(
     event: str = Query(settings.CURRENT_EVENT),
+    event_name: str = Query(None),
+    year: int = Query(None),
 ) -> RaceResultsResponse:
     """
     Получить результаты гонки из race_data.json
+    Поддерживает фильтрацию по событию и году
     """
     try:
         raw_data = fetch_copernico_data()
+        
+        # Фильтруем по событию, если указано
+        if event_name:
+            raw_data = [r for r in raw_data if r.get('event') == event_name or 
+                       settings.EVENTS_CONFIG.get(event, {}).get('name') == event_name]
         
         results = []
         for runner in raw_data[:100]:  # Ограничиваем до 100 результатов

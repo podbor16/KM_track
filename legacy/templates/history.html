@@ -1,0 +1,84 @@
+<!-- legacy/templates/history.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>История - Анализ забегов</title>
+    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
+    <link rel="stylesheet" href="/legacy/static/navigation.css">
+    <link rel="stylesheet" href="/legacy/static/analytics.css">
+    <link rel="stylesheet" href="/legacy/static/history.css">
+</head>
+<body>
+    <!-- Включаем хэдер Красмарафона -->
+    {% include 'krasmarafon_header.html' %}
+    {% include 'header.html' %}
+
+    <div class="container" >
+        <h1>История участия в забегах</h1>
+        
+        <div class="intro-section">
+            <p>
+                Выберите способ поиска информации о спортсменах и забегах. 
+                Здесь вы найдете анализ результатов и статистику участников.
+            </p>
+        </div>
+
+        <div class="history-container">
+            <!-- ОПЦИЯ 1: Поиск по спортсмену -->
+            <div class="search-option">
+                <h2> Поиск спортсмена</h2>
+                <form class="search-form search-athlete-form" onsubmit="searchAthlete(event)">
+                    <input 
+                        type="text" 
+                        id="athleteSurname" 
+                        class="search-input athlete-input" 
+                        placeholder="Введите фамилию спортсмена..." 
+                        required
+                        autocomplete="off"
+                    >
+                    <div class="athlete-button-container">
+                        <button type="submit" class="search-btn">Поиск</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ОПЦИЯ 2: Анализ по забегам -->
+            <div class="search-option">
+                <h2> Анализ по забегам</h2>
+                <p>
+                    Выберите интересующее вас событие, чтобы просмотреть подробную аналитику: 
+                    статистика участников, результаты, рейтинги и сравнительный анализ.
+                </p>
+                <div class="race-link-container">
+                    <a href="/race-analysis" class="race-analysis-btn">Перейти к анализу забегов</a>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Функция поиска спортсмена
+        function searchAthlete(event) {
+            event.preventDefault();
+            const surname = document.getElementById('athleteSurname').value.trim();
+            
+            if (!surname) {
+                alert('Пожалуйста, введите фамилию спортсмена');
+                return;
+            }
+            
+            // Редиректим на страницу анализа спортсмена
+            window.location.href = `/athlete-analysis?surname=${encodeURIComponent(surname)}`;
+        }
+
+        // Фокус на первое поле при загрузке
+        document.getElementById('athleteSurname').focus();
+    </script>
+
+    <!-- Включаем официальный футер Красмарафона -->
+    {% include 'krasmarafon_footer.html' %}
+</body>
+</html>

@@ -6,7 +6,7 @@ FastAPI приложение KM_track
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     settings.logger.info("\nReady to process requests!")
     settings.logger.info(f"📍 Swagger UI: http://localhost:8000/docs")
     settings.logger.info(f"📍 ReDoc: http://localhost:8000/redoc")
+    settings.logger.info(f"📍 Трекер: http://localhost:8000/tracker")
     settings.logger.info("=" * 50)
     
     yield  # Приложение работает здесь
@@ -152,6 +153,20 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc",
     }
+
+
+# --- ПРОСТЫЕ СТРАНИЦЫ (HTML) ---
+
+@app.get("/history", tags=["Pages"])
+async def history_page(request: Request):
+    """Страница истории с поиском по спортсмену и забегу"""
+    return legacy_templates.TemplateResponse("history.html", {"request": request})
+
+
+@app.get("/race-analysis", tags=["Pages"])
+async def race_analysis_page(request: Request):
+    """Страница анализа забегов с выбором события и года"""
+    return legacy_templates.TemplateResponse("race-analysis.html", {"request": request})
 
 
 # --- РЕГИСТРАЦИЯ РОУТЕРОВ ---

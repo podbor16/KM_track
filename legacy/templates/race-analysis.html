@@ -1,0 +1,306 @@
+<!-- legacy/templates/race-analysis.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ по забегам</title>
+    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
+    <link rel="stylesheet" href="/legacy/static/navigation.css">
+    <link rel="stylesheet" href="/legacy/static/analytics.css">
+    <style>
+        /* Дополнительные стили для страницы анализа забегов */
+        :root {
+            --primary-color: #EE2D62;
+        }
+
+        .analysis-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .analysis-header h1 {
+            color: #2c3e50;
+            font-size: 36px;
+            margin-bottom: 15px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .analysis-header p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.8;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .analysis-card {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+            max-width: 600px;
+            margin: 0 auto;
+            border-top: 4px solid var(--primary-color);
+        }
+
+        .analysis-form {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            align-items: stretch;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group select {
+            padding: 14px 18px;
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+            background-color: white;
+            color: #2c3e50;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+
+        .form-group select:hover {
+            border-color: #d41f52;
+            box-shadow: 0 4px 12px rgba(238, 45, 98, 0.15);
+        }
+
+        .form-group select:focus {
+            outline: none;
+            border-color: #d41f52;
+            box-shadow: 0 0 0 4px rgba(238, 45, 98, 0.15);
+            background-color: #fafafa;
+        }
+
+        .info-box {
+            background: linear-gradient(to right, #ecf0f1, #f5f5f5);
+            border-left: 5px solid var(--primary-color);
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: #555;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .info-box strong {
+            color: var(--primary-color);
+        }
+
+        .form-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .analysis-btn,
+        .back-btn {
+            padding: 14px 35px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .analysis-btn {
+            background: linear-gradient(135deg, var(--primary-color), #d41f52);
+            color: white;
+            box-shadow: 0 4px 10px rgba(238, 45, 98, 0.3);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .analysis-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(238, 45, 98, 0.4);
+            background: linear-gradient(135deg, #d41f52, #b81649);
+        }
+
+        .analysis-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(238, 45, 98, 0.3);
+        }
+
+        .back-btn {
+            background: #ecf0f1;
+            color: #34495e;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .back-btn:hover {
+            background: #d3d9de;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .back-btn:active {
+            transform: translateY(0);
+        }
+
+        .form-divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--primary-color), transparent);
+            margin: 15px 0;
+        }
+
+        @media (max-width: 768px) {
+            .analysis-card {
+                padding: 25px;
+            }
+
+            .analysis-header h1 {
+                font-size: 28px;
+            }
+
+            .analysis-header p {
+                font-size: 14px;
+            }
+
+            .form-buttons {
+                flex-direction: column;
+            }
+
+            .analysis-btn,
+            .back-btn {
+                width: 100%;
+            }
+
+            .container {
+                padding: 15px;
+            }
+        }
+
+        .icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Включаем хэдер Красмарафона -->
+    {% include 'krasmarafon_header.html' %}
+    {% include 'header.html' %}
+
+    <div class="container">
+        <div class="analysis-header">
+            <h1>📊 Анализ по забегам</h1>
+            <p>
+                Выберите интересующее вас событие и год для просмотра подробной аналитики: 
+                статистика участников, результаты, рейтинги и сравнительный анализ.
+            </p>
+        </div>
+
+        <div class="analysis-card">
+            <form class="analysis-form" onsubmit="handleAnalysis(event)">
+                <div class="form-group">
+                    <label for="eventSelector">Событие *</label>
+                    <select id="eventSelector" required>
+                        <option value="">-- Выберите событие --</option>
+                        <option value="night_run">Ночной забег</option>
+                        <option value="vesna">Весна</option>
+                        <option value="colorrun">Красочный забег</option>
+                        <option value="girlseven">Женская семерка</option>
+                        <option value="zhara">Жара</option>
+                        <option value="kids">Детский забег</option>
+                        <option value="xtrailrun">Х Трейл</option>
+                        <option value="snow7">Снежная семерка</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="yearSelector">Год *</label>
+                    <select id="yearSelector" required>
+                        <option value="">-- Выберите год --</option>
+                        <option value="all">По всем годам</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2018">2018</option>
+                    </select>
+                </div>
+
+                <div class="form-divider"></div>
+
+                <div class="info-box">
+                    <strong>💡 Подсказка:</strong> Выберите событие и год для просмотра:
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Детальную статистику по участникам</li>
+                        <li>Результаты и позиции</li>
+                        <li>Возрастные группы и категории</li>
+                        <li>Сравнительный анализ между годами</li>
+                    </ul>
+                </div>
+
+                <div class="form-buttons">
+                    <button type="submit" class="analysis-btn">
+                        <span class="icon">🔍</span>
+                        Показать анализ
+                    </button>
+                    <a href="/history" class="back-btn">
+                        <span class="icon">←</span>
+                        Вернуться
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Функция обработки отправки формы анализа
+        function handleAnalysis(event) {
+            event.preventDefault();
+            const eventId = document.getElementById('eventSelector').value;
+            const year = document.getElementById('yearSelector').value;
+            
+            if (!eventId || !year) {
+                alert('Пожалуйста, выберите событие и год');
+                return;
+            }
+            
+            // В будущем это будет переход на страницу с аналитикой
+            // window.location.href = `/analytics?event=${encodeURIComponent(eventId)}&year=${encodeURIComponent(year)}`;
+            
+            // Временно показываем сообщение
+            alert(`Анализ по событию "${eventId}" за ${year} год.\n\nЭта функция будет реализована в ближайшее время.`);
+        }
+
+        // Фокус на первый селект при загрузке
+        window.addEventListener('load', () => {
+            document.getElementById('eventSelector').focus();
+        });
+    </script>
+
+    <!-- Включаем официальный футер Красмарафона -->
+    {% include 'krasmarafon_footer.html' %}
+</body>
+</html>

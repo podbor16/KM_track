@@ -14,7 +14,13 @@
                 <a href="/tracker" class="navbar-link active-link">ТРЕКЕР</a>
             </li>
             <li class="navbar-item">
-                <a href="/analytics" class="navbar-link active-link">РЕЗУЛЬТАТЫ</a>
+                <a href="/start_list" class="navbar-link">СТАРТОВЫЙ СПИСОК</a>
+            </li>
+            <li class="navbar-item">
+                <a href="/results" class="navbar-link">РЕЗУЛЬТАТЫ</a>
+            </li>
+            <li class="navbar-item">
+                <a href="/history" class="navbar-link">ИСТОРИЯ</a>
             </li>
         </ul>
     </div>
@@ -50,8 +56,12 @@
         // Проверяем текущий путь и подсвечиваем соответствующую ссылку
         if (currentPath === '/tracker' || currentPath === '/' || currentPath.startsWith('/tracker/')) {
             navbarLinks[0]?.classList.add('active'); // Трекер
-        } else if (currentPath === '/analytics' || currentPath.includes('/analytics')) {
-            navbarLinks[1]?.classList.add('active'); // Результаты/Аналитика
+        } else if (currentPath === '/start_list') {
+            navbarLinks[1]?.classList.add('active'); // Стартовый список
+        } else if (currentPath === '/results' || currentPath === '/analytics' || currentPath.includes('/analytics')) {
+            navbarLinks[2]?.classList.add('active'); // Результаты
+        } else if (currentPath === '/history') {
+            navbarLinks[3]?.classList.add('active'); // История
         }
     }
     
