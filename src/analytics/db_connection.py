@@ -403,3 +403,173 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'event_year': 2026
         }
     ]
+
+
+def search_clients(search_query: str) -> List[Dict[str, Any]]:
+    """
+    Поиск спортсменов в таблице 'clients' по фамилии и имени
+    
+    Args:
+        search_query: Поисковая строка (фамилия или имя)
+    
+    Returns:
+        Список найденных спортсменов с полями: surname, name, birth_year
+    """
+    connection = create_connection()
+    
+    if not connection:
+        logger.error("❌ Не удалось установить соединение с БД")
+        return []
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Варианты названий таблицы clients
+        possible_tables = [
+            "clients",
+            "Клиенты",
+            "спортсмены",
+            "athletes",
+            "participants"
+        ]
+        
+        # Получаем список всех таблиц в БД
+        cursor.execute("SHOW TABLES")
+        tables_result = cursor.fetchall()
+        
+        existing_tables = []
+        if tables_result:
+            if isinstance(tables_result[0], dict):
+                key = list(tables_result[0].keys())[0]
+                existing_tables = [table[key] for table in tables_result]
+            else:
+                existing_tables = [table[0] for table in tables_result]
+        
+        logger.info(f"📋 Таблицы в БД: {existing_tables}")
+        
+        # Пытаемся найти подходящую таблицу
+        target_table = None
+        for possible_table in possible_tables:
+            if possible_table.lower() in [t.lower() for t in existing_tables]:
+                target_table = next(t for t in existing_tables if t.lower() == possible_table.lower())
+                logger.info(f"✅ Найдена таблица: {target_table}")
+                break
+        
+        if not target_table:
+            logger.error(f"❌ Таблица not found. Доступные таблицы: {existing_tables}")
+            return []
+        
+        # Получаем список столбцов таблицы
+        cursor.execute(f"DESCRIBE `{target_table}`")
+        columns_result = cursor.fetchall()
+        
+        available_columns = []
+        if columns_result:
+            if isinstance(columns_result[0], dict):
+                available_columns = [col['Field'] for col in columns_result]
+            else:
+                available_columns = [col[0] for col in columns_result]
+        
+        logger.info(f"📋 Столбцы в таблице '{target_table}': {available_columns}")
+        
+        # Определяем какие поля существуют
+        surname_field = None
+        name_field = None
+        birthday_field = None
+        
+        # Ищем поле фамилии
+        for field in ['surname', 'Фамилия', 'last_name', 'lastname']:
+            if field.lower() in [col.lower() for col in available_columns]:
+                surname_field = next(col for col in available_columns if col.lower() == field.lower())
+                break
+        
+        # Ищем поле имени
+        for field in ['name', 'Имя', 'first_name', 'firstname']:
+            if field.lower() in [col.lower() for col in available_columns]:
+                name_field = next(col for col in available_columns if col.lower() == field.lower())
+                break
+        
+        # Ищем поле даты рождения
+        for field in ['birthday', 'Дата рождения', 'birthdate', 'birth_date', 'date_of_birth']:
+            if field.lower() in [col.lower() for col in available_columns]:
+                birthday_field = next(col for col in available_columns if col.lower() == field.lower())
+                break
+        
+        # Если требуемые поля не найдены, выбираем первые 3 доступные
+        if not all([surname_field, name_field, birthday_field]):
+            logger.warning(f"⚠️ Не все поля найдены. surname={surname_field}, name={name_field}, birthday={birthday_field}")
+            if not surname_field and available_columns:
+                surname_field = available_columns[0]
+            if not name_field and len(available_columns) > 1:
+                name_field = available_columns[1]
+            if not birthday_field and len(available_columns) > 2:
+                birthday_field = available_columns[2]
+        
+        # Выполняем поиск
+        search_term = f"%{search_query}%"
+        
+        if surname_field and name_field and birthday_field:
+            query = f"""
+            SELECT `{surname_field}` as surname, `{name_field}` as name, `{birthday_field}` as birthday 
+            FROM `{target_table}`
+            WHERE `{surname_field}` LIKE %s OR `{name_field}` LIKE %s
+            LIMIT 20
+            """
+        else:
+            # Если не можем определить поля, берем все и фильтруем на стороне Python
+            query = f"SELECT * FROM `{target_table}` LIMIT 100"
+        
+        if surname_field and name_field and birthday_field:
+            cursor.execute(query, (search_term, search_term))
+        else:
+            cursor.execute(query)
+        
+        records = cursor.fetchall()
+        
+        # Если не получилось определить поля, фильтруем результаты на стороне Python
+        if not (surname_field and name_field and birthday_field):
+            filtered_records = []
+            for record in records:
+                if isinstance(record, dict):
+                    record_str = str(record).lower()
+                else:
+                    record_str = str(record).lower()
+                
+                if search_query.lower() in record_str:
+                    filtered_records.append(record)
+            
+            records = filtered_records[:20]
+        
+        # Извлекаем год рождения из даты рождения
+        for record in records:
+            if isinstance(record, dict):
+                birthday = record.get('birthday')
+                if birthday:
+                    # Если это datetime объект
+                    if hasattr(birthday, 'year'):
+                        record['birth_year'] = str(birthday.year)
+                    # Если это строка
+                    elif isinstance(birthday, str):
+                        try:
+                            year = birthday.split('-')[0] if '-' in birthday else birthday[:4]
+                            record['birth_year'] = year
+                        except:
+                            record['birth_year'] = 'Неизвестно'
+                    else:
+                        record['birth_year'] = 'Неизвестно'
+                else:
+                    record['birth_year'] = 'Неизвестно'
+                # Убираем поле birthday
+                record.pop('birthday', None)
+        
+        logger.info(f"✅ Найдено {len(records)} соответствий для запроса '{search_query}'")
+        
+        return records
+        
+    except Error as e:
+        logger.error(f"❌ Ошибка при поиске в таблице: {e}")
+        return []
+    finally:
+        cursor.close()
+        if connection.is_connected():
+            connection.close()

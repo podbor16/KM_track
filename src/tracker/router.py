@@ -366,6 +366,30 @@ async def search_runners(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/search-athletes", tags=["Athletes"])
+async def search_athletes(
+    q: str = Query("", min_length=1, description="Search query (surname or name)"),
+):
+    """
+    Поиск спортсменов в таблице 'clients' по фамилии и имени
+    Возвращает: фамилия, имя, город
+    """
+    try:
+        from src.analytics.db_connection import search_clients
+        
+        results = search_clients(q)
+        
+        return {
+            'query': q,
+            'count': len(results),
+            'results': results[:20],  # Ограничиваем до 20 результатов
+        }
+    
+    except Exception as e:
+        logger.error(f"Error searching athletes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/select-runner", response_model=SelectedRunnersResponse, tags=["Runners"])
 async def select_runner(
     request: RunnerSelectionRequest,

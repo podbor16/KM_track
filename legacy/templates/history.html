@@ -9,6 +9,102 @@
     <link rel="stylesheet" href="/legacy/static/navigation.css">
     <link rel="stylesheet" href="/legacy/static/analytics.css">
     <link rel="stylesheet" href="/legacy/static/history.css">
+    <style>
+        .athlete-search-container {
+            position: relative;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .athlete-search-input {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 16px;
+            border: 2px solid #EE2D62;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        .athlete-search-input:focus {
+            outline: none;
+            border-color: #EE2D62;
+        }
+
+        .autocomplete-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #EE2D62;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .autocomplete-results.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .autocomplete-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .autocomplete-item.selected {
+            background-color: #ffe6d5;
+        }
+
+        .athlete-info {
+            display: block;
+            color: #333;
+        }
+
+        .no-results {
+            padding: 20px 15px;
+            text-align: left;
+            color: #999;
+            background-color: #f9f9f9;
+        }
+
+        .search-loader {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #EE2D62;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .search-status {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+            min-height: 18px;
+        }
+    </style>
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
@@ -28,25 +124,28 @@
         <div class="history-container">
             <!-- ОПЦИЯ 1: Поиск по спортсмену -->
             <div class="search-option">
-                <h2> Поиск спортсмена</h2>
-                <form class="search-form search-athlete-form" onsubmit="searchAthlete(event)">
+                <h2>Поиск спортсмена</h2>
+                <p>Введите фамилию или имя спортсмена для поиска в базе</p>
+                
+                <div class="athlete-search-container">
                     <input 
                         type="text" 
-                        id="athleteSurname" 
-                        class="search-input athlete-input" 
-                        placeholder="Введите фамилию спортсмена..." 
-                        required
+                        id="athleteSearchInput" 
+                        class="athlete-search-input" 
+                        placeholder="Введите фамилию или имя спортсмена..." 
                         autocomplete="off"
                     >
-                    <div class="athlete-button-container">
-                        <button type="submit" class="search-btn">Поиск</button>
+                    <div class="search-status" id="searchStatus"></div>
+                    
+                    <div class="autocomplete-results" id="resultsContainer">
+                        <div class="no-results">Начните вводить для поиска...</div>
                     </div>
-                </form>
+                </div>
             </div>
 
             <!-- ОПЦИЯ 2: Анализ по забегам -->
             <div class="search-option">
-                <h2> Анализ по забегам</h2>
+                <h2>Анализ по забегам</h2>
                 <p>
                     Выберите интересующее вас событие, чтобы просмотреть подробную аналитику: 
                     статистика участников, результаты, рейтинги и сравнительный анализ.
@@ -55,27 +154,205 @@
                     <a href="/race-analysis" class="race-analysis-btn">Перейти к анализу забегов</a>
                 </div>
             </div>
-            </div>
         </div>
     </div>
 
     <script>
-        // Функция поиска спортсмена
-        function searchAthlete(event) {
-            event.preventDefault();
-            const surname = document.getElementById('athleteSurname').value.trim();
+        // Ждем полной загрузки DOM
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 DOMContentLoaded событие произошло');
             
-            if (!surname) {
-                alert('Пожалуйста, введите фамилию спортсмена');
+            const searchInput = document.getElementById('athleteSearchInput');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const searchStatus = document.getElementById('searchStatus');
+            
+            console.log('📦 Элементы инициализированы:');
+            console.log('  - searchInput:', searchInput);
+            console.log('  - resultsContainer:', resultsContainer);
+            console.log('  - searchStatus:', searchStatus);
+            
+            let searchTimeout;
+            let currentSelectedIndex = -1;
+
+            if (!searchInput) {
+                console.error('❌ ОШИБКА: searchInput не найден!');
                 return;
             }
-            
-            // Редиректим на страницу анализа спортсмена
-            window.location.href = `/athlete-analysis?surname=${encodeURIComponent(surname)}`;
-        }
+            if (!resultsContainer) {
+                console.error('❌ ОШИБКА: resultsContainer не найден!');
+                return;
+            }
+            if (!searchStatus) {
+                console.error('❌ ОШИБКА: searchStatus не найден!');
+                return;
+            }
 
-        // Фокус на первое поле при загрузке
-        document.getElementById('athleteSurname').focus();
+            console.log('✅ Все элементы найдены, добавляю event listener');
+
+            searchInput.addEventListener('input', function(e) {
+                const query = this.value.trim();
+                console.log('⌨️ Введено:', query, `(${query.length} символов)`);
+                
+                clearTimeout(searchTimeout);
+                
+                if (!query) {
+                    resultsContainer.innerHTML = '<div class="no-results">Начните вводить для поиска...</div>';
+                    resultsContainer.classList.remove('show');
+                    searchStatus.textContent = '';
+                    currentSelectedIndex = -1;
+                    return;
+                }
+
+                if (query.length < 2) {
+                    resultsContainer.innerHTML = '<div class="no-results">Введите минимум 2 символа</div>';
+                    resultsContainer.classList.add('show');
+                    searchStatus.textContent = '';
+                    return;
+                }
+
+                searchStatus.innerHTML = '<span class="search-loader"></span> Поиск...';
+                
+                searchTimeout = setTimeout(() => {
+                    performSearch(query);
+                }, 300);
+            });
+
+            async function performSearch(query) {
+                try {
+                    console.log('🔍 Поиск:', query);
+                    const url = `/api/search-athletes?q=${encodeURIComponent(query)}`;
+                    console.log('📡 URL запроса:', url);
+                    
+                    const response = await fetch(url);
+                    console.log('📊 Статус ответа:', response.status);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ошибка! статус: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('✅ Данные получены:', data);
+
+                    if (!data.results || data.results.length === 0) {
+                        resultsContainer.innerHTML = '<div class="no-results">Спортсмены не найдены</div>';
+                        searchStatus.textContent = `По запросу "${query}" ничего не найдено`;
+                    } else {
+                        console.log('📋 Результатов:', data.results.length);
+                        displayResults(data.results);
+                        searchStatus.textContent = `Найдено ${data.count || data.results.length} спортсменов`;
+                    }
+                    
+                    resultsContainer.classList.add('show');
+                    currentSelectedIndex = -1;
+                    
+                } catch (error) {
+                    console.error('❌ Ошибка при поиске:', error);
+                    console.error('Тип ошибки:', error.message);
+                    resultsContainer.innerHTML = `<div class="no-results">Ошибка при поиске:<br><small>${error.message}</small></div>`;
+                    searchStatus.textContent = '❌ Ошибка поиска';
+                    resultsContainer.classList.add('show');
+                }
+            }
+
+            function displayResults(results) {
+                console.log('🎯 displayResults вызвана с:', results);
+                
+                if (!results || results.length === 0) {
+                    console.warn('⚠️ Пустой список результатов');
+                    resultsContainer.innerHTML = '<div class="no-results">Нет результатов</div>';
+                    return;
+                }
+
+                console.log(`📝 Отображаю ${results.length} результатов`);
+                let html = '';
+                results.forEach((athlete, index) => {
+                    console.log(`  [${index}]:`, athlete);
+                    const surname = athlete.surname || 'Не указано';
+                    const name = athlete.name || 'Не указано';
+                    const birth_year = athlete.birth_year || 'Неизвестно';
+                    
+                    html += `
+                        <div class="autocomplete-item" data-index="${index}" data-surname="${surname}" data-name="${name}">
+                            <div class="athlete-info">
+                                ${surname} ${name}, ${birth_year} г.р.
+                            </div>
+                        </div>
+                    `;
+                });
+
+                resultsContainer.innerHTML = html;
+                console.log('✅ Результаты добавлены в DOM');
+
+                // Добавляем обработчики для каждого результата
+                const items = resultsContainer.querySelectorAll('.autocomplete-item');
+                console.log(`🖱️ Добавлено ${items.length} обработчиков`);
+                
+                items.forEach(item => {
+                    item.addEventListener('click', function() {
+                        selectAthlete(this);
+                    });
+                    
+                    item.addEventListener('mouseenter', function() {
+                        items.forEach(i => i.classList.remove('selected'));
+                        this.classList.add('selected');
+                        currentSelectedIndex = parseInt(this.dataset.index);
+                    });
+                });
+            }
+
+            function selectAthlete(element) {
+                const surname = element.dataset.surname;
+                const name = element.dataset.name;
+                
+                searchInput.value = `${surname} ${name}`;
+                resultsContainer.classList.remove('show');
+                searchStatus.textContent = '✓ Спортсмен выбран';
+                
+                // Можно добавить редирект или дальнейшую обработку
+                // window.location.href = `/athlete-analysis?surname=${encodeURIComponent(surname)}`;
+            }
+
+            // Закрытие результатов при клике вне
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.athlete-search-container')) {
+                    resultsContainer.classList.remove('show');
+                }
+            });
+
+            // Навигация клавиатурой
+            searchInput.addEventListener('keydown', function(e) {
+                const items = resultsContainer.querySelectorAll('.autocomplete-item');
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (currentSelectedIndex < items.length - 1) {
+                        currentSelectedIndex++;
+                        items[currentSelectedIndex].scrollIntoView({ block: 'nearest' });
+                        items.forEach(i => i.classList.remove('selected'));
+                        items[currentSelectedIndex].classList.add('selected');
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (currentSelectedIndex > 0) {
+                        currentSelectedIndex--;
+                        items[currentSelectedIndex].scrollIntoView({ block: 'nearest' });
+                        items.forEach(i => i.classList.remove('selected'));
+                        items[currentSelectedIndex].classList.add('selected');
+                    }
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (currentSelectedIndex >= 0 && items[currentSelectedIndex]) {
+                        selectAthlete(items[currentSelectedIndex]);
+                    }
+                } else if (e.key === 'Escape') {
+                    resultsContainer.classList.remove('show');
+                }
+            });
+
+            // Фокус на первое поле при загрузке
+            searchInput.focus();
+            console.log('✅ Скрипт полностью инициализирован');
+        });
     </script>
 
     <!-- Включаем официальный футер Красмарафона -->
