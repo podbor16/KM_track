@@ -7,10 +7,10 @@ import logging
 import json
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, Query, Request, Depends, HTTPException
+from pathlib import Path
+from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
 
 from src.config import settings
 from src.core.state import AppState
@@ -117,7 +117,7 @@ async def results_page(request: Request):
 async def old_start_list_page(request: Request):
     """Оригинальная страница стартового списка - возвращает статический HTML из old_templates"""
     from pathlib import Path
-    start_list_path = Path(__file__).resolve().parent.parent.parent.parent / "analytics" / "personal" / "start_list.html"
+    start_list_path = PathlibPath(__file__).resolve().parent.parent.parent.parent / "analytics" / "personal" / "start_list.html"
     
     try:
         with open(start_list_path, 'r', encoding='utf-8') as f:
@@ -388,6 +388,76 @@ async def search_athletes(
     except Exception as e:
         logger.error(f"Error searching athletes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/athlete/{surname}/{name}", tags=["Athletes"])
+async def get_athlete_profile(
+    surname: str = PathParam(..., description="Фамилия спортсмена"),
+    name: str = PathParam(..., description="Имя спортсмена"),
+):
+    """
+    Получить информацию о спортсмене и его все результаты
+    
+    Args:
+        surname: Фамилия спортсмена
+        name: Имя спортсмена
+    
+    Returns:
+        Информация о спортсмене и список его результатов
+    """
+    try:
+        from src.analytics.db_connection import get_athlete_results
+        
+        logger.info(f"📥 Запрос профиля спортсмена: {surname} {name}")
+        
+        athlete_info, results = get_athlete_results(surname, name)
+        
+        logger.info(f"📊 Получено: athlete_info={'OK' if athlete_info else 'EMPTY'}, results={len(results)} items")
+        
+        if not athlete_info and not results:
+            logger.warning(f"❌ Спортсмен не найден: {surname} {name}")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Спортсмен {surname} {name} не найден в базе данных"
+            )
+        
+        # Форматируем результаты для фронтенда
+        formatted_results = []
+        for result in results:
+            # Преобразуем сложные типы данных в строки для JSON
+            formatted_result = {}
+            for key, value in result.items():
+                if hasattr(value, 'isoformat'):  # datetime объекты
+                    formatted_result[key] = value.isoformat()
+                elif isinstance(value, (int, float, str, bool, type(None))):
+                    formatted_result[key] = value
+                else:
+                    formatted_result[key] = str(value)
+            formatted_results.append(formatted_result)
+        
+        # Форматируем информацию о спортсмене
+        formatted_athlete_info = {}
+        for key, value in athlete_info.items():
+            if hasattr(value, 'isoformat'):  # datetime объекты
+                formatted_athlete_info[key] = value.isoformat()
+            elif isinstance(value, (int, float, str, bool, type(None))):
+                formatted_athlete_info[key] = value
+            else:
+                formatted_athlete_info[key] = str(value)
+        
+        logger.info(f"✅ Успешно вернул результат: {formatted_athlete_info.get('name', '?')} {formatted_athlete_info.get('surname', '?')} - {len(formatted_results)} гонок")
+        
+        return {
+            'athlete': formatted_athlete_info,
+            'results': formatted_results,
+            'total_races': len(formatted_results),
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении профиля спортсмена {surname} {name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка сервера: {str(e)}")
 
 
 @router.post("/api/select-runner", response_model=SelectedRunnersResponse, tags=["Runners"])

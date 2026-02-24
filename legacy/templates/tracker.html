@@ -4,11 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>{{ event_title }}</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
-    <link rel="stylesheet" href="/legacy/static/navigation.css">
-    <link rel="stylesheet" href="/legacy/static/tracker.css">
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-header.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/navigation.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/tracker.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-footer.css?v=1">
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
@@ -89,7 +93,7 @@
                 eventLoaded = true;
             });
     </script>
-    <script src="/legacy/static/tracker.js"></script>
+    <script src="/static/js/tracker.js"></script>
     <script>
         // Ждем загрузки события с сервера
         const waitForEvent = setInterval(() => {

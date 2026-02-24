@@ -1,0 +1,354 @@
+/* race-analysis.css - Стили для страницы Анализ забегов */
+
+:root {
+    --primary-color: #EE2D62;
+    --text-dark: #333;
+    --text-light: #666;
+    --background: #faf8fa;
+    --white: #ffffff;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
+    
+    /* Цвета забегов */
+    --color-nightrun: #1c2c55;
+    --color-spring: #85c6e2;
+    --color-colorrun: #059C43;
+    --color-girlseven: #f072ab;
+    --color-zhara: #ee2d62;
+    --color-kids: #ee2d62;
+    --color-xtrail: #562872;
+    --color-snow7: #00BFDF;
+}
+
+/* Основной контейнер */
+.race-analysis-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background-color: var(--background);
+    padding: 40px 40px;
+}
+
+.race-analysis-header {
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+.race-analysis-header h1 {
+    font-size: 36px;
+    color: var(--text-dark);
+    margin: 20px 0 30px;
+    font-weight: 600;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.race-analysis-header p {
+    font-size: 16px;
+    color: var(--text-light);
+    line-height: 1.8;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Кнопка возврата */
+
+.back-button a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background-color: var(--white);
+    color: var(--primary-color);
+    font-weight: 600;
+    text-decoration: none;
+    border: 2px solid var(--primary-color);
+    border-radius: 50px;
+    transition: all 0.3s ease;
+    font-size: 15px;
+    box-shadow: var(--shadow);
+}
+
+.back-button a:hover {
+    background-color: var(--primary-color);
+    color: var(--white);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(238, 45, 98, 0.3);
+}
+
+.back-button a:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(238, 45, 98, 0.2);
+}
+
+.back-button svg {
+    width: 20px;
+    height: 20px;
+    transform: scaleX(-1);
+}
+
+/* Сетка карточек */
+.race-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 25px;
+    padding: 0;
+}
+
+/* Карточка забега */
+.race-card {
+    position: relative;
+    height: 300px;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow);
+    border: none;
+}
+
+.race-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+/* Цвета для каждого забега */
+.race-card:nth-child(1) .race-card-image {
+    background-image: url('/legacy/static/images/events/logo1x1/night_run.png');
+    background-size: cover;
+    background-position: center;
+}
+
+.race-card .race-card-content {
+    display: none;
+}
+
+.race-card:nth-child(2) .race-card-image {
+    background-image: url('/legacy/static/images/events/logo1x1/Весна.png');
+    background-size: cover;
+    background-position: center;
+}
+
+.race-card:nth-child(3) .race-card-image {
+    background: linear-gradient(135deg, #059C43 0%, #047a35 100%);
+}
+
+.race-card:nth-child(4) .race-card-image {
+    background: linear-gradient(135deg, #f072ab 0%, #d9518c 100%);
+}
+
+.race-card:nth-child(5) .race-card-image {
+    background: linear-gradient(135deg, #ee2d62 0%, #d41f52 100%);
+}
+
+.race-card:nth-child(6) .race-card-image {
+    background: linear-gradient(135deg, #ee2d62 0%, #d41f52 100%);
+}
+
+.race-card:nth-child(7) .race-card-image {
+    background: linear-gradient(135deg, #562872 0%, #422056 100%);
+}
+
+.race-card:nth-child(8) .race-card-image {
+    background: linear-gradient(135deg, #00BFDF 0%, #0099ba 100%);
+}
+
+.race-card-image {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    object-fit: cover;
+}
+
+.race-card-overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.35));
+    z-index: 1;
+    transition: background 0.3s ease;
+}
+
+.race-card:hover .race-card-overlay {
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.65));
+}
+
+.race-card-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 28px 24px;
+    color: var(--white);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    height: 100%;
+}
+
+.race-card-title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.3px;
+}
+
+.race-card-description {
+    font-size: 13px;
+    opacity: 0.95;
+    line-height: 1.5;
+    font-weight: 500;
+}
+
+/* Модальное окно */
+.race-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+}
+
+.race-modal.active {
+    display: flex;
+}
+
+.race-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1001;
+}
+
+.race-modal-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--white);
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    z-index: 1002;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -45%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.race-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--text-dark);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.race-modal-close:hover {
+    background-color: #f0f0f0;
+    color: var(--primary-color);
+}
+
+.race-modal-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin: 0 0 20px 0;
+}
+
+.race-modal-body {
+    font-size: 16px;
+    color: var(--text-light);
+    line-height: 1.6;
+}
+
+.race-modal-body p {
+    margin: 0;
+}
+
+/* Адаптивный дизайн */
+@media (max-width: 768px) {
+    .race-analysis-container {
+        padding: 20px 20px;
+    }
+
+    .back-button {
+        padding: 0 20px;
+        margin-bottom: 25px;
+    }
+
+    .race-cards-container {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 15px;
+    }
+
+    .race-card {
+        height: 220px;
+    }
+
+    .race-card-title {
+        font-size: 16px;
+    }
+
+    .race-card-content {
+        padding: 18px 16px;
+    }
+
+    .race-analysis-header h1 {
+        font-size: 28px;
+    }
+
+    .race-analysis-header p {
+        font-size: 14px;
+    }
+
+    .back-button a {
+        font-size: 14px;
+        padding: 10px 20px;
+    }
+
+    .race-modal-container {
+        padding: 30px 24px;
+        width: 95%;
+    }
+
+    .race-modal-title {
+        font-size: 24px;
+    }
+
+    .race-modal-close {
+        width: 28px;
+        height: 28px;
+        font-size: 24px;
+    }
+}

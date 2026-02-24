@@ -163,6 +163,12 @@ async def history_page(request: Request):
     return legacy_templates.TemplateResponse("history.html", {"request": request})
 
 
+@app.get("/athlete-profile", tags=["Pages"])
+async def athlete_profile_page(request: Request):
+    """Страница профиля спортсмена с его результатами"""
+    return legacy_templates.TemplateResponse("athlete-profile.html", {"request": request})
+
+
 @app.get("/race-analysis", tags=["Pages"])
 async def race_analysis_page(request: Request):
     """Страница анализа забегов с выбором события и года"""

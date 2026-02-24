@@ -117,12 +117,14 @@
     background-position: center;
 }
 
-.race-card:nth-child(1) .race-card-content {
+.race-card .race-card-content {
     display: none;
 }
 
 .race-card:nth-child(2) .race-card-image {
-    background: linear-gradient(135deg, #85c6e2 0%, #5ba9c9 100%);
+    background-image: url('/legacy/static/images/events/logo1x1/Весна.png');
+    background-size: cover;
+    background-position: center;
 }
 
 .race-card:nth-child(3) .race-card-image {

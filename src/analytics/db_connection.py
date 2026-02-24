@@ -573,3 +573,142 @@ def search_clients(search_query: str) -> List[Dict[str, Any]]:
         cursor.close()
         if connection.is_connected():
             connection.close()
+
+
+def get_athlete_results(surname: str, name: str) -> tuple:
+    """
+    Получить информацию о спортсмене и его все результаты из таблицы results
+    
+    Args:
+        surname: Фамилия спортсмена
+        name: Имя спортсмена
+    
+    Returns:
+        Кортеж (информация о спортсмене, список его результатов)
+    """
+    logger.info(f"🔍 Поиск спортсмена: {surname} {name}")
+    
+    connection = create_connection()
+    
+    if not connection:
+        logger.error("❌ Не удалось установить соединение с БД")
+        return {}, []
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Получаем список таблиц в БД
+        try:
+            cursor.execute("SHOW TABLES")
+            tables_result = cursor.fetchall()
+            
+            existing_tables = []
+            if tables_result:
+                if isinstance(tables_result[0], dict):
+                    key = list(tables_result[0].keys())[0]
+                    existing_tables = [table[key] for table in tables_result]
+                else:
+                    existing_tables = [table[0] for table in tables_result]
+            
+            logger.info(f"📋 Таблицы в БД: {existing_tables}")
+        except Exception as e:
+            logger.error(f"⚠️ Не удалось получить список таблиц: {e}")
+            existing_tables = []
+        
+        # Пытаемся найти таблицу results
+        results_table = None
+        possible_results_tables = ["results", "Results", "RESULTS", "гонка", "забеги"]
+        
+        for possible_table in possible_results_tables:
+            if possible_table.lower() in [t.lower() for t in existing_tables]:
+                results_table = next(t for t in existing_tables if t.lower() == possible_table.lower())
+                logger.info(f"✅ Найдена таблица результатов: {results_table}")
+                break
+        
+        if not results_table:
+            logger.error(f"❌ Таблица results не найдена. Доступные таблицы: {existing_tables}")
+            return {}, []
+        
+        # Получаем информацию о колонках в таблице results
+        try:
+            cursor.execute(f"DESCRIBE `{results_table}`")
+            columns_info = cursor.fetchall()
+            available_columns = [col['Field'] for col in columns_info]
+            logger.info(f"📄 Колонки в таблице {results_table}: {available_columns}")
+        except Exception as e:
+            logger.error(f"⚠️ Не удалось получить описание таблицы: {e}")
+            available_columns = []
+        
+        # Ищем поля фамилии и имени
+        surname_field = None
+        name_field = None
+        
+        for field in ['surname', 'Фамилия', 'last_name', 'lastname']:
+            if field.lower() in [col.lower() for col in available_columns]:
+                surname_field = next(col for col in available_columns if col.lower() == field.lower())
+                logger.info(f"✅ Найдено поле фамилии: {surname_field}")
+                break
+        
+        for field in ['name', 'Имя', 'first_name', 'firstname']:
+            if field.lower() in [col.lower() for col in available_columns]:
+                name_field = next(col for col in available_columns if col.lower() == field.lower())
+                logger.info(f"✅ Найдено поле имени: {name_field}")
+                break
+        
+        if not surname_field or not name_field:
+            logger.error(f"❌ Не удалось найти поля фамилии и имени. surname_field={surname_field}, name_field={name_field}")
+            return {}, []
+        
+        # Получаем всю информацию о спортсмене
+        athlete_info = {}
+        try:
+            query = f"SELECT * FROM `{results_table}` WHERE `{surname_field}` = %s AND `{name_field}` = %s LIMIT 1"
+            logger.info(f"📝 Запрос: {query} | Параметры: ({surname}, {name})")
+            cursor.execute(query, (surname, name))
+            athlete_data = cursor.fetchone()
+            
+            if athlete_data:
+                athlete_info = dict(athlete_data)
+                logger.info(f"✅ Данные спортсмена найдены")
+            else:
+                logger.warning(f"⚠️ Спортсмен не найден в таблице {results_table}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при запросе информации спортсмена: {e}")
+            return {}, []
+        
+        # Получаем все результаты спортсмена
+        results_list = []
+        try:
+            # Проверяем есть ли поле gunTime для сортировки
+            has_gunTime = 'gunTime' in [col.lower() for col in available_columns]
+            
+            if has_gunTime:
+                query = f"SELECT * FROM `{results_table}` WHERE `{surname_field}` = %s AND `{name_field}` = %s ORDER BY gunTime DESC"
+            else:
+                query = f"SELECT * FROM `{results_table}` WHERE `{surname_field}` = %s AND `{name_field}` = %s"
+            
+            logger.info(f"📝 Запрос результатов: {query} | Параметры: ({surname}, {name})")
+            cursor.execute(query, (surname, name))
+            results = cursor.fetchall()
+            
+            # Преобразуем datetime объекты в строки для JSON сериализации
+            for result in results:
+                result_dict = dict(result)
+                results_list.append(result_dict)
+            
+            logger.info(f"✅ Найдено {len(results_list)} результатов для {surname} {name}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при запросе результатов: {e}")
+        
+        return athlete_info, results_list
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении результатов спортсмена: {e}", exc_info=True)
+        return {}, []
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+        if connection and connection.is_connected():
+            connection.close()

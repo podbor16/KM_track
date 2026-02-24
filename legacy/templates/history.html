@@ -4,11 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>История - Анализ забегов</title>
-    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
-    <link rel="stylesheet" href="/legacy/static/navigation.css">
-    <link rel="stylesheet" href="/legacy/static/analytics.css">
-    <link rel="stylesheet" href="/legacy/static/history.css">
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-header.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/navigation.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/analytics.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/history.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-footer.css?v=1">
     <style>
         .athlete-search-container {
             position: relative;
@@ -308,8 +312,8 @@
                 resultsContainer.classList.remove('show');
                 searchStatus.textContent = '✓ Спортсмен выбран';
                 
-                // Можно добавить редирект или дальнейшую обработку
-                // window.location.href = `/athlete-analysis?surname=${encodeURIComponent(surname)}`;
+                // Переходим на страницу профиля спортсмена
+                window.location.href = `/athlete-profile?surname=${encodeURIComponent(surname)}&name=${encodeURIComponent(name)}`;
             }
 
             // Закрытие результатов при клике вне

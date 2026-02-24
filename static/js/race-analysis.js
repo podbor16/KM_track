@@ -124,17 +124,15 @@ function initializeRaceCards() {
  * @param {number} index - Индекс карточки (0-7)
  */
 function handleRaceCardClick(card, index) {
-    const title = card.querySelector('.race-card-title')?.textContent.trim() || card.dataset.raceName;
+    // Получаем название забега из data атрибута или из заголовка
+    const raceName = card.dataset.raceName || card.querySelector('.race-card-title')?.textContent.trim();
     
     // Логирование для отладки
-    console.log('Выбран забег:', title);
+    console.log('Выбран забег:', raceName);
     
-    // Для первой карточки открываем модальное окно
-    if (index === 0) {
-        openRaceModal(title);
-    } else {
-        // Заглушка для будущей функциональности других карточек
-        console.log('Аналитика для "' + title + '" будет реализована в ближайшее время');
+    // Открываем модальное окно для всех карточек
+    if (raceName) {
+        openRaceModal(raceName);
     }
 }
 

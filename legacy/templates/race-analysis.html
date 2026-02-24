@@ -4,11 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализ забегов - Красмарафон</title>
-    <link rel="stylesheet" href="/legacy/static/krasmarafon-header.css">
-    <link rel="stylesheet" href="/legacy/static/navigation.css">
-    <link rel="stylesheet" href="/legacy/static/analytics.css">
-    <link rel="stylesheet" href="/legacy/static/race-analysis.css">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Анализ забегов - История событий</title>
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-header.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/navigation.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/analytics.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/race-analysis.css?v=1">
+    <link rel="stylesheet" href="/legacy/static/css/krasmarafon-footer.css?v=1">
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
@@ -44,7 +48,7 @@
             </div>
 
             <!-- Карточка 2: Весна -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="vesna" data-race-name="Весна">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -56,7 +60,7 @@
             </div>
 
             <!-- Карточка 3: Красочный забег -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="colorrun" data-race-name="Красочный забег">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -68,7 +72,7 @@
             </div>
 
             <!-- Карточка 4: Женская Семерка -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="girlseven" data-race-name="Женская Семерка">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -80,7 +84,7 @@
             </div>
 
             <!-- Карточка 5: Жара -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="zhara" data-race-name="Жара">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -92,7 +96,7 @@
             </div>
 
             <!-- Карточка 6: Детский Забег -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="kids" data-race-name="Детский Забег">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -104,7 +108,7 @@
             </div>
 
             <!-- Карточка 7: Х Трейл -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="xtrail" data-race-name="Х Трейл">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -116,7 +120,7 @@
             </div>
 
             <!-- Карточка 8: Снежная семерка -->
-            <div class="race-card">
+            <div class="race-card" data-race-id="snow7" data-race-name="Снежная семерка">
                 <div class="race-card-image"></div>
                 <div class="race-card-overlay"></div>
                 <div class="race-card-content">
@@ -144,7 +148,7 @@
         </div>
     </div>
 
-    <script src="/legacy/static/race-analysis.js"></script>
+    <script src="/static/js/race-analysis.js"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}
