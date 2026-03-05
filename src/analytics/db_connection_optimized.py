@@ -497,6 +497,190 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
 
 
 # ============================================================
+# ПОЛУЧЕНИЕ РЕЗУЛЬТАТОВ ПО EVENT_ID
+# ============================================================
+
+def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
+    """
+    Получение результатов забега по event_id из таблицы results
+    
+    Args:
+        event_id: ID события (например, 67 для Ночного забега 2025)
+    
+    Returns:
+        Список словарей с результатами спортсменов
+    """
+    logger.info(f"🔍 Загрузка результатов для event_id={event_id}")
+    
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение")
+        return []
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Находим таблицу results
+        results_table = find_table([
+            "results",
+            "Results",
+            "RESULTS",
+            "гонка",
+            "забеги"
+        ])
+        
+        if not results_table:
+            logger.error("❌ Таблица results не найдена")
+            return []
+        
+        # Получаем информацию о колонках
+        columns = get_table_columns(results_table)
+        
+        # Проверяем наличие поля event_id
+        has_event_id = any(col.lower() == 'event_id' for col in columns)
+        
+        if not has_event_id:
+            logger.warning(f"⚠️ Поле 'event_id' не найдено в таблице {results_table}")
+            # Возвращаем пустой результат если нет поля event_id
+            cursor.close()
+            return []
+        
+        # Запрос результатов по event_id
+        query = f"""
+        SELECT * FROM `{results_table}` 
+        WHERE event_id = %s
+        ORDER BY rank_absolute ASC
+        """
+        
+        cursor.execute(query, (event_id,))
+        results = cursor.fetchall()
+        
+        if results:
+            results_list = [dict(r) for r in results]
+            logger.info(f"✅ Найдено {len(results_list)} результатов для event_id={event_id}")
+            cursor.close()
+            return results_list
+        else:
+            logger.warning(f"⚠️ Результаты для event_id={event_id} не найдены")
+            cursor.close()
+            return []
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении результатов: {e}")
+        return []
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+
+def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Dict[str, Any]]:
+    """
+    Получение результатов забега по названию события и году
+    
+    Args:
+        event_name: Название события (например, "Ночной забег")
+        year: Год события (например, 2025)
+    
+    Returns:
+        Список словарей с результатами спортсменов
+    """
+    logger.info(f"🔍 Загрузка результатов для {event_name} {year}")
+    
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение")
+        return []
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Находим таблицу results
+        results_table = find_table([
+            "results",
+            "Results",
+            "RESULTS",
+            "гонка",
+            "забеги"
+        ])
+        
+        if not results_table:
+            logger.error("❌ Таблица results не найдена")
+            return []
+        
+        # Получаем информацию о колонках
+        columns = get_table_columns(results_table)
+        
+        # Проверяем наличие необходимых полей
+        has_event_id = any(col.lower() == 'event_id' for col in columns)
+        has_birthday = any(col.lower() == 'birthday' for col in columns)
+        
+        if not has_event_id:
+            logger.warning(f"⚠️ Поле 'event_id' не найдено в таблице {results_table}")
+            cursor.close()
+            return []
+        
+        # Запрос результатов по названию события и году
+        # Используем JOIN с таблицей events если она есть
+        query = f"""
+        SELECT r.* FROM `{results_table}` r
+        INNER JOIN events e ON r.event_id = e.id
+        WHERE e.name = %s AND YEAR(e.date) = %s
+        ORDER BY r.rank_absolute ASC
+        """
+        
+        try:
+            cursor.execute(query, (event_name, year))
+            results = cursor.fetchall()
+            
+            if results:
+                results_list = [dict(r) for r in results]
+                logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
+                cursor.close()
+                return results_list
+        except Exception as join_error:
+            # Если JOIN не работает, пробуем альтернативный способ
+            logger.warning(f"⚠️ JOIN затруднен, пробуем прямой поиск: {join_error}")
+            
+            query = f"""
+            SELECT r.* FROM `{results_table}` r
+            WHERE r.category LIKE CONCAT(%s, '%%')
+            ORDER BY r.rank_absolute ASC
+            LIMIT 1000
+            """
+            
+            # Изменяем запрос на поиск по году через birthday
+            if has_birthday:
+                year_start = f"{year}-01-01"
+                year_end = f"{year}-12-31"
+                query = f"""
+                SELECT * FROM `{results_table}`
+                WHERE YEAR(birthday) IS NOT NULL
+                ORDER BY rank_absolute ASC
+                LIMIT 1000
+                """
+        
+        cursor.execute(query, (event_name,))
+        results = cursor.fetchall()
+        
+        if results:
+            results_list = [dict(r) for r in results]
+            logger.info(f"✅ Найдено {len(results_list)} результатов")
+            cursor.close()
+            return results_list
+        else:
+            logger.warning(f"⚠️ Результаты не найдены")
+            cursor.close()
+            return []
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении результатов: {e}")
+        return []
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+
+# ============================================================
 # ОПТИМИЗИРОВАННЫЙ DEBUG ENDPOINT
 # ============================================================
 

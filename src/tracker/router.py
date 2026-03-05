@@ -748,6 +748,98 @@ async def get_race_results(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/event-results", response_model=RaceResultsResponse, tags=["Analytics"])
+async def get_event_results(
+    event_id: int = Query(None, description="ID события в БД"),
+    event_name: str = Query(None, description="Название события"),
+    year: int = Query(None, description="Год события"),
+) -> RaceResultsResponse:
+    """
+    Получить результаты события из БД по event_id или по названию и году
+    
+    Examples:
+    - /api/event-results?event_id=67
+    - /api/event-results?event_name=Ночной%20забег&year=2025
+    """
+    try:
+        from src.analytics.db_connection_optimized import (
+            get_race_results_by_event_id, 
+            get_race_results_by_event_id_and_year
+        )
+        
+        results_data = []
+        
+        # Получаем результаты по event_id или по названию и году
+        if event_id:
+            logger.info(f"Загрузка результатов для event_id={event_id}")
+            results_data = get_race_results_by_event_id(event_id)
+        elif event_name and year:
+            logger.info(f"Загрузка результатов для {event_name} {year}")
+            results_data = get_race_results_by_event_id_and_year(event_name, year)
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Укажите event_id или event_name + year"
+            )
+        
+        # Преобразуем результаты в нужный формат
+        results = []
+        for runner in results_data:
+            result_item = {
+                'id': runner.get('id') or runner.get('client_id'),
+                'start_number': runner.get('start_number'),
+                'surname': runner.get('surname', ''),
+                'name': runner.get('name', ''),
+                'full_name': f"{runner.get('surname', '')} {runner.get('name', '')}".strip(),
+                'sex': runner.get('sex'),
+                'category': runner.get('category'),
+                'birthday': runner.get('birthday'),
+                'race_status': runner.get('race_status'),
+                'rank_absolute': runner.get('rank_absolute'),
+                'rank_sex': runner.get('rank_sex'),
+                'rank_category': runner.get('rank_category'),
+                'time_gun_finish': runner.get('time_gun_finish'),
+                'time_clear_finish': runner.get('time_clear_finish'),
+                'finish_pace_avg': runner.get('finish_pace_avg'),
+                'checkpoints': {
+                    'kt1': {
+                        'time': runner.get('time_clear_kt1'),
+                        'pace': runner.get('pace_avg_kt1')
+                    },
+                    'kt2': {
+                        'time': runner.get('time_clear_kt2'),
+                        'pace': runner.get('pace_avg_kt2')
+                    },
+                    'kt3': {
+                        'time': runner.get('time_clear_kt3'),
+                        'pace': runner.get('pace_avg_kt3')
+                    },
+                    'kt4': {
+                        'time': runner.get('time_clear_kt4'),
+                        'pace': runner.get('pace_avg_kt4')
+                    },
+                    'kt5': {
+                        'time': runner.get('time_clear_kt5'),
+                        'pace': runner.get('pace_avg_kt5')
+                    }
+                }
+            }
+            results.append(result_item)
+        
+        return RaceResultsResponse(
+            event=event_name or f"event_{event_id}",
+            total_results=len(results_data),
+            results=results,
+            timestamp=datetime.now().isoformat(),
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting event results: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ENDPOINTS
 # ============================================================================

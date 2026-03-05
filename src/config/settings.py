@@ -113,16 +113,6 @@ ROUTE_CACHE_DURATION = 3600
 # Выбранные участники
 MAX_SELECTED_RUNNERS = 5
 
-# --- COPERNICO API КОНФИГУРАЦИЯ ---
-# URL для получения данных гонки в реальном времени
-COPERNICO_API_URL = os.getenv(
-    "COPERNICO_API_URL",
-    "https://public-api.copernico.cloud/api/races/--2025-96994/preset/podbor250718@gmail.com:::%D0%A1%D0%BD%D0%B5%D0%B6%D0%BD%D0%B0%D1%8F%207%20%D1%82%D1%80%D0%B5%D0%BA%D0%B5%D1%80/%D0%9C%D1%83%D0%B6%D1%81%D0%BA%D0%B0%D1%8F%20%D0%B3%D0%BE%D0%BD%D0%BA%D0%B0%2010%20%D0%BA%D0%BC"
-)
-COPERNICO_FETCH_INTERVAL = 10  # секунд между запросами
-COPERNICO_MAX_RETRIES = 3
-COPERNICO_RETRY_DELAY = 2  # секунд между попытками
-
 # --- FastAPI КОНФИГУРАЦИЯ ---
 API_TITLE = "KM Track API"
 API_DESCRIPTION = "Трекер маршрутов и аналитика спортивных мероприятий"

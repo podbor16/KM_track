@@ -89,25 +89,43 @@ function updateEventCardBackground() {
 
 // Функция загрузки данных
 async function loadRunnersData() {
-    console.log('Загрузка данных для результатов');
+    console.log(`Загрузка данных для результатов: ${currentEvent} ${currentYear}`);
     showLoading(true);
     
     try {
-        // Загружаем данные гонки из race_data.json
-        const eventName = eventNameMap[currentEvent] || 'Ночной забег';
-        const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
-        console.log('Запрос к ' + apiUrl);
-        const data = await fetch(apiUrl).then(response => {
+        let rawData = [];
+        
+        // Для Ночного забега 2025 загружаем из БД (Event ID = 67)
+        if (currentEvent === 'night_run' && currentYear === 2025) {
+            console.log('📊 Загрузка результатов из БД (Event ID = 67)');
+            const response = await fetch(`/api/event-results?event_id=67`);
+            
+            if (!response.ok) {
+                throw new Error('Ошибка загрузки результатов из БД');
+            }
+            
+            const data = await response.json();
+            console.log('✅ Загружено из БД:', data.results ? data.results.length : 0, 'участников');
+            rawData = data.results || [];
+        } else {
+            // Для прошлых событий загружаем из race-results
+            const eventName = eventNameMap[currentEvent] || 'Ночной забег';
+            const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
+            console.log('Запрос к ' + apiUrl);
+            
+            const response = await fetch(apiUrl);
             console.log('Ответ от /api/race-results получен, статус:', response.status);
-            return response.json();
-        });
+            const data = await response.json();
+            
+            rawData = Array.isArray(data) ? data : (data.runners || data.data || data.results || []);
+        }
         
-        allRunners = Array.isArray(data) ? data : (data.runners || data.data || []);
+        console.log('rawData:', rawData.length, 'элементов');
         
-        // Добавим логирование для отладки
-        console.log('Данные получены:', data);
-        console.log('allRunners:', allRunners);
-        console.log('Количество элементов:', allRunners.length);
+        // Нормализуем данные в единый формат
+        allRunners = normalizeRunnerData(rawData);
+        
+        console.log('allRunners после нормализации:', allRunners.length);
         if (allRunners.length > 0) {
             console.log('Пример первого элемента:', allRunners[0]);
         }
@@ -119,10 +137,82 @@ async function loadRunnersData() {
         applyFilters();
         showLoading(false);
     } catch (error) {
-        console.error('Ошибка загрузки данных:', error);
+        console.error('❌ Ошибка загрузки данных:', error);
         showError('Ошибка загрузки данных: ' + error.message);
         showLoading(false);
     }
+}
+
+// Функция нормализации данных из разных источников
+function normalizeRunnerData(runners) {
+    if (!Array.isArray(runners)) {
+        console.warn('⚠️ Ожидается массив, получено:', typeof runners);
+        return [];
+    }
+    
+    return runners.map(runner => {
+        // Если это уже нормализованные данные, возвращаем как есть
+        if (runner.status !== undefined && runner.gender !== undefined) {
+            return runner;
+        }
+        
+        // Нормализуем данные из БД
+        return {
+            // Основная информация
+            surname: runner.surname || '',
+            name: runner.name || '',
+            full_name: runner.full_name || `${runner.surname || ''} ${runner.name || ''}`,
+            birthdate: runner.birthday || runner.birthdate || '',
+            gender: convertSexToGender(runner.sex),
+            sex: runner.sex,
+            category: runner.category || '',
+            
+            // Статус и результаты
+            status: convertRaceStatus(runner.race_status),
+            race_status: runner.race_status,
+            
+            // Время и темп
+            'times.official_:::finish:::': runner.time_clear_finish,
+            time_clear_finish: runner.time_clear_finish,
+            finish_pace_avg: runner.finish_pace_avg,
+            
+            // Место и ранк
+            rank_absolute: runner.rank_absolute,
+            rank_sex: runner.rank_sex,
+            rank_category: runner.rank_category,
+            start_number: runner.start_number,
+            
+            // Дистанция и событие
+            event: runner.event || 'Ночной забег',
+            distance: runner.distance || '5 км',
+            
+            // Дополнительные поля
+            checkpoints: runner.checkpoints || {}
+        };
+    });
+}
+
+// Конвертируем пол из БД в формат приложения
+function convertSexToGender(sex) {
+    if (!sex) return '';
+    const lowerSex = sex.toLowerCase();
+    if (lowerSex.includes('муж') || lowerSex === 'male' || lowerSex === 'm') return 'male';
+    if (lowerSex.includes('жен') || lowerSex === 'female' || lowerSex === 'f') return 'female';
+    return lowerSex;
+}
+
+// Конвертируем статус из БД в формат приложения
+function convertRaceStatus(raceStatus) {
+    if (!raceStatus) return 'notstarted';
+    const lowerStatus = raceStatus.toLowerCase();
+    
+    if (lowerStatus.includes('finish')) return 'finished';
+    if (lowerStatus.includes('not start') || lowerStatus === 'not started') return 'notstarted';
+    if (lowerStatus.includes('running') || lowerStatus.includes('started')) return 'running';
+    if (lowerStatus.includes('withdraw')) return 'disqualified';
+    if (lowerStatus.includes('disqualif')) return 'disqualified';
+    
+    return 'notstarted';
 }
 
 // Восстанавливаем сохраненные значения при загрузке страницы
@@ -304,10 +394,39 @@ function applyFilters() {
     sortTable('pace');
 }
 
-// Функция для форматирования времени из миллисекунд в чч:мм:сс
-function formatTime(milliseconds) {
-    if (!milliseconds) return '-';
-    const totalSeconds = Math.floor(milliseconds / 1000);
+// Функция для форматирования времени из миллисекунд в чч:мм:сс (поддерживает ISO 8601)
+function formatTime(timeData) {
+    if (!timeData) return '-';
+    
+    // Если это уже строка в формате HH:MM:SS, возвращаем как есть
+    if (typeof timeData === 'string') {
+        // Проверяем формат HH:MM:SS
+        if (timeData.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+            return timeData;
+        }
+        // Парсим ISO 8601 duration: PT1H30M45S или PT1577S => HH:MM:SS
+        if (timeData.startsWith('PT')) {
+            const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+            if (match) {
+                let hours = parseInt(match[1] || 0);
+                let minutes = parseInt(match[2] || 0);
+                let seconds = Math.floor(parseFloat(match[3] || 0));
+                
+                // Конвертируем лишние секунды в минуты и часы
+                minutes += Math.floor(seconds / 60);
+                seconds = seconds % 60;
+                hours += Math.floor(minutes / 60);
+                minutes = minutes % 60;
+                
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+        // Если строка но не в известном формате, возвращаем "-"
+        return '-';
+    }
+    
+    // Если это число (миллисекунды), преобразуем
+    const totalSeconds = Math.floor(timeData / 1000);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
@@ -409,7 +528,7 @@ function renderResultsTable(runners) {
             birthYear = year > 0 ? year : 'N/A';
         }
         
-        // Статус и время
+        // Статус и время (поддерживаем оба формата)
         let status = '';
         let time = '';
         let pace = '-';
@@ -417,16 +536,30 @@ function renderResultsTable(runners) {
         
         // Переводим статусы на русский
         let statusRu = runner.status || 'Неизвестно';
-        if (runner.status === 'finished') statusRu = 'Финишировал';
+        if (runner.status === 'finished') statusRu = '✅ Финишировал';
+        if (runner.status === 'running') statusRu = '🏃 Бежит';
         if (runner.status === 'notstarted') statusRu = 'Не стартовал';
-        if (runner.status === 'disqualified') statusRu = 'Дисквалифицирован';
-        if (runner.status === 'running') statusRu = 'Бежит';
+        if (runner.status === 'disqualified') statusRu = '❌ Дисквалифицирован';
         
         status = statusRu;
         statusClass = `status-${runner.status || 'unknown'}`;
-        const finishTime = runner['times.official_:::finish:::'];
+        
+        // Время финиша (поддерживаем оба формата данных)
+        const finishTime = runner.time_clear_finish || runner['times.official_:::finish:::'];
         time = formatTime(finishTime);
-        pace = calculatePace(finishTime, runner.event);
+        
+        // Темп: очищаем от дублирования "мин/км"
+        let paceValue = runner.finish_pace_avg || calculatePace(finishTime, runner.event);
+        if (typeof paceValue === 'string') {
+            // Удаляем все варианты "мин/км" из строки
+            paceValue = paceValue.replace(/\s*мин\/км\s*/g, '').trim();
+            paceValue = parseFloat(paceValue);
+        }
+        if (paceValue && paceValue !== '-' && !isNaN(paceValue)) {
+            pace = parseFloat(paceValue).toFixed(2) + ' мин/км';
+        } else {
+            pace = '-';
+        }
         
         // Фамилия, имя, пол
         let firstName = runner.name || 'N/A';
@@ -448,7 +581,7 @@ function renderResultsTable(runners) {
         }
         
         // Дистанция и возрастная группа
-        let distance = runner.event || '7 km';
+        let distance = runner.event || runner.distance || '5 км';
         let category = runner.category || '';
         
         let rowHTML = `
@@ -468,7 +601,7 @@ function renderResultsTable(runners) {
         tbody.appendChild(row);
     });
     
-    console.log(`Отрисовано ${runners.length} строк таблицы результатов`);
+    console.log(`✅ Отрисовано ${runners.length} строк таблицы результатов`);
 }
 
 // Показываем индикатор загрузки

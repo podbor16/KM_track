@@ -75,37 +75,29 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Загружаем событие с сервера
-        let eventLoaded = false;
-        fetch('/api/current-event')
-            .then(r => r.json())
-            .then(data => {
-                window.INITIAL_EVENT = data.event;
-                window.INITIAL_STORAGE = data.storage_key;
-                // Обновляем заголовок и описание
-                document.getElementById('eventTitle').textContent = data.title;
-                document.getElementById('eventDescription').textContent = data.description;
-                eventLoaded = true;
-            })
-            .catch(err => {
-                console.error('Ошибка загрузки события:', err);
-                // Используем undefined, трекер будет ждать данные с сервера
-                eventLoaded = true;
-            });
+        // === КОНФИГУРАЦИЯ ДЛЯ EVENT_ID = 67 (Ночной забег 2025, 5 км) ===
+        window.EVENT_CONFIG = {
+            id: 67,
+            code: 'night_run',
+            name: 'Ночной забег',
+            year: 2025,
+            distance: '5 км',
+            coordinates: [56.0075, 92.7246],  // Набережная, Красноярск
+            osm_way_id: 1477580211
+        };
+        
+        console.log('✅ Event config установлен:', window.EVENT_CONFIG);
     </script>
-    <script src="/static/js/tracker.js"></script>
+    <script src="/legacy/static/js/tracker.js"></script>
     <script>
-        // Ждем загрузки события с сервера
-        const waitForEvent = setInterval(() => {
-            if (eventLoaded && window.INITIAL_EVENT) {
-                CONFIG.EVENT_NAME = window.INITIAL_EVENT;
-                CONFIG.STORAGE_KEY = window.INITIAL_STORAGE;
-                clearInterval(waitForEvent);
-                console.log('✓ Событие загружено:', CONFIG.EVENT_NAME);
-                
-                // Запускаем инициализацию ПОСЛЕ установки правильного EVENT_NAME
-                init();
-            }
+        // Запускаем инициализацию трекера
+        console.log('🚀 Инициализация трекера для Event ID = 67');
+        CONFIG.EVENT_NAME = 'night_run';
+        CONFIG.EVENT_ID = 67;
+        
+        // Запускаем сразу
+        setTimeout(() => {
+            init();
         }, 100);
     </script>
 

@@ -1,45 +1,110 @@
 // legacy/static/tracker.js
 /**
- * Основная логика трекера забега
- * Используется в tracker.html
+ * Основная логика трекера забега Event 67 (Ночной забег)
+ * Загружает участников из БД и отслеживает их позиции на карте
  */
 
 // Конфигурация
 const CONFIG = {
-    API_BASE: '/api',  // Используем относительный путь для FastAPI
-    UPDATE_INTERVAL: 2000,  // 2 секунды для плавного обновления позиций
+    API_BASE: '/api',
+    UPDATE_INTERVAL: 2000,
     MAX_SELECTED: 5,
-    EVENT_NAME: 'night_run',  // Будет переопределено в HTML
-    STORAGE_KEY: 'selected_runners'  // Ключ для localStorage
+    EVENT_NAME: 'night_run',
+    EVENT_ID: 67,
+    STORAGE_KEY: 'night_run_selected_runners'
 };
 
 // Глобальные переменные
 let map = null;
 let routeLayer = null;
+let routeCoordinates = [];
 let runnerMarkers = {};
 let selectedRunnerIds = new Set();
 let allRunners = [];
 let isUpdating = false;
-let routeType = 'loop';
-let activePopups = new Map(); // Хранит активные всплывающие окна
+let routeType = 'shuttle';
+let runnerPositions = {};
+let activePopups = new Map();
 
 // Цвета для статусов
 const STATUS_COLORS = {
     'notstarted': '#9E9E9E',
-    'started': '#EE2D62',
-    'running': '#EE2D62',
-    'finished': '#1a1a1a'
+    'running':    '#EE2D62',
+    'finished':   '#1a1a1a'
 };
 
+
 // ============================================
-// РАБОТА С LOCALSTORAGE
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================
+
+function parseDuration(duration) {
+    if (!duration) return null;
+
+    // Уже в читаемом формате
+    if (!String(duration).startsWith('PT')) return duration;
+
+    // Парсим ISO 8601: PT1H26M0S или PT1560S
+    const match = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return duration;
+
+    const totalSeconds =
+        (parseInt(match[1] || 0) * 3600) +
+        (parseInt(match[2] || 0) * 60) +
+        parseInt(match[3] || 0);
+
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+
+    if (h > 0) {
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function getStatusText(status) {
+    if (!status) return 'Неизвестно';
+
+    const statusMap = {
+        'Not started':  'Не стартовал',
+        'notstarted':   'Не стартовал',
+        'Running':      'На трассе',
+        'running':      'На трассе',
+        'started':      'На трассе',
+        'Finished':     'Финишировал',
+        'finished':     'Финишировал',
+        'Disqualified': 'Дисквалифицирован',
+        'disqualified': 'Дисквалифицирован',
+        'Disqualifed':  'Дисквалифицирован',
+        'Withdrawn':    'Снялся',
+        'withdrawn':    'Снялся'
+    };
+
+    return statusMap[status] || status;
+}
+
+function getStatusColor(status) {
+    if (!status) return STATUS_COLORS.notstarted;
+    const s = status.toLowerCase();
+    if (s.includes('finish'))                            return STATUS_COLORS.finished;
+    if (s.includes('running') || s.includes('started')) return STATUS_COLORS.running;
+    return STATUS_COLORS.notstarted;
+}
+
+function updateStatus(message) {
+    const statusPanel = document.getElementById('statusPanel');
+    if (statusPanel) statusPanel.textContent = message;
+}
+
+
+// ============================================
+// РАБОТА С ЛОКАЛЬНЫМ ХРАНИЛИЩЕМ
 // ============================================
 
 function saveSelectedToStorage() {
     try {
-        const selectedArray = Array.from(selectedRunnerIds);
-        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(selectedArray));
-        console.log('💾 Сохранено в localStorage:', selectedArray);
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(Array.from(selectedRunnerIds)));
     } catch (error) {
         console.error('Ошибка сохранения в localStorage:', error);
     }
@@ -49,10 +114,10 @@ function loadSelectedFromStorage() {
     try {
         const stored = localStorage.getItem(CONFIG.STORAGE_KEY);
         if (stored) {
-            const selectedArray = JSON.parse(stored);
-            selectedRunnerIds = new Set(selectedArray);
-            console.log('📂 Загружено из localStorage:', selectedArray);
-            return selectedArray;
+            const arr = JSON.parse(stored);
+            selectedRunnerIds = new Set(arr);
+            console.log('📂 Загружено выбранных из localStorage:', arr);
+            return arr;
         }
     } catch (error) {
         console.error('Ошибка загрузки из localStorage:', error);
@@ -63,662 +128,659 @@ function loadSelectedFromStorage() {
 function clearSelectedStorage() {
     try {
         localStorage.removeItem(CONFIG.STORAGE_KEY);
-        console.log('🗑️ localStorage очищен');
     } catch (error) {
         console.error('Ошибка очистки localStorage:', error);
     }
 }
 
+
 // ============================================
-// ИНИЦИАЛИЗАЦИЯ
+// ИНИЦИАЛИЗАЦИЯ ТРЕКЕРА
 // ============================================
 
 async function init() {
-    console.log('🚀 Инициализация трекера для события:', CONFIG.EVENT_NAME);
-    
+    console.log('🚀 Инициализация трекера Event 67 (Ночной забег)');
+
     loadSelectedFromStorage();
     await initMap();
     await loadAllRunners();
-    await loadStats();
-    
+
     if (selectedRunnerIds.size > 0) {
+        console.log('📍 Восстановлено выбранных участников:', selectedRunnerIds.size);
         updateSelectedList();
-        updateSelectedRunnersMarkers();
+        initializeSelectedRunnersMarkers();
     }
-    
+
     setupSearch();
+    await loadAnalytics();
     startAutoUpdate();
-    loadAnalytics(); // Загружаем аналитику после инициализации
-    updateStatus('Трекер запущен');
+
+    updateStatus('✅ Трекер запущен (Event 67 - Ночной забег)');
 }
+
 
 // ============================================
 // РАБОТА С КАРТОЙ
 // ============================================
 
 async function initMap() {
+    console.log('🗺️ Инициализация карты...');
+
     map = L.map('map').setView([56.0075, 92.7246], 15);
     map.attributionControl.setPrefix('');
-    
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+        attribution: '© OpenStreetMap contributors'
     }).addTo(map);
-    
+
     await loadRouteFromAPI();
+
+    console.log('✅ Карта инициализирована');
 }
 
 async function loadRouteFromAPI() {
     try {
         updateStatus('Загрузка маршрута...');
-        const timestamp = new Date().getTime(); // Cache-busting
-        const response = await fetch(`${CONFIG.API_BASE}/route?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        
-        if (!response.ok) {
-            throw new Error('Ошибка загрузки маршрута');
+
+        const osm_way_id = 1477580211;
+
+        try {
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(way(${osm_way_id}););out geom;`;
+            const response = await fetch(overpassUrl);
+            const osm_data = await response.json();
+
+            if (osm_data.elements && osm_data.elements[0] && osm_data.elements[0].geometry) {
+                routeCoordinates = osm_data.elements[0].geometry.map(node => [node.lat, node.lon]);
+                routeType = 'osm';
+                console.log(`✅ Загружен маршрут OSM (${osm_way_id}): ${routeCoordinates.length} точек`);
+            } else {
+                throw new Error('No geometry data');
+            }
+        } catch (osm_error) {
+            console.warn('⚠️ Overpass API недоступен, используем fallback маршрут:', osm_error);
+            const data = createFallbackRoute();
+            routeCoordinates = data.coordinates || [];
+            routeType = data.route_type || 'shuttle';
         }
-        
-        const data = await response.json();
-        routeType = data.route_type || 'loop';
-        
-        console.log(`📍 Загружен маршрут: ${data.event_name}`);
-        console.log(`📏 Тип маршрута: ${routeType}`);
-        
-        if (routeLayer) {
-            map.removeLayer(routeLayer);
+
+        if (routeLayer) map.removeLayer(routeLayer);
+
+        if (routeCoordinates.length > 0) {
+            routeLayer = L.polyline(routeCoordinates, {
+                color: '#EE2D62',
+                weight: 5,
+                opacity: 0.7,
+                smoothFactor: 1
+            }).addTo(map);
+
+            L.marker(routeCoordinates[0], {
+                icon: L.divIcon({
+                    className: 'start-marker',
+                    html: '<div style="background: #EE2D62; color: white; padding: 8px 12px; border-radius: 5px; font-weight: bold; text-align: center;">🏁 СТАРТ</div>',
+                    iconSize: [100, 35],
+                    iconAnchor: [50, 35]
+                })
+            }).addTo(map);
+
+            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
         }
-        
-        routeLayer = L.polyline(data.coordinates, {
-            color: '#EE2D62',
-            weight: 5,
-            opacity: 0.8,
-            smoothFactor: 1
-        }).addTo(map);
-        
-        const startPoint = data.coordinates[0];
-        L.marker(startPoint, {
-            icon: L.divIcon({
-                className: 'start-marker',
-                html: '<div style="background: #EE2D62; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">СТАРТ/ФИНИШ</div>',
-                iconSize: [100, 30],
-                iconAnchor: [100, 5],
-                popupAnchor: [50, 0]
-            })
-        }).addTo(map);
-        
-        map.fitBounds(routeLayer.getBounds());
-        updateStatus('Маршрут загружен');
-        
+
+        updateStatus('✅ Маршрут загружен');
     } catch (error) {
-        console.error('Ошибка загрузки маршрута:', error);
+        console.error('❌ Ошибка загрузки маршрута:', error);
         updateStatus('Ошибка загрузки маршрута');
     }
 }
 
-function centerMap() {
-    if (routeLayer) {
-        map.fitBounds(routeLayer.getBounds());
+function createFallbackRoute() {
+    const baseCoords = [56.0075, 92.7246];
+    const latOffset = 0.01;
+    const coordinates = [];
+
+    for (let i = 0; i <= 10; i++) {
+        coordinates.push([
+            baseCoords[0] + (latOffset * i / 10),
+            baseCoords[1] + (latOffset * 0.5 * i / 10)
+        ]);
     }
+    for (let i = 10; i >= 0; i--) {
+        coordinates.push([
+            baseCoords[0] + (latOffset * i / 10),
+            baseCoords[1] + (latOffset * 0.5 * i / 10)
+        ]);
+    }
+
+    return {
+        event: 'night_run',
+        event_name: 'Ночной забег (Набережная, Красноярск)',
+        event_id: 67,
+        distance: 5.0,
+        route_type: 'shuttle',
+        coordinates
+    };
 }
 
+
 // ============================================
-// РАБОТА С УЧАСТНИКАМИ
+// ЗАГРУЗКА УЧАСТНИКОВ
 // ============================================
 
 async function loadAllRunners() {
     try {
-        const timestamp = new Date().getTime(); // Cache-busting
-        const response = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        allRunners = await response.json();
-        console.log(`Загружено участников: ${allRunners.length}`);
-        updateSelectedRunnersMarkers();
+        updateStatus('Загрузка участников...');
+
+        const response = await fetch(
+            `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
+        );
+
+        if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
+
+        const data = await response.json();
+
+        allRunners = (data.results || []).map(runner => ({
+            id:                   runner.id || runner.start_number,
+            start_number:         runner.start_number,
+            surname:              runner.surname || '',
+            name:                 runner.name || '',
+            full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
+            sex:                  runner.sex,
+            category:             runner.category || '',
+            status:               runner.race_status,
+            time_gun_finish: parseDuration(runner.time_gun_finish),
+            time_clear_finish:    parseDuration(runner.time_clear_finish),
+            finish_pace_avg:      parseDuration(runner.finish_pace_avg),
+            rank_absolute:        runner.rank_absolute,
+            bib:                  runner.start_number,
+            dorsal:               runner.start_number
+        }));
+
+        console.log(`✅ Загружено ${allRunners.length} участников`);
+        updateStatus(`✅ Загружено участников: ${allRunners.length}`);
+
     } catch (error) {
-        console.error('Ошибка загрузки участников:', error);
-        updateStatus('Ошибка загрузки данных');
+        console.error('❌ Ошибка при загрузке участников:', error);
+        allRunners = [];
+        updateStatus('Ошибка загрузки участников');
     }
 }
 
-async function loadStats() {
-    try {
-        const timestamp = new Date().getTime(); // Cache-busting
-        const response = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        const runners = await response.json();
-        
-        const stats = {
-            total: runners.length,
-            on_track: runners.filter(r => ['started', 'running'].includes(r.status)).length,
-            finished: runners.filter(r => r.status === 'finished').length,
-            not_started: runners.filter(r => r.status === 'notstarted').length
-        };
-        
-        const totalRunnersElement = document.getElementById('total-runners-value');
-        if (totalRunnersElement) {
-            totalRunnersElement.textContent = stats.total;
-        }
-        
-        const notStartedElement = document.getElementById('not-started-value');
-        if (notStartedElement) {
-            notStartedElement.textContent = stats.not_started;
-        }
-        
-        const onTrackElement = document.getElementById('on-track-value');
-        if (onTrackElement) {
-            onTrackElement.textContent = stats.on_track;
-        }
-        
-        const finishedElement = document.getElementById('finished-value');
-        if (finishedElement) {
-            finishedElement.textContent = stats.finished;
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки статистики:', error);
-    }
-}
-
-async function loadAnalytics() {
-    try {
-        const timestamp = new Date().getTime();
-        const analyticsResponse = await fetch(`${CONFIG.API_BASE}/analytics?v=${timestamp}`);
-        const analyticsData = await analyticsResponse.json();
-        
-        const statsResponse = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        const runners = await statsResponse.json();
-        
-        const stats = {
-            total: runners.length,
-            on_track: runners.filter(r => ['started', 'running'].includes(r.status)).length,
-            finished: runners.filter(r => r.status === 'finished').length,
-            not_started: runners.filter(r => r.status === 'notstarted').length
-        };
-        
-        const analyticsPanel = document.getElementById('analyticsContent');
-        if (analyticsPanel) {
-            analyticsPanel.innerHTML = renderAnalyticsHTML(analyticsData);
-            
-            document.getElementById('total-runners-value').textContent = stats.total;
-            document.getElementById('not-started-value').textContent = stats.not_started;
-            document.getElementById('on-track-value').textContent = stats.on_track;
-            document.getElementById('finished-value').textContent = stats.finished;
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки аналитики:', error);
-        const analyticsPanel = document.getElementById('analyticsContent');
-        if (analyticsPanel) {
-            analyticsPanel.innerHTML = `<p>Ошибка загрузки аналитических данных: ${error.message}</p>`;
-        }
-    }
-}
-
-function renderAnalyticsHTML(data) {
-    if (!data || data.error) {
-        return `<p>Ошибка: ${data?.error || 'Нет данных для отображения'}</p>`;
-    }
-    
-    const generalStatsHTML = `
-        <div class="analytics-section">
-            <h3>📈 Общая статистика участников</h3>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-card-value" id="total-runners-value">0</div>
-                    <div class="stat-card-label">Всего участников</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-value" id="not-started-value">0</div>
-                    <div class="stat-card-label">Не стартовали</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-value" id="on-track-value">0</div>
-                    <div class="stat-card-label">На трассе</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-card-value" id="finished-value">0</div>
-                    <div class="stat-card-label">Финишировали</div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    const genderStatsHTML = `
-        <div class="analytics-section">
-            <h3>👥 Статистика по полу</h3>
-            <div class="gender-stats">
-                <div class="gender-stat">
-                    <div class="gender-title">Мужчины</div>
-                    <div class="gender-count">${data.gender_stats.male_count}</div>
-                    <div class="gender-avg-time">Среднее время: ${data.gender_stats.male_avg_time}</div>
-                </div>
-                <div class="gender-stat">
-                    <div class="gender-title">Женщины</div>
-                    <div class="gender-count">${data.gender_stats.female_count}</div>
-                    <div class="gender-avg-time">Среднее время: ${data.gender_stats.female_avg_time}</div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    const topFinishersHTML = `
-        <div class="analytics-section">
-            <h3>🏆 Топ-3 финишёров</h3>
-            <div class="top-finishers">
-                <div>
-                    <h4>Общий зачёт</h4>
-                    ${renderTopFinishers(data.top_finishers.overall, 'overall')}
-                </div>
-                <div>
-                    <h4>Мужчины</h4>
-                    ${renderTopFinishers(data.top_finishers.male, 'male')}
-                </div>
-                <div>
-                    <h4>Женщины</h4>
-                    ${renderTopFinishers(data.top_finishers.female, 'female')}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    return generalStatsHTML + genderStatsHTML + topFinishersHTML;
-}
-
-function renderTopFinishers(finishers, category) {
-    if (!finishers || finishers.length === 0) {
-        return '<p>Нет данных</p>';
-    }
-    
-    let html = '';
-    finishers.slice(0, 3).forEach((runner, index) => {
-        let medalClass = '';
-        if (index === 0) medalClass = 'gold';
-        else if (index === 1) medalClass = 'silver';
-        else if (index === 2) medalClass = 'bronze';
-        
-        html += `
-            <div class="finisher-item ${medalClass}">
-                <div class="finisher-place">${index + 1}</div>
-                <div class="finisher-name">${runner.name} ${runner.surname}</div>
-                <div class="finisher-time">${runner.time_str}</div>
-            </div>
-        `;
-    });
-    
-    return html;
-}
 
 // ============================================
 // МАРКЕРЫ НА КАРТЕ
 // ============================================
 
-function updateSelectedRunnersMarkers() {
-    const selectedRunners = allRunners.filter(runner =>
-        selectedRunnerIds.has(String(runner.id))
-    );
-    updateRunnerMarkers(selectedRunners);
+function initializeSelectedRunnersMarkers() {
+    Object.values(runnerMarkers).forEach(marker => {
+        if (map.hasLayer(marker)) map.removeLayer(marker);
+    });
+    runnerMarkers = {};
+
+    selectedRunnerIds.forEach(runnerId => {
+        const runner = allRunners.find(r => String(r.id) === String(runnerId));
+        if (runner) createRunnerMarker(runner);
+    });
 }
 
-function updateRunnerMarkers(runners) {
-    const openPopups = new Map();
-    for (const [id, marker] of Object.entries(runnerMarkers)) {
-        if (marker._popup && marker._popup.isOpen && marker._popup.isOpen()) {
-            openPopups.set(id, true);
-        }
-    }
-    
-    const runnerIds = new Set(runners.map(runner => runner.id));
-    for (const [id, marker] of Object.entries(runnerMarkers)) {
-        if (!runnerIds.has(Number(id))) {
-            if (marker._popup && marker._popup.isOpen && marker._popup.isOpen()) {
-                marker.closePopup();
-            }
-            map.removeLayer(marker);
-            delete runnerMarkers[id];
-            activePopups.delete(id);
-        }
-    }
-    
-    runners.forEach(runner => {
-        if (!runner.position || !runner.position.lat || !runner.position.lng) {
-            return;
-        }
-        
-        const color = STATUS_COLORS[runner.status] || '#2196F3';
-        let pulseAnimation = '';
-        
-        if (runner.speed && runner.speed > 12) {
-            pulseAnimation = 'animation: pulse 1.5s infinite;';
-        } else if (runner.speed && runner.speed < 8) {
-            pulseAnimation = 'animation: slow-pulse 2s infinite;';
-        }
-        
-        const icon = L.divIcon({
-            className: `runner-marker moving-marker`,
-            html: `
-                <div style="
+function buildMarkerIcon(runner) {
+    const color = getStatusColor(runner.status);
+    const runnerId = String(runner.id);
+    // Уменьшаем шрифт для трёхзначных номеров, чтобы текст не выходил за круг
+    const fontSize = String(runner.start_number).length >= 3 ? '11px' : '13px';
+
+    return L.divIcon({
+        className: `runner-marker runner-${runnerId}`,
+        html: `<div style="
                     background: ${color};
-                    width: 32px;
-                    height: 32px;
+                    color: white;
+                    width: 52px;
+                    height: 52px;
                     border-radius: 50%;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: white;
                     font-weight: bold;
-                    font-size: 14px;
-                    border: 3px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    ${pulseAnimation}
-                ">
-                    ${runner.dorsal || runner.id}
-                </div>
-            `,
-            iconSize: [38, 38],
-            iconAnchor: [19, 19]
-        });
-        
-        let marker = runnerMarkers[runner.id];
-        
-        if (marker) {
-            marker.setLatLng([runner.position.lat, runner.position.lng]);
-            marker.setIcon(icon);
-            const popupContent = createPopupContent(runner);
-            marker.getPopup().setContent(popupContent);
-        } else {
-            marker = L.marker(
-                [runner.position.lat, runner.position.lng],
-                { icon }
-            ).addTo(map);
-            
-            const popupContent = createPopupContent(runner);
-            marker.bindPopup(popupContent, {
-                closeOnClick: false,
-                autoClose: false,
-                closeButton: true
-            });
-            
-            marker.on('popupopen', function(e) {
-                activePopups.set(runner.id, e.popup);
-            });
-            
-            marker.on('popupclose', function(e) {
-                activePopups.delete(runner.id);
-            });
-            
-            runnerMarkers[runner.id] = marker;
-        }
-        
-        if (openPopups.has(String(runner.id))) {
-            marker.openPopup();
-        }
+                    font-size: ${fontSize};
+                    border: 2px solid white;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                    box-sizing: border-box;
+                    text-align: center;
+                    line-height: 1;
+                    overflow: hidden;
+               ">№${runner.start_number}</div>`,
+        iconSize: [52, 52],
+        iconAnchor: [26, 26],
+        popupAnchor: [0, -28]
     });
 }
 
-function createPopupContent(runner) {
+function buildPopupContent(runner) {
+    // Показываем строки времён только если данные есть
+    const officialTime = runner.time_gun_finish
+        ? `<strong>Официальное время финиша:</strong> ${runner.time_gun_finish}<br>`
+        : '';
+    const pace = runner.finish_pace_avg
+        ? `<strong>Темп:</strong> ${runner.finish_pace_avg}`
+        : '';
+    const clearTime = runner.time_clear_finish        
+        ? `<strong>Чистое время финиша:</strong> ${runner.time_clear_finish}<br>` 
+        : '';
+
     return `
-        <div style="min-width: 200px;">
-            <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
-                №${runner.dorsal || runner.id} - ${runner.full_name || 'Участник'}
+        <div style="font-size: 12px; min-width: 190px; text-align: center;">
+            <div><strong>№${runner.start_number}</strong></div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
+                <div><strong>${runner.full_name}</strong></div>
+                ${runner.category ? `
+                    <div style="margin-top: 6px; color: #666;">Категория:</div>
+                    <div>${runner.category}</div>
+                ` : ''}
             </div>
-            <div style="font-size: 14px; margin-bottom: 10px;">
-                <div><strong>Категория:</strong> ${runner.category || 'N/A'}</div>
-                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1) || 0} км</div>
-                <div><strong>Скорость:</strong> ${runner.speed?.toFixed(1) || '--'} км/ч</div>
-            </div>
-            <div style="font-size: 12px; color: #666;">
-                Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; text-align: left;">
+                <strong>Статус:</strong> ${getStatusText(runner.status)}<br>
+                <strong>Место в абсолюте:</strong> ${runner.rank_absolute || '-'}<br>
+                ${officialTime}
+                ${clearTime}
+                ${pace}
             </div>
         </div>
     `;
 }
 
-// ============================================
-// ВЫБОР УЧАСТНИКОВ
-// ============================================
+function createRunnerMarker(runner) {
+    const runnerId = String(runner.id);
 
-function updateSelectedList() {
-    const selectedList = document.getElementById('selectedList');
-    const selectedCount = document.getElementById('selectedCount');
-    const limitWarning = document.getElementById('selection-limit-warning');
-    
-    const selectedRunners = allRunners.filter(runner =>
-        selectedRunnerIds.has(String(runner.id))
-    );
-    
-    const currentCount = selectedRunners.length;
-    if (selectedCount) selectedCount.textContent = currentCount;
-    
-    if (limitWarning) {
-        limitWarning.style.display = currentCount >= CONFIG.MAX_SELECTED ? 'block' : 'none';
-    }
-    
-    const clearBtn = document.querySelector('.control-btn.secondary');
-    if (clearBtn) clearBtn.disabled = currentCount === 0;
-    
-    if (currentCount === 0) {
-        selectedList.innerHTML = '<div class="empty-selection">Нет выбранных участников</div>';
+    if (runnerMarkers[runnerId]) {
+        updateRunnerMarkerPosition(runner);
         return;
     }
-    
-    let html = '';
-    selectedRunners.forEach(runner => {
-        const statusClass = runner.status === 'finished' ? 'finished' :
-                           runner.status === 'started' ? 'started' : 'not-started';
-        
-        html += `
-            <div class="selected-runner">
-                <div class="runner-info">
-                    <div class="runner-number">№${runner.dorsal}</div>
-                    <div class="runner-name">${runner.full_name}</div>
-                    <div class="runner-category">${runner.category} • <span class="${statusClass}">${getStatusText(runner.status)}</span></div>
-                </div>
-                <button class="remove-btn" onclick="deselectRunner('${runner.id}')">✕</button>
-            </div>
-        `;
-    });
-    
-    selectedList.innerHTML = html;
-    updateSelectedRunnersMarkers();
+
+    const initialPosition = routeCoordinates[0] || [56.0075, 92.7246];
+    const marker = L.marker(initialPosition, { icon: buildMarkerIcon(runner) }).addTo(map);
+
+    marker.bindPopup(buildPopupContent(runner), { minWidth: 200 });
+    marker.on('click', e => e.target.openPopup());
+    marker.on('popupopen',  () => activePopups.set(runnerId, true));
+    marker.on('popupclose', () => activePopups.delete(runnerId));
+
+    runnerMarkers[runnerId] = marker;
+    console.log(`✅ Создан маркер: ${runner.full_name}`);
 }
 
+function updateRunnerMarkerPosition(runner) {
+    const runnerId = String(runner.id);
+    const marker = runnerMarkers[runnerId];
+
+    if (!marker || !routeCoordinates.length) return;
+
+    let progressPercent = runnerPositions[runnerId] || 0;
+
+    const s = (runner.status || '').toLowerCase();
+    if (s.includes('finish')) {
+        progressPercent = 100;
+    } else if (s.includes('running') || s.includes('started')) {
+        progressPercent = Math.min(100, progressPercent + 0.5);
+    }
+
+    runnerPositions[runnerId] = progressPercent;
+
+    const maxIndex = Math.max(0, routeCoordinates.length - 1);
+    const positionIndex = Math.min(maxIndex, Math.round(maxIndex * progressPercent / 100));
+    marker.setLatLng(routeCoordinates[positionIndex] || routeCoordinates[0]);
+
+    marker.setIcon(buildMarkerIcon(runner));
+
+    if (marker.getPopup()) {
+        marker.getPopup().setContent(buildPopupContent(runner));
+    }
+}
+
+
+// ============================================
+// ВЫБОР И ОТСЛЕЖИВАНИЕ УЧАСТНИКОВ
+// ============================================
+
 async function selectRunner(runnerId) {
+    const runnerId_str = String(runnerId);
+
     if (selectedRunnerIds.size >= CONFIG.MAX_SELECTED) {
-        alert(`Максимум можно выбрать ${CONFIG.MAX_SELECTED} участников`);
+        alert(`❌ Максимум можно выбрать ${CONFIG.MAX_SELECTED} участников`);
         return;
     }
-    
-    if (selectedRunnerIds.has(runnerId)) {
-        alert('Этот участник уже добавлен в отслеживаемые');
+    if (selectedRunnerIds.has(runnerId_str)) {
+        alert('✅ Этот участник уже отслеживается');
         return;
     }
-    
-    try {
-        const response = await fetch(`${CONFIG.API_BASE}/select-runner`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ runner_id: runnerId })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            selectedRunnerIds.add(runnerId);
-            saveSelectedToStorage();
-            await loadAllRunners();
-            updateSelectedList();
-            updateStatus(`Участник №${runnerId} добавлен в отслеживаемые`);
-        } else {
-            alert(result.error || 'Ошибка добавления участника');
-        }
-    } catch (error) {
-        console.error('Ошибка выбора участника:', error);
-        alert('Ошибка связи с сервером');
+
+    const runner = allRunners.find(r => String(r.id) === runnerId_str);
+    if (!runner) {
+        alert('❌ Участник не найден в базе');
+        return;
+    }
+
+    selectedRunnerIds.add(runnerId_str);
+    saveSelectedToStorage();
+    createRunnerMarker(runner);
+    updateSelectedList();
+    updateStatus(`✅ Отслеживание: ${runner.full_name} (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})`);
+
+    const resultsDiv = document.getElementById('searchResults');
+    if (resultsDiv && resultsDiv.style.display !== 'none') {
+        searchRunners();
     }
 }
 
 async function deselectRunner(runnerId) {
-    try {
-        const response = await fetch(`${CONFIG.API_BASE}/deselect-runner`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ runner_id: runnerId })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            selectedRunnerIds.delete(runnerId);
-            saveSelectedToStorage();
-            
-            if (runnerMarkers[runnerId]) {
-                map.removeLayer(runnerMarkers[runnerId]);
-                delete runnerMarkers[runnerId];
-            }
-            
-            await loadAllRunners();
-            updateSelectedList();
-            updateStatus(`Участник №${runnerId} удален из отслеживаемых`);
+    const runnerId_str = String(runnerId);
+    selectedRunnerIds.delete(runnerId_str);
+    saveSelectedToStorage();
+
+    if (runnerMarkers[runnerId_str]) {
+        if (map.hasLayer(runnerMarkers[runnerId_str])) {
+            map.removeLayer(runnerMarkers[runnerId_str]);
         }
-    } catch (error) {
-        console.error('Ошибка удаления участника:', error);
+        delete runnerMarkers[runnerId_str];
+        delete runnerPositions[runnerId_str];
+        activePopups.delete(runnerId_str);
     }
+
+    updateSelectedList();
+    updateStatus(`Отслеживание остановлено (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})`);
 }
 
 async function clearSelection() {
-    if (!confirm('Очистить всех выбранных участников?')) {
-        return;
-    }
-    
-    const runnerIds = Array.from(selectedRunnerIds);
-    for (const runnerId of runnerIds) {
+    if (!confirm('Удалить всех отслеживаемых участников?')) return;
+
+    for (const runnerId of Array.from(selectedRunnerIds)) {
         await deselectRunner(runnerId);
     }
-    
     clearSelectedStorage();
 }
 
+function updateSelectedList() {
+    const selectedListDiv = document.getElementById('selectedList');
+    if (!selectedListDiv) return;
+
+    if (selectedRunnerIds.size === 0) {
+        selectedListDiv.innerHTML = '<div style="color: #999; text-align: center; padding: 15px; font-size: 13px;">Нет отслеживаемых участников</div>';
+        return;
+    }
+
+    let html = '<div style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; max-height: 320px; overflow-y: auto; background: #f9f9f9;">';
+
+    selectedRunnerIds.forEach(runnerId => {
+        const runner = allRunners.find(r => String(r.id) === String(runnerId));
+        if (!runner) return;
+        html += `
+            <div style="padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <div style="flex: 1; min-width: 0;">
+                    <strong style="display: block; font-size: 13px;">№${runner.start_number}</strong>
+                    <div style="font-size: 12px; font-weight: 500; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${runner.full_name}</div>
+                    <div style="font-size: 11px; color: #666;">${runner.category || ''}</div>
+                </div>
+                <button onclick="deselectRunner('${runnerId}')" style="padding: 3px 6px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap;">✕</button>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    html += `<button onclick="clearSelection()" style="margin-top: 8px; padding: 6px 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; cursor: pointer; width: 100%; font-size: 12px;">🗑️ Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
+
+    selectedListDiv.innerHTML = html;
+}
+
+
 // ============================================
-// ПОИСК
+// ПОИСК УЧАСТНИКОВ
 // ============================================
 
-async function searchRunners() {
-    const query = document.getElementById('searchInput').value.trim();
+function searchRunners() {
+    const query = document.getElementById('searchInput');
+    if (!query) return;
+
+    const searchText = query.value.trim().toLowerCase();
     const resultsDiv = document.getElementById('searchResults');
-    
-    if (!query) {
+
+    if (!searchText) {
         resultsDiv.innerHTML = '';
         resultsDiv.style.display = 'none';
         return;
     }
-    
-    try {
-        const timestamp = new Date().getTime();
-        const response = await fetch(`${CONFIG.API_BASE}/search-runners?q=${encodeURIComponent(query)}&event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        const results = await response.json();
-        
-        if (results.length === 0) {
-            resultsDiv.innerHTML = '<div class="runner-item">Участники не найдены</div>';
-            resultsDiv.style.display = 'block';
-            return;
-        }
-        
-        let html = '';
-        results.forEach(runner => {
-            const isSelected = selectedRunnerIds.has(String(runner.id));
-            const canSelect = !isSelected && selectedRunnerIds.size < CONFIG.MAX_SELECTED;
-            
-            html += `
-                <div class="runner-item">
-                    <div class="runner-info">
-                        <div class="runner-number">№${runner.dorsal}</div>
-                        <div class="runner-name">${runner.full_name}</div>
-                        <div class="runner-category">${runner.category} • ${getStatusText(runner.status)}</div>
-                    </div>
-                    <button
-                        class="select-btn ${isSelected ? 'selected' : ''}"
-                        ${!canSelect ? 'disabled' : ''}
-                        onclick="${canSelect ? `selectRunner('${runner.id}')` : ''}"
-                    >
-                        ${isSelected ? 'Выбран' : 'Выбрать'}
-                    </button>
-                </div>
-            `;
-        });
-        
-        resultsDiv.innerHTML = html;
+
+    const results = allRunners.filter(runner =>
+        runner.full_name.toLowerCase().includes(searchText) ||
+        String(runner.start_number).includes(searchText)
+    ).slice(0, 15);
+
+    if (results.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding: 10px; color: #999;">❌ Участники не найдены</div>';
         resultsDiv.style.display = 'block';
-    } catch (error) {
-        console.error('Ошибка поиска:', error);
-        resultsDiv.innerHTML = '<div class="runner-item">Ошибка поиска</div>';
-        resultsDiv.style.display = 'block';
+        return;
     }
+
+    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+
+    results.forEach(runner => {
+        const isSelected  = selectedRunnerIds.has(String(runner.id));
+        const canSelect   = !isSelected && selectedRunnerIds.size < CONFIG.MAX_SELECTED;
+        const statusColor = getStatusColor(runner.status);
+
+        html += `
+            <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <strong>№${runner.start_number}</strong> ${runner.full_name}
+                    <div style="font-size: 11px; color: #666;">${runner.category || ''}</div>
+                    <div style="font-size: 11px; color: ${statusColor}; margin-top: 3px;">● ${getStatusText(runner.status)}</div>
+                </div>
+                <button
+                    onclick="selectRunner('${runner.id}')"
+                    style="padding: 6px 12px;
+                           background: ${isSelected ? '#90EE90' : canSelect ? '#EE2D62' : '#ccc'};
+                           color: white;
+                           border: none;
+                           border-radius: 3px;
+                           cursor: ${canSelect ? 'pointer' : 'not-allowed'};
+                           font-weight: bold;"
+                    ${!canSelect && !isSelected ? 'disabled' : ''}
+                >
+                    ${isSelected ? '✓' : '+'}
+                </button>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
 }
 
 function setupSearch() {
     const searchInput = document.getElementById('searchInput');
-    let searchTimeout;
-    
     if (!searchInput) return;
-    
-    searchInput.addEventListener('input', function() {
+
+    let searchTimeout;
+    searchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(searchRunners, 300);
     });
-    
-    document.addEventListener('click', function(event) {
+
+    document.addEventListener('click', (event) => {
         const resultsDiv = document.getElementById('searchResults');
-        if (!searchInput.contains(event.target) && !resultsDiv.contains(event.target)) {
+        if (resultsDiv && !searchInput.contains(event.target) && !resultsDiv.contains(event.target)) {
             resultsDiv.style.display = 'none';
         }
     });
 }
+
+
+// ============================================
+// АНАЛИТИКА
+// ============================================
+
+async function loadAnalytics() {
+    try {
+        console.log('📊 Загрузка аналитики для Event 67');
+
+        const response = await fetch(
+            `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
+        );
+
+        if (!response.ok) throw new Error('Ошибка загрузки результатов');
+
+        const data = await response.json();
+        const results = data.results || [];
+
+        const stats = {
+            total:        results.length,
+            finished:     results.filter(r => r.race_status === 'Finished').length,
+            not_started:  results.filter(r => r.race_status === 'Not started').length,
+            running:      results.filter(r => r.race_status === 'Running').length,
+            withdrawn:    results.filter(r => r.race_status === 'Withdrawn').length,
+            disqualified: results.filter(r => r.race_status === 'Disqualifed' || r.race_status === 'Disqualified').length,
+            male:         results.filter(r => r.sex === 'Мужчина').length,
+            female:       results.filter(r => r.sex === 'Женщина').length
+        };
+
+        const analyticsPanel = document.getElementById('analyticsContent');
+        if (analyticsPanel) {
+            analyticsPanel.innerHTML = renderAnalyticsHTML(stats, results);
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка загрузки аналитики:', error);
+        const analyticsPanel = document.getElementById('analyticsContent');
+        if (analyticsPanel) {
+            analyticsPanel.innerHTML = `<p style="color: red;">Ошибка загрузки аналитики: ${error.message}</p>`;
+        }
+    }
+}
+
+function renderAnalyticsHTML(stats, results) {
+    const finishedRunners = results
+        .filter(r => r.race_status === 'Finished' && r.rank_absolute)
+        .sort((a, b) => (a.rank_absolute || 999) - (b.rank_absolute || 999))
+        .slice(0, 5);
+
+    const topHTML = finishedRunners.length
+        ? finishedRunners.map(runner => `
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 8px; text-align: center;">${runner.rank_absolute}</td>
+                <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>
+                <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
+                <td style="padding: 8px;">${runner.category || '-'}</td>
+                <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
+                <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.finish_pace_avg) || '-'}</td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="6" style="padding: 10px; text-align: center;">Результатов нет</td></tr>';
+
+    const totalSafe = stats.total || 1;
+
+    return `
+        <div class="analytics-section">
+            <h3>📊 Ночной забег 2025 (5 км) — Общая статистика</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-value">${stats.total}</div>
+                    <div class="stat-card-label">Всего участников</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" style="color: #4CAF50;">${stats.finished}</div>
+                    <div class="stat-card-label">Финишировали</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" style="color: #EE2D62;">${stats.running}</div>
+                    <div class="stat-card-label">На трассе</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" style="color: #FF9800;">${stats.not_started}</div>
+                    <div class="stat-card-label">Не стартовали</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" style="color: #f44336;">${stats.withdrawn + stats.disqualified}</div>
+                    <div class="stat-card-label">Снялись</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analytics-section">
+            <h3>👥 Распределение по полу</h3>
+            <div class="gender-stats">
+                <div class="gender-stat">
+                    <div class="gender-title">👨 Мужчины</div>
+                    <div class="gender-count">${stats.male}</div>
+                    <div class="gender-avg-time">${((stats.male / totalSafe) * 100).toFixed(1)}%</div>
+                </div>
+                <div class="gender-stat">
+                    <div class="gender-title">👩 Женщины</div>
+                    <div class="gender-count">${stats.female}</div>
+                    <div class="gender-avg-time">${((stats.female / totalSafe) * 100).toFixed(1)}%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analytics-section">
+            <h3>🏆 Топ-5 финишёров</h3>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+                            <th style="padding: 10px; text-align: center;">#</th>
+                            <th style="padding: 10px; text-align: center;">№</th>
+                            <th style="padding: 10px; text-align: left;">Фамилия Имя</th>
+                            <th style="padding: 10px; text-align: left;">Категория</th>
+                            <th style="padding: 8px; text-align: left;">Офиц. время</th>
+                            <th style="padding: 8px; text-align: left;">Темп</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${topHTML}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
 
 // ============================================
 // АВТООБНОВЛЕНИЕ
 // ============================================
 
 function startAutoUpdate() {
-    console.log(`⏱️ Автообновление запущено для события: ${CONFIG.EVENT_NAME}`);
+    console.log(`⏱️ Автообновление запущено (каждые ${CONFIG.UPDATE_INTERVAL / 1000}с)`);
+
     setInterval(async () => {
         if (isUpdating) return;
-        
         isUpdating = true;
+
         try {
             await loadAllRunners();
-            await loadStats();
-            await loadAnalytics();
-            updateStatus('Обновлено ' + new Date().toLocaleTimeString());
+
+            selectedRunnerIds.forEach(runnerId => {
+                const runner = allRunners.find(r => String(r.id) === String(runnerId));
+                if (runner) updateRunnerMarkerPosition(runner);
+            });
+
+            updateSelectedList();
+            updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 67`);
+
         } catch (error) {
-            console.error('Ошибка автообновления:', error);
-            updateStatus('Ошибка обновления');
+            console.error('❌ Ошибка при обновлении:', error);
         } finally {
             isUpdating = false;
         }
     }, CONFIG.UPDATE_INTERVAL);
 }
 
-// ============================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ============================================
 
-function getStatusText(status) {
-    const statusMap = {
-        'notstarted': 'Не стартовал',
-        'started': 'На трассе',
-        'running': 'На трассе',
-        'finished': 'Финишировал'
-    };
-    
-    return statusMap[status] || status || 'Неизвестно';
-}
-
-function updateStatus(message) {
-    const statusPanel = document.getElementById('statusPanel');
-    if (statusPanel) statusPanel.textContent = message;
-}
+// ============================================
+// ПРОЧЕЕ
+// ============================================
 
 function closeAllPopups() {
-    for (const [id, popup] of activePopups) {
+    for (const [id] of activePopups) {
         const marker = runnerMarkers[id];
-        if (marker && marker._popup) {
-            marker.closePopup();
-        }
+        if (marker && marker._popup) marker.closePopup();
     }
     activePopups.clear();
 }
