@@ -17,6 +17,7 @@ from pathlib import Path
 from src.config import settings
 from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
+from src.analytics.db_connection_optimized import initialize_connection_pool
 
 # Инициализация приложения
 @asynccontextmanager
@@ -31,6 +32,13 @@ async def lifespan(app: FastAPI):
     # Инициализирование глобального состояния
     app_state = init_app_state()
     settings.logger.info(f"✓ Application state initialized: {app_state}")
+    
+    # Инициализируем пул БД соединений
+    pool = initialize_connection_pool(pool_size=5)
+    if pool:
+        settings.logger.info("✓ Database connection pool initialized (size: 5)")
+    else:
+        settings.logger.warning("⚠ Database connection pool initialization failed")
     settings.logger.info("✓ CORS enabled for: " + ", ".join(settings.CORS_ORIGINS))
     settings.logger.info("✓ Static files mounted")
     settings.logger.info("✓ Templates configured")

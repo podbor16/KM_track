@@ -375,9 +375,9 @@ async def search_athletes(
     Возвращает: фамилия, имя, город
     """
     try:
-        from src.analytics.db_connection import search_clients
+        from src.analytics.db_connection_optimized import search_clients_optimized
         
-        results = search_clients(q)
+        results = search_clients_optimized(q)
         
         return {
             'query': q,
@@ -406,11 +406,11 @@ async def get_athlete_profile(
         Информация о спортсмене и список его результатов
     """
     try:
-        from src.analytics.db_connection import get_athlete_results
+        from src.analytics.db_connection_optimized import get_athlete_results_optimized
         
         logger.info(f"📥 Запрос профиля спортсмена: {surname} {name}")
         
-        athlete_info, results = get_athlete_results(surname, name)
+        athlete_info, results = get_athlete_results_optimized(surname, name)
         
         logger.info(f"📊 Получено: athlete_info={'OK' if athlete_info else 'EMPTY'}, results={len(results)} items")
         
@@ -637,7 +637,7 @@ async def get_registered_runners(
     - event_year: 2026 (по умолчанию)
     """
     try:
-        from src.analytics.db_connection import get_test_table_data
+        from src.analytics.db_connection_optimized import get_test_table_data
         from src.tracker.models.analytics import RegisteredRunnerInfo
         
         logger.info(f"Fetching registered runners (limit: {limit}, event_name: {event_name}, event_year: {event_year})")
@@ -844,10 +844,10 @@ async def fetcher_status():
 async def database_debug():
     """
     Отладочный endpoint для проверки подключения к БД и структуры таблиц
-    Показывает какие таблицы есть в БД и их содержимое
+    Оптимизирован с использованием кэшированной информации о таблицах
     """
     try:
-        from src.analytics.db_connection import create_connection
+        from src.analytics.db_connection_optimized import get_database_info_optimized
         
         debug_info = {
             "db_config": {
@@ -856,68 +856,12 @@ async def database_debug():
                 "database": settings.DB_NAME,
                 "user": settings.DB_USER,
             },
-            "connection": "Testing...",
-            "tables": [],
-            "errors": []
         }
         
-        connection = create_connection()
+        # Используем оптимизированную функцию с INFORMATION_SCHEMA и кэшем
+        optimized_info = get_database_info_optimized()
+        debug_info.update(optimized_info)
         
-        if not connection:
-            debug_info["connection"] = "❌ Failed to connect"
-            debug_info["errors"].append("Could not establish database connection")
-            return debug_info
-        
-        debug_info["connection"] = "✅ Connected successfully"
-        
-        try:
-            cursor = connection.cursor(dictionary=True, buffered=True)
-            
-            # Получаем список таблиц
-            cursor.execute("SHOW TABLES")
-            tables_result = cursor.fetchall()
-            table_names = [list(t.values())[0] for t in tables_result]
-            
-            debug_info["tables_list"] = table_names
-            logger.info(f"📋 Available tables: {table_names}")
-            
-            # Для каждой таблицы получаем информацию
-            for table_name in table_names:
-                table_info = {
-                    "name": table_name,
-                    "row_count": 0,
-                    "columns": [],
-                    "sample_rows": []
-                }
-                
-                try:
-                    # Количество строк
-                    cursor.execute(f"SELECT COUNT(*) as count FROM `{table_name}`")
-                    count_result = cursor.fetchone()
-                    table_info["row_count"] = count_result.get('count', 0) if count_result else 0
-                    
-                    # Структура таблицы
-                    cursor.execute(f"DESCRIBE `{table_name}`")
-                    fields = cursor.fetchall()
-                    table_info["columns"] = [f.get('Field', '') for f in fields] if fields else []
-                    
-                    # BeispielRows
-                    cursor.execute(f"SELECT * FROM `{table_name}` LIMIT 2")
-                    samples = cursor.fetchall()
-                    table_info["sample_rows"] = samples if samples else []
-                    
-                    debug_info["tables"].append(table_info)
-                    
-                except Exception as table_error:
-                    debug_info["errors"].append(f"Error reading table {table_name}: {str(table_error)}")
-                    logger.error(f"Error reading table {table_name}: {table_error}")
-            
-            cursor.close()
-            
-        finally:
-            if connection.is_connected():
-                connection.close()
-                
         return debug_info
         
     except Exception as e:
@@ -936,7 +880,7 @@ async def test_fetch_runners():
     Показывает какие данные получены и формат
     """
     try:
-        from src.analytics.db_connection import get_test_table_data
+        from src.analytics.db_connection_optimized import get_test_table_data
         
         logger.info("Testing runner data fetch from database...")
         

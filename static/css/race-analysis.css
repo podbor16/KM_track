@@ -112,7 +112,7 @@
 
 /* Цвета для каждого забега */
 .race-card:nth-child(1) .race-card-image {
-    background-image: url('/legacy/static/images/events/logo1x1/night_run.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Ночной забег.png');
     background-size: cover;
     background-position: center;
 }

@@ -20,13 +20,13 @@ const eventNameMap = {
 // Цвета для каждого события
 const eventColorMap = {
     'night_run': '#1c2c55',
-    'vesna': '#27ae60',
-    'colorrun': '#f39c12',
-    'girlseven': '#e83e8c',
-    'zhara': '#c0392b',
-    'kids': '#3498db',
-    'xtrailrun': '#16a085',
-    'snow7': '#2980b9'
+    'vesna': '#85c6e2',
+    'colorrun': '#059C43',
+    'girlseven': '#f072ab',
+    'zhara': '#ee2d62',
+    'kids': '#ee2d62',
+    'xtrailrun': '#562872',
+    'snow7': '#00BFDF'
 };
 
 // Инициализация страницы
