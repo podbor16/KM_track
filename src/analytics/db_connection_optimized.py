@@ -503,12 +503,13 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
 def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     """
     Получение результатов забега по event_id из таблицы results
+    с присоединением информации о дистанции из таблицы events
     
     Args:
         event_id: ID события (например, 67 для Ночного забега 2025)
     
     Returns:
-        Список словарей с результатами спортсменов
+        Список словарей с результатами спортсменов, отсортированных по времени финиша
     """
     logger.info(f"🔍 Загрузка результатов для event_id={event_id}")
     
@@ -545,18 +546,43 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
             cursor.close()
             return []
         
-        # Запрос результатов по event_id
+        # Запрос результатов с JOIN к событиям для получения дистанции
+        # Сортируем: 
+        # 1. Finished - по времени (быстрейшие первыми)
+        # 2. Running/Withdrawn - по времени затем по id
+        # 3. Not started - в конец
         query = f"""
-        SELECT * FROM `{results_table}` 
-        WHERE event_id = %s
-        ORDER BY rank_absolute ASC
+        SELECT 
+            r.*,
+            COALESCE(e.event_distance, '5 км') as distance_from_event
+        FROM `{results_table}` r
+        LEFT JOIN events e ON r.event_id = e.id
+        WHERE r.event_id = %s
+        ORDER BY 
+            -- 1. Finished в начало (0), остальные после (1), Not started в конец (2)
+            CASE 
+                WHEN r.race_status = 'Finished' THEN 0
+                WHEN r.race_status = 'Not started' THEN 2
+                ELSE 1
+            END ASC,
+            -- 2. Для финишировавших и остальных - по времени финиша 
+            r.time_clear_finish ASC,
+            -- 3. Для тех у кого нет времени - по id
+            r.id ASC
         """
         
         cursor.execute(query, (event_id,))
         results = cursor.fetchall()
         
         if results:
-            results_list = [dict(r) for r in results]
+            results_list = []
+            for r in results:
+                result_dict = dict(r)
+                # Добавляем дистанцию в основные поля результата
+                if 'distance_from_event' in result_dict:
+                    result_dict['distance'] = result_dict['distance_from_event']
+                results_list.append(result_dict)
+            
             logger.info(f"✅ Найдено {len(results_list)} результатов для event_id={event_id}")
             cursor.close()
             return results_list

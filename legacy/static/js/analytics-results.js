@@ -29,12 +29,32 @@ const eventColorMap = {
     'snow7': '#00BFDF'
 };
 
+// Маппинг событие + год на event_id в БД
+const eventYearToIdMap = {
+    'night_run_2025': 67,
+    'night_run_2026': 104,
+    'vesna_2025': 71,
+    'vesna_2026': 106,
+    'colorrun_2025': 75,
+    'colorrun_2026': 108,
+    'girlseven_2025': 79,
+    'girlseven_2026': 110,
+    'kids_2025': 83,
+    'kids_2026': 113,
+    'zhara_2025': [89, 91, 93],       // три дистанции
+    'zhara_2026': [115, 116, 117],    // три дистанции
+    'xtrailrun_2025': 95,
+    'xtrailrun_2026': 117,
+    'snow7_2025': 99,
+    'snow7_2026': 119
+};
+
 // Инициализация страницы
 document.addEventListener('DOMContentLoaded', function() {
-    populateYearSelector();
-    restoreSavedPreferences();
-    updateEventThemeColor();
-    loadRunnersData();
+    populateYearSelector();           // Сначала заполняем селектор годов
+    restoreSavedPreferences();        // Потом восстанавливаем сохраненные значения
+    updateEventThemeColor();          // Обновляем цвет темы
+    loadRunnersData();                // Загружаем данные
 });
 
 // Функция обновления цвета темы в зависимости от события
@@ -95,20 +115,30 @@ async function loadRunnersData() {
     try {
         let rawData = [];
         
-        // Для Ночного забега 2025 загружаем из БД (Event ID = 67)
-        if (currentEvent === 'night_run' && currentYear === 2025) {
-            console.log('📊 Загрузка результатов из БД (Event ID = 67)');
-            const response = await fetch(`/api/event-results?event_id=67`);
+        // Получаем event_id из маппинга события+года
+        const mapKey = `${currentEvent}_${currentYear}`;
+        const eventIdOrIds = eventYearToIdMap[mapKey];
+        
+        if (eventIdOrIds !== undefined) {
+            // Загружаем из БД через API с правильным event_id
+            console.log('📊 Загрузка результатов из БД через API');
             
-            if (!response.ok) {
-                throw new Error('Ошибка загрузки результатов из БД');
+            // Если это массив дистанций (для Жары), загружаем все вместе
+            const eventIds = Array.isArray(eventIdOrIds) ? eventIdOrIds : [eventIdOrIds];
+            
+            for (const eventId of eventIds) {
+                const response = await fetch(`/api/event-results?event_id=${eventId}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Ошибка загрузки результатов для event_id=${eventId}`);
+                }
+                
+                const data = await response.json();
+                console.log(`✅ Загружено из БД (event_id=${eventId}):`, data.results ? data.results.length : 0, 'участников');
+                rawData = rawData.concat(data.results || []);
             }
-            
-            const data = await response.json();
-            console.log('✅ Загружено из БД:', data.results ? data.results.length : 0, 'участников');
-            rawData = data.results || [];
         } else {
-            // Для прошлых событий загружаем из race-results
+            // Для неизвестных комбинаций загружаем из legacy API
             const eventName = eventNameMap[currentEvent] || 'Ночной забег';
             const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
             console.log('Запрос к ' + apiUrl);
@@ -163,7 +193,7 @@ function normalizeRunnerData(runners) {
             name: runner.name || '',
             full_name: runner.full_name || `${runner.surname || ''} ${runner.name || ''}`,
             birthdate: runner.birthday || runner.birthdate || '',
-            gender: convertSexToGender(runner.sex),
+            gender: convertSexToGender(runner.sex),  // Будет "Мужчина" или "Женщина"
             sex: runner.sex,
             category: runner.category || '',
             
@@ -182,9 +212,9 @@ function normalizeRunnerData(runners) {
             rank_category: runner.rank_category,
             start_number: runner.start_number,
             
-            // Дистанция и событие
-            event: runner.event || 'Ночной забег',
-            distance: runner.distance || '5 км',
+            // Дистанция и событие - используем distance_from_event из БД если есть
+            event: runner.event || runner.distance_from_event || 'Ночной забег',
+            distance: runner.distance || runner.distance_from_event || '5 км',
             
             // Дополнительные поля
             checkpoints: runner.checkpoints || {}
@@ -192,13 +222,13 @@ function normalizeRunnerData(runners) {
     });
 }
 
-// Конвертируем пол из БД в формат приложения
+// Конвертируем пол из БД в формат приложения (сохраняем на русском)
 function convertSexToGender(sex) {
     if (!sex) return '';
     const lowerSex = sex.toLowerCase();
-    if (lowerSex.includes('муж') || lowerSex === 'male' || lowerSex === 'm') return 'male';
-    if (lowerSex.includes('жен') || lowerSex === 'female' || lowerSex === 'f') return 'female';
-    return lowerSex;
+    if (lowerSex.includes('муж') || lowerSex === 'male' || lowerSex === 'm') return 'Мужчина';
+    if (lowerSex.includes('жен') || lowerSex === 'female' || lowerSex === 'f') return 'Женщина';
+    return sex;  // Возвращаем исходное значение если не распознали
 }
 
 // Конвертируем статус из БД в формат приложения
@@ -388,10 +418,10 @@ function applyFilters() {
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
-    // Рендерим таблицу и сортируем по темпу по умолчанию
-    sortState.column = 'pace';
+    // Рендерим таблицу и сортируем по времени финиша по умолчанию
+    sortState.column = 'time';
     sortState.direction = 'asc';
-    sortTable('pace');
+    sortTable('time');
 }
 
 // Функция для форматирования времени из миллисекунд в чч:мм:сс (поддерживает ISO 8601)
@@ -434,13 +464,46 @@ function formatTime(timeData) {
 }
 
 // Функция для расчета темпа (минут на км)
-function calculatePace(milliseconds, distanceStr) {
-    if (!milliseconds || !distanceStr) return '-';
-    const distance = parseFloat(distanceStr);
-    if (distance <= 0) return '-';
-    const totalMinutes = milliseconds / 1000 / 60;
-    const pace = totalMinutes / distance;
-    return pace.toFixed(2);
+function calculatePace(timeData, distanceStr) {
+    if (!timeData || !distanceStr) return '-';
+    
+    // Парсим дистанцию (например, "5 км" -> 5)
+    const distanceNum = parseFloat(distanceStr);
+    if (distanceNum <= 0) return '-';
+    
+    // Парсим время
+    let totalSeconds = 0;
+    
+    // Если это строка формата "0:16:01"
+    if (typeof timeData === 'string' && timeData.includes(':')) {
+        const parts = timeData.split(':');
+        if (parts.length === 3) {
+            totalSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        } else if (parts.length === 2) {
+            totalSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        }
+    }
+    // Если это число (миллисекунды или секунды)
+    else if (typeof timeData === 'number') {
+        // Если больше 60000, это миллисекунды
+        totalSeconds = timeData > 60000 ? timeData / 1000 : timeData;
+    }
+    // Если это ISO 8601 формат PT2490S
+    else if (typeof timeData === 'string' && timeData.startsWith('PT')) {
+        const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+        if (match) {
+            const h = parseInt(match[1] || 0);
+            const m = parseInt(match[2] || 0);
+            const s = parseFloat(match[3] || 0);
+            totalSeconds = h * 3600 + m * 60 + Math.floor(s);
+        }
+    }
+    
+    if (totalSeconds <= 0) return '-';
+    
+    const totalMinutes = totalSeconds / 60;
+    const pace = totalMinutes / distanceNum;
+    return pace.toFixed(5);
 }
 
 // Функция сортировки таблицы
@@ -493,9 +556,33 @@ function sortTable(columnName) {
                 valA = (a.status || '').toLowerCase();
                 valB = (b.status || '').toLowerCase();
                 break;
+            case 'time':
+                // Специальная логика для времени финиша
+                // "Not started" в конце, остальные по времени (быстрее первыми)
+                const statusA = (a.race_status || 'не стартовал').toLowerCase();
+                const statusB = (b.race_status || 'не стартовал').toLowerCase();
+                
+                const isNotStartedA = statusA.includes('not') && statusA.includes('start');
+                const isNotStartedB = statusB.includes('not') && statusB.includes('start');
+                
+                if (isNotStartedA && !isNotStartedB) return 1;
+                if (!isNotStartedA && isNotStartedB) return -1;
+                if (isNotStartedA && isNotStartedB) return 0;
+                
+                // Для стартовавших - сортируем по времени финиша
+                const timeA = a.time_clear_finish || a['times.official_:::finish:::'];
+                const timeB = b.time_clear_finish || b['times.official_:::finish:::'];
+                
+                // Конвертируем время в секунды для сравнения
+                const secsA = parseFloat(timeA) || Infinity;
+                const secsB = parseFloat(timeB) || Infinity;
+                
+                valA = secsA;
+                valB = secsB;
+                break;
             case 'pace':
-                const pace1 = calculatePace(a['times.official_:::finish:::'], a.event);
-                const pace2 = calculatePace(b['times.official_:::finish:::'], b.event);
+                const pace1 = calculatePace(a.time_clear_finish || a['times.official_:::finish:::'], a.distance || a.event);
+                const pace2 = calculatePace(b.time_clear_finish || b['times.official_:::finish:::'], b.distance || b.event);
                 valA = pace1 === '-' ? Infinity : parseFloat(pace1);
                 valB = pace2 === '-' ? Infinity : parseFloat(pace2);
                 break;
@@ -522,41 +609,39 @@ function renderResultsTable(runners) {
         const row = document.createElement('tr');
         
         // Год рождения
-        let birthYear = 'N/A';
+        let birthYear = '-';
         if (runner.birthdate) {
             const year = new Date(runner.birthdate).getFullYear();
-            birthYear = year > 0 ? year : 'N/A';
+            birthYear = year > 0 ? year : '-';
         }
         
         // Статус и время (поддерживаем оба формата)
         let status = '';
         let time = '';
-        let pace = '-';
         let statusClass = '';
         
         // Переводим статусы на русский
         let statusRu = runner.status || 'Неизвестно';
-        if (runner.status === 'finished') statusRu = '✅ Финишировал';
-        if (runner.status === 'running') statusRu = '🏃 Бежит';
+        if (runner.status === 'finished') statusRu = 'Финишировал';
+        if (runner.status === 'running') statusRu = 'Бежит';
         if (runner.status === 'notstarted') statusRu = 'Не стартовал';
-        if (runner.status === 'disqualified') statusRu = '❌ Дисквалифицирован';
+        if (runner.status === 'disqualified') statusRu = 'Нарушение';
         
         status = statusRu;
         statusClass = `status-${runner.status || 'unknown'}`;
         
-        // Время финиша (поддерживаем оба формата данных)
+        //финиша (поддерживаем оба формата данных)
         const finishTime = runner.time_clear_finish || runner['times.official_:::finish:::'];
         time = formatTime(finishTime);
         
-        // Темп: очищаем от дублирования "мин/км"
-        let paceValue = runner.finish_pace_avg || calculatePace(finishTime, runner.event);
-        if (typeof paceValue === 'string') {
-            // Удаляем все варианты "мин/км" из строки
-            paceValue = paceValue.replace(/\s*мин\/км\s*/g, '').trim();
-            paceValue = parseFloat(paceValue);
-        }
-        if (paceValue && paceValue !== '-' && !isNaN(paceValue)) {
-            pace = parseFloat(paceValue).toFixed(2) + ' мин/км';
+        // Темп: используем значение из БД как есть
+        let pace = runner.finish_pace_avg || '-';
+        // Если значение содержит число, оставляем как есть
+        if (pace && pace !== '#ЗНАЧ!' && typeof pace === 'string') {
+            // Убедимся что есть "мин/км" в конце если нужно
+            if (!pace.includes('мин')) {
+                pace = pace + ' мин/км';
+            }
         } else {
             pace = '-';
         }
@@ -568,11 +653,12 @@ function renderResultsTable(runners) {
         let genderText = 'N/A';
         
         if (runner.gender) {
-            if (runner.gender === 'male') {
-                genderText = 'мужчина';
+            // Теперь gender уже в правильном формате ("Мужчина"/"Женщина")
+            if (runner.gender === 'Мужчина' || runner.gender === 'male') {
+                genderText = 'Мужчина';
                 genderClass = 'gender-male';
-            } else if (runner.gender === 'female') {
-                genderText = 'женщина';
+            } else if (runner.gender === 'Женщина' || runner.gender === 'female') {
+                genderText = 'Женщина';
                 genderClass = 'gender-female';
             } else {
                 genderText = runner.gender;

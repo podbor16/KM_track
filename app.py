@@ -35,18 +35,9 @@ async def lifespan(app: FastAPI):
     
     # Инициализируем пул БД соединений
     pool = initialize_connection_pool(pool_size=5)
-    if pool:
-        settings.logger.info("✓ Database connection pool initialized (size: 5)")
-    else:
-        settings.logger.warning("⚠ Database connection pool initialization failed")
-    settings.logger.info("✓ CORS enabled for: " + ", ".join(settings.CORS_ORIGINS))
-    settings.logger.info("✓ Static files mounted")
-    settings.logger.info("✓ Templates configured")
-    settings.logger.info("\nReady to process requests!")
     settings.logger.info(f"📍 Swagger UI: http://localhost:8000/docs")
     settings.logger.info(f"📍 ReDoc: http://localhost:8000/redoc")
     settings.logger.info(f"📍 Трекер: http://localhost:8000/tracker")
-    settings.logger.info("=" * 50)
     
     yield  # Приложение работает здесь
     

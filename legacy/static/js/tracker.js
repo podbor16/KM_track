@@ -74,9 +74,9 @@ function getStatusText(status) {
         'started':      'На трассе',
         'Finished':     'Финишировал',
         'finished':     'Финишировал',
-        'Disqualified': 'Дисквалифицирован',
-        'disqualified': 'Дисквалифицирован',
-        'Disqualifed':  'Дисквалифицирован',
+        'Disqualified': 'Нарушение',
+        'disqualified': 'Нарушение',
+        'Disqualifed':  'Нарушение',
         'Withdrawn':    'Снялся',
         'withdrawn':    'Снялся'
     };

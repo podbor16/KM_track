@@ -237,6 +237,7 @@ table {
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    table-layout: fixed;
 }
 
 /* Контейнер для таблиц */
@@ -249,6 +250,8 @@ th, td {
     padding: 16px 14px;
     text-align: center;
     border-bottom: 1px solid #e0e0e0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 th {
@@ -270,6 +273,18 @@ th:hover {
     background: linear-gradient(to bottom, var(--primary-color), #1a1a1a);
     opacity: 0.8;
 }
+
+/* Ширины столбцов */
+th:nth-child(1), td:nth-child(1) { width: 4%; }      /* № - узкий */
+th:nth-child(2), td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
+th:nth-child(3), td:nth-child(3) { width: 8%; }     /* Имя */
+th:nth-child(4), td:nth-child(4) { width: 9%; }      /* Год рождения */
+th:nth-child(5), td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
+th:nth-child(6), td:nth-child(6) { width: 7%; }      /* Пол */
+th:nth-child(7), td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
+th:nth-child(8), td:nth-child(8) { width: 10%; }     /* Статус */
+th:nth-child(9), td:nth-child(9) { width: 8%; }      /* Время */
+th:nth-child(10), td:nth-child(10) { width: 10%; }   /* Темп */
 
 tr:nth-child(even) {
     background-color: #f8f9fa;

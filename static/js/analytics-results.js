@@ -419,7 +419,7 @@ function renderResultsTable(runners) {
         let statusRu = runner.status || 'Неизвестно';
         if (runner.status === 'finished') statusRu = 'Финишировал';
         if (runner.status === 'notstarted') statusRu = 'Не стартовал';
-        if (runner.status === 'disqualified') statusRu = 'Дисквалифицирован';
+        if (runner.status === 'disqualified') statusRu = 'Нарушение';
         if (runner.status === 'running') statusRu = 'Бежит';
         
         status = statusRu;

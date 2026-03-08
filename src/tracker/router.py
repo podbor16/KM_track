@@ -801,6 +801,9 @@ async def get_event_results(
                 'time_gun_finish': runner.get('time_gun_finish'),
                 'time_clear_finish': runner.get('time_clear_finish'),
                 'finish_pace_avg': runner.get('finish_pace_avg'),
+                # Добавляем дистанцию от события
+                'distance': runner.get('distance', runner.get('distance_from_event', '5 км')),
+                'event': runner.get('distance', runner.get('distance_from_event', '5 км')),
                 'checkpoints': {
                     'kt1': {
                         'time': runner.get('time_clear_kt1'),
