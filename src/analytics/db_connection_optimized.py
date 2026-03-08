@@ -786,10 +786,30 @@ def get_database_info_optimized() -> Dict[str, Any]:
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
 
-def calculate_age_group(birthdate_or_age) -> str:
+def calculate_age_group(birthdate_or_age, sex: str = None) -> str:
     """
-    Рассчитывает возрастную группу по дате рождения или возрасту
-    (не изменилась - оставлена для совместимости)
+    Рассчитывает возрастную группу по дате рождения/возрасту и полу спортсмена
+    
+    Возрастные группы для МУЖЧИН:
+    - мужчины до 49 лет (1977 г.р. и младше)
+    - мужчины 50-59 лет (1967-1976 г.р.)
+    - мужчины 60-64 года (1962-1966 г.р.)
+    - мужчины 65-69 лет (1957-1961 г.р.)
+    - мужчины 70-74 года (1952-1956 г.р.)
+    - мужчины 75 лет и старше (1951 г.р. и старше)
+    
+    Возрастные группы для ЖЕНЩИН:
+    - женщины до 49 лет (1977 г.р. и младше)
+    - женщины 50-59 лет (1967-1976 г.р.)
+    - женщины 60-64 года (1962-1966 г.р.)
+    - женщины 65 лет и старше (1961 г.р. и старше)
+    
+    Args:
+        birthdate_or_age: Дата рождения (DATE/DATETIME/str 'YYYY-MM-DD') или возраст (int)
+        sex: Пол спортсмена ('male'/'М'/'мужчина' или 'female'/'Ж'/'женщина')
+    
+    Returns:
+        Названия возрастной группы
     """
     if not birthdate_or_age:
         return 'Неизвестно'
@@ -816,18 +836,37 @@ def calculate_age_group(birthdate_or_age) -> str:
         if age is None:
             return 'Неизвестно'
         
-        if age < 49:
-            return '<49'
-        elif age <= 59:
-            return '50-59'
-        elif age <= 64:
-            return '60-64'
-        elif age <= 69:
-            return '65-69'
-        elif age <= 74:
-            return '70-74'
+        # Определяем пол
+        is_male = True  # По умолчанию мужчина
+        if sex:
+            sex_lower = str(sex).lower().strip()
+            if sex_lower in ['female', 'ж', 'женщина', 'women', 'f']:
+                is_male = False
+        
+        # Возрастные группы для МУЖЧИН
+        if is_male:
+            if age < 49:
+                return 'мужчины до 49 лет (1977 г.р. и младше)'
+            elif age <= 59:
+                return 'мужчины 50-59 лет (1967-1976 г.р.)'
+            elif age <= 64:
+                return 'мужчины 60-64 года (1962-1966 г.р.)'
+            elif age <= 69:
+                return 'мужчины 65-69 лет (1957-1961 г.р.)'
+            elif age <= 74:
+                return 'мужчины 70-74 года (1952-1956 г.р.)'
+            else:
+                return 'мужчины 75 лет и старше (1952-1956 г.р.)'
+        # Возрастные группы для ЖЕНЩИН
         else:
-            return '>75'
+            if age < 49:
+                return 'женщины до 49 лет (1977 г.р. и младше)'
+            elif age <= 59:
+                return 'женщины 50-59 лет (1967-1976 г.р.)'
+            elif age <= 64:
+                return 'женщины 60-64 года (1962-1966 г.р.)'
+            else:
+                return 'женщины 65 лет и старше (1961 г.р. и старше)'
     except Exception as e:
         logger.error(f"Ошибка при расчёте возрастной группы: {e}")
         return 'Неизвестно'
@@ -893,8 +932,19 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                         elif 'Возраст' in record:
                             age_info = record['Возраст']
                         
+                        # Определяем пол
+                        sex_info = None
+                        if 'sex' in record:
+                            sex_info = record['sex']
+                        elif 'Пол' in record:
+                            sex_info = record['Пол']
+                        elif 'gender' in record:
+                            sex_info = record['gender']
+                        elif 'gender_en' in record:
+                            sex_info = record['gender_en']
+                        
                         if age_info:
-                            record['category'] = calculate_age_group(age_info)
+                            record['category'] = calculate_age_group(age_info, sex=sex_info)
                         else:
                             record['category'] = 'Неизвестно'
                     
@@ -933,7 +983,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'БегКлуб',
             'birthday': '2005-03-15',
-            'category': '<49',
+            'category': 'мужчины до 49 лет',
             'event_distance': '5 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -945,7 +995,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Марафон',
             'birthday': '1992-07-22',
-            'category': '<49',
+            'category': 'женщины до 49 лет',
             'event_distance': '10 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -957,7 +1007,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Новосибирск',
             'club': 'Спорт',
             'birthday': '1975-11-08',
-            'category': '50-59',
+            'category': 'мужчины 50-59 лет',
             'event_distance': '21 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -969,7 +1019,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'БегКлуб',
             'birthday': '2000-01-30',
-            'category': '<49',
+            'category': 'женщины до 49 лет',
             'event_distance': '5 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -981,7 +1031,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Енисейск',
             'club': 'Олимп',
             'birthday': '1988-09-12',
-            'category': '<49',
+            'category': 'мужчины до 49 лет',
             'event_distance': '10 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -993,7 +1043,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Марафон',
             'birthday': '1960-05-20',
-            'category': '60-64',
+            'category': 'женщины 60-64 года',
             'event_distance': '5 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -1005,7 +1055,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Красноярск',
             'club': 'Спорт',
             'birthday': '1970-12-03',
-            'category': '50-59',
+            'category': 'мужчины 50-59 лет',
             'event_distance': '21 км',
             'event_name': 'Ночной забег',
             'event_year': 2026
@@ -1017,7 +1067,7 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
             'city': 'Ачинск',
             'club': 'Бегуны',
             'birthday': '1985-06-18',
-            'category': '<49',
+            'category': 'женщины до 49 лет',
             'event_distance': '10 км',
             'event_name': 'Ночной забег',
             'event_year': 2026

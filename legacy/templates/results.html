@@ -7,12 +7,15 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+
     <title>Результаты забега</title>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/legacy/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/legacy/static/css/navigation.css?v=1">
     <link rel="stylesheet" href="/legacy/static/css/analytics.css?v=1">
     <link rel="stylesheet" href="/legacy/static/css/krasmarafon-footer.css?v=1">
+
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
@@ -20,8 +23,8 @@
     {% include 'header.html' %}
 
     <div class="container">
+
         <h1>Результаты забега</h1>
-        
         <!-- Карточка события с фото и селекторами -->
         <div class="event-card" id="eventCard" style="background-image: url('/legacy/static/images/events/Ночной%20забег.png');">
             <div class="event-card-overlay"></div>
@@ -51,7 +54,7 @@
        <div class="filters">
            <div class="filter-group">
                <label for="genderFilter">Пол:</label>
-               <select id="genderFilter" onchange="applyFilters()">
+               <select id="genderFilter" onchange="onGenderChange()">
                    <option value="">Все</option>
                    <option value="Мужчина">Мужчина</option>
                    <option value="Женщина">Женщина</option>

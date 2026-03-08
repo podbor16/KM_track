@@ -681,15 +681,24 @@ async def get_registered_runners(
             # Получаем дистанцию из БД
             distance = str(runner_data.get('event_distance', runner_data.get('distance', ''))).strip()
             
+            # Вспомогательная функция для очистки null значений
+            def clean_null_value(value):
+                if value is None:
+                    return None
+                value_str = str(value).strip() if value else ''
+                if value_str.lower() in ('null', 'none', ''):
+                    return None
+                return value_str
+            
             runner_info = RegisteredRunnerInfo(
                 id=str(idx + 1),
-                name=runner_data.get('name', ''),
-                surname=runner_data.get('surname', ''),
+                name=clean_null_value(runner_data.get('name')),
+                surname=clean_null_value(runner_data.get('surname')),
                 full_name=full_name,
-                category=runner_data.get('category', 'Неизвестно'),
-                city=runner_data.get('city', ''),
-                sex=runner_data.get('sex', ''),
-                club=runner_data.get('club', ''),
+                category=clean_null_value(runner_data.get('category')),
+                city=clean_null_value(runner_data.get('city')),
+                sex=clean_null_value(runner_data.get('sex')),
+                club=clean_null_value(runner_data.get('club')),
                 birthday=birthday,
                 distance=distance,
                 registration_date=None,  # Может быть добавлено из БД если есть

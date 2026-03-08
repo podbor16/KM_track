@@ -122,11 +122,11 @@ async function loadRunnersData() {
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
-    const savedValue = ageGroupSelect.value; // Сохраняем текущее выбранное значение
+    const genderFilter = document.getElementById('genderFilter').value; // Получаем выбранный пол
+    const savedValue = ageGroupSelect.value;
     const ageGroups = new Set();
     
     runners.forEach(runner => {
-        // Для стартового списка используем поле 'category' (рассчитанное на сервере)
         if (runner.category) {
             ageGroups.add(runner.category);
         }
@@ -141,18 +141,52 @@ function populateAgeGroups(runners) {
     allOption.textContent = 'Все';
     ageGroupSelect.appendChild(allOption);
     
-    // Сортируем возрастные группы: <49 в начало, >75 в конец, остальные в середине
-    const sortedGroups = Array.from(ageGroups).sort((a, b) => {
-        // <49 должна быть первой после "Все"
-        if (a === '<49') return -1;
-        if (b === '<49') return 1;
+    // Фильтруем группы по выбранному полу
+    let filteredGroups = Array.from(ageGroups);
+    
+    if (genderFilter === 'Мужчина') {
+        // Показываем только мужские группы
+        filteredGroups = filteredGroups.filter(group => group.startsWith('мужчины'));
+    } else if (genderFilter === 'Женщина') {
+        // Показываем только женские группы
+        filteredGroups = filteredGroups.filter(group => group.startsWith('женщины'));
+    }
+    
+    // Сортируем группы в правильном порядке
+    const sortedGroups = filteredGroups.sort((a, b) => {
+        // Если пол не выбран - женские группы в начало, потом мужские
+        if (!genderFilter) {
+            const aIsFemale = a.startsWith('женщины');
+            const bIsFemale = b.startsWith('женщины');
+            
+            if (aIsFemale && !bIsFemale) return -1;
+            if (!aIsFemale && bIsFemale) return 1;
+        }
         
-        // >75 должна быть последней
-        if (a === '>75') return 1;
-        if (b === '>75') return -1;
+        // Определяем порядок возрастов для правильной сортировки
+        const ageOrder = {
+            'до 49 лет': 1,
+            '50-59 лет': 2,
+            '60-64 года': 3,
+            '65-69 лет': 4,
+            '70-74 года': 5,
+            '75 лет и старше': 6,
+            '65 лет и старше': 6  // для женщин после 65
+        };
         
-        // Остальные по алфавиту/возрастанию
-        return a.localeCompare(b, 'ru');
+        // Извлекаем возрастной диапазон из названия группы
+        let aAgeKey = '';
+        let bAgeKey = '';
+        
+        for (let key in ageOrder) {
+            if (a.includes(key)) aAgeKey = key;
+            if (b.includes(key)) bAgeKey = key;
+        }
+        
+        const aOrder = ageOrder[aAgeKey] || 99;
+        const bOrder = ageOrder[bAgeKey] || 99;
+        
+        return aOrder - bOrder;
     });
     
     sortedGroups.forEach(group => {
@@ -162,9 +196,12 @@ function populateAgeGroups(runners) {
         ageGroupSelect.appendChild(option);
     });
     
-    // Восстанавливаем сохраненное значение
-    if (savedValue) {
+    // Восстанавливаем сохраненное значение, если оно еще доступно
+    if (savedValue && Array.from(ageGroupSelect.options).some(opt => opt.value === savedValue)) {
         ageGroupSelect.value = savedValue;
+    } else {
+        // Если выбранное значение больше не доступно, выбираем "Все"
+        ageGroupSelect.value = '';
     }
 }
 
@@ -219,6 +256,14 @@ function populateDistances(runners) {
     if (savedValue) {
         distanceSelect.value = savedValue;
     }
+}
+
+// Обработчик изменения пола - обновляет доступные возрастные группы
+function onGenderChange() {
+    // Пересчитываем доступные возрастные группы в зависимости от выбранного пола
+    populateAgeGroups(allRunners);
+    // Затем применяем все фильтры
+    applyFilters();
 }
 
 // Применяем фильтры к данным
@@ -402,9 +447,9 @@ function renderStartList(runners) {
             <td>${index + 1}</td>
             <td>${lastName}</td>
             <td>${firstName}</td>
+            <td>${birthYear}</td>
             <td>${distance}</td>
             <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
-            <td>${birthYear}</td>
             <td><span class="age-group-tag">${category}</span></td>
             <td>${city}</td>
             <td>${club}</td>

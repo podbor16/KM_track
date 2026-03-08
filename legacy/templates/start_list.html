@@ -45,7 +45,7 @@
        <div class="filters">
            <div class="filter-group">
                <label for="genderFilter">Пол:</label>
-               <select id="genderFilter" onchange="applyFilters()">
+               <select id="genderFilter" onchange="onGenderChange()">
                    <option value="">Все</option>
                    <option value="Мужчина">Мужчина</option>
                    <option value="Женщина">Женщина</option>
@@ -92,9 +92,9 @@
                    <th>№</th>
                    <th onclick="sortTable('surname')">Фамилия</th>
                    <th onclick="sortTable('name')">Имя</th>
+                   <th onclick="sortTable('birthday')">Год рождения</th>
                    <th onclick="sortTable('distance')">Дистанция</th>
                    <th onclick="sortTable('sex')">Пол</th>
-                   <th onclick="sortTable('birthday')">Год рождения</th>
                    <th onclick="sortTable('category')">Возрастная группа</th>
                    <th onclick="sortTable('city')">Город</th>
                    <th onclick="sortTable('club')">Клуб</th>

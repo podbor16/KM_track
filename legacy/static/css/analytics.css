@@ -274,17 +274,28 @@ th:hover {
     opacity: 0.8;
 }
 
-/* Ширины столбцов */
-th:nth-child(1), td:nth-child(1) { width: 4%; }      /* № - узкий */
-th:nth-child(2), td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
-th:nth-child(3), td:nth-child(3) { width: 8%; }     /* Имя */
-th:nth-child(4), td:nth-child(4) { width: 9%; }      /* Год рождения */
-th:nth-child(5), td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
-th:nth-child(6), td:nth-child(6) { width: 7%; }      /* Пол */
-th:nth-child(7), td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
-th:nth-child(8), td:nth-child(8) { width: 10%; }     /* Статус */
-th:nth-child(9), td:nth-child(9) { width: 8%; }      /* Время */
-th:nth-child(10), td:nth-child(10) { width: 10%; }   /* Темп */
+/* Ширины столбцов для таблицы результатов (during-mode-table) */
+.during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
+.during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
+.during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
+.during-mode-table th:nth-child(5), .during-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
+.during-mode-table th:nth-child(6), .during-mode-table td:nth-child(6) { width: 7%; }      /* Пол */
+.during-mode-table th:nth-child(7), .during-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
+.during-mode-table th:nth-child(8), .during-mode-table td:nth-child(8) { width: 10%; }     /* Статус */
+.during-mode-table th:nth-child(9), .during-mode-table td:nth-child(9) { width: 8%; }      /* Время */
+.during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 10%; }   /* Темп */
+
+/* Ширины столбцов для таблицы стартового списка (before-mode-table) */
+.before-mode-table th:nth-child(1), .before-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.before-mode-table th:nth-child(2), .before-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
+.before-mode-table th:nth-child(3), .before-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
+.before-mode-table th:nth-child(4), .before-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
+.before-mode-table th:nth-child(5), .before-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
+.before-mode-table th:nth-child(6), .before-mode-table td:nth-child(6) { width: 7%; }      /* Пол */
+.before-mode-table th:nth-child(7), .before-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
+.before-mode-table th:nth-child(8), .before-mode-table td:nth-child(8) { width: 10%; }      /* Город */
+.before-mode-table th:nth-child(9), .before-mode-table td:nth-child(9) { width: 18%; }     /* Клуб - широкий */
 
 tr:nth-child(even) {
     background-color: #f8f9fa;
@@ -314,17 +325,6 @@ tr:hover {
     background: linear-gradient(to right, #fce4ec, #f8bbd0);
     color: #880e4f;
     border-color: #f8bbd0;
-}
-
-.age-group-tag {
-    display: inline-block;
-    padding: 5px 12px;
-    background: linear-gradient(to right, #fff3e0, #ffe0b2);
-    color: #e65100;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    border: 1px solid #ffe0b2;
 }
 
 .status-registered {
