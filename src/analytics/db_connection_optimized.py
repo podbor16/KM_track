@@ -706,6 +706,89 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             connection.close()
 
 
+def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
+    """
+    Получает сегменты результата из таблицы result_segments
+    
+    Args:
+        result_id: ID результата (из таблицы results)
+    
+    Returns:
+        Список словарей с данными сегментов:
+        - id: ID сегмента
+        - result_id: ID результата
+        - segment_code: Код сегмента (напр. 'start-kt1', 'kt1-finish')
+        - sg_time_clear: Время преодоления участка (HH:MM:SS)
+        - sg_pace_avg: Средний темп на участке (мин/км)
+        - sg_rank_absolute: Позиция в абсолюте по достижению контрольной точки
+        - sg_rank_sex: Позиция в рейтинге по полу
+        - sg_rank_category: Позиция в рейтинге по возрастной категории
+    """
+    logger.info(f"🔍 Загрузка сегментов для result_id={result_id}")
+    
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение")
+        return []
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Ищем таблицу result_segments
+        segments_table = find_table([
+            "result_segments",
+            "result_segment",
+            "segments",
+            "race_segments",
+            "Сегменты результатов"
+        ])
+        
+        if not segments_table:
+            logger.warning("⚠️ Таблица result_segments не найдена")
+            return []
+        
+        # Проверяем наличие необходимых colов
+        columns = get_table_columns(segments_table)
+        required_cols = ['result_id', 'segment_code']
+        missing_cols = [col for col in required_cols if col not in columns]
+        
+        if missing_cols:
+            logger.warning(f"⚠️ Отсутствуют требуемые колонки в {segments_table}: {missing_cols}")
+            return []
+        
+        # Запрос сегментов сортированных по порядку
+        query = f"""
+        SELECT *
+        FROM `{segments_table}`
+        WHERE result_id = %s
+        ORDER BY 
+            CASE 
+                WHEN segment_code LIKE 'start%' THEN 1
+                WHEN segment_code LIKE '%finish%' THEN 999
+                ELSE CAST(SUBSTRING_INDEX(segment_code, '-', 1) AS UNSIGNED)
+            END ASC
+        """
+        
+        cursor.execute(query, (result_id,))
+        segments = cursor.fetchall()
+        
+        if segments:
+            logger.info(f"✅ Найдено {len(segments)} сегментов для result_id={result_id}")
+            cursor.close()
+            return segments
+        else:
+            logger.info(f"ℹ️ Сегменты для result_id={result_id} не найдены")
+            cursor.close()
+            return []
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении сегментов: {e}")
+        return []
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+
 # ============================================================
 # ОПТИМИЗИРОВАННЫЙ DEBUG ENDPOINT
 # ============================================================

@@ -852,6 +852,47 @@ async def get_event_results(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/result-segments", response_model=list, tags=["Analytics"])
+async def get_result_segments_api(result_id: int = Query(..., description="ID результата")) -> list:
+    """
+    Получить сегменты (контрольные точки) для конкретного результата
+    
+    Returns список сегментов с данными:
+    - id: ID сегмента
+    - result_id: ID результата
+    - segment_code: Код сегмента (напр. 'start-kt1', 'kt1-kt2', 'kt1-finish')
+    - sg_time_clear: Время преодоления участка
+    - sg_pace_avg: Средний темп на участке (мин/км)
+    - sg_rank_absolute: Позиция в абсолюте
+    - sg_rank_sex: Позиция по полу
+    - sg_rank_category: Позиция по возрастной категории
+    
+    Examples:
+    - /api/result-segments?result_id=716
+    """
+    try:
+        from src.analytics.db_connection_optimized import get_result_segments
+        
+        logger.info(f"Загрузка сегментов для result_id={result_id}")
+        segments = get_result_segments(result_id)
+        
+        # Преобразуем в список словарей для сериализации
+        result = []
+        for segment in segments:
+            if isinstance(segment, dict):
+                result.append(segment)
+            else:
+                # Если это объект, конвертируем в словарь
+                result.append(dict(segment))
+        
+        logger.info(f"✅ Получено {len(result)} сегментов для result_id={result_id}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения сегментов результата: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ошибка получения сегментов: {str(e)}")
+
+
 # ============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ENDPOINTS
 # ============================================================================

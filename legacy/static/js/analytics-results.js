@@ -188,6 +188,9 @@ function normalizeRunnerData(runners) {
         
         // Нормализуем данные из БД
         return {
+            // ID результата (важно для загрузки сегментов!)
+            id: runner.id || runner.client_id || '',
+            
             // Основная информация
             surname: runner.surname || '',
             name: runner.name || '',
@@ -730,6 +733,31 @@ function renderResultsTable(runners) {
         `;
         
         row.innerHTML = rowHTML;
+        
+        // Добавляем обработчик клика и сохраняем runner.id (result_id)
+        const resultId = runner.id || '';
+        row.dataset.resultId = resultId;
+        row.classList.add('runner-row');
+        
+        // Логируем для отладки
+        if (resultId) {
+            console.log(`✅ Строка ${index + 1} имеет result_id=${resultId}`);
+        } else {
+            console.warn(`⚠️ Строка ${index + 1} (${lastName} ${firstName}) не имеет result_id, runner объект:`, runner);
+        }
+        
+        // Обработчик клика для открытия/закрытия сегментов
+        row.addEventListener('click', function(e) {
+            e.preventDefault();
+            const rId = this.dataset.resultId;
+            console.log(`🖱️ Клик по строке. resultId=${rId}`);
+            if (rId) {
+                toggleSegments(this, rId, `${lastName} ${firstName}`);
+            } else {
+                console.warn('⚠️ result_id не определён');
+            }
+        });
+        
         tbody.appendChild(row);
     });
     
@@ -746,4 +774,285 @@ function showLoading(show) {
 function showError(message) {
     document.getElementById('errorIndicator').textContent = message;
     document.getElementById('errorIndicator').style.display = 'block';
+}
+
+// ============================================================
+// ФУНКЦИИ ДЛЯ РАБОТЫ С РАСКРЫВАЮЩЕЙСЯ ОБЛАСТЬЮ СЕГМЕНТОВ
+// ============================================================
+
+/**
+ * Переименование кода сегмента в читаемый формат
+ */
+function formatSegmentName(code) {
+    if (!code) return '-';
+    
+    const names = {
+        'start': 'Старт',
+        'kt1': 'Разворот',
+        'kt2': 'КТ2',
+        'kt3': 'КT3',
+        'kt4': 'КТ4',
+        'kt5': 'КТ5',
+        'finish': 'Финиш'
+    };
+    
+    // Парсим код типа "start-kt1" или "kt1-finish"
+    const parts = code.split('-');
+    return parts.map(part => names[part] || part).join(' → ');
+}
+
+/**
+ * Получает иконку для сегмента
+ */
+function getSegmentIcon(code) {
+    const icons = {
+        'start': '🏁',
+        'kt1': '🔄',
+        'kt2': '🏃',
+        'kt3': '🏃',
+        'kt4': '🏃',
+        'kt5': '🏃',
+        'finish': '🎯'
+    };
+    
+    const mainPart = code.split('-')[0];
+    return icons[mainPart] || '⚡';
+}
+
+/**
+ * Получает цвет позиции (для фона кружка)
+ */
+function getRankColor(rank) {
+    if (!rank || rank === '-') return 'var(--primary-color)';
+    
+    const rankNum = parseInt(rank);
+    switch(rankNum) {
+        case 1: return '#FFD700'; // золото
+        case 2: return '#C0C0C0'; // серебро
+        case 3: return '#CD7F32'; // бронза
+        default: return 'var(--primary-color)';
+    }
+}
+
+/**
+ * Сравнивает темп между двумя сегментами
+ * Возвращает объект с направлением и процентом изменения
+ */
+function compareSegments(currentPace, previousPace) {
+    if (!currentPace || !previousPace || currentPace === '-' || previousPace === '-') {
+        return null;
+    }
+    
+    // Парсим темп (формат "08:38 мин/км" или "08:38")
+    const parseMinutes = (paceStr) => {
+        if (typeof paceStr !== 'string') return null;
+        const match = paceStr.match(/(\d+):(\d+)/);
+        if (!match) return null;
+        return parseInt(match[1]) + parseInt(match[2]) / 60;
+    };
+    
+    const current = parseMinutes(currentPace);
+    const previous = parseMinutes(previousPace);
+    
+    if (current === null || previous === null) return null;
+    
+    const diff = current - previous; // отрицательное = улучшение
+    const percent = Math.abs((diff / previous) * 100).toFixed(1);
+    const isImproved = diff < 0;
+    
+    return {
+        improved: isImproved,
+        percent: percent,
+        direction: isImproved ? '↓' : '↑'
+    };
+}
+
+/**
+ * Переключает видимость раскрывающейся области сегментов после строки
+ */
+async function toggleSegments(runnerRow, resultId, runnerName) {
+    console.log(`📊 Переключение сегментов для result_id=${resultId}`);
+    
+    const tbody = runnerRow.parentElement;
+    const nextRow = runnerRow.nextElementSibling;
+    
+    // Если уже есть открытая строка сегментов, закрываем все остальные
+    const openSegmentsRows = tbody.querySelectorAll('.segments-row:not(.collapsed)');
+    if (nextRow && nextRow.classList.contains('segments-row')) {
+        // Это наш ряд, просто переключаем его
+        if (nextRow.classList.contains('collapsed')) {
+            nextRow.classList.remove('collapsed');
+        } else {
+            nextRow.classList.add('collapsed');
+        }
+    } else {
+        // Закрываем все открытые ряды
+        openSegmentsRows.forEach(row => {
+            row.classList.add('collapsed');
+        });
+        
+        // Если это была та же строка, просто закрываем и выходим
+        if (nextRow && nextRow.classList.contains('segments-row') && nextRow.classList.contains('collapsed')) {
+            return;
+        }
+        
+        // Создаём новую строку с сегментами
+        const newSegmentsRow = await createSegmentsRow(resultId, runnerName);
+        runnerRow.insertAdjacentElement('afterend', newSegmentsRow);
+    }
+}
+
+/**
+ * Создаёт HTML строку с сегментами (диаграммами)
+ */
+async function createSegmentsRow(resultId, runnerName) {
+    const row = document.createElement('tr');
+    row.classList.add('segments-row');
+    
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('segments-content-wrapper');
+    
+    // Показываем индикатор загрузки
+    const loading = document.createElement('div');
+    loading.classList.add('segments-loading');
+    loading.textContent = 'Загрузка данных сегментов...';
+    wrapper.appendChild(loading);
+    
+    cell.appendChild(wrapper);
+    row.appendChild(cell);
+    
+    // Загружаем данные сегментов
+    try {
+        const response = await fetch(`/api/result-segments?result_id=${resultId}`);
+        
+        if (!response.ok) {
+            throw new Error(`Ошибка сервера: ${response.status}`);
+        }
+        
+        const segments = await response.json();
+        console.log(`✅ Получено ${segments.length} сегментов для result_id=${resultId}`, segments);
+        
+        // Удаляем индикатор загрузки
+        loading.remove();
+        
+        if (segments.length === 0) {
+            const error = document.createElement('div');
+            error.classList.add('segments-error');
+            error.textContent = 'Данные сегментов не найдены';
+            wrapper.appendChild(error);
+            return row;
+        }
+        
+        // Создаём сетку со статистикой сегментов
+        const grid = document.createElement('div');
+        grid.classList.add('segments-grid');
+        
+        segments.forEach((segment, index) => {
+            const card = createSegmentCard(segment, segments, index);
+            grid.appendChild(card);
+        });
+        
+        wrapper.appendChild(grid);
+        
+    } catch (error) {
+        console.error('❌ Ошибка загрузки сегментов:', error);
+        loading.remove();
+        const errorDiv = document.createElement('div');
+        errorDiv.classList.add('segments-error');
+        errorDiv.textContent = `Ошибка загрузки: ${error.message}`;
+        wrapper.appendChild(errorDiv);
+    }
+    
+    return row;
+}
+
+/**
+ * Создаёт карточку с диаграммой для одного сегмента
+ */
+function createSegmentCard(segment, allSegments, segmentIndex) {
+    const card = document.createElement('div');
+    card.classList.add('segment-card');
+    
+    const segmentCode = segment.segment_code || '-';
+    const time = formatTime(segment.sg_time_clear) || '-';
+    const pace = segment.sg_pace_avg || '-';
+    const rankAbsolute = segment.sg_rank_absolute || '-';
+    const rankSex = segment.sg_rank_sex || '-';
+    const rankCategory = segment.sg_rank_category || '-';
+    
+    const icon = getSegmentIcon(segmentCode);
+    const name = formatSegmentName(segmentCode);
+    
+    // Сравниваем с предыдущим сегментом
+    let paceComparison = '';
+    if (segmentIndex > 0) {
+        const prevSegment = allSegments[segmentIndex - 1];
+        const comparison = compareSegments(pace, prevSegment.sg_pace_avg);
+        if (comparison) {
+            const color = comparison.improved ? '#27ae60' : '#e74c3c';
+            paceComparison = `
+                <div class="pace-comparison" style="color: ${color};">
+                    ${comparison.direction} ${comparison.percent}%
+                </div>
+            `;
+        }
+    }
+    
+    // Цвета для медалей
+    const colorAbsolute = getRankColor(rankAbsolute);
+    const colorSex = getRankColor(rankSex);
+    const colorCategory = getRankColor(rankCategory);
+    
+    card.innerHTML = `
+        <div class="segment-card-title">
+            <span class="segment-icon">${icon}</span>
+            <span>${name}</span>
+        </div>
+        
+        <div class="segment-info-row">
+            <span class="segment-distance">📏 2,5 км</span>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">⏱️ Время</span>
+            <span class="segment-time">${time}</span>
+        </div>
+        
+        <div class="segment-stat">
+            <div>
+                <span class="segment-stat-label">🏃 Темп</span>
+                <span class="segment-stat-value">${pace}</span>
+            </div>
+            ${paceComparison}
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">🏆 В абсолюте</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="background-color: ${colorAbsolute};"> ${rankAbsolute}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">♀♂ По полу</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorSex};"> ${rankSex}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">🎂 По категории</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorCategory};"> ${rankCategory}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+    `;
+    
+    return card;
 }
