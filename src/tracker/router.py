@@ -894,6 +894,183 @@ async def get_result_segments_api(result_id: int = Query(..., description="ID р
 
 
 # ============================================================================
+# СТАТИСТИКА ПО ЗАБЕГАМ / СОБЫТИЯМ
+# ============================================================================
+
+@router.get("/api/race-stats-db", tags=["Race Analysis"])
+async def get_race_stats_from_db(
+    race_name: str = Query(None, description="Название забега"),
+):
+    """
+    Получить статистику по забегу из БД MySQL:
+    - Лучший результат (время и темп)
+    - Средний темп всех участников
+    - Средний темп мужчин и женщин
+    - Распределение участников по годам (для графика)
+    """
+    try:
+        from src.analytics.db_connection_optimized import get_race_stats_from_db as get_stats
+        
+        if not race_name:
+            raise HTTPException(status_code=400, detail="race_name parameter is required")
+        
+        # Получаем статистику из БД
+        stats = get_stats(race_name)
+        
+        if not stats or not stats.get('years_data'):
+            raise HTTPException(
+                status_code=404,
+                detail=f"No race data found for event: {race_name}"
+            )
+        
+        return stats
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting race stats from DB: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/race-stats", tags=["Race Analysis"])
+async def get_race_stats(
+    event_name: str = Query(None, description="Название события (например, '7 km', '5 km')"),
+):
+    """
+    Получить статистику по забегу:
+    - Название и距离
+    - Лучший результат (время и темп)
+    - Средний темп всех участников
+    - Средний темп мужчин
+    - Средний темп женщин
+    - Распределение участников по статусам
+    """
+    try:
+        # Загружаем данные из race_data.json
+        race_data_path = Path(settings.RACE_DATA_FILE)
+        with open(race_data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        runners_data = data.get('data', [])
+        
+        # Фильтруем по типу события
+        if event_name:
+            runners_data = [r for r in runners_data if r.get('event') == event_name]
+        
+        if not runners_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No runners found for event: {event_name}" if event_name else "No runners found"
+            )
+        
+        # Вспомогательная функция для парсинга времени из формата минуты'секунды"
+        def parse_pace_to_seconds(pace_str):
+            """Парсит строку вида '4\'22\"/Km' в количество секунд на км"""
+            if not pace_str or isinstance(pace_str, (int, float)):
+                return None
+            try:
+                # pace_str формат: "4'22\"/Km" -> 4 минуты 22 секунды на км
+                pace_str = str(pace_str).strip()
+                # Удаляем '/Km' и другие суффиксы
+                pace_str = pace_str.split('/')[0].strip()
+                # Разбираем минуты и секунды
+                parts = pace_str.replace('"', '').split("'")
+                if len(parts) == 2:
+                    minutes = int(parts[0])
+                    seconds = int(parts[1])
+                    return minutes * 60 + seconds
+            except:
+                pass
+            return None
+        
+        # Вспомогательная функция для преобразования секунд в строку мин/км
+        def seconds_to_pace_string(seconds):
+            """Преобразует секунды в строку типа '4\'22\"/Km'"""
+            if not seconds:
+                return "N/A"
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes}'{secs:02d}\"/Km"
+        
+        # Парсим данные участников
+        male_paces = []
+        female_paces = []
+        all_paces = []
+        best_pace = None
+        best_runner = None
+        
+        finished_runners = [r for r in runners_data if r.get('status') == 'finished' or 
+                           r.get('times.official_:::finish:::') is not None]
+        
+        for runner in finished_runners:
+            pace_str = runner.get('intervalaverages_:::full-1:::')
+            pace_seconds = parse_pace_to_seconds(pace_str)
+            
+            if pace_seconds:
+                all_paces.append(pace_seconds)
+                
+                # Отслеживаем лучший результат
+                if best_pace is None or pace_seconds < best_pace:
+                    best_pace = pace_seconds
+                    # Вычисляем время финиша в минутах
+                    official_time = runner.get('times.official_:::finish:::')
+                    if official_time and isinstance(official_time, (int, float)):
+                        finish_time_seconds = official_time / 1000  # конвертируем из мс
+                        finish_minutes = int(finish_time_seconds / 60)
+                        finish_secs = int(finish_time_seconds % 60)
+                        best_runner = {
+                            'name': runner.get('name', ''),
+                            'surname': runner.get('surname', ''),
+                            'full_name': runner.get('fullName', ''),
+                            'gender': runner.get('gender', ''),
+                            'time': f"{finish_minutes}:{finish_secs:02d}",
+                            'pace': pace_str,
+                        }
+                
+                # Разделяем по полам
+                gender = runner.get('gender', '').lower()
+                if gender in ['male', 'm', 'мужчина']:
+                    male_paces.append(pace_seconds)
+                elif gender in ['female', 'f', 'женщина']:
+                    female_paces.append(pace_seconds)
+        
+        # Вычисляем средние темпы
+        avg_pace = sum(all_paces) / len(all_paces) if all_paces else None
+        male_avg_pace = sum(male_paces) / len(male_paces) if male_paces else None
+        female_avg_pace = sum(female_paces) / len(female_paces) if female_paces else None
+        
+        # Формируем ответ
+        response = {
+            'event_name': event_name or 'All Events',
+            'total_runners': len(runners_data),
+            'finished_runners': len(finished_runners),
+            'running_runners': sum(1 for r in runners_data if r.get('status') == 'running'),
+            'not_started_runners': sum(1 for r in runners_data if r.get('status') == 'notstarted'),
+            'best_result': {
+                'runner': best_runner,
+                'pace': seconds_to_pace_string(best_pace) if best_pace else 'N/A',
+            } if best_runner else None,
+            'average_pace': {
+                'all': seconds_to_pace_string(avg_pace) if avg_pace else 'N/A',
+                'male': seconds_to_pace_string(male_avg_pace) if male_avg_pace else 'N/A',
+                'female': seconds_to_pace_string(female_avg_pace) if female_avg_pace else 'N/A',
+            },
+            'statistics': {
+                'male_count': len(male_paces),
+                'female_count': len(female_paces),
+            },
+        }
+        
+        return response
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting race stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ENDPOINTS
 # ============================================================================
 

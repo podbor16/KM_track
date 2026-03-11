@@ -620,90 +620,285 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
         
-        # Находим таблицу results
-        results_table = find_table([
-            "results",
-            "Results",
-            "RESULTS",
-            "гонка",
-            "забеги"
-        ])
-        
-        if not results_table:
-            logger.error("❌ Таблица results не найдена")
-            return []
-        
-        # Получаем информацию о колонках
-        columns = get_table_columns(results_table)
-        
-        # Проверяем наличие необходимых полей
-        has_event_id = any(col.lower() == 'event_id' for col in columns)
-        has_birthday = any(col.lower() == 'birthday' for col in columns)
-        
-        if not has_event_id:
-            logger.warning(f"⚠️ Поле 'event_id' не найдено в таблице {results_table}")
-            cursor.close()
-            return []
-        
         # Запрос результатов по названию события и году
-        # Используем JOIN с таблицей events если она есть
-        query = f"""
-        SELECT r.* FROM `{results_table}` r
+        query = """
+        SELECT 
+            r.id,
+            r.surname,
+            r.name,
+            r.birthday,
+            r.client_id,
+            r.event_id,
+            r.sex,
+            r.start_number,
+            r.category,
+            r.race_status,
+            r.time_gun_start,
+            r.time_clear_start,
+            r.time_gun_finish,
+            r.time_clear_finish,
+            r.rank_absolute,
+            r.rank_sex,
+            r.rank_category,
+            r.finish_pace_avg,
+            r.time_clear_kt1,
+            r.time_clear_kt2,
+            r.time_clear_kt3,
+            r.time_clear_kt4,
+            r.time_clear_kt5,
+            r.pace_avg_kt1,
+            r.pace_avg_kt2,
+            r.pace_avg_kt3,
+            r.pace_avg_kt4,
+            r.pace_avg_kt5,
+            e.event_name,
+            e.event_distance,
+            e.event_year
+        FROM results r
         INNER JOIN events e ON r.event_id = e.id
-        WHERE e.name = %s AND YEAR(e.date) = %s
+        WHERE e.event_name = %s AND e.event_year = %s
         ORDER BY r.rank_absolute ASC
         """
         
-        try:
-            cursor.execute(query, (event_name, year))
-            results = cursor.fetchall()
-            
-            if results:
-                results_list = [dict(r) for r in results]
-                logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
-                cursor.close()
-                return results_list
-        except Exception as join_error:
-            # Если JOIN не работает, пробуем альтернативный способ
-            logger.warning(f"⚠️ JOIN затруднен, пробуем прямой поиск: {join_error}")
-            
-            query = f"""
-            SELECT r.* FROM `{results_table}` r
-            WHERE r.category LIKE CONCAT(%s, '%%')
-            ORDER BY r.rank_absolute ASC
-            LIMIT 1000
-            """
-            
-            # Изменяем запрос на поиск по году через birthday
-            if has_birthday:
-                year_start = f"{year}-01-01"
-                year_end = f"{year}-12-31"
-                query = f"""
-                SELECT * FROM `{results_table}`
-                WHERE YEAR(birthday) IS NOT NULL
-                ORDER BY rank_absolute ASC
-                LIMIT 1000
-                """
-        
-        cursor.execute(query, (event_name,))
+        cursor.execute(query, (event_name, year))
         results = cursor.fetchall()
         
         if results:
             results_list = [dict(r) for r in results]
-            logger.info(f"✅ Найдено {len(results_list)} результатов")
-            cursor.close()
+            logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
             return results_list
         else:
-            logger.warning(f"⚠️ Результаты не найдены")
-            cursor.close()
+            logger.warning(f"⚠️ Результаты не найдены для {event_name} {year}")
             return []
             
     except Exception as e:
         logger.error(f"❌ Ошибка при получении результатов: {e}")
         return []
     finally:
-        if connection.is_connected():
-            connection.close()
+        # Соединение из пула, его не нужно закрывать явно
+        try:
+            if cursor:
+                cursor.close()
+        except:
+            pass
+
+
+def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
+    """
+    Получить статистику по забегу из БД:
+    - Название и дистанция
+    - Лучший результат
+    - Средние темпы по полам
+    - История по годам
+    
+    Args:
+        event_name: Название события (например, "Ночной забег")
+    
+    Returns:
+        Словарь со статистикой
+    """
+    logger.info(f"🔍 Получение статистики забега: {event_name}")
+    
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение")
+        return {}
+    
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        
+        # Получаем все года для этого события
+        years_query = """
+        SELECT DISTINCT e.event_year
+        FROM events e
+        WHERE e.event_name = %s
+        ORDER BY e.event_year DESC
+        """
+        
+        cursor.execute(years_query, (event_name,))
+        years_result = cursor.fetchall()
+        
+        if not years_result:
+            logger.warning(f"⚠️ События с названием '{event_name}' не найдены")
+            cursor.close()
+            return {}
+        
+        years = [y['event_year'] for y in years_result]
+        logger.info(f"✅ Найдены года: {years}")
+        
+        # Собираем статистику по годам
+        years_data = []
+        best_result = None
+        all_male_paces = []
+        all_female_paces = []
+        race_distance = None
+        
+        for year in years:
+            # Запрос для каждого года
+            year_query = """
+            SELECT 
+                r.surname,
+                r.name,
+                r.sex,
+                r.time_clear_finish,
+                r.finish_pace_avg,
+                r.race_status,
+                e.event_distance,
+                e.event_year
+            FROM results r
+            INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s AND e.event_year = %s
+            """
+            
+            cursor.execute(year_query, (event_name, year))
+            year_results = cursor.fetchall()
+            
+            if not year_results:
+                logger.debug(f"⚠️ Нет результатов для {event_name} {year}")
+                continue
+            
+            # Сохраняем дистанцию из первого результата
+            if not race_distance and year_results:
+                race_distance = year_results[0].get('event_distance')
+            
+            # Обработка результатов для года
+            finished_runners = [r for r in year_results if r['race_status'] in ['Finished', 'finished']]
+            male_paces = []
+            female_paces = []
+            best_time = None
+            best_runner = None
+            
+            for result in finished_runners:
+                # Проверяем пол
+                sex = result.get('sex', '').lower()
+                pace = result.get('finish_pace_avg')
+                
+                # Парсим темп
+                def parse_pace(pace_str):
+                    if not pace_str:
+                        return None
+                    try:
+                        pace_str = str(pace_str).strip()
+                        # Формат: "03:12 мин/км" или "03:12"/км" или "03'12"/км"
+                        # Извлекаем числа в начале
+                        
+                        # Удаляем текст после чисел
+                        pace_str = pace_str.replace('мин/км', '').replace('/км', '').strip()
+                        
+                        if ':' in pace_str:
+                            parts = pace_str.split(':')
+                            if len(parts) == 2:
+                                minutes = int(parts[0])
+                                seconds_part = parts[1].replace('"', '').strip()
+                                # Берем только цифры
+                                seconds = int(''.join(c for c in seconds_part if c.isdigit()))
+                                return minutes * 60 + seconds
+                        elif "'" in pace_str:
+                            parts = pace_str.replace('"', '').split("'")
+                            if len(parts) == 2:
+                                minutes = int(parts[0])
+                                seconds = int(parts[1])
+                                return minutes * 60 + seconds
+                    except:
+                        pass
+                    return None
+                
+                pace_seconds = parse_pace(pace)
+                
+                # Добавляем в общие пулы для среднего
+                if pace_seconds:
+                    if sex in ['мужчина', 'м', 'male', 'муж', 'm']:
+                        male_paces.append(pace_seconds)
+                        all_male_paces.append(pace_seconds)
+                    elif sex in ['женщина', 'ж', 'female', 'жен', 'f']:
+                        female_paces.append(pace_seconds)
+                        all_female_paces.append(pace_seconds)
+                
+                # Ищем лучший результат
+                time_finish = result.get('time_clear_finish')
+                if time_finish:
+                    if best_time is None or (isinstance(time_finish, str) and time_finish < best_time):
+                        best_time = time_finish
+                        best_runner = {
+                            'name': f"{result.get('surname', '')} {result.get('name', '')}".strip(),
+                            'time': str(time_finish),
+                            'pace': str(pace) if pace else 'N/A'
+                        }
+            
+            # Функция преобразования секунд в строку
+            def seconds_to_pace_string(seconds):
+                if not seconds:
+                    return "N/A"
+                minutes = int(seconds // 60)
+                secs = int(seconds % 60)
+                return f"{minutes:02d}:{secs:02d} мин/км"
+            
+            # Вычисляем средние для года
+            avg_all = sum(male_paces + female_paces) / (len(male_paces) + len(female_paces)) if (male_paces or female_paces) else None
+            avg_male = sum(male_paces) / len(male_paces) if male_paces else None
+            avg_female = sum(female_paces) / len(female_paces) if female_paces else None
+            
+            year_data = {
+                'year': year,
+                'total_runners': len(year_results),
+                'finished_runners': len(finished_runners),
+                'male_count': len(male_paces),
+                'female_count': len(female_paces),
+                'average_pace': seconds_to_pace_string(avg_all),
+                'male_avg_pace': seconds_to_pace_string(avg_male),
+                'female_avg_pace': seconds_to_pace_string(avg_female),
+            }
+            
+            years_data.append(year_data)
+            
+            # Обновляем общий лучший результат если это первый год
+            if not best_result and best_runner:
+                best_result = best_runner
+        
+        # Функция преобразования секунд в строку
+        def seconds_to_pace_string(seconds):
+            if not seconds:
+                return "N/A"
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes:02d}:{secs:02d} мин/км"
+        
+        # Вычисляем общие средние
+        avg_all_overall = sum(all_male_paces + all_female_paces) / (len(all_male_paces) + len(all_female_paces)) if (all_male_paces or all_female_paces) else None
+        avg_male_overall = sum(all_male_paces) / len(all_male_paces) if all_male_paces else None
+        avg_female_overall = sum(all_female_paces) / len(all_female_paces) if all_female_paces else None
+        
+        cursor.close()
+        
+        result = {
+            'race_name': event_name,
+            'race_distance': race_distance,
+            'years_data': years_data,
+            'best_result': best_result,
+            'average_paces': {
+                'all': seconds_to_pace_string(avg_all_overall),
+                'male': seconds_to_pace_string(avg_male_overall),
+                'female': seconds_to_pace_string(avg_female_overall)
+            },
+            'gender_stats': {
+                'male_count': len(all_male_paces),
+                'female_count': len(all_female_paces)
+            }
+        }
+        
+        logger.info(f"✅ Статистика загружена для {event_name}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения статистики: {e}\n{repr(e)}")
+        return {}
+    finally:
+        # Соединение из пула, его не нужно закрывать явно
+        try:
+            if cursor:
+                cursor.close()
+        except:
+            pass
 
 
 def get_result_segments(result_id: int) -> List[Dict[str, Any]]:

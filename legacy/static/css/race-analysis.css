@@ -248,9 +248,9 @@
     background-color: var(--white);
     border-radius: 12px;
     padding: 40px;
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
+    max-width: 900px;
+    width: 95%;
+    max-height: 90vh;
     overflow-y: auto;
     z-index: 1002;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -309,7 +309,238 @@
     margin: 0;
 }
 
+/* === НОВЫЕ СТИЛИ ДЛЯ ДЕТАЛЕЙ ЗАБЕГА === */
+
+.race-details {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.race-info,
+.race-info-section {
+    padding: 0;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin: 0 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+/* Информация о забеге */
+.race-info-section .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.race-info-section .info-row:last-child {
+    border-bottom: none;
+}
+
+.race-info-section .info-label {
+    font-weight: 600;
+    color: var(--text-dark);
+    flex: 0 0 auto;
+    margin-right: 12px;
+}
+
+.race-info-section .info-value {
+    color: var(--text-light);
+    text-align: right;
+    flex: 1;
+}
+
+/* Сетка статистики */
+.race-stats-section {
+    margin: 0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.stat-item {
+    background-color: #f8f9fa;
+    padding: 16px;
+    border-radius: 8px;
+    text-align: center;
+    border-left: 4px solid var(--primary-color);
+}
+
+.stat-item:nth-child(2) {
+    border-left-color: #059C43;
+}
+
+.stat-item:nth-child(3) {
+    border-left-color: #85c6e2;
+}
+
+.stat-item:nth-child(4) {
+    border-left-color: #562872;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--text-light);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+/* Лучший результат */
+.race-best-section {
+    margin: 0;
+}
+
+.best-result {
+    background: linear-gradient(135deg, #fff5f8 0%, #fffbfc 100%);
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.best-runner-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin-bottom: 12px;
+}
+
+.best-result-metrics {
+    display: flex;
+    gap: 20px;
+}
+
+.best-result-metrics .metric {
+    flex: 1;
+}
+
+.metric-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.metric-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* Средние темпы */
+.race-pace-section {
+    margin: 0;
+}
+
+.pace-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.pace-item {
+    background-color: #f0f8ff;
+    padding: 16px;
+    border-radius: 8px;
+    text-align: center;
+    border-top: 3px solid #00BFDF;
+}
+
+.pace-item:nth-child(2) {
+    background-color: #f8f5ff;
+    border-top-color: #562872;
+}
+
+.pace-item:nth-child(3) {
+    background-color: #fff5f8;
+    border-top-color: var(--primary-color);
+}
+
+.pace-label {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.pace-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-dark);
+    font-family: 'Courier New', monospace;
+}
+
+/* График участников по годам */
+.race-chart-section {
+    margin: 0;
+}
+
+.race-chart-container {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    max-height: 400px;
+    min-height: 300px;
+    position: relative;
+}
+
+.race-chart-container canvas {
+    max-height: 350px;
+}
+
+.chart-loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--text-light);
+    font-size: 14px;
+}
+
 /* Адаптивный дизайн */
+@media (max-width: 768px) {
+    .pace-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .best-result-metrics {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .race-modal-container {
+        padding: 20px;
+        max-width: 98%;
+        max-height: 98vh;
+    }
+    
+    .race-chart-container {
+        max-height: 300px;
+        min-height: 250px;
+    }
+}
 @media (max-width: 768px) {
     .race-analysis-container {
         padding: 20px 20px;
