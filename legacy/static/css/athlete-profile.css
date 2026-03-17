@@ -1,35 +1,75 @@
+/* Переменные стилей */
+:root {
+    --primary-color: #EE2D62;
+    --text-dark: #333;
+    --text-light: #666;
+    --background: #faf8fa;
+    --white: #ffffff;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
+}
+
 .athlete-profile-container {
     max-width: 1200px;
-    margin: 20px auto;
-    padding: 20px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    background-color: var(--background);
+}
+
+/* Кнопка возврата */
+.back-button a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background-color: var(--white);
+    color: var(--primary-color);
+    font-weight: 600;
+    text-decoration: none;
+    border: 2px solid var(--primary-color);
+    border-radius: 50px;
+    transition: all 0.3s ease;
+    font-size: 15px;
+    box-shadow: var(--shadow);
+}
+
+.back-button a:hover {
+    background-color: var(--primary-color);
+    color: var(--white);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(238, 45, 98, 0.3);
+}
+
+.back-button a:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(238, 45, 98, 0.2);
+}
+
+.back-button svg {
+    width: 20px;
+    height: 20px;
+    transform: scaleX(-1);
 }
 
 .back-button {
     display: inline-block;
-    margin-bottom: 20px;
-    padding: 10px 20px;
-    background-color: #EE2D62;
-    color: white;
-    text-decoration: none;
-    border-radius: 4px;
-    transition: background-color 0.3s;
-}
-
-.back-button:hover {
-    background-color: #d41451;
+    margin-bottom: 30px;
 }
 
 .profile-header {
     background: linear-gradient(135deg, #EE2D62 0%, #d41451 100%);
-    color: white;
-    padding: 30px;
-    border-radius: 8px;
-    margin-bottom: 30px;
+    color: var(--white);
+    padding: 40px;
+    border-radius: 12px;
+    margin-bottom: 40px;
+    box-shadow: var(--shadow-hover);
 }
 
 .profile-header h1 {
-    margin: 0 0 10px 0;
-    font-size: 32px;
+    margin: 0 0 20px 0;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
 }
 
 .profile-info {
@@ -40,76 +80,96 @@
 }
 
 .info-item {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 15px;
-    border-radius: 4px;
-    border-left: 4px solid white;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 18px;
+    border-radius: 8px;
+    border-left: 4px solid rgba(255, 255, 255, 0.8);
+    transition: all 0.3s ease;
+}
+
+.info-item:hover {
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .info-label {
     font-size: 12px;
     text-transform: uppercase;
     opacity: 0.8;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
 }
 
 .info-value {
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 20px;
+    font-weight: 700;
 }
 
 .results-section {
-    margin-top: 40px;
+    margin-top: 50px;
+    background: var(--white);
+    padding: 35px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
 }
 
 .results-section h2 {
-    color: #EE2D62;
-    border-bottom: 2px solid #EE2D62;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
+    color: var(--primary-color);
+    border-bottom: 3px solid var(--primary-color);
+    padding-bottom: 15px;
+    margin-bottom: 30px;
+    font-size: 28px;
+    font-weight: 700;
 }
 
 .races-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+    margin-bottom: 30px;
+    margin-top: 20px;
 }
 
 .race-card {
-    background: white;
-    border: 2px solid #eee;
-    border-radius: 8px;
-    padding: 20px;
-    transition: transform 0.3s, box-shadow 0.3s;
+    background: var(--white);
+    border: 2px solid #f0f0f0;
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow);
 }
 
 .race-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(238, 45, 98, 0.2);
-    border-color: #EE2D62;
+    transform: translateY(-6px);
+    box-shadow: 0 8px 24px rgba(238, 45, 98, 0.15);
+    border-color: var(--primary-color);
 }
 
 .race-date {
-    color: #EE2D62;
-    font-weight: bold;
-    margin-bottom: 10px;
-    font-size: 14px;
+    color: var(--primary-color);
+    font-weight: 700;
+    margin-bottom: 12px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .race-distance {
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 10px;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 15px;
+    color: var(--text-dark);
 }
 
 .race-status {
     display: inline-block;
-    padding: 5px 10px;
-    border-radius: 4px;
+    padding: 6px 14px;
+    border-radius: 20px;
     font-size: 12px;
-    font-weight: bold;
-    margin: 5px 5px 5px 0;
+    font-weight: 700;
+    margin: 8px 8px 8px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .status-finished {
@@ -133,119 +193,358 @@
 }
 
 .race-time {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid #eee;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid #f5f5f5;
 }
 
 .time-row {
     display: flex;
     justify-content: space-between;
-    margin: 5px 0;
-    font-size: 14px;
+    align-items: center;
+    margin: 10px 0;
+    font-size: 15px;
 }
 
 .time-label {
-    color: #666;
+    color: var(--text-light);
+    font-weight: 600;
 }
 
 .time-value {
-    font-weight: bold;
-    color: #333;
+    font-weight: 700;
+    color: var(--text-dark);
 }
 
 .pace {
-    color: #EE2D62;
-    font-weight: bold;
+    color: var(--primary-color);
+    font-weight: 700;
 }
 
 .no-races {
     text-align: center;
-    padding: 40px;
-    background: #f5f5f5;
-    border-radius: 8px;
-    color: #666;
+    padding: 60px 20px;
+    background: #f9f9f9;
+    border-radius: 12px;
+    color: var(--text-light);
+    font-size: 16px;
+    font-weight: 500;
+    margin-top: 20px;
 }
 
 .loading {
     text-align: center;
-    padding: 40px;
+    padding: 60px 20px;
     font-size: 18px;
-    color: #666;
+    color: var(--text-light);
 }
 
 .error {
-    background-color: #f44336;
-    color: white;
+    background: linear-gradient(135deg, #ff6b6b 0%, #f44336 100%);
+    color: var(--white);
     padding: 20px;
-    border-radius: 8px;
+    border-radius: 12px;
     margin: 20px 0;
+    font-weight: 600;
+}
+
+#loadingContainer {
+    text-align: center;
+    padding: 40px;
+}
+
+#errorContainer {
+    margin: 20px 0;
+}
+
+/* === РАСШИРЕННАЯ СТАТИСТИКА === */
+
+.extended-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin: 30px 0 50px 0;
+    padding: 30px;
+    background: linear-gradient(135deg, #f5f5f5 0%, #fafafa 100%);
+    border-radius: 12px;
+    border-left: 4px solid var(--primary-color);
+}
+
+.extended-stat-item {
+    background: var(--white);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.3s ease;
+}
+
+.extended-stat-item:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-hover);
+}
+
+.extended-stat-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-light);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.extended-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary-color);
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.extended-stat-secondary {
+    font-size: 12px;
+    color: var(--text-light);
+    font-weight: 500;
+}
+
+/* === ГРАФИКИ === */
+
+.charts-section {
+    margin: 50px 0;
+    background: var(--white);
+    padding: 35px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+.charts-section h2 {
+    color: var(--primary-color);
+    border-bottom: 3px solid var(--primary-color);
+    padding-bottom: 15px;
+    margin-bottom: 30px;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.chart-card {
+    background: var(--white);
+    border: 2px solid #f0f0f0;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+}
+
+.chart-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 8px 24px rgba(238, 45, 98, 0.1);
+}
+
+.chart-card h3 {
+    color: var(--text-dark);
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-container canvas {
+    max-height: 300px;
+}
+
+/* === ФИЛЬТРЫ === */
+
+.filters-container {
+    background: linear-gradient(135deg, #f9f9f9 0%, #fafafa 100%);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    border-left: 4px solid var(--primary-color);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-group label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.filter-select {
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    background: var(--white);
+    color: var(--text-dark);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 150px;
+}
+
+.filter-select:hover,
+.filter-select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(238, 45, 98, 0.1);
+}
+
+.btn-filter-clear {
+    padding: 10px 20px;
+    background: var(--white);
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    letter-spacing: 0.3px;
+    align-self: flex-end;
+}
+
+.btn-filter-clear:hover {
+    background: var(--primary-color);
+    color: var(--white);
+    transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .extended-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .filters-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .filter-select {
+        min-width: 100%;
+    }
 }
 
 .stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    margin-bottom: 30px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+    margin-top: 30px;
 }
 
 .stat-card {
-    background: #f5f5f5;
-    padding: 15px;
-    border-radius: 8px;
+    background: var(--white);
+    padding: 25px;
+    border-radius: 12px;
     text-align: center;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+    border-left: 4px solid var(--primary-color);
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
 }
 
 .stat-number {
-    font-size: 28px;
-    font-weight: bold;
-    color: #EE2D62;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--primary-color);
+    line-height: 1;
 }
 
 .stat-label {
-    font-size: 12px;
-    color: #666;
-    margin-top: 5px;
+    font-size: 14px;
+    color: var(--text-light);
+    margin-top: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .table-wrapper {
     overflow-x: auto;
     margin-top: 20px;
+    border-radius: 8px;
 }
 
 .races-table {
     width: 100%;
     border-collapse: collapse;
-    background: white;
+    background: var(--white);
 }
 
 .races-table thead {
-    background-color: #EE2D62;
-    color: white;
+    background: linear-gradient(135deg, var(--primary-color) 0%, #d41451 100%);
+    color: var(--white);
 }
 
 .races-table th {
-    padding: 12px;
+    padding: 16px;
     text-align: left;
-    font-weight: bold;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.3px;
 }
 
 .races-table td {
-    padding: 12px;
-    border-bottom: 1px solid #eee;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    font-weight: 500;
 }
 
 .races-table tbody tr:hover {
-    background-color: #f5f5f5;
+    background-color: #f9f9f9;
+}
+
+.races-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 @media (max-width: 768px) {
     .profile-header {
-        padding: 20px;
+        padding: 25px;
     }
 
     .profile-header h1 {
-        font-size: 24px;
+        font-size: 28px;
     }
 
     .races-grid {
@@ -253,6 +552,10 @@
     }
 
     .athlete-profile-container {
-        padding: 10px;
+        padding: 20px 10px;
+    }
+    
+    .results-section {
+        padding: 20px;
     }
 }

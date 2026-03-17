@@ -400,12 +400,12 @@ def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[st
 
 def get_athlete_results_optimized(surname: str, name: str) -> tuple:
     """
-    Оптимизированное получение результатов спортсмена
+    Оптимизированное получение результатов спортсмена с информацией о событиях
     
     УЛУЧШЕНИЯ:
-    1. Единое соединение из пула для всех запросов
-    2. Кэшированные названия таблиц
-    3. Минимизация количества запросов
+    1. JOIN с таблицей events для получения event_name и event_distance
+    2. Единое соединение из пула для всех запросов
+    3. Кэшированные названия таблиц
     4. Параметризованные запросы
     
     Args:
@@ -413,7 +413,7 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
         name: Имя спортсмена
     
     Returns:
-        Кортеж (информация о спортсмене, список его результатов)
+        Кортеж (информация о спортсмене, список его результатов с информацией о событиях)
     """
     logger.info(f"🔍 Поиск спортсмена: {surname} {name}")
     
@@ -451,23 +451,20 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
             logger.error("❌ Не найдены поля фамилии и имени")
             return {}, []
         
-        # Проверяем есть ли поле gunTime для сортировки
-        has_gunTime = any(col.lower() == 'guntime' for col in columns)
-        
-        # ОДИН ЗАПРОС для получения информации и результатов
-        if has_gunTime:
-            query = f"""
-            SELECT * FROM `{results_table}` 
-            WHERE `{surname_field}` = %s 
-              AND `{name_field}` = %s
-            ORDER BY gunTime DESC
-            """
-        else:
-            query = f"""
-            SELECT * FROM `{results_table}` 
-            WHERE `{surname_field}` = %s 
-              AND `{name_field}` = %s
-            """
+        # ЗАПРОС с JOIN к таблице events для получения дистанции и названия события
+        query = f"""
+        SELECT 
+            r.*,
+            e.event_name,
+            e.event_distance,
+            e.event_year,
+            e.event_date
+        FROM `{results_table}` r
+        LEFT JOIN events e ON r.event_id = e.id
+        WHERE r.`{surname_field}` = %s 
+          AND r.`{name_field}` = %s
+        ORDER BY r.time_gun_start DESC
+        """
         
         cursor.execute(query, (surname, name))
         results = cursor.fetchall()
