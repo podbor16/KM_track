@@ -20,6 +20,7 @@ from src.tracker.models import (
     Route, RouteResponse, RaceConfig,
     CurrentEventResponse, EventsListResponse, EventInfo,
     Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
+    Segment, SegmentsListResponse,
 )
 from src.tracker.services import (
     fetch_route_from_osm, get_route_calculator,
@@ -259,57 +260,107 @@ async def get_runners(
     state: AppState = Depends(get_app_state),
 ) -> RunnersListResponse:
     """
-    Получить список всех участников события из race_data.json
-    - Загружает данные участников из файла race_data.json
-    - Возвращает полную информацию о каждом участнике с его статусом
+    Получить список всех участников события из БД
+    - Загружает данные участников из таблицы results
+    - Включает текущую дистанцию, темп, скорость на основе данных БД
     """
     try:
-        # Загружаем данные из race_data.json
-        import json
-        from pathlib import Path
+        from src.analytics.db_connection_optimized import get_race_results_by_event_id_and_year
+        from src.tracker.services import parse_pace_to_kmh
         
-        race_data_path = Path(settings.RACE_DATA_FILE)
-        with open(race_data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        # Получаем конфигурацию события
+        event_config = settings.EVENTS_CONFIG.get(event, {})
+        event_name = event_config.get('name', 'Ночной забег')
         
-        runners_data = data.get('data', [])
+        # Предполагаем текущий год
+        current_year = datetime.now().year
         
-        # Считаем статусы
-        total = len(runners_data)
-        running = sum(1 for r in runners_data if r.get('status') == 'running')
-        finished = sum(1 for r in runners_data if r.get('status') == 'finished')
-        not_started = sum(1 for r in runners_data if r.get('status') == 'notstarted')
+        # Получаем результаты из БД
+        results = get_race_results_by_event_id_and_year(event_name, current_year)
         
-        # Преобразуем в Pydantic модели
+        if not results:
+            logger.warning(f"No results found for {event_name} {current_year}")
+            return RunnersListResponse(
+                event=event,
+                total=0,
+                running=0,
+                finished=0,
+                not_started=0,
+                runners=[],
+                last_update=datetime.now().isoformat(),
+            )
+        
+        # Преобразуем результаты в Runner models
         runners_models = []
-        for r in runners_data:
+        total = len(results)
+        running = 0
+        finished = 0
+        not_started = 0
+        
+        for result in results:
             try:
-                dorsal = int(r.get('dorsal', 0))
-                name = r.get('name', '')
-                surname = r.get('surname', '')
+                # Получаем основные данные
+                client_id = result.get('client_id', result.get('id', 0))
+                surname = result.get('surname', '')
+                name = result.get('name', '')
                 
+                # Определяем статус
+                race_status = result.get('race_status', 'Not started')
+                if race_status == 'Finished':
+                    status = 'finished'
+                    finished += 1
+                elif race_status == 'Not started':
+                    status = 'notstarted'
+                    not_started += 1
+                else:
+                    status = 'running'
+                    running += 1
+                
+                # Вычисляем текущую дистанцию на основе времени прохождения контрольных точек
+                current_distance = 0.0
+                
+                # Проверяем прохождение контрольных точек
+                if result.get('time_clear_finish'):
+                    current_distance = 5.0  # Финишировал
+                elif result.get('time_clear_kt2'):
+                    current_distance = 5.0  # Прошел KT2
+                elif result.get('time_clear_kt1'):
+                    current_distance = 2.5  # Прошел KT1
+                else:
+                    current_distance = 0.0  # Не начал
+                
+                # Получаем темп
+                pace_str = result.get('finish_pace_avg', None)
+                if pace_str:
+                    speed_kmh = parse_pace_to_kmh(pace_str)
+                else:
+                    speed_kmh = 0.0
+                    pace_str = 'N/A'
+                
+                # Создаем модель Runner
                 runner = Runner(
-                    id=str(dorsal),
-                    bib=dorsal,
-                    dorsal=dorsal,
+                    id=str(client_id),
+                    bib=result.get('start_number', client_id),
+                    dorsal=result.get('start_number', client_id),
                     name=name.strip(),
                     surname=surname.strip(),
-                    full_name=r.get('fullName', f"{surname} {name}".strip()).strip(),
-                    category=r.get('category', 'N/A'),
-                    gender=r.get('gender', 'Unknown'),
-                    status=r.get('status', 'notstarted'),
-                    current_distance=float(r.get('current_distance', 0)),
-                    position={'lat': 56.0, 'lng': 92.0},  # Default position - Kirov
-                    speed=float(r.get('speed', 0)),
-                    pace=float(r.get('pace', 0)),
-                    start={'treal': None, 'tofficial': None},
-                    kt2={'treal': None, 'tofficial': None, 'avg': None},
-                    finish=None,
+                    full_name=f"{name} {surname}".strip(),
+                    category=result.get('category', 'N/A'),
+                    gender=result.get('sex', 'Unknown').lower(),
+                    status=status,
+                    current_distance=current_distance,
+                    position={'lat': 56.0, 'lng': 92.0},
+                    speed=speed_kmh,
+                    pace=pace_str,
+                    start={'treal': result.get('time_clear_start'), 'tofficial': result.get('time_gun_start')},
+                    kt2={'treal': result.get('time_clear_kt2'), 'tofficial': None, 'avg': result.get('pace_avg_kt2')},
+                    finish=result.get('time_clear_finish'),
                     last_update=datetime.now().isoformat(),
                 )
                 runners_models.append(runner)
+                
             except Exception as e:
-                logger.warning(f"Error converting runner {r.get('dorsal', 'unknown')}: {e}")
+                logger.warning(f"Error converting runner {result.get('surname', 'unknown')}: {e}")
                 continue
         
         return RunnersListResponse(
@@ -323,7 +374,7 @@ async def get_runners(
         )
     
     except Exception as e:
-        logger.error(f"Error getting runners: {e}")
+        logger.error(f"Error getting runners from DB: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -520,6 +571,209 @@ async def get_selected_runners(
         selected_ids=list(selected),
         count=len(selected),
     )
+
+
+# ============================================================================
+# СЕГМЕНТЫ РЕЗУЛЬТАТОВ (SEGMENTS)
+# ============================================================================
+
+@router.get("/api/runner/{runner_id}/segments", tags=["Segments"])
+async def get_runner_segments(
+    runner_id: int = PathParam(..., description="ID спортсмена (client_id)"),
+    event: str = Query(settings.CURRENT_EVENT, description="Event ID"),
+) -> SegmentsListResponse:
+    """
+    Получить список сегментов (контрольных точек) спортсмена.
+    
+    Используется трекером для отслеживания прохождения контрольных точек (kt1, kt2, и т.д.)
+    и динамической корректировки темпа при достижении каждой точки.
+    
+    Args:
+        runner_id: ID спортсмена (client_id из таблицы results)
+        event: ID события (например, 'night_run')
+    
+    Returns:
+        SegmentsListResponse с списком пройденных сегментов и их метриками
+    """
+    try:
+        from src.analytics.db_connection_optimized import get_result_segments, find_result_by_client_id
+
+        # Лог входящего идентификатора
+        settings.logger.info(f"[segments] requested runner_id={runner_id} event={event}")
+
+        # Если передан client_id, пытаемся найти соответствующий result_id
+        # get_result_segments ожидает result_id (id из таблицы results)
+        result_row = find_result_by_client_id(runner_id)
+        if not result_row:
+            # Попробуем ещё как числовой result_id
+            try:
+                numeric_result_id = int(runner_id)
+            except Exception:
+                numeric_result_id = None
+
+            if numeric_result_id:
+                result_id = numeric_result_id
+            else:
+                return SegmentsListResponse(
+                    success=True,
+                    runner_id=runner_id,
+                    event=event,
+                    segments=[],
+                    count=0,
+                )
+        else:
+            result_id = result_row.get('id') or result_row.get('result_id') or None
+
+        if not result_id:
+            return SegmentsListResponse(
+                success=True,
+                runner_id=runner_id,
+                event=event,
+                segments=[],
+                count=0,
+            )
+
+        settings.logger.info(f"[segments] resolved result_id={result_id} for runner_id={runner_id}")
+
+        # Получаем сегменты спортсмена по result_id
+        segments_data = get_result_segments(result_id)
+        settings.logger.info(f"[segments] found {len(segments_data) if segments_data else 0} segments for result_id={result_id}")
+        
+        # Преобразуем в Pydantic модели
+        segments_models = []
+        for seg in segments_data:
+            segment = Segment(
+                id=seg.get('id', 0),
+                result_id=seg.get('result_id', 0),
+                segment_code=seg.get('segment_code', ''),
+                sg_time_clear=seg.get('sg_time_clear'),
+                sg_pace_avg=seg.get('sg_pace_avg'),
+                sg_rank_absolute=seg.get('sg_rank_absolute'),
+                sg_rank_sex=seg.get('sg_rank_sex'),
+                sg_rank_category=seg.get('sg_rank_category'),
+            )
+            segments_models.append(segment)
+        
+        return SegmentsListResponse(
+            success=True,
+            runner_id=runner_id,
+            event=event,
+            segments=segments_models,
+            count=len(segments_models),
+        )
+    
+    except Exception as e:
+        logger.error(f"Error getting segments for runner {runner_id}: {e}")
+        return SegmentsListResponse(
+            success=False,
+            runner_id=runner_id,
+            event=event,
+            segments=[],
+            count=0,
+            message=str(e),
+        )
+
+
+@router.get("/api/runner/{runner_id}/latest-segment", tags=["Segments"])
+async def get_runner_latest_segment(
+    runner_id: int = PathParam(..., description="ID спортсмена (client_id)"),
+    event: str = Query(settings.CURRENT_EVENT, description="Event ID"),
+) -> SegmentsListResponse:
+    """
+    Получить ПОСЛЕДНИЙ завершённый сегмент спортсмена.
+    
+    Используется для отслеживания текущего положения спортсмена на маршруте
+    и определения необходимости смены направления движения маркера.
+    
+    Args:
+        runner_id: ID спортсмена
+        event: ID события
+    
+    Returns:
+        SegmentsListResponse с одним последним сегментом (если есть)
+    """
+    try:
+        from src.analytics.db_connection_optimized import get_result_segments, find_result_by_client_id
+
+        settings.logger.info(f"[latest-segment] requested runner_id={runner_id} event={event}")
+
+        # Аналогично: сначала конвертируем client_id в result_id
+        result_row = find_result_by_client_id(runner_id)
+        if not result_row:
+            try:
+                numeric_result_id = int(runner_id)
+            except Exception:
+                numeric_result_id = None
+
+            if numeric_result_id:
+                result_id = numeric_result_id
+            else:
+                return SegmentsListResponse(
+                    success=True,
+                    runner_id=runner_id,
+                    event=event,
+                    segments=[],
+                    count=0,
+                )
+        else:
+            result_id = result_row.get('id') or result_row.get('result_id') or None
+
+        if not result_id:
+            return SegmentsListResponse(
+                success=True,
+                runner_id=runner_id,
+                event=event,
+                segments=[],
+                count=0,
+            )
+
+        settings.logger.info(f"[latest-segment] resolved result_id={result_id} for runner_id={runner_id}")
+
+        # Получаем все сегменты и берём последний
+        segments_data = get_result_segments(result_id)
+        settings.logger.info(f"[latest-segment] found {len(segments_data) if segments_data else 0} segments for result_id={result_id}")
+        
+        if not segments_data:
+            return SegmentsListResponse(
+                success=True,
+                runner_id=runner_id,
+                event=event,
+                segments=[],
+                count=0,
+            )
+        
+        # Берём последний сегмент (последний в массиве)
+        latest_seg_data = segments_data[-1]
+        
+        segment = Segment(
+            id=latest_seg_data.get('id', 0),
+            result_id=latest_seg_data.get('result_id', 0),
+            segment_code=latest_seg_data.get('segment_code', ''),
+            sg_time_clear=latest_seg_data.get('sg_time_clear'),
+            sg_pace_avg=latest_seg_data.get('sg_pace_avg'),
+            sg_rank_absolute=latest_seg_data.get('sg_rank_absolute'),
+            sg_rank_sex=latest_seg_data.get('sg_rank_sex'),
+            sg_rank_category=latest_seg_data.get('sg_rank_category'),
+        )
+        
+        return SegmentsListResponse(
+            success=True,
+            runner_id=runner_id,
+            event=event,
+            segments=[segment],
+            count=1,
+        )
+    
+    except Exception as e:
+        logger.error(f"Error getting latest segment for runner {runner_id}: {e}")
+        return SegmentsListResponse(
+            success=False,
+            runner_id=runner_id,
+            event=event,
+            segments=[],
+            count=0,
+            message=str(e),
+        )
 
 
 # ============================================================================

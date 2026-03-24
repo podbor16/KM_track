@@ -18,6 +18,15 @@ from .analytics_service import (
     get_formatted_analytics,
 )
 
+from .pace_calculator import (
+    parse_distance,
+    parse_pace_to_kmh,
+    kmh_to_pace,
+    get_initial_pace,
+    get_runner_average_pace,
+    get_category_average_pace,
+)
+
 __all__ = [
     # routes
     "fetch_route_from_osm",
@@ -33,4 +42,12 @@ __all__ = [
     
     # analytics
     "get_formatted_analytics",
+    
+    # pace_calculator
+    "parse_distance",
+    "parse_pace_to_kmh",
+    "kmh_to_pace",
+    "get_initial_pace",
+    "get_runner_average_pace",
+    "get_category_average_pace",
 ]

@@ -10,18 +10,21 @@ const CONFIG = {
     UPDATE_INTERVAL: 2000,  // 2 секунды для плавного обновления позиций
     MAX_SELECTED: 5,
     EVENT_NAME: 'night_run',  // Будет переопределено в HTML
-    STORAGE_KEY: 'selected_runners'  // Ключ для localStorage
+    STORAGE_KEY: 'selected_runners',  // Ключ для localStorage
+    TOTAL_RACE_KM: 5.0  // Общая дистанция забега в км
 };
 
 // Глобальные переменные
 let map = null;
 let routeLayer = null;
 let runnerMarkers = {};
+let runnerAnimators = {}; // Хранит animator'ы для плавной анимации маркеров
 let selectedRunnerIds = new Set();
 let allRunners = [];
 let isUpdating = false;
 let routeType = 'loop';
 let activePopups = new Map(); // Хранит активные всплывающие окна
+let routeCoordinates = []; // Сохраняем координаты маршрута для animations
 
 // Цвета для статусов
 const STATUS_COLORS = {
@@ -30,6 +33,152 @@ const STATUS_COLORS = {
     'running': '#EE2D62',
     'finished': '#1a1a1a'
 };
+
+// ============================================
+// КЛАСС ДЛЯ ПЛАВНОЙ АНИМАЦИИ МАРКЕРА
+// ============================================
+
+/**
+ * Класс для интерполяции позиции маркера между обновлениями API
+ * Обеспечивает плавное движение маркера по маршруту вместо скачков
+ */
+class RunnerMarkerAnimator {
+    constructor(marker, routeCoordinates) {
+        this.marker = marker;
+        this.routeCoordinates = routeCoordinates;
+        
+        // Текущая позиция маркера на маршруте (0-100%)
+        this.currentProgress = 0;
+        
+        // Целевая позиция маркера на маршруте (0-100%)
+        this.targetProgress = 0;
+        
+        // Время начала последней анимации (для плавного перехода)
+        this.animationStartTime = null;
+        this.animationDuration = CONFIG.UPDATE_INTERVAL * 0.8; // 80% времени между обновлениями
+        
+        // Флаг направления: true = forward (0->100%), false = backward (100->0%)
+        this.isForward = true;
+        
+        // requestAnimationFrame ID для отмены анимации
+        this.animationFrameId = null;
+    }
+    
+    /**
+     * Обновить целевую позицию маркера на основе пройденной дистанции
+     */
+    updateTarget(currentDistanceKm, totalDistanceKm) {
+        if (totalDistanceKm <= 0) {
+            this.targetProgress = 0;
+            return;
+        }
+        
+        // Вычисляем прогресс (0-100%)
+        this.targetProgress = (currentDistanceKm / totalDistanceKm) * 100;
+        
+        // Ограничиваем в диапазоне 0-100%
+        this.targetProgress = Math.max(0, Math.min(100, this.targetProgress));
+        
+        // Запускаем анимацию к новой позиции
+        this.startAnimation();
+    }
+    
+    /**
+     * Начать анимацию движения маркера от текущей к целевой позиции
+     */
+    startAnimation() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+        }
+        
+        this.animationStartTime = performance.now();
+        this.animateFrame();
+    }
+    
+    /**
+     * Callback для requestAnimationFrame - интерполирует позицию
+     */
+    animateFrame = () => {
+        if (!this.animationStartTime) return;
+        
+        const elapsed = performance.now() - this.animationStartTime;
+        const progress = Math.min(elapsed / this.animationDuration, 1); // 0 to 1
+        
+        // Linear interpolation между текущей и целевой позицией
+        const previousProgress = this.currentProgress;
+        this.currentProgress = previousProgress + (this.targetProgress - previousProgress) * progress;
+        
+        // Ограничиваем прогресс в диапазоне 0-100
+        this.currentProgress = Math.max(0, Math.min(100, this.currentProgress));
+        
+        // Обновляем позицию маркера
+        this.updateMarkerPosition();
+        
+        // Продолжаем анимацию, если не достигли цели (99% вместо 100% для плавного завершения)
+        if (progress < 0.99) {
+            this.animationFrameId = requestAnimationFrame(this.animateFrame);
+        } else {
+            // Убеждаемся, что маркер точно на целевой позиции
+            this.currentProgress = this.targetProgress;
+            this.updateMarkerPosition();
+            this.animationFrameId = null;
+        }
+    }
+    
+    /**
+     * Обновить позицию маркера на карте на основе currentProgress
+     */
+    updateMarkerPosition() {
+        if (!this.routeCoordinates || this.routeCoordinates.length === 0) {
+            return;
+        }
+        
+        const maxIndex = this.routeCoordinates.length - 1;
+        
+        // Вычисляем индекс в массиве координат
+        let positionIndex;
+        if (this.isForward) {
+            // Движение вперед (0% -> 100%)
+            positionIndex = Math.round(maxIndex * this.currentProgress / 100);
+        } else {
+            // Движение назад (100% -> 0%)
+            positionIndex = Math.round(maxIndex * (100 - this.currentProgress) / 100);
+        }
+        
+        // Ограничиваем индекс в диапазоне 0-maxIndex
+        positionIndex = Math.max(0, Math.min(maxIndex, positionIndex));
+        
+        const coordinate = this.routeCoordinates[positionIndex];
+        if (coordinate && coordinate.length === 2) {
+            this.marker.setLatLng([coordinate[0], coordinate[1]]);
+        }
+    }
+    
+    /**
+     * Изменить направление движения маркера (для разворотов на kt1, kt2 и т.д.)
+     */
+    changeDirection() {
+        this.isForward = !this.isForward;
+        console.log(`🔄 Маркер изменил направление: ${this.isForward ? 'вперед' : 'назад'}`);
+    }
+    
+    /**
+     * Получить текущий прогресс маркера (0-100%)
+     */
+    getProgress() {
+        return this.currentProgress;
+    }
+    
+    /**
+     * Очистить ресурсы
+     */
+    dispose() {
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+    }
+}
 
 // ============================================
 // РАБОТА С LOCALSTORAGE
@@ -120,21 +269,25 @@ async function loadRouteFromAPI() {
         const data = await response.json();
         routeType = data.route_type || 'loop';
         
+        // Сохраняем координаты маршрута для использования в анимации маркеров
+        routeCoordinates = data.coordinates || [];
+        
         console.log(`📍 Загружен маршрут: ${data.event_name}`);
         console.log(`📏 Тип маршрута: ${routeType}`);
+        console.log(`📍 Координаты маршрута: ${routeCoordinates.length} точек`);
         
         if (routeLayer) {
             map.removeLayer(routeLayer);
         }
         
-        routeLayer = L.polyline(data.coordinates, {
+        routeLayer = L.polyline(routeCoordinates, {
             color: '#EE2D62',
             weight: 5,
             opacity: 0.8,
             smoothFactor: 1
         }).addTo(map);
         
-        const startPoint = data.coordinates[0];
+        const startPoint = routeCoordinates[0];
         L.marker(startPoint, {
             icon: L.divIcon({
                 className: 'start-marker',
@@ -168,7 +321,9 @@ async function loadAllRunners() {
     try {
         const timestamp = new Date().getTime(); // Cache-busting
         const response = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        allRunners = await response.json();
+        const data = await response.json();
+        // API возвращает RunnersListResponse со структурой { runners, total, ... }
+        allRunners = Array.isArray(data) ? data : (data.runners || []);
         console.log(`Загружено участников: ${allRunners.length}`);
         updateSelectedRunnersMarkers();
     } catch (error) {
@@ -181,7 +336,8 @@ async function loadStats() {
     try {
         const timestamp = new Date().getTime(); // Cache-busting
         const response = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        const runners = await response.json();
+        const data = await response.json();
+        const runners = Array.isArray(data) ? data : (data.runners || []);
         
         const stats = {
             total: runners.length,
@@ -221,7 +377,8 @@ async function loadAnalytics() {
         const analyticsData = await analyticsResponse.json();
         
         const statsResponse = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
-        const runners = await statsResponse.json();
+        const data = await statsResponse.json();
+        const runners = Array.isArray(data) ? data : (data.runners || []);
         
         const stats = {
             total: runners.length,
@@ -347,9 +504,10 @@ function renderTopFinishers(finishers, category) {
 // ============================================
 
 function updateSelectedRunnersMarkers() {
-    const selectedRunners = allRunners.filter(runner =>
-        selectedRunnerIds.has(String(runner.id))
-    );
+    const selectedRunners = allRunners.filter(runner => {
+        const runnerId = String(runner.id || runner.bib || runner.dorsal);
+        return selectedRunnerIds.has(runnerId);
+    });
     updateRunnerMarkers(selectedRunners);
 }
 
@@ -367,6 +525,13 @@ function updateRunnerMarkers(runners) {
             if (marker._popup && marker._popup.isOpen && marker._popup.isOpen()) {
                 marker.closePopup();
             }
+            
+            // Очищаем animator при удалении маркера
+            if (runnerAnimators[id]) {
+                runnerAnimators[id].dispose();
+                delete runnerAnimators[id];
+            }
+            
             map.removeLayer(marker);
             delete runnerMarkers[id];
             activePopups.delete(id);
@@ -415,11 +580,18 @@ function updateRunnerMarkers(runners) {
         let marker = runnerMarkers[runner.id];
         
         if (marker) {
-            marker.setLatLng([runner.position.lat, runner.position.lng]);
+            // Маркер уже существует - обновляем позицию через animator
             marker.setIcon(icon);
             const popupContent = createPopupContent(runner);
             marker.getPopup().setContent(popupContent);
+            
+            // Обновляем animator для плавной анимации
+            if (runnerAnimators[runner.id] && routeCoordinates.length > 0) {
+                const totalDistance = runner.total_distance || CONFIG.TOTAL_RACE_KM || 5.0;
+                runnerAnimators[runner.id].updateTarget(runner.current_distance || 0, totalDistance);
+            }
         } else {
+            // Создаём новый маркер
             marker = L.marker(
                 [runner.position.lat, runner.position.lng],
                 { icon }
@@ -434,6 +606,10 @@ function updateRunnerMarkers(runners) {
             
             marker.on('popupopen', function(e) {
                 activePopups.set(runner.id, e.popup);
+                // Загружаем информацию о сегменте когда popup открывается (div уже в DOM)
+                if (runner.status === 'running' || runner.status === 'started') {
+                    loadAndDisplaySegmentInfo(runner.id);
+                }
             });
             
             marker.on('popupclose', function(e) {
@@ -441,6 +617,16 @@ function updateRunnerMarkers(runners) {
             });
             
             runnerMarkers[runner.id] = marker;
+            
+            // Создаём animator для новой плавной анимации
+            if (routeCoordinates.length > 0) {
+                const animator = new RunnerMarkerAnimator(marker, routeCoordinates);
+                runnerAnimators[runner.id] = animator;
+                
+                // Инициализируем начальную позицию
+                const totalDistance = runner.total_distance || CONFIG.TOTAL_RACE_KM || 5.0;
+                animator.updateTarget(runner.current_distance || 0, totalDistance);
+            }
         }
         
         if (openPopups.has(String(runner.id))) {
@@ -450,8 +636,25 @@ function updateRunnerMarkers(runners) {
 }
 
 function createPopupContent(runner) {
+    // Для Running маркеров показываем дополнительную информацию о сегменте
+    let additionalInfo = '';
+    
+    if (runner.status === 'running' || runner.status === 'started') {
+        additionalInfo = `
+            <div style="border-top: 1px solid #ddd; margin: 8px 0; padding-top: 8px;">
+                <div style="font-weight: bold; color: #EE2D62; margin-bottom: 5px;">⚡ Текущий темп:</div>
+                <div style="font-size: 16px; font-weight: bold; color: #2196F3;">
+                    ${runner.pace ? (typeof runner.pace === 'string' && runner.pace.startsWith(':') ? '0' + runner.pace : runner.pace) : 'N/A'}
+                </div>
+            </div>
+            <div id="segment-info-${runner.id}" style="border-top: 1px solid #ddd; margin: 8px 0; padding-top: 8px; font-size: 12px; min-height: 60px;">
+                <div style="color: #999;">⏳ Загрузка информации о контрольных точках...</div>
+            </div>
+        `;
+    }
+    
     return `
-        <div style="min-width: 200px;">
+        <div style="min-width: 270px;">
             <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
                 №${runner.dorsal || runner.id} - ${runner.full_name || 'Участник'}
             </div>
@@ -461,11 +664,135 @@ function createPopupContent(runner) {
                 <div><strong>Дистанция:</strong> ${runner.current_distance?.toFixed(1) || 0} км</div>
                 <div><strong>Скорость:</strong> ${runner.speed?.toFixed(1) || '--'} км/ч</div>
             </div>
-            <div style="font-size: 12px; color: #666;">
+            ${additionalInfo}
+            <div style="font-size: 12px; color: #666; border-top: 1px solid #ddd; margin-top: 8px; padding-top: 8px;">
                 Обновлено: ${runner.last_update ? new Date(runner.last_update).toLocaleTimeString() : 'N/A'}
             </div>
         </div>
     `;
+}
+
+/**
+ * Загрузить информацию о последнем сегменте спортсмена и отобразить в popup
+ */
+async function loadAndDisplaySegmentInfo(runnerId) {
+    try {
+        let segmentDiv = document.getElementById(`segment-info-${runnerId}`);
+        
+        if (!segmentDiv) {
+            console.log(`Div segment-info-${runnerId} не найден, popup может быть закрыт`);
+            return;
+        }
+        
+        const response = await fetch(
+            `${CONFIG.API_BASE}/runner/${runnerId}/latest-segment?event=${CONFIG.EVENT_NAME}`
+        );
+        
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
+        
+        const data = await response.json();
+        console.log(`Сегмент для ${runnerId}:`, data);
+        
+        if (!data.success || !data.segments || data.segments.length === 0) {
+            updateSegmentDisplay(runnerId, null);
+            return;
+        }
+        
+        const segment = data.segments[0];
+        console.log(`Загружен сегмент для ${runnerId}:`, segment);
+        updateSegmentDisplay(runnerId, segment);
+    } catch (error) {
+        console.warn(`Не удалось загрузить сегмент для спортсмена ${runnerId}:`, error);
+        updateSegmentDisplay(runnerId, null);
+    }
+}
+
+/**
+ * Обновить отображение информации о сегменте в popup
+ */
+function updateSegmentDisplay(runnerId, segment) {
+    const segmentDiv = document.getElementById(`segment-info-${runnerId}`);
+    if (!segmentDiv) return;
+    
+    if (!segment) {
+        segmentDiv.innerHTML = '<div style="color: #999;">Нет информации о контрольных точках</div>';
+        return;
+    }
+    
+    const segmentName = getSegmentName(segment.segment_code);
+    const html = `
+        <div style="background: #f5f5f5; padding: 8px; border-radius: 4px;">
+            <div style="font-weight: bold; color: #333; margin-bottom: 4px;">
+                📍 ${segmentName}
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                <div>
+                    <span style="color: #666;">Время:</span><br>
+                    <strong>${segment.sg_time_clear || 'N/A'}</strong>
+                </div>
+                <div>
+                    <span style="color: #666;">Темп:</span><br>
+                    <strong>${segment.sg_pace_avg || 'N/A'}</strong>
+                </div>
+                <div>
+                    <span style="color: #666;">Место (абс):</span><br>
+                    <strong>${segment.sg_rank_absolute || '-'}</strong>
+                </div>
+                <div>
+                    <span style="color: #666;">Место (пол):</span><br>
+                    <strong>${segment.sg_rank_sex || '-'}</strong>
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 4px;">
+                Место в категории: <strong>${segment.sg_rank_category || '-'}</strong>
+            </div>
+        </div>
+    `;
+    
+    segmentDiv.innerHTML = html;
+}
+
+/**
+ * Получить человеческой формат названия сегмента
+ */
+function getSegmentName(segmentCode) {
+    const names = {
+        'start-kt1': '🏃 Start → KT1 (Разворот)',
+        'kt1-finish': '🏁 KT1 → Finish (Финиш)',
+        'kt1': '🔄 Контрольная точка 1',
+        'kt2': '🔄 Контрольная точка 2',
+        'start': '🏁 Старт',
+        'finish': '🏁 Финиш'
+    };
+    return names[segmentCode] || `📍 ${segmentCode}`;
+}
+
+/**
+ * Вспомогательная функция для преобразования темпа в км/ч
+ * (копия из pace_calculator.py логики)
+ */
+function parse_pace_to_kmh_helper(paceStr) {
+    if (!paceStr || paceStr.toLowerCase() === 'null' || paceStr.trim() === '') {
+        return 10.0;
+    }
+    
+    // Парсим формат "7:22" или "7'22"
+    const match = paceStr.match(/(\d+)[:'](\d+)/);
+    if (match) {
+        const minutes = parseInt(match[1]);
+        const seconds = parseInt(match[2]);
+        
+        const totalSecondsPerKm = minutes * 60 + seconds;
+        if (totalSecondsPerKm === 0) {
+            return 10.0;
+        }
+        
+        // Скорость (км/ч) = 3600 сек/час / секунды на км
+        const speedKmh = 3600.0 / totalSecondsPerKm;
+        return parseFloat(speedKmh.toFixed(2));
+    }
+    
+    return 10.0;
 }
 
 // ============================================
@@ -674,7 +1001,7 @@ function setupSearch() {
 // ============================================
 
 function startAutoUpdate() {
-    console.log(`⏱️ Автообновление запущено для события: ${CONFIG.EVENT_NAME}`);
+    console.log(`⏱️ Автообновление запущен для события: ${CONFIG.EVENT_NAME}`);
     setInterval(async () => {
         if (isUpdating) return;
         
@@ -691,6 +1018,205 @@ function startAutoUpdate() {
             isUpdating = false;
         }
     }, CONFIG.UPDATE_INTERVAL);
+    
+    // Запускаем отслеживание сегментов для каждого выбранного спортсмена
+    startSegmentTracking();
+}
+
+// ============================================
+// ОТСЛЕЖИВАНИЕ СЕГМЕНТОВ И КОРРЕКЦИЯ ТЕМПА
+// ============================================
+
+const SEGMENT_TRACKING = {
+    POLLING_INTERVAL: 7000, // 7 секунд между опросами
+    lastSeenSegments: {}, // Сохраняем последний ID сегмента для каждого спортсмена
+    intervalId: null
+};
+
+/**
+ * Запустить отслеживание прохождения контрольных точек (сегментов)
+ * Используется для динамической корректировки темпа и смены направления маркера
+ */
+function startSegmentTracking() {
+    if (SEGMENT_TRACKING.intervalId) {
+        clearInterval(SEGMENT_TRACKING.intervalId);
+    }
+    
+    SEGMENT_TRACKING.intervalId = setInterval(async () => {
+        if (selectedRunnerIds.size === 0) return;
+        
+        // Проверяем новые сегменты для каждого выбранного спортсмена
+        for (const runnerId of selectedRunnerIds) {
+            try {
+                await checkRunnerSegments(parseInt(runnerId));
+            } catch (error) {
+                console.error(`Ошибка при проверке сегментов для спортсмена ${runnerId}:`, error);
+            }
+        }
+    }, SEGMENT_TRACKING.POLLING_INTERVAL);
+    
+    console.log(`📊 Отслеживание сегментов запущено (опрос каждые ${SEGMENT_TRACKING.POLLING_INTERVAL / 1000}с)`);
+}
+
+/**
+ * Проверить наличие новых сегментов (контрольных точек) для спортсмена
+ */
+async function checkRunnerSegments(runnerId) {
+    try {
+        const response = await fetch(
+            `${CONFIG.API_BASE}/runner/${runnerId}/latest-segment?event=${CONFIG.EVENT_NAME}`
+        );
+        
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        if (!data.success || data.segments.length === 0) return;
+        
+        const latestSegment = data.segments[0];
+        const segmentKey = `${runnerId}_${latestSegment.segment_code}`;
+        
+        // Проверяем, новый ли это сегмент
+        if (SEGMENT_TRACKING.lastSeenSegments[segmentKey]) {
+            return; // Уже обработали этот сегмент
+        }
+        
+        // Отмечаем как обработанный
+        SEGMENT_TRACKING.lastSeenSegments[segmentKey] = true;
+        
+        console.log(`✅ Спортсмен ${runnerId} прошел ${latestSegment.segment_code}:`);
+        console.log(`   Темп: ${latestSegment.sg_pace_avg || 'N/A'}`);
+        console.log(`   Место: ${latestSegment.sg_rank_category || 'N/A'} в категории`);
+        
+        // Обновляем маркер спортсмена
+        onSegmentPassed(runnerId, latestSegment);
+        
+    } catch (error) {
+        console.warn(`Не удалось получить сегменты для спортсмена ${runnerId}:`, error);
+    }
+}
+
+/**
+ * Callback при прохождении спортсменом контрольной точки (сегмента)
+ * Корректирует темп и меняет направление маркера при разворотах
+ */
+/**
+ * Непрерывное обновление позиций маркеров на маршруте
+ * Вызывается один раз при инициализации для периодического отслеживания спортсменов
+ */
+function startContinuousTracking() {
+    console.log('Запущено непрерывное отслеживание позиций маркеров...');
+    
+    setInterval(async () => {
+        try {
+            const timestamp = new Date().getTime();
+            const response = await fetch(`${CONFIG.API_BASE}/runners?event=${CONFIG.EVENT_NAME}&v=${timestamp}`);
+            const data = await response.json();
+            
+            // Парсим ответ правильно
+            const updatedRunners = Array.isArray(data) ? data : (data.runners || []);
+            
+            // Обновляем только выбранных спортсменов
+            const selectedRunners = updatedRunners.filter(runner => {
+                const runnerId = String(runner.id || runner.bib || runner.dorsal);
+                return selectedRunnerIds.has(runnerId);
+            });
+            
+            if (selectedRunners.length > 0) {
+                updateRunnerMarkers(selectedRunners);
+            }
+        } catch (error) {
+            console.warn('Ошибка обновления позиций:', error);
+        }
+    }, CONFIG.UPDATE_INTERVAL);
+}
+
+/**
+ * Callback при прохождении спортсменом контрольной точки (сегмента)
+ * Корректирует темп и меняет направление маркера при разворотах
+ * 
+ * Поддерживаемые segment_code:
+ * - "start-kt1": Спортсмен прошел от старта к разороту (kt1 на 50%)
+ * - "kt1-finish": Спортсмен прошел от разворота к финишу
+ */
+function onSegmentPassed(runnerId, segment) {
+    const animator = runnerAnimators[runnerId];
+    if (!animator) {
+        console.warn(`🚨 Animator для спортсмена ${runnerId} не найден`);
+        return;
+    }
+    
+    const segmentCode = segment.segment_code || '';
+    const totalDistance = CONFIG.TOTAL_RACE_KM || 5.0;
+    
+    console.log(`📍 Спортсмен ${runnerId} прошел сегмент: ${segmentCode}`);
+    console.log(`   Темп: ${segment.sg_pace_avg || 'N/A'}`);
+    console.log(`   Место: ${segment.sg_rank_category || 'N/A'} в категории`);
+    
+    // Логика телепортации в зависимости от segment_code
+    if (segmentCode === 'start-kt1') {
+        // ТЕЛЕПОРТАЦИЯ К РАЗОРОТУ (KT1 = 50% дистанции)
+        console.log(`🚀 Телепортация к KT1 (50% дистанции)`);
+        
+        // Телепортируем маркер к KT1
+        const kt1Distance = totalDistance / 2; // 50% дистанции
+        animator.updateTarget(kt1Distance, totalDistance);
+        animator.currentProgress = 50; // Сразу перемещаем на 50%
+        animator.updateMarkerPosition();
+        
+        // Меняем направление на "назад" для второго плеча
+        animator.isForward = false;
+        
+        // Обновляем темп спортсмена в памяти для UI
+        const runner = allRunners.find(r => Number(r.id) === runnerId);
+        if (runner && segment.sg_pace_avg) {
+            // Пересчитываем скорость на основе нового темпа
+            runner.speed = parse_pace_to_kmh_helper(segment.sg_pace_avg);
+            runner.pace = segment.sg_pace_avg;
+            console.log(`📈 Обновленная скорость: ${runner.speed?.toFixed(2)} км/ч`);
+        }
+    }
+    else if (segmentCode === 'kt1-finish') {
+        // ТЕЛЕПОРТАЦИЯ К ФИНИШУ (100% дистанции)
+        console.log(`🏁 Телепортация к ФИНИШУ (100% дистанции)`);
+        
+        // Телепортируем маркер к финишу
+        animator.updateTarget(totalDistance, totalDistance);
+        animator.currentProgress = 100; // Сразу перемещаем на 100%
+        animator.updateMarkerPosition();
+        
+        // Обновляем темп спортсмена
+        const runner = allRunners.find(r => Number(r.id) === runnerId);
+        if (runner && segment.sg_pace_avg) {
+            runner.speed = parse_pace_to_kmh_helper(segment.sg_pace_avg);
+            runner.pace = segment.sg_pace_avg;
+            console.log(`📈 Финальная скорость: ${runner.speed?.toFixed(2)} км/ч`);
+        }
+    }
+    else if (segmentCode === 'kt1' || segmentCode === 'kt2' || segmentCode === 'kt3') {
+        // Изменить направление для промежуточных контрольных точек
+        animator.changeDirection();
+        console.log(`🔄 Маркер изменил направление на ${segmentCode}`);
+        
+        // Обновляем темп спортсмена
+        if (segment.sg_pace_avg) {
+            const runner = allRunners.find(r => Number(r.id) === runnerId);
+            if (runner) {
+                runner.speed = parse_pace_to_kmh_helper(segment.sg_pace_avg);
+                runner.pace = segment.sg_pace_avg;
+            }
+        }
+    }
+}
+
+/**
+ * Остановить отслеживание сегментов
+ */
+function stopSegmentTracking() {
+    if (SEGMENT_TRACKING.intervalId) {
+        clearInterval(SEGMENT_TRACKING.intervalId);
+        SEGMENT_TRACKING.intervalId = null;
+        console.log('🛑 Отслеживание сегментов остановлено');
+    }
 }
 
 // ============================================

@@ -981,6 +981,76 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
             connection.close()
 
 
+def find_result_by_client_id(client_identifier) -> Dict[str, Any]:
+    """
+    Найти строку результата в таблице `results` по client_id, start_number или id.
+
+    Args:
+        client_identifier: может быть client_id (str/int), start_number или numeric id
+
+    Returns:
+        dict строки результата или None
+    """
+    logger.info(f"🔎 Поиск result по идентификатору: {client_identifier}")
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение для find_result_by_client_id")
+        return None
+
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+
+        # Попробуем искать по client_id, затем по start_number, затем по id
+        query = None
+        params = None
+
+        # Преобразуем идентификатор
+        try:
+            numeric = int(client_identifier)
+        except Exception:
+            numeric = None
+
+        # По client_id (строка) - чаще всего
+        query = "SELECT * FROM results WHERE client_id = %s LIMIT 1"
+        params = (str(client_identifier),)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        if row:
+            cursor.close()
+            return dict(row)
+
+        # По start_number (numeric)
+        if numeric is not None:
+            query = "SELECT * FROM results WHERE start_number = %s LIMIT 1"
+            params = (numeric,)
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            if row:
+                cursor.close()
+                return dict(row)
+
+            # По id
+            query = "SELECT * FROM results WHERE id = %s LIMIT 1"
+            params = (numeric,)
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            if row:
+                cursor.close()
+                return dict(row)
+
+        cursor.close()
+        return None
+    except Exception as e:
+        logger.error(f"❌ Ошибка find_result_by_client_id: {e}")
+        return None
+    finally:
+        try:
+            if connection.is_connected():
+                connection.close()
+        except Exception:
+            pass
+
+
 # ============================================================
 # ОПТИМИЗИРОВАННЫЙ DEBUG ENDPOINT
 # ============================================================

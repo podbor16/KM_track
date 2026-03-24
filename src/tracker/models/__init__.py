@@ -25,6 +25,11 @@ from .event import (
     EventsListResponse,
 )
 
+from .segment import (
+    Segment,
+    SegmentsListResponse,
+)
+
 from .analytics import (
     Analytics,
     GeneralStats,
@@ -58,6 +63,10 @@ __all__ = [
     "EventInfo",
     "CurrentEventResponse",
     "EventsListResponse",
+    
+    # Segment models
+    "Segment",
+    "SegmentsListResponse",
     
     # Analytics models
     "Analytics",
