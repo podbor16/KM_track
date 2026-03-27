@@ -11,7 +11,9 @@ const CONFIG = {
     MAX_SELECTED: 5,
     EVENT_NAME: 'night_run',
     EVENT_ID: 67,
-    STORAGE_KEY: 'night_run_selected_runners'
+    STORAGE_KEY: 'night_run_selected_runners',
+    // Координаты контрольной точки 1 (разворот)
+    KT1_COORDS: [55.9988248, 92.8350464]
 };
 
 // Глобальные переменные
@@ -21,10 +23,14 @@ let routeCoordinates = [];
 let runnerMarkers = {};
 let selectedRunnerIds = new Set();
 let allRunners = [];
-let isUpdating = false;
 let routeType = 'shuttle';
 let runnerPositions = {};
 let activePopups = new Map();
+let eventDistance = 0; // Дистанция события в км
+
+// Объект для плавной анимации позиций
+let runnerAnimations = {};
+let animationFrameId = null;
 
 // Цвета для статусов
 const STATUS_COLORS = {
@@ -97,6 +103,125 @@ function updateStatus(message) {
     if (statusPanel) statusPanel.textContent = message;
 }
 
+/**
+ * Находит последнюю пройденную контрольную точку
+ * Возвращает {name, time, pace} или null
+ */
+function getLastCheckpoint(runner) {
+    if (!runner.checkpoints) return null;
+    
+    const checkpoints = [
+        { code: 'start', name: 'Старт', data: { time: '0', pace: '0' } }, // Start не имеет реальных данных
+        { code: 'kt1', name: 'КТ1', data: runner.checkpoints.kt1 },
+        { code: 'kt2', name: 'КТ2', data: runner.checkpoints.kt2 },
+        { code: 'kt3', name: 'КТ3', data: runner.checkpoints.kt3 },
+        { code: 'kt4', name: 'КТ4', data: runner.checkpoints.kt4 },
+        { code: 'kt5', name: 'КТ5', data: runner.checkpoints.kt5 }
+    ];
+    
+    let lastCheckpoint = null;
+    
+    for (const checkpoint of checkpoints) {
+        if (checkpoint.data && checkpoint.data.time) {
+            lastCheckpoint = {
+                name: checkpoint.name,
+                code: checkpoint.code,
+                time: checkpoint.data.time,
+                pace: checkpoint.data.pace
+            };
+        }
+    }
+    
+    return lastCheckpoint;
+}
+
+/**
+ * Преобразует время в формате PT48S в секунды
+ */
+function durationToSeconds(duration) {
+    if (!duration || duration === 'null' || duration === null) return 0;
+    if (typeof duration === 'number') return duration;
+    
+    const match = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+    
+    return (parseInt(match[1] || 0) * 3600) +
+           (parseInt(match[2] || 0) * 60) +
+           parseInt(match[3] || 0);
+}
+
+/**
+ * Форматирует время в секундах в читаемый формат MM:SS или HH:MM:SS
+ */
+function secondsToTime(totalSeconds) {
+    if (!totalSeconds) return '--:--';
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    
+    if (h > 0) {
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
+ * Вычисляет темп в формате м'сс"/км на основе времени (ISO 8601) и расстояния
+ * Темп = (время в секундах / расстояние в км) в формате минуты'секунды"/км
+ */
+function calculatePaceFromTime(isoTime, distanceKm) {
+    if (!isoTime || !distanceKm || distanceKm <= 0) return null;
+    
+    const totalSeconds = durationToSeconds(isoTime);
+    if (totalSeconds <= 0) return null;
+    
+    const distance = parseFloat(distanceKm);
+    if (distance <= 0) return null;
+    
+    // Вычисляем секунды на км
+    const secondsPerKm = totalSeconds / distance;
+    
+    // Преобразуем в соответствующее количество минут и секунд
+    const minutes = Math.floor(secondsPerKm / 60);
+    const seconds = Math.round(secondsPerKm % 60);
+    
+    return `${minutes}'${String(seconds).padStart(2, '0')}"/km`;
+}
+
+/**
+ * Находит ближайшую точку на маршруте к заданным координатам
+ * Возвращает {index, percent} - индекс точки и процент маршрута
+ */
+function findNearestPointOnRoute(targetLat, targetLon) {
+    if (!routeCoordinates || routeCoordinates.length === 0) {
+        return { index: 0, percent: 0 };
+    }
+
+    let minDistance = Infinity;
+    let nearestIndex = 0;
+
+    // Вычисляем расстояние Хаверсина между точками
+    for (let i = 0; i < routeCoordinates.length; i++) {
+        const [lat, lon] = routeCoordinates[i];
+        const dLat = (targetLat - lat) * Math.PI / 180;
+        const dLon = (targetLon - lon) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat * Math.PI / 180) * Math.cos(targetLat * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = 6371 * c; // Радиус Земли в км
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearestIndex = i;
+        }
+    }
+
+    const maxIndex = routeCoordinates.length - 1;
+    const percent = (nearestIndex / maxIndex) * 100;
+    return { index: nearestIndex, percent };
+}
+
 
 // ============================================
 // РАБОТА С ЛОКАЛЬНЫМ ХРАНИЛИЩЕМ
@@ -116,7 +241,6 @@ function loadSelectedFromStorage() {
         if (stored) {
             const arr = JSON.parse(stored);
             selectedRunnerIds = new Set(arr);
-            console.log('📂 Загружено выбранных из localStorage:', arr);
             return arr;
         }
     } catch (error) {
@@ -139,14 +263,11 @@ function clearSelectedStorage() {
 // ============================================
 
 async function init() {
-    console.log('🚀 Инициализация трекера Event 67 (Ночной забег)');
-
     loadSelectedFromStorage();
     await initMap();
     await loadAllRunners();
 
     if (selectedRunnerIds.size > 0) {
-        console.log('📍 Восстановлено выбранных участников:', selectedRunnerIds.size);
         updateSelectedList();
         initializeSelectedRunnersMarkers();
     }
@@ -154,6 +275,7 @@ async function init() {
     setupSearch();
     await loadAnalytics();
     startAutoUpdate();
+    startAnimationLoop();
 
     updateStatus('✅ Трекер запущен (Event 67 - Ночной забег)');
 }
@@ -164,8 +286,6 @@ async function init() {
 // ============================================
 
 async function initMap() {
-    console.log('🗺️ Инициализация карты...');
-
     map = L.map('map').setView([56.0075, 92.7246], 15);
     map.attributionControl.setPrefix('');
 
@@ -174,35 +294,29 @@ async function initMap() {
     }).addTo(map);
 
     await loadRouteFromAPI();
-
-    console.log('✅ Карта инициализирована');
 }
 
 async function loadRouteFromAPI() {
     try {
-        updateStatus('Загрузка маршрута...');
-
-        const osm_way_id = 1477580211;
-
-        try {
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(way(${osm_way_id}););out geom;`;
-            const response = await fetch(overpassUrl);
-            const osm_data = await response.json();
-
-            if (osm_data.elements && osm_data.elements[0] && osm_data.elements[0].geometry) {
-                routeCoordinates = osm_data.elements[0].geometry.map(node => [node.lat, node.lon]);
-                routeType = 'osm';
-                console.log(`✅ Загружен маршрут OSM (${osm_way_id}): ${routeCoordinates.length} точек`);
-            } else {
-                throw new Error('No geometry data');
-            }
-        } catch (osm_error) {
-            console.warn('⚠️ Overpass API недоступен, используем fallback маршрут:', osm_error);
-            const data = createFallbackRoute();
-            routeCoordinates = data.coordinates || [];
-            routeType = data.route_type || 'shuttle';
+        updateStatus('Загрузка GPX маршрута...');
+        
+        const gpxPath = getGPXPathForEvent(CONFIG.EVENT_NAME);
+        
+        const gpxResponse = await fetch(gpxPath);
+        
+        if (!gpxResponse.ok) {
+            throw new Error(`Ошибка загрузки GPX (статус ${gpxResponse.status})`);
         }
-
+        
+        const gpxContent = await gpxResponse.text();
+        routeCoordinates = parseGPXToCoordinates(gpxContent);
+        
+        if (routeCoordinates.length === 0) {
+            throw new Error('GPX файл не содержит координат');
+        }
+        
+        routeType = 'gpx';
+        
         if (routeLayer) map.removeLayer(routeLayer);
 
         if (routeCoordinates.length > 0) {
@@ -226,38 +340,69 @@ async function loadRouteFromAPI() {
         }
 
         updateStatus('✅ Маршрут загружен');
+        
     } catch (error) {
-        console.error('❌ Ошибка загрузки маршрута:', error);
-        updateStatus('Ошибка загрузки маршрута');
+        console.error('❌ Ошибка загрузки GPX:', error);
+        updateStatus('❌ Ошибка: не удалось загрузить GPX маршрут');
+        alert(`Ошибка загрузки маршрута: ${error.message}`);
     }
 }
 
-function createFallbackRoute() {
-    const baseCoords = [56.0075, 92.7246];
-    const latOffset = 0.01;
-    const coordinates = [];
-
-    for (let i = 0; i <= 10; i++) {
-        coordinates.push([
-            baseCoords[0] + (latOffset * i / 10),
-            baseCoords[1] + (latOffset * 0.5 * i / 10)
-        ]);
-    }
-    for (let i = 10; i >= 0; i--) {
-        coordinates.push([
-            baseCoords[0] + (latOffset * i / 10),
-            baseCoords[1] + (latOffset * 0.5 * i / 10)
-        ]);
-    }
-
-    return {
-        event: 'night_run',
-        event_name: 'Ночной забег (Набережная, Красноярск)',
-        event_id: 67,
-        distance: 5.0,
-        route_type: 'shuttle',
-        coordinates
+/**
+ * Определяет путь к GPX файлу на основе названия события
+ */
+function getGPXPathForEvent(eventName) {
+    const paths = {
+        'night_run': '/static/map/2026/night_run.gpx',
+        'city_marathon': '/static/map/2026/city_marathon.gpx',
+        'half_marathon': '/static/map/2026/half_marathon.gpx'
     };
+    
+    return paths[eventName] || '/static/map/2026/night_run.gpx';
+}
+
+/**
+ * Парсит GPX файл и извлекает координаты трека
+ */
+function parseGPXToCoordinates(gpxContent) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(gpxContent, 'text/xml');
+        
+        if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+            throw new Error('Ошибка парсинга XML');
+        }
+        
+        const coordinates = [];
+        const trackPoints = xmlDoc.getElementsByTagName('trkpt');
+        const routePoints = xmlDoc.getElementsByTagName('rtept');
+        
+        if (trackPoints.length > 0) {
+            for (let i = 0; i < trackPoints.length; i++) {
+                const lat = trackPoints[i].getAttribute('lat');
+                const lon = trackPoints[i].getAttribute('lon');
+                if (lat && lon) {
+                    coordinates.push([parseFloat(lat), parseFloat(lon)]);
+                }
+            }
+        }
+        
+        if (coordinates.length === 0 && routePoints.length > 0) {
+            for (let i = 0; i < routePoints.length; i++) {
+                const lat = routePoints[i].getAttribute('lat');
+                const lon = routePoints[i].getAttribute('lon');
+                if (lat && lon) {
+                    coordinates.push([parseFloat(lat), parseFloat(lon)]);
+                }
+            }
+        }
+        
+        return coordinates;
+        
+    } catch (error) {
+        console.error('❌ Ошибка при парсинге GPX:', error);
+        return [];
+    }
 }
 
 
@@ -277,24 +422,55 @@ async function loadAllRunners() {
 
         const data = await response.json();
 
-        allRunners = (data.results || []).map(runner => ({
-            id:                   runner.id || runner.start_number,
-            start_number:         runner.start_number,
-            surname:              runner.surname || '',
-            name:                 runner.name || '',
-            full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
-            sex:                  runner.sex,
-            category:             runner.category || '',
-            status:               runner.race_status,
-            time_gun_finish: parseDuration(runner.time_gun_finish),
-            time_clear_finish:    parseDuration(runner.time_clear_finish),
-            finish_pace_avg:      parseDuration(runner.finish_pace_avg),
-            rank_absolute:        runner.rank_absolute,
-            bib:                  runner.start_number,
-            dorsal:               runner.start_number
-        }));
+        // Загружаем дистанцию события из первого участника
+        if (data.results && data.results.length > 0) {
+            eventDistance = parseFloat(data.results[0].distance) || 0;
+        }
 
-        console.log(`✅ Загружено ${allRunners.length} участников`);
+        allRunners = (data.results || []).map((runner, idx) => {
+            
+            // Извлекаем данные KT1 из вложенного объекта checkpoints
+            // ВАЖНО: поле называется 'time', а не 'time_clear'
+            const kt1Data = runner.checkpoints?.kt1;
+            let kt1Time = kt1Data?.time;
+            
+            // Обработка невалидных значений
+            if (kt1Time === 'undefined' || kt1Time === undefined || kt1Time === null || kt1Time === 'null') {
+                kt1Time = null;
+            }
+            
+            // Вычисляем темпы на основе времени финиша и дистанции (если API их не вернул)
+            const distanceKm = runner.distance || runner.event_distance || eventDistance;
+            const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, distanceKm);
+            const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, distanceKm);
+            
+            return {
+                id:                   runner.id || runner.start_number,
+                start_number:         runner.start_number,
+                surname:              runner.surname || '',
+                name:                 runner.name || '',
+                full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
+                sex:                  runner.sex,
+                category:             runner.category || '',
+                status:               runner.race_status,
+                time_gun_finish:      parseDuration(runner.time_gun_finish),
+                time_clear_finish:    parseDuration(runner.time_clear_finish),
+                // ВАЖНО: сохраняем ИСХОДНОЕ значение (из nested checkpoints.kt1.time) для проверки наличия KT1
+                time_clear_kt1_raw:   kt1Time,
+                time_clear_kt1:       parseDuration(kt1Time),
+                finish_pace_avg:      parseDuration(runner.finish_pace_avg),
+                // Вычисляем темпы из времени и дистанции, так как API их не возвращает
+                finish_pace_avg_gun:  calculatedGunPace,
+                finish_pace_avg_clean: calculatedCleanPace,
+                rank_absolute:        runner.rank_absolute,
+                rank_sex:             runner.rank_sex,
+                rank_category:        runner.rank_category,
+                bib:                  runner.start_number,
+                dorsal:               runner.start_number,
+                checkpoints:          runner.checkpoints || {}
+            };
+        });
+
         updateStatus(`✅ Загружено участников: ${allRunners.length}`);
 
     } catch (error) {
@@ -314,6 +490,8 @@ function initializeSelectedRunnersMarkers() {
         if (map.hasLayer(marker)) map.removeLayer(marker);
     });
     runnerMarkers = {};
+    runnerPositions = {};
+    runnerAnimations = {};
 
     selectedRunnerIds.forEach(runnerId => {
         const runner = allRunners.find(r => String(r.id) === String(runnerId));
@@ -354,36 +532,93 @@ function buildMarkerIcon(runner) {
 }
 
 function buildPopupContent(runner) {
-    // Показываем строки времён только если данные есть
-    const officialTime = runner.time_gun_finish
-        ? `<strong>Официальное время финиша:</strong> ${runner.time_gun_finish}<br>`
-        : '';
-    const pace = runner.finish_pace_avg
-        ? `<strong>Темп:</strong> ${runner.finish_pace_avg}`
-        : '';
-    const clearTime = runner.time_clear_finish        
-        ? `<strong>Чистое время финиша:</strong> ${runner.time_clear_finish}<br>` 
-        : '';
-
-    return `
-        <div style="font-size: 12px; min-width: 190px; text-align: center;">
-            <div><strong>№${runner.start_number}</strong></div>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
+    const status = (runner.status || '').toLowerCase();
+    
+    // Базовая информация
+    const baseHTML = `
+        <div style="font-size: 12px; min-width: 220px; text-align: left;">
+            <div style="text-align: center; margin-bottom: 8px;">
+                <div><strong>№${runner.start_number}</strong></div>
                 <div><strong>${runner.full_name}</strong></div>
-                ${runner.category ? `
-                    <div style="margin-top: 6px; color: #666;">Категория:</div>
-                    <div>${runner.category}</div>
-                ` : ''}
             </div>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; text-align: left;">
-                <strong>Статус:</strong> ${getStatusText(runner.status)}<br>
-                <strong>Место в абсолюте:</strong> ${runner.rank_absolute || '-'}<br>
+            <div style="border-top: 1px solid #ddd; padding-top: 8px; margin-bottom: 8px;">
+                ${runner.category ? `<div><strong>Категория:</strong> ${runner.category}</div>` : ''}
+            </div>
+    `;
+    
+    let contentHTML = '';
+    
+    if (status.includes('finish')) {
+        // FINISHED - расширенная информация с темпами и местами
+        const officialTime = runner.time_gun_finish
+            ? `<div><strong>Официальное время:</strong> ${runner.time_gun_finish}</div>`
+            : '';
+        const clearTime = runner.time_clear_finish        
+            ? `<div><strong>Чистое время:</strong> ${runner.time_clear_finish}</div>` 
+            : '';
+        const officialPace = runner.finish_pace_avg_gun
+            ? `<div><strong>Официальный темп:</strong> ${runner.finish_pace_avg_gun}</div>`
+            : '';
+        const cleanPace = runner.finish_pace_avg_clean
+            ? `<div><strong>Чистый темп:</strong> ${runner.finish_pace_avg_clean}</div>`
+            : '';
+        const rankSex = runner.rank_sex
+            ? `<div><strong>Место (пол):</strong> ${runner.rank_sex}</div>`
+            : '';
+        const rankCategory = runner.rank_category
+            ? `<div><strong>Место (категория):</strong> ${runner.rank_category}</div>`
+            : '';
+        
+        contentHTML = `
+            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                <div><strong>Место (абсолют):</strong> ${runner.rank_absolute || '-'}</div>
                 ${officialTime}
                 ${clearTime}
-                ${pace}
+                ${officialPace}
+                ${cleanPace}
+                ${rankSex}
+                ${rankCategory}
             </div>
-        </div>
-    `;
+        `;
+    } else if (status.includes('running') || status.includes('started')) {
+        // RUNNING - подробная информация
+        const lastCP = getLastCheckpoint(runner);
+        const lastCPTime = lastCP ? parseDuration(lastCP.time) : '-';
+        const lastCPPace = lastCP ? parseDuration(lastCP.pace) : '-';
+        
+        // Прогнозируемое время финиша
+        let predictedFinish = '-';
+        if (lastCP && lastCP.pace) {
+            const paceSeconds = durationToSeconds(lastCP.pace);
+            if (paceSeconds > 0 && eventDistance > 0) {
+                const predictedSeconds = (eventDistance * 1000) / (1000 / paceSeconds); // расстояние в км * темп на км
+                predictedFinish = secondsToTime(predictedSeconds);
+            }
+        }
+        
+        contentHTML = `
+            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                <div><strong>Последняя КТ:</strong> ${lastCP ? lastCP.name : '-'}</div>
+                <div><strong>Время на КТ:</strong> ${lastCPTime}</div>
+                <div><strong>Темп на КТ:</strong> ${lastCPPace}</div>
+                <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
+                <div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
+                    <div><strong>Прогноз финиша:</strong> ${predictedFinish}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        // NOT STARTED
+        contentHTML = `
+            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+            </div>
+        `;
+    }
+    
+    return baseHTML + contentHTML + '</div>';
 }
 
 function createRunnerMarker(runner) {
@@ -403,7 +638,6 @@ function createRunnerMarker(runner) {
     marker.on('popupclose', () => activePopups.delete(runnerId));
 
     runnerMarkers[runnerId] = marker;
-    console.log(`✅ Создан маркер: ${runner.full_name}`);
 }
 
 function updateRunnerMarkerPosition(runner) {
@@ -412,20 +646,91 @@ function updateRunnerMarkerPosition(runner) {
 
     if (!marker || !routeCoordinates.length) return;
 
-    let progressPercent = runnerPositions[runnerId] || 0;
+    // Определяем целевую позицию на основе реальных данных
+    let targetProgressPercent = 0;
+    let shouldTeleport = false;
 
     const s = (runner.status || '').toLowerCase();
-    if (s.includes('finish')) {
-        progressPercent = 100;
+    
+    const hasKT1 = runner.time_clear_kt1_raw && 
+                   runner.time_clear_kt1_raw !== '0' && 
+                   runner.time_clear_kt1_raw !== '' &&
+                   runner.time_clear_kt1_raw !== 'null' &&
+                   runner.time_clear_kt1_raw !== 'undefined' &&
+                   runner.time_clear_kt1_raw !== null &&
+                   runner.time_clear_kt1_raw !== undefined;
+    
+    if (s.includes('notstart') || s.includes('not started')) {
+        // "Не стартовал" - ВСЕГДА остаётся на старте (0%), не движется
+        targetProgressPercent = 0;
+        shouldTeleport = false;
+    } else if (s.includes('finish')) {
+        // Финишировал - телепортируемся на финиш (100%)
+        targetProgressPercent = 100;
+        shouldTeleport = true;
+    } else if (hasKT1) {
+        // Прошел KT1 - сначала телепортируемся туда один раз, затем движемся к финишу
+        const currentProgress = runnerPositions[runnerId] || 0;
+        const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
+        const kt1Percent = kt1Point.percent;
+        
+        if (currentProgress < kt1Percent) {
+            // Первый раз - телепортируемся на KT1
+            targetProgressPercent = kt1Percent;
+            shouldTeleport = true;
+        } else {
+            // Уже на KT1 или прошли его - плавно движемся к финишу (100%)
+            targetProgressPercent = Math.min(100, currentProgress + 0.3);
+            shouldTeleport = false;
+        }
     } else if (s.includes('running') || s.includes('started')) {
-        progressPercent = Math.min(100, progressPercent + 0.5);
+        // На трассе - плавно движемся (0% -> до KT1)
+        const currentProgress = runnerPositions[runnerId] || 0;
+        const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
+        const maxTargetPercent = kt1Point.percent;
+        targetProgressPercent = Math.min(maxTargetPercent, currentProgress + 0.3);
+        shouldTeleport = false;
     }
+    // Иначе остаёмся на старте (0%)
 
-    runnerPositions[runnerId] = progressPercent;
+    // Обновляем позицию
+    runnerPositions[runnerId] = targetProgressPercent;
 
+    const progressPercent = runnerPositions[runnerId];
     const maxIndex = Math.max(0, routeCoordinates.length - 1);
-    const positionIndex = Math.min(maxIndex, Math.round(maxIndex * progressPercent / 100));
-    marker.setLatLng(routeCoordinates[positionIndex] || routeCoordinates[0]);
+    const targetIndex = Math.min(maxIndex, Math.round(maxIndex * progressPercent / 100));
+
+    // Инициализируем анимацию если её еще нет
+    if (!runnerAnimations[runnerId]) {
+        runnerAnimations[runnerId] = {
+            currentIndex: targetIndex,
+            targetIndex: targetIndex,
+            startTime: Date.now(),
+            animationDuration: shouldTeleport ? 0 : CONFIG.UPDATE_INTERVAL
+        };
+    } else {
+        // ВАЖНО: перед перезапуском анимации сохраняем текущую фактическую позицию
+        // чтобы избежать отскока к целому индексу, ЕСЛИ это не телепорт
+        const now = Date.now();
+        const anim = runnerAnimations[runnerId];
+        
+        if (shouldTeleport) {
+            // При телепорте сразу устанавливаем целевой индекс
+            anim.currentIndex = targetIndex;
+            anim.targetIndex = targetIndex;
+        } else {
+            // При плавном движении сохраняем текущую интерполированную позицию
+            const elapsed = Math.max(0, now - anim.startTime);
+            const progress = anim.animationDuration > 0 ? Math.min(1, elapsed / anim.animationDuration) : 1;
+            const currentIndex = anim.currentIndex + (anim.targetIndex - anim.currentIndex) * progress;
+            anim.currentIndex = currentIndex;
+            anim.targetIndex = targetIndex;
+        }
+        
+        // Обновляем время и длительность анимации
+        anim.startTime = now;
+        anim.animationDuration = shouldTeleport ? 0 : CONFIG.UPDATE_INTERVAL;
+    }
 
     marker.setIcon(buildMarkerIcon(runner));
 
@@ -434,10 +739,64 @@ function updateRunnerMarkerPosition(runner) {
     }
 }
 
+/**
+ * Плавная анимация позиции маркера на протяжении интервала обновления
+ * Интерполирует позицию между текущим и целевым индексом на маршруте
+ */
+function animateRunnerFrame() {
+    const now = Date.now();
 
-// ============================================
-// ВЫБОР И ОТСЛЕЖИВАНИЕ УЧАСТНИКОВ
-// ============================================
+    Object.entries(runnerAnimations).forEach(([runnerId, anim]) => {
+        const marker = runnerMarkers[runnerId];
+        if (!marker || !routeCoordinates.length) return;
+
+        const elapsed = now - anim.startTime;
+        const progress = Math.min(1, elapsed / anim.animationDuration);
+
+        // Линейная интерполяция индекса
+        const currentIndex = anim.currentIndex + (anim.targetIndex - anim.currentIndex) * progress;
+        
+        // Получаем позиции для интерполяции между двумя точками маршрута
+        const floorIndex = Math.floor(currentIndex);
+        const ceilIndex = Math.ceil(currentIndex);
+        const fracIndex = currentIndex - floorIndex;
+
+        let position;
+        if (floorIndex === ceilIndex) {
+            position = routeCoordinates[floorIndex];
+        } else {
+            // Интерполируем между двумя соседними точками
+            const p1 = routeCoordinates[floorIndex];
+            const p2 = routeCoordinates[ceilIndex];
+            position = [
+                p1[0] + (p2[0] - p1[0]) * fracIndex,
+                p1[1] + (p2[1] - p1[1]) * fracIndex
+            ];
+        }
+
+        if (position) {
+            marker.setLatLng(position);
+        }
+
+        // Когда анимация завершена
+        if (progress >= 1) {
+            anim.currentIndex = anim.targetIndex;
+            anim.startTime = now; // Готово к следующей анимации
+        }
+    });
+
+    // Продолжаем анимационный цикл
+    animationFrameId = requestAnimationFrame(animateRunnerFrame);
+}
+
+/**
+ * Запускает основной animation loop для плавного движения маркеров
+ */
+function startAnimationLoop() {
+    if (!animationFrameId) {
+        animateRunnerFrame();
+    }
+}
 
 async function selectRunner(runnerId) {
     const runnerId_str = String(runnerId);
@@ -480,6 +839,7 @@ async function deselectRunner(runnerId) {
         }
         delete runnerMarkers[runnerId_str];
         delete runnerPositions[runnerId_str];
+        delete runnerAnimations[runnerId_str];
         activePopups.delete(runnerId_str);
     }
 
@@ -618,7 +978,7 @@ function setupSearch() {
 
 async function loadAnalytics() {
     try {
-        console.log('📊 Загрузка аналитики для Event 67');
+
 
         const response = await fetch(
             `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
@@ -747,28 +1107,29 @@ function renderAnalyticsHTML(stats, results) {
 // ============================================
 
 function startAutoUpdate() {
-    console.log(`⏱️ Автообновление запущено (каждые ${CONFIG.UPDATE_INTERVAL / 1000}с)`);
 
-    setInterval(async () => {
-        if (isUpdating) return;
-        isUpdating = true;
 
-        try {
-            await loadAllRunners();
+    let isLoading = false;
 
-            selectedRunnerIds.forEach(runnerId => {
-                const runner = allRunners.find(r => String(r.id) === String(runnerId));
-                if (runner) updateRunnerMarkerPosition(runner);
-            });
-
-            updateSelectedList();
-            updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 67`);
-
-        } catch (error) {
-            console.error('❌ Ошибка при обновлении:', error);
-        } finally {
-            isUpdating = false;
+    setInterval(() => {
+        // Запускаем загрузку параллельно, БЕЗ await - не блокируем цикл
+        if (!isLoading) {
+            isLoading = true;
+            loadAllRunners()
+                .catch(error => console.error('❌ Ошибка при загрузке данных:', error))
+                .finally(() => { isLoading = false; });
         }
+
+        // Обновляем позиции маркеров НЕЗАВИСИМО от загрузки данных
+        // Маркеры продолжат плавно двигаться, даже если идёт загрузка
+        selectedRunnerIds.forEach(runnerId => {
+            const runner = allRunners.find(r => String(r.id) === String(runnerId));
+            if (runner) updateRunnerMarkerPosition(runner);
+        });
+
+        updateSelectedList();
+        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 67`);
+
     }, CONFIG.UPDATE_INTERVAL);
 }
 

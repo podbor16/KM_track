@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
-🏃 KRASMARAFON RACE LOADER v3.3 - NORMALIZED (type-safe)
-Загружает и обновляет результаты забега из системы хронометража
-Темпы берутся напрямую из JSON, ранги – из грязного времени,
-сегменты генерируются по соседним точкам из checkpoint_distances.
-Все времена в кэше приводятся к формату HH:MM:SS с ведущими нулями.
+🏃 KRASMARAFON RACE LOADER v3.4 - COPERNICO INTEGRATION (fixed)
+Загружает и обновляет результаты забега из системы хронометража Copernico.
 """
 
 import sys
@@ -13,6 +10,8 @@ import time
 import logging
 import argparse
 import re
+import urllib.request
+import urllib.parse
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
@@ -155,7 +154,11 @@ def normalize_time(t: Optional[str]) -> Optional[str]:
 class RaceLoader:
     """Оптимизированный загрузчик результатов в двух режимах"""
 
-    def __init__(self, event_id: int, logger: logging.LoggerAdapter):
+    def __init__(self, event_id: int, logger: logging.LoggerAdapter,
+                 copernico_race_id: Optional[str] = None,
+                 copernico_login: Optional[str] = None,
+                 copernico_preset: Optional[str] = None,
+                 copernico_event: Optional[str] = None):
         self.event_id = event_id
         self.logger = logger
         self.connection = None
@@ -168,7 +171,13 @@ class RaceLoader:
 
         # Данные о событии (дистанция, массив дистанций КТ)
         self.event_distance_km: Optional[float] = None
-        self.checkpoint_distances: Optional[List[float]] = None  # список float [0, ... , total]
+        self.checkpoint_distances: Optional[List[float]] = None
+
+        # Параметры Copernico API
+        self.copernico_race_id = copernico_race_id
+        self.copernico_login = copernico_login
+        self.copernico_preset = copernico_preset
+        self.copernico_event = copernico_event
 
     def connect(self) -> bool:
         """Подключиться к БД и получить данные о событии"""
@@ -215,12 +224,57 @@ class RaceLoader:
             self.logger.error(f"❌ Ошибка подключения: {e}")
             return False
 
+    def fetch_from_copernico(self) -> List[Dict]:
+        """Получить данные из Copernico API."""
+        if not all([self.copernico_race_id, self.copernico_login, self.copernico_preset, self.copernico_event]):
+            self.logger.error("❌ Не заданы все параметры Copernico API")
+            return []
+
+        encoded_preset = urllib.parse.quote(self.copernico_preset)
+        encoded_event = urllib.parse.quote(self.copernico_event)
+        url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
+        self.logger.info(f"📡 Запрос к Copernico API: {url}")
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                self.logger.debug(f"Ответ API: {data}")
+                if isinstance(data, dict) and 'data' in data:
+                    runners = data['data']
+                elif isinstance(data, list):
+                    runners = data
+                else:
+                    self.logger.error(f"❌ Неожиданный формат ответа: {type(data)}")
+                    return []
+                self.logger.info(f"✅ Получено {len(runners)} участников из API")
+                return runners
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка при запросе к API: {e}")
+            return []
+
     def load_race_data(self) -> List[Dict]:
-        """Прочитать race_data.json"""
+        """Получить данные (из API или из файла) и обновить JSON."""
+        # Если указаны параметры Copernico, пытаемся получить из API
+        if self.copernico_race_id and self.copernico_login and self.copernico_preset and self.copernico_event:
+            try:
+                runners = self.fetch_from_copernico()
+                # Если запрос выполнился (даже пустой список) – используем результат
+                if runners is not None:
+                    # Сохраняем в файл для истории
+                    try:
+                        with open(RACE_DATA_FILE, 'w', encoding='utf-8') as f:
+                            json.dump({"data": runners, "last_updated": datetime.now().isoformat()}, f,
+                                      ensure_ascii=False, indent=2)
+                        self.logger.info(f"💾 Данные сохранены в {RACE_DATA_FILE}")
+                    except Exception as e:
+                        self.logger.error(f"❌ Ошибка сохранения JSON: {e}")
+                    return runners
+            except Exception as e:
+                self.logger.warning(f"⚠️ Не удалось получить данные из API: {e}, пробуем читать из файла...")
+        # Читаем из файла (резервный вариант)
         if not RACE_DATA_FILE.exists():
             self.logger.error(f"❌ Файл не найден: {RACE_DATA_FILE}")
             return []
-
         try:
             with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -253,9 +307,7 @@ class RaceLoader:
             )
             self.existing_results = {}
             for row in self.cursor.fetchall():
-                # Преобразуем в словарь, чтобы изменять
                 row_dict = dict(row)
-                # Нормализуем временные поля
                 for field in ['time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish']:
                     row_dict[field] = normalize_time(row_dict.get(field))
                 for kt in ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5']:
@@ -288,10 +340,11 @@ class RaceLoader:
         try:
             for idx, runner in enumerate(runners, 1):
                 dorsal = runner.get('dorsal')
-                surname = runner.get('surname', '').strip()
-                name = runner.get('name', '').strip()
+                surname = (runner.get('surname') or '').strip()
+                name = (runner.get('name') or '').strip()
+                birthdate = runner.get('birthdate')
 
-                if not dorsal or not surname or not name:
+                if not dorsal or not surname or not name or not birthdate:
                     continue
 
                 batch.append((
@@ -299,7 +352,7 @@ class RaceLoader:
                     str(dorsal),
                     surname,
                     name,
-                    runner.get('birthdate'),
+                    birthdate,
                     convert_gender(runner.get('gender')),
                     runner.get('category', 'Unknown'),
                     'Not started'
@@ -352,7 +405,7 @@ class RaceLoader:
 
                 runners = self.load_race_data()
                 if not runners:
-                    self.logger.warning("⚠️ Ошибка чтения JSON, повторим...")
+                    self.logger.warning("⚠️ Ошибка получения данных, повторим...")
                     time.sleep(interval)
                     continue
 
@@ -398,8 +451,8 @@ class RaceLoader:
             result_id = existing['id']
 
             # === РЕЗУЛЬТАТЫ ===
-            surname = runner.get('surname', '').strip()
-            name = runner.get('name', '').strip()
+            surname = (runner.get('surname') or '').strip()
+            name = (runner.get('name') or '').strip()
             birthdate = runner.get('birthdate')
             sex = convert_gender(runner.get('gender'))
             category = runner.get('category', 'Unknown')
@@ -640,17 +693,14 @@ class RaceLoader:
 # === MAIN ===
 def main():
     parser = argparse.ArgumentParser(
-        description='🏃 KRASMARAFON Race Loader v3.3',
+        description='🏃 KRASMARAFON Race Loader v3.4',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:
   Режим INIT (первоначальная загрузка всех участников):
-  $ python load_race_results.py --init --event-id 99
+  $ python load_race_results.py --init --event-id 104
 
   Режим CONTINUOUS (непрерывное обновление):
-  $ python load_race_results.py --event-id 99
-
-  С кастомным интервалом обновления:
-  $ python load_race_results.py --event-id 99 --interval 1 --reset-cache 60
+  $ python load_race_results.py --event-id 104 --interval 2 --reset-cache 60
 
 ВАЖНО:
   • INIT режим: Загружает всех участников один раз с "Not started"
@@ -701,13 +751,27 @@ def main():
     if args.debug:
         logger.info("🔧 DEBUG режим: будут показаны детали изменений")
 
+    # Жестко заданные параметры Copernico
+    copernico_race_id = "--2026-67178"
+    copernico_login = "podbor250718@gmail.com"
+    copernico_preset = "km_analytics"
+    copernico_event = "5 км"
+
     # Создать загрузчик
-    loader = RaceLoader(event_id=args.event_id, logger=logger)
+    loader = RaceLoader(
+        event_id=args.event_id,
+        logger=logger,
+        copernico_race_id=copernico_race_id,
+        copernico_login=copernico_login,
+        copernico_preset=copernico_preset,
+        copernico_event=copernico_event
+    )
 
     try:
         if not loader.connect():
             return 1
 
+        # Первая загрузка данных (из API или файла)
         runners = loader.load_race_data()
         if not runners:
             logger.error("❌ Нет данных для загрузки")
