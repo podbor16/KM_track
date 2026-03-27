@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function updateEventCardBackground() {
     const eventCard = document.getElementById('eventCard');
     const eventDisplayName = eventNameMap[currentEvent];
-    const imageUrl = `/legacy/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
     eventCard.style.backgroundImage = `url('${imageUrl}')`;
 }
 
@@ -362,21 +362,22 @@ function sortTable(columnName) {
                 valA = (a.distance || '').toLowerCase();
                 valB = (b.distance || '').toLowerCase();
                 break;
+            case 'sex':
+                valA = (a.sex || '').toLowerCase();
+                valB = (b.sex || '').toLowerCase();
+                break;    
             case 'category':
                 valA = (a.category || '').toLowerCase();
                 valB = (b.category || '').toLowerCase();
                 break;
-            case 'sex':
-                valA = (a.sex || '').toLowerCase();
-                valB = (b.sex || '').toLowerCase();
-                break;
+
             case 'city':
                 valA = (a.city || a.City || '').toLowerCase();
                 valB = (b.city || b.City || '').toLowerCase();
                 break;
             case 'club':
-                valA = (a.club || a.Club || '').toLowerCase();
-                valB = (b.club || b.Club || '').toLowerCase();
+                valA = (a.club || a.Club || 'Без клуба').toLowerCase();
+                valB = (b.club || b.Club || 'Без клуба').toLowerCase();
                 break;
             default:
                 return 0;
@@ -403,6 +404,18 @@ function renderStartList(runners) {
         // Фамилия, имя
         let firstName = runner.name || 'N/A';
         let lastName = runner.surname || 'N/A';
+
+        // Год рождения
+        let birthYear = 'N/A';
+        if (runner.birthday) {
+            try {
+                const dateStr = runner.birthday;
+                const year = new Date(dateStr).getFullYear();
+                birthYear = year > 0 ? year : 'N/A';
+            } catch (e) {
+                birthYear = 'N/A';
+            }
+        }
         
         // Дистанция
         let distance = runner.distance || '1 км';
@@ -424,24 +437,12 @@ function renderStartList(runners) {
             }
         }
         
-        // Год рождения
-        let birthYear = 'N/A';
-        if (runner.birthday) {
-            try {
-                const dateStr = runner.birthday;
-                const year = new Date(dateStr).getFullYear();
-                birthYear = year > 0 ? year : 'N/A';
-            } catch (e) {
-                birthYear = 'N/A';
-            }
-        }
-        
         // Возрастная категория
         let category = runner.category || 'Неизвестно';
         
-        // Город, клуб - заменяем null и N/A на пустую строку
-        let city = runner.city && runner.city.toLowerCase() !== 'n/a' ? runner.city : '';
-        let club = runner.club && runner.club.toLowerCase() !== 'n/a' ? runner.club : '';
+        // Город, клуб - заменяем null, 'null' и N/A на пустую строку
+        let city = (runner.city && runner.city.toLowerCase() !== 'n/a' && runner.city.toLowerCase() !== 'null') ? runner.city : '';
+        let club = (runner.club && runner.club.toLowerCase() !== 'n/a' && runner.club.toLowerCase() !== 'null') ? runner.club : '';
         
         let rowHTML = `
             <td>${index + 1}</td>
@@ -449,7 +450,7 @@ function renderStartList(runners) {
             <td>${firstName}</td>
             <td>${birthYear}</td>
             <td>${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span>"gender-tag ${genderClass}">${genderText}</span></td>
             <td><span class="age-group-tag">${category}</span></td>
             <td>${city}</td>
             <td>${club}</td>

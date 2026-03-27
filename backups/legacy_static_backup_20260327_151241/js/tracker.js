@@ -180,29 +180,27 @@ async function initMap() {
 
 async function loadRouteFromAPI() {
     try {
-        updateStatus('Загрузка маршрута...');
-
-        const osm_way_id = 1477580211;
-
-        try {
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];(way(${osm_way_id}););out geom;`;
-            const response = await fetch(overpassUrl);
-            const osm_data = await response.json();
-
-            if (osm_data.elements && osm_data.elements[0] && osm_data.elements[0].geometry) {
-                routeCoordinates = osm_data.elements[0].geometry.map(node => [node.lat, node.lon]);
-                routeType = 'osm';
-                console.log(`✅ Загружен маршрут OSM (${osm_way_id}): ${routeCoordinates.length} точек`);
-            } else {
-                throw new Error('No geometry data');
-            }
-        } catch (osm_error) {
-            console.warn('⚠️ Overpass API недоступен, используем fallback маршрут:', osm_error);
-            const data = createFallbackRoute();
-            routeCoordinates = data.coordinates || [];
-            routeType = data.route_type || 'shuttle';
+        updateStatus('Загрузка GPX маршрута...');
+        
+        const gpxPath = getGPXPathForEvent(CONFIG.EVENT_NAME);
+        console.log('📂 Загружаю GPX:', gpxPath);
+        
+        const gpxResponse = await fetch(gpxPath);
+        
+        if (!gpxResponse.ok) {
+            throw new Error(`Ошибка загрузки GPX (статус ${gpxResponse.status})`);
         }
-
+        
+        const gpxContent = await gpxResponse.text();
+        routeCoordinates = parseGPXToCoordinates(gpxContent);
+        
+        if (routeCoordinates.length === 0) {
+            throw new Error('GPX файл не содержит координат');
+        }
+        
+        routeType = 'gpx';
+        console.log(`📍 Загружен GPX маршрут: ${routeCoordinates.length} точек`);
+        
         if (routeLayer) map.removeLayer(routeLayer);
 
         if (routeCoordinates.length > 0) {
@@ -226,9 +224,69 @@ async function loadRouteFromAPI() {
         }
 
         updateStatus('✅ Маршрут загружен');
+        
     } catch (error) {
-        console.error('❌ Ошибка загрузки маршрута:', error);
-        updateStatus('Ошибка загрузки маршрута');
+        console.error('❌ Ошибка загрузки GPX:', error);
+        updateStatus('❌ Ошибка: не удалось загрузить GPX маршрут');
+        alert(`Ошибка загрузки маршрута: ${error.message}`);
+    }
+}
+
+/**
+ * Определяет путь к GPX файлу на основе названия события
+ */
+function getGPXPathForEvent(eventName) {
+    const paths = {
+        'night_run': '/static/map/2026/night_run.gpx',
+        'city_marathon': '/static/map/2026/city_marathon.gpx',
+        'half_marathon': '/static/map/2026/half_marathon.gpx'
+    };
+    
+    return paths[eventName] || '/static/map/2026/night_run.gpx';
+}
+
+/**
+ * Парсит GPX файл и извлекает координаты трека
+ */
+function parseGPXToCoordinates(gpxContent) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(gpxContent, 'text/xml');
+        
+        if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+            throw new Error('Ошибка парсинга XML');
+        }
+        
+        const coordinates = [];
+        const trackPoints = xmlDoc.getElementsByTagName('trkpt');
+        const routePoints = xmlDoc.getElementsByTagName('rtept');
+        
+        if (trackPoints.length > 0) {
+            for (let i = 0; i < trackPoints.length; i++) {
+                const lat = trackPoints[i].getAttribute('lat');
+                const lon = trackPoints[i].getAttribute('lon');
+                if (lat && lon) {
+                    coordinates.push([parseFloat(lat), parseFloat(lon)]);
+                }
+            }
+        }
+        
+        if (coordinates.length === 0 && routePoints.length > 0) {
+            for (let i = 0; i < routePoints.length; i++) {
+                const lat = routePoints[i].getAttribute('lat');
+                const lon = routePoints[i].getAttribute('lon');
+                if (lat && lon) {
+                    coordinates.push([parseFloat(lat), parseFloat(lon)]);
+                }
+            }
+        }
+        
+        console.log(`✅ GPX распарсен: ${coordinates.length} координат извлечено`);
+        return coordinates;
+        
+    } catch (error) {
+        console.error('❌ Ошибка при парсинге GPX:', error);
+        return [];
     }
 }
 
@@ -412,13 +470,24 @@ function updateRunnerMarkerPosition(runner) {
 
     if (!marker || !routeCoordinates.length) return;
 
+    const s = (runner.status || '').toLowerCase();
+    
+    // Определяем статус для логики позиции
+    const isNotStarted = s.includes('not') || s === 'notstarted';
+    const isRunning = s.includes('running') || s.includes('started');
+    const isFinished = s.includes('finish');
+    
     let progressPercent = runnerPositions[runnerId] || 0;
 
-    const s = (runner.status || '').toLowerCase();
-    if (s.includes('finish')) {
+    if (isNotStarted) {
+        // "Не стартовал" - стоит на старте
+        progressPercent = 0;
+    } else if (isFinished) {
+        // "Финиш" - на финише
         progressPercent = 100;
-    } else if (s.includes('running') || s.includes('started')) {
-        progressPercent = Math.min(100, progressPercent + 0.5);
+    } else if (isRunning) {
+        // "На трассе" - плавно движется (увеличиваем очень медленно для плавности)
+        progressPercent = Math.min(100, progressPercent + 0.02);
     }
 
     runnerPositions[runnerId] = progressPercent;

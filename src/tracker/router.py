@@ -36,9 +36,7 @@ router = APIRouter(prefix="", tags=["tracker"])
 # Подключить шаблоны (реэкспорт из app.py)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
-LEGACY_TEMPLATES_DIR = BASE_DIR / "legacy" / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-legacy_templates = Jinja2Templates(directory=str(LEGACY_TEMPLATES_DIR))
 
 
 # ============================================================================
@@ -70,7 +68,7 @@ async def tracker_event(request: Request, event: str):
         "event": event,
         "events": list(settings.EVENTS_CONFIG.keys()),
     }
-    return legacy_templates.TemplateResponse("tracker.html", context)
+    return templates.TemplateResponse("tracker.html", context)
 
 
 async def tracker_main(request: Request):
@@ -80,7 +78,7 @@ async def tracker_main(request: Request):
         "event": settings.CURRENT_EVENT,
         "events": list(settings.EVENTS_CONFIG.keys()),
     }
-    return legacy_templates.TemplateResponse("tracker.html", context)
+    return templates.TemplateResponse("tracker.html", context)
 
 
 @router.get("/analytics", response_class=HTMLResponse, tags=["Pages"])
@@ -91,7 +89,7 @@ async def analytics_page(request: Request):
         "request": request,
         "event": settings.CURRENT_EVENT,
     }
-    return legacy_templates.TemplateResponse("start_list.html", context)
+    return templates.TemplateResponse("start_list.html", context)
 
 
 @router.get("/start_list", response_class=HTMLResponse, tags=["Pages"])
@@ -101,7 +99,7 @@ async def start_list_page(request: Request):
         "request": request,
         "event": settings.CURRENT_EVENT,
     }
-    return legacy_templates.TemplateResponse("start_list.html", context)
+    return templates.TemplateResponse("start_list.html", context)
 
 
 @router.get("/results", response_class=HTMLResponse, tags=["Pages"])
@@ -111,7 +109,7 @@ async def results_page(request: Request):
         "request": request,
         "event": settings.CURRENT_EVENT,
     }
-    return legacy_templates.TemplateResponse("results.html", context)
+    return templates.TemplateResponse("results.html", context)
 
 
 @router.get("/old_pages_start_list", response_class=HTMLResponse, tags=["Pages"])

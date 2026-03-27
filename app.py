@@ -70,33 +70,22 @@ app.add_middleware(
 # Пути
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-LEGACY_STATIC_DIR = BASE_DIR / "legacy" / "static"
 OLD_TEMPLATES_DIR = BASE_DIR / "old_templates"
 TEMPLATES_DIR = BASE_DIR / "templates"
-LEGACY_TEMPLATES_DIR = BASE_DIR / "legacy" / "templates"
 
 # Подключение статических файлов
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     settings.logger.info(f"Static files mounted: {STATIC_DIR}")
 
-# Подключение legacy статических файлов
-if LEGACY_STATIC_DIR.exists():
-    app.mount("/legacy/static", StaticFiles(directory=str(LEGACY_STATIC_DIR)), name="legacy_static")
-    settings.logger.info(f"Legacy static files mounted: {LEGACY_STATIC_DIR}")
-
 # Подключение old_templates (Красмарафон)
 if OLD_TEMPLATES_DIR.exists():
     app.mount("/old_templates", StaticFiles(directory=str(OLD_TEMPLATES_DIR)), name="old_templates")
     settings.logger.info(f"Old templates mounted: {OLD_TEMPLATES_DIR}")
 
-# Подключение шаблонов (текущих и legacy)
+# Подключение шаблонов
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 settings.logger.info(f"Templates directory: {TEMPLATES_DIR}")
-
-# Подключение legacy шаблонов
-legacy_templates = Jinja2Templates(directory=str(LEGACY_TEMPLATES_DIR))
-settings.logger.info(f"Legacy templates directory: {LEGACY_TEMPLATES_DIR}")
 
 
 # --- ОБРАБОТЧИКИ ИСКЛЮЧЕНИЙ ---
@@ -159,19 +148,19 @@ async def root():
 @app.get("/history", tags=["Pages"])
 async def history_page(request: Request):
     """Страница истории с поиском по спортсмену и забегу"""
-    return legacy_templates.TemplateResponse("history.html", {"request": request})
+    return templates.TemplateResponse("history.html", {"request": request})
 
 
 @app.get("/athlete-profile", tags=["Pages"])
 async def athlete_profile_page(request: Request):
     """Страница профиля спортсмена с его результатами"""
-    return legacy_templates.TemplateResponse("athlete-profile.html", {"request": request})
+    return templates.TemplateResponse("athlete-profile.html", {"request": request})
 
 
 @app.get("/race-analysis", tags=["Pages"])
 async def race_analysis_page(request: Request):
     """Страница анализа забегов с выбором события и года"""
-    return legacy_templates.TemplateResponse("race-analysis.html", {"request": request})
+    return templates.TemplateResponse("race-analysis.html", {"request": request})
 
 
 # --- РЕГИСТРАЦИЯ РОУТЕРОВ ---

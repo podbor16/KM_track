@@ -1,21 +1,10 @@
 #!/usr/bin/env python3
 """
-🏃 KRASMARAFON RACE LOADER v3.2 - CORRECTED
+🏃 KRASMARAFON RACE LOADER v3.3 - NORMALIZED (type-safe)
 Загружает и обновляет результаты забега из системы хронометража
-С полной поддержкой всех полей, времен, темпов, рангов и сегментов
-Теперь ранги берутся из грязного времени, темпы вычисляются по дистанции,
+Темпы берутся напрямую из JSON, ранги – из грязного времени,
 сегменты генерируются по соседним точкам из checkpoint_distances.
-
-РЕЖИМЫ:
-  1. --init --event-id 99       : Первая загрузка (INSERT всех участников)
-  2. --event-id 99              : Непрерывное обновление (UPDATE существующих, работает до Ctrl+C)
-
-ПРИМЕРЫ:
-  python load_race_results.py --init --event-id 99
-  python load_race_results.py --event-id 99
-  python load_race_results.py --event-id 99 --interval 3
-
-ЛОГИРОВАНИЕ: Все операции логируются в logs/race_loader_*.log
+Все времена в кэше приводятся к формату HH:MM:SS с ведущими нулями.
 """
 
 import sys
@@ -26,7 +15,7 @@ import argparse
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import os
 
 # Добавляем src в PATH
@@ -83,9 +72,11 @@ def setup_logging(event_id: int) -> logging.LoggerAdapter:
 
 # === КОНВЕРТЕРЫ ===
 def milliseconds_to_time(ms: Optional[int]) -> Optional[str]:
-    """Конвертировать миллисекунды в HH:MM:SS"""
-    if ms is None or ms == 0:
+    """Конвертировать миллисекунды в HH:MM:SS с ведущими нулями"""
+    if ms is None:
         return None
+    if ms == 0:
+        return '00:00:00'
     try:
         total_seconds = ms // 1000
         hours = total_seconds // 3600
@@ -96,13 +87,28 @@ def milliseconds_to_time(ms: Optional[int]) -> Optional[str]:
         return None
 
 
+def convert_pace_format(pace_str: Optional[str]) -> Optional[str]:
+    """Конвертировать темп из формата JSON (м'сс"/км) в ЧЧ:ММ:СС, где ЧЧ всегда 00"""
+    if not pace_str or str(pace_str).lower() == 'null':
+        return None
+    try:
+        match = re.search(r"(\d{1,2})'(\d{2})", str(pace_str))
+        if match:
+            minutes = int(match.group(1))
+            seconds = int(match.group(2))
+            return f"00:{minutes:02d}:{seconds:02d}"
+    except (ValueError, AttributeError):
+        pass
+    return None
+
+
 def compute_pace(seconds_km: float) -> Optional[str]:
-    """Конвертирует секунды на километр в строку 'мм:сс'"""
+    """Конвертирует секунды на километр в строку 'ЧЧ:ММ:СС' (часы всегда 00)"""
     if seconds_km is None or seconds_km <= 0:
         return None
     minutes = int(seconds_km // 60)
     seconds = int(seconds_km % 60)
-    return f"{minutes:02d}:{seconds:02d}"
+    return f"00:{minutes:02d}:{seconds:02d}"
 
 
 def convert_status(status: Optional[str]) -> str:
@@ -131,6 +137,20 @@ def convert_gender(gender: Optional[str]) -> str:
         return "Женщина"
 
 
+def normalize_time(t: Optional[str]) -> Optional[str]:
+    """Приводит строку времени HH:MM:SS к формату с ведущими нулями (02:05:36)"""
+    if t is None:
+        return None
+    if isinstance(t, str):
+        parts = t.split(':')
+        if len(parts) == 3:
+            try:
+                return f"{int(parts[0]):02d}:{int(parts[1]):02d}:{int(parts[2]):02d}"
+            except ValueError:
+                pass
+    return t
+
+
 # === КЛАСС ЗАГРУЗЧИКА ===
 class RaceLoader:
     """Оптимизированный загрузчик результатов в двух режимах"""
@@ -147,8 +167,8 @@ class RaceLoader:
         self.update_cycles = 0
 
         # Данные о событии (дистанция, массив дистанций КТ)
-        self.event_distance_km = None
-        self.checkpoint_distances = None  # список float [0, ... , total]
+        self.event_distance_km: Optional[float] = None
+        self.checkpoint_distances: Optional[List[float]] = None  # список float [0, ... , total]
 
     def connect(self) -> bool:
         """Подключиться к БД и получить данные о событии"""
@@ -164,7 +184,6 @@ class RaceLoader:
                 (self.event_id,)
             )
             event = self.cursor.fetchone()
-
             if not event:
                 self.logger.error(f"❌ События ID {self.event_id} не найдено в БД")
                 return False
@@ -179,7 +198,6 @@ class RaceLoader:
             if event['checkpoint_distances']:
                 try:
                     self.checkpoint_distances = json.loads(event['checkpoint_distances'])
-                    # Убедимся, что это список чисел
                     if not isinstance(self.checkpoint_distances, list):
                         self.logger.error("❌ checkpoint_distances не является списком")
                         return False
@@ -187,7 +205,6 @@ class RaceLoader:
                     self.logger.error("❌ Ошибка разбора checkpoint_distances")
                     return False
             else:
-                # Если нет КТ, используем только старт и финиш
                 self.checkpoint_distances = [0.0, self.event_distance_km]
 
             self.logger.info(f"✅ Подключено. Событие: {event['event_name']} ({self.event_distance_km} км)")
@@ -207,45 +224,59 @@ class RaceLoader:
         try:
             with open(RACE_DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-
             runners = data.get('data', [])
             if not self.update_cycles:
                 self.logger.info(f"📂 Загружено {len(runners)} участников из race_data.json")
             return runners
-
         except Exception as e:
             self.logger.error(f"❌ Ошибка JSON: {e}")
             return []
 
     def load_existing_results(self) -> None:
-    """Загрузить существующие результаты в кэш"""
-    self.logger.info(f"⏳ Загрузка существующих результатов в кэш...")
-    try:
-        self.cursor.execute(
-            """SELECT id, start_number, surname, name, birthday, sex, category, 
-                    race_status, time_gun_start, time_clear_start, time_gun_finish, 
-                    time_clear_finish, rank_absolute, rank_sex, rank_category, 
-                    finish_pace_avg_gun, finish_pace_avg_clean,
-                    time_clear_kt1, time_clear_kt2, time_clear_kt3, 
-                    time_clear_kt4, time_clear_kt5, pace_avg_kt1, pace_avg_kt2, 
-                    pace_avg_kt3, pace_avg_kt4, pace_avg_kt5
-            FROM results WHERE event_id = %s""",
-            (self.event_id,)
-        )
-        self.existing_results = {}
-        for row in self.cursor.fetchall():
-            # ИСПРАВЛЕНО: проверяем на None, а не на falsy (0 и "0" будут добавлены)
-            if row['start_number'] is not None:
-                dorsal = str(row['start_number'])
-                self.existing_results[dorsal] = dict(row)
-            else:
-                self.logger.warning(f"⚠️ Пропущен участник {row['surname']} {row['name']} из-за отсутствия start_number")
-        self.logger.info(f"✅ Кэш загружен: {len(self.existing_results)} результатов")
-    except Exception as e:
-        self.logger.error(f"❌ Ошибка кэша: {e}")
+        """Загрузить существующие результаты в кэш с нормализацией времен"""
+        if self.cursor is None:
+            self.logger.error("❌ Нет курсора БД")
+            return
+
+        self.logger.info(f"⏳ Загрузка существующих результатов в кэш...")
+        try:
+            self.cursor.execute(
+                """SELECT id, start_number, surname, name, birthday, sex, category, 
+                        race_status, time_gun_start, time_clear_start, time_gun_finish, 
+                        time_clear_finish, rank_absolute, rank_sex, rank_category, 
+                        finish_pace_avg_gun, finish_pace_avg_clean,
+                        time_clear_kt1, time_clear_kt2, time_clear_kt3, 
+                        time_clear_kt4, time_clear_kt5, pace_avg_kt1, pace_avg_kt2, 
+                        pace_avg_kt3, pace_avg_kt4, pace_avg_kt5
+                FROM results WHERE event_id = %s""",
+                (self.event_id,)
+            )
+            self.existing_results = {}
+            for row in self.cursor.fetchall():
+                # Преобразуем в словарь, чтобы изменять
+                row_dict = dict(row)
+                # Нормализуем временные поля
+                for field in ['time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish']:
+                    row_dict[field] = normalize_time(row_dict.get(field))
+                for kt in ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5']:
+                    if row_dict.get(kt) is not None:
+                        row_dict[kt] = normalize_time(row_dict[kt])
+
+                if row_dict.get('start_number') is not None:
+                    dorsal = str(row_dict['start_number'])
+                    self.existing_results[dorsal] = row_dict
+                else:
+                    self.logger.warning(f"⚠️ Пропущен участник {row_dict['surname']} {row_dict['name']} из-за отсутствия start_number")
+            self.logger.info(f"✅ Кэш загружен: {len(self.existing_results)} результатов")
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка кэша: {e}")
 
     def init_mode(self, runners: List[Dict]) -> bool:
         """РЕЖИМ INIT: Загрузить один раз всех участников с INSERT"""
+        if self.cursor is None:
+            self.logger.error("❌ Нет курсора БД")
+            return False
+
         self.logger.info("\n" + "="*70)
         self.logger.info("🚀 РЕЖИМ ИНИЦИАЛИЗАЦИИ (--init)")
         self.logger.info("="*70)
@@ -288,12 +319,14 @@ class RaceLoader:
             self.logger.info(f"   Время: {elapsed:.1f}с ({elapsed/len(runners):.3f}с/участник)")
             self.logger.info("="*70 + "\n")
 
-            self.connection.commit()
+            if self.connection:
+                self.connection.commit()
             return True
 
         except Exception as e:
             self.logger.error(f"❌ Ошибка INIT: {e}")
-            self.connection.rollback()
+            if self.connection:
+                self.connection.rollback()
             return False
 
     def continuous_mode(self, runners: List[Dict], interval: int, reset_cache_interval: int = 15) -> None:
@@ -346,14 +379,19 @@ class RaceLoader:
 
     def _update_existing(self, runners: List[Dict]) -> Tuple[int, int]:
         """Обновить все поля существующих записей И их сегменты"""
+        if self.cursor is None:
+            self.logger.error("❌ Нет курсора БД")
+            return 0, 0
+
         results_batch = []
         segments_batch = []
-        updated_dorsals = []   # для логирования
+        updated_dorsals = []
 
         for runner in runners:
             dorsal = str(runner.get('dorsal'))
 
             if dorsal not in self.existing_results:
+                self.logger.warning(f"⚠️ Участник с номером {dorsal} не найден в кэше (возможно, нет start_number в БД)")
                 continue
 
             existing = self.existing_results[dorsal]
@@ -378,24 +416,9 @@ class RaceLoader:
             rank_sex = runner.get('rankings.gen_:::full-1:::')
             rank_category = runner.get('rankings.cat_:::full-1:::')
 
-            # Вычисляем темпы финиша (используем разницу и дистанцию)
-            finish_pace_avg_gun = None
-            if time_gun_finish and time_gun_start and self.event_distance_km:
-                try:
-                    gun_seconds = (datetime.strptime(time_gun_finish, '%H:%M:%S') - datetime.strptime(time_gun_start, '%H:%M:%S')).total_seconds()
-                    gun_km_seconds = gun_seconds / self.event_distance_km
-                    finish_pace_avg_gun = compute_pace(gun_km_seconds)
-                except:
-                    pass
-
-            finish_pace_avg_clean = None
-            if time_clear_finish and time_clear_start and self.event_distance_km:
-                try:
-                    clean_seconds = (datetime.strptime(time_clear_finish, '%H:%M:%S') - datetime.strptime(time_clear_start, '%H:%M:%S')).total_seconds()
-                    clean_km_seconds = clean_seconds / self.event_distance_km
-                    finish_pace_avg_clean = compute_pace(clean_km_seconds)
-                except:
-                    pass
+            # Темпы из JSON
+            finish_pace_avg_gun = convert_pace_format(runner.get('intervalaverages_:::full-1:::'))
+            finish_pace_avg_clean = convert_pace_format(runner.get('netintervalaverages_:::full-1:::'))
 
             # Времена КТ
             time_clear_kt1 = milliseconds_to_time(runner.get('times.real_kt1'))
@@ -431,22 +454,19 @@ class RaceLoader:
             if time_clear_finish != existing.get('time_clear_finish'):
                 changed_fields.append(f'time_clear_finish: {existing.get("time_clear_finish")} → {time_clear_finish}')
 
-            # Если есть изменения, добавляем в список для логирования
             if changed_fields:
                 updated_dorsals.append(dorsal)
-                # Логируем первые несколько
                 if len(updated_dorsals) <= 5:
                     self.logger.debug(f"📝 Dorsal #{dorsal} ({surname} {name}): {', '.join(changed_fields)}")
-
-            # Добавляем в батч для UPDATE
-            results_batch.append((
-                surname, name, birthdate, sex, category, race_status,
-                time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
-                rank_absolute, rank_sex, rank_category, finish_pace_avg_gun, finish_pace_avg_clean,
-                time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5,
-                None, None, None, None, None,   # pace_avg_kt* – оставляем NULL, они не используются
-                result_id
-            ))
+                # Добавляем в батч для UPDATE только если есть изменения
+                results_batch.append((
+                    surname, name, birthdate, sex, category, race_status,
+                    time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
+                    rank_absolute, rank_sex, rank_category, finish_pace_avg_gun, finish_pace_avg_clean,
+                    time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5,
+                    None, None, None, None, None,
+                    result_id
+                ))
 
             # === СЕГМЕНТЫ (всегда обновляем) ===
             segments = self._prepare_segments(result_id, runner)
@@ -495,14 +515,16 @@ class RaceLoader:
                     WHERE id = %s
                 """
                 self.cursor.executemany(update_query, results_batch)
-                self.connection.commit()
+                if self.connection:
+                    self.connection.commit()
                 updated_results = len(results_batch)
                 self.updated_results_count += updated_results
                 if updated_dorsals:
                     self.logger.debug(f"📝 Обновлены: {', '.join(updated_dorsals[:5])} (всего {len(updated_dorsals)})")
             except Exception as e:
                 self.logger.error(f"❌ UPDATE results: {e}")
-                self.connection.rollback()
+                if self.connection:
+                    self.connection.rollback()
 
         # Выполнить bulk UPDATE/INSERT segments
         updated_segments = 0
@@ -519,44 +541,36 @@ class RaceLoader:
                         sg_rank_category = VALUES(sg_rank_category)
                 """
                 self.cursor.executemany(insert_query, segments_batch)
-                self.connection.commit()
+                if self.connection:
+                    self.connection.commit()
                 updated_segments = len(segments_batch)
                 self.updated_segments_count += updated_segments
             except Exception as e:
                 self.logger.error(f"❌ INSERT/UPDATE segments: {e}")
-                self.connection.rollback()
+                if self.connection:
+                    self.connection.rollback()
 
         return updated_results, updated_segments
 
     def _prepare_segments(self, result_id: int, runner_data: Dict) -> List[Tuple]:
         """Подготовить данные сегментов на основе соседних точек из checkpoint_distances"""
+        if self.checkpoint_distances is None:
+            return []
+
         segments = []
 
         # Получаем все чистые времена для точек
-        # Имена точек: 'start', 'kt1', 'kt2', ..., 'finish'
-        # Соответствующие ключи в runner_data:
-        # 'times.real_:::start:::' – старт
-        # 'times.real_kt1', 'times.real_kt2', ... – КТ
-        # 'times.real_:::finish:::' – финиш
-        times = {}
-        # старт
+        times: Dict[str, Optional[int]] = {}
         times['start'] = runner_data.get('times.real_:::start:::')
-        # КТ
         for i in range(1, 6):
             times[f'kt{i}'] = runner_data.get(f'times.real_kt{i}')
-        # финиш
         times['finish'] = runner_data.get('times.real_:::finish:::')
 
         # Список названий точек, соответствующих checkpoint_distances
-        point_names = []
-        # Первая точка – 'start'
-        point_names.append('start')
-        # Добавляем промежуточные КТ (kt1, kt2, ...) в зависимости от длины checkpoint_distances
-        # Количество КТ = len(checkpoint_distances) - 2
+        point_names = ['start']
         num_kt = len(self.checkpoint_distances) - 2
         for i in range(1, num_kt + 1):
             point_names.append(f'kt{i}')
-        # Последняя точка – 'finish'
         point_names.append('finish')
 
         # Генерируем сегменты между соседними точками
@@ -581,14 +595,12 @@ class RaceLoader:
             if seg_dist <= 0:
                 continue
 
-            # Время в секундах
             seg_seconds = segment_ms / 1000.0
             seg_seconds_km = seg_seconds / seg_dist
             sg_pace = compute_pace(seg_seconds_km)
 
             segment_code = f"{from_point}-{to_point}"
 
-            # Ранги для сегментов пока не вычисляем, оставляем NULL
             segments.append((
                 result_id,
                 segment_code,
@@ -601,7 +613,7 @@ class RaceLoader:
 
     def _bulk_insert(self, batch: List[Tuple]) -> int:
         """Bulk INSERT для новых результатов"""
-        if not batch:
+        if not batch or self.cursor is None:
             return 0
 
         try:
@@ -628,7 +640,7 @@ class RaceLoader:
 # === MAIN ===
 def main():
     parser = argparse.ArgumentParser(
-        description='🏃 KRASMARAFON Race Loader v3.2',
+        description='🏃 KRASMARAFON Race Loader v3.3',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:
   Режим INIT (первоначальная загрузка всех участников):
@@ -638,7 +650,7 @@ def main():
   $ python load_race_results.py --event-id 99
 
   С кастомным интервалом обновления:
-  $ python load_race_results.py --event-id 99 --interval 3
+  $ python load_race_results.py --event-id 99 --interval 1 --reset-cache 60
 
 ВАЖНО:
   • INIT режим: Загружает всех участников один раз с "Not started"
@@ -693,17 +705,14 @@ def main():
     loader = RaceLoader(event_id=args.event_id, logger=logger)
 
     try:
-        # Подключиться к БД
         if not loader.connect():
             return 1
 
-        # Загрузить данные из race_data.json
         runners = loader.load_race_data()
         if not runners:
             logger.error("❌ Нет данных для загрузки")
             return 1
 
-        # Выбрать режим
         if args.init:
             if not loader.init_mode(runners):
                 return 1

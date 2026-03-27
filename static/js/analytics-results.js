@@ -29,12 +29,32 @@ const eventColorMap = {
     'snow7': '#00BFDF'
 };
 
+// Маппинг событие + год на event_id в БД
+const eventYearToIdMap = {
+    'night_run_2025': 67,
+    'night_run_2026': 104,
+    'vesna_2025': 71,
+    'vesna_2026': 106,
+    'colorrun_2025': 75,
+    'colorrun_2026': 108,
+    'girlseven_2025': 79,
+    'girlseven_2026': 110,
+    'kids_2025': 83,
+    'kids_2026': 113,
+    'zhara_2025': [89, 91, 93],       // три дистанции
+    'zhara_2026': [115, 116, 117],    // три дистанции
+    'xtrailrun_2025': 95,
+    'xtrailrun_2026': 117,
+    'snow7_2025': 99,
+    'snow7_2026': 119
+};
+
 // Инициализация страницы
 document.addEventListener('DOMContentLoaded', function() {
-    populateYearSelector();
-    restoreSavedPreferences();
-    updateEventThemeColor();
-    loadRunnersData();
+    populateYearSelector();           // Сначала заполняем селектор годов
+    restoreSavedPreferences();        // Потом восстанавливаем сохраненные значения
+    updateEventThemeColor();          // Обновляем цвет темы
+    loadRunnersData();                // Загружаем данные
 });
 
 // Функция обновления цвета темы в зависимости от события
@@ -83,31 +103,59 @@ async function switchEventResults() {
 function updateEventCardBackground() {
     const eventCard = document.getElementById('eventCard');
     const eventDisplayName = eventNameMap[currentEvent];
-    const imageUrl = `/legacy/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
     eventCard.style.backgroundImage = `url('${imageUrl}')`;
 }
 
 // Функция загрузки данных
 async function loadRunnersData() {
-    console.log('Загрузка данных для результатов');
+    console.log(`Загрузка данных для результатов: ${currentEvent} ${currentYear}`);
     showLoading(true);
     
     try {
-        // Загружаем данные гонки из race_data.json
-        const eventName = eventNameMap[currentEvent] || 'Ночной забег';
-        const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
-        console.log('Запрос к ' + apiUrl);
-        const data = await fetch(apiUrl).then(response => {
+        let rawData = [];
+        
+        // Получаем event_id из маппинга события+года
+        const mapKey = `${currentEvent}_${currentYear}`;
+        const eventIdOrIds = eventYearToIdMap[mapKey];
+        
+        if (eventIdOrIds !== undefined) {
+            // Загружаем из БД через API с правильным event_id
+            console.log('📊 Загрузка результатов из БД через API');
+            
+            // Если это массив дистанций (для Жары), загружаем все вместе
+            const eventIds = Array.isArray(eventIdOrIds) ? eventIdOrIds : [eventIdOrIds];
+            
+            for (const eventId of eventIds) {
+                const response = await fetch(`/api/event-results?event_id=${eventId}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Ошибка загрузки результатов для event_id=${eventId}`);
+                }
+                
+                const data = await response.json();
+                console.log(`✅ Загружено из БД (event_id=${eventId}):`, data.results ? data.results.length : 0, 'участников');
+                rawData = rawData.concat(data.results || []);
+            }
+        } else {
+            // Для неизвестных комбинаций загружаем из legacy API
+            const eventName = eventNameMap[currentEvent] || 'Ночной забег';
+            const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
+            console.log('Запрос к ' + apiUrl);
+            
+            const response = await fetch(apiUrl);
             console.log('Ответ от /api/race-results получен, статус:', response.status);
-            return response.json();
-        });
+            const data = await response.json();
+            
+            rawData = Array.isArray(data) ? data : (data.runners || data.data || data.results || []);
+        }
         
-        allRunners = Array.isArray(data) ? data : (data.runners || data.data || []);
+        console.log('rawData:', rawData.length, 'элементов');
         
-        // Добавим логирование для отладки
-        console.log('Данные получены:', data);
-        console.log('allRunners:', allRunners);
-        console.log('Количество элементов:', allRunners.length);
+        // Нормализуем данные в единый формат
+        allRunners = normalizeRunnerData(rawData);
+        
+        console.log('allRunners после нормализации:', allRunners.length);
         if (allRunners.length > 0) {
             console.log('Пример первого элемента:', allRunners[0]);
         }
@@ -119,10 +167,85 @@ async function loadRunnersData() {
         applyFilters();
         showLoading(false);
     } catch (error) {
-        console.error('Ошибка загрузки данных:', error);
+        console.error('❌ Ошибка загрузки данных:', error);
         showError('Ошибка загрузки данных: ' + error.message);
         showLoading(false);
     }
+}
+
+// Функция нормализации данных из разных источников
+function normalizeRunnerData(runners) {
+    if (!Array.isArray(runners)) {
+        console.warn('⚠️ Ожидается массив, получено:', typeof runners);
+        return [];
+    }
+    
+    return runners.map(runner => {
+        // Если это уже нормализованные данные, возвращаем как есть
+        if (runner.status !== undefined && runner.gender !== undefined) {
+            return runner;
+        }
+        
+        // Нормализуем данные из БД
+        return {
+            // ID результата (важно для загрузки сегментов!)
+            id: runner.id || runner.client_id || '',
+            
+            // Основная информация
+            surname: runner.surname || '',
+            name: runner.name || '',
+            full_name: runner.full_name || `${runner.surname || ''} ${runner.name || ''}`,
+            birthdate: runner.birthday || runner.birthdate || '',
+            gender: convertSexToGender(runner.sex),  // Будет "Мужчина" или "Женщина"
+            sex: runner.sex,
+            category: runner.category || '',
+            
+            // Статус и результаты
+            status: convertRaceStatus(runner.race_status),
+            race_status: runner.race_status,
+            
+            // Время и темп
+            'times.official_:::finish:::': runner.time_clear_finish,
+            time_clear_finish: runner.time_clear_finish,
+            finish_pace_avg: runner.finish_pace_avg,
+            
+            // Место и ранк
+            rank_absolute: runner.rank_absolute,
+            rank_sex: runner.rank_sex,
+            rank_category: runner.rank_category,
+            start_number: runner.start_number,
+            
+            // Дистанция и событие - используем distance_from_event из БД если есть
+            event: runner.event || runner.distance_from_event || 'Ночной забег',
+            distance: runner.distance || runner.distance_from_event || '5 км',
+            
+            // Дополнительные поля
+            checkpoints: runner.checkpoints || {}
+        };
+    });
+}
+
+// Конвертируем пол из БД в формат приложения (сохраняем на русском)
+function convertSexToGender(sex) {
+    if (!sex) return '';
+    const lowerSex = sex.toLowerCase();
+    if (lowerSex.includes('муж') || lowerSex === 'male' || lowerSex === 'm') return 'Мужчина';
+    if (lowerSex.includes('жен') || lowerSex === 'female' || lowerSex === 'f') return 'Женщина';
+    return sex;  // Возвращаем исходное значение если не распознали
+}
+
+// Конвертируем статус из БД в формат приложения
+function convertRaceStatus(raceStatus) {
+    if (!raceStatus) return 'notstarted';
+    const lowerStatus = raceStatus.toLowerCase();
+    
+    if (lowerStatus.includes('finish')) return 'finished';
+    if (lowerStatus.includes('not start') || lowerStatus === 'not started') return 'notstarted';
+    if (lowerStatus.includes('running') || lowerStatus.includes('started')) return 'running';
+    if (lowerStatus.includes('withdraw')) return 'disqualified';
+    if (lowerStatus.includes('disqualif')) return 'disqualified';
+    
+    return 'notstarted';
 }
 
 // Восстанавливаем сохраненные значения при загрузке страницы
@@ -146,7 +269,8 @@ function restoreSavedPreferences() {
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
-    const savedValue = ageGroupSelect.value; // Сохраняем текущее выбранное значение
+    const genderFilter = document.getElementById('genderFilter').value; // Получаем выбранный пол
+    const savedValue = ageGroupSelect.value;
     const ageGroups = new Set();
     
     runners.forEach(runner => {
@@ -169,18 +293,52 @@ function populateAgeGroups(runners) {
     allOption.textContent = 'Все';
     ageGroupSelect.appendChild(allOption);
     
-    // Сортируем возрастные группы: <49 в начало, >75 в конец, остальные в середине
-    const sortedGroups = Array.from(ageGroups).sort((a, b) => {
-        // <49 должна быть первой после "Все"
-        if (a === '<49') return -1;
-        if (b === '<49') return 1;
+    // Фильтруем группы по выбранному полу
+    let filteredGroups = Array.from(ageGroups);
+    
+    if (genderFilter === 'Мужчина') {
+        // Показываем только мужские группы
+        filteredGroups = filteredGroups.filter(group => group.startsWith('мужчины'));
+    } else if (genderFilter === 'Женщина') {
+        // Показываем только женские группы
+        filteredGroups = filteredGroups.filter(group => group.startsWith('женщины'));
+    }
+    
+    // Сортируем группы в правильном порядке
+    const sortedGroups = filteredGroups.sort((a, b) => {
+        // Если пол не выбран - женские группы в начало, потом мужские
+        if (!genderFilter) {
+            const aIsFemale = a.startsWith('женщины');
+            const bIsFemale = b.startsWith('женщины');
+            
+            if (aIsFemale && !bIsFemale) return -1;
+            if (!aIsFemale && bIsFemale) return 1;
+        }
         
-        // >75 должна быть последней
-        if (a === '>75') return 1;
-        if (b === '>75') return -1;
+        // Определяем порядок возрастов для правильной сортировки
+        const ageOrder = {
+            'до 49 лет': 1,
+            '50-59 лет': 2,
+            '60-64 года': 3,
+            '65-69 лет': 4,
+            '70-74 года': 5,
+            '75 лет и старше': 6,
+            '65 лет и старше': 6  // для женщин после 65
+        };
         
-        // Остальные по алфавиту/возрастанию
-        return a.localeCompare(b, 'ru');
+        // Извлекаем возрастной диапазон из названия группы
+        let aAgeKey = '';
+        let bAgeKey = '';
+        
+        for (let key in ageOrder) {
+            if (a.includes(key)) aAgeKey = key;
+            if (b.includes(key)) bAgeKey = key;
+        }
+        
+        const aOrder = ageOrder[aAgeKey] || 99;
+        const bOrder = ageOrder[bAgeKey] || 99;
+        
+        return aOrder - bOrder;
     });
     
     sortedGroups.forEach(group => {
@@ -190,9 +348,12 @@ function populateAgeGroups(runners) {
         ageGroupSelect.appendChild(option);
     });
     
-    // Восстанавливаем сохраненное значение
-    if (savedValue) {
+    // Восстанавливаем сохраненное значение, если оно еще доступно
+    if (savedValue && Array.from(ageGroupSelect.options).some(opt => opt.value === savedValue)) {
         ageGroupSelect.value = savedValue;
+    } else {
+        // Если выбранное значение больше не доступно, выбираем "Все"
+        ageGroupSelect.value = '';
     }
 }
 
@@ -249,6 +410,14 @@ function populateDistances(runners) {
     }
 }
 
+// Обработчик изменения пола - обновляет доступные возрастные группы
+function onGenderChange() {
+    // Пересчитываем доступные возрастные группы в зависимости от выбранного пола
+    populateAgeGroups(allRunners);
+    // Затем применяем все фильтры
+    applyFilters();
+}
+
 // Применяем фильтры к данным
 function applyFilters() {
     const genderFilter = document.getElementById('genderFilter').value;
@@ -298,16 +467,45 @@ function applyFilters() {
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
-    // Рендерим таблицу и сортируем по темпу по умолчанию
-    sortState.column = 'pace';
+    // Рендерим таблицу и сортируем по времени финиша по умолчанию
+    sortState.column = 'time';
     sortState.direction = 'asc';
-    sortTable('pace');
+    sortTable('time');
 }
 
-// Функция для форматирования времени из миллисекунд в чч:мм:сс
-function formatTime(milliseconds) {
-    if (!milliseconds) return '-';
-    const totalSeconds = Math.floor(milliseconds / 1000);
+// Функция для форматирования времени из миллисекунд в чч:мм:сс (поддерживает ISO 8601)
+function formatTime(timeData) {
+    if (!timeData) return '-';
+    
+    // Если это уже строка в формате HH:MM:SS, возвращаем как есть
+    if (typeof timeData === 'string') {
+        // Проверяем формат HH:MM:SS
+        if (timeData.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+            return timeData;
+        }
+        // Парсим ISO 8601 duration: PT1H30M45S или PT1577S => HH:MM:SS
+        if (timeData.startsWith('PT')) {
+            const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+            if (match) {
+                let hours = parseInt(match[1] || 0);
+                let minutes = parseInt(match[2] || 0);
+                let seconds = Math.floor(parseFloat(match[3] || 0));
+                
+                // Конвертируем лишние секунды в минуты и часы
+                minutes += Math.floor(seconds / 60);
+                seconds = seconds % 60;
+                hours += Math.floor(minutes / 60);
+                minutes = minutes % 60;
+                
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+        // Если строка но не в известном формате, возвращаем "-"
+        return '-';
+    }
+    
+    // Если это число (миллисекунды), преобразуем
+    const totalSeconds = Math.floor(timeData / 1000);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
@@ -315,13 +513,46 @@ function formatTime(milliseconds) {
 }
 
 // Функция для расчета темпа (минут на км)
-function calculatePace(milliseconds, distanceStr) {
-    if (!milliseconds || !distanceStr) return '-';
-    const distance = parseFloat(distanceStr);
-    if (distance <= 0) return '-';
-    const totalMinutes = milliseconds / 1000 / 60;
-    const pace = totalMinutes / distance;
-    return pace.toFixed(2);
+function calculatePace(timeData, distanceStr) {
+    if (!timeData || !distanceStr) return '-';
+    
+    // Парсим дистанцию (например, "5 км" -> 5)
+    const distanceNum = parseFloat(distanceStr);
+    if (distanceNum <= 0) return '-';
+    
+    // Парсим время
+    let totalSeconds = 0;
+    
+    // Если это строка формата "0:16:01"
+    if (typeof timeData === 'string' && timeData.includes(':')) {
+        const parts = timeData.split(':');
+        if (parts.length === 3) {
+            totalSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        } else if (parts.length === 2) {
+            totalSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        }
+    }
+    // Если это число (миллисекунды или секунды)
+    else if (typeof timeData === 'number') {
+        // Если больше 60000, это миллисекунды
+        totalSeconds = timeData > 60000 ? timeData / 1000 : timeData;
+    }
+    // Если это ISO 8601 формат PT2490S
+    else if (typeof timeData === 'string' && timeData.startsWith('PT')) {
+        const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+        if (match) {
+            const h = parseInt(match[1] || 0);
+            const m = parseInt(match[2] || 0);
+            const s = parseFloat(match[3] || 0);
+            totalSeconds = h * 3600 + m * 60 + Math.floor(s);
+        }
+    }
+    
+    if (totalSeconds <= 0) return '-';
+    
+    const totalMinutes = totalSeconds / 60;
+    const pace = totalMinutes / distanceNum;
+    return pace.toFixed(5);
 }
 
 // Функция сортировки таблицы
@@ -374,9 +605,33 @@ function sortTable(columnName) {
                 valA = (a.status || '').toLowerCase();
                 valB = (b.status || '').toLowerCase();
                 break;
+            case 'time':
+                // Специальная логика для времени финиша
+                // "Not started" в конце, остальные по времени (быстрее первыми)
+                const statusA = (a.race_status || 'не стартовал').toLowerCase();
+                const statusB = (b.race_status || 'не стартовал').toLowerCase();
+                
+                const isNotStartedA = statusA.includes('not') && statusA.includes('start');
+                const isNotStartedB = statusB.includes('not') && statusB.includes('start');
+                
+                if (isNotStartedA && !isNotStartedB) return 1;
+                if (!isNotStartedA && isNotStartedB) return -1;
+                if (isNotStartedA && isNotStartedB) return 0;
+                
+                // Для стартовавших - сортируем по времени финиша
+                const timeA = a.time_clear_finish || a['times.official_:::finish:::'];
+                const timeB = b.time_clear_finish || b['times.official_:::finish:::'];
+                
+                // Конвертируем время в секунды для сравнения
+                const secsA = parseFloat(timeA) || Infinity;
+                const secsB = parseFloat(timeB) || Infinity;
+                
+                valA = secsA;
+                valB = secsB;
+                break;
             case 'pace':
-                const pace1 = calculatePace(a['times.official_:::finish:::'], a.event);
-                const pace2 = calculatePace(b['times.official_:::finish:::'], b.event);
+                const pace1 = calculatePace(a.time_clear_finish || a['times.official_:::finish:::'], a.distance || a.event);
+                const pace2 = calculatePace(b.time_clear_finish || b['times.official_:::finish:::'], b.distance || b.event);
                 valA = pace1 === '-' ? Infinity : parseFloat(pace1);
                 valB = pace2 === '-' ? Infinity : parseFloat(pace2);
                 break;
@@ -403,30 +658,42 @@ function renderResultsTable(runners) {
         const row = document.createElement('tr');
         
         // Год рождения
-        let birthYear = 'N/A';
+        let birthYear = '-';
         if (runner.birthdate) {
             const year = new Date(runner.birthdate).getFullYear();
-            birthYear = year > 0 ? year : 'N/A';
+            birthYear = year > 0 ? year : '-';
         }
         
-        // Статус и время
+        // Статус и время (поддерживаем оба формата)
         let status = '';
         let time = '';
-        let pace = '-';
         let statusClass = '';
         
         // Переводим статусы на русский
         let statusRu = runner.status || 'Неизвестно';
         if (runner.status === 'finished') statusRu = 'Финишировал';
+        if (runner.status === 'running') statusRu = 'Бежит';
         if (runner.status === 'notstarted') statusRu = 'Не стартовал';
         if (runner.status === 'disqualified') statusRu = 'Нарушение';
-        if (runner.status === 'running') statusRu = 'Бежит';
         
         status = statusRu;
         statusClass = `status-${runner.status || 'unknown'}`;
-        const finishTime = runner['times.official_:::finish:::'];
+        
+        //финиша (поддерживаем оба формата данных)
+        const finishTime = runner.time_clear_finish || runner['times.official_:::finish:::'];
         time = formatTime(finishTime);
-        pace = calculatePace(finishTime, runner.event);
+        
+        // Темп: используем значение из БД как есть
+        let pace = runner.finish_pace_avg || '-';
+        // Если значение содержит число, оставляем как есть
+        if (pace && pace !== '#ЗНАЧ!' && typeof pace === 'string') {
+            // Убедимся что есть "мин/км" в конце если нужно
+            if (!pace.includes('мин')) {
+                pace = pace + ' мин/км';
+            }
+        } else {
+            pace = '-';
+        }
         
         // Фамилия, имя, пол
         let firstName = runner.name || 'N/A';
@@ -435,11 +702,12 @@ function renderResultsTable(runners) {
         let genderText = 'N/A';
         
         if (runner.gender) {
-            if (runner.gender === 'male') {
-                genderText = 'мужчина';
+            // Теперь gender уже в правильном формате ("Мужчина"/"Женщина")
+            if (runner.gender === 'Мужчина' || runner.gender === 'male') {
+                genderText = 'Мужчина';
                 genderClass = 'gender-male';
-            } else if (runner.gender === 'female') {
-                genderText = 'женщина';
+            } else if (runner.gender === 'Женщина' || runner.gender === 'female') {
+                genderText = 'Женщина';
                 genderClass = 'gender-female';
             } else {
                 genderText = runner.gender;
@@ -448,7 +716,7 @@ function renderResultsTable(runners) {
         }
         
         // Дистанция и возрастная группа
-        let distance = runner.event || '7 km';
+        let distance = runner.event || runner.distance || '5 км';
         let category = runner.category || '';
         
         let rowHTML = `
@@ -465,10 +733,35 @@ function renderResultsTable(runners) {
         `;
         
         row.innerHTML = rowHTML;
+        
+        // Добавляем обработчик клика и сохраняем runner.id (result_id)
+        const resultId = runner.id || '';
+        row.dataset.resultId = resultId;
+        row.classList.add('runner-row');
+        
+        // Логируем для отладки
+        if (resultId) {
+            console.log(`✅ Строка ${index + 1} имеет result_id=${resultId}`);
+        } else {
+            console.warn(`⚠️ Строка ${index + 1} (${lastName} ${firstName}) не имеет result_id, runner объект:`, runner);
+        }
+        
+        // Обработчик клика для открытия/закрытия сегментов
+        row.addEventListener('click', function(e) {
+            e.preventDefault();
+            const rId = this.dataset.resultId;
+            console.log(`🖱️ Клик по строке. resultId=${rId}`);
+            if (rId) {
+                toggleSegments(this, rId, `${lastName} ${firstName}`);
+            } else {
+                console.warn('⚠️ result_id не определён');
+            }
+        });
+        
         tbody.appendChild(row);
     });
     
-    console.log(`Отрисовано ${runners.length} строк таблицы результатов`);
+    console.log(`✅ Отрисовано ${runners.length} строк таблицы результатов`);
 }
 
 // Показываем индикатор загрузки
@@ -481,4 +774,285 @@ function showLoading(show) {
 function showError(message) {
     document.getElementById('errorIndicator').textContent = message;
     document.getElementById('errorIndicator').style.display = 'block';
+}
+
+// ============================================================
+// ФУНКЦИИ ДЛЯ РАБОТЫ С РАСКРЫВАЮЩЕЙСЯ ОБЛАСТЬЮ СЕГМЕНТОВ
+// ============================================================
+
+/**
+ * Переименование кода сегмента в читаемый формат
+ */
+function formatSegmentName(code) {
+    if (!code) return '-';
+    
+    const names = {
+        'start': 'Старт',
+        'kt1': 'Разворот',
+        'kt2': 'КТ2',
+        'kt3': 'КT3',
+        'kt4': 'КТ4',
+        'kt5': 'КТ5',
+        'finish': 'Финиш'
+    };
+    
+    // Парсим код типа "start-kt1" или "kt1-finish"
+    const parts = code.split('-');
+    return parts.map(part => names[part] || part).join(' → ');
+}
+
+/**
+ * Получает иконку для сегмента
+ */
+function getSegmentIcon(code) {
+    const icons = {
+        'start': '🏁',
+        'kt1': '🔄',
+        'kt2': '🏃',
+        'kt3': '🏃',
+        'kt4': '🏃',
+        'kt5': '🏃',
+        'finish': '🎯'
+    };
+    
+    const mainPart = code.split('-')[0];
+    return icons[mainPart] || '⚡';
+}
+
+/**
+ * Получает цвет позиции (для фона кружка)
+ */
+function getRankColor(rank) {
+    if (!rank || rank === '-') return 'var(--primary-color)';
+    
+    const rankNum = parseInt(rank);
+    switch(rankNum) {
+        case 1: return '#FFD700'; // золото
+        case 2: return '#C0C0C0'; // серебро
+        case 3: return '#CD7F32'; // бронза
+        default: return 'var(--primary-color)';
+    }
+}
+
+/**
+ * Сравнивает темп между двумя сегментами
+ * Возвращает объект с направлением и процентом изменения
+ */
+function compareSegments(currentPace, previousPace) {
+    if (!currentPace || !previousPace || currentPace === '-' || previousPace === '-') {
+        return null;
+    }
+    
+    // Парсим темп (формат "08:38 мин/км" или "08:38")
+    const parseMinutes = (paceStr) => {
+        if (typeof paceStr !== 'string') return null;
+        const match = paceStr.match(/(\d+):(\d+)/);
+        if (!match) return null;
+        return parseInt(match[1]) + parseInt(match[2]) / 60;
+    };
+    
+    const current = parseMinutes(currentPace);
+    const previous = parseMinutes(previousPace);
+    
+    if (current === null || previous === null) return null;
+    
+    const diff = current - previous; // отрицательное = улучшение
+    const percent = Math.abs((diff / previous) * 100).toFixed(1);
+    const isImproved = diff < 0;
+    
+    return {
+        improved: isImproved,
+        percent: percent,
+        direction: isImproved ? '↓' : '↑'
+    };
+}
+
+/**
+ * Переключает видимость раскрывающейся области сегментов после строки
+ */
+async function toggleSegments(runnerRow, resultId, runnerName) {
+    console.log(`📊 Переключение сегментов для result_id=${resultId}`);
+    
+    const tbody = runnerRow.parentElement;
+    const nextRow = runnerRow.nextElementSibling;
+    
+    // Если уже есть открытая строка сегментов, закрываем все остальные
+    const openSegmentsRows = tbody.querySelectorAll('.segments-row:not(.collapsed)');
+    if (nextRow && nextRow.classList.contains('segments-row')) {
+        // Это наш ряд, просто переключаем его
+        if (nextRow.classList.contains('collapsed')) {
+            nextRow.classList.remove('collapsed');
+        } else {
+            nextRow.classList.add('collapsed');
+        }
+    } else {
+        // Закрываем все открытые ряды
+        openSegmentsRows.forEach(row => {
+            row.classList.add('collapsed');
+        });
+        
+        // Если это была та же строка, просто закрываем и выходим
+        if (nextRow && nextRow.classList.contains('segments-row') && nextRow.classList.contains('collapsed')) {
+            return;
+        }
+        
+        // Создаём новую строку с сегментами
+        const newSegmentsRow = await createSegmentsRow(resultId, runnerName);
+        runnerRow.insertAdjacentElement('afterend', newSegmentsRow);
+    }
+}
+
+/**
+ * Создаёт HTML строку с сегментами (диаграммами)
+ */
+async function createSegmentsRow(resultId, runnerName) {
+    const row = document.createElement('tr');
+    row.classList.add('segments-row');
+    
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('segments-content-wrapper');
+    
+    // Показываем индикатор загрузки
+    const loading = document.createElement('div');
+    loading.classList.add('segments-loading');
+    loading.textContent = 'Загрузка данных сегментов...';
+    wrapper.appendChild(loading);
+    
+    cell.appendChild(wrapper);
+    row.appendChild(cell);
+    
+    // Загружаем данные сегментов
+    try {
+        const response = await fetch(`/api/result-segments?result_id=${resultId}`);
+        
+        if (!response.ok) {
+            throw new Error(`Ошибка сервера: ${response.status}`);
+        }
+        
+        const segments = await response.json();
+        console.log(`✅ Получено ${segments.length} сегментов для result_id=${resultId}`, segments);
+        
+        // Удаляем индикатор загрузки
+        loading.remove();
+        
+        if (segments.length === 0) {
+            const error = document.createElement('div');
+            error.classList.add('segments-error');
+            error.textContent = 'Данные сегментов не найдены';
+            wrapper.appendChild(error);
+            return row;
+        }
+        
+        // Создаём сетку со статистикой сегментов
+        const grid = document.createElement('div');
+        grid.classList.add('segments-grid');
+        
+        segments.forEach((segment, index) => {
+            const card = createSegmentCard(segment, segments, index);
+            grid.appendChild(card);
+        });
+        
+        wrapper.appendChild(grid);
+        
+    } catch (error) {
+        console.error('❌ Ошибка загрузки сегментов:', error);
+        loading.remove();
+        const errorDiv = document.createElement('div');
+        errorDiv.classList.add('segments-error');
+        errorDiv.textContent = `Ошибка загрузки: ${error.message}`;
+        wrapper.appendChild(errorDiv);
+    }
+    
+    return row;
+}
+
+/**
+ * Создаёт карточку с диаграммой для одного сегмента
+ */
+function createSegmentCard(segment, allSegments, segmentIndex) {
+    const card = document.createElement('div');
+    card.classList.add('segment-card');
+    
+    const segmentCode = segment.segment_code || '-';
+    const time = formatTime(segment.sg_time_clear) || '-';
+    const pace = segment.sg_pace_avg || '-';
+    const rankAbsolute = segment.sg_rank_absolute || '-';
+    const rankSex = segment.sg_rank_sex || '-';
+    const rankCategory = segment.sg_rank_category || '-';
+    
+    const icon = getSegmentIcon(segmentCode);
+    const name = formatSegmentName(segmentCode);
+    
+    // Сравниваем с предыдущим сегментом
+    let paceComparison = '';
+    if (segmentIndex > 0) {
+        const prevSegment = allSegments[segmentIndex - 1];
+        const comparison = compareSegments(pace, prevSegment.sg_pace_avg);
+        if (comparison) {
+            const color = comparison.improved ? '#27ae60' : '#e74c3c';
+            paceComparison = `
+                <div class="pace-comparison" style="color: ${color};">
+                    ${comparison.direction} ${comparison.percent}%
+                </div>
+            `;
+        }
+    }
+    
+    // Цвета для медалей
+    const colorAbsolute = getRankColor(rankAbsolute);
+    const colorSex = getRankColor(rankSex);
+    const colorCategory = getRankColor(rankCategory);
+    
+    card.innerHTML = `
+        <div class="segment-card-title">
+            <span class="segment-icon">${icon}</span>
+            <span>${name}</span>
+        </div>
+        
+        <div class="segment-info-row">
+            <span class="segment-distance">📏 2,5 км</span>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">⏱️ Время</span>
+            <span class="segment-time">${time}</span>
+        </div>
+        
+        <div class="segment-stat">
+            <div>
+                <span class="segment-stat-label">🏃 Темп</span>
+                <span class="segment-stat-value">${pace}</span>
+            </div>
+            ${paceComparison}
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">🏆 В абсолюте</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="background-color: ${colorAbsolute};"> ${rankAbsolute}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">♀♂ По полу</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorSex};"> ${rankSex}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+        
+        <div class="segment-stat">
+            <span class="segment-stat-label">🎂 По категории</span>
+            <div class="rank-container">
+                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorCategory};"> ${rankCategory}</div>
+                <div class="segment-rank-label">место</div>
+            </div>
+        </div>
+    `;
+    
+    return card;
 }

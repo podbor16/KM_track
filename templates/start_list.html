@@ -1,0 +1,115 @@
+<!-- legacy/templates/start_list.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Стартовый список</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
+    <link rel="stylesheet" href="/static/css/navigation.css?v=1">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=1">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
+</head>
+<body>
+    <!-- Включаем хэдер Красмарафона -->
+    {% include 'krasmarafon_header.html' %}
+    {% include 'header.html' %}
+
+    <div class="container">
+        <h1>Стартовый список</h1>
+        
+        <!-- Карточка события с фото и селектором -->
+        <div class="event-card" id="eventCard" style="background-image: url('/static/images/events/Ночной%20забег.png');">
+            <div class="event-card-overlay"></div>
+            <div class="event-card-content">
+                <div class="event-selector-group">
+                    <label for="eventSelector">Событие:</label>
+                    <select id="eventSelector" onchange="switchEvent()" class="event-selector-input">
+                        <option value="night_run">Ночной забег</option>
+                        <option value="vesna">Весна</option>
+                        <option value="colorrun">Красочный забег</option>
+                        <option value="girlseven">Женская семерка</option>
+                        <option value="zhara">Жара</option>
+                        <option value="kids">Детский забег</option>
+                        <option value="xtrailrun">Х Трейл</option>
+                        <option value="snow7">Снежная семерка</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+       <div class="filters">
+           <div class="filter-group">
+               <label for="genderFilter">Пол:</label>
+               <select id="genderFilter" onchange="onGenderChange()">
+                   <option value="">Все</option>
+                   <option value="Мужчина">Мужчина</option>
+                   <option value="Женщина">Женщина</option>
+               </select>
+           </div>
+           
+           <div class="filter-group" id="ageGroupFilterGroup">
+               <label for="ageGroupFilter">Возрастная группа:</label>
+               <select id="ageGroupFilter" onchange="applyFilters()">
+                   <!-- Возрастные группы будут заполнены динамически -->
+               </select>
+           </div>
+           
+           <div class="filter-group" id="distanceFilterGroup">
+               <label for="distanceFilter">Дистанция:</label>
+               <select id="distanceFilter" onchange="applyFilters()">
+                   <!-- Дистанции будут заполнены динамически -->
+               </select>
+           </div>
+       </div>
+       
+       <!-- Поле поиска по фамилии -->
+       <div class="search-section">
+           <div class="filter-group search-filter-group">
+               <label for="surnameSearch">Поиск:</label>
+               <input 
+                   type="text" 
+                   id="surnameSearch" 
+                   placeholder="Введите фамилию..." 
+                   onkeyup="applyFilters()"
+                   class="surname-search-input"
+               >
+           </div>
+       </div>
+       
+       <div id="loadingIndicator" class="loading" style="display: none;">Загрузка данных...</div>
+       <div id="errorIndicator" class="error" style="display: none;"></div>
+       
+       <!-- Контейнер для Стартового списка -->
+       <div class="table-wrapper" id="startListWrapper">
+           <table id="startListTable" class="before-mode-table">
+           <thead>
+               <tr>
+                   <th>№</th>
+                   <th onclick="sortTable('surname')">Фамилия</th>
+                   <th onclick="sortTable('name')">Имя</th>
+                   <th onclick="sortTable('birthday')">Год рождения</th>
+                   <th onclick="sortTable('distance')">Дистанция</th>
+                   <th onclick="sortTable('sex')">Пол</th>
+                   <th onclick="sortTable('category')">Возрастная группа</th>
+                   <th onclick="sortTable('city')">Город</th>
+                   <th onclick="sortTable('club')">Клуб</th>
+               </tr>
+           </thead>
+           <tbody id="startListBody">
+               <!-- Данные будут добавлены через JavaScript -->
+           </tbody>
+       </table>
+       </div>
+    </div>
+
+    <script src="/static/js/analytics-start-list.js"></script>
+
+    <!-- Включаем официальный футер Красмарафона -->
+    {% include 'krasmarafon_footer.html' %}
+</body>
+</html>

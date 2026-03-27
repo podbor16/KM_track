@@ -237,6 +237,7 @@ table {
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    table-layout: fixed;
 }
 
 /* Контейнер для таблиц */
@@ -249,6 +250,8 @@ th, td {
     padding: 16px 14px;
     text-align: center;
     border-bottom: 1px solid #e0e0e0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 th {
@@ -270,6 +273,29 @@ th:hover {
     background: linear-gradient(to bottom, var(--primary-color), #1a1a1a);
     opacity: 0.8;
 }
+
+/* Ширины столбцов для таблицы результатов (during-mode-table) */
+.during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
+.during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
+.during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
+.during-mode-table th:nth-child(5), .during-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
+.during-mode-table th:nth-child(6), .during-mode-table td:nth-child(6) { width: 7%; }      /* Пол */
+.during-mode-table th:nth-child(7), .during-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
+.during-mode-table th:nth-child(8), .during-mode-table td:nth-child(8) { width: 10%; }     /* Статус */
+.during-mode-table th:nth-child(9), .during-mode-table td:nth-child(9) { width: 8%; }      /* Время */
+.during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 10%; }   /* Темп */
+
+/* Ширины столбцов для таблицы стартового списка (before-mode-table) */
+.before-mode-table th:nth-child(1), .before-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.before-mode-table th:nth-child(2), .before-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
+.before-mode-table th:nth-child(3), .before-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
+.before-mode-table th:nth-child(4), .before-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
+.before-mode-table th:nth-child(5), .before-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
+.before-mode-table th:nth-child(6), .before-mode-table td:nth-child(6) { width: 7%; }      /* Пол */
+.before-mode-table th:nth-child(7), .before-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
+.before-mode-table th:nth-child(8), .before-mode-table td:nth-child(8) { width: 10%; }      /* Город */
+.before-mode-table th:nth-child(9), .before-mode-table td:nth-child(9) { width: 18%; }     /* Клуб - широкий */
 
 tr:nth-child(even) {
     background-color: #f8f9fa;
@@ -299,17 +325,6 @@ tr:hover {
     background: linear-gradient(to right, #fce4ec, #f8bbd0);
     color: #880e4f;
     border-color: #f8bbd0;
-}
-
-.age-group-tag {
-    display: inline-block;
-    padding: 5px 12px;
-    background: linear-gradient(to right, #fff3e0, #ffe0b2);
-    color: #e65100;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    border: 1px solid #ffe0b2;
 }
 
 .status-registered {
@@ -484,3 +499,331 @@ tr:hover {
     border-color: #d41f52;
     box-shadow: 0 0 0 4px rgba(238, 45, 98, 0.15);
 }
+
+/* ============================================================
+   СТИЛИ ДЛЯ РАСКРЫВАЮЩЕЙСЯ ОБЛАСТИ СЕГМЕНТОВ
+   ============================================================ */
+
+.segments-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-top: 20px;
+    padding: 20px;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.segments-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 15px;
+}
+
+.segments-panel-header h3 {
+    color: var(--primary-color);
+    font-size: 20px;
+    margin: 0;
+}
+
+.segments-panel-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.segments-panel-close:hover {
+    background-color: rgba(238, 45, 98, 0.1);
+    color: var(--primary-color);
+}
+
+.segments-panel-content {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.segments-loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-size: 16px;
+}
+
+.segments-error {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.segments-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+}
+
+.segments-table thead {
+    background-color: #f1f3f5;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.segments-table th {
+    text-align: left;
+    padding: 12px;
+    font-weight: 600;
+    color: #2c3e50;
+    cursor: pointer;
+    user-select: none;
+}
+
+.segments-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.segments-table tbody tr {
+    transition: background-color 0.2s;
+}
+
+.segments-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Стиль для наведения на строку таблицы результатов */
+.during-mode-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.during-mode-table tbody tr:hover {
+    background-color: rgba(238, 45, 98, 0.05);
+}
+
+/* ============================================================
+   РАСКРЫВАЮЩАЯСЯ СТРОКА СО СТАТИСТИКОЙ СЕГМЕНТОВ
+   ============================================================ */
+
+.segments-row {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    background-color: #f8f9fa;
+}
+
+.segments-row.collapsed {
+    display: none !important;
+}
+
+.segments-row td {
+    padding: 0;
+    border: none;
+}
+
+.segments-content-wrapper {
+    padding: 20px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.segments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    width: 100%;
+}
+
+.segment-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+}
+
+.segment-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+.segment-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.segment-icon {
+    font-size: 20px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.segment-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.segment-stat:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.segment-stat > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.segment-stat-label {
+    font-size: 12px;
+    color: #999;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.segment-stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.segment-time {
+    font-size: 18px;
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+.segment-rank {
+    color: white;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.segment-rank:hover {
+    transform: scale(1.1);
+}
+
+.segment-rank-label {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.rank-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.segment-info-row {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+    padding: 8px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.segment-distance {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.pace-comparison {
+    font-size: 13px;
+    font-weight: 600;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+/* Анимация раскрытия */
+@keyframes expandRow {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+@keyframes collapseRow {
+    from {
+        opacity: 1;
+        max-height: 500px;
+    }
+    to {
+        opacity: 0;
+        max-height: 0;
+    }
+}
+
+.segments-row:not(.collapsed) {
+    animation: expandRow 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .segments-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .segments-content-wrapper {
+        flex-direction: column;
+        padding: 15px;
+    }
+}
+

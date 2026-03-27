@@ -8,7 +8,7 @@
 /* Подключение кастомного шрифта */
 @font-face {
     font-family: 'Houschka Pro';
-    src: url('/legacy/static/houschkapro_demibold.otf') format('opentype');
+    src: url('/static/houschkapro_demibold.otf') format('opentype');
     font-weight: 600;
     font-style: normal;
 }

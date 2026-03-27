@@ -1,0 +1,810 @@
+<!-- legacy/templates/athlete-profile.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Профиль спортсмена - Анализ забегов</title>
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
+    <link rel="stylesheet" href="/static/css/navigation.css?v=1">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=1">
+    <link rel="stylesheet" href="/static/css/athlete-profile.css?v=2">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <!-- Включаем хэдер Красмарафона -->
+    {% include 'krasmarafon_header.html' %}
+    {% include 'header.html' %}
+
+    <div class="athlete-profile-container">
+        <div class="back-button">
+            <a href="/history">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Вернуться к поиску
+            </a>
+        </div>
+
+        <div id="loadingContainer" class="loading">
+            <p>Загрузка информации о спортсмене...</p>
+        </div>
+
+        <div id="errorContainer" style="display: none;"></div>
+
+        <div id="profileContainer" style="display: none;">
+            <!-- Шапка профиля -->
+            <div class="profile-header">
+                <h1 id="athleteName"></h1>
+                <div class="profile-info" id="profileInfo">
+                </div>
+            </div>
+
+            <!-- Основная статистика -->
+            <div class="stats" id="statsContainer"></div>
+
+            <!-- Расширенная статистика -->
+            <div class="extended-stats" id="extendedStatsContainer" style="display: none;"></div>
+
+            <!-- Графики -->
+            <div class="charts-section" id="chartsSection" style="display: none;">
+                <h2>Аналитика</h2>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Динамика среднего темпа</h3>
+                        <div class="chart-container">
+                            <canvas id="paceChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Рассстояние и количество забегов по годам</h3>
+                        <div class="chart-container">
+                            <canvas id="yearlyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Результаты -->
+            <div class="results-section">
+                <h2>История забегов</h2>
+
+                <!-- Фильтры -->
+                <div class="filters-container" id="filtersContainer" style="display: none;">
+                    <div class="filter-group">
+                        <label for="eventNameFilter">Название забега:</label>
+                        <select id="eventNameFilter" class="filter-select">
+                            <option value="">Все забеги</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="distanceFilter">Дистанция:</label>
+                        <select id="distanceFilter" class="filter-select">
+                            <option value="">Все дистанции</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="yearFilter">Год:</label>
+                        <select id="yearFilter" class="filter-select">
+                            <option value="">Все годы</option>
+                        </select>
+                    </div>
+                    <button id="clearFiltersBtn" class="btn-filter-clear">Очистить фильтры</button>
+                </div>
+                
+                <div id="racesViewToggle" style="margin-bottom: 20px;">
+                    <button id="gridViewBtn" class="view-btn active" style="padding: 10px 20px; margin-right: 10px; background-color: #EE2D62; color: white; border: none; border-radius: 4px; cursor: pointer;">Сетка</button>
+                    <button id="tableViewBtn" class="view-btn" style="padding: 10px 20px; background-color: #ccc; color: #333; border: none; border-radius: 4px; cursor: pointer;">Таблица</button>
+                </div>
+
+                <div id="racesGrid" class="races-grid"></div>
+                
+                <div class="table-wrapper" id="racesTableWrapper" style="display: none;">
+                    <table class="races-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Дистанция</th>
+                                <th>Статус</th>
+                                <th>Время</th>
+                                <th>Темп (мин/км)</th>
+                                <th>Место</th>
+                            </tr>
+                        </thead>
+                        <tbody id="racesTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="noRaces" class="no-races" style="display: none;">
+                    Нет информации о забегах для этого спортсмена
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Включаем официальный футер Красмарафона -->
+    {% include 'krasmarafon_footer.html' %}
+
+    <script>
+        let currentAthlete = null;
+        let currentResults = [];
+        let filteredResults = [];
+        let charts = {};
+
+        // Получить параметры из URL
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                surname: params.get('surname'),
+                name: params.get('name')
+            };
+        }
+
+        // Форматирование времени
+        function formatTime(seconds) {
+            if (!seconds) return '-';
+            
+            let totalSeconds = typeof seconds === 'string' 
+                ? parseInt(seconds) 
+                : seconds;
+            
+            if (isNaN(totalSeconds) || totalSeconds === 0) return '-';
+            
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const secs = totalSeconds % 60;
+            
+            if (hours > 0) {
+                return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            return `${minutes}:${String(secs).padStart(2, '0')}`;
+        }
+
+        // Форматирование темпа для числового сравнения
+        function formatPaceNumber(finishTime, distance) {
+            if (!finishTime || !distance) return Infinity;
+            try {
+                let totalSeconds = typeof finishTime === 'string' 
+                    ? parseInt(finishTime) / 1000 
+                    : finishTime / 1000;
+                if (isNaN(totalSeconds) || totalSeconds === 0) return Infinity;
+                const distNum = parseFloat(distance);
+                if (!distNum || distNum === 0) return Infinity;
+                return (totalSeconds / distNum) * 60;
+            } catch (e) {
+                return Infinity;
+            }
+        }
+
+        // Расчет темпа (мин/км)
+        function calculatePace(finishTime, distance) {
+            const paceSeconds = formatPaceNumber(finishTime, distance);
+            if (paceSeconds === Infinity) return '-';
+            
+            const paceMinutes = Math.floor(paceSeconds / 60);
+            const paceSecondsRem = Math.round(paceSeconds % 60);
+            return `${paceMinutes}'${String(paceSecondsRem).padStart(2, '0')}"`;
+        }
+
+        // Получить русский текст статуса
+        function getStatusText(status) {
+            const statuses = {
+                'finished': { text: 'Финишировал', class: 'status-finished' },
+                'Finished': { text: 'Финишировал', class: 'status-finished' },
+                'fifnished': { text: 'Финишировал', class: 'status-finished' },
+                'running': { text: 'Бежит', class: 'status-running' },
+                'notstarted': { text: 'Не стартовал', class: 'status-notstarted' },
+                'disqualified': { text: 'Нарушение', class: 'status-disqualified' }
+            };
+            return statuses[status] || { text: status, class: '' };
+        }
+
+        // Получить дату из результата
+        function getRaceDate(race) {
+            let date = null;
+            if (race.time_gun_start) {
+                try {
+                    if (typeof race.time_gun_start === 'string') {
+                        date = new Date(race.time_gun_start);
+                    } else {
+                        date = new Date(race.time_gun_start);
+                    }
+                } catch (e) {
+                    return null;
+                }
+            }
+            return date;
+        }
+
+        // Загрузить информацию о спортсмене
+        async function loadAthleteProfile() {
+            const params = getUrlParams();
+            
+            if (!params.surname || !params.name) {
+                showError('Параметры спортсмена не найдены');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/athlete/${encodeURIComponent(params.surname)}/${encodeURIComponent(params.name)}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                currentAthlete = data.athlete;
+                currentResults = data.results || [];
+                filteredResults = [...currentResults];
+
+                renderProfile();
+                document.getElementById('loadingContainer').style.display = 'none';
+                document.getElementById('profileContainer').style.display = 'block';
+
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                showError(`Не удалось загрузить информацию: ${error.message}`);
+            }
+        }
+
+        // Показать ошибку
+        function showError(message) {
+            document.getElementById('loadingContainer').style.display = 'none';
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error">${message}</div>`;
+            errorContainer.style.display = 'block';
+        }
+
+        // Отрисовать профиль
+        function renderProfile() {
+            const fullName = `${currentAthlete.surname || ''} ${currentAthlete.name || ''}`.trim();
+            document.getElementById('athleteName').textContent = fullName;
+
+            const profileInfo = document.getElementById('profileInfo');
+            profileInfo.innerHTML = '';
+
+            if (currentAthlete.birthday) {
+                const year = new Date(currentAthlete.birthday).getFullYear();
+                profileInfo.innerHTML += `
+                    <div class="info-item">
+                        <div class="info-label">Год рождения</div>
+                        <div class="info-value">${year}</div>
+                    </div>
+                `;
+            }
+
+            if (currentAthlete.sex) {
+                profileInfo.innerHTML += `
+                    <div class="info-item">
+                        <div class="info-label">Пол</div>
+                        <div class="info-value">${currentAthlete.sex}</div>
+                    </div>
+                `;
+            } else if (currentAthlete.gender) {
+                const genderText = currentAthlete.gender === 'male' ? 'мужчина' : 'женщина';
+                profileInfo.innerHTML += `
+                    <div class="info-item">
+                        <div class="info-label">Пол</div>
+                        <div class="info-value">${genderText}</div>
+                    </div>
+                `;
+            }
+
+            if (currentAthlete.category) {
+                profileInfo.innerHTML += `
+                    <div class="info-item">
+                        <div class="info-label">Категория</div>
+                        <div class="info-value">${currentAthlete.category}</div>
+                    </div>
+                `;
+            }
+
+            renderStats();
+            renderExtendedStats();
+            renderCharts();
+            renderFilters();
+            renderResults();
+        }
+
+        // Отрисовать основную статистику
+        function renderStats() {
+            const statsContainer = document.getElementById('statsContainer');
+            statsContainer.innerHTML = '';
+
+            const finishedCount = currentResults.filter(r => 
+                r.race_status === 'finished' || r.race_status === 'fifnished'
+            ).length;
+            const totalDistance = currentResults.length * 5;
+
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${currentResults.length}</div>
+                    <div class="stat-label">Всего забегов</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${finishedCount}</div>
+                    <div class="stat-label">Финишировал</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${totalDistance} км</div>
+                    <div class="stat-label">Суммарная дистанция</div>
+                </div>
+            `;
+        }
+
+        // Отрисовать расширенную статистику
+        function renderExtendedStats() {
+            if (currentResults.length === 0) return;
+
+            const container = document.getElementById('extendedStatsContainer');
+            
+            // Группируем по дистанции
+            const byDistance = {};
+            currentResults.forEach(r => {
+                const dist = r.event_distance || 'Unknown';
+                if (!byDistance[dist]) {
+                    byDistance[dist] = [];
+                }
+                byDistance[dist].push(r);
+            });
+
+            let html = '';
+            
+            for (const distance in byDistance) {
+                const races = byDistance[distance];
+                const finished = races.filter(r => 
+                    r.race_status === 'Finished' || r.race_status === 'finished'
+                );
+                
+                if (finished.length === 0) continue;
+
+                // Лучший темп
+                let bestPace = Infinity;
+                let bestPaceText = '-';
+                finished.forEach(r => {
+                    // Темп уже готов в finish_pace_avg
+                    if (r.finish_pace_avg) {
+                        const paceStr = r.finish_pace_avg.replace(' мин/км', '');
+                        const [min, sec] = paceStr.split(':').map(Number);
+                        const paceNum = min * 60 + sec;
+                        if (paceNum < bestPace) {
+                            bestPace = paceNum;
+                            bestPaceText = r.finish_pace_avg;
+                        }
+                    }
+                });
+
+                // Лучшее время (используем time_clear_finish)
+                let bestTime = Infinity;
+                let bestTimeText = '-';
+                finished.forEach(r => {
+                    if (r.time_clear_finish) {
+                        const timeStr = r.time_clear_finish;
+                        const parts = timeStr.split(':').map(Number);
+                        const totalSecs = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+                        if (totalSecs > 0 && totalSecs < bestTime) {
+                            bestTime = totalSecs;
+                            bestTimeText = formatTime(totalSecs);
+                        }
+                    }
+                });
+
+                // Среднее время
+                let totalTime = 0;
+                finished.forEach(r => {
+                    if (r.time_clear_finish) {
+                        const timeStr = r.time_clear_finish;
+                        const parts = timeStr.split(':').map(Number);
+                        const totalSecs = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+                        totalTime += totalSecs;
+                    }
+                });
+                const avgTime = finished.length > 0 ? totalTime / finished.length : 0;
+                const avgTimeText = formatTime(avgTime);
+
+                // Процент завершения
+                const completePercent = races.length > 0 
+                    ? Math.round((finished.length / races.length) * 100) 
+                    : 0;
+
+                html += `
+                    <div class="distance-stats-group">
+                        <h3 style="grid-column: 1 / -1; color: #EE2D62; font-size: 16px; margin-bottom: 15px;">📍 ${distance}</h3>
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Лучший темп</div>
+                            <div class="extended-stat-value">${bestPaceText}</div>
+                            <div class="extended-stat-secondary">мин/км</div>
+                        </div>
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Лучшее время</div>
+                            <div class="extended-stat-value">${bestTimeText}</div>
+                            <div class="extended-stat-secondary">время финиша</div>
+                        </div>
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Среднее время</div>
+                            <div class="extended-stat-value">${avgTimeText}</div>
+                            <div class="extended-stat-secondary">для законченых</div>
+                        </div>
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Завершение</div>
+                            <div class="extended-stat-value">${completePercent}%</div>
+                            <div class="extended-stat-secondary">${finished.length} / ${races.length}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            container.style.display = 'block';
+        }
+
+        // Отрисовать графики
+        function renderCharts() {
+            if (filteredResults.length < 2) {
+                document.getElementById('chartsSection').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('chartsSection').style.display = 'block';
+
+            // Фильтруем только завершенные забеги
+            const finished = filteredResults.filter(r => r.race_status === 'Finished' || r.race_status === 'finished');
+            
+            if (finished.length < 2) {
+                document.getElementById('chartsSection').style.display = 'none';
+                return;
+            }
+
+            // ===== ГРАФИК 1: Динамика среднего темпа по всем забегам =====
+            const sortedByDate = [...finished].sort((a, b) => {
+                const dateA = a.event_date ? new Date(a.event_date) : new Date(0);
+                const dateB = b.event_date ? new Date(b.event_date) : new Date(0);
+                return dateA - dateB;
+            });
+
+            if (charts.pace) charts.pace.destroy();
+            const ctxPace = document.getElementById('paceChart').getContext('2d');
+            
+            // Парсим темп из строки "03:12 мин/км" в числовое значение (минуты)
+            const parsePaceToMinutes = (paceStr) => {
+                if (!paceStr) return null;
+                const clean = paceStr.replace(' мин/км', '').trim();
+                const parts = clean.split(':').map(Number);
+                if (parts.length === 2) {
+                    return parts[0] + parts[1] / 60; // минуты + доля минуты
+                }
+                return null;
+            };
+            
+            charts.pace = new Chart(ctxPace, {
+                type: 'line',
+                data: {
+                    labels: sortedByDate.map((r, i) => {
+                        const date = r.event_date ? new Date(r.event_date).toLocaleDateString('ru', { month: 'short', day: 'numeric' }) : `#${i+1}`;
+                        return `${r.event_name || 'Забег'}\n(${date})`;
+                    }),
+                    datasets: [{
+                        label: 'Средний темп (мин/км)',
+                        data: sortedByDate.map(r => parsePaceToMinutes(r.finish_pace_avg)),
+                        borderColor: '#EE2D62',
+                        backgroundColor: 'rgba(238, 45, 98, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#EE2D62',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+
+            // ===== ГРАФИК 2: Столбчатая диаграмма по годам (количество + км) =====
+            // Группируем по годам
+            const byYear = {};
+            finished.forEach(r => {
+                const year = r.event_year || 'Unknown';
+                if (!byYear[year]) {
+                    byYear[year] = {
+                        count: 0,
+                        distance: 0
+                    };
+                }
+                byYear[year].count += 1;
+                
+                // Парсим расстояние из формата "5 км"
+                if (r.event_distance) {
+                    const distMatch = r.event_distance.match(/[\d.]+/);
+                    if (distMatch) {
+                        byYear[year].distance += parseFloat(distMatch[0]);
+                    }
+                }
+            });
+
+            // Подготавливаем данные
+            const years = Object.keys(byYear).sort();
+            const counts = years.map(y => byYear[y].count);
+            const distances = years.map(y => byYear[y].distance);
+
+            if (charts.yearly) charts.yearly.destroy();
+            const ctxYearly = document.getElementById('yearlyChart').getContext('2d');
+            charts.yearly = new Chart(ctxYearly, {
+                type: 'bar',
+                data: {
+                    labels: years,
+                    datasets: [
+                        {
+                            label: 'Количество забегов',
+                            data: counts,
+                            backgroundColor: 'rgba(238, 45, 98, 0.7)',
+                            borderColor: '#EE2D62',
+                            borderWidth: 2,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Пройденное расстояние (км)',
+                            data: distances,
+                            type: 'line',
+                            borderColor: '#4CAF50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            tension: 0.4,
+                            pointBackgroundColor: '#4CAF50',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Количество забегов' },
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Расстояние (км)' },
+                            grid: { drawOnChartArea: false },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Инициализировать фильтры
+        function renderFilters() {
+            if (currentResults.length === 0) return;
+
+            const filtersContainer = document.getElementById('filtersContainer');
+            filtersContainer.style.display = 'flex';
+
+            // Собрать уникальные названия событий, дистанции и годы
+            const eventNames = new Set();
+            const distances = new Set();
+            const years = new Set();
+            
+            currentResults.forEach(r => {
+                if (r.event_name) {
+                    eventNames.add(r.event_name);
+                }
+                if (r.event_distance) {
+                    distances.add(r.event_distance);
+                }
+                if (r.event_year) {
+                    years.add(r.event_year.toString());
+                }
+            });
+
+            // Заполнить названия событий
+            const eventNameSelect = document.getElementById('eventNameFilter');
+            eventNameSelect.innerHTML = '<option value="">Все забеги</option>';
+            Array.from(eventNames).sort().forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                eventNameSelect.appendChild(option);
+            });
+
+            // Заполнить дистанции
+            const distanceSelect = document.getElementById('distanceFilter');
+            distanceSelect.innerHTML = '<option value="">Все дистанции</option>';
+            Array.from(distances).sort().forEach(dist => {
+                const option = document.createElement('option');
+                option.value = dist;
+                option.textContent = dist;
+                distanceSelect.appendChild(option);
+            });
+
+            // Заполнить годы
+            const yearSelect = document.getElementById('yearFilter');
+            Array.from(years).sort((a, b) => parseInt(b) - parseInt(a)).forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            });
+
+            // Слушатели фильтров
+            document.getElementById('eventNameFilter').addEventListener('change', applyFilters);
+            document.getElementById('distanceFilter').addEventListener('change', applyFilters);
+            document.getElementById('yearFilter').addEventListener('change', applyFilters);
+            document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+        }
+
+        // Применить фильтры
+        function applyFilters() {
+            const eventNameFilter = document.getElementById('eventNameFilter').value;
+            const distanceFilter = document.getElementById('distanceFilter').value;
+            const yearFilter = document.getElementById('yearFilter').value;
+
+            filteredResults = currentResults.filter(r => {
+                let match = true;
+
+                if (eventNameFilter && r.event_name !== eventNameFilter) {
+                    match = false;
+                }
+
+                if (distanceFilter && r.event_distance !== distanceFilter) {
+                    match = false;
+                }
+
+                if (yearFilter && r.event_year && r.event_year.toString() !== yearFilter) {
+                    match = false;
+                }
+
+                return match;
+            });
+
+            renderGridView();
+            renderTableView();
+            renderExtendedStats();
+            renderCharts();
+        }
+
+        // Очистить фильтры
+        function clearFilters() {
+            document.getElementById('eventNameFilter').value = '';
+            document.getElementById('distanceFilter').value = '';
+            document.getElementById('yearFilter').value = '';
+            filteredResults = [...currentResults];
+            renderGridView();
+            renderTableView();
+            renderExtendedStats();
+            renderCharts();
+        }
+
+        // Отрисовать результаты
+        function renderResults() {
+            if (currentResults.length === 0) {
+                document.getElementById('noRaces').style.display = 'block';
+                document.getElementById('racesGrid').style.display = 'none';
+                document.getElementById('racesTableWrapper').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('noRaces').style.display = 'none';
+            
+            renderGridView();
+            renderTableView();
+
+            document.getElementById('gridViewBtn').onclick = () => {
+                document.getElementById('racesGrid').style.display = 'grid';
+                document.getElementById('racesTableWrapper').style.display = 'none';
+                document.getElementById('gridViewBtn').style.backgroundColor = '#EE2D62';
+                document.getElementById('gridViewBtn').style.color = 'white';
+                document.getElementById('tableViewBtn').style.backgroundColor = '#ccc';
+                document.getElementById('tableViewBtn').style.color = '#333';
+            };
+
+            document.getElementById('tableViewBtn').onclick = () => {
+                document.getElementById('racesGrid').style.display = 'none';
+                document.getElementById('racesTableWrapper').style.display = 'block';
+                document.getElementById('tableViewBtn').style.backgroundColor = '#EE2D62';
+                document.getElementById('tableViewBtn').style.color = 'white';
+                document.getElementById('gridViewBtn').style.backgroundColor = '#ccc';
+                document.getElementById('gridViewBtn').style.color = '#333';
+            };
+        }
+
+        // Отрисовать сетку
+        function renderGridView() {
+            const racesGrid = document.getElementById('racesGrid');
+            racesGrid.innerHTML = '';
+
+            filteredResults.forEach((race, index) => {
+                const statusInfo = getStatusText(race.race_status || 'unknown');
+                
+                // Используем готовый темп и время
+                const pace = race.finish_pace_avg || '-';
+                const time = race.time_clear_finish || '-';
+                
+                // Дата из event_date
+                const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
+
+                racesGrid.innerHTML += `
+                    <div class="race-card">
+                        <div class="race-date">${dateStr}</div>
+                        <div class="race-distance" style="font-size: 16px;">${race.event_name || '-'}</div>
+                        <div style="font-size: 13px; color: #666;">📍 ${race.event_distance || '-'}</div>
+                        <div style="margin-top: 10px;">
+                            <span class="race-status ${statusInfo.class}">${statusInfo.text}</span>
+                        </div>
+                        <div class="race-time">
+                            <div class="time-row">
+                                <span class="time-label">Время финиша:</span>
+                                <span class="time-value">${time}</span>
+                            </div>
+                            <div class="time-row">
+                                <span class="time-label">Темп:</span>
+                                <span class="time-value pace">${pace}</span>
+                            </div>
+                            ${race.category ? `<div class="time-row"><span class="time-label">Категория:</span><span class="time-value">${race.category}</span></div>` : ''}
+                            ${race.rank_absolute ? `<div class="time-row"><span class="time-label">Место:</span><span class="time-value">#${race.rank_absolute}</span></div>` : ''}
+                            ${race.rank_sex ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${race.rank_sex}</span></div>` : ''}
+                            ${race.rank_category ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${race.rank_category}</span></div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Отрисовать таблицу
+        function renderTableView() {
+            const tbody = document.getElementById('racesTableBody');
+            tbody.innerHTML = '';
+
+            filteredResults.forEach((race, index) => {
+                const statusInfo = getStatusText(race.race_status || 'unknown');
+                
+                const pace = race.finish_pace_avg || '-';
+                const time = race.time_clear_finish || '-';
+                
+                const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
+                
+                const ranking = race.rank_absolute || '-';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${dateStr}</td>
+                        <td><strong>${race.event_name || '-'}</strong><br><small>${race.event_distance || '-'}</small></td>
+                        <td><span class="race-status ${statusInfo.class}">${statusInfo.text}</span></td>
+                        <td>${time}</td>
+                        <td><span class="pace">${pace}</span></td>
+                        <td>${ranking}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAthleteProfile();
+        });
+    </script>
+    </script>
+</body>
+</html>

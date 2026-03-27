@@ -117,49 +117,49 @@
 }
 
 .race-card:nth-child(1) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Ночной забег.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Ночной забег.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(2) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Весна.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Весна.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(3) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Красочный забег.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Красочный забег.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(4) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Женская семерка.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Женская семерка.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(5) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Жара.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Жара.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(6) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Детский забег.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Детский забег.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(7) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Х Трейл.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Х Трейл.png');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(8) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Снежная семерка.png');
+    background-image: url('/legacy/static/images/events/logo1x1/Снежная семерка.png');
     background-size: cover;
     background-position: center;
 }
@@ -284,7 +284,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: all 0.2s ease;
+    transition: all 0.01s ease;
 }
 
 .race-modal-close:hover {

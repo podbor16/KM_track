@@ -1,0 +1,73 @@
+<!-- legacy/templates/header.html - Общий хэдер для всех страниц -->
+<nav class="navbar">
+    <div class="navbar-container">
+        <a href="/tracker" class="navbar-brand">
+            <img src="/static/images/krasmarafon-logo.png" alt="Логотип" class="navbar-logo" style="width: 50%;">
+        </a>
+        <button class="navbar-toggle" id="navbarToggle">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <ul class="navbar-menu" id="navbarMenu">
+            <li class="navbar-item">
+                <a href="/tracker" class="navbar-link active-link">ТРЕКЕР</a>
+            </li>
+            <li class="navbar-item">
+                <a href="/start_list" class="navbar-link">СТАРТОВЫЙ СПИСОК</a>
+            </li>
+            <li class="navbar-item">
+                <a href="/results" class="navbar-link">РЕЗУЛЬТАТЫ</a>
+            </li>
+            <li class="navbar-item">
+                <a href="/history" class="navbar-link">ИСТОРИЯ</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<script>
+    // Мобильное меню
+    const navbarToggle = document.getElementById('navbarToggle');
+    const navbarMenu = document.getElementById('navbarMenu');
+    
+    if (navbarToggle && navbarMenu) {
+        navbarToggle.addEventListener('click', () => {
+            navbarMenu.classList.toggle('active');
+        });
+    
+        // Закрываем меню при клике на ссылку
+        document.querySelectorAll('.navbar-link').forEach(link => {
+            link.addEventListener('click', () => {
+                navbarMenu.classList.remove('active');
+            });
+        });
+    }
+
+    // Установить активный класс для текущей страницы
+    function updateActiveNavLink() {
+        const currentPath = window.location.pathname;
+        const navbarLinks = document.querySelectorAll('.navbar-link');
+        
+        navbarLinks.forEach(link => {
+            link.classList.remove('active');
+        });
+        
+        // Проверяем текущий путь и подсвечиваем соответствующую ссылку
+        if (currentPath === '/tracker' || currentPath === '/' || currentPath.startsWith('/tracker/')) {
+            navbarLinks[0]?.classList.add('active'); // Трекер
+        } else if (currentPath === '/start_list') {
+            navbarLinks[1]?.classList.add('active'); // Стартовый список
+        } else if (currentPath === '/results' || currentPath === '/analytics' || currentPath.includes('/analytics')) {
+            navbarLinks[2]?.classList.add('active'); // Результаты
+        } else if (currentPath === '/history') {
+            navbarLinks[3]?.classList.add('active'); // История
+        }
+    }
+    
+    // Вызываем при загрузке страницы
+    updateActiveNavLink();
+    
+    // Обновляем при смене URL (для SPA)
+    window.addEventListener('popstate', updateActiveNavLink);
+</script>
