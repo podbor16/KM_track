@@ -32,7 +32,7 @@ except ImportError:
 from src.analytics.db_connection import create_connection
 
 # === КОНСТАНТЫ ===
-RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "tracker/race_data.json"))
+RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 UPDATE_INTERVAL = int(os.getenv("CONTINUOUS_UPDATE_INTERVAL", "5"))
 BATCH_SIZE = 1000

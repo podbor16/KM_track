@@ -10,7 +10,7 @@ const CONFIG = {
     UPDATE_INTERVAL: 2000,
     MAX_SELECTED: 5,
     EVENT_NAME: 'night_run',
-    EVENT_ID: 67,
+    EVENT_ID: 104,
     STORAGE_KEY: 'night_run_selected_runners'
 };
 
@@ -139,7 +139,7 @@ function clearSelectedStorage() {
 // ============================================
 
 async function init() {
-    console.log('🚀 Инициализация трекера Event 67 (Ночной забег)');
+    console.log('🚀 Инициализация трекера Event 104 (Ночной забег)');
 
     loadSelectedFromStorage();
     await initMap();
@@ -155,7 +155,7 @@ async function init() {
     await loadAnalytics();
     startAutoUpdate();
 
-    updateStatus('✅ Трекер запущен (Event 67 - Ночной забег)');
+    updateStatus('✅ Трекер запущен (Event 104 - Ночной забег)');
 }
 
 
@@ -311,7 +311,7 @@ function createFallbackRoute() {
     return {
         event: 'night_run',
         event_name: 'Ночной забег (Набережная, Красноярск)',
-        event_id: 67,
+        event_id: 104,
         distance: 5.0,
         route_type: 'shuttle',
         coordinates
@@ -687,7 +687,7 @@ function setupSearch() {
 
 async function loadAnalytics() {
     try {
-        console.log('📊 Загрузка аналитики для Event 67');
+        console.log('📊 Загрузка аналитики для Event 104');
 
         const response = await fetch(
             `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
@@ -831,7 +831,7 @@ function startAutoUpdate() {
             });
 
             updateSelectedList();
-            updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 67`);
+            updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 104`);
 
         } catch (error) {
             console.error('❌ Ошибка при обновлении:', error);

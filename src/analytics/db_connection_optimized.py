@@ -638,6 +638,8 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             r.rank_sex,
             r.rank_category,
             r.finish_pace_avg,
+            r.finish_pace_avg_gun,
+            r.finish_pace_avg_clean,
             r.time_clear_kt1,
             r.time_clear_kt2,
             r.time_clear_kt3,
