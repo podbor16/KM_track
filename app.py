@@ -70,18 +70,12 @@ app.add_middleware(
 # Пути
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-OLD_TEMPLATES_DIR = BASE_DIR / "old_templates"
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 # Подключение статических файлов
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     settings.logger.info(f"Static files mounted: {STATIC_DIR}")
-
-# Подключение old_templates (Красмарафон)
-if OLD_TEMPLATES_DIR.exists():
-    app.mount("/old_templates", StaticFiles(directory=str(OLD_TEMPLATES_DIR)), name="old_templates")
-    settings.logger.info(f"Old templates mounted: {OLD_TEMPLATES_DIR}")
 
 # Подключение шаблонов
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

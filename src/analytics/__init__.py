@@ -1,13 +1,19 @@
-from .db_connection import (
-    create_connection,
-    get_test_table_data,
-    calculate_age_group,
-    validate_host_config
+from .db_connection_optimized import (
+    get_pooled_connection,
+    get_cached_tables,
+    get_event_info,
+    get_event_info_by_id,
+    get_race_results_by_event_id,
+    get_category_avg_paces,
+    get_prev_year_results,
 )
 
 __all__ = [
-    'create_connection',
-    'get_test_table_data',
-    'calculate_age_group',
-    'validate_host_config'
+    'get_pooled_connection',
+    'get_cached_tables',
+    'get_event_info',
+    'get_event_info_by_id',
+    'get_race_results_by_event_id',
+    'get_category_avg_paces',
+    'get_prev_year_results',
 ]

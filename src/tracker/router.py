@@ -16,15 +16,13 @@ from src.config import settings
 from src.core.state import AppState
 from src.core.dependencies import get_app_state, get_event
 from src.tracker.models import (
-    Runner, RunnersListResponse, RunnerSelectionRequest, SelectedRunnersResponse,
-    Route, RouteResponse, RaceConfig,
+    RunnerSelectionRequest, SelectedRunnersResponse,
+    RaceConfig,
     CurrentEventResponse, EventsListResponse, EventInfo,
     Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
 from src.tracker.services import (
-    fetch_route_from_osm, get_route_calculator,
-    fetch_copernico_data, transform_copernico_data, update_runner_positions,
     get_formatted_analytics,
 )
 
@@ -32,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 # Создать роутер
 router = APIRouter(prefix="", tags=["tracker"])
+
+# Кэш исторических данных (прошлый год): заполняется один раз при первом запросе
+_hist_cache: dict = {}
 
 # Подключить шаблоны (реэкспорт из app.py)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -112,21 +113,6 @@ async def results_page(request: Request):
     return templates.TemplateResponse("results.html", context)
 
 
-@router.get("/old_pages_start_list", response_class=HTMLResponse, tags=["Pages"])
-async def old_start_list_page(request: Request):
-    """Оригинальная страница стартового списка - возвращает статический HTML из old_templates"""
-    from pathlib import Path
-    start_list_path = PathlibPath(__file__).resolve().parent.parent.parent.parent / "analytics" / "personal" / "start_list.html"
-    
-    try:
-        with open(start_list_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        logger.error(f"Error loading start_list: {e}")
-        # Fallback на основную страницу трекера
-        return await tracker_main(request)
-
-
 # ============================================================================
 # СОБЫТИЯ (EVENTS)
 # ============================================================================
@@ -172,248 +158,8 @@ async def get_events() -> EventsListResponse:
 
 
 # ============================================================================
-# МАРШРУТЫ (ROUTES)
-# ============================================================================
-
-@router.get("/api/route", response_model=RouteResponse, tags=["Routes"])
-async def get_route(
-    event: str = Query(settings.CURRENT_EVENT, description="Event ID"),
-    state: AppState = Depends(get_app_state),
-) -> RouteResponse:
-    """
-    Получить маршрут события
-    - Кеширует результат на 3600 секунд
-    - Поддерживает челночные (shuttle) и кольцевые (loop) маршруты
-    """
-    # Валидация события
-    if event not in settings.EVENTS_CONFIG:
-        return RouteResponse(
-            success=False,
-            cached=False,
-            message=f"Event '{event}' not found",
-        )
-    
-    event_config = settings.EVENTS_CONFIG[event]
-    route_type = 'shuttle' if event != 'rosneft' else 'loop'
-    
-    try:
-        # Пытаемся загрузить маршрут
-        coords = fetch_route_from_osm(event)
-        
-        if not coords:
-            logger.warning(f"No coordinates loaded for event {event}")
-            return RouteResponse(
-                success=False,
-                cached=False,
-                message="Could not load route coordinates",
-            )
-        
-        # Инициализируем калькулятор если нужно
-        route_calc = get_route_calculator()
-        route_calc.set_path(coords)
-        
-        # Подготовляем ответ
-        route = Route(
-            coordinates=coords,
-            distance=event_config.get('total_race_km', 0),
-            way_id=event_config.get('osm_way_id', 0),
-            event=event,
-            event_name=event_config.get('name', event),
-            route_type=route_type,
-        )
-        
-        race_config = RaceConfig(
-            total_distance=event_config.get('total_race_km', 0),
-            event_name=event_config.get('name', event),
-            event_id=event,
-            route_type=route_type,
-            one_way_length=event_config.get('one_way_length_km'),
-            laps=event_config.get('laps'),
-            checkpoints=[],
-        )
-        
-        return RouteResponse(
-            success=True,
-            route=route,
-            config=race_config,
-            cached=False,
-        )
-    
-    except Exception as e:
-        logger.error(f"Error loading route for {event}: {e}")
-        return RouteResponse(
-            success=False,
-            cached=False,
-            message=f"Error: {str(e)}",
-        )
-
-
-# ============================================================================
 # УЧАСТНИКИ (RUNNERS)
 # ============================================================================
-
-@router.get("/api/runners", response_model=RunnersListResponse, tags=["Runners"])
-async def get_runners(
-    event: str = Query(settings.CURRENT_EVENT, description="Event ID"),
-    state: AppState = Depends(get_app_state),
-) -> RunnersListResponse:
-    """
-    Получить список всех участников события из БД
-    - Загружает данные участников из таблицы results
-    - Включает текущую дистанцию, темп, скорость на основе данных БД
-    """
-    try:
-        from src.analytics.db_connection_optimized import get_race_results_by_event_id_and_year
-        from src.tracker.services import parse_pace_to_kmh
-        
-        # Получаем конфигурацию события
-        event_config = settings.EVENTS_CONFIG.get(event, {})
-        event_name = event_config.get('name', 'Ночной забег')
-        
-        # Предполагаем текущий год
-        current_year = datetime.now().year
-        
-        # Получаем результаты из БД
-        results = get_race_results_by_event_id_and_year(event_name, current_year)
-        
-        if not results:
-            logger.warning(f"No results found for {event_name} {current_year}")
-            return RunnersListResponse(
-                event=event,
-                total=0,
-                running=0,
-                finished=0,
-                not_started=0,
-                runners=[],
-                last_update=datetime.now().isoformat(),
-            )
-        
-        # Преобразуем результаты в Runner models
-        runners_models = []
-        total = len(results)
-        running = 0
-        finished = 0
-        not_started = 0
-        
-        for result in results:
-            try:
-                # Получаем основные данные
-                client_id = result.get('client_id', result.get('id', 0))
-                surname = result.get('surname', '')
-                name = result.get('name', '')
-                
-                # Определяем статус
-                race_status = result.get('race_status', 'Not started')
-                if race_status == 'Finished':
-                    status = 'finished'
-                    finished += 1
-                elif race_status == 'Not started':
-                    status = 'notstarted'
-                    not_started += 1
-                else:
-                    status = 'running'
-                    running += 1
-                
-                # Вычисляем текущую дистанцию на основе времени прохождения контрольных точек
-                current_distance = 0.0
-                
-                # Проверяем прохождение контрольных точек
-                if result.get('time_clear_finish'):
-                    current_distance = 5.0  # Финишировал
-                elif result.get('time_clear_kt2'):
-                    current_distance = 5.0  # Прошел KT2
-                elif result.get('time_clear_kt1'):
-                    current_distance = 2.5  # Прошел KT1
-                else:
-                    current_distance = 0.0  # Не начал
-                
-                # Получаем темп
-                pace_str = result.get('finish_pace_avg', None)
-                if pace_str:
-                    speed_kmh = parse_pace_to_kmh(pace_str)
-                else:
-                    speed_kmh = 0.0
-                    pace_str = 'N/A'
-                
-                # Создаем модель Runner
-                runner = Runner(
-                    id=str(client_id),
-                    bib=result.get('start_number', client_id),
-                    dorsal=result.get('start_number', client_id),
-                    name=name.strip(),
-                    surname=surname.strip(),
-                    full_name=f"{name} {surname}".strip(),
-                    category=result.get('category', 'N/A'),
-                    gender=result.get('sex', 'Unknown').lower(),
-                    status=status,
-                    current_distance=current_distance,
-                    position={'lat': 56.0, 'lng': 92.0},
-                    speed=speed_kmh,
-                    pace=pace_str,
-                    start={'treal': result.get('time_clear_start'), 'tofficial': result.get('time_gun_start')},
-                    kt2={'treal': result.get('time_clear_kt2'), 'tofficial': None, 'avg': result.get('pace_avg_kt2')},
-                    finish=result.get('time_clear_finish'),
-                    last_update=datetime.now().isoformat(),
-                )
-                runners_models.append(runner)
-                
-            except Exception as e:
-                logger.warning(f"Error converting runner {result.get('surname', 'unknown')}: {e}")
-                continue
-        
-        return RunnersListResponse(
-            event=event,
-            total=total,
-            running=running,
-            finished=finished,
-            not_started=not_started,
-            runners=runners_models,
-            last_update=datetime.now().isoformat(),
-        )
-    
-    except Exception as e:
-        logger.error(f"Error getting runners from DB: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/api/search-runners", tags=["Runners"])
-async def search_runners(
-    q: str = Query("", min_length=1, description="Search query (name or bib)"),
-    event: str = Query(settings.CURRENT_EVENT),
-    state: AppState = Depends(get_app_state),
-):
-    """
-    Поиск участников по имени или номеру
-    """
-    try:
-        raw_data = fetch_copernico_data()
-        runners_data = transform_copernico_data(raw_data)
-        
-        q_lower = q.lower()
-        results = []
-        
-        for runner in runners_data:
-            full_name = runner.get('full_name', '').lower()
-            bib = str(runner.get('bib', ''))
-            
-            if q_lower in full_name or q_lower in bib:
-                results.append({
-                    'id': runner.get('id'),
-                    'full_name': runner.get('full_name'),
-                    'bib': runner.get('bib'),
-                    'status': runner.get('status'),
-                })
-        
-        return {
-            'query': q,
-            'count': len(results),
-            'results': results[:10],  # Ограничиваем до 10 результатов
-        }
-    
-    except Exception as e:
-        logger.error(f"Error searching runners: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/api/search-athletes", tags=["Athletes"])
 async def search_athletes(
@@ -968,47 +714,6 @@ async def get_registered_runners(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@router.get("/api/race-results", response_model=RaceResultsResponse, tags=["Analytics"])
-async def get_race_results(
-    event: str = Query(settings.CURRENT_EVENT),
-    event_name: str = Query(None),
-    year: int = Query(None),
-) -> RaceResultsResponse:
-    """
-    Получить результаты гонки из race_data.json
-    Поддерживает фильтрацию по событию и году
-    """
-    try:
-        raw_data = fetch_copernico_data()
-        
-        # Фильтруем по событию, если указано
-        if event_name:
-            raw_data = [r for r in raw_data if r.get('event') == event_name or 
-                       settings.EVENTS_CONFIG.get(event, {}).get('name') == event_name]
-        
-        results = []
-        for runner in raw_data[:100]:  # Ограничиваем до 100 результатов
-            results.append({
-                'id': runner.get('dorsal'),
-                'full_name': f"{runner.get('name', '')} {runner.get('surname', '')}",
-                'gender': runner.get('gender'),
-                'category': runner.get('category'),
-                'finish_time': runner.get('times.official_:::finish:::'),
-                'status': runner.get('status'),
-                'ranking': runner.get('rankings_:::full-1:::'),
-            })
-        
-        return RaceResultsResponse(
-            event=event,
-            total_results=len(raw_data),
-            results=results,
-            timestamp=datetime.now().isoformat(),
-        )
-    except Exception as e:
-        logger.error(f"Error getting race results: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/api/event-results", response_model=RaceResultsResponse, tags=["Analytics"])
 async def get_event_results(
     event_id: int = Query(None, description="ID события в БД"),
@@ -1023,13 +728,21 @@ async def get_event_results(
     - /api/event-results?event_name=Ночной%20забег&year=2025
     """
     try:
+        import json as _json
+        from datetime import date as _date, timedelta as _td
         from src.analytics.db_connection_optimized import (
-            get_race_results_by_event_id, 
-            get_race_results_by_event_id_and_year
+            get_race_results_by_event_id,
+            get_race_results_by_event_id_and_year,
+            get_event_info_by_id,
+            get_event_info,
+            get_category_avg_paces,
+            get_prev_year_results,
         )
-        
+        from src.tracker.services.runners_service import calculate_live_position
+        from src.tracker.services.pace_calculator import parse_pace_to_kmh
+
         results_data = []
-        
+
         # Получаем результаты по event_id или по названию и году
         if event_id:
             logger.info(f"Загрузка результатов для event_id={event_id}")
@@ -1039,13 +752,113 @@ async def get_event_results(
             results_data = get_race_results_by_event_id_and_year(event_name, year)
         else:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Укажите event_id или event_name + year"
             )
-        
+
+        # Получаем данные события для расчёта live-скоростей (один раз на запрос)
+        current_year = datetime.now().year
+        if event_id:
+            ev_info = get_event_info_by_id(event_id)
+        else:
+            ev_info = get_event_info(event_name, year or current_year)
+
+        race_date = ev_info.get('event_date') or _date.today()
+        ev_name = ev_info.get('event_name', event_name or '')
+        ev_distance = ev_info.get('event_distance')
+        ev_year = ev_info.get('event_year', current_year)
+
+        raw_cp = ev_info.get('checkpoint_distances')
+        if raw_cp:
+            checkpoint_distances = (
+                [float(x) for x in raw_cp]
+                if isinstance(raw_cp, list)
+                else [float(x) for x in _json.loads(raw_cp)]
+            )
+        else:
+            total_km = float(ev_distance) if ev_distance else 5.0
+            checkpoint_distances = [0.0, total_km]
+
+        category_speeds = get_category_avg_paces(ev_name, ev_distance, ev_year) if ev_name else {}
+
+        # --- Исторические данные для первого участка (кэш на весь процесс) ---
+        cache_key = f"{ev_name}|{ev_distance}|{ev_year}"
+        if cache_key not in _hist_cache:
+            prev_year = (ev_year or current_year) - 1
+            prev_rows = get_prev_year_results(ev_name, ev_distance, prev_year) if ev_name else []
+            personal: dict = {}
+            cat_raw: dict = {}
+            for row in prev_rows:
+                bday = row.get('birthday')
+                bday_str = bday.isoformat() if hasattr(bday, 'isoformat') else str(bday or '')
+                key = f"{(row.get('surname') or '').strip()}|{(row.get('name') or '').strip()}|{bday_str}".upper()
+                pace_val = row.get('finish_pace_avg_clean')
+                if isinstance(pace_val, _td):
+                    _s = int(pace_val.total_seconds())
+                    pace_val = f"{_s // 60}:{_s % 60:02d}"
+                spd = parse_pace_to_kmh(str(pace_val) if pace_val else '')
+                if spd > 0:
+                    personal[key] = spd
+                # Нормализуем категорию: убираем суффикс с годами рождения "(1976 г.р. и младше)"
+                cat = (row.get('category') or '').strip().split(' (')[0].strip()
+                if cat and spd > 0:
+                    cat_raw.setdefault(cat, []).append(spd)
+            _hist_cache[cache_key] = {
+                'personal': personal,
+                'category_avg': {c: sum(v) / len(v) for c, v in cat_raw.items()},
+                'prev_year': prev_year,
+            }
+            logger.info(f"Исторические данные загружены: {len(personal)} личных, {len(cat_raw)} категорий за {prev_year} год")
+        hist_data = _hist_cache[cache_key]
+
+        logger.info(
+            f"hist_data: personal={len(hist_data['personal'])}, "
+            f"categories={list(hist_data['category_avg'].keys())[:5]}, "
+            f"prev_year={hist_data['prev_year']}"
+        )
+
         # Преобразуем результаты в нужный формат
         results = []
+        _debug_count = 0
         for runner in results_data:
+            # Исторический темп для первого участка
+            bday = runner.get('birthday')
+            bday_str = bday.isoformat() if hasattr(bday, 'isoformat') else str(bday or '')
+            runner_key = f"{(runner.get('surname') or '').strip()}|{(runner.get('name') or '').strip()}|{bday_str}".upper()
+            if runner_key in hist_data['personal']:
+                r_hist_speed = hist_data['personal'][runner_key]
+                r_hist_source = 'personal'
+            elif (runner.get('category') or '').strip().split(' (')[0].strip() in hist_data['category_avg']:
+                r_hist_speed = hist_data['category_avg'][(runner.get('category') or '').strip().split(' (')[0].strip()]
+                r_hist_source = 'category'
+            else:
+                r_hist_speed = None
+                r_hist_source = None
+
+            # Рассчитываем live-скорость и дистанцию
+            try:
+                speed_kmh, current_dist, pace_str = calculate_live_position(
+                    runner, checkpoint_distances, race_date, category_speeds,
+                    hist_speed=r_hist_speed,
+                )
+            except Exception as _e:
+                logger.warning(f"calculate_live_position error for runner {runner.get('id')}: {_e}")
+                speed_kmh, current_dist, pace_str = 10.0, 0.0, "6:00"
+
+            # Источник темпа: только для участников до первой КТ
+            if runner.get('time_clear_finish') or runner.get('time_clear_kt1'):
+                pace_source = ''
+            else:
+                pace_source = r_hist_source or ''
+                if _debug_count < 20 and runner.get('race_status') == 'Running':
+                    logger.info(
+                        f"[DEBUG] #{runner.get('start_number')} {runner.get('surname')} {runner.get('name')}: "
+                        f"cat='{(runner.get('category') or '').split(' (')[0]}' "
+                        f"hist={f'{r_hist_speed:.2f}' if r_hist_speed else 'None'} ({r_hist_source}), "
+                        f"speed={speed_kmh:.2f}, pace={pace_str}"
+                    )
+                    _debug_count += 1
+
             result_item = {
                 'id': runner.get('id') or runner.get('client_id'),
                 'start_number': runner.get('start_number'),
@@ -1056,9 +869,13 @@ async def get_event_results(
                 'category': runner.get('category'),
                 'birthday': runner.get('birthday'),
                 'race_status': runner.get('race_status'),
+                'status': runner.get('race_status'),
                 'rank_absolute': runner.get('rank_absolute'),
                 'rank_sex': runner.get('rank_sex'),
                 'rank_category': runner.get('rank_category'),
+                'rank_absolute_clean': runner.get('rank_absolute_clean'),
+                'rank_sex_clean': runner.get('rank_sex_clean'),
+                'rank_category_clean': runner.get('rank_category_clean'),
                 'time_gun_finish': runner.get('time_gun_finish'),
                 'time_clear_finish': runner.get('time_clear_finish'),
                 'finish_pace_avg': runner.get('finish_pace_avg'),
@@ -1086,7 +903,13 @@ async def get_event_results(
                         'time': runner.get('time_clear_kt5'),
                         'pace': runner.get('pace_avg_kt5')
                     }
-                }
+                },
+                # Live-данные для анимации маркера
+                'speed': round(speed_kmh, 2),
+                'current_distance': round(current_dist, 3),
+                'current_pace': pace_str,
+                'pace_source': pace_source,
+                'prev_year': hist_data['prev_year'],
             }
             results.append(result_item)
         

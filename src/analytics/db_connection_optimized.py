@@ -682,6 +682,281 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             pass
 
 
+def get_checkpoint_distances(event_id: int) -> List[float]:
+    """
+    Возвращает список дистанций контрольных точек для события из events.checkpoint_distances.
+
+    Args:
+        event_id: ID события в таблице events
+
+    Returns:
+        Список дистанций в км, напр. [0.0, 2.5, 5.0]. При ошибке — пустой список.
+    """
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ get_checkpoint_distances: нет соединения")
+        return []
+
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        cursor.execute(
+            "SELECT checkpoint_distances, event_distance FROM events WHERE id = %s",
+            (event_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+
+        if not row:
+            logger.warning(f"⚠️ get_checkpoint_distances: event_id={event_id} не найден")
+            return []
+
+        raw = row.get("checkpoint_distances")
+        if raw is None:
+            # Нет JSON — строим из event_distance: [0.0, total]
+            total = float(row.get("event_distance") or 0)
+            return [0.0, total] if total else []
+
+        # mysql-connector возвращает JSON-поле уже как str или list
+        if isinstance(raw, list):
+            return [float(x) for x in raw]
+        if isinstance(raw, str):
+            import json as _json
+            return [float(x) for x in _json.loads(raw)]
+
+        return []
+
+    except Exception as e:
+        logger.error(f"❌ get_checkpoint_distances error: {e}")
+        return []
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
+def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[str, float]:
+    """
+    Возвращает среднюю скорость (км/ч) финишировавших участников по категориям
+    для события event_name с дистанцией event_distance в году year.
+
+    Используется для прогноза скорости маркера до первой КТ.
+    Вызывается ОДИН РАЗ для всего события, результат кешируется вызывающим кодом.
+
+    Returns:
+        Dict {category_str: avg_speed_kmh}, напр. {'Мужчины до 49 лет': 10.5}
+    """
+
+    def _pace_to_kmh(pace_str: str) -> float:
+        """'5:30' -> 10.909 km/h. Возвращает 0.0 при ошибке."""
+        try:
+            parts = pace_str.strip().split(':')
+            minutes = int(parts[0])
+            seconds = int(parts[1]) if len(parts) > 1 else 0
+            total_secs = minutes * 60 + seconds
+            return 3600.0 / total_secs if total_secs > 0 else 0.0
+        except Exception:
+            return 0.0
+
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ get_category_avg_paces: нет соединения")
+        return {}
+
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+
+        # Ищем по event_name + event_year + event_distance (точная идентификация забега)
+        cursor.execute(
+            """
+            SELECT r.category, r.finish_pace_avg
+            FROM results r
+            INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s
+              AND e.event_year = %s
+              AND e.event_distance = %s
+              AND r.race_status = 'Finished'
+              AND r.finish_pace_avg IS NOT NULL
+              AND r.finish_pace_avg != ''
+              AND r.category IS NOT NULL
+              AND r.category != ''
+            """,
+            (event_name, year, str(event_distance)),
+        )
+        rows = cursor.fetchall()
+
+        if not rows:
+            # Запасной вариант: без фильтра по дистанции (если дистанция хранится по-другому)
+            cursor.execute(
+                """
+                SELECT r.category, r.finish_pace_avg
+                FROM results r
+                INNER JOIN events e ON r.event_id = e.id
+                WHERE e.event_name = %s
+                  AND e.event_year = %s
+                  AND r.race_status = 'Finished'
+                  AND r.finish_pace_avg IS NOT NULL
+                  AND r.finish_pace_avg != ''
+                  AND r.category IS NOT NULL
+                  AND r.category != ''
+                """,
+                (event_name, year),
+            )
+            rows = cursor.fetchall()
+
+        cursor.close()
+
+        if not rows:
+            logger.warning(
+                f"⚠️ get_category_avg_paces: нет финишировавших для "
+                f"{event_name} {year} дист={event_distance}"
+            )
+            return {}
+
+        # Группируем по категории, считаем среднюю скорость
+        from collections import defaultdict
+        speeds_by_cat: Dict[str, list] = defaultdict(list)
+        for row in rows:
+            cat = (row.get("category") or "").strip()
+            pace_str = (row.get("finish_pace_avg") or "").strip()
+            if cat and pace_str:
+                kmh = _pace_to_kmh(pace_str)
+                if kmh > 0:
+                    speeds_by_cat[cat].append(kmh)
+
+        result = {}
+        for cat, speeds in speeds_by_cat.items():
+            result[cat] = sum(speeds) / len(speeds)
+
+        logger.info(
+            f"✅ get_category_avg_paces: {len(result)} категорий для "
+            f"{event_name} {year}"
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ get_category_avg_paces error: {e}")
+        return {}
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
+def get_event_info(event_name: str, year: int) -> Dict[str, Any]:
+    """
+    Возвращает строку из таблицы events по названию и году.
+
+    Returns:
+        Словарь с полями id, event_name, event_distance, event_date, checkpoint_distances
+        или пустой словарь если не найдено.
+    """
+    connection = get_pooled_connection()
+    if not connection:
+        return {}
+
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        cursor.execute(
+            "SELECT id, event_name, event_distance, event_date, checkpoint_distances "
+            "FROM events WHERE event_name = %s AND event_year = %s LIMIT 1",
+            (event_name, year)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return row or {}
+    except Exception as e:
+        logger.error(f"❌ get_event_info error: {e}")
+        return {}
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
+def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
+    """
+    Возвращает строку из таблицы events по ID.
+
+    Returns:
+        Словарь с полями id, event_name, event_distance, event_date, checkpoint_distances
+        или пустой словарь если не найдено.
+    """
+    connection = get_pooled_connection()
+    if not connection:
+        return {}
+
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        cursor.execute(
+            "SELECT id, event_name, event_distance, event_date, checkpoint_distances, event_year "
+            "FROM events WHERE id = %s LIMIT 1",
+            (event_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return row or {}
+    except Exception as e:
+        logger.error(f"❌ get_event_info_by_id error: {e}")
+        return {}
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
+def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Dict[str, Any]]:
+    connection = get_pooled_connection()
+    if not connection:
+        return []
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        cursor.execute(
+            """
+            SELECT r.surname, r.name, r.birthday, r.category, r.finish_pace_avg_clean
+            FROM results r
+            INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s
+              AND e.event_distance = %s
+              AND e.event_year = %s
+              AND r.race_status = 'Finished'
+              AND r.time_clear_finish IS NOT NULL
+              AND r.finish_pace_avg_clean IS NOT NULL
+            """,
+            (event_name, str(event_distance), year),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            cursor.execute(
+                """
+                SELECT r.surname, r.name, r.birthday, r.category, r.finish_pace_avg_clean
+                FROM results r
+                INNER JOIN events e ON r.event_id = e.id
+                WHERE e.event_name = %s
+                  AND e.event_year = %s
+                  AND r.race_status = 'Finished'
+                  AND r.time_clear_finish IS NOT NULL
+                  AND r.finish_pace_avg_clean IS NOT NULL
+                  AND r.finish_pace_avg_clean != ''
+                """,
+                (event_name, year),
+            )
+            rows = cursor.fetchall()
+        cursor.close()
+        return [dict(r) for r in rows] if rows else []
+    except Exception as e:
+        logger.error(f"get_prev_year_results error: {e}")
+        return []
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
 def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
     """
     Получить статистику по забегу из БД:

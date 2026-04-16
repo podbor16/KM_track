@@ -1,16 +1,13 @@
 """Сервисы приложения"""
 
 from .routes_service import (
-    fetch_route_from_osm,
+    load_route_from_gpx,
     get_route_calculator,
-    load_route_from_json,
-    process_osm_route_data,
+    RouteCalculator,
 )
 
 from .runners_service import (
-    fetch_copernico_data,
-    transform_copernico_data,
-    update_runner_positions,
+    calculate_live_position,
     parse_pace_to_speed,
 )
 
@@ -29,20 +26,17 @@ from .pace_calculator import (
 
 __all__ = [
     # routes
-    "fetch_route_from_osm",
+    "load_route_from_gpx",
     "get_route_calculator",
-    "load_route_from_json",
-    "process_osm_route_data",
-    
+    "RouteCalculator",
+
     # runners
-    "fetch_copernico_data",
-    "transform_copernico_data",
-    "update_runner_positions",
+    "calculate_live_position",
     "parse_pace_to_speed",
-    
+
     # analytics
     "get_formatted_analytics",
-    
+
     # pace_calculator
     "parse_distance",
     "parse_pace_to_kmh",

@@ -30,6 +30,7 @@ except ImportError:
     sys.exit(1)
 
 from src.analytics.db_connection import create_connection
+from src.analytics.db_connection_optimized import calculate_age_group
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
@@ -148,6 +149,29 @@ def normalize_time(t: Optional[str]) -> Optional[str]:
             except ValueError:
                 pass
     return t
+
+
+def _time_str_to_seconds(t: Optional[str]) -> Optional[float]:
+    """'HH:MM:SS' → total seconds. None если невалидно или None."""
+    if not t:
+        return None
+    parts = t.split(':')
+    if len(parts) != 3:
+        return None
+    try:
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except (ValueError, TypeError):
+        return None
+
+
+def _seconds_to_pace(total_seconds: Optional[float], distance_km: Optional[float]) -> Optional[str]:
+    """total_sec / dist_km → 'mm:ss' темп. None если данных нет."""
+    if not total_seconds or not distance_km or distance_km <= 0:
+        return None
+    secs_per_km = total_seconds / distance_km
+    minutes = int(secs_per_km // 60)
+    seconds = int(secs_per_km % 60)
+    return f"{minutes}:{seconds:02d}"
 
 
 # === КЛАСС ЗАГРУЗЧИКА ===
@@ -374,6 +398,8 @@ class RaceLoader:
 
             if self.connection:
                 self.connection.commit()
+
+            self._recalculate_ranks()
             return True
 
         except Exception as e:
@@ -410,6 +436,7 @@ class RaceLoader:
                     continue
 
                 updated_r, updated_s = self._update_existing(runners)
+                self._recalculate_ranks()
 
                 cycle_time = time.time() - cycle_start
                 if updated_r > 0:
@@ -455,7 +482,8 @@ class RaceLoader:
             name = (runner.get('name') or '').strip()
             birthdate = runner.get('birthdate')
             sex = convert_gender(runner.get('gender'))
-            category = runner.get('category', 'Unknown')
+            # Категория вычисляется из года рождения и пола, не из Copernico
+            category = calculate_age_group(birthdate, sex) or runner.get('category', 'Unknown')
             race_status = convert_status(runner.get('status'))
 
             # Времена
@@ -464,21 +492,29 @@ class RaceLoader:
             time_gun_finish = milliseconds_to_time(runner.get('times.official_:::finish:::'))
             time_clear_finish = milliseconds_to_time(runner.get('times.real_:::finish:::'))
 
-            # Ранги (грязные)
-            rank_absolute = runner.get('rankings_:::full-1:::')
-            rank_sex = runner.get('rankings.gen_:::full-1:::')
-            rank_category = runner.get('rankings.cat_:::full-1:::')
+            # Темпы финиша — вычисляются из времён и дистанции
+            finish_pace_avg_gun = _seconds_to_pace(
+                _time_str_to_seconds(time_gun_finish), self.event_distance_km
+            )
+            finish_pace_avg_clean = _seconds_to_pace(
+                _time_str_to_seconds(time_clear_finish), self.event_distance_km
+            )
 
-            # Темпы из JSON
-            finish_pace_avg_gun = convert_pace_format(runner.get('intervalaverages_:::full-1:::'))
-            finish_pace_avg_clean = convert_pace_format(runner.get('netintervalaverages_:::full-1:::'))
-
-            # Времена КТ
+            # Времена КТ (чистые — chip time из Copernico)
             time_clear_kt1 = milliseconds_to_time(runner.get('times.real_kt1'))
             time_clear_kt2 = milliseconds_to_time(runner.get('times.real_kt2'))
             time_clear_kt3 = milliseconds_to_time(runner.get('times.real_kt3'))
             time_clear_kt4 = milliseconds_to_time(runner.get('times.real_kt4'))
             time_clear_kt5 = milliseconds_to_time(runner.get('times.real_kt5'))
+
+            # Темпы КТ — вычисляются из чистого времени и дистанции до КТ
+            kt_clear_times = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5]
+            pace_avg_kts = []
+            for i, kt_time in enumerate(kt_clear_times):
+                cp_idx = i + 1
+                dist = self.checkpoint_distances[cp_idx] if self.checkpoint_distances and cp_idx < len(self.checkpoint_distances) else None
+                pace_avg_kts.append(_seconds_to_pace(_time_str_to_seconds(kt_time), dist))
+            pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5 = pace_avg_kts
 
             # === Сравнение всех полей ===
             changed_fields = []
@@ -490,12 +526,6 @@ class RaceLoader:
                 changed_fields.append(f'race_status: "{existing.get("race_status")}" → "{race_status}"')
             if time_gun_finish != existing.get('time_gun_finish'):
                 changed_fields.append(f'time_gun_finish: {existing.get("time_gun_finish")} → {time_gun_finish}')
-            if rank_absolute != existing.get('rank_absolute'):
-                changed_fields.append(f'rank_absolute: {existing.get("rank_absolute")} → {rank_absolute}')
-            if rank_sex != existing.get('rank_sex'):
-                changed_fields.append(f'rank_sex: {existing.get("rank_sex")} → {rank_sex}')
-            if rank_category != existing.get('rank_category'):
-                changed_fields.append(f'rank_category: {existing.get("rank_category")} → {rank_category}')
             if finish_pace_avg_gun != existing.get('finish_pace_avg_gun'):
                 changed_fields.append(f'finish_pace_avg_gun: {existing.get("finish_pace_avg_gun")} → {finish_pace_avg_gun}')
             if finish_pace_avg_clean != existing.get('finish_pace_avg_clean'):
@@ -512,12 +542,13 @@ class RaceLoader:
                 if len(updated_dorsals) <= 5:
                     self.logger.debug(f"📝 Dorsal #{dorsal} ({surname} {name}): {', '.join(changed_fields)}")
                 # Добавляем в батч для UPDATE только если есть изменения
+                # Ранги (rank_absolute/sex/category) управляются _recalculate_ranks()
                 results_batch.append((
                     surname, name, birthdate, sex, category, race_status,
                     time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
-                    rank_absolute, rank_sex, rank_category, finish_pace_avg_gun, finish_pace_avg_clean,
+                    finish_pace_avg_gun, finish_pace_avg_clean,
                     time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5,
-                    None, None, None, None, None,
+                    pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5,
                     result_id
                 ))
 
@@ -538,9 +569,6 @@ class RaceLoader:
                 'time_clear_start': time_clear_start,
                 'time_gun_finish': time_gun_finish,
                 'time_clear_finish': time_clear_finish,
-                'rank_absolute': rank_absolute,
-                'rank_sex': rank_sex,
-                'rank_category': rank_category,
                 'finish_pace_avg_gun': finish_pace_avg_gun,
                 'finish_pace_avg_clean': finish_pace_avg_clean,
                 'time_clear_kt1': time_clear_kt1,
@@ -555,15 +583,14 @@ class RaceLoader:
         if results_batch:
             try:
                 update_query = """
-                    UPDATE results SET 
-                        surname = %s, name = %s, birthday = %s, sex = %s, category = %s, 
-                        race_status = %s, time_gun_start = %s, time_clear_start = %s, 
+                    UPDATE results SET
+                        surname = %s, name = %s, birthday = %s, sex = %s, category = %s,
+                        race_status = %s, time_gun_start = %s, time_clear_start = %s,
                         time_gun_finish = %s, time_clear_finish = %s,
-                        rank_absolute = %s, rank_sex = %s, rank_category = %s,
                         finish_pace_avg_gun = %s, finish_pace_avg_clean = %s,
-                        time_clear_kt1 = %s, time_clear_kt2 = %s, time_clear_kt3 = %s, 
+                        time_clear_kt1 = %s, time_clear_kt2 = %s, time_clear_kt3 = %s,
                         time_clear_kt4 = %s, time_clear_kt5 = %s,
-                        pace_avg_kt1 = %s, pace_avg_kt2 = %s, pace_avg_kt3 = %s, 
+                        pace_avg_kt1 = %s, pace_avg_kt2 = %s, pace_avg_kt3 = %s,
                         pace_avg_kt4 = %s, pace_avg_kt5 = %s
                     WHERE id = %s
                 """
@@ -604,6 +631,161 @@ class RaceLoader:
                     self.connection.rollback()
 
         return updated_results, updated_segments
+
+    @staticmethod
+    def _assign_ranks(runners: List[Dict], time_key: str) -> Dict[int, int]:
+        """
+        Назначает места (RANK) по возрастанию времени.
+        Одинаковые времена получают одинаковое место; следующее место пропускается.
+        Возвращает {result_id: rank}.
+        """
+        valid = [(r['id'], r[time_key]) for r in runners if r.get(time_key)]
+        valid.sort(key=lambda x: x[1])
+        ranks: Dict[int, int] = {}
+        for i, (rid, t) in enumerate(valid):
+            if i == 0 or t != valid[i - 1][1]:
+                ranks[rid] = i + 1
+            else:
+                ranks[rid] = ranks[valid[i - 1][0]]
+        return ranks
+
+    def _recalculate_ranks(self) -> None:
+        """
+        Пересчитывает все места для event_id:
+        - Финишные места (official/clean) в таблице results
+        - Места на КТ (clean) в таблице result_segments
+        """
+        if self.cursor is None:
+            return
+
+        try:
+            # --- Финишные места ---
+            self.cursor.execute(
+                """SELECT id, sex, category, time_gun_finish, time_clear_finish
+                   FROM results
+                   WHERE event_id = %s AND race_status = 'Finished'
+                   AND time_gun_finish IS NOT NULL""",
+                (self.event_id,)
+            )
+            finished = [dict(r) for r in self.cursor.fetchall()]
+
+            if not finished:
+                return
+
+            # Официальные места (gun time)
+            abs_gun = self._assign_ranks(finished, 'time_gun_finish')
+            sex_gun: Dict[str, Dict[int, int]] = {}
+            cat_gun: Dict[str, Dict[int, int]] = {}
+            abs_clean: Dict[int, int] = {}
+            sex_clean: Dict[str, Dict[int, int]] = {}
+            cat_clean: Dict[str, Dict[int, int]] = {}
+
+            for sex_val in set(r['sex'] for r in finished if r.get('sex')):
+                group = [r for r in finished if r.get('sex') == sex_val]
+                sex_gun[sex_val] = self._assign_ranks(group, 'time_gun_finish')
+
+            for cat_val in set(r['category'] for r in finished if r.get('category')):
+                group = [r for r in finished if r.get('category') == cat_val]
+                cat_gun[cat_val] = self._assign_ranks(group, 'time_gun_finish')
+
+            # Чистые места (clean time) — только если есть time_clear_finish
+            with_clean = [r for r in finished if r.get('time_clear_finish')]
+            abs_clean = self._assign_ranks(with_clean, 'time_clear_finish')
+
+            for sex_val in set(r['sex'] for r in with_clean if r.get('sex')):
+                group = [r for r in with_clean if r.get('sex') == sex_val]
+                sex_clean[sex_val] = self._assign_ranks(group, 'time_clear_finish')
+
+            for cat_val in set(r['category'] for r in with_clean if r.get('category')):
+                group = [r for r in with_clean if r.get('category') == cat_val]
+                cat_clean[cat_val] = self._assign_ranks(group, 'time_clear_finish')
+
+            # Bulk UPDATE ranks
+            rank_batch = []
+            for r in finished:
+                rid = r['id']
+                sex_val = r.get('sex', '')
+                cat_val = r.get('category', '')
+                rank_batch.append((
+                    abs_gun.get(rid),
+                    sex_gun.get(sex_val, {}).get(rid),
+                    cat_gun.get(cat_val, {}).get(rid),
+                    abs_clean.get(rid),
+                    sex_clean.get(sex_val, {}).get(rid),
+                    cat_clean.get(cat_val, {}).get(rid),
+                    rid,
+                ))
+
+            self.cursor.executemany(
+                """UPDATE results SET
+                       rank_absolute = %s, rank_sex = %s, rank_category = %s,
+                       rank_absolute_clean = %s, rank_sex_clean = %s, rank_category_clean = %s
+                   WHERE id = %s""",
+                rank_batch,
+            )
+            self.connection.commit()
+            self.logger.debug(f"🏆 Места пересчитаны: {len(rank_batch)} финишировавших")
+
+            # --- Места на КТ ---
+            kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5']
+            for kt in kt_keys:
+                time_col = f'time_clear_{kt}'
+                self.cursor.execute(
+                    f"""SELECT r.id, r.sex, r.category, r.{time_col}
+                        FROM results r
+                        WHERE r.event_id = %s AND r.{time_col} IS NOT NULL""",
+                    (self.event_id,)
+                )
+                kt_runners = [dict(row) for row in self.cursor.fetchall()]
+                if not kt_runners:
+                    continue
+
+                kt_abs = self._assign_ranks(kt_runners, time_col)
+                kt_sex: Dict[str, Dict[int, int]] = {}
+                kt_cat: Dict[str, Dict[int, int]] = {}
+
+                for sex_val in set(r['sex'] for r in kt_runners if r.get('sex')):
+                    group = [r for r in kt_runners if r.get('sex') == sex_val]
+                    kt_sex[sex_val] = self._assign_ranks(group, time_col)
+
+                for cat_val in set(r['category'] for r in kt_runners if r.get('category')):
+                    group = [r for r in kt_runners if r.get('category') == cat_val]
+                    kt_cat[cat_val] = self._assign_ranks(group, time_col)
+
+                # Обновляем колонки rank_*_kt{i} в таблице results
+                kt_batch = []
+                seg_batch = []
+                seg_code = f'start-{kt}'
+                for r in kt_runners:
+                    rid = r['id']
+                    sex_val = r.get('sex', '')
+                    cat_val = r.get('category', '')
+                    ra = kt_abs.get(rid)
+                    rs = kt_sex.get(sex_val, {}).get(rid)
+                    rc = kt_cat.get(cat_val, {}).get(rid)
+                    kt_batch.append((ra, rs, rc, rid))
+                    seg_batch.append((ra, rs, rc, rid, seg_code))
+
+                self.cursor.executemany(
+                    f"""UPDATE results SET
+                            rank_absolute_{kt} = %s,
+                            rank_sex_{kt} = %s,
+                            rank_category_{kt} = %s
+                        WHERE id = %s""",
+                    kt_batch,
+                )
+                self.cursor.executemany(
+                    """UPDATE result_segments SET
+                           sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s
+                       WHERE result_id = %s AND segment_code = %s""",
+                    seg_batch,
+                )
+                self.connection.commit()
+
+        except Exception as e:
+            self.logger.error(f"❌ _recalculate_ranks: {e}")
+            if self.connection:
+                self.connection.rollback()
 
     def _prepare_segments(self, result_id: int, runner_data: Dict) -> List[Tuple]:
         """Подготовить данные сегментов на основе соседних точек из checkpoint_distances"""

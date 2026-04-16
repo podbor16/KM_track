@@ -467,8 +467,26 @@ async function loadAllRunners() {
                 rank_category:        runner.rank_category,
                 bib:                  runner.start_number,
                 dorsal:               runner.start_number,
-                checkpoints:          runner.checkpoints || {}
+                checkpoints:          runner.checkpoints || {},
+                // Live-данные для анимации
+                speed:                runner.speed != null ? runner.speed : 10.0,
+                current_distance:     runner.current_distance || 0,
+                current_pace:         runner.current_pace || '6:00',
+                pace_source:          runner.pace_source || '',
+                prev_year:            runner.prev_year || null,
             };
+        });
+
+        // Диагностика: что API вернул для отслеживаемых участников
+        selectedRunnerIds.forEach(id => {
+            const r = allRunners.find(x => String(x.id) === String(id));
+            if (r) console.log(
+                `[API_CHECK] #${r.start_number} ${r.full_name}:`,
+                `status=${r.status}`,
+                `speed=${r.speed}`,
+                `current_pace=${r.current_pace}`,
+                `pace_source=${r.pace_source}`
+            );
         });
 
         updateStatus(`✅ Загружено участников: ${allRunners.length}`);
@@ -597,12 +615,23 @@ function buildPopupContent(runner) {
             }
         }
         
+        let paceLabel = 'Текущий темп';
+        if (runner.pace_source === 'personal' && runner.prev_year) {
+            paceLabel = `Прогноз (личный ${runner.prev_year})`;
+        } else if (runner.pace_source === 'category' && runner.prev_year) {
+            paceLabel = `Прогноз (ср. кат. ${runner.prev_year})`;
+        }
+        const currentPace = runner.current_pace
+            ? `<div><strong>${paceLabel}:</strong> ${runner.current_pace} мин/км</div>`
+            : '';
+
         contentHTML = `
             <div style="border-top: 1px solid #ddd; padding-top: 8px;">
                 <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
                 <div><strong>Последняя КТ:</strong> ${lastCP ? lastCP.name : '-'}</div>
                 <div><strong>Время на КТ:</strong> ${lastCPTime}</div>
                 <div><strong>Темп на КТ:</strong> ${lastCPPace}</div>
+                ${currentPace}
                 <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
                 <div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
                     <div><strong>Прогноз финиша:</strong> ${predictedFinish}</div>
@@ -673,25 +702,51 @@ function updateRunnerMarkerPosition(runner) {
         const currentProgress = runnerPositions[runnerId] || 0;
         const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
         const kt1Percent = kt1Point.percent;
-        
+
         if (currentProgress < kt1Percent) {
             // Первый раз - телепортируемся на KT1
             targetProgressPercent = kt1Percent;
             shouldTeleport = true;
         } else {
-            // Уже на KT1 или прошли его - плавно движемся к финишу (100%)
-            targetProgressPercent = Math.min(100, currentProgress + 0.3);
+            // Уже на KT1 или прошли его - плавно движемся к финишу с реальной скоростью
+            const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
+            const totalDistKm = eventDistance || 5.0;
+            const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
+            targetProgressPercent = Math.min(100, currentProgress + progressPerTick);
             shouldTeleport = false;
         }
     } else if (s.includes('running') || s.includes('started')) {
-        // На трассе - плавно движемся (0% -> до KT1)
+        // На трассе - плавно движемся с реальной скоростью (0% -> до KT1)
         const currentProgress = runnerPositions[runnerId] || 0;
         const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
         const maxTargetPercent = kt1Point.percent;
-        targetProgressPercent = Math.min(maxTargetPercent, currentProgress + 0.3);
+        const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
+        const totalDistKm = eventDistance || 5.0;
+        const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
+        targetProgressPercent = Math.min(maxTargetPercent, currentProgress + progressPerTick);
         shouldTeleport = false;
     }
     // Иначе остаёмся на старте (0%)
+
+    // Детальный лог для отслеживаемых участников
+    if (selectedRunnerIds.has(runnerId)) {
+        const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
+        const totalDistKm = eventDistance || 5.0;
+        const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
+        const srcLabel = runner.pace_source === 'personal' ? `личный ${runner.prev_year}`
+                       : runner.pace_source === 'category' ? `ср.кат. ${runner.prev_year}`
+                       : 'дефолт';
+        console.log(
+            `[TRACKER] #${runner.start_number} ${runner.full_name}`,
+            `| статус: ${s}`,
+            `| speed: ${speedKmh.toFixed(2)} км/ч`,
+            `| темп: ${runner.current_pace}`,
+            `| источник: ${srcLabel}`,
+            `| позиция: ${(runnerPositions[runnerId] || 0).toFixed(2)}%`,
+            `| цель: ${targetProgressPercent.toFixed(2)}%`,
+            `| шаг: +${progressPerTick.toFixed(4)}%`
+        );
+    }
 
     // Обновляем позицию
     runnerPositions[runnerId] = targetProgressPercent;

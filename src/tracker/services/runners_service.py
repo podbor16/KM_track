@@ -1,38 +1,13 @@
 """
 Сервис управления участниками гонки
-Перенесён из tracker/server/runners_service.py с обновленными импортами
 """
 
-import json
-import logging
-import os
 import re
-from datetime import datetime
-
-from src.config import settings
-from src.tracker.parsers.ParsingRaceInMap import CopernicoParser
+import logging
+from datetime import datetime, date, timedelta
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
-
-# RaceConfig и RouteCalculator используются для типизации
-class RaceConfig:
-    """Конфигурация гонки"""
-    pass
-
-
-class RouteCalculator:
-    """Калькулятор маршрута"""
-    pass
-
-# Инициализация
-race_config = RaceConfig()
-copernico_parser = CopernicoParser(race_config)
-
-
-def get_route_calculator():
-    """Получить калькулятор маршрута"""
-    from src.tracker.services.routes_service import get_route_calculator as _get_rc
-    return _get_rc()
 
 
 def parse_pace_to_speed(pace_str):
@@ -41,7 +16,7 @@ def parse_pace_to_speed(pace_str):
     """
     if not pace_str or pace_str.lower() == 'null':
         return 10.0
-    
+
     match = re.search(r"(\d+)'(\d+)", pace_str)
     if match:
         minutes = int(match.group(1))
@@ -49,129 +24,144 @@ def parse_pace_to_speed(pace_str):
         total_seconds_per_km = minutes * 60 + seconds
         if total_seconds_per_km == 0:
             return 10.0
-        
-        hours_per_km = total_seconds_per_km / 3600.0
-        speed_kmh = 1.0 / hours_per_km
-        return speed_kmh
-    else:
-        return 10.0
+        return 1.0 / (total_seconds_per_km / 3600.0)
+    return 10.0
 
 
-def fetch_copernico_data():
-    """Загружает данные участников из файла"""
+def _time_field_to_datetime(race_date: date, t) -> Optional[datetime]:
+    """
+    Конвертирует поле TIME из mysql-connector (timedelta) в datetime.
+    mysql-connector возвращает TIME-колонки как datetime.timedelta.
+    """
+    if t is None:
+        return None
+    if isinstance(t, timedelta):
+        return datetime.combine(race_date, datetime.min.time()) + t
+    if isinstance(t, datetime):
+        return t
     try:
-        if not os.path.exists(settings.RACE_DATA_FILE):
-            logger.error(f"❌ Файл НЕ НАЙДЕН: {settings.RACE_DATA_FILE}")
-            return []
-
-        with open(settings.RACE_DATA_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        raw_data = data.get("data", [])
-        if not isinstance(raw_data, list):
-            return []
-
-        logger.info(f"✅ Загружено {len(raw_data)} записей из файла")
-        return raw_data
-    except Exception as e:
-        logger.error(f"❌ Ошибка чтения файла: {e}")
-        return []
+        return datetime.combine(race_date, t)
+    except Exception:
+        return None
 
 
-def transform_copernico_data(raw_data):
-    """Преобразует сырые данные в структуру участников"""
-    runners = []
-    current_time_iso = datetime.now().isoformat()
-
-    for item in raw_data:
-        try:
-            runner = {
-                'id': item.get('dorsal', ''),
-                'name': f"{item.get('name', '')} {item.get('surname', '')}",
-                'full_name': f"{item.get('name', '')} {item.get('surname', '')}",
-                'dorsal': item.get('dorsal', ''),
-                'category': item.get('category', ''),
-                'status': item.get('status', 'notstarted').lower(),
-                'start_time': item.get('startRawTime', None),
-                'finish_time': item.get('times.official_:::finish:::', None),
-                'rankings_full': item.get('rankings_:::full-1:::', None),
-                'gender_ranking': item.get('rankings.gen_:::full-1:::', None),
-                'category_ranking': item.get('rankings.cat_:::full-1:::', None),
-                'current_distance': 0.0,
-                'position': {'lat': 0, 'lng': 0},
-                'last_update': current_time_iso,
-                'speed': 10.0  # Устанавливаем базовую скорость
-            }
-            
-            # Обновляем скорость на основе данных, если они есть
-            interval_average = item.get('intervalaverages_:::full-1:::')
-            if interval_average:
-                runner['speed'] = parse_pace_to_speed(interval_average)
-            
-            runners.append(runner)
-        except Exception as e:
-            logger.error(f"Ошибка при обработке данных участника: {e}")
-            continue
-    return runners
+def _timedelta_to_hours(td) -> float:
+    """Конвертирует timedelta в часы. Возвращает 0.0 если не timedelta."""
+    if isinstance(td, timedelta):
+        return td.total_seconds() / 3600.0
+    return 0.0
 
 
-def update_runner_positions(runners, event_name=None):
-    """Обновляет позиции и дистанции участников"""
-    if event_name is None:
-        event_name = settings.CURRENT_EVENT
-        
-    current_time = datetime.now()
-    event_config = settings.EVENTS_CONFIG.get(event_name, settings.EVENTS_CONFIG[settings.CURRENT_EVENT])
-    route_calc = get_route_calculator()
+def _kmh_to_pace_str(kmh: float) -> str:
+    """10.0 км/ч → '6:00'. Возвращает '6:00' при ошибке."""
+    if kmh <= 0:
+        return "6:00"
+    secs_per_km = 3600.0 / kmh
+    minutes = int(secs_per_km // 60)
+    seconds = int(secs_per_km % 60)
+    return f"{minutes}:{seconds:02d}"
 
-    if not route_calc.path_coords:
-        from src.tracker.services.routes_service import fetch_route_from_osm
-        fetch_route_from_osm(event_name)
 
-    is_loop = event_name == 'rosneft'
-    total_race_distance = event_config.get('total_race_km', 7.0)
-    one_way_length = event_config.get('one_way_length_km', settings.ONE_WAY_LENGTH_KM)
+def calculate_live_position(
+    result: Dict,
+    checkpoint_distances: List[float],
+    race_date: date,
+    category_speeds: Dict[str, float],
+    hist_speed: Optional[float] = None,
+) -> Tuple[float, float, str]:
+    """
+    Рассчитывает текущую скорость, дистанцию и темп участника в live-режиме.
 
-    for runner in runners:
-        status = runner.get('status', '').lower()
+    Логика:
+    - Финишировал: speed=0, dist=total
+    - До первой КТ (time_clear_kt1 IS NULL):
+        speed = среднее по категории (из category_speeds)
+        dist  = speed * elapsed_since_start, ограничена checkpoint_distances[1]
+    - После КТn (time_clear_ktN NOT NULL):
+        speed = checkpoint_distances[N] / time_clear_ktN_in_hours  (фактическая скорость)
+        dist  = checkpoint_distances[N] + speed * elapsed_since_ktN
+        pace  = time_clear_ktN_seconds / checkpoint_distances[N]  в формате "м:сс"
 
-        if status == 'finished':
-            runner['current_distance'] = total_race_distance
-            if is_loop:
-                coords = route_calc.get_position_on_loop(total_race_distance)
-            else:
-                coords = route_calc.get_shuttle_position(total_race_distance, one_way_length, total_race_distance)
-            if coords:
-                runner['position'] = {'lat': coords[0], 'lng': coords[1]}
-            continue
+    Args:
+        result:               строка из таблицы results (dict)
+        checkpoint_distances: [0.0, kt1_km, kt2_km, ..., finish_km]
+        race_date:            дата проведения забега (datetime.date)
+        category_speeds:      {category: avg_speed_kmh}
 
-        if status in ['started', 'running']:
-            try:
-                last_update_dt = datetime.fromisoformat(runner['last_update'])
-            except (ValueError, TypeError):
-                last_update_dt = current_time
+    Returns:
+        Кортеж (speed_kmh, current_distance_km, pace_str)
+    """
+    DEFAULT_SPEED = 10.0
+    DEFAULT_PACE = "6:00"
 
-            time_diff_hours = (current_time - last_update_dt).total_seconds() / 3600.0
-            
-            # Используем скорость, которая уже установлена в transform_copernico_data
-            speed = runner.get('speed', 10.0)
+    now = datetime.now()
+    total_distance = checkpoint_distances[-1] if checkpoint_distances else 5.0
 
-            dist_increment = speed * time_diff_hours
-            new_dist = float(runner.get('current_distance', 0.0)) + dist_increment
-            
-            if new_dist >= total_race_distance:
-                new_dist = total_race_distance
-                runner['status'] = 'finished'
-            
-            runner['current_distance'] = new_dist
-            
-            if is_loop:
-                lat_lon = route_calc.get_position_on_loop(new_dist)
-            else:
-                lat_lon = route_calc.get_shuttle_position(new_dist, one_way_length, total_race_distance)
-            if lat_lon:
-                runner['position'] = {'lat': lat_lon[0], 'lng': lat_lon[1]}
+    # --- Финишировал ---
+    if result.get('time_clear_finish'):
+        finish_pace = result.get('finish_pace_avg_clean') or result.get('finish_pace_avg') or DEFAULT_PACE
+        if isinstance(finish_pace, timedelta):
+            _s = int(finish_pace.total_seconds())
+            finish_pace = f"{_s // 60}:{_s % 60:02d}"
+        return 0.0, total_distance, str(finish_pace) if finish_pace else DEFAULT_PACE
 
-        runner['last_update'] = current_time.isoformat()
+    # --- Не стартовал (нет времени старта) ---
+    start_td = result.get('time_clear_start')
+    start_dt = _time_field_to_datetime(race_date, start_td)
+    if start_dt is None:
+        return DEFAULT_SPEED, 0.0, DEFAULT_PACE
 
-    return runners
+    # --- Определяем последнюю пройденную КТ ---
+    kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5']
+    last_kt_idx = 0
+    last_kt_td = None
+
+    for i, kt in enumerate(kt_keys):
+        kt_time = result.get(f'time_clear_{kt}')
+        cp_idx = i + 1
+        if kt_time is not None and cp_idx < len(checkpoint_distances):
+            last_kt_idx = cp_idx
+            last_kt_td = kt_time
+        else:
+            break
+
+    # --- До первой КТ: исторический или категорийный темп ---
+    if last_kt_idx == 0:
+        if hist_speed and hist_speed > 0:
+            speed_kmh = hist_speed
+        else:
+            category = (result.get('category') or '').strip()
+            speed_kmh = category_speeds.get(category, DEFAULT_SPEED)
+            if speed_kmh <= 0:
+                speed_kmh = DEFAULT_SPEED
+
+        elapsed_hours = max(0.0, (now - start_dt).total_seconds() / 3600.0)
+        next_kt_dist = checkpoint_distances[1] if len(checkpoint_distances) > 1 else total_distance
+        current_distance = min(speed_kmh * elapsed_hours, next_kt_dist)
+        return speed_kmh, current_distance, _kmh_to_pace_str(speed_kmh)
+
+    # --- После КТN: скорость = дистанция_КТN / время_КТN ---
+    kt_dist = checkpoint_distances[last_kt_idx]
+    kt_hours = _timedelta_to_hours(last_kt_td)
+
+    if kt_hours > 0 and kt_dist > 0:
+        speed_kmh = kt_dist / kt_hours
+        kt_seconds = last_kt_td.total_seconds() if isinstance(last_kt_td, timedelta) else 0
+        secs_per_km = kt_seconds / kt_dist if kt_dist > 0 else 360
+        mins = int(secs_per_km // 60)
+        secs = int(secs_per_km % 60)
+        pace_str = f"{mins}:{secs:02d}"
+    else:
+        speed_kmh = DEFAULT_SPEED
+        pace_str = DEFAULT_PACE
+
+    kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
+    elapsed_since_kt = max(0.0, (now - kt_wall_dt).total_seconds() / 3600.0)
+
+    next_dist = (
+        checkpoint_distances[last_kt_idx + 1]
+        if last_kt_idx + 1 < len(checkpoint_distances)
+        else total_distance
+    )
+    current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, next_dist)
+    return speed_kmh, current_distance, pace_str
