@@ -1,0 +1,25 @@
+name: "Детский забег"
+display_name: "Детский забег"
+year: 2026
+code: "kids"
+
+distances:
+  - distance: "1 км"
+    distance_km: 1.0
+    db_event_id: null
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: null
+    gpx_file: null
+    event_date: null
+    copernico:
+      race_id: null
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "1 км"
+
+  - distance: "500 м"
+    distance_km: 0.5
+    db_event_id: null
+    tracked: false
+    has_start_list: true

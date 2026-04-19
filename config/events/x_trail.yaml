@@ -1,0 +1,25 @@
+name: "Х Трейл"              # ТОЧНО как event_name в БД
+display_name: "Забег Икс"    # показывается пользователям
+year: 2026
+code: "xtrailrun"
+
+distances:
+  - distance: "10 км"
+    distance_km: 10.0
+    db_event_id: null
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: null
+    gpx_file: null
+    event_date: null
+    copernico:
+      race_id: null
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "10 км"
+
+  - distance: "2 км"
+    distance_km: 2.0
+    db_event_id: null
+    tracked: false
+    has_start_list: true

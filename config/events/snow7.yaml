@@ -1,0 +1,25 @@
+name: "Снежная семерка"
+display_name: "Снежная семерка"
+year: 2026
+code: "snow7"
+
+distances:
+  - distance: "7 км"
+    distance_km: 7.0
+    db_event_id: null
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: null
+    gpx_file: "static/gpx/snow7.gpx"
+    event_date: null
+    copernico:
+      race_id: null
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "7 км"
+
+  - distance: "2 км"
+    distance_km: 2.0
+    db_event_id: null
+    tracked: false
+    has_start_list: true

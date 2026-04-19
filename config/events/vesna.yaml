@@ -1,0 +1,25 @@
+name: "Весна"
+display_name: "Весна"
+year: 2026
+code: "vesna"
+
+distances:
+  - distance: "5 км"
+    distance_km: 5.0
+    db_event_id: null         # ← заполнить перед стартом
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: null
+    gpx_file: null            # ← заполнить: "static/gpx/vesna.gpx"
+    event_date: null          # ← заполнить
+    copernico:
+      race_id: null           # ← заполнить перед стартом
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "5 км"
+
+  - distance: "2 км"
+    distance_km: 2.0
+    db_event_id: null
+    tracked: false
+    has_start_list: true

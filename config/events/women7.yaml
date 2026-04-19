@@ -1,0 +1,25 @@
+name: "Женская семерка"
+display_name: "Женская семерка"
+year: 2026
+code: "girlseven"
+
+distances:
+  - distance: "7 км"
+    distance_km: 7.0
+    db_event_id: null
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: null
+    gpx_file: null
+    event_date: null
+    copernico:
+      race_id: null
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "7 км"
+
+  - distance: "2 км"
+    distance_km: 2.0
+    db_event_id: null
+    tracked: false
+    has_start_list: true

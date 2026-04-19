@@ -41,6 +41,51 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 # ============================================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ СТРАНИЦ
+# ============================================================================
+
+def _build_event_config_for_template(
+    event_id: Optional[int] = None,
+    event_code: Optional[str] = None,
+) -> dict:
+    """Строит dict для window.EVENT_CONFIG в шаблоне tracker.html.
+
+    Приоритет: event_id (из БД) > event_code (из settings) > CURRENT_EVENT.
+    Для Х Трейл подставляет display_name вместо name.
+    """
+    from src.analytics.db_connection_optimized import get_event_info_by_id
+
+    ev_info: dict = {}
+    if event_id:
+        ev_info = get_event_info_by_id(event_id) or {}
+
+    # Определяем code по event_name из БД
+    db_event_name = ev_info.get('event_name', '')
+    resolved_code = event_code or settings.CURRENT_EVENT
+    if db_event_name:
+        for code, cfg in settings.EVENTS_CONFIG.items():
+            if cfg.get('name') == db_event_name:
+                resolved_code = code
+                break
+
+    ev_settings = settings.EVENTS_CONFIG.get(resolved_code, {})
+
+    display_name = settings.get_display_name(resolved_code)
+    title = ev_settings.get('title') or f"{display_name} | Трекер"
+
+    return {
+        'id': event_id or ev_info.get('id'),
+        'code': resolved_code,
+        'name': display_name,
+        'year': ev_info.get('event_year') or datetime.now().year,
+        'distance': str(ev_info.get('event_distance') or ''),
+        'title': title,
+        'description': ev_settings.get('description', ''),
+        'coordinates': [56.0075, 92.7246],  # центр карты по умолчанию (Красноярск)
+    }
+
+
+# ============================================================================
 # СТРАНИЦЫ (HTML)
 # ============================================================================
 
@@ -51,32 +96,31 @@ async def root(request: Request):
 
 
 @router.get("/tracker", response_class=HTMLResponse, tags=["Pages"])
-async def tracker_redirect(request: Request):
-    """Перенаправление на главную трекера"""
-    return await tracker_main(request)
+async def tracker_redirect(request: Request, event_id: Optional[int] = None):
+    """Страница трекера. event_id опционален — если не задан, берётся CURRENT_EVENT."""
+    return await tracker_main(request, event_id=event_id)
 
 
 @router.get("/tracker/{event:path}", response_class=HTMLResponse, tags=["Pages"])
 async def tracker_event(request: Request, event: str):
-    """Страница трекера для конкретного события"""
-    # Валидируем событие
+    """Страница трекера для конкретного события (по коду из EVENTS_CONFIG)"""
     if event not in settings.EVENTS_CONFIG:
-        logger.warning(f"Invalid event: {event}")
+        logger.warning(f"Invalid event code: {event}")
         event = settings.CURRENT_EVENT
-    
-    context = {
-        "request": request,
-        "event": event,
-        "events": list(settings.EVENTS_CONFIG.keys()),
-    }
-    return templates.TemplateResponse("tracker.html", context)
+    return await tracker_main(request, event_code=event)
 
 
-async def tracker_main(request: Request):
-    """Главная страница трекера"""
+async def tracker_main(
+    request: Request,
+    event_id: Optional[int] = None,
+    event_code: Optional[str] = None,
+):
+    """Рендер главной страницы трекера с динамическим event_config."""
+    event_cfg = _build_event_config_for_template(event_id=event_id, event_code=event_code)
     context = {
         "request": request,
-        "event": settings.CURRENT_EVENT,
+        "event_title": event_cfg["title"],
+        "event_config": event_cfg,
         "events": list(settings.EVENTS_CONFIG.keys()),
     }
     return templates.TemplateResponse("tracker.html", context)

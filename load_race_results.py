@@ -5,6 +5,13 @@
 """
 
 import sys
+
+# UTF-8 вывод в консоль на Windows — должен быть ДО любых других импортов
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import json
 import time
 import logging
@@ -16,6 +23,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 import os
+
+try:
+    import yaml
+    _YAML_AVAILABLE = True
+except ImportError:
+    _YAML_AVAILABLE = False
 
 # Добавляем src в PATH
 project_root = Path(__file__).parent
@@ -41,6 +54,71 @@ BATCH_SIZE = 1000
 LOG_DIR.mkdir(exist_ok=True)
 
 
+# === КОНФИГ СОБЫТИЙ ===
+def _load_event_config(config_path: str, distance: str) -> Dict[str, Any]:
+    """Загружает конфиг дистанции из YAML-файла события.
+
+    Args:
+        config_path: путь к YAML (напр. config/events/night_run.yaml)
+        distance: строка дистанции (напр. "5 км")
+
+    Returns:
+        dict дистанции с полями: db_event_id, copernico, gpx_file, и т.д.
+    """
+    if not _YAML_AVAILABLE:
+        raise ImportError("PyYAML не установлен. Выполните: pip install pyyaml")
+
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Конфиг не найден: {config_path}")
+
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    distances = cfg.get("distances") or []
+    for dist_cfg in distances:
+        if dist_cfg.get("distance") == distance:
+            # Добавляем поля верхнего уровня для удобства
+            dist_cfg["event_name"] = cfg.get("name")
+            dist_cfg["event_display_name"] = cfg.get("display_name") or cfg.get("name")
+            dist_cfg["event_code"] = cfg.get("code")
+            dist_cfg["event_year"] = cfg.get("year")
+            return dist_cfg
+
+    available = [d.get("distance") for d in distances]
+    raise ValueError(
+        f"Дистанция '{distance}' не найдена в {config_path}. "
+        f"Доступные: {available}"
+    )
+
+
+# === МАРШРУТИЗАЦИЯ ===
+def _setup_db_route(db_host: str, gateway: str) -> bool:
+    """Добавляет Windows-маршрут для сервера БД в обход VPN."""
+    import subprocess
+    import ctypes
+    if not ctypes.windll.shell32.IsUserAnAdmin():
+        print("WARN: Нет прав администратора - маршрут не добавлен. Запустите от имени администратора.")
+        return False
+    result = subprocess.run(
+        ["route", "add", db_host, "mask", "255.255.255.255", gateway],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print(f"INFO: Маршрут добавлен: {db_host} -> {gateway}")
+        return True
+    else:
+        print(f"WARN: Не удалось добавить маршрут {db_host}: {result.stderr.strip()}")
+        return False
+
+
+def _cleanup_db_route(db_host: str) -> None:
+    """Удаляет маршрут для сервера БД."""
+    import subprocess
+    subprocess.run(["route", "delete", db_host], capture_output=True)
+    print(f"INFO: Маршрут удален: {db_host}")
+
+
 # === ЛОГИРОВАНИЕ ===
 def setup_logging(event_id: int) -> logging.LoggerAdapter:
     """Подготовить логирование в файл и консоль"""
@@ -61,8 +139,8 @@ def setup_logging(event_id: int) -> logging.LoggerAdapter:
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    # Console handler
-    ch = logging.StreamHandler()
+    # Console handler (encoding='utf-8' чтобы кириллика не ломалась на Windows)
+    ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(logging.INFO)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
@@ -893,10 +971,25 @@ def main():
     )
 
     parser.add_argument(
+        '--config',
+        type=str,
+        default=None,
+        help='Путь к YAML-конфигу события (напр. config/events/night_run.yaml)'
+    )
+
+    parser.add_argument(
+        '--distance',
+        type=str,
+        default=None,
+        help='Дистанция из конфига (напр. "5 км"). Обязателен если задан --config'
+    )
+
+    parser.add_argument(
         '--event-id',
         type=int,
-        required=True,
-        help='🔴 ОБЯЗАТЕЛЬНЫЙ: ID события в БД'
+        required=False,
+        default=None,
+        help='ID события в БД. Обязателен если не задан --config'
     )
 
     parser.add_argument(
@@ -925,23 +1018,74 @@ def main():
         help='Показывать DEBUG логи (какие поля изменяются)'
     )
 
+    parser.add_argument(
+        '--fix-routing',
+        action='store_true',
+        help='Добавить маршрут для БД в обход VPN (нужны права администратора)'
+    )
+
+    parser.add_argument(
+        '--local-gateway',
+        type=str,
+        default=None,
+        help='Локальный шлюз для --fix-routing (если не задан - читается из config/network.yaml)'
+    )
+
     args = parser.parse_args()
 
+    # Разрешаем параметры: --config имеет приоритет над --event-id + хардкодом
+    if args.config:
+        if not args.distance:
+            parser.error("--distance обязателен при использовании --config (напр. --distance \"5 км\")")
+        dist_cfg = _load_event_config(args.config, args.distance)
+        event_id = dist_cfg.get("db_event_id") or args.event_id
+        if not event_id:
+            parser.error(
+                f"db_event_id не задан в {args.config} для дистанции '{args.distance}' "
+                "и не передан через --event-id"
+            )
+        cop = dist_cfg.get("copernico") or {}
+        copernico_race_id = cop.get("race_id")
+        copernico_login   = cop.get("login", "podbor250718@gmail.com")
+        copernico_preset  = cop.get("preset", "km_analytics")
+        copernico_event   = cop.get("event", args.distance)
+    else:
+        # Обратная совместимость: --event-id + хардкод
+        if not args.event_id:
+            parser.error("Необходимо указать --config или --event-id")
+        event_id          = args.event_id
+        copernico_race_id = "--2026-67178"
+        copernico_login   = "podbor250718@gmail.com"
+        copernico_preset  = "km_analytics"
+        copernico_event   = "5 км"
+
+    # Маршрутизация: обход VPN для доступа к БД
+    if args.fix_routing:
+        gateway = args.local_gateway
+        if not gateway:
+            net_cfg_path = Path("config/network.yaml")
+            if net_cfg_path.exists() and _YAML_AVAILABLE:
+                net_cfg = yaml.safe_load(net_cfg_path.read_text(encoding='utf-8'))
+                gateway = net_cfg.get('local_gateway')
+        if gateway:
+            from src.config.settings import DB_HOST
+            if _setup_db_route(DB_HOST, gateway):
+                import atexit
+                atexit.register(_cleanup_db_route, DB_HOST)
+        else:
+            print("WARN: --fix-routing задан, но local_gateway не найден. Добавьте в config/network.yaml.")
+
     # Подготовить логирование
-    logger = setup_logging(args.event_id)
+    logger = setup_logging(event_id)
 
     if args.debug:
         logger.info("🔧 DEBUG режим: будут показаны детали изменений")
-
-    # Жестко заданные параметры Copernico
-    copernico_race_id = "--2026-67178"
-    copernico_login = "podbor250718@gmail.com"
-    copernico_preset = "km_analytics"
-    copernico_event = "5 км"
+    if args.config:
+        logger.info(f"📋 Конфиг: {args.config} | дистанция: {args.distance} | event_id: {event_id}")
 
     # Создать загрузчик
     loader = RaceLoader(
-        event_id=args.event_id,
+        event_id=event_id,
         logger=logger,
         copernico_race_id=copernico_race_id,
         copernico_login=copernico_login,

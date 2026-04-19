@@ -1,0 +1,25 @@
+name: "Ночной забег"          # ТОЧНО как event_name в БД
+display_name: "Ночной забег"  # показывается пользователям
+year: 2026
+code: "night_run"             # ключ в settings.py EVENTS_CONFIG — не менять
+
+distances:
+  - distance: "5 км"
+    distance_km: 5.0
+    db_event_id: 104          # ← ОБНОВЛЯТЬ каждый год
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: [0.0, 1.5, 5.0]
+    gpx_file: "static/gpx/night_run.gpx"
+    event_date: "2026-03-29"  # ← ОБНОВЛЯТЬ каждый год
+    copernico:
+      race_id: "--2026-67178" # ← ОБНОВЛЯТЬ каждый год
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "5 км"
+
+  - distance: "2 км"
+    distance_km: 2.0
+    db_event_id: null
+    tracked: false
+    has_start_list: true

@@ -76,30 +76,15 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // === КОНФИГУРАЦИЯ ДЛЯ EVENT_ID = 67 (Ночной забег 2025, 5 км) ===
-        window.EVENT_CONFIG = {
-            id: 104,
-            code: 'night_run',
-            name: 'Ночной забег',
-            year: 2026,
-            distance: '5 км',
-            coordinates: [56.0075, 92.7246],  // Набережная, Красноярск
-            osm_way_id: 1477580211
-        };
-        
+        window.EVENT_CONFIG = {{ event_config | tojson }};
         console.log('✅ Event config установлен:', window.EVENT_CONFIG);
     </script>
     <script src="/static/js/tracker.js"></script>
     <script>
-        // Запускаем инициализацию трекера
-        console.log('🚀 Инициализация трекера для Event ID = 104');
-        CONFIG.EVENT_NAME = 'night_run';
-        CONFIG.EVENT_ID = 104;
-        
-        // Запускаем сразу
-        setTimeout(() => {
-            init();
-        }, 100);
+        console.log('🚀 Инициализация трекера для Event ID =', window.EVENT_CONFIG.id);
+        CONFIG.EVENT_NAME = window.EVENT_CONFIG.code;
+        CONFIG.EVENT_ID   = window.EVENT_CONFIG.id;
+        setTimeout(() => { init(); }, 100);
     </script>
 
     <!-- Включаем официальный футер Красмарафона -->
