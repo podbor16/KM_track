@@ -859,7 +859,7 @@ def get_event_info(event_name: str, year: int) -> Dict[str, Any]:
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
-            "SELECT id, event_name, event_distance, event_date, checkpoint_distances "
+            "SELECT id, event_name, event_distance, event_date, checkpoint_distances, gun_time_utc "
             "FROM events WHERE event_name = %s AND event_year = %s LIMIT 1",
             (event_name, year)
         )
@@ -891,7 +891,7 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
-            "SELECT id, event_name, event_distance, event_date, checkpoint_distances, event_year "
+            "SELECT id, event_name, event_distance, event_date, checkpoint_distances, event_year, gun_time_utc "
             "FROM events WHERE id = %s LIMIT 1",
             (event_id,)
         )

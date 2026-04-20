@@ -2,6 +2,8 @@ name: "Весна"
 display_name: "Весна"
 year: 2026
 code: "vesna"
+gun_time: null                # ← заполнить перед стартом
+description: "Событие Весна | Дистанция: 5 км"
 
 distances:
   - distance: "5 км"
@@ -9,9 +11,12 @@ distances:
     db_event_id: null         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: null
+    checkpoint_distances: []
     gpx_file: null            # ← заполнить: "static/gpx/vesna.gpx"
-    event_date: null          # ← заполнить
+    event_date: null          # ← заполнить перед стартом
+    route:
+      laps: 1
+      total_km: 5.0
     copernico:
       race_id: null           # ← заполнить перед стартом
       login: "podbor250718@gmail.com"
@@ -23,3 +28,7 @@ distances:
     db_event_id: null
     tracked: false
     has_start_list: true
+    checkpoint_distances: []
+    route:
+      laps: 1
+      total_km: 2.0

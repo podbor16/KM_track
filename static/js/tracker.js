@@ -32,6 +32,26 @@ let eventDistance = 0; // Дистанция события в км
 let runnerAnimations = {};
 let animationFrameId = null;
 
+// Максимальная дистанция каждого маркера — никогда не движемся назад
+const runnerMaxDistance = {};
+
+// Ключ-префикс для sessionStorage: привязан к событию, переживает перезагрузку страницы
+const _maxDistKeyPrefix = () => `km_max_dist_${CONFIG.EVENT_ID || CONFIG.EVENT_NAME || 'ev'}_`;
+
+function _loadMaxDist(rId) {
+    try { return parseFloat(sessionStorage.getItem(_maxDistKeyPrefix() + rId)) || 0; }
+    catch { return 0; }
+}
+function _saveMaxDist(rId, dist) {
+    try { sessionStorage.setItem(_maxDistKeyPrefix() + rId, String(dist)); }
+    catch {}
+}
+
+// Время сервера в момент последнего ответа API (Unix ms) — для экстраполяции позиции
+let serverTimeUnix = Date.now();
+// Абсолютное время выстрела пистолета (Unix ms) — для астрономического времени старта
+let raceGunUnixMs = null;
+
 // Цвета для статусов
 const STATUS_COLORS = {
     'notstarted': '#9E9E9E',
@@ -414,20 +434,25 @@ async function loadAllRunners() {
     try {
         updateStatus('Загрузка участников...');
 
-        const response = await fetch(
-            `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
-        );
+        const _params = new URLSearchParams({ v: Date.now() });
+        if (CONFIG.EVENT_ID != null) _params.set('event_id', CONFIG.EVENT_ID);
+        else if (CONFIG.EVENT_NAME)  _params.set('event_name', CONFIG.EVENT_NAME);
+        const response = await fetch(`${CONFIG.API_BASE}/event-results?${_params}`);
 
         if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
 
         const data = await response.json();
+
+        // Синхронизируем время сервера для точной экстраполяции позиций
+        if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
+        if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
 
         // Загружаем дистанцию события из первого участника
         if (data.results && data.results.length > 0) {
             eventDistance = parseFloat(data.results[0].distance) || 0;
         }
 
-        allRunners = (data.results || []).map((runner, idx) => {
+        allRunners = (data.results || []).map((runner) => {
             
             // Извлекаем данные KT1 из вложенного объекта checkpoints
             // ВАЖНО: поле называется 'time', а не 'time_clear'
@@ -474,6 +499,7 @@ async function loadAllRunners() {
                 current_pace:         runner.current_pace || '6:00',
                 pace_source:          runner.pace_source || '',
                 prev_year:            runner.prev_year || null,
+                time_clear_start_s:   runner.time_clear_start_s ?? null,
             };
         });
 
@@ -552,6 +578,14 @@ function buildMarkerIcon(runner) {
 function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
     
+    // Астрономическое время старта (если известно время выстрела пистолета)
+    let startClockHTML = '';
+    if (raceGunUnixMs != null && runner.time_clear_start_s != null) {
+        const startUnix = raceGunUnixMs + runner.time_clear_start_s * 1000;
+        const startTime = new Date(startUnix).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        startClockHTML = `<div><strong>Время старта:</strong> ${startTime}</div>`;
+    }
+
     // Базовая информация
     const baseHTML = `
         <div style="font-size: 12px; min-width: 220px; text-align: left;">
@@ -561,6 +595,7 @@ function buildPopupContent(runner) {
             </div>
             <div style="border-top: 1px solid #ddd; padding-top: 8px; margin-bottom: 8px;">
                 ${runner.category ? `<div><strong>Категория:</strong> ${runner.category}</div>` : ''}
+                ${startClockHTML}
             </div>
     `;
     
@@ -669,91 +704,63 @@ function createRunnerMarker(runner) {
     runnerMarkers[runnerId] = marker;
 }
 
+/**
+ * Вычисляет текущую дистанцию участника (км) на основе данных последнего API-ответа.
+ * Экстраполирует позицию от момента ответа сервера до текущего момента.
+ * Не зависит от накопленного состояния — безопасна при рефреше и пересэлекте.
+ */
+function calculateCurrentDistanceKm(runner) {
+    const rId = String(runner.id);
+    const elapsedSinceApiH = (Date.now() - serverTimeUnix) / 3_600_000;
+    const speed = (runner.speed > 0) ? runner.speed : 10.0;
+
+    // Экстраполируем позицию от момента последнего API-ответа до сейчас.
+    // Бэкенд больше не кэпит на КТ, поэтому current_distance растёт непрерывно.
+    const apiExtrapolated = Math.max(0, (runner.current_distance || 0) + speed * elapsedSinceApiH);
+
+    // Защита от прыжков назад: используем sessionStorage только если
+    // значение из него не сильно опережает то, что вернул сервер.
+    // Это защищает от устаревших данных предыдущей сессии.
+    let storedMax = _loadMaxDist(rId);
+    const serverDist = runner.current_distance || 0;
+    if (storedMax > 0 && serverDist > 0 && storedMax > serverDist * 1.1) {
+        // Stored max на >10% впереди сервера — данные устарели, сбрасываем
+        storedMax = 0;
+        try { sessionStorage.removeItem(_maxDistKeyPrefix() + rId); } catch {}
+    }
+
+    const dist = Math.max(runnerMaxDistance[rId] || 0, storedMax, apiExtrapolated);
+    runnerMaxDistance[rId] = dist;
+    _saveMaxDist(rId, dist);
+    return dist;
+}
+
 function updateRunnerMarkerPosition(runner) {
     const runnerId = String(runner.id);
     const marker = runnerMarkers[runnerId];
 
     if (!marker || !routeCoordinates.length) return;
 
-    // Определяем целевую позицию на основе реальных данных
+    // Определяем целевую позицию на основе времени (не накопленного состояния)
     let targetProgressPercent = 0;
     let shouldTeleport = false;
 
     const s = (runner.status || '').toLowerCase();
-    
-    const hasKT1 = runner.time_clear_kt1_raw && 
-                   runner.time_clear_kt1_raw !== '0' && 
-                   runner.time_clear_kt1_raw !== '' &&
-                   runner.time_clear_kt1_raw !== 'null' &&
-                   runner.time_clear_kt1_raw !== 'undefined' &&
-                   runner.time_clear_kt1_raw !== null &&
-                   runner.time_clear_kt1_raw !== undefined;
-    
+    const totalDistKm = eventDistance || 5.0;
+
     if (s.includes('notstart') || s.includes('not started')) {
-        // "Не стартовал" - ВСЕГДА остаётся на старте (0%), не движется
         targetProgressPercent = 0;
-        shouldTeleport = false;
     } else if (s.includes('finish')) {
-        // Финишировал - телепортируемся на финиш (100%)
         targetProgressPercent = 100;
         shouldTeleport = true;
-    } else if (hasKT1) {
-        // Прошел KT1 - сначала телепортируемся туда один раз, затем движемся к финишу
-        const currentProgress = runnerPositions[runnerId] || 0;
-        const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
-        const kt1Percent = kt1Point.percent;
-
-        if (currentProgress < kt1Percent) {
-            // Первый раз - телепортируемся на KT1
-            targetProgressPercent = kt1Percent;
-            shouldTeleport = true;
-        } else {
-            // Уже на KT1 или прошли его - плавно движемся к финишу с реальной скоростью
-            const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
-            const totalDistKm = eventDistance || 5.0;
-            const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
-            targetProgressPercent = Math.min(100, currentProgress + progressPerTick);
-            shouldTeleport = false;
-        }
     } else if (s.includes('running') || s.includes('started')) {
-        // На трассе - плавно движемся с реальной скоростью (0% -> до KT1)
-        const currentProgress = runnerPositions[runnerId] || 0;
-        const kt1Point = findNearestPointOnRoute(CONFIG.KT1_COORDS[0], CONFIG.KT1_COORDS[1]);
-        const maxTargetPercent = kt1Point.percent;
-        const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
-        const totalDistKm = eventDistance || 5.0;
-        const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
-        targetProgressPercent = Math.min(maxTargetPercent, currentProgress + progressPerTick);
-        shouldTeleport = false;
-    }
-    // Иначе остаёмся на старте (0%)
-
-    // Детальный лог для отслеживаемых участников
-    if (selectedRunnerIds.has(runnerId)) {
-        const speedKmh = (runner.speed != null && runner.speed > 0) ? runner.speed : 10.0;
-        const totalDistKm = eventDistance || 5.0;
-        const progressPerTick = speedKmh * CONFIG.UPDATE_INTERVAL / 3_600_000 / totalDistKm * 100;
-        const srcLabel = runner.pace_source === 'personal' ? `личный ${runner.prev_year}`
-                       : runner.pace_source === 'category' ? `ср.кат. ${runner.prev_year}`
-                       : 'дефолт';
-        console.log(
-            `[TRACKER] #${runner.start_number} ${runner.full_name}`,
-            `| статус: ${s}`,
-            `| speed: ${speedKmh.toFixed(2)} км/ч`,
-            `| темп: ${runner.current_pace}`,
-            `| источник: ${srcLabel}`,
-            `| позиция: ${(runnerPositions[runnerId] || 0).toFixed(2)}%`,
-            `| цель: ${targetProgressPercent.toFixed(2)}%`,
-            `| шаг: +${progressPerTick.toFixed(4)}%`
-        );
+        // Позиция = текущая дистанция от сервера + экстраполяция по времени
+        const distKm = calculateCurrentDistanceKm(runner);
+        targetProgressPercent = Math.min(100, distKm / totalDistKm * 100);
     }
 
-    // Обновляем позицию
-    runnerPositions[runnerId] = targetProgressPercent;
-
-    const progressPercent = runnerPositions[runnerId];
     const maxIndex = Math.max(0, routeCoordinates.length - 1);
-    const targetIndex = Math.min(maxIndex, Math.round(maxIndex * progressPercent / 100));
+    const targetIndex = Math.min(maxIndex, Math.round(maxIndex * targetProgressPercent / 100));
 
     // Инициализируем анимацию если её еще нет
     if (!runnerAnimations[runnerId]) {
@@ -873,7 +880,17 @@ async function selectRunner(runnerId) {
 
     selectedRunnerIds.add(runnerId_str);
     saveSelectedToStorage();
-    createRunnerMarker(runner);
+
+    if (runnerMarkers[runnerId_str]) {
+        // Маркер уже существует (был скрыт при десэлекте) — просто показываем
+        if (!map.hasLayer(runnerMarkers[runnerId_str])) {
+            runnerMarkers[runnerId_str].addTo(map);
+        }
+    } else {
+        // Создаём новый маркер; позиция вычислится по времени на первом тике
+        createRunnerMarker(runner);
+    }
+
     updateSelectedList();
     updateStatus(`✅ Отслеживание: ${runner.full_name} (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})`);
 
@@ -888,13 +905,12 @@ async function deselectRunner(runnerId) {
     selectedRunnerIds.delete(runnerId_str);
     saveSelectedToStorage();
 
+    // Только скрываем маркер с карты, не удаляем объект и анимацию
+    // При повторном выборе маркер восстановится на правильной позиции
     if (runnerMarkers[runnerId_str]) {
         if (map.hasLayer(runnerMarkers[runnerId_str])) {
             map.removeLayer(runnerMarkers[runnerId_str]);
         }
-        delete runnerMarkers[runnerId_str];
-        delete runnerPositions[runnerId_str];
-        delete runnerAnimations[runnerId_str];
         activePopups.delete(runnerId_str);
     }
 
@@ -1035,9 +1051,10 @@ async function loadAnalytics() {
     try {
 
 
-        const response = await fetch(
-            `${CONFIG.API_BASE}/event-results?event_id=${CONFIG.EVENT_ID}&v=${Date.now()}`
-        );
+        const _aParams = new URLSearchParams({ v: Date.now() });
+        if (CONFIG.EVENT_ID != null) _aParams.set('event_id', CONFIG.EVENT_ID);
+        else if (CONFIG.EVENT_NAME)  _aParams.set('event_name', CONFIG.EVENT_NAME);
+        const response = await fetch(`${CONFIG.API_BASE}/event-results?${_aParams}`);
 
         if (!response.ok) throw new Error('Ошибка загрузки результатов');
 

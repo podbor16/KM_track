@@ -6,9 +6,8 @@ FastAPI приложение KM_track
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
@@ -19,6 +18,12 @@ from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
 from src.analytics.db_connection_optimized import initialize_connection_pool
 
+# Пути (нужны до lifespan)
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+
+
 # Инициализация приложения
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,12 +31,19 @@ async def lifespan(app: FastAPI):
     
     # === STARTUP ===
     settings.logger.info("=" * 50)
-    settings.logger.info(f"🚀 {settings.API_TITLE} v{settings.API_VERSION}")
+    settings.logger.info(f"Запуск {settings.API_TITLE} v{settings.API_VERSION}")
     settings.logger.info("=" * 50)
-    
+
+    # Загрузка конфигураций мероприятий из YAML
+    from src.config.event_loader import load_all_events
+    settings.EVENTS = load_all_events(BASE_DIR / "config" / "events")
+    settings.logger.info(
+        f"Загружено мероприятий: {len(settings.EVENTS)} — {list(settings.EVENTS)}"
+    )
+
     # Инициализирование глобального состояния
     app_state = init_app_state()
-    settings.logger.info(f"✓ Application state initialized: {app_state}")
+    settings.logger.info(f"AppState инициализирован: {app_state}")
     
     # Инициализируем пул БД соединений
     pool = initialize_connection_pool(pool_size=5)
@@ -67,18 +79,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Пути
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
-TEMPLATES_DIR = BASE_DIR / "templates"
-
 # Подключение статических файлов
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     settings.logger.info(f"Static files mounted: {STATIC_DIR}")
 
-# Подключение шаблонов
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 settings.logger.info(f"Templates directory: {TEMPLATES_DIR}")
 
 
@@ -125,47 +130,11 @@ async def health_check():
     }
 
 
-@app.get("/", tags=["Info"])
-async def root():
-    """Информация о приложении"""
-    return {
-        "title": settings.API_TITLE,
-        "description": settings.API_DESCRIPTION,
-        "version": settings.API_VERSION,
-        "docs": "/docs",
-        "redoc": "/redoc",
-    }
-
-
-# --- ПРОСТЫЕ СТРАНИЦЫ (HTML) ---
-
-@app.get("/history", tags=["Pages"])
-async def history_page(request: Request):
-    """Страница истории с поиском по спортсмену и забегу"""
-    return templates.TemplateResponse("history.html", {"request": request})
-
-
-@app.get("/athlete-profile", tags=["Pages"])
-async def athlete_profile_page(request: Request):
-    """Страница профиля спортсмена с его результатами"""
-    return templates.TemplateResponse("athlete-profile.html", {"request": request})
-
-
-@app.get("/race-analysis", tags=["Pages"])
-async def race_analysis_page(request: Request):
-    """Страница анализа забегов с выбором события и года"""
-    return templates.TemplateResponse("race-analysis.html", {"request": request})
-
-
 # --- РЕГИСТРАЦИЯ РОУТЕРОВ ---
 
 from src.tracker.router import router as tracker_router
 
-app.include_router(tracker_router, tags=["tracker"])
-
-# TODO: Подключить src/analytics/router.py когда он будет создан
-# from src.analytics.router import router as analytics_router
-# app.include_router(analytics_router, prefix="/api", tags=["analytics"])
+app.include_router(tracker_router)
 
 
 # --- ГЛАВНАЯ ТОЧКА ВХОДА ---

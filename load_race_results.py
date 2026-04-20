@@ -280,6 +280,7 @@ class RaceLoader:
         self.copernico_login = copernico_login
         self.copernico_preset = copernico_preset
         self.copernico_event = copernico_event
+        self.gun_time_utc: Optional[str] = None
 
     def connect(self) -> bool:
         """Подключиться к БД и получить данные о событии"""
@@ -343,6 +344,7 @@ class RaceLoader:
                 self.logger.debug(f"Ответ API: {data}")
                 if isinstance(data, dict) and 'data' in data:
                     runners = data['data']
+                    self.gun_time_utc = data.get('gunTime')
                 elif isinstance(data, list):
                     runners = data
                 else:
@@ -370,6 +372,16 @@ class RaceLoader:
                         self.logger.info(f"💾 Данные сохранены в {RACE_DATA_FILE}")
                     except Exception as e:
                         self.logger.error(f"❌ Ошибка сохранения JSON: {e}")
+                    if self.gun_time_utc and self.cursor:
+                        try:
+                            self.cursor.execute(
+                                "UPDATE events SET gun_time_utc = %s WHERE id = %s",
+                                (self.gun_time_utc, self.event_id)
+                            )
+                            self.connection.commit()
+                            self.logger.info(f"🕐 gun_time_utc сохранён: {self.gun_time_utc}")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ Не удалось сохранить gun_time_utc: {e}")
                     return runners
             except Exception as e:
                 self.logger.warning(f"⚠️ Не удалось получить данные из API: {e}, пробуем читать из файла...")

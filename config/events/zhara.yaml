@@ -2,32 +2,40 @@ name: "Жара"
 display_name: "Жара"
 year: 2026
 code: "zhara"
+gun_time: null                # ← заполнить перед стартом (разные для дистанций?)
+description: "Жара | Дистанции: 5 км, 21.1 км"
 
 distances:
   - distance: "21.1 км"
     distance_km: 21.1
-    db_event_id: null
+    db_event_id: null         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: null
+    checkpoint_distances: []
     gpx_file: null
-    event_date: null
+    event_date: null          # ← заполнить перед стартом
+    route:
+      laps: 1
+      total_km: 21.1
     copernico:
-      race_id: null
+      race_id: null           # ← заполнить перед стартом
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event: "21.1 км"
 
   - distance: "5 км"
     distance_km: 5.0
-    db_event_id: null
+    db_event_id: null         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: null
+    checkpoint_distances: []
     gpx_file: null
-    event_date: null
+    event_date: null          # ← заполнить перед стартом
+    route:
+      laps: 1
+      total_km: 5.0
     copernico:
-      race_id: null           # отдельный race_id для дистанции 5 км
+      race_id: null           # ← отдельный race_id для дистанции 5 км
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event: "5 км"
@@ -37,3 +45,7 @@ distances:
     db_event_id: null
     tracked: false
     has_start_list: true
+    checkpoint_distances: []
+    route:
+      laps: 1
+      total_km: 2.0

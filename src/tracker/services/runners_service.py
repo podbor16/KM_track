@@ -68,6 +68,7 @@ def calculate_live_position(
     race_date: date,
     category_speeds: Dict[str, float],
     hist_speed: Optional[float] = None,
+    gun_start_dt: Optional[datetime] = None,
 ) -> Tuple[float, float, str]:
     """
     Рассчитывает текущую скорость, дистанцию и темп участника в live-режиме.
@@ -107,7 +108,12 @@ def calculate_live_position(
 
     # --- Не стартовал (нет времени старта) ---
     start_td = result.get('time_clear_start')
-    start_dt = _time_field_to_datetime(race_date, start_td)
+    if gun_start_dt is not None:
+        # Используем точное UTC-время выстрела + задержку старта участника
+        delay = start_td if isinstance(start_td, timedelta) else timedelta(0)
+        start_dt = gun_start_dt + delay
+    else:
+        start_dt = _time_field_to_datetime(race_date, start_td)
     if start_dt is None:
         return DEFAULT_SPEED, 0.0, DEFAULT_PACE
 
@@ -136,8 +142,9 @@ def calculate_live_position(
                 speed_kmh = DEFAULT_SPEED
 
         elapsed_hours = max(0.0, (now - start_dt).total_seconds() / 3600.0)
-        next_kt_dist = checkpoint_distances[1] if len(checkpoint_distances) > 1 else total_distance
-        current_distance = min(speed_kmh * elapsed_hours, next_kt_dist)
+        # Без кэпа на КТ: маркер движется непрерывно по маршруту.
+        # Телепорт на КТ произойдёт когда фактическое время КТ появится в БД.
+        current_distance = min(speed_kmh * elapsed_hours, total_distance)
         return speed_kmh, current_distance, _kmh_to_pace_str(speed_kmh)
 
     # --- После КТN: скорость = дистанция_КТN / время_КТN ---
@@ -158,10 +165,7 @@ def calculate_live_position(
     kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
     elapsed_since_kt = max(0.0, (now - kt_wall_dt).total_seconds() / 3600.0)
 
-    next_dist = (
-        checkpoint_distances[last_kt_idx + 1]
-        if last_kt_idx + 1 < len(checkpoint_distances)
-        else total_distance
-    )
-    current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, next_dist)
+    # После КТN: движемся непрерывно дальше без кэпа на следующую КТ.
+    # Телепорт на следующую КТ произойдёт когда её время появится в БД.
+    current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, total_distance)
     return speed_kmh, current_distance, pace_str

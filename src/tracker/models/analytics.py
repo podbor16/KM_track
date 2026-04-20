@@ -100,8 +100,10 @@ class RegisteredRunnersListResponse(BaseModel):
 
 class RaceResultsResponse(BaseModel):
     """Результаты гонки"""
-    
+
     event: str = Field(..., description="ID события")
     total_results: int = Field(..., description="Всего результатов")
     results: List[Dict[str, Any]] = Field(..., description="Результаты участников")
     timestamp: str = Field(..., description="Время получения результатов")
+    server_time_unix: Optional[int] = Field(None, description="Unix ms когда был сформирован ответ — для экстраполяции позиций на клиенте")
+    race_gun_unix_ms: Optional[int] = Field(None, description="Unix ms момента выстрела стартового пистолета")
