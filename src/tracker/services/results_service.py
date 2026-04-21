@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 _hist_cache: dict = {}
 
 
+def _kt_pace(kt_time_td, checkpoint_distances: list, kt_idx: int) -> Optional[str]:
+    """On-the-fly расчёт темпа КТ если pace_avg_ktN = NULL в БД."""
+    from datetime import timedelta
+    if not isinstance(kt_time_td, timedelta):
+        return None
+    if kt_idx >= len(checkpoint_distances) or checkpoint_distances[kt_idx] <= 0:
+        return None
+    secs = kt_time_td.total_seconds()
+    secs_per_km = secs / checkpoint_distances[kt_idx]
+    m, s = int(secs_per_km // 60), int(secs_per_km % 60)
+    return f"{m}:{s:02d}"
+
+
 def build_event_results(
     event_id: Optional[int],
     event_name: Optional[str],
@@ -111,7 +124,8 @@ def build_event_results(
 
     # --- Исторический кеш (предыдущий год) ---
     cache_key = f"{ev_name}|{ev_distance}|{ev_year}"
-    if cache_key not in _hist_cache:
+    # Не кешируем пустые данные — при DB-сбое позволяем повторный запрос
+    if cache_key not in _hist_cache or not _hist_cache[cache_key].get('populated'):
         prev_year = (ev_year or current_year) - 1
         prev_rows = get_prev_year_results(ev_name, ev_distance, prev_year) if ev_name else []
         personal: dict = {}
@@ -137,6 +151,7 @@ def build_event_results(
             'personal': personal,
             'category_avg': {c: sum(v) / len(v) for c, v in cat_raw.items()},
             'prev_year': prev_year,
+            'populated': bool(prev_rows),
         }
         logger.info(
             f"Исторические данные загружены: {len(personal)} личных, "
@@ -212,11 +227,11 @@ def build_event_results(
             'distance': runner.get('distance', runner.get('distance_from_event', '5 км')),
             'event': runner.get('distance', runner.get('distance_from_event', '5 км')),
             'checkpoints': {
-                'kt1': {'time': runner.get('time_clear_kt1'), 'pace': runner.get('pace_avg_kt1')},
-                'kt2': {'time': runner.get('time_clear_kt2'), 'pace': runner.get('pace_avg_kt2')},
-                'kt3': {'time': runner.get('time_clear_kt3'), 'pace': runner.get('pace_avg_kt3')},
-                'kt4': {'time': runner.get('time_clear_kt4'), 'pace': runner.get('pace_avg_kt4')},
-                'kt5': {'time': runner.get('time_clear_kt5'), 'pace': runner.get('pace_avg_kt5')},
+                'kt1': {'time': runner.get('time_clear_kt1'), 'pace': runner.get('pace_avg_kt1') or _kt_pace(runner.get('time_clear_kt1'), checkpoint_distances, 1)},
+                'kt2': {'time': runner.get('time_clear_kt2'), 'pace': runner.get('pace_avg_kt2') or _kt_pace(runner.get('time_clear_kt2'), checkpoint_distances, 2)},
+                'kt3': {'time': runner.get('time_clear_kt3'), 'pace': runner.get('pace_avg_kt3') or _kt_pace(runner.get('time_clear_kt3'), checkpoint_distances, 3)},
+                'kt4': {'time': runner.get('time_clear_kt4'), 'pace': runner.get('pace_avg_kt4') or _kt_pace(runner.get('time_clear_kt4'), checkpoint_distances, 4)},
+                'kt5': {'time': runner.get('time_clear_kt5'), 'pace': runner.get('pace_avg_kt5') or _kt_pace(runner.get('time_clear_kt5'), checkpoint_distances, 5)},
             },
             'speed': round(speed_kmh, 2),
             'current_distance': round(current_dist, 3),

@@ -243,13 +243,13 @@ def _time_str_to_seconds(t: Optional[str]) -> Optional[float]:
 
 
 def _seconds_to_pace(total_seconds: Optional[float], distance_km: Optional[float]) -> Optional[str]:
-    """total_sec / dist_km → 'mm:ss' темп. None если данных нет."""
+    """total_sec / dist_km → '00:mm:ss' темп для хранения в MySQL TIME. None если данных нет."""
     if not total_seconds or not distance_km or distance_km <= 0:
         return None
     secs_per_km = total_seconds / distance_km
     minutes = int(secs_per_km // 60)
     seconds = int(secs_per_km % 60)
-    return f"{minutes}:{seconds:02d}"
+    return f"00:{minutes:02d}:{seconds:02d}"
 
 
 # === КЛАСС ЗАГРУЗЧИКА ===

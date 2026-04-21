@@ -79,8 +79,9 @@ class TestBeforeFirstKT:
         assert speed == pytest.approx(10.0, rel=0.05)
         assert dist == pytest.approx(10.0 * 10 / 60, rel=0.05)  # 10 km/h * 10/60 h
 
-    def test_distance_capped_at_kt1(self):
-        """Дистанция не превышает КТ1, даже если времени прошло много."""
+    def test_distance_capped_at_total(self):
+        """До первой КТ маркер движется непрерывно без кэпа у КТ1 (фикс осцилляции).
+        Дистанция ограничена только финишем (total_distance)."""
         result = _make_result(category='М40')
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=22, minutes=0)
         with patch('src.tracker.services.runners_service.datetime') as mock_dt:
@@ -89,7 +90,7 @@ class TestBeforeFirstKT:
             mock_dt.min = datetime.min
             speed, dist, pace = calculate_live_position(result, CP_DISTS, RACE_DATE, CAT_SPEEDS)
 
-        assert dist == pytest.approx(CP_DISTS[1])  # ограничен 2.5 км
+        assert dist == pytest.approx(CP_DISTS[-1])  # ограничен финишем (5.0 км), не КТ1
 
     def test_no_start_time_returns_default(self):
         """Нет времени старта → дефолтная скорость, дистанция 0."""

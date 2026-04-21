@@ -163,9 +163,13 @@ def calculate_live_position(
         pace_str = DEFAULT_PACE
 
     kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
-    elapsed_since_kt = max(0.0, (now - kt_wall_dt).total_seconds() / 3600.0)
-
-    # После КТN: движемся непрерывно дальше без кэпа на следующую КТ.
-    # Телепорт на следующую КТ произойдёт когда её время появится в БД.
-    current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, total_distance)
+    if kt_wall_dt > now:
+        # kt_wall_dt в будущем — значит start_dt сдвинут (тест/конфиг), откатываемся к фазе "до КТ"
+        elapsed_hours = max(0.0, (now - start_dt).total_seconds() / 3600.0)
+        current_distance = min(speed_kmh * elapsed_hours, total_distance)
+    else:
+        elapsed_since_kt = (now - kt_wall_dt).total_seconds() / 3600.0
+        # Ограничиваем разумным значением: не более 24 часов с момента КТ (защита от прошедших событий)
+        elapsed_since_kt = min(elapsed_since_kt, 24.0)
+        current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, total_distance)
     return speed_kmh, current_distance, pace_str
