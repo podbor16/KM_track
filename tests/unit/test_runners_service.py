@@ -139,6 +139,9 @@ class TestBeforeFirstKT:
         assert speed == pytest.approx(10.0, rel=0.05)  # из CAT_SPEEDS['М40']
 
 
+CP_DISTS_MULTI = [0.0, 3.0, 7.0, 10.0]  # старт, КТ1 на 3 км, КТ2 на 7 км, финиш
+
+
 class TestAfterKT1:
     """Участник прошёл КТ1, идёт к финишу."""
 
@@ -211,3 +214,86 @@ class TestAfterKT1:
             _, _, pace = calculate_live_position(result, CP_DISTS, RACE_DATE, CAT_SPEEDS)
 
         assert ':' in pace, f"Темп '{pace}' должен содержать ':'"
+
+
+class TestAfterKT2:
+    """Участник прошёл КТ1 и КТ2 в забеге с несколькими КТ."""
+
+    def test_speed_uses_kt2_dist_and_time(self):
+        """После КТ2 скорость = dist_kt2 / time_kt2 (средний темп от старта до КТ2).
+        КТ2 = 7.0 км за 42 мин → speed = 7.0 / 0.7 = 10.0 км/ч
+        """
+        result = _make_result(
+            time_clear_start=timedelta(hours=20),
+            time_clear_kt1=timedelta(minutes=18),  # КТ1 на 3 км за 18 мин
+            time_clear_kt2=timedelta(minutes=42),  # КТ2 на 7 км за 42 мин
+        )
+        fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=43)
+        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            mock_dt.combine = datetime.combine
+            mock_dt.min = datetime.min
+            speed, dist, _ = calculate_live_position(result, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
+
+        # speed = 7.0 / (42/60) = 10.0 км/ч
+        assert speed == pytest.approx(10.0, rel=0.05)
+        # dist = 7.0 + 10.0 * (1/60) ≈ 7.167
+        assert dist == pytest.approx(7.0 + 10.0 / 60, rel=0.05)
+
+    def test_kt1_ignored_when_kt2_present(self):
+        """Если KT2 пройдена, скорость считается по KT2, а не по KT1."""
+        result = _make_result(
+            time_clear_start=timedelta(hours=20),
+            time_clear_kt1=timedelta(minutes=18),  # 3.0/0.3 = 10.0 км/ч
+            time_clear_kt2=timedelta(minutes=42),  # 7.0/0.7 = 10.0 км/ч (совпадает)
+        )
+        # Изменим kt1 время, чтобы скорости отличались
+        result_kt1_slow = _make_result(
+            time_clear_start=timedelta(hours=20),
+            time_clear_kt1=timedelta(minutes=30),  # 3.0/0.5 = 6.0 км/ч
+            time_clear_kt2=timedelta(minutes=42),  # 7.0/0.7 = 10.0 км/ч
+        )
+        fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=43)
+        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            mock_dt.combine = datetime.combine
+            mock_dt.min = datetime.min
+            speed, _, _ = calculate_live_position(result_kt1_slow, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
+
+        # Должен использовать KT2: 7.0 / (42/60) = 10.0 км/ч, не KT1: 3.0 / 0.5 = 6.0
+        assert speed == pytest.approx(10.0, rel=0.05)
+
+    def test_distance_capped_at_finish_after_kt2(self):
+        """Дистанция не превышает финиш даже после KT2."""
+        result = _make_result(
+            time_clear_start=timedelta(hours=20),
+            time_clear_kt1=timedelta(minutes=18),
+            time_clear_kt2=timedelta(minutes=42),
+        )
+        fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=23)
+        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            mock_dt.combine = datetime.combine
+            mock_dt.min = datetime.min
+            _, dist, _ = calculate_live_position(result, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
+
+        assert dist == pytest.approx(CP_DISTS_MULTI[-1])
+
+    def test_kt2_not_used_if_not_in_checkpoint_distances(self):
+        """Если checkpoint_distances не включает KT2 (len=2), KT2 игнорируется."""
+        result = _make_result(
+            time_clear_start=timedelta(hours=20),
+            time_clear_kt1=timedelta(minutes=15),   # на трассе с 1 КТ
+            time_clear_kt2=timedelta(minutes=999),  # посторонние данные
+        )
+        cp_dists_no_kt2 = [0.0, 5.0]  # нет KT2 в конфиге
+        fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=16)
+        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            mock_dt.combine = datetime.combine
+            mock_dt.min = datetime.min
+            speed, _, _ = calculate_live_position(result, cp_dists_no_kt2, RACE_DATE, CAT_SPEEDS)
+
+        # KT1: dist=5.0 (финиш), time=15мин → speed=5.0/0.25=20 км/ч
+        # KT2 не должен участвовать (cp_idx=2 >= len=2)
+        assert speed == pytest.approx(20.0, rel=0.05)
