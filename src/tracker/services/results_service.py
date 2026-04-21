@@ -13,8 +13,10 @@ from src.tracker.models.analytics import RaceResultsResponse
 
 logger = logging.getLogger(__name__)
 
-# Кэш исторических данных (прошлый год): заполняется один раз на запрос к событию
+# Кэш исторических данных (прошлый год)
 _hist_cache: dict = {}
+_hist_cache_ts: dict = {}
+HIST_CACHE_TTL = 600  # 10 минут — пересоздаём кэш если данные устарели
 
 
 def _kt_pace(kt_time_td, checkpoint_distances: list, kt_idx: int) -> Optional[str]:
@@ -124,19 +126,17 @@ def build_event_results(
 
     # --- Исторический кеш (предыдущий год) ---
     cache_key = f"{ev_name}|{ev_distance}|{ev_year}"
-    # Не кешируем пустые данные — при DB-сбое позволяем повторный запрос
-    if cache_key not in _hist_cache or not _hist_cache[cache_key].get('populated'):
+    _now_ts = time.time()
+    _cache_stale = (_now_ts - _hist_cache_ts.get(cache_key, 0)) > HIST_CACHE_TTL
+    if cache_key not in _hist_cache or not _hist_cache[cache_key].get('populated') or _cache_stale:
         prev_year = (ev_year or current_year) - 1
-        prev_rows = get_prev_year_results(ev_name, ev_distance, prev_year) if ev_name else []
+        prev_rows = get_prev_year_results(ev_name, str(ev_distance) if ev_distance is not None else '', prev_year) if ev_name else []
         personal: dict = {}
         cat_raw: dict = {}
         for row in prev_rows:
             bday = row.get('birthday')
             bday_str = bday.isoformat() if hasattr(bday, 'isoformat') else str(bday or '')
-            key = (
-                f"{(row.get('surname') or '').strip()}|"
-                f"{(row.get('name') or '').strip()}|{bday_str}".upper()
-            )
+            key = f"{(row.get('surname') or '').strip()}|{(row.get('name') or '').strip()}|{bday_str}".upper()
             pace_val = row.get('finish_pace_avg_clean')
             if isinstance(pace_val, _td):
                 _s = int(pace_val.total_seconds())
@@ -153,6 +153,8 @@ def build_event_results(
             'prev_year': prev_year,
             'populated': bool(prev_rows),
         }
+        if prev_rows:
+            _hist_cache_ts[cache_key] = _now_ts
         logger.info(
             f"Исторические данные загружены: {len(personal)} личных, "
             f"{len(cat_raw)} категорий за {prev_year} год"
@@ -165,10 +167,7 @@ def build_event_results(
     for runner in results_data:
         bday = runner.get('birthday')
         bday_str = bday.isoformat() if hasattr(bday, 'isoformat') else str(bday or '')
-        runner_key = (
-            f"{(runner.get('surname') or '').strip()}|"
-            f"{(runner.get('name') or '').strip()}|{bday_str}".upper()
-        )
+        runner_key = f"{(runner.get('surname') or '').strip()}|{(runner.get('name') or '').strip()}|{bday_str}".upper()
 
         cat_norm = (runner.get('category') or '').strip().split(' (')[0].strip()
         if runner_key in hist_data['personal']:
