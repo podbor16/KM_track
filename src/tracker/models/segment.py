@@ -11,6 +11,7 @@ class Segment(BaseModel):
     
     id: int = Field(..., description="ID записи в result_segments")
     result_id: int = Field(..., description="ID результата спортсмена")
+    event_id: Optional[int] = Field(None, description="ID мероприятия")
     segment_code: str = Field(..., description="Код сегмента (kt1, kt2, kt3, kt4, kt5)")
     sg_time_clear: Optional[str] = Field(None, description="Чистое время прохождения (HH:MM:SS)")
     sg_pace_avg: Optional[str] = Field(None, description="Средний темп на сегменте (м:сс)")

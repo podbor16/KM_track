@@ -1230,11 +1230,24 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
         SELECT *
         FROM `{segments_table}`
         WHERE result_id = %s
-        ORDER BY 
-            CASE 
-                WHEN segment_code LIKE 'start%' THEN 1
-                WHEN segment_code LIKE '%finish%' THEN 999
-                ELSE CAST(SUBSTRING_INDEX(segment_code, '-', 1) AS UNSIGNED)
+        ORDER BY
+            CASE SUBSTRING_INDEX(segment_code, '-', 1)
+                WHEN 'start' THEN 0
+                WHEN 'kt1'   THEN 1
+                WHEN 'kt2'   THEN 2
+                WHEN 'kt3'   THEN 3
+                WHEN 'kt4'   THEN 4
+                WHEN 'kt5'   THEN 5
+                ELSE 99
+            END ASC,
+            CASE SUBSTRING_INDEX(segment_code, '-', -1)
+                WHEN 'kt1'    THEN 1
+                WHEN 'kt2'    THEN 2
+                WHEN 'kt3'    THEN 3
+                WHEN 'kt4'    THEN 4
+                WHEN 'kt5'    THEN 5
+                WHEN 'finish' THEN 99
+                ELSE 0
             END ASC
         """
         
@@ -1516,7 +1529,7 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                 # Варианты названий таблиц для поиска
                 possible_tables = [
                     "Все заявки",           # Русское имя
-                    "All Applications",     # English name
+                    "leads",     # English name
                     "runners",              # Common English name
                     "participants",         # Another common name
                     "entries",              # Alternative

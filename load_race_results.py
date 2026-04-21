@@ -490,6 +490,7 @@ class RaceLoader:
                 self.connection.commit()
 
             self._recalculate_ranks()
+            self._recalculate_segment_ranks()
             return True
 
         except Exception as e:
@@ -527,6 +528,7 @@ class RaceLoader:
 
                 updated_r, updated_s = self._update_existing(runners)
                 self._recalculate_ranks()
+                self._recalculate_segment_ranks()
 
                 cycle_time = time.time() - cycle_start
                 if updated_r > 0:
@@ -701,11 +703,12 @@ class RaceLoader:
         if segments_batch:
             try:
                 insert_query = """
-                    INSERT INTO result_segments (result_id, segment_code, sg_time_clear, sg_pace_avg, sg_rank_absolute, sg_rank_sex, sg_rank_category)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO result_segments (result_id, event_id, segment_code, sg_time_clear, sg_pace_avg, sg_rank_absolute, sg_rank_sex, sg_rank_category)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
                         sg_time_clear = VALUES(sg_time_clear),
                         sg_pace_avg = VALUES(sg_pace_avg),
+                        event_id = VALUES(event_id),
                         sg_rank_absolute = VALUES(sg_rank_absolute),
                         sg_rank_sex = VALUES(sg_rank_sex),
                         sg_rank_category = VALUES(sg_rank_category)
@@ -877,62 +880,117 @@ class RaceLoader:
             if self.connection:
                 self.connection.rollback()
 
+    def _recalculate_segment_ranks(self) -> None:
+        """Пересчитывает ранги для ВСЕХ сегментных комбинаций события."""
+        if not self.cursor or not self.connection:
+            return
+        try:
+            self.cursor.execute("""
+                SELECT rs.id AS seg_id, rs.result_id, rs.segment_code, rs.sg_time_clear,
+                       r.sex, r.category
+                FROM result_segments rs
+                JOIN results r ON rs.result_id = r.id
+                WHERE rs.event_id = %s AND rs.sg_time_clear IS NOT NULL
+            """, (self.event_id,))
+            rows = [dict(row) for row in self.cursor.fetchall()]
+            if not rows:
+                return
+
+            from collections import defaultdict
+            by_code: Dict[str, list] = defaultdict(list)
+            for row in rows:
+                by_code[row['segment_code']].append({
+                    'id':            row['result_id'],
+                    'seg_id':        row['seg_id'],
+                    'sg_time_clear': row['sg_time_clear'],
+                    'sex':           row['sex'],
+                    'category':      row['category'],
+                })
+
+            batch = []
+            for seg_code, segs in by_code.items():
+                abs_ranks = self._assign_ranks(segs, 'sg_time_clear')
+                sex_ranks: Dict[str, Dict[int, int]] = {}
+                for sex_val in set(s['sex'] for s in segs if s.get('sex')):
+                    sex_ranks[sex_val] = self._assign_ranks(
+                        [s for s in segs if s.get('sex') == sex_val], 'sg_time_clear'
+                    )
+                cat_ranks: Dict[str, Dict[int, int]] = {}
+                for cat_val in set(s['category'] for s in segs if s.get('category')):
+                    cat_ranks[cat_val] = self._assign_ranks(
+                        [s for s in segs if s.get('category') == cat_val], 'sg_time_clear'
+                    )
+                for seg in segs:
+                    rid = seg['id']
+                    batch.append((
+                        abs_ranks.get(rid),
+                        sex_ranks.get(seg.get('sex', ''), {}).get(rid),
+                        cat_ranks.get(seg.get('category', ''), {}).get(rid),
+                        seg['seg_id'],
+                    ))
+
+            if batch:
+                self.cursor.executemany(
+                    """UPDATE result_segments
+                       SET sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s
+                       WHERE id = %s""",
+                    batch,
+                )
+                self.connection.commit()
+                self.logger.debug(f"🏆 Ранги сегментов пересчитаны: {len(batch)} записей")
+        except Exception as e:
+            self.logger.error(f"❌ _recalculate_segment_ranks: {e}")
+            if self.connection:
+                self.connection.rollback()
+
     def _prepare_segments(self, result_id: int, runner_data: Dict) -> List[Tuple]:
-        """Подготовить данные сегментов на основе соседних точек из checkpoint_distances"""
+        """Подготовить данные сегментов для всех пар точек из checkpoint_distances."""
         if self.checkpoint_distances is None:
             return []
 
-        segments = []
-
-        # Получаем все чистые времена для точек
-        times: Dict[str, Optional[int]] = {}
-        times['start'] = runner_data.get('times.real_:::start:::')
-        for i in range(1, 6):
-            times[f'kt{i}'] = runner_data.get(f'times.real_kt{i}')
-        times['finish'] = runner_data.get('times.real_:::finish:::')
-
-        # Список названий точек, соответствующих checkpoint_distances
-        point_names = ['start']
         num_kt = len(self.checkpoint_distances) - 2
+        point_names = ['start'] + [f'kt{i}' for i in range(1, num_kt + 1)] + ['finish']
+
+        times: Dict[str, Optional[int]] = {
+            'start': runner_data.get('times.real_:::start:::'),
+            'finish': runner_data.get('times.real_:::finish:::'),
+        }
         for i in range(1, num_kt + 1):
-            point_names.append(f'kt{i}')
-        point_names.append('finish')
+            times[f'kt{i}'] = runner_data.get(f'times.real_kt{i}')
 
-        # Генерируем сегменты между соседними точками
-        for i in range(len(point_names) - 1):
-            from_point = point_names[i]
-            to_point = point_names[i + 1]
-            from_ms = times.get(from_point)
-            to_ms = times.get(to_point)
-            if from_ms is None or to_ms is None:
-                continue
-            segment_ms = to_ms - from_ms
-            if segment_ms <= 0:
-                continue
-            segment_time = milliseconds_to_time(segment_ms)
-            if not segment_time:
-                continue
+        segments = []
+        for i in range(len(point_names)):
+            for j in range(i + 1, len(point_names)):
+                from_point = point_names[i]
+                to_point = point_names[j]
+                from_ms = times.get(from_point)
+                to_ms = times.get(to_point)
+                if from_ms is None or to_ms is None:
+                    continue
+                segment_ms = to_ms - from_ms
+                if segment_ms <= 0:
+                    continue
+                segment_time = milliseconds_to_time(segment_ms)
+                if not segment_time:
+                    continue
 
-            # Расстояние сегмента
-            from_dist = self.checkpoint_distances[i]
-            to_dist = self.checkpoint_distances[i + 1]
-            seg_dist = to_dist - from_dist
-            if seg_dist <= 0:
-                continue
+                from_dist = self.checkpoint_distances[i]
+                to_dist = self.checkpoint_distances[j]
+                seg_dist = to_dist - from_dist
+                if seg_dist <= 0:
+                    continue
 
-            seg_seconds = segment_ms / 1000.0
-            seg_seconds_km = seg_seconds / seg_dist
-            sg_pace = compute_pace(seg_seconds_km)
+                sg_pace = compute_pace((segment_ms / 1000.0) / seg_dist)
+                segment_code = f"{from_point}-{to_point}"
 
-            segment_code = f"{from_point}-{to_point}"
-
-            segments.append((
-                result_id,
-                segment_code,
-                segment_time,
-                sg_pace,
-                None, None, None
-            ))
+                segments.append((
+                    result_id,
+                    self.event_id,
+                    segment_code,
+                    segment_time,
+                    sg_pace,
+                    None, None, None,
+                ))
 
         return segments
 
