@@ -510,6 +510,10 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
 # ПОЛУЧЕНИЕ РЕЗУЛЬТАТОВ ПО EVENT_ID
 # ============================================================
 
+_results_cache: dict = {}
+_results_cache_ts: dict = {}
+RESULTS_CACHE_TTL = 10  # секунд — трекер опрашивает раз в 2 сек, БД обновляется раз в ~15 сек
+
 def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     """
     Получение результатов забега по event_id из таблицы results
@@ -521,16 +525,20 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     Returns:
         Список словарей с результатами спортсменов, отсортированных по времени финиша
     """
+    _now = time.time()
+    if event_id in _results_cache and (_now - _results_cache_ts.get(event_id, 0)) < RESULTS_CACHE_TTL:
+        return _results_cache[event_id]
+
     logger.info(f"🔍 Загрузка результатов для event_id={event_id}")
-    
+
     connection = get_pooled_connection()
     if not connection:
         logger.error("❌ Не удалось установить соединение")
         return []
-    
+
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
-        
+
         # Находим таблицу results
         results_table = find_table([
             "results",
@@ -595,12 +603,14 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
             
             logger.info(f"✅ Найдено {len(results_list)} результатов для event_id={event_id}")
             cursor.close()
+            _results_cache[event_id] = results_list
+            _results_cache_ts[event_id] = time.time()
             return results_list
         else:
             logger.warning(f"⚠️ Результаты для event_id={event_id} не найдены")
             cursor.close()
             return []
-        
+
     except Exception as e:
         logger.error(f"❌ Ошибка при получении результатов: {e}")
         return []
@@ -620,16 +630,21 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
     Returns:
         Список словарей с результатами спортсменов
     """
+    _cache_key = f"{event_name}|{year}"
+    _now = time.time()
+    if _cache_key in _results_cache and (_now - _results_cache_ts.get(_cache_key, 0)) < RESULTS_CACHE_TTL:
+        return _results_cache[_cache_key]
+
     logger.info(f"🔍 Загрузка результатов для {event_name} {year}")
-    
+
     connection = get_pooled_connection()
     if not connection:
         logger.error("❌ Не удалось установить соединение")
         return []
-    
+
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
-        
+
         # Запрос результатов по названию события и году
         query = """
         SELECT 
@@ -678,6 +693,8 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
         if results:
             results_list = [dict(r) for r in results]
             logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
+            _results_cache[_cache_key] = results_list
+            _results_cache_ts[_cache_key] = time.time()
             return results_list
         else:
             logger.warning(f"⚠️ Результаты не найдены для {event_name} {year}")

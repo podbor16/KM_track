@@ -16,7 +16,24 @@ logger = logging.getLogger(__name__)
 # Кэш исторических данных (прошлый год)
 _hist_cache: dict = {}
 _hist_cache_ts: dict = {}
-HIST_CACHE_TTL = 600  # 10 минут — пересоздаём кэш если данные устарели
+HIST_CACHE_TTL = 600
+
+# Кэш категорийных темпов (исторические данные — не меняются)
+_cat_speeds_cache: dict = {}
+_cat_speeds_cache_ts: dict = {}
+CAT_SPEEDS_TTL = 600
+
+
+def _get_cached_category_speeds(ev_name, ev_distance, ev_year) -> dict:
+    from src.analytics.db_connection_optimized import get_category_avg_paces
+    key = f"{ev_name}|{ev_distance}|{ev_year}"
+    _now = time.time()
+    if key in _cat_speeds_cache and (_now - _cat_speeds_cache_ts.get(key, 0)) < CAT_SPEEDS_TTL:
+        return _cat_speeds_cache[key]
+    result = get_category_avg_paces(ev_name, ev_distance, ev_year) if ev_name else {}
+    _cat_speeds_cache[key] = result
+    _cat_speeds_cache_ts[key] = _now
+    return result
 
 
 def _kt_pace(kt_time_td, checkpoint_distances: list, kt_idx: int) -> Optional[str]:
@@ -122,7 +139,7 @@ def build_event_results(
             total_km = float(ev_distance) if ev_distance else 5.0
             checkpoint_distances = [0.0, total_km]
 
-    category_speeds = get_category_avg_paces(ev_name, ev_distance, ev_year) if ev_name else {}
+    category_speeds = _get_cached_category_speeds(ev_name, ev_distance, ev_year)
 
     # --- Исторический кеш (предыдущий год) ---
     cache_key = f"{ev_name}|{ev_distance}|{ev_year}"
