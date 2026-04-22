@@ -512,7 +512,7 @@ def get_athlete_results_optimized(surname: str, name: str) -> tuple:
 
 _results_cache: dict = {}
 _results_cache_ts: dict = {}
-RESULTS_CACHE_TTL = 10  # секунд — трекер опрашивает раз в 2 сек, БД обновляется раз в ~15 сек
+RESULTS_CACHE_TTL = 60  # секунд — должен быть > RESPONSE_CACHE_TTL (30s), чтобы при пересчёте Python данные уже в памяти
 
 def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     """

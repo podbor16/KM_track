@@ -113,6 +113,7 @@ async function loadRunnersData() {
     allRunners = [];
     filteredRunners = [];
     document.getElementById('resultsTableBody').innerHTML = '';
+    document.getElementById('resultsWrapper').style.display = 'none';
     showLoading(true);
 
     try {
@@ -169,10 +170,12 @@ async function loadRunnersData() {
         
         applyFilters();
         showLoading(false);
+        document.getElementById('resultsWrapper').style.display = '';
     } catch (error) {
         console.error('❌ Ошибка загрузки данных:', error);
         showError('Ошибка загрузки данных: ' + error.message);
         showLoading(false);
+        document.getElementById('resultsWrapper').style.display = '';
     }
 }
 

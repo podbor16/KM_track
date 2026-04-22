@@ -26,7 +26,7 @@ CAT_SPEEDS_TTL = 600
 # Кэш финального ответа build_event_results (включает Python-обработку 1000+ участников)
 _response_cache: dict = {}
 _response_cache_ts: dict = {}
-RESPONSE_CACHE_TTL = 5  # секунд — клиент экстраполирует позиции сам, устаревание на 5 сек незаметно
+RESPONSE_CACHE_TTL = 30  # секунд — клиент экстраполирует позиции сам, устаревание на 30 сек незаметно
 
 
 def _get_cached_category_speeds(ev_name, ev_distance, ev_year) -> dict:
