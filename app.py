@@ -51,7 +51,29 @@ async def lifespan(app: FastAPI):
     settings.logger.info(f"📍 Swagger UI: http://localhost:8000/docs")
     settings.logger.info(f"📍 ReDoc: http://localhost:8000/redoc")
     settings.logger.info(f"📍 Трекер: http://localhost:8000/tracker")
-    
+
+    # Прогрев кеша: загрузка результатов активных мероприятий в фоне
+    import asyncio
+    async def _prewarm_cache():
+        try:
+            active_ids = [
+                dist.db_event_id
+                for ev in settings.EVENTS.values()
+                for dist in ev.distances
+                if dist.db_event_id
+            ]
+            if not active_ids:
+                return
+            from src.tracker.services.results_service import build_event_results
+            for eid in active_ids:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, build_event_results, eid, None, None, settings.EVENTS
+                )
+                settings.logger.info(f"Cache pre-warmed: event_id={eid}")
+        except Exception as _e:
+            settings.logger.warning(f"Cache pre-warm failed: {_e}")
+    asyncio.create_task(_prewarm_cache())
+
     yield  # Приложение работает здесь
     
     # === SHUTDOWN ===

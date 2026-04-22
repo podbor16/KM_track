@@ -23,6 +23,11 @@ _cat_speeds_cache: dict = {}
 _cat_speeds_cache_ts: dict = {}
 CAT_SPEEDS_TTL = 600
 
+# Кэш финального ответа build_event_results (включает Python-обработку 1000+ участников)
+_response_cache: dict = {}
+_response_cache_ts: dict = {}
+RESPONSE_CACHE_TTL = 5  # секунд — клиент экстраполирует позиции сам, устаревание на 5 сек незаметно
+
 
 def _get_cached_category_speeds(ev_name, ev_distance, ev_year) -> dict:
     from src.analytics.db_connection_optimized import get_category_avg_paces
@@ -67,6 +72,11 @@ def build_event_results(
     Returns:
         RaceResultsResponse — полный список участников с live-данными
     """
+    _resp_key = f"{event_id}|{event_name}|{year}"
+    _now_resp = time.time()
+    if _resp_key in _response_cache and (_now_resp - _response_cache_ts.get(_resp_key, 0)) < RESPONSE_CACHE_TTL:
+        return _response_cache[_resp_key]
+
     import json as _json
     from datetime import timedelta as _td
     from src.analytics.db_connection_optimized import (
@@ -273,7 +283,7 @@ def build_event_results(
             except Exception as _ge:
                 logger.debug(f"gun_time YAML parse failed: {_ge}")
 
-    return RaceResultsResponse(
+    response = RaceResultsResponse(
         event=ev_name or f"event_{event_id}",
         total_results=len(results_data),
         results=results,
@@ -281,3 +291,6 @@ def build_event_results(
         server_time_unix=server_time_unix,
         race_gun_unix_ms=race_gun_unix_ms,
     )
+    _response_cache[_resp_key] = response
+    _response_cache_ts[_resp_key] = time.time()
+    return response
