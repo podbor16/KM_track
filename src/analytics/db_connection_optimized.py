@@ -24,6 +24,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # ============================================================
+# БЕЗОПАСНОСТЬ: whitelist допустимых имён таблиц
+# ============================================================
+
+_ALLOWED_TABLES = {'clients', 'events', 'leads', 'result_segments', 'results'}
+
+
+def _validate_table_name(name: str) -> str:
+    if name not in _ALLOWED_TABLES:
+        raise ValueError(f"Недопустимое имя таблицы: {name!r}")
+    return name
+
+
+# ============================================================
 # ГЛОБАЛЬНЫЙ ПУЛИНГ СОЕДИНЕНИЙ - ГЛАВНОЕ УЛУЧШЕНИЕ
 # ============================================================
 
@@ -268,7 +281,7 @@ def get_table_columns(table_name: str) -> List[str]:
     
     try:
         cursor = connection.cursor(dictionary=True)
-        cursor.execute(f"DESCRIBE `{table_name}`")
+        cursor.execute(f"DESCRIBE `{_validate_table_name(table_name)}`")
         fields = cursor.fetchall()
         
         columns = [f.get('Field', '') for f in fields] if fields else []
@@ -1395,7 +1408,7 @@ def get_database_info_optimized() -> Dict[str, Any]:
                 table_info["columns"] = get_table_columns(table_name)
                 
                 # Примеры строк (только SELECT, без COUNT/DESCRIBE)
-                cursor.execute(f"SELECT * FROM `{table_name}` LIMIT 2")
+                cursor.execute(f"SELECT * FROM `{_validate_table_name(table_name)}` LIMIT 2")
                 samples = cursor.fetchall()
                 table_info["sample_rows"] = samples if samples else []
                 
@@ -1546,7 +1559,7 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                     return get_test_data_fallback()
                 
                 # Выполняем запрос к найденной таблице
-                cursor.execute(f"SELECT * FROM `{target_table}`")
+                cursor.execute(f"SELECT * FROM `{_validate_table_name(target_table)}`")
                 records = cursor.fetchall()
                 
                 if records:

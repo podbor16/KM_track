@@ -6,6 +6,9 @@ import os
 import sys
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 # UTF-8 вывод в консоль на Windows (иначе кириллица — кракозябры)
 if hasattr(sys.stdout, 'reconfigure'):
@@ -50,17 +53,17 @@ API_VERSION = "1.0.0"
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 # CORS
-CORS_ORIGINS = ["*"]  # В продакшене укажите конкретные домены
+CORS_ORIGINS = ["*"]
 
 # --- БАЗА ДАННЫХ MySQL ---
-# Параметры подключения к базе данных Krasmarafon
 DB_HOST = os.getenv("DB_HOST", "79.174.89.159")
 DB_PORT = int(os.getenv("DB_PORT", "16171"))
 DB_NAME = os.getenv("DB_NAME", "krasmarafon")
 DB_USER = os.getenv("DB_USER", "km_analytic")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "CneZbvlOS2H-BLsQ")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 # Таблицы БД
 DB_RUNNERS_TABLE = os.getenv("DB_RUNNERS_TABLE", "runners")           # Таблица с участниками
@@ -80,6 +83,7 @@ __all__ = [
     "HOST",
     "PORT",
     "DEBUG",
+    "DEBUG_MODE",
     "CORS_ORIGINS",
     "DB_HOST",
     "DB_NAME",
