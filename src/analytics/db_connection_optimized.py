@@ -1541,6 +1541,10 @@ def calculate_age_group(birthdate_or_age, sex: str = None) -> str:
 # МИГРАЦИЯ: СТАРЫЕ ФУНКЦИИ -> НОВЫЕ ФУНКЦИИ
 # ============================================================
 
+_start_list_cache: list = []
+_start_list_cache_ts: float = 0.0
+START_LIST_CACHE_TTL = 300  # 5 минут — данные регистрации меняются редко
+
 def get_test_table_data() -> List[Dict[str, Any]]:
     """
     Получает данные участников из БД (оптимизированная версия)
@@ -1549,12 +1553,17 @@ def get_test_table_data() -> List[Dict[str, Any]]:
     
     ОПТИМИЗАЦИЯ: Использует пулинг соединений и кэшированный список таблиц
     """
+    global _start_list_cache, _start_list_cache_ts
+    _now_sl = time.time()
+    if _start_list_cache and (_now_sl - _start_list_cache_ts) < START_LIST_CACHE_TTL:
+        return _start_list_cache
+
     connection = get_pooled_connection()
-    
+
     if connection:
         try:
             cursor = connection.cursor(dictionary=True, buffered=True)
-            
+
             try:
                 # Варианты названий таблиц для поиска
                 possible_tables = [
@@ -1581,7 +1590,7 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                 
                 if records:
                     logger.info(f"✅ Получено {len(records)} записей из таблицы '{target_table}'")
-                    
+
                     # Добавляем возрастную группу к каждой записи
                     for record in records:
                         # Проверяем какие поля есть для расчёта возраста
@@ -1613,6 +1622,8 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                         else:
                             record['category'] = 'Неизвестно'
                     
+                    _start_list_cache = records
+                    _start_list_cache_ts = time.time()
                     return records
                 else:
                     logger.warning(f"⚠️ Таблица '{target_table}' пуста, возвращаем тестовые данные")

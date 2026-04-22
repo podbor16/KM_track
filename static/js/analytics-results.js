@@ -110,8 +110,11 @@ function updateEventCardBackground() {
 // Функция загрузки данных
 async function loadRunnersData() {
     console.log(`Загрузка данных для результатов: ${currentEvent} ${currentYear}`);
+    allRunners = [];
+    filteredRunners = [];
+    document.getElementById('resultsTableBody').innerHTML = '';
     showLoading(true);
-    
+
     try {
         let rawData = [];
         

@@ -56,16 +56,18 @@ async def lifespan(app: FastAPI):
     import asyncio
     async def _prewarm_cache():
         try:
-            active_ids = [
-                dist.db_event_id
-                for ev in settings.EVENTS.values()
-                for dist in ev.distances
-                if dist.db_event_id
-            ]
-            if not active_ids:
-                return
+            from src.analytics.db_connection_optimized import get_pooled_connection
             from src.tracker.services.results_service import build_event_results
-            for eid in active_ids:
+            # Загружаем все event_id которые реально есть в БД
+            conn = get_pooled_connection()
+            if not conn:
+                return
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT DISTINCT event_id FROM results ORDER BY event_id")
+            event_ids = [row['event_id'] for row in cur.fetchall()]
+            cur.close()
+            conn.close()
+            for eid in event_ids:
                 await asyncio.get_event_loop().run_in_executor(
                     None, build_event_results, eid, None, None, settings.EVENTS
                 )

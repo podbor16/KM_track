@@ -84,8 +84,11 @@ async function switchEvent() {
 // Функция загрузки данных
 async function loadRunnersData() {
     console.log('Загрузка данных для стартового списка, событие:', currentEvent);
+    allRunners = [];
+    filteredRunners = [];
+    document.getElementById('startListBody').innerHTML = '';
     showLoading(true);
-    
+
     try {
         // Загружаем зарегистрированных участников из БД с фильтром по событию
         const eventName = eventNameMap[currentEvent] || 'Ночной забег';
