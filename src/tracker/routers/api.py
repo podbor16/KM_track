@@ -427,7 +427,7 @@ async def get_race_stats_db(race_name: str = Query(None)):
         if not race_name:
             raise HTTPException(status_code=400, detail="race_name обязателен")
         stats = _get_stats(race_name)
-        if not stats or not stats.get('years_data'):
+        if not stats or not stats.get('distances'):
             raise HTTPException(status_code=404, detail=f"Нет данных для: {race_name}")
         return stats
     except HTTPException:

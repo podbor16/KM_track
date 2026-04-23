@@ -75,18 +75,7 @@ function openRaceModal(raceName) {
  * @returns {string|null} - Event name для API или null
  */
 function getRaceEventName(raceName) {
-    const raceEventMap = {
-        'Ночной забег': '7 km',      // Ночной забег на 7 км
-        'Весна': '21 km',             // Весенний полумарафон
-        'Красочный забег': '5 km',    // Красочный забег на 5 км
-        'Женская Семерка': '7 km',    // Женская семерка на 7 км
-        'Жара': '21 km',              // Летний полумарафон на 21 км
-        'Детский Забег': '1 km',      // Детский забег на 1 км
-        'Х Трейл': '7 km',            // Трейл на 7 км
-        'Снежная семерка': '7 km'     // Зимний забег на 7 км
-    };
-    
-    return raceEventMap[raceName] || null;
+    return raceName;
 }
 
 /**
@@ -110,7 +99,7 @@ async function loadRaceStats(raceName) {
         
         throw new Error(`Ошибка при загрузке: ${response.status}`);
     } catch (error) {
-        logger.error("Ошибка при загрузке из БД, используем fallback:", error);
+        console.error("Ошибка при загрузке из БД, используем fallback:", error);
         
         // Fallback: пытаемся загрузить из race_data.json используя event_name
         const eventName = getRaceEventName(raceName);
@@ -136,137 +125,130 @@ async function loadRaceStats(raceName) {
 
 /**
  * Отображает данные забега в модальном окне
- * @param {Object} stats - Статистика забега
+ * @param {Object} stats - Статистика забега (формат с distances[])
  * @param {string} raceName - Название забега
  */
 function displayRaceModal(stats, raceName) {
     const body = document.querySelector('.race-modal-body');
-    const description = getRaceDescription(raceName);
-    
-    // Извлекаем данные из статистики
-    const bestResult = stats.best_result ? {
-        name: `${stats.best_result.surname || ''} ${stats.best_result.name || ''}`.trim(),
-        time: stats.best_result.time || 'N/A',
-        pace: stats.best_result.pace || 'N/A'
-    } : null;
-    
-    const avgPaces = stats.average_paces || {};
-    const yearsData = stats.years_data || [];
-    
-    // Строим HTML модального окна
-    let modalHTML = `
-        <div class="race-details">
-            <!-- Основная информация о забеге -->
-            <div class="race-info-section">
-                <h3 class="section-title">Информация о забеге</h3>
-                <div class="info-row">
-                    <span class="info-label">Название:</span>
-                    <span class="info-value">${raceName}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Дистанция:</span>
-                    <span class="info-value">${stats.race_distance || 'N/A'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Описание:</span>
-                    <span class="info-value">${description}</span>
-                </div>
-            </div>
-    `;
-    
-    // Статистика последних результатов (если есть)
-    if (yearsData && yearsData.length > 0) {
-        const latestYear = yearsData[0]; // Первый элемент - самый свежий год
-        
-        modalHTML += `
-            <div class="race-stats-section">
-                <h3 class="section-title">Статистика (${latestYear.year})</h3>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-label">Всего участников</div>
-                        <div class="stat-value">${latestYear.total_runners || 0}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Финишировали</div>
-                        <div class="stat-value">${latestYear.finished_runners || 0}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Мужчин</div>
-                        <div class="stat-value">${latestYear.male_count || 0}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Женщин</div>
-                        <div class="stat-value">${latestYear.female_count || 0}</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Лучший результат
-    if (bestResult && bestResult.name) {
-        modalHTML += `
-            <div class="race-best-section">
-                <h3 class="section-title">Лучший результат</h3>
-                <div class="best-result">
-                    <div class="best-runner-name">${bestResult.name}</div>
-                    <div class="best-result-metrics">
-                        <div class="metric">
-                            <span class="metric-label">Время:</span>
-                            <span class="metric-value">${bestResult.time}</span>
+
+    // Нормализуем: если API вернул старый формат — конвертируем
+    const distances = stats.distances || [{
+        distance: stats.race_distance || '',
+        years_data: stats.years_data || [],
+        best_result: stats.best_result || null,
+        average_paces: stats.average_paces || {},
+    }];
+
+    // Находим дистанцию с наибольшим количеством участников для графика
+    const mainDist = distances.reduce((a, b) => {
+        const aTotal = (a.years_data || []).reduce((s, y) => s + (y.total_runners || 0), 0);
+        const bTotal = (b.years_data || []).reduce((s, y) => s + (y.total_runners || 0), 0);
+        return bTotal > aTotal ? b : a;
+    }, distances[0]);
+
+    let modalHTML = `<div class="race-details">`;
+
+    distances.forEach(distObj => {
+        const dist = distObj.distance || '';
+        const yearsData = distObj.years_data || [];
+        const best = distObj.best_result;
+        const avgPaces = distObj.average_paces || {};
+        const latestYear = yearsData[0];
+
+        modalHTML += `<div class="distance-block">`;
+
+        if (distances.length > 1) {
+            modalHTML += `<div class="distance-block-title">${dist}</div>`;
+        }
+
+        // Статистика последнего года
+        if (latestYear) {
+            modalHTML += `
+                <div class="race-stats-section">
+                    <h3 class="section-title">Статистика (${latestYear.year})</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">Всего участников</div>
+                            <div class="stat-value">${latestYear.total_runners || 0}</div>
                         </div>
-                        <div class="metric">
-                            <span class="metric-label">Темп:</span>
-                            <span class="metric-value">${bestResult.pace}</span>
+                        <div class="stat-item">
+                            <div class="stat-label">Финишировали</div>
+                            <div class="stat-value">${latestYear.finished_runners || 0}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Мужчин</div>
+                            <div class="stat-value">${latestYear.male_count || 0}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Женщин</div>
+                            <div class="stat-value">${latestYear.female_count || 0}</div>
                         </div>
                     </div>
+                </div>`;
+        }
+
+        // Лучший результат
+        if (best && (best.surname || best.name)) {
+            const name = `${best.surname || ''} ${best.name || ''}`.trim();
+            modalHTML += `
+                <div class="race-best-section">
+                    <h3 class="section-title">Лучший результат</h3>
+                    <div class="best-result">
+                        <div class="best-runner-name">${name}</div>
+                        ${best.year ? `<div class="best-year">${best.year}${dist ? ' · ' + dist : ''}</div>` : ''}
+                        <div class="best-result-metrics">
+                            <div class="metric">
+                                <span class="metric-label">Время:</span>
+                                <span class="metric-value">${best.time || 'N/A'}</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Темп:</span>
+                                <span class="metric-value">${best.pace || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // Средние темпы
+        modalHTML += `
+            <div class="race-pace-section">
+                <h3 class="section-title">Средний темп участников</h3>
+                <div class="pace-grid">
+                    <div class="pace-item">
+                        <div class="pace-label">Общий средний темп</div>
+                        <div class="pace-value">${avgPaces.all || 'N/A'}</div>
+                    </div>
+                    <div class="pace-item">
+                        <div class="pace-label">Мужчины</div>
+                        <div class="pace-value">${avgPaces.male || 'N/A'}</div>
+                    </div>
+                    <div class="pace-item">
+                        <div class="pace-label">Женщины</div>
+                        <div class="pace-value">${avgPaces.female || 'N/A'}</div>
+                    </div>
                 </div>
-            </div>
-        `;
-    }
-    
-    // Средние темпы
-    modalHTML += `
-        <div class="race-pace-section">
-            <h3 class="section-title">Средний темп участников</h3>
-            <div class="pace-grid">
-                <div class="pace-item">
-                    <div class="pace-label">Общий средний темп</div>
-                    <div class="pace-value">${avgPaces.all || 'N/A'}</div>
-                </div>
-                <div class="pace-item">
-                    <div class="pace-label">Мужчины</div>
-                    <div class="pace-value">${avgPaces.male || 'N/A'}</div>
-                </div>
-                <div class="pace-item">
-                    <div class="pace-label">Женщины</div>
-                    <div class="pace-value">${avgPaces.female || 'N/A'}</div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // График участников по годам (если есть данные)
-    if (yearsData && yearsData.length > 0) {
+            </div>`;
+
+        modalHTML += `</div>`; // distance-block
+    });
+
+    // График — только для основной дистанции
+    if (mainDist.years_data && mainDist.years_data.length > 0) {
         modalHTML += `
             <div class="race-chart-section">
-                <h3 class="section-title">Количество участников по годам</h3>
+                <h3 class="section-title">Количество участников по годам${distances.length > 1 ? ' (' + mainDist.distance + ')' : ''}</h3>
                 <div class="race-chart-container">
                     <canvas id="raceChart"></canvas>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
-    
-    modalHTML += `
-        </div> <!-- race-details -->
-    `;
-    
+
+    modalHTML += `</div>`; // race-details
     body.innerHTML = modalHTML;
-    
-    // Отображаем график если есть данные
-    if (yearsData && yearsData.length > 0) {
-        displayRaceChart(yearsData);
+
+    if (mainDist.years_data && mainDist.years_data.length > 0) {
+        displayRaceChart(mainDist.years_data);
     }
 }
 

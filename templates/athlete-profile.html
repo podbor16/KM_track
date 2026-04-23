@@ -156,12 +156,35 @@
             
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const secs = totalSeconds % 60;
+            const secs = Math.floor(totalSeconds % 60);
             
             if (hours > 0) {
                 return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
             }
             return `${minutes}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function parseTimeToSeconds(val) {
+            if (!val) return 0;
+            if (typeof val === 'number') return Math.round(val);
+            const s = String(val);
+            const iso = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (iso) return (+(iso[1]||0))*3600 + (+(iso[2]||0))*60 + (+(iso[3]||0));
+            const parts = s.split(':').map(Number);
+            if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+            if (parts.length === 2) return parts[0]*60 + parts[1];
+            return parseInt(s) || 0;
+        }
+
+        function parsePaceToSeconds(val) {
+            if (!val) return Infinity;
+            if (typeof val === 'number') return val;
+            const s = String(val).replace(' мин/км', '').trim();
+            const iso = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (iso && iso[0].length > 2) return (+(iso[1]||0))*3600 + (+(iso[2]||0))*60 + (+(iso[3]||0));
+            const parts = s.split(':').map(Number);
+            if (parts.length === 2) return parts[0]*60 + parts[1];
+            return Infinity;
         }
 
         // Форматирование темпа для числового сравнения
@@ -188,6 +211,29 @@
             const paceMinutes = Math.floor(paceSeconds / 60);
             const paceSecondsRem = Math.round(paceSeconds % 60);
             return `${paceMinutes}'${String(paceSecondsRem).padStart(2, '0')}"`;
+        }
+
+        function formatPaceDisplay(race) {
+            // Приоритет: чистый темп → официальный → legacy varchar
+            const raw = race.finish_pace_avg_clean ?? race.finish_pace_avg_gun ?? race.finish_pace_avg;
+            if (raw) {
+                const pps = parsePaceToSeconds(raw);
+                if (isFinite(pps) && pps > 0) return formatPaceSeconds(pps);
+            }
+            return '-';
+        }
+
+        function formatDistance(val) {
+            if (!val && val !== 0) return '-';
+            const s = String(val).replace(/\s*км\s*/i, '').trim();
+            const n = parseFloat(s);
+            if (isNaN(n)) return String(val);
+            return (n === Math.floor(n) ? String(Math.floor(n)) : String(n)) + ' км';
+        }
+
+        function stripCategoryBirthYear(cat) {
+            if (!cat) return '';
+            return cat.replace(/\s*\([^)]+\)/g, '').trim();
         }
 
         // Получить русский текст статуса
@@ -316,10 +362,19 @@
             const statsContainer = document.getElementById('statsContainer');
             statsContainer.innerHTML = '';
 
-            const finishedCount = currentResults.filter(r => 
-                r.race_status === 'finished' || r.race_status === 'fifnished'
+            const finishedCount = currentResults.filter(r =>
+                r.race_status === 'Finished' || r.race_status === 'finished' || r.race_status === 'fifnished'
             ).length;
-            const totalDistance = currentResults.length * 5;
+
+            let totalDistance = 0;
+            currentResults.forEach(r => {
+                const m = String(r.event_distance || '').match(/[\d.]+/);
+                if (m) totalDistance += parseFloat(m[0]);
+            });
+
+            const finishRate = currentResults.length > 0
+                ? Math.round(finishedCount / currentResults.length * 100)
+                : 0;
 
             statsContainer.innerHTML = `
                 <div class="stat-card">
@@ -329,12 +384,24 @@
                 <div class="stat-card">
                     <div class="stat-number">${finishedCount}</div>
                     <div class="stat-label">Финишировал</div>
+                    <div class="stat-sublabel">${finishRate}% завершения</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${totalDistance} км</div>
+                    <div class="stat-number">${formatDistance(totalDistance)}</div>
                     <div class="stat-label">Суммарная дистанция</div>
                 </div>
             `;
+        }
+
+        function raceContext(r) {
+            const parts = [r.event_name, r.event_year].filter(Boolean).join(' ');
+            const dist = formatDistance(r.event_distance);
+            return parts ? `${parts} · ${dist}`.trim() : '';
+        }
+
+        function formatPaceSeconds(sec) {
+            if (!isFinite(sec)) return '-';
+            return `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,'0')} мин/км`;
         }
 
         // Отрисовать расширенную статистику
@@ -342,98 +409,94 @@
             if (currentResults.length === 0) return;
 
             const container = document.getElementById('extendedStatsContainer');
-            
-            // Группируем по дистанции
+
             const byDistance = {};
             currentResults.forEach(r => {
                 const dist = r.event_distance || 'Unknown';
-                if (!byDistance[dist]) {
-                    byDistance[dist] = [];
-                }
+                if (!byDistance[dist]) byDistance[dist] = [];
                 byDistance[dist].push(r);
             });
 
             let html = '';
-            
+
             for (const distance in byDistance) {
                 const races = byDistance[distance];
-                const finished = races.filter(r => 
-                    r.race_status === 'Finished' || r.race_status === 'finished'
+                const finished = races.filter(r =>
+                    r.race_status === 'Finished' || r.race_status === 'finished' || r.race_status === 'fifnished'
                 );
-                
+
                 if (finished.length === 0) continue;
 
-                // Лучший темп
-                let bestPace = Infinity;
-                let bestPaceText = '-';
+                // Лучший чистый темп (finish_pace_avg_clean)
+                let bestCleanPaceSec = Infinity, bestCleanPaceCtx = '';
+                // Лучший официальный темп (finish_pace_avg_gun)
+                let bestGunPaceSec = Infinity, bestGunPaceCtx = '';
+                // Лучшее чистое время
+                let bestClearSec = Infinity, bestClearText = '-', bestClearCtx = '';
+                // Лучшее официальное время
+                let bestGunSec = Infinity, bestGunText = '-', bestGunCtx = '';
+                let totalTime = 0, timeCount = 0;
+
                 finished.forEach(r => {
-                    // Темп уже готов в finish_pace_avg
-                    if (r.finish_pace_avg) {
-                        const paceStr = r.finish_pace_avg.replace(' мин/км', '');
-                        const [min, sec] = paceStr.split(':').map(Number);
-                        const paceNum = min * 60 + sec;
-                        if (paceNum < bestPace) {
-                            bestPace = paceNum;
-                            bestPaceText = r.finish_pace_avg;
+                    if (r.finish_pace_avg_clean) {
+                        const ps = parsePaceToSeconds(r.finish_pace_avg_clean);
+                        if (ps < bestCleanPaceSec) { bestCleanPaceSec = ps; bestCleanPaceCtx = raceContext(r); }
+                    }
+                    if (r.finish_pace_avg_gun) {
+                        const ps = parsePaceToSeconds(r.finish_pace_avg_gun);
+                        if (ps < bestGunPaceSec) { bestGunPaceSec = ps; bestGunPaceCtx = raceContext(r); }
+                    }
+                    if (r.time_clear_finish) {
+                        const s = parseTimeToSeconds(r.time_clear_finish);
+                        if (s > 0) {
+                            totalTime += s; timeCount++;
+                            if (s < bestClearSec) { bestClearSec = s; bestClearText = formatTime(s); bestClearCtx = raceContext(r); }
                         }
                     }
-                });
-
-                // Лучшее время (используем time_clear_finish)
-                let bestTime = Infinity;
-                let bestTimeText = '-';
-                finished.forEach(r => {
-                    if (r.time_clear_finish) {
-                        const timeStr = r.time_clear_finish;
-                        const parts = timeStr.split(':').map(Number);
-                        const totalSecs = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-                        if (totalSecs > 0 && totalSecs < bestTime) {
-                            bestTime = totalSecs;
-                            bestTimeText = formatTime(totalSecs);
-                        }
+                    if (r.time_gun_finish) {
+                        const s = parseTimeToSeconds(r.time_gun_finish);
+                        if (s > 0 && s < bestGunSec) { bestGunSec = s; bestGunText = formatTime(s); bestGunCtx = raceContext(r); }
                     }
                 });
 
-                // Среднее время
-                let totalTime = 0;
-                finished.forEach(r => {
-                    if (r.time_clear_finish) {
-                        const timeStr = r.time_clear_finish;
-                        const parts = timeStr.split(':').map(Number);
-                        const totalSecs = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-                        totalTime += totalSecs;
-                    }
-                });
-                const avgTime = finished.length > 0 ? totalTime / finished.length : 0;
-                const avgTimeText = formatTime(avgTime);
-
-                // Процент завершения
-                const completePercent = races.length > 0 
-                    ? Math.round((finished.length / races.length) * 100) 
-                    : 0;
+                const avgTimeText = timeCount > 0 ? formatTime(totalTime / timeCount) : '-';
+                const completePercent = Math.round(finished.length / races.length * 100);
 
                 html += `
                     <div class="distance-stats-group">
-                        <h3 style="grid-column: 1 / -1; color: #EE2D62; font-size: 16px; margin-bottom: 15px;">📍 ${distance}</h3>
+                        <div class="distance-stats-title">${formatDistance(distance)}</div>
+                        ${isFinite(bestCleanPaceSec) ? `
                         <div class="extended-stat-item">
-                            <div class="extended-stat-label">Лучший темп</div>
-                            <div class="extended-stat-value">${bestPaceText}</div>
-                            <div class="extended-stat-secondary">мин/км</div>
-                        </div>
+                            <div class="extended-stat-label">Лучший чистый темп</div>
+                            <div class="extended-stat-value">${formatPaceSeconds(bestCleanPaceSec)}</div>
+                            ${bestCleanPaceCtx ? `<div class="extended-stat-context">${bestCleanPaceCtx}</div>` : ''}
+                        </div>` : ''}
+                        ${isFinite(bestGunPaceSec) ? `
                         <div class="extended-stat-item">
-                            <div class="extended-stat-label">Лучшее время</div>
-                            <div class="extended-stat-value">${bestTimeText}</div>
-                            <div class="extended-stat-secondary">время финиша</div>
+                            <div class="extended-stat-label">Лучший официальный темп</div>
+                            <div class="extended-stat-value">${formatPaceSeconds(bestGunPaceSec)}</div>
+                            ${bestGunPaceCtx ? `<div class="extended-stat-context">${bestGunPaceCtx}</div>` : ''}
+                        </div>` : ''}
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Лучшее чистое время</div>
+                            <div class="extended-stat-value">${bestClearText}</div>
+                            ${bestClearCtx ? `<div class="extended-stat-context">${bestClearCtx}</div>` : ''}
                         </div>
+                        ${bestGunText !== '-' ? `
+                        <div class="extended-stat-item">
+                            <div class="extended-stat-label">Лучшее официальное время</div>
+                            <div class="extended-stat-value">${bestGunText}</div>
+                            ${bestGunCtx ? `<div class="extended-stat-context">${bestGunCtx}</div>` : ''}
+                        </div>` : ''}
                         <div class="extended-stat-item">
                             <div class="extended-stat-label">Среднее время</div>
                             <div class="extended-stat-value">${avgTimeText}</div>
-                            <div class="extended-stat-secondary">для законченых</div>
+                            <div class="extended-stat-context">${finished.length} из ${races.length} забегов</div>
                         </div>
                         <div class="extended-stat-item">
-                            <div class="extended-stat-label">Завершение</div>
+                            <div class="extended-stat-label">Завершено</div>
                             <div class="extended-stat-value">${completePercent}%</div>
-                            <div class="extended-stat-secondary">${finished.length} / ${races.length}</div>
+                            <div class="extended-stat-context">${finished.length} / ${races.length}</div>
                         </div>
                     </div>
                 `;
@@ -470,14 +533,14 @@
             if (charts.pace) charts.pace.destroy();
             const ctxPace = document.getElementById('paceChart').getContext('2d');
             
-            // Парсим темп из строки "03:12 мин/км" в числовое значение (минуты)
             const parsePaceToMinutes = (paceStr) => {
                 if (!paceStr) return null;
-                const clean = paceStr.replace(' мин/км', '').trim();
+                if (typeof paceStr === 'number') return paceStr / 60;
+                const clean = String(paceStr).replace(' мин/км', '').trim();
+                const iso = clean.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                if (iso && iso[0].length > 2) return ((+(iso[1]||0))*3600 + (+(iso[2]||0))*60 + (+(iso[3]||0))) / 60;
                 const parts = clean.split(':').map(Number);
-                if (parts.length === 2) {
-                    return parts[0] + parts[1] / 60; // минуты + доля минуты
-                }
+                if (parts.length === 2) return parts[0] + parts[1] / 60;
                 return null;
             };
             
@@ -490,7 +553,7 @@
                     }),
                     datasets: [{
                         label: 'Средний темп (мин/км)',
-                        data: sortedByDate.map(r => parsePaceToMinutes(r.finish_pace_avg)),
+                        data: sortedByDate.map(r => parsePaceToMinutes(r.finish_pace_avg_clean ?? r.finish_pace_avg_gun ?? r.finish_pace_avg)),
                         borderColor: '#EE2D62',
                         backgroundColor: 'rgba(238, 45, 98, 0.1)',
                         tension: 0.4,
@@ -525,7 +588,7 @@
                 
                 // Парсим расстояние из формата "5 км"
                 if (r.event_distance) {
-                    const distMatch = r.event_distance.match(/[\d.]+/);
+                    const distMatch = String(r.event_distance).match(/[\d.]+/);
                     if (distMatch) {
                         byYear[year].distance += parseFloat(distMatch[0]);
                     }
@@ -738,10 +801,10 @@
             filteredResults.forEach((race, index) => {
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
-                // Используем готовый темп и время
-                const pace = race.finish_pace_avg || '-';
-                const time = race.time_clear_finish || '-';
-                
+                const pace = formatPaceDisplay(race);
+                const time = formatTime(parseTimeToSeconds(race.time_clear_finish));
+                const category = stripCategoryBirthYear(race.category);
+
                 // Дата из event_date
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
 
@@ -749,7 +812,7 @@
                     <div class="race-card">
                         <div class="race-date">${dateStr}</div>
                         <div class="race-distance" style="font-size: 16px;">${race.event_name || '-'}</div>
-                        <div style="font-size: 13px; color: #666;">📍 ${race.event_distance || '-'}</div>
+                        <div class="race-dist-badge">${formatDistance(race.event_distance)}</div>
                         <div style="margin-top: 10px;">
                             <span class="race-status ${statusInfo.class}">${statusInfo.text}</span>
                         </div>
@@ -762,7 +825,7 @@
                                 <span class="time-label">Темп:</span>
                                 <span class="time-value pace">${pace}</span>
                             </div>
-                            ${race.category ? `<div class="time-row"><span class="time-label">Категория:</span><span class="time-value">${race.category}</span></div>` : ''}
+                            ${category ? `<div class="time-row"><span class="time-label">Категория:</span><span class="time-value">${category}</span></div>` : ''}
                             ${race.rank_absolute ? `<div class="time-row"><span class="time-label">Место:</span><span class="time-value">#${race.rank_absolute}</span></div>` : ''}
                             ${race.rank_sex ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${race.rank_sex}</span></div>` : ''}
                             ${race.rank_category ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${race.rank_category}</span></div>` : ''}
@@ -780,9 +843,9 @@
             filteredResults.forEach((race, index) => {
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
-                const pace = race.finish_pace_avg || '-';
-                const time = race.time_clear_finish || '-';
-                
+                const pace = formatPaceDisplay(race);
+                const time = formatTime(parseTimeToSeconds(race.time_clear_finish));
+
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
                 
                 const ranking = race.rank_absolute || '-';
@@ -790,7 +853,7 @@
                 tbody.innerHTML += `
                     <tr>
                         <td>${dateStr}</td>
-                        <td><strong>${race.event_name || '-'}</strong><br><small>${race.event_distance || '-'}</small></td>
+                        <td><strong>${race.event_name || '-'}</strong><br><small>${formatDistance(race.event_distance)}</small></td>
                         <td><span class="race-status ${statusInfo.class}">${statusInfo.text}</span></td>
                         <td>${time}</td>
                         <td><span class="pace">${pace}</span></td>

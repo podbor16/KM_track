@@ -309,6 +309,51 @@
     font-weight: 500;
 }
 
+.extended-stat-context {
+    font-size: 11px;
+    color: var(--text-light);
+    font-weight: 500;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #f0f0f0;
+    line-height: 1.4;
+}
+
+.distance-stats-group {
+    grid-column: 1 / -1;
+    display: contents;
+}
+
+.distance-stats-title {
+    grid-column: 1 / -1;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 0 4px;
+    border-bottom: 2px solid var(--primary-color);
+    margin-bottom: 4px;
+}
+
+.stat-sublabel {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+.race-dist-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    background: #f5f5f5;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+}
+
 /* === ГРАФИКИ === */
 
 .charts-section {

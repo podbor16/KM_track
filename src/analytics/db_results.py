@@ -470,12 +470,7 @@ def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Di
 def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
     """
     Статистика по забегу: лучший результат, средние темпы по полам, история по годам.
-
-    Args:
-        event_name: Название события (например, "Ночной забег")
-
-    Returns:
-        Словарь со статистикой
+    Группировка по дистанции (поддержка мультидистанционных событий типа «Жара»).
     """
     logger.info(f"🔍 Получение статистики забега: {event_name}")
 
@@ -484,142 +479,152 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
         logger.error("❌ Не удалось установить соединение")
         return {}
 
+    cursor = None
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
 
         cursor.execute(
-            "SELECT DISTINCT e.event_year FROM events e WHERE e.event_name = %s ORDER BY e.event_year DESC",
+            """
+            SELECT r.surname, r.name, r.sex,
+                   r.time_clear_finish, r.time_gun_finish,
+                   r.finish_pace_avg_clean, r.finish_pace_avg_gun,
+                   r.race_status, e.event_distance, e.event_year
+            FROM results r
+            INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s
+            ORDER BY e.event_distance, e.event_year DESC
+            """,
             (event_name,)
         )
-        years_result = cursor.fetchall()
+        all_results = cursor.fetchall()
+        cursor.close()
+        cursor = None
 
-        if not years_result:
-            logger.warning(f"⚠️ События с названием '{event_name}' не найдены")
-            cursor.close()
+        if not all_results:
+            logger.warning(f"⚠️ Нет данных для '{event_name}'")
             return {}
 
-        years = [y['event_year'] for y in years_result]
-        logger.info(f"✅ Найдены года: {years}")
+        def _fmt_dist(dist) -> str:
+            if dist is None:
+                return 'N/A'
+            n = float(dist)
+            return f"{int(n)} км" if n == int(n) else f"{n} км"
 
-        years_data = []
-        best_result = None
-        all_male_paces = []
-        all_female_paces = []
-        race_distance = None
-
-        def parse_pace(pace_str):
-            if not pace_str:
+        def _td_sec(val) -> Optional[int]:
+            if val is None:
                 return None
-            try:
-                pace_str = str(pace_str).strip().replace('мин/км', '').replace('/км', '').strip()
-                if ':' in pace_str:
-                    parts = pace_str.split(':')
-                    if len(parts) == 2:
-                        minutes = int(parts[0])
-                        seconds = int(''.join(c for c in parts[1].replace('"', '').strip() if c.isdigit()))
-                        return minutes * 60 + seconds
-                elif "'" in pace_str:
-                    parts = pace_str.replace('"', '').split("'")
-                    if len(parts) == 2:
-                        return int(parts[0]) * 60 + int(parts[1])
-            except Exception:
-                pass
+            if hasattr(val, 'total_seconds'):
+                s = int(val.total_seconds())
+                return s if s > 0 else None
             return None
 
-        def seconds_to_pace_string(seconds):
-            if not seconds:
+        def _pace_str(sec) -> str:
+            if not sec:
                 return "N/A"
-            return f"{int(seconds // 60):02d}:{int(seconds % 60):02d} мин/км"
+            return f"{int(sec // 60):02d}:{int(sec % 60):02d} мин/км"
 
-        for year in years:
-            cursor.execute(
-                """
-                SELECT r.surname, r.name, r.sex, r.time_clear_finish,
-                       r.finish_pace_avg, r.race_status, e.event_distance, e.event_year
-                FROM results r
-                INNER JOIN events e ON r.event_id = e.id
-                WHERE e.event_name = %s AND e.event_year = %s
-                """,
-                (event_name, year)
-            )
-            year_results = cursor.fetchall()
+        def _time_str(val) -> str:
+            sec = _td_sec(val)
+            if not sec:
+                return str(val) if val else 'N/A'
+            h = sec // 3600
+            m = (sec % 3600) // 60
+            s = sec % 60
+            return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
-            if not year_results:
-                continue
+        # Группируем: dist_data[dist_str][year] = [rows...]
+        dist_data: Dict[str, Dict[int, list]] = {}
+        for r in all_results:
+            dist = _fmt_dist(r['event_distance'])
+            year = r['event_year']
+            dist_data.setdefault(dist, {}).setdefault(year, []).append(r)
 
-            if not race_distance:
-                race_distance = year_results[0].get('event_distance')
+        distances_out = []
 
-            finished_runners = [r for r in year_results if r['race_status'] in ['Finished', 'finished']]
-            male_paces = []
-            female_paces = []
-            best_time = None
-            best_runner = None
+        for dist_str, year_map in dist_data.items():
+            years_data = []
+            dist_best: Optional[Dict] = None
+            dist_best_raw = None
+            all_male_paces: list = []
+            all_female_paces: list = []
 
-            for result in finished_runners:
-                sex = result.get('sex', '').lower()
-                pace = result.get('finish_pace_avg')
-                pace_seconds = parse_pace(pace)
+            for year in sorted(year_map.keys(), reverse=True):
+                rows = year_map[year]
+                finished = [r for r in rows if r['race_status'] in ('Finished', 'finished')]
 
-                if pace_seconds:
-                    if sex in ['мужчина', 'м', 'male', 'муж', 'm']:
-                        male_paces.append(pace_seconds)
-                        all_male_paces.append(pace_seconds)
-                    elif sex in ['женщина', 'ж', 'female', 'жен', 'f']:
-                        female_paces.append(pace_seconds)
-                        all_female_paces.append(pace_seconds)
+                male_count = 0
+                female_count = 0
+                male_paces: list = []
+                female_paces: list = []
 
-                time_finish = result.get('time_clear_finish')
-                if time_finish:
-                    if best_time is None or (isinstance(time_finish, str) and time_finish < best_time):
-                        best_time = time_finish
-                        best_runner = {
-                            'name': f"{result.get('surname', '')} {result.get('name', '')}".strip(),
-                            'time': str(time_finish),
-                            'pace': str(pace) if pace else 'N/A'
-                        }
+                for r in finished:
+                    sex = (r.get('sex') or '').lower()
+                    is_male = sex == 'мужчина'
+                    is_female = sex == 'женщина'
+                    if is_male:
+                        male_count += 1
+                    elif is_female:
+                        female_count += 1
 
-            combined = male_paces + female_paces
-            avg_all = sum(combined) / len(combined) if combined else None
-            avg_male = sum(male_paces) / len(male_paces) if male_paces else None
-            avg_female = sum(female_paces) / len(female_paces) if female_paces else None
+                    pace_sec = _td_sec(r.get('finish_pace_avg_clean') or r.get('finish_pace_avg_gun'))
+                    if pace_sec:
+                        if is_male:
+                            male_paces.append(pace_sec)
+                            all_male_paces.append(pace_sec)
+                        elif is_female:
+                            female_paces.append(pace_sec)
+                            all_female_paces.append(pace_sec)
 
-            years_data.append({
-                'year': year,
-                'total_runners': len(year_results),
-                'finished_runners': len(finished_runners),
-                'male_count': len(male_paces),
-                'female_count': len(female_paces),
-                'average_pace': seconds_to_pace_string(avg_all),
-                'male_avg_pace': seconds_to_pace_string(avg_male),
-                'female_avg_pace': seconds_to_pace_string(avg_female),
+                    tc = r.get('time_clear_finish')
+                    tc_sec = _td_sec(tc)
+                    if tc_sec:
+                        if dist_best_raw is None or tc_sec < dist_best_raw:
+                            dist_best_raw = tc_sec
+                            pace_sec_best = _td_sec(r.get('finish_pace_avg_clean') or r.get('finish_pace_avg_gun'))
+                            dist_best = {
+                                'surname': r.get('surname', ''),
+                                'name': r.get('name', ''),
+                                'time': _time_str(tc),
+                                'pace': _pace_str(pace_sec_best),
+                                'year': year,
+                            }
+
+                combined = male_paces + female_paces
+                avg_all = sum(combined) / len(combined) if combined else None
+                avg_m = sum(male_paces) / len(male_paces) if male_paces else None
+                avg_f = sum(female_paces) / len(female_paces) if female_paces else None
+
+                years_data.append({
+                    'year': year,
+                    'total_runners': len(rows),
+                    'finished_runners': len(finished),
+                    'male_count': male_count,
+                    'female_count': female_count,
+                    'average_pace': _pace_str(avg_all),
+                    'male_avg_pace': _pace_str(avg_m),
+                    'female_avg_pace': _pace_str(avg_f),
+                })
+
+            combined_all = all_male_paces + all_female_paces
+            avg_all_ov = sum(combined_all) / len(combined_all) if combined_all else None
+            avg_m_ov = sum(all_male_paces) / len(all_male_paces) if all_male_paces else None
+            avg_f_ov = sum(all_female_paces) / len(all_female_paces) if all_female_paces else None
+
+            distances_out.append({
+                'distance': dist_str,
+                'years_data': years_data,
+                'best_result': dist_best,
+                'average_paces': {
+                    'all': _pace_str(avg_all_ov),
+                    'male': _pace_str(avg_m_ov),
+                    'female': _pace_str(avg_f_ov),
+                },
             })
 
-            if not best_result and best_runner:
-                best_result = best_runner
-
-        cursor.close()
-
-        combined_all = all_male_paces + all_female_paces
-        avg_all_overall = sum(combined_all) / len(combined_all) if combined_all else None
-        avg_male_overall = sum(all_male_paces) / len(all_male_paces) if all_male_paces else None
-        avg_female_overall = sum(all_female_paces) / len(all_female_paces) if all_female_paces else None
-
-        logger.info(f"✅ Статистика загружена для {event_name}")
+        logger.info(f"✅ Статистика загружена: {event_name}, дистанций: {len(distances_out)}")
         return {
             'race_name': event_name,
-            'race_distance': race_distance,
-            'years_data': years_data,
-            'best_result': best_result,
-            'average_paces': {
-                'all': seconds_to_pace_string(avg_all_overall),
-                'male': seconds_to_pace_string(avg_male_overall),
-                'female': seconds_to_pace_string(avg_female_overall),
-            },
-            'gender_stats': {
-                'male_count': len(all_male_paces),
-                'female_count': len(all_female_paces),
-            }
+            'distances': distances_out,
         }
 
     except Exception as e:
