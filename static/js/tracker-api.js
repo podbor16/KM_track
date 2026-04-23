@@ -525,7 +525,7 @@ function startAutoUpdate() {
         });
 
         updateSelectedList();
-        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | Event 67`);
+        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}`);
 
     }, CONFIG.UPDATE_INTERVAL);
 }
