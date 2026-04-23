@@ -48,6 +48,7 @@ class CurrentEventResponse(BaseModel):
     start_lat: Optional[float] = Field(None, description="Широта точки старта")
     start_lon: Optional[float] = Field(None, description="Долгота точки старта")
     gpx_file: Optional[str] = Field(None, description="Путь к GPX-файлу маршрута")
+    db_event_id: Optional[int] = Field(None, description="ID события в БД (tracked дистанция)")
 
     class Config:
         json_schema_extra = {

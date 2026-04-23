@@ -249,16 +249,18 @@ function clearSelectedStorage() {
 // ============================================
 
 async function init() {
-    // Загружаем конфиг активного забега из API
+    // Загружаем конфиг активного забега из API — перезаписываем всё из серверного рендера
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
-        if (cfg.gpx_file)     CONFIG.GPX_FILE     = '/' + cfg.gpx_file;
-        if (cfg.start_lat)    CONFIG.START_LAT    = cfg.start_lat;
-        if (cfg.start_lon)    CONFIG.START_LON    = cfg.start_lon;
-        if (cfg.event)        CONFIG.EVENT_NAME   = cfg.event;
+        if (cfg.gpx_file)     CONFIG.GPX_FILE      = '/' + cfg.gpx_file;
+        if (cfg.start_lat)    CONFIG.START_LAT     = cfg.start_lat;
+        if (cfg.start_lon)    CONFIG.START_LON     = cfg.start_lon;
+        if (cfg.event)        CONFIG.EVENT_NAME    = cfg.event;
         if (cfg.name)         CONFIG.EVENT_DB_NAME = cfg.name;
-        if (cfg.year)         CONFIG.EVENT_YEAR   = cfg.year;
-        if (cfg.storage_key)  CONFIG.STORAGE_KEY  = cfg.storage_key;
+        if (cfg.year)         CONFIG.EVENT_YEAR    = cfg.year;
+        if (cfg.storage_key)  CONFIG.STORAGE_KEY   = cfg.storage_key;
+        // Явно сбрасываем EVENT_ID из YAML — null если не задан, иначе значение из БД
+        CONFIG.EVENT_ID = cfg.db_event_id ?? null;
     } catch {}
 
     loadSelectedFromStorage();

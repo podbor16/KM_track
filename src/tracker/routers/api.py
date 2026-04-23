@@ -58,6 +58,7 @@ async def get_current_event() -> CurrentEventResponse:
         start_lat=event.start_lat,
         start_lon=event.start_lon,
         gpx_file=tracked.gpx_file if tracked else None,
+        db_event_id=tracked.db_event_id if tracked else None,
     )
 
 
