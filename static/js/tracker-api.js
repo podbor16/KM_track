@@ -6,6 +6,8 @@ const CONFIG = {
     UPDATE_INTERVAL: 2000,
     MAX_SELECTED: 5,
     EVENT_NAME: 'night_run',
+    EVENT_DB_NAME: 'Ночной забег',
+    EVENT_YEAR: new Date().getFullYear(),
     EVENT_ID: 67,
     STORAGE_KEY: 'night_run_selected_runners',
     KT1_COORDS: [55.9988248, 92.8350464],
@@ -247,12 +249,16 @@ function clearSelectedStorage() {
 // ============================================
 
 async function init() {
-    // Загружаем конфиг активного забега из API (GPX, координаты старта)
+    // Загружаем конфиг активного забега из API
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
-        if (cfg.gpx_file)  CONFIG.GPX_FILE  = '/' + cfg.gpx_file;
-        if (cfg.start_lat) CONFIG.START_LAT = cfg.start_lat;
-        if (cfg.start_lon) CONFIG.START_LON = cfg.start_lon;
+        if (cfg.gpx_file)     CONFIG.GPX_FILE     = '/' + cfg.gpx_file;
+        if (cfg.start_lat)    CONFIG.START_LAT    = cfg.start_lat;
+        if (cfg.start_lon)    CONFIG.START_LON    = cfg.start_lon;
+        if (cfg.event)        CONFIG.EVENT_NAME   = cfg.event;
+        if (cfg.name)         CONFIG.EVENT_DB_NAME = cfg.name;
+        if (cfg.year)         CONFIG.EVENT_YEAR   = cfg.year;
+        if (cfg.storage_key)  CONFIG.STORAGE_KEY  = cfg.storage_key;
     } catch {}
 
     loadSelectedFromStorage();
@@ -269,7 +275,7 @@ async function init() {
     startAutoUpdate();
     startAnimationLoop();
 
-    updateStatus('✅ Трекер запущен (Event 67 - Ночной забег)');
+    updateStatus(`✅ Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
 }
 
 
@@ -283,7 +289,8 @@ async function loadAllRunners() {
 
         const _params = new URLSearchParams({ v: Date.now() });
         if (CONFIG.EVENT_ID != null) _params.set('event_id', CONFIG.EVENT_ID);
-        else if (CONFIG.EVENT_NAME)  _params.set('event_name', CONFIG.EVENT_NAME);
+        else if (CONFIG.EVENT_DB_NAME) _params.set('event_name', CONFIG.EVENT_DB_NAME);
+        else if (CONFIG.EVENT_NAME)    _params.set('event_name', CONFIG.EVENT_NAME);
         const response = await fetch(`${CONFIG.API_BASE}/event-results?${_params}`);
 
         if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
@@ -369,7 +376,8 @@ async function loadAnalytics() {
     try {
         const _aParams = new URLSearchParams({ v: Date.now() });
         if (CONFIG.EVENT_ID != null) _aParams.set('event_id', CONFIG.EVENT_ID);
-        else if (CONFIG.EVENT_NAME)  _aParams.set('event_name', CONFIG.EVENT_NAME);
+        else if (CONFIG.EVENT_DB_NAME) _aParams.set('event_name', CONFIG.EVENT_DB_NAME);
+        else if (CONFIG.EVENT_NAME)    _aParams.set('event_name', CONFIG.EVENT_NAME);
         const response = await fetch(`${CONFIG.API_BASE}/event-results?${_aParams}`);
 
         if (!response.ok) throw new Error('Ошибка загрузки результатов');
@@ -403,6 +411,10 @@ async function loadAnalytics() {
 }
 
 function renderAnalyticsHTML(stats, results) {
+    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
+    const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
+    const distStr = (results.length > 0 && results[0].distance) ? ` (${results[0].distance})` : '';
+
     const finishedRunners = results
         .filter(r => r.race_status === 'Finished' && r.rank_absolute)
         .sort((a, b) => (a.rank_absolute || 999) - (b.rank_absolute || 999))
@@ -425,7 +437,7 @@ function renderAnalyticsHTML(stats, results) {
 
     return `
         <div class="analytics-section">
-            <h3>📊 Ночной забег 2025 (5 км) — Общая статистика</h3>
+            <h3>📊 ${evName} ${evYear}${distStr} — Общая статистика</h3>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-value">${stats.total}</div>
