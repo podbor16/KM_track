@@ -12,7 +12,9 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
 
 from src.config import settings
-from src.config.event_loader import RouteConfig
+from src.config.event_loader import (
+    RouteConfig, load_events_cached, get_active_event, invalidate_events_cache,
+)
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
 from src.tracker.models import (
@@ -36,9 +38,11 @@ router = APIRouter(tags=["API"])
 
 @router.get("/api/current-event", response_model=CurrentEventResponse)
 async def get_current_event() -> CurrentEventResponse:
-    """Текущее активное событие."""
-    code = settings.CURRENT_EVENT
-    event = settings.EVENTS.get(code)
+    """Текущее активное событие. Перечитывает YAML с TTL-кешем 30 сек."""
+    events = load_events_cached()
+    active = get_active_event(events)
+    code = active.code if active else settings.CURRENT_EVENT
+    event = events.get(code)
     if not event:
         raise HTTPException(status_code=404, detail=f"Event {code} not configured")
     tracked = event.get_tracked()
@@ -55,6 +59,17 @@ async def get_current_event() -> CurrentEventResponse:
         start_lon=event.start_lon,
         gpx_file=tracked.gpx_file if tracked else None,
     )
+
+
+@router.post("/api/admin/reload-config")
+async def reload_config() -> dict:
+    """Немедленно перезагружает YAML-конфиги забегов без перезапуска сервера."""
+    invalidate_events_cache()
+    events = load_events_cached()
+    active = get_active_event(events)
+    settings.EVENTS = events
+    settings.CURRENT_EVENT = active.code if active else settings.CURRENT_EVENT
+    return {"status": "ok", "active_event": settings.CURRENT_EVENT, "events_count": len(events)}
 
 
 @router.get("/api/events", response_model=EventsListResponse)

@@ -3,6 +3,8 @@
 Единственная точка правды для всех настроек событий.
 """
 
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
@@ -129,3 +131,34 @@ def get_event_by_name(
 ) -> Optional["EventConfig"]:
     """Найти EventConfig по точному имени события (как в БД)."""
     return next((e for e in events.values() if e.name == name), None)
+
+
+# ---------------------------------------------------------------------------
+# TTL-кеш для горячей перезагрузки YAML без перезапуска сервера
+# ---------------------------------------------------------------------------
+
+_DEFAULT_EVENTS_DIR = Path(__file__).parent.parent.parent / "config" / "events"
+
+_cache_lock = threading.Lock()
+_cached_events: Optional[dict] = None
+_cache_timestamp: float = 0.0
+EVENTS_CACHE_TTL = 30.0  # секунды
+
+
+def load_events_cached(config_dir: Path = _DEFAULT_EVENTS_DIR) -> dict[str, "EventConfig"]:
+    """Загружает конфиги с TTL-кешем. YAML перечитывается не чаще раза в EVENTS_CACHE_TTL секунд."""
+    global _cached_events, _cache_timestamp
+    now = time.monotonic()
+    with _cache_lock:
+        if _cached_events is None or (now - _cache_timestamp) > EVENTS_CACHE_TTL:
+            _cached_events = load_all_events(config_dir)
+            _cache_timestamp = now
+        return _cached_events
+
+
+def invalidate_events_cache() -> None:
+    """Сбрасывает кеш — следующий вызов load_events_cached() перечитает YAML."""
+    global _cached_events, _cache_timestamp
+    with _cache_lock:
+        _cached_events = None
+        _cache_timestamp = 0.0
