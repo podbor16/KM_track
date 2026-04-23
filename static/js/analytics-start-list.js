@@ -8,15 +8,15 @@ let currentEvent = 'night_run'; // Текущее выбранное событ�
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
 
-// Инициализация страницы
-document.addEventListener('DOMContentLoaded', function() {
-    // Загружаем сохраненный выбор события из localStorage
-    const savedEvent = localStorage.getItem('selectedEvent');
-    if (savedEvent) {
-        currentEvent = savedEvent;
-        document.getElementById('eventSelector').value = currentEvent;
+// Инициализация страницы — дефолт из активного забега
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const cfg = await fetch('/api/current-event').then(r => r.json());
+        currentEvent = cfg.event || 'night_run';
+    } catch {
+        currentEvent = 'night_run';
     }
-    // Обновляем фон карточки события и цвет темы
+    document.getElementById('eventSelector').value = currentEvent;
     updateEventCardBackground();
     updateEventThemeColor();
     loadRunnersData();

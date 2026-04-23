@@ -29,12 +29,22 @@ const eventYearToIdMap = {
     'snow7_2026': 119
 };
 
-// Инициализация страницы
-document.addEventListener('DOMContentLoaded', function() {
-    populateYearSelector();           // Сначала заполняем селектор годов
-    restoreSavedPreferences();        // Потом восстанавливаем сохраненные значения
-    updateEventThemeColor();          // Обновляем цвет темы
-    loadRunnersData();                // Загружаем данные
+// Инициализация страницы — дефолт: активный забег + прошлый год
+document.addEventListener('DOMContentLoaded', async function() {
+    populateYearSelector();
+    try {
+        const cfg = await fetch('/api/current-event').then(r => r.json());
+        currentEvent = cfg.event || 'night_run';
+        currentYear  = (cfg.year || new Date().getFullYear()) - 1;
+    } catch {
+        currentEvent = 'night_run';
+        currentYear  = new Date().getFullYear() - 1;
+    }
+    document.getElementById('eventResultsSelector').value = currentEvent;
+    document.getElementById('yearResultsSelector').value  = currentYear;
+    updateEventThemeColor();
+    updateEventCardBackground();
+    loadRunnersData();
 });
 
 // Функция обновления цвета темы в зависимости от события
@@ -64,10 +74,6 @@ function populateYearSelector() {
 async function switchEventResults() {
     currentEvent = document.getElementById('eventResultsSelector').value;
     currentYear = parseInt(document.getElementById('yearResultsSelector').value);
-    
-    // Сохраняем выбор в localStorage
-    localStorage.setItem('selectedEventResults', currentEvent);
-    localStorage.setItem('selectedYearResults', currentYear);
     
     // Обновляем цвет темы
     updateEventThemeColor();
@@ -234,23 +240,6 @@ function convertRaceStatus(raceStatus) {
     return 'notstarted';
 }
 
-// Восстанавливаем сохраненные значения при загрузке страницы
-function restoreSavedPreferences() {
-    const savedEvent = localStorage.getItem('selectedEventResults');
-    const savedYear = localStorage.getItem('selectedYearResults');
-    
-    if (savedEvent) {
-        currentEvent = savedEvent;
-        document.getElementById('eventResultsSelector').value = currentEvent;
-        updateEventCardBackground();
-        updateEventThemeColor();
-    }
-    
-    if (savedYear) {
-        currentYear = parseInt(savedYear);
-        document.getElementById('yearResultsSelector').value = currentYear;
-    }
-}
 
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {

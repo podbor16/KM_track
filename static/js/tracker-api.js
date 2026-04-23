@@ -8,7 +8,10 @@ const CONFIG = {
     EVENT_NAME: 'night_run',
     EVENT_ID: 67,
     STORAGE_KEY: 'night_run_selected_runners',
-    KT1_COORDS: [55.9988248, 92.8350464]
+    KT1_COORDS: [55.9988248, 92.8350464],
+    GPX_FILE: '/static/map/2026/night_run.gpx',
+    START_LAT: 56.0075,
+    START_LON: 92.7246
 };
 
 // Глобальные переменные (доступны всем модулям)
@@ -244,6 +247,14 @@ function clearSelectedStorage() {
 // ============================================
 
 async function init() {
+    // Загружаем конфиг активного забега из API (GPX, координаты старта)
+    try {
+        const cfg = await fetch('/api/current-event').then(r => r.json());
+        if (cfg.gpx_file)  CONFIG.GPX_FILE  = '/' + cfg.gpx_file;
+        if (cfg.start_lat) CONFIG.START_LAT = cfg.start_lat;
+        if (cfg.start_lon) CONFIG.START_LON = cfg.start_lon;
+    } catch {}
+
     loadSelectedFromStorage();
     await initMap();
     await loadAllRunners();

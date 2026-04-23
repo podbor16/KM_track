@@ -2,6 +2,9 @@ name: "Красочный забег"
 display_name: "Красочный забег"
 year: 2026
 code: "colorrun"
+is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
+start_lat: null               # ← заполнить перед стартом
+start_lon: null               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
 description: "Красочный забег | Дистанция: 5 км"
 
@@ -12,7 +15,8 @@ distances:
     tracked: true
     has_start_list: true
     checkpoint_distances: []
-    gpx_file: null
+    checkpoints: []           # ← заполнить перед стартом
+    gpx_file: "static/map/2026/color_run.gpx"
     event_date: null          # ← заполнить перед стартом
     route:
       laps: 1

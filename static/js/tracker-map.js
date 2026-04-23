@@ -1,7 +1,7 @@
 // tracker-map.js — карта, маршрут, маркеры, анимация
 
 async function initMap() {
-    map = L.map('map').setView([56.0075, 92.7246], 15);
+    map = L.map('map').setView([CONFIG.START_LAT, CONFIG.START_LON], 15);
     map.attributionControl.setPrefix('');
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -15,7 +15,7 @@ async function loadRouteFromAPI() {
     try {
         updateStatus('Загрузка GPX маршрута...');
 
-        const gpxPath = getGPXPathForEvent(CONFIG.EVENT_NAME);
+        const gpxPath = CONFIG.GPX_FILE;
         const gpxResponse = await fetch(gpxPath);
 
         if (!gpxResponse.ok) {
@@ -62,14 +62,6 @@ async function loadRouteFromAPI() {
     }
 }
 
-function getGPXPathForEvent(eventName) {
-    const paths = {
-        'night_run': '/static/map/2026/night_run.gpx',
-        'city_marathon': '/static/map/2026/city_marathon.gpx',
-        'half_marathon': '/static/map/2026/half_marathon.gpx'
-    };
-    return paths[eventName] || '/static/map/2026/night_run.gpx';
-}
 
 function parseGPXToCoordinates(gpxContent) {
     try {
@@ -269,7 +261,7 @@ function createRunnerMarker(runner) {
         return;
     }
 
-    const initialPosition = routeCoordinates[0] || [56.0075, 92.7246];
+    const initialPosition = routeCoordinates[0] || [CONFIG.START_LAT, CONFIG.START_LON];
     const marker = L.marker(initialPosition, { icon: buildMarkerIcon(runner) }).addTo(map);
 
     marker.bindPopup(buildPopupContent(runner), { minWidth: 200 });

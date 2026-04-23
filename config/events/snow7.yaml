@@ -2,6 +2,9 @@ name: "Снежная семерка"
 display_name: "Снежная семерка"
 year: 2026
 code: "snow7"
+is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
+start_lat: null               # ← заполнить перед стартом
+start_lon: null               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
 description: "МСК \"Радуга\", Красноярск | Дистанция: 7 км (челночная)"
 
@@ -12,6 +15,7 @@ distances:
     tracked: true
     has_start_list: true
     checkpoint_distances: []
+    checkpoints: []           # ← заполнить перед стартом
     gpx_file: "static/gpx/snow7.gpx"
     event_date: null          # ← заполнить перед стартом
     route:

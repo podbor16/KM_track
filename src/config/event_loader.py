@@ -27,6 +27,13 @@ class RouteConfig(BaseModel):
     total_km: Optional[float] = None
 
 
+class CheckpointCoord(BaseModel):
+    name: str
+    distance_km: float
+    lat: float
+    lon: float
+
+
 class DistanceConfig(BaseModel):
     distance: str                        # "5 км"
     distance_km: float
@@ -34,6 +41,7 @@ class DistanceConfig(BaseModel):
     tracked: bool = False
     has_start_list: bool = False
     checkpoint_distances: list[float] = []
+    checkpoints: list[CheckpointCoord] = []
     gpx_file: Optional[str] = None
     event_date: Optional[str] = None
     route: RouteConfig = RouteConfig()
@@ -45,6 +53,9 @@ class EventConfig(BaseModel):
     name: str                            # ТОЧНО как event_name в БД
     display_name: str
     year: int
+    is_active: bool = False
+    start_lat: Optional[float] = None
+    start_lon: Optional[float] = None
     gun_time: Optional[str] = None       # "21:00:00"
     description: str = ""
     distances: list[DistanceConfig] = []
@@ -104,6 +115,13 @@ def get_event_by_db_id(
         if dist is not None:
             return event, dist
     return None, None
+
+
+def get_active_event(
+    events: dict[str, "EventConfig"],
+) -> Optional["EventConfig"]:
+    """Найти единственное активное событие (is_active=true в YAML)."""
+    return next((e for e in events.values() if e.is_active), None)
 
 
 def get_event_by_name(

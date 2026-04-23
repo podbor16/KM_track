@@ -36,11 +36,17 @@ async def lifespan(app: FastAPI):
     settings.logger.info("=" * 50)
 
     # Загрузка конфигураций мероприятий из YAML
-    from src.config.event_loader import load_all_events
+    from src.config.event_loader import load_all_events, get_active_event
     settings.EVENTS = load_all_events(BASE_DIR / "config" / "events")
     settings.logger.info(
         f"Загружено мероприятий: {len(settings.EVENTS)} — {list(settings.EVENTS)}"
     )
+    active = get_active_event(settings.EVENTS)
+    if active:
+        settings.CURRENT_EVENT = active.code
+        settings.logger.info(f"Активное мероприятие: {active.code} ({active.display_name})")
+    else:
+        settings.logger.warning("Активное мероприятие не задано в конфигах (is_active: true)")
 
     # Инициализирование глобального состояния
     app_state = init_app_state()

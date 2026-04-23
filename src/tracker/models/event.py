@@ -37,14 +37,18 @@ class EventInfo(BaseModel):
 
 class CurrentEventResponse(BaseModel):
     """Ответ с текущим событием"""
-    
+
     event: str = Field(..., description="ID текущего события")
     storage_key: str = Field(..., description="Ключ localStorage для сохранения выбора")
     name: str = Field(..., description="Название события")
     title: str = Field(..., description="Заголовок события")
     description: str = Field(..., description="Описание события")
     route_type: str = Field(..., description="Тип маршрута (shuttle/loop)")
-    
+    year: int = Field(..., description="Год события")
+    start_lat: Optional[float] = Field(None, description="Широта точки старта")
+    start_lon: Optional[float] = Field(None, description="Долгота точки старта")
+    gpx_file: Optional[str] = Field(None, description="Путь к GPX-файлу маршрута")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -53,7 +57,11 @@ class CurrentEventResponse(BaseModel):
                 "name": "Ночной забег",
                 "title": "Ночной забег. Трекер",
                 "description": "Набережная, Красноярск",
-                "route_type": "shuttle"
+                "route_type": "shuttle",
+                "year": 2026,
+                "start_lat": 56.0075,
+                "start_lon": 92.7246,
+                "gpx_file": "static/gpx/night_run.gpx"
             }
         }
 

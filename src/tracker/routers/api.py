@@ -50,6 +50,10 @@ async def get_current_event() -> CurrentEventResponse:
         title=event.title,
         description=event.description,
         route_type=route_type,
+        year=event.year,
+        start_lat=event.start_lat,
+        start_lon=event.start_lon,
+        gpx_file=tracked.gpx_file if tracked else None,
     )
 
 
@@ -361,9 +365,21 @@ async def get_event_results(
     - /api/event-results?event_id=104
     - /api/event-results?event_name=Ночной%20забег&year=2026
     """
+    import time
+    import asyncio
+    from src.tracker.services.results_service import (
+        build_event_results, _response_cache, _response_cache_ts, RESPONSE_CACHE_TTL
+    )
+    # Fast path: serve directly from cache without touching thread pool
+    _key = f"{event_id}|{event_name}|{year}"
+    if _key in _response_cache and (time.time() - _response_cache_ts.get(_key, 0)) < RESPONSE_CACHE_TTL:
+        return _response_cache[_key]
+
+    # Cache miss: run sync build in thread pool to avoid blocking event loop
     try:
-        from src.tracker.services.results_service import build_event_results
-        return build_event_results(event_id, event_name, year, settings.EVENTS)
+        return await asyncio.get_event_loop().run_in_executor(
+            None, build_event_results, event_id, event_name, year, settings.EVENTS
+        )
     except HTTPException:
         raise
     except Exception as e:
