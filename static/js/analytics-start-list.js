@@ -5,29 +5,8 @@ let filteredRunners = [];
 let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
 let currentEvent = 'night_run'; // Текущее выбранное событие
 
-// Маппинг ID события на название события для API
-const eventNameMap = {
-    'night_run': 'Ночной забег',
-    'vesna': 'Весна',
-    'colorrun': 'Красочный забег',
-    'girlseven': 'Женская семерка',
-    'zhara': 'Жара',
-    'kids': 'Детский забег',
-    'xtrailrun': 'Х Трейл',
-    'snow7': 'Снежная семерка'
-};
-
-// Цвета для каждого события
-const eventColorMap = {
-    'night_run': '#1c2c55',
-    'vesna': '#85c6e2',
-    'colorrun': '#059C43',
-    'girlseven': '#f072ab',
-    'zhara': '#ee2d62',
-    'kids': '#ee2d62',
-    'xtrailrun': '#562872',
-    'snow7': '#00BFDF'
-};
+const eventNameMap = KMUtils.EVENT_NAMES;
+const eventColorMap = KMUtils.EVENT_COLORS;
 
 // Инициализация страницы
 document.addEventListener('DOMContentLoaded', function() {

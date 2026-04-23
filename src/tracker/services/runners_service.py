@@ -2,30 +2,11 @@
 Сервис управления участниками гонки
 """
 
-import re
 import logging
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
-
-
-def parse_pace_to_speed(pace_str):
-    """
-    Преобразует строку темпа (например, '7'22"/Km') в скорость в км/ч.
-    """
-    if not pace_str or pace_str.lower() == 'null':
-        return 10.0
-
-    match = re.search(r"(\d+)'(\d+)", pace_str)
-    if match:
-        minutes = int(match.group(1))
-        seconds = int(match.group(2))
-        total_seconds_per_km = minutes * 60 + seconds
-        if total_seconds_per_km == 0:
-            return 10.0
-        return 1.0 / (total_seconds_per_km / 3600.0)
-    return 10.0
 
 
 def _time_field_to_datetime(race_date: date, t) -> Optional[datetime]:

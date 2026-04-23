@@ -1,0 +1,88 @@
+// Общие утилиты KM_Track — доступны через window.KMUtils
+window.KMUtils = {
+    EVENT_NAMES: {
+        'night_run':  'Ночной забег',
+        'vesna':      'Весна',
+        'colorrun':   'Красочный забег',
+        'girlseven':  'Женская семерка',
+        'zhara':      'Жара',
+        'kids':       'Детский забег',
+        'xtrailrun':  'Х Трейл',
+        'snow7':      'Снежная семерка'
+    },
+
+    EVENT_COLORS: {
+        'night_run':  '#1c2c55',
+        'vesna':      '#85c6e2',
+        'colorrun':   '#059C43',
+        'girlseven':  '#f072ab',
+        'zhara':      '#ee2d62',
+        'kids':       '#ee2d62',
+        'xtrailrun':  '#562872',
+        'snow7':      '#00BFDF'
+    },
+
+    // Форматирует время в HH:MM:SS; принимает строку HH:MM:SS, ISO 8601 (PT...) или число мс
+    formatTime(timeData) {
+        if (!timeData) return '-';
+        if (typeof timeData === 'string') {
+            if (timeData.match(/^\d{1,2}:\d{2}:\d{2}$/)) return timeData;
+            if (timeData.startsWith('PT')) {
+                const m = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+                if (m) {
+                    let h = parseInt(m[1] || 0);
+                    let min = parseInt(m[2] || 0);
+                    let sec = Math.floor(parseFloat(m[3] || 0));
+                    min += Math.floor(sec / 60); sec %= 60;
+                    h += Math.floor(min / 60); min %= 60;
+                    return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                }
+            }
+            return '-';
+        }
+        const ts = Math.floor(timeData / 1000);
+        const h = Math.floor(ts / 3600);
+        const min = Math.floor((ts % 3600) / 60);
+        const sec = ts % 60;
+        return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    },
+
+    // Вычисляет темп (минут/км) как число; принимает время (строка HH:MM:SS / ISO 8601 / мс) и строку дистанции
+    calculatePace(timeData, distanceStr) {
+        if (!timeData || !distanceStr) return '-';
+        const distanceNum = parseFloat(distanceStr);
+        if (distanceNum <= 0) return '-';
+        let totalSeconds = 0;
+        if (typeof timeData === 'string' && timeData.includes(':')) {
+            const parts = timeData.split(':');
+            if (parts.length === 3) {
+                totalSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+            } else if (parts.length === 2) {
+                totalSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            }
+        } else if (typeof timeData === 'number') {
+            totalSeconds = timeData > 60000 ? timeData / 1000 : timeData;
+        } else if (typeof timeData === 'string' && timeData.startsWith('PT')) {
+            const m = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+            if (m) {
+                totalSeconds = parseInt(m[1] || 0) * 3600 + parseInt(m[2] || 0) * 60 + Math.floor(parseFloat(m[3] || 0));
+            }
+        }
+        if (totalSeconds <= 0) return '-';
+        return (totalSeconds / 60 / distanceNum).toFixed(5);
+    },
+
+    // Парсит ISO 8601 duration (PT1H26M0S) в читаемый формат H:MM:SS
+    parseDuration(duration) {
+        if (!duration) return null;
+        if (!String(duration).startsWith('PT')) return duration;
+        const m = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (!m) return duration;
+        const totalSeconds = (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
+        const h = Math.floor(totalSeconds / 3600);
+        const min = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        if (h > 0) return `${h}:${String(min).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        return `${min}:${String(s).padStart(2,'0')}`;
+    }
+};

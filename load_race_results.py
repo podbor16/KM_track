@@ -42,8 +42,7 @@ except ImportError:
     print("❌ Установите: pip install python-dotenv")
     sys.exit(1)
 
-from src.analytics.db_connection import create_connection
-from src.analytics.db_connection_optimized import calculate_age_group
+from src.analytics.db_connection_optimized import create_connection, calculate_age_group
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))

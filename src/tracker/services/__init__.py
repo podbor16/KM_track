@@ -8,7 +8,6 @@ from .routes_service import (
 
 from .runners_service import (
     calculate_live_position,
-    parse_pace_to_speed,
 )
 
 from .analytics_service import (
@@ -18,10 +17,6 @@ from .analytics_service import (
 from .pace_calculator import (
     parse_distance,
     parse_pace_to_kmh,
-    kmh_to_pace,
-    get_initial_pace,
-    get_runner_average_pace,
-    get_category_average_pace,
 )
 
 __all__ = [
@@ -32,7 +27,6 @@ __all__ = [
 
     # runners
     "calculate_live_position",
-    "parse_pace_to_speed",
 
     # analytics
     "get_formatted_analytics",
@@ -40,8 +34,4 @@ __all__ = [
     # pace_calculator
     "parse_distance",
     "parse_pace_to_kmh",
-    "kmh_to_pace",
-    "get_initial_pace",
-    "get_runner_average_pace",
-    "get_category_average_pace",
 ]

@@ -6,28 +6,8 @@ let sortState = { column: null, direction: 'asc' }; // Отслеживание 
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
 
-const eventNameMap = {
-    'night_run': 'Ночной забег',
-    'vesna': 'Весна',
-    'colorrun': 'Красочный забег',
-    'girlseven': 'Женская семерка',
-    'zhara': 'Жара',
-    'kids': 'Детский забег',
-    'xtrailrun': 'Х Трейл',
-    'snow7': 'Снежная семерка'
-};
-
-// Цвета для каждого события
-const eventColorMap = {
-    'night_run': '#1c2c55',
-    'vesna': '#85c6e2',
-    'colorrun': '#059C43',
-    'girlseven': '#f072ab',
-    'zhara': '#ee2d62',
-    'kids': '#ee2d62',
-    'xtrailrun': '#562872',
-    'snow7': '#00BFDF'
-};
+const eventNameMap = KMUtils.EVENT_NAMES;
+const eventColorMap = KMUtils.EVENT_COLORS;
 
 // Маппинг событие + год на event_id в БД
 const eventYearToIdMap = {
@@ -479,87 +459,8 @@ function applyFilters() {
     sortTable('time');
 }
 
-// Функция для форматирования времени из миллисекунд в чч:мм:сс (поддерживает ISO 8601)
-function formatTime(timeData) {
-    if (!timeData) return '-';
-    
-    // Если это уже строка в формате HH:MM:SS, возвращаем как есть
-    if (typeof timeData === 'string') {
-        // Проверяем формат HH:MM:SS
-        if (timeData.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
-            return timeData;
-        }
-        // Парсим ISO 8601 duration: PT1H30M45S или PT1577S => HH:MM:SS
-        if (timeData.startsWith('PT')) {
-            const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
-            if (match) {
-                let hours = parseInt(match[1] || 0);
-                let minutes = parseInt(match[2] || 0);
-                let seconds = Math.floor(parseFloat(match[3] || 0));
-                
-                // Конвертируем лишние секунды в минуты и часы
-                minutes += Math.floor(seconds / 60);
-                seconds = seconds % 60;
-                hours += Math.floor(minutes / 60);
-                minutes = minutes % 60;
-                
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-        }
-        // Если строка но не в известном формате, возвращаем "-"
-        return '-';
-    }
-    
-    // Если это число (миллисекунды), преобразуем
-    const totalSeconds = Math.floor(timeData / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
-
-// Функция для расчета темпа (минут на км)
-function calculatePace(timeData, distanceStr) {
-    if (!timeData || !distanceStr) return '-';
-    
-    // Парсим дистанцию (например, "5 км" -> 5)
-    const distanceNum = parseFloat(distanceStr);
-    if (distanceNum <= 0) return '-';
-    
-    // Парсим время
-    let totalSeconds = 0;
-    
-    // Если это строка формата "0:16:01"
-    if (typeof timeData === 'string' && timeData.includes(':')) {
-        const parts = timeData.split(':');
-        if (parts.length === 3) {
-            totalSeconds = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-        } else if (parts.length === 2) {
-            totalSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-        }
-    }
-    // Если это число (миллисекунды или секунды)
-    else if (typeof timeData === 'number') {
-        // Если больше 60000, это миллисекунды
-        totalSeconds = timeData > 60000 ? timeData / 1000 : timeData;
-    }
-    // Если это ISO 8601 формат PT2490S
-    else if (typeof timeData === 'string' && timeData.startsWith('PT')) {
-        const match = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
-        if (match) {
-            const h = parseInt(match[1] || 0);
-            const m = parseInt(match[2] || 0);
-            const s = parseFloat(match[3] || 0);
-            totalSeconds = h * 3600 + m * 60 + Math.floor(s);
-        }
-    }
-    
-    if (totalSeconds <= 0) return '-';
-    
-    const totalMinutes = totalSeconds / 60;
-    const pace = totalMinutes / distanceNum;
-    return pace.toFixed(5);
-}
+const formatTime = KMUtils.formatTime.bind(KMUtils);
+const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 
 // Функция сортировки таблицы
 function sortTable(columnName) {
