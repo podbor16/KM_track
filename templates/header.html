@@ -8,7 +8,7 @@
         </button>
         <ul class="navbar-menu" id="navbarMenu">
             <li class="navbar-item">
-                <a href="/tracker" class="navbar-link active-link">ТРЕКЕР</a>
+                <a href="/tracker" class="navbar-link">ТРЕКЕР</a>
             </li>
             <li class="navbar-item">
                 <a href="/start_list" class="navbar-link">СТАРТОВЫЙ СПИСОК</a>
@@ -47,7 +47,7 @@
         const navbarLinks = document.querySelectorAll('.navbar-link');
         
         navbarLinks.forEach(link => {
-            link.classList.remove('active');
+            link.classList.remove('active', 'active-link');
         });
         
         // Проверяем текущий путь и подсвечиваем соответствующую ссылку
