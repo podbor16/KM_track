@@ -5,6 +5,7 @@ let filteredRunners = [];
 let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
+let timeMode = 'net'; // 'net' = чистое, 'gun' = официальное
 
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
@@ -96,6 +97,17 @@ function updatePageTitle() {
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
     title.innerHTML = `Результаты<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
+}
+
+function setTimeMode(mode) {
+    timeMode = mode;
+    const btnNet = document.getElementById('btnNet');
+    const btnGun = document.getElementById('btnGun');
+    if (btnNet) btnNet.classList.toggle('active', mode === 'net');
+    if (btnGun) btnGun.classList.toggle('active', mode === 'gun');
+    const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
+    if (th) th.textContent = mode === 'gun' ? 'Офиц. время' : 'Чистое время';
+    renderResultsTable(filteredRunners);
 }
 
 // Функция обновления фонового изображения карточки события
@@ -203,16 +215,19 @@ function normalizeRunnerData(runners) {
             birthdate: runner.birthday || runner.birthdate || '',
             gender: convertSexToGender(runner.sex),  // Будет "Мужчина" или "Женщина"
             sex: runner.sex,
-            category: runner.category || '',
-            
+            category: KMUtils.normalizeCategory(runner.category || ''),
+
             // Статус и результаты
             status: convertRaceStatus(runner.race_status),
             race_status: runner.race_status,
-            
+
             // Время и темп
             'times.official_:::finish:::': runner.time_clear_finish,
             time_clear_finish: runner.time_clear_finish,
+            time_gun_finish: runner.time_gun_finish,
             finish_pace_avg: runner.finish_pace_avg,
+            finish_pace_avg_gun: runner.finish_pace_avg_gun,
+            finish_pace_avg_clean: runner.finish_pace_avg_clean,
             
             // Место и ранк
             rank_absolute: runner.rank_absolute,
@@ -591,18 +606,19 @@ function renderResultsTable(runners) {
         status = statusRu;
         statusClass = `status-${runner.status || 'unknown'}`;
         
-        //финиша (поддерживаем оба формата данных)
-        const finishTime = runner.time_clear_finish || runner['times.official_:::finish:::'];
+        // Время финиша — зависит от режима тоггла
+        const finishTime = timeMode === 'gun'
+            ? (runner.time_gun_finish || runner.time_clear_finish)
+            : (runner.time_clear_finish || runner['times.official_:::finish:::']);
         time = formatTime(finishTime);
-        
-        // Темп: используем значение из БД как есть
-        let pace = runner.finish_pace_avg || '-';
-        // Если значение содержит число, оставляем как есть
+
+        // Темп — зависит от режима тоггла
+        let rawPace = timeMode === 'gun'
+            ? (runner.finish_pace_avg_gun || runner.finish_pace_avg)
+            : (runner.finish_pace_avg_clean || runner.finish_pace_avg);
+        let pace = rawPace || '-';
         if (pace && pace !== '#ЗНАЧ!' && typeof pace === 'string') {
-            // Убедимся что есть "мин/км" в конце если нужно
-            if (!pace.includes('мин')) {
-                pace = pace + ' мин/км';
-            }
+            if (!pace.includes('мин')) pace = pace + ' мин/км';
         } else {
             pace = '-';
         }

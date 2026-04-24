@@ -72,6 +72,12 @@ window.KMUtils = {
         return (totalSeconds / 60 / distanceNum).toFixed(5);
     },
 
+    // Убирает скобочный суффикс с годами рождения из названия категории: "мужчины до 49 лет (1977 г.р.)" → "мужчины до 49 лет"
+    normalizeCategory(cat) {
+        if (!cat) return '';
+        return cat.replace(/\s*\(.*?\)/g, '').trim();
+    },
+
     // Парсит ISO 8601 duration (PT1H26M0S) в читаемый формат H:MM:SS
     parseDuration(duration) {
         if (!duration) return null;

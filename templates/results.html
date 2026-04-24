@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=5">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=6">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 
 </head>
@@ -93,6 +93,12 @@
        <div id="loadingIndicator" class="loading" style="display: none;">Загрузка данных...</div>
        <div id="errorIndicator" class="error" style="display: none;"></div>
        
+       <!-- Переключатель типа времени -->
+       <div class="time-mode-toggle">
+           <button id="btnNet" class="time-mode-btn active" onclick="setTimeMode('net')">Чистое время</button>
+           <button id="btnGun" class="time-mode-btn" onclick="setTimeMode('gun')">Официальное время</button>
+       </div>
+
        <!-- Контейнер для Результатов -->
        <div class="table-wrapper" id="resultsWrapper">
            <table id="resultsTable" class="during-mode-table">
@@ -117,8 +123,8 @@
        </div>
     </div>
 
-    <script src="/static/js/utils.js?v=1"></script>
-    <script src="/static/js/analytics-results.js?v=5"></script>
+    <script src="/static/js/utils.js?v=2"></script>
+    <script src="/static/js/analytics-results.js?v=6"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}

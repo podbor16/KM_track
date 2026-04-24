@@ -268,6 +268,8 @@ def build_event_results(
                 'time_gun_finish': runner.get('time_gun_finish'),
                 'time_clear_finish': runner.get('time_clear_finish'),
                 'finish_pace_avg': runner.get('finish_pace_avg'),
+                'finish_pace_avg_gun': runner.get('finish_pace_avg_gun'),
+                'finish_pace_avg_clean': runner.get('finish_pace_avg_clean'),
                 'distance': runner.get('distance', runner.get('distance_from_event', '5 км')),
                 'event': runner.get('distance', runner.get('distance_from_event', '5 км')),
                 'checkpoints': {

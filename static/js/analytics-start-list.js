@@ -93,7 +93,8 @@ async function loadRunnersData() {
         });
 
         
-        allRunners = Array.isArray(data) ? data : (data.runners || data.data || []);
+        const raw = Array.isArray(data) ? data : (data.runners || data.data || []);
+        allRunners = raw.map(r => ({...r, category: KMUtils.normalizeCategory(r.category)}));
         
         // Добавим логирование для отладки
         console.log('Данные получены:', data);

@@ -185,7 +185,7 @@ function buildPopupContent(runner) {
                 <div><strong>${runner.full_name}</strong></div>
             </div>
             <div style="border-top: 1px solid #ddd; padding-top: 8px; margin-bottom: 8px;">
-                ${runner.category ? `<div><strong>Категория:</strong> ${runner.category}</div>` : ''}
+                ${runner.category ? `<div><strong>Категория:</strong> ${KMUtils.normalizeCategory(runner.category)}</div>` : ''}
                 ${startClockHTML}
             </div>
     `;
