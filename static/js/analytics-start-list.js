@@ -432,7 +432,7 @@ function renderStartList(runners) {
             <td>${firstName}</td>
             <td>${birthYear}</td>
             <td>${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span>"gender-tag ${genderClass}">${genderText}</span></td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
             <td><span class="age-group-tag">${category}</span></td>
             <td>${city}</td>
             <td>${club}</td>
