@@ -402,56 +402,86 @@ tr:hover {
         max-width: 350px;
     }
 
+    /* Таблица: авто-ширина колонок — браузер сам подбирает по содержимому */
     table {
         font-size: 13px;
+        table-layout: auto;
+        min-width: 700px;
     }
 
     th {
         font-size: 11px;
         letter-spacing: 0;
-        padding: 10px 6px;
+        padding: 10px 8px;
+        white-space: nowrap;
     }
 
     td {
-        padding: 10px 6px;
+        padding: 10px 8px;
+        white-space: normal;
+        word-break: normal;
+        overflow-wrap: normal;
     }
 
     .gender-tag {
         padding: 3px 8px;
         font-size: 12px;
+        white-space: nowrap;
     }
 
     .age-group-tag {
         font-size: 11px;
         padding: 3px 6px;
+        white-space: normal;
     }
 
-    /* Event card */
+    /* Event card: убираем фоновое фото, заменяем на чистый блок выбора */
     .event-card {
-        height: 180px;
-        padding: 15px;
-        justify-content: center;
-        align-items: center;
+        height: auto;
+        background-image: none !important;
+        background-color: #f8f9fa;
+        padding: 16px;
+        border-radius: 12px;
+        border: 2px solid #EE2D62;
+        box-shadow: 0 2px 8px rgba(238, 45, 98, 0.12);
+        justify-content: flex-start;
+        align-items: flex-start;
+    }
+
+    .event-card-overlay {
+        display: none;
     }
 
     .event-card-content {
+        position: static;
+        background: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
         flex-direction: column;
-        align-items: stretch;
-        padding: 15px;
-        gap: 10px;
+        gap: 12px;
         width: 100%;
-        max-width: 340px;
     }
 
     .event-selector-group,
     .year-selector-group {
         width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .event-selector-group label,
+    .year-selector-group label {
+        font-size: 14px;
+        min-width: 80px;
     }
 
     .event-selector-input,
     .year-selector-input {
         min-width: 0;
-        width: 100%;
+        flex: 1;
+        height: 40px;
+        font-size: 14px;
     }
 }
 
