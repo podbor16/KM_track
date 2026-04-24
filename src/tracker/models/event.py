@@ -35,6 +35,17 @@ class EventInfo(BaseModel):
         }
 
 
+class DistanceInfo(BaseModel):
+    """Информация об одной отслеживаемой дистанции события"""
+
+    distance: str = Field(..., description="Название дистанции, например '21.1 км'")
+    distance_km: float = Field(..., description="Дистанция в км")
+    db_event_id: Optional[int] = Field(None, description="ID события в БД")
+    gpx_file: Optional[str] = Field(None, description="Путь к GPX-файлу")
+    event_date: Optional[str] = Field(None, description="Дата проведения YYYY-MM-DD")
+    route_type: str = Field("loop", description="Тип маршрута (shuttle/loop)")
+
+
 class CurrentEventResponse(BaseModel):
     """Ответ с текущим событием"""
 
@@ -49,6 +60,7 @@ class CurrentEventResponse(BaseModel):
     start_lon: Optional[float] = Field(None, description="Долгота точки старта")
     gpx_file: Optional[str] = Field(None, description="Путь к GPX-файлу маршрута")
     db_event_id: Optional[int] = Field(None, description="ID события в БД (tracked дистанция)")
+    distances: List[DistanceInfo] = Field(default_factory=list, description="Все отслеживаемые дистанции события")
 
     class Config:
         json_schema_extra = {

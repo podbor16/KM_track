@@ -9,6 +9,7 @@ const CONFIG = {
     EVENT_DB_NAME: 'Ночной забег',
     EVENT_YEAR: new Date().getFullYear(),
     EVENT_ID: 67,
+    CURRENT_DISTANCE: '',
     STORAGE_KEY: 'night_run_selected_runners',
     KT1_COORDS: [55.9988248, 92.8350464],
     GPX_FILE: '/static/map/2026/night_run.gpx',
@@ -19,6 +20,7 @@ const CONFIG = {
 // Глобальные переменные (доступны всем модулям)
 let map = null;
 let routeLayer = null;
+let startMarker = null;
 let routeCoordinates = [];
 let runnerMarkers = {};
 let selectedRunnerIds = new Set();
@@ -252,16 +254,50 @@ async function init() {
     // Загружаем конфиг активного забега из API — перезаписываем всё из серверного рендера
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
-        if (cfg.gpx_file)     CONFIG.GPX_FILE      = '/' + cfg.gpx_file;
         if (cfg.start_lat)    CONFIG.START_LAT     = cfg.start_lat;
         if (cfg.start_lon)    CONFIG.START_LON     = cfg.start_lon;
         if (cfg.event)        CONFIG.EVENT_NAME    = cfg.event;
         if (cfg.name)         CONFIG.EVENT_DB_NAME = cfg.name;
         if (cfg.year)         CONFIG.EVENT_YEAR    = cfg.year;
         if (cfg.storage_key)  CONFIG.STORAGE_KEY   = cfg.storage_key;
-        // Явно сбрасываем EVENT_ID из YAML — null если не задан, иначе значение из БД
-        CONFIG.EVENT_ID = cfg.db_event_id ?? null;
-    } catch {}
+
+        // Выбрать дистанцию по умолчанию: ближайшую по дате к сегодня
+        const trackedDistances = cfg.distances || [];
+        let defaultDist = trackedDistances[0] || null;
+
+        if (trackedDistances.length > 1) {
+            const today = new Date().toISOString().slice(0, 10);
+            const withDates = trackedDistances.filter(d => d.event_date);
+            if (withDates.length > 0) {
+                // Предпочитаем ближайшую будущую дату; если все прошли — берём самую последнюю
+                const future = withDates.filter(d => d.event_date >= today);
+                if (future.length > 0) {
+                    defaultDist = future.sort((a, b) => a.event_date.localeCompare(b.event_date))[0];
+                } else {
+                    defaultDist = withDates.sort((a, b) => b.event_date.localeCompare(a.event_date))[0];
+                }
+            }
+        }
+
+        if (defaultDist) {
+            if (defaultDist.gpx_file) CONFIG.GPX_FILE = '/' + defaultDist.gpx_file;
+            CONFIG.EVENT_ID = defaultDist.db_event_id ?? null;
+            CONFIG.CURRENT_DISTANCE = defaultDist.distance || '';
+        } else {
+            // Fallback: одиночное событие без массива distances
+            if (cfg.gpx_file) CONFIG.GPX_FILE = '/' + cfg.gpx_file;
+            CONFIG.EVENT_ID = cfg.db_event_id ?? null;
+        }
+
+        console.log('📡 /api/current-event distances:', trackedDistances.length, trackedDistances.map(d => d.distance));
+
+        // Показать switcher если отслеживаемых дистанций > 1
+        if (trackedDistances.length > 1) {
+            renderDistanceSwitcher(trackedDistances, defaultDist);
+        }
+    } catch (e) {
+        console.error('❌ Ошибка загрузки конфига события:', e);
+    }
 
     loadSelectedFromStorage();
     await initMap();
@@ -276,8 +312,77 @@ async function init() {
     await loadAnalytics();
     startAutoUpdate();
     startAnimationLoop();
+    updateEventTitle();
 
     updateStatus(`✅ Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
+}
+
+
+function updateEventTitle() {
+    const h1 = document.getElementById('eventTitle');
+    if (!h1) return;
+    const name = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || '';
+    const year = CONFIG.EVENT_YEAR || '';
+    const dist = CONFIG.CURRENT_DISTANCE ? `, ${CONFIG.CURRENT_DISTANCE}` : '';
+    h1.textContent = `🏃 Трекер забега. «${name}» ${year}${dist}.`;
+}
+
+
+// ============================================
+// ПЕРЕКЛЮЧЕНИЕ ДИСТАНЦИЙ
+// ============================================
+
+function renderDistanceSwitcher(distances, activeDist) {
+    const container = document.getElementById('distanceSwitcher');
+    if (!container) return;
+
+    container.innerHTML = distances.map(d => `
+        <button class="dist-btn${d === activeDist ? ' active' : ''}"
+                data-event-id="${d.db_event_id ?? ''}"
+                data-gpx="${d.gpx_file ? '/' + d.gpx_file : ''}"
+                data-route-type="${d.route_type || 'loop'}"
+                data-label="${d.distance}">
+            ${d.distance}
+        </button>
+    `).join('');
+    container.style.display = 'flex';
+
+    container.querySelectorAll('.dist-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.classList.contains('active')) return;
+            const eventId = btn.dataset.eventId ? parseInt(btn.dataset.eventId) : null;
+            const gpx = btn.dataset.gpx;
+            const routeType = btn.dataset.routeType;
+            const label = btn.dataset.label || '';
+            container.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            switchDistance(eventId, gpx, routeType, label);
+        });
+    });
+}
+
+async function switchDistance(eventId, gpxFile, routeType, label) {
+    CONFIG.EVENT_ID = eventId;
+    CONFIG.GPX_FILE = gpxFile;
+    if (label) CONFIG.CURRENT_DISTANCE = label;
+    updateEventTitle();
+
+    // Сбросить выбранных участников — они принадлежат другой дистанции
+    selectedRunnerIds.clear();
+    saveSelectedToStorage();
+    updateSelectedList();
+
+    // Очистить маркеры текущей дистанции
+    Object.values(runnerMarkers).forEach(m => { if (map) map.removeLayer(m); });
+    runnerMarkers = {};
+    runnerAnimations = {};
+    allRunners = [];
+
+    updateStatus('Переключение дистанции...');
+
+    await reloadRoute(gpxFile);
+    await loadAllRunners();
+    await loadAnalytics();
 }
 
 
@@ -403,6 +508,12 @@ async function loadAnalytics() {
             analyticsPanel.innerHTML = renderAnalyticsHTML(stats, results);
         }
 
+        const analyticsH2 = document.querySelector('#analyticsPanel h2');
+        if (analyticsH2) {
+            const distStr = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
+            analyticsH2.textContent = `Общая аналитика по забегу${distStr}`;
+        }
+
     } catch (error) {
         console.error('❌ Ошибка загрузки аналитики:', error);
         const analyticsPanel = document.getElementById('analyticsContent');
@@ -525,7 +636,8 @@ function startAutoUpdate() {
         });
 
         updateSelectedList();
-        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}`);
+        const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
+        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
     }, CONFIG.UPDATE_INTERVAL);
 }

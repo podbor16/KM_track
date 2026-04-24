@@ -41,7 +41,8 @@ async function loadRouteFromAPI() {
                 smoothFactor: 1
             }).addTo(map);
 
-            L.marker(routeCoordinates[0], {
+            if (startMarker && map) map.removeLayer(startMarker);
+            startMarker = L.marker(routeCoordinates[0], {
                 icon: L.divIcon({
                     className: 'start-marker',
                     html: '<div style="background: #EE2D62; color: white; padding: 8px 12px; border-radius: 5px; font-weight: bold; text-align: center;">🏁 СТАРТ</div>',
@@ -59,6 +60,19 @@ async function loadRouteFromAPI() {
         console.error('❌ Ошибка загрузки GPX:', error);
         updateStatus('❌ Ошибка: не удалось загрузить GPX маршрут');
         alert(`Ошибка загрузки маршрута: ${error.message}`);
+    }
+}
+
+
+async function reloadRoute(gpxPath) {
+    if (routeLayer && map) {
+        map.removeLayer(routeLayer);
+        routeLayer = null;
+        routeCoordinates = [];
+    }
+    if (gpxPath) {
+        CONFIG.GPX_FILE = gpxPath;
+        await loadRouteFromAPI();
     }
 }
 

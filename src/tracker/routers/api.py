@@ -20,7 +20,7 @@ from src.core.dependencies import get_app_state
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
-    CurrentEventResponse, EventsListResponse, EventInfo,
+    CurrentEventResponse, DistanceInfo, EventsListResponse, EventInfo,
     Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
@@ -47,6 +47,20 @@ async def get_current_event() -> CurrentEventResponse:
         raise HTTPException(status_code=404, detail=f"Event {code} not configured")
     tracked = event.get_tracked()
     route_type = 'shuttle' if (tracked and tracked.route.laps > 1) else 'loop'
+
+    tracked_distances = [d for d in event.distances if d.tracked]
+    distances_info = [
+        DistanceInfo(
+            distance=d.distance,
+            distance_km=d.distance_km,
+            db_event_id=d.db_event_id,
+            gpx_file=d.gpx_file,
+            event_date=d.event_date,
+            route_type='shuttle' if d.route.laps > 1 else 'loop',
+        )
+        for d in tracked_distances
+    ]
+
     return CurrentEventResponse(
         event=code,
         storage_key=f"{code}_selected_runners",
@@ -59,6 +73,7 @@ async def get_current_event() -> CurrentEventResponse:
         start_lon=event.start_lon,
         gpx_file=tracked.gpx_file if tracked else None,
         db_event_id=tracked.db_event_id if tracked else None,
+        distances=distances_info,
     )
 
 

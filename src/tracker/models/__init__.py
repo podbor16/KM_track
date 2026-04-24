@@ -21,6 +21,7 @@ from .route import (
 
 from .event import (
     EventInfo,
+    DistanceInfo,
     CurrentEventResponse,
     EventsListResponse,
 )
@@ -61,6 +62,7 @@ __all__ = [
     
     # Event models
     "EventInfo",
+    "DistanceInfo",
     "CurrentEventResponse",
     "EventsListResponse",
     
