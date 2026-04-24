@@ -51,7 +51,12 @@ async function loadRouteFromAPI() {
                 })
             }).addTo(map);
 
-            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+            const routeBounds = routeLayer.getBounds();
+            map.fitBounds(routeBounds, { padding: [10, 10] });
+
+            const maxBounds = routeBounds.pad(0.25);
+            map.setMaxBounds(maxBounds);
+            map.setMinZoom(map.getBoundsZoom(maxBounds));
         }
 
         updateStatus('✅ Маршрут загружен');
@@ -408,5 +413,11 @@ function animateRunnerFrame() {
 function startAnimationLoop() {
     if (!animationFrameId) {
         animateRunnerFrame();
+    }
+}
+
+function centerMap() {
+    if (routeLayer && map) {
+        map.fitBounds(routeLayer.getBounds(), { padding: [10, 10] });
     }
 }

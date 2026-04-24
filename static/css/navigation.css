@@ -38,10 +38,10 @@ body {
 /* Навигационная панель */
 .navbar {
     width: 100%;
-    background: linear-gradient(135deg, #1a1a1a 0%, #EE2D62 100%);
+    background: #222222;
+    border-bottom: 2px solid #EE2D62;
     padding: 0;
     margin: 0;
-    box-shadow: var(--shadow);
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -53,49 +53,15 @@ body {
     margin: 0 auto;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     padding: 0 20px;
-    height: 70px;
-}
-
-.navbar-brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--white);
-    text-decoration: none;
-    font-size: 24px;
-    font-weight: 700;
-    transition: opacity 0.3s ease;
-}
-
-.navbar-brand:hover {
-    opacity: 0.9;
-}
-
-.navbar-brand-icon {
-    font-size: 28px;
-}
-
-.navbar-logo {
-    height: 45px;
-    width: auto;
-    object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-}
-
-.navbar-brand-text {
-    color: var(--white);
-    font-family: 'Houschka Pro', Arial, sans-serif;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
+    height: 44px;
 }
 
 .navbar-menu {
     display: flex;
     list-style: none;
-    gap: 10px;
+    gap: 0;
     align-items: center;
     margin: 0;
     padding: 0;
@@ -106,25 +72,30 @@ body {
 }
 
 .navbar-link {
-    color: var(--white);
+    color: #aaaaaa;
     text-decoration: none;
-    padding: 12px 20px;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-    font-size: 15px;
-    font-weight: 500;
+    padding: 0 16px;
+    height: 44px;
+    line-height: 44px;
     display: inline-block;
-    position: relative;
+    font-family: 'Houschka Pro', Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
 }
 
 .navbar-link:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-2px);
+    color: #ffffff;
+    border-bottom-color: transparent;
 }
 
-.navbar-link.active {
-    background-color: rgba(255, 255, 255, 0.25);
-    border-bottom: 3px solid var(--white);
+.navbar-link.active,
+.navbar-link.active-link {
+    color: #EE2D62;
+    border-bottom: 2px solid #EE2D62;
 }
 
 /* Мобильное меню */
@@ -154,6 +125,12 @@ body {
 
 /* Адаптивность */
 @media (max-width: 768px) {
+    .navbar-container {
+        height: 44px;
+        justify-content: space-between;
+        padding: 0 15px;
+    }
+
     .navbar-toggle {
         display: flex;
         flex-direction: column;
@@ -162,21 +139,22 @@ body {
 
     .navbar-menu {
         position: absolute;
-        top: 70px;
+        top: 44px;
         left: 0;
         right: 0;
-        background: var(--primary-dark);
+        background: #222222;
         flex-direction: column;
         gap: 0;
-        padding: 15px 0;
+        padding: 8px 0;
         max-height: 0;
         overflow: hidden;
         transition: max-height 0.3s ease;
         box-shadow: var(--shadow);
+        z-index: 999;
     }
 
     .navbar-menu.active {
-        max-height: 500px;
+        max-height: 300px;
     }
 
     .navbar-item {
@@ -185,23 +163,26 @@ body {
 
     .navbar-link {
         display: block;
+        height: auto;
+        line-height: normal;
         padding: 12px 20px;
-        border-radius: 0;
-        width: 100%;
+        border-bottom: none;
+        border-left: 2px solid transparent;
+    }
+
+    .navbar-link.active,
+    .navbar-link.active-link {
+        border-bottom: none;
+        border-left: 2px solid #EE2D62;
     }
 
     .navbar-link:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-        transform: none;
+        background-color: rgba(255, 255, 255, 0.05);
     }
 
-    .navbar-container {
-        height: auto;
-        padding: 0 15px;
-    }
-
+    /* Заглушки для удалённых классов логотипа */
     .navbar-brand {
-        font-size: 18px;
+        display: none;
     }
 
     .navbar-brand-icon {
