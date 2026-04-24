@@ -95,7 +95,7 @@ function updatePageTitle() {
     const name = eventNameMap[currentEvent] || currentEvent;
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
-    title.textContent = `Результаты. «${name}» ${currentYear}${dist}`;
+    title.innerHTML = `Результаты<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
 }
 
 // Функция обновления фонового изображения карточки события

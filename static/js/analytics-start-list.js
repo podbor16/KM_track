@@ -70,7 +70,7 @@ function updatePageTitle() {
     const name = eventNameMap[currentEvent] || currentEvent;
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
-    title.textContent = `Стартовый список. «${name}»${dist}`;
+    title.innerHTML = `Стартовый список<br><span class="page-title-event">${name}${dist}</span>`;
 }
 
 // Функция загрузки данных
