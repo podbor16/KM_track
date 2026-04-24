@@ -107,7 +107,7 @@ function setTimeMode(mode) {
     if (btnGun) btnGun.classList.toggle('active', mode === 'gun');
     const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
     if (th) th.textContent = mode === 'gun' ? 'Офиц. время' : 'Чистое время';
-    renderResultsTable(filteredRunners);
+    renderResultsTable(_sortArray(filteredRunners));
 }
 
 // Функция обновления фонового изображения карточки события

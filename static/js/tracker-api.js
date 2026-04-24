@@ -534,16 +534,19 @@ function renderAnalyticsHTML(stats, results) {
         .slice(0, 5);
 
     const topHTML = finishedRunners.length
-        ? finishedRunners.map(runner => `
+        ? finishedRunners.map(runner => {
+            const paceStr = parseDuration(runner.finish_pace_avg_gun) || parseDuration(runner.finish_pace_avg);
+            const pace = paceStr ? paceStr + ' мин/км' : '-';
+            return `
             <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; text-align: center;">${runner.rank_absolute}</td>
                 <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>
                 <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
                 <td style="padding: 8px;">${KMUtils.normalizeCategory(runner.category) || '-'}</td>
                 <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
-                <td style="padding: 8px; font-family: monospace;">${runner.finish_pace_avg_gun || runner.finish_pace_avg || '-'}</td>
+                <td style="padding: 8px; font-family: monospace;">${pace}</td>
             </tr>
-        `).join('')
+        `;}).join('')
         : '<tr><td colspan="6" style="padding: 10px; text-align: center;">Результатов нет</td></tr>';
 
     const totalSafe = stats.total || 1;
