@@ -2,7 +2,7 @@
 // Javascript для страницы стартового списка
 let allRunners = [];
 let filteredRunners = [];
-let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
+let sortState = { column: 'surname', direction: 'asc' }; // Отслеживание сортировки
 let currentEvent = 'night_run'; // Текущее выбранное событие
 let currentYear = new Date().getFullYear();
 
@@ -56,7 +56,7 @@ async function switchEvent() {
     document.getElementById('ageGroupFilter').value = '';
     document.getElementById('distanceFilter').value = '';
     document.getElementById('surnameSearch').value = '';
-    sortState = { column: null, direction: 'asc' };
+    sortState = { column: 'surname', direction: 'asc' };
 
     // Обновляем заголовок
     updatePageTitle();
@@ -315,34 +315,19 @@ function applyFilters() {
     populateDistances(allRunners);
     
     // Рендерим таблицу
-    renderStartList(filteredRunners);
+    renderStartList(_sortArray(filteredRunners));
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
 }
 
-// Функция сортировки таблицы
-function sortTable(columnName) {
-    // Если кликнули на тот же столбец - меняем направление
-    if (sortState.column === columnName) {
-        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        // Новый столбец - начинаем с ascending
-        sortState.column = columnName;
-        sortState.direction = 'asc';
-    }
-    
-    // Копируем filtered runners и сортируем
-    let toSort = [...filteredRunners];
-    
-    toSort.sort((a, b) => {
+function _sortArray(arr) {
+    if (!sortState.column) return arr;
+    return [...arr].sort((a, b) => {
         let valA, valB;
-        
-        switch(columnName) {
+        switch (sortState.column) {
             case 'index':
-                valA = 0;
-                valB = 0;
-                break;
+                valA = 0; valB = 0; break;
             case 'bib':
                 valA = a.bib || 0;
                 valB = b.bib || 0;
@@ -369,12 +354,11 @@ function sortTable(columnName) {
             case 'sex':
                 valA = (a.sex || '').toLowerCase();
                 valB = (b.sex || '').toLowerCase();
-                break;    
+                break;
             case 'category':
                 valA = KMUtils.categoryOrder(a.category);
                 valB = KMUtils.categoryOrder(b.category);
                 break;
-
             case 'city':
                 valA = (a.city || a.City || '').toLowerCase();
                 valB = (b.city || b.City || '').toLowerCase();
@@ -386,15 +370,19 @@ function sortTable(columnName) {
             default:
                 return 0;
         }
-        
-        // Сравнение
         if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
         return 0;
     });
-    
-    // Рендерим таблицу
-    renderStartList(toSort);
+}
+
+// Функция сортировки таблицы
+function sortTable(columnName) {
+    sortState.direction = sortState.column === columnName
+        ? (sortState.direction === 'asc' ? 'desc' : 'asc')
+        : 'asc';
+    sortState.column = columnName;
+    renderStartList(_sortArray(filteredRunners));
 }
 
 // Отрисовываем таблицу стартового списка

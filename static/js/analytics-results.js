@@ -522,6 +522,8 @@ function _sortArray(arr) {
                 const fb = timeMode === 'gun' ? b.time_gun_finish : b.time_clear_finish;
                 valA = KMUtils.parseTimeToSeconds(fa);
                 valB = KMUtils.parseTimeToSeconds(fb);
+                // Вторичная сортировка по фамилии при одинаковом времени (напр. все Not Started)
+                if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
                 break;
             }
             case 'pace': {
