@@ -72,6 +72,36 @@ window.KMUtils = {
         return (totalSeconds / 60 / distanceNum).toFixed(5);
     },
 
+    // Конвертирует "HH:MM:SS" в секунды; возвращает Infinity для пустых/некорректных значений
+    parseTimeToSeconds(timeStr) {
+        if (!timeStr || typeof timeStr !== 'string') return Infinity;
+        const parts = timeStr.split(':');
+        if (parts.length === 3)
+            return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        return Infinity;
+    },
+
+    // Числовой ключ сортировки возрастной группы: женщины 0-6, мужчины 10-16
+    categoryOrder(cat) {
+        if (!cat) return 99;
+        const c = cat.toLowerCase();
+        const base = c.startsWith('женщин') ? 0 : 10;
+        if (c.includes('до 49'))                            return base + 1;
+        if (c.includes('50-59'))                            return base + 2;
+        if (c.includes('60-64'))                            return base + 3;
+        if (c.includes('65-69'))                            return base + 4;
+        if (c.includes('70-74'))                            return base + 5;
+        if (c.includes('75') || c.includes('65 лет и старше')) return base + 6;
+        return base + 7;
+    },
+
+    // Извлекает числовое значение км из строки типа "10 км"
+    parseDistanceKm(distStr) {
+        if (!distStr) return 0;
+        const m = String(distStr).match(/(\d+(?:[.,]\d+)?)/);
+        return m ? parseFloat(m[1].replace(',', '.')) : 0;
+    },
+
     // Убирает скобочный суффикс с годами рождения из названия категории: "мужчины до 49 лет (1977 г.р.)" → "мужчины до 49 лет"
     normalizeCategory(cat) {
         if (!cat) return '';

@@ -539,9 +539,9 @@ function renderAnalyticsHTML(stats, results) {
                 <td style="padding: 8px; text-align: center;">${runner.rank_absolute}</td>
                 <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>
                 <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
-                <td style="padding: 8px;">${runner.category || '-'}</td>
+                <td style="padding: 8px;">${KMUtils.normalizeCategory(runner.category) || '-'}</td>
                 <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
-                <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.finish_pace_avg) || '-'}</td>
+                <td style="padding: 8px; font-family: monospace;">${runner.finish_pace_avg || '-'}</td>
             </tr>
         `).join('')
         : '<tr><td colspan="6" style="padding: 10px; text-align: center;">Результатов нет</td></tr>';

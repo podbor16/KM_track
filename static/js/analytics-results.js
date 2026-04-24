@@ -2,7 +2,7 @@
 // Javascript для страницы результатов забега
 let allRunners = [];
 let filteredRunners = [];
-let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
+let sortState = { column: 'time', direction: 'asc' }; // Дефолт: по официальному времени
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
 let timeMode = 'net'; // 'net' = чистое, 'gun' = официальное
@@ -470,10 +470,7 @@ function applyFilters() {
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
-    // Рендерим таблицу и сортируем по времени финиша по умолчанию
-    sortState.column = 'time';
-    sortState.direction = 'asc';
-    sortTable('time');
+    renderResultsTable(_sortArray(filteredRunners));
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
@@ -482,28 +479,12 @@ function applyFilters() {
 const formatTime = KMUtils.formatTime.bind(KMUtils);
 const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 
-// Функция сортировки таблицы
-function sortTable(columnName) {
-    // Если кликнули на тот же столбец - меняем направление
-    if (sortState.column === columnName) {
-        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        // Новый столбец - начинаем с ascending
-        sortState.column = columnName;
-        sortState.direction = 'asc';
-    }
-    
-    // Копируем filtered runners и сортируем
-    let toSort = [...filteredRunners];
-    
-    toSort.sort((a, b) => {
+// Применяет текущий sortState к массиву, возвращает отсортированную копию
+function _sortArray(arr) {
+    if (!sortState.column) return arr;
+    return [...arr].sort((a, b) => {
         let valA, valB;
-        
-        switch(columnName) {
-            case 'index':
-                valA = 0;
-                valB = 0;
-                break;
+        switch (sortState.column) {
             case 'surname':
                 valA = (a.surname || '').toLowerCase();
                 valB = (b.surname || '').toLowerCase();
@@ -517,63 +498,55 @@ function sortTable(columnName) {
                 valB = b.birthdate ? new Date(b.birthdate).getFullYear() : 0;
                 break;
             case 'event':
-                valA = (a.event || '').toLowerCase();
-                valB = (b.event || '').toLowerCase();
+                valA = KMUtils.parseDistanceKm(a.event || a.distance);
+                valB = KMUtils.parseDistanceKm(b.event || b.distance);
                 break;
             case 'gender':
                 valA = (a.gender || '').toLowerCase();
                 valB = (b.gender || '').toLowerCase();
                 break;
             case 'category':
-                valA = (a.category || '').toLowerCase();
-                valB = (b.category || '').toLowerCase();
+                valA = KMUtils.categoryOrder(a.category);
+                valB = KMUtils.categoryOrder(b.category);
                 break;
             case 'status':
                 valA = (a.status || '').toLowerCase();
                 valB = (b.status || '').toLowerCase();
                 break;
-            case 'time':
-                // Специальная логика для времени финиша
-                // "Not started" в конце, остальные по времени (быстрее первыми)
-                const statusA = (a.race_status || 'не стартовал').toLowerCase();
-                const statusB = (b.race_status || 'не стартовал').toLowerCase();
-                
-                const isNotStartedA = statusA.includes('not') && statusA.includes('start');
-                const isNotStartedB = statusB.includes('not') && statusB.includes('start');
-                
-                if (isNotStartedA && !isNotStartedB) return 1;
-                if (!isNotStartedA && isNotStartedB) return -1;
-                if (isNotStartedA && isNotStartedB) return 0;
-                
-                // Для стартовавших - сортируем по времени финиша
-                const timeA = a.time_clear_finish || a['times.official_:::finish:::'];
-                const timeB = b.time_clear_finish || b['times.official_:::finish:::'];
-                
-                // Конвертируем время в секунды для сравнения
-                const secsA = parseFloat(timeA) || Infinity;
-                const secsB = parseFloat(timeB) || Infinity;
-                
-                valA = secsA;
-                valB = secsB;
+            case 'time': {
+                // Статус-приоритет: finished=0, running=1, прочие=2, notstarted=3
+                const pri = s => s === 'finished' ? 0 : s === 'running' ? 1 : s === 'notstarted' ? 3 : 2;
+                const pa = pri(a.status), pb = pri(b.status);
+                if (pa !== pb) return sortState.direction === 'asc' ? pa - pb : pb - pa;
+                const fa = timeMode === 'gun' ? a.time_gun_finish : a.time_clear_finish;
+                const fb = timeMode === 'gun' ? b.time_gun_finish : b.time_clear_finish;
+                valA = KMUtils.parseTimeToSeconds(fa);
+                valB = KMUtils.parseTimeToSeconds(fb);
                 break;
-            case 'pace':
-                const pace1 = calculatePace(a.time_clear_finish || a['times.official_:::finish:::'], a.distance || a.event);
-                const pace2 = calculatePace(b.time_clear_finish || b['times.official_:::finish:::'], b.distance || b.event);
-                valA = pace1 === '-' ? Infinity : parseFloat(pace1);
-                valB = pace2 === '-' ? Infinity : parseFloat(pace2);
+            }
+            case 'pace': {
+                const p1 = calculatePace(a.time_clear_finish || a['times.official_:::finish:::'], a.distance || a.event);
+                const p2 = calculatePace(b.time_clear_finish || b['times.official_:::finish:::'], b.distance || b.event);
+                valA = p1 === '-' ? Infinity : parseFloat(p1);
+                valB = p2 === '-' ? Infinity : parseFloat(p2);
                 break;
+            }
             default:
                 return 0;
         }
-        
-        // Сравнение
         if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
         return 0;
     });
-    
-    // Рендерим таблицу
-    renderResultsTable(toSort);
+}
+
+// Функция сортировки таблицы
+function sortTable(columnName) {
+    sortState.direction = sortState.column === columnName
+        ? (sortState.direction === 'asc' ? 'desc' : 'asc')
+        : 'asc';
+    sortState.column = columnName;
+    renderResultsTable(_sortArray(filteredRunners));
 }
 
 // Отрисовываем таблицу результатов
@@ -612,16 +585,12 @@ function renderResultsTable(runners) {
             : (runner.time_clear_finish || runner['times.official_:::finish:::']);
         time = formatTime(finishTime);
 
-        // Темп — зависит от режима тоггла
-        let rawPace = timeMode === 'gun'
+        // Темп — зависит от режима тоггла; parseDuration конвертирует PT3M12S → "3:12"
+        const rawPace = timeMode === 'gun'
             ? (runner.finish_pace_avg_gun || runner.finish_pace_avg)
             : (runner.finish_pace_avg_clean || runner.finish_pace_avg);
-        let pace = rawPace || '-';
-        if (pace && pace !== '#ЗНАЧ!' && typeof pace === 'string') {
-            if (!pace.includes('мин')) pace = pace + ' мин/км';
-        } else {
-            pace = '-';
-        }
+        const paceStr = KMUtils.parseDuration(rawPace);
+        const pace = (paceStr && paceStr !== '#ЗНАЧ!') ? paceStr + ' мин/км' : '-';
         
         // Фамилия, имя, пол
         let firstName = runner.name || 'N/A';

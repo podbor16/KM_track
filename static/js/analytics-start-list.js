@@ -355,21 +355,24 @@ function sortTable(columnName) {
                 valA = (a.name || '').toLowerCase();
                 valB = (b.name || '').toLowerCase();
                 break;
-            case 'birthday':
-                valA = a.birthdate || a.birthday ? new Date(a.birthdate || a.birthday).getFullYear() : 0;
-                valB = b.birthdate || b.birthday ? new Date(b.birthdate || b.birthday).getFullYear() : 0;
+            case 'birthday': {
+                const bdA = a.birthdate || a.birthday;
+                const bdB = b.birthdate || b.birthday;
+                valA = bdA ? new Date(bdA).getFullYear() : 0;
+                valB = bdB ? new Date(bdB).getFullYear() : 0;
                 break;
+            }
             case 'distance':
-                valA = (a.distance || '').toLowerCase();
-                valB = (b.distance || '').toLowerCase();
+                valA = KMUtils.parseDistanceKm(a.distance);
+                valB = KMUtils.parseDistanceKm(b.distance);
                 break;
             case 'sex':
                 valA = (a.sex || '').toLowerCase();
                 valB = (b.sex || '').toLowerCase();
                 break;    
             case 'category':
-                valA = (a.category || '').toLowerCase();
-                valB = (b.category || '').toLowerCase();
+                valA = KMUtils.categoryOrder(a.category);
+                valB = KMUtils.categoryOrder(b.category);
                 break;
 
             case 'city':
