@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('eventSelector').value = currentEvent;
     updateEventCardBackground();
     updateEventThemeColor();
+    updatePageTitle();
     loadRunnersData();
 });
 
@@ -40,24 +41,36 @@ function updateEventThemeColor() {
 async function switchEvent() {
     const eventSelector = document.getElementById('eventSelector');
     currentEvent = eventSelector.value;
-    
+
     // Сохраняем выбор в localStorage
     localStorage.setItem('selectedEvent', currentEvent);
-    
+
     // Обновляем фон карточки события и цвет темы
     updateEventCardBackground();
     updateEventThemeColor();
-    
+
     // Сбрасываем фильтры
     document.getElementById('genderFilter').value = '';
     document.getElementById('ageGroupFilter').value = '';
     document.getElementById('distanceFilter').value = '';
     document.getElementById('surnameSearch').value = '';
     sortState = { column: null, direction: 'asc' };
-    
+
+    // Обновляем заголовок
+    updatePageTitle();
+
     // Перезагружаем данные
     console.log('Смена события на:', currentEvent);
     loadRunnersData();
+}
+
+function updatePageTitle() {
+    const title = document.getElementById('pageTitle');
+    if (!title) return;
+    const name = eventNameMap[currentEvent] || currentEvent;
+    const distSel = document.getElementById('distanceFilter');
+    const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
+    title.textContent = `Стартовый список. «${name}»${dist}`;
 }
 
 // Функция загрузки данных
@@ -300,6 +313,9 @@ function applyFilters() {
     
     // Рендерим таблицу
     renderStartList(filteredRunners);
+
+    // Обновляем заголовок (дистанция могла смениться)
+    updatePageTitle();
 }
 
 // Функция сортировки таблицы

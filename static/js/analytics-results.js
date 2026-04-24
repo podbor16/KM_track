@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('yearResultsSelector').value  = currentYear;
     updateEventThemeColor();
     updateEventCardBackground();
+    updatePageTitle();
     loadRunnersData();
 });
 
@@ -74,15 +75,27 @@ function populateYearSelector() {
 async function switchEventResults() {
     currentEvent = document.getElementById('eventResultsSelector').value;
     currentYear = parseInt(document.getElementById('yearResultsSelector').value);
-    
+
     // Обновляем цвет темы
     updateEventThemeColor();
-    
+
     // Меняем фоновую картинку карточки события
     updateEventCardBackground();
-    
+
+    // Обновляем заголовок страницы
+    updatePageTitle();
+
     // Перезагружаем данные
     loadRunnersData();
+}
+
+function updatePageTitle() {
+    const title = document.getElementById('pageTitle');
+    if (!title) return;
+    const name = eventNameMap[currentEvent] || currentEvent;
+    const distSel = document.getElementById('distanceFilter');
+    const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
+    title.textContent = `Результаты. «${name}» ${currentYear}${dist}`;
 }
 
 // Функция обновления фонового изображения карточки события
@@ -446,6 +459,9 @@ function applyFilters() {
     sortState.column = 'time';
     sortState.direction = 'asc';
     sortTable('time');
+
+    // Обновляем заголовок (дистанция могла смениться)
+    updatePageTitle();
 }
 
 const formatTime = KMUtils.formatTime.bind(KMUtils);

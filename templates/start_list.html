@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=2">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=3">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 </head>
 <body>
@@ -20,7 +20,7 @@
     {% include 'header.html' %}
 
     <div class="container">
-        <h1>Стартовый список</h1>
+        <h1 id="pageTitle">Стартовый список</h1>
         
         <!-- Карточка события с фото и селектором -->
         <div class="event-card" id="eventCard" style="background-image: url('/static/images/events/Ночной%20забег.png');">
@@ -108,7 +108,7 @@
     </div>
 
     <script src="/static/js/utils.js?v=1"></script>
-    <script src="/static/js/analytics-start-list.js?v=2"></script>
+    <script src="/static/js/analytics-start-list.js?v=3"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}

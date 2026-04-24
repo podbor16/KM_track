@@ -435,17 +435,17 @@ tr:hover {
         white-space: normal;
     }
 
-    /* Event card: убираем фоновое фото, заменяем на чистый блок выбора */
+    /* Event card: убираем фото, заменяем на цвет забега */
     .event-card {
         height: auto;
         background-image: none !important;
-        background-color: #f8f9fa;
+        background-color: var(--primary-color);
         padding: 16px;
         border-radius: 12px;
-        border: 2px solid #EE2D62;
-        box-shadow: 0 2px 8px rgba(238, 45, 98, 0.12);
-        justify-content: flex-start;
-        align-items: flex-start;
+        border: none;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        justify-content: center;
+        align-items: center;
     }
 
     .event-card-overlay {
@@ -454,10 +454,10 @@ tr:hover {
 
     .event-card-content {
         position: static;
-        background: none;
-        box-shadow: none;
-        border-radius: 0;
-        padding: 0;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+        border-radius: 10px;
+        padding: 16px;
         flex-direction: column;
         gap: 12px;
         width: 100%;
