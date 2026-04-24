@@ -517,7 +517,7 @@ function _sortArray(arr) {
                 // Статус-приоритет: finished=0, running=1, прочие=2, notstarted=3
                 const pri = s => s === 'finished' ? 0 : s === 'running' ? 1 : s === 'notstarted' ? 3 : 2;
                 const pa = pri(a.status), pb = pri(b.status);
-                if (pa !== pb) return sortState.direction === 'asc' ? pa - pb : pb - pa;
+                if (pa !== pb) return pa - pb; // статусный порядок фиксирован независимо от направления
                 const fa = timeMode === 'gun' ? a.time_gun_finish : a.time_clear_finish;
                 const fb = timeMode === 'gun' ? b.time_gun_finish : b.time_clear_finish;
                 valA = KMUtils.parseTimeToSeconds(fa);

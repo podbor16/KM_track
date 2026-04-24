@@ -72,9 +72,13 @@ window.KMUtils = {
         return (totalSeconds / 60 / distanceNum).toFixed(5);
     },
 
-    // Конвертирует "HH:MM:SS" в секунды; возвращает Infinity для пустых/некорректных значений
+    // Конвертирует "HH:MM:SS" или "PTxHxMxS" в секунды; возвращает Infinity для пустых/некорректных значений
     parseTimeToSeconds(timeStr) {
         if (!timeStr || typeof timeStr !== 'string') return Infinity;
+        if (timeStr.startsWith('PT')) {
+            const m = timeStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+            if (m) return parseInt(m[1]||0)*3600 + parseInt(m[2]||0)*60 + Math.floor(parseFloat(m[3]||0));
+        }
         const parts = timeStr.split(':');
         if (parts.length === 3)
             return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
