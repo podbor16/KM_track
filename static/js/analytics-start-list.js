@@ -4,6 +4,7 @@ let allRunners = [];
 let filteredRunners = [];
 let sortState = { column: null, direction: 'asc' }; // Отслеживание сортировки
 let currentEvent = 'night_run'; // Текущее выбранное событие
+let currentYear = new Date().getFullYear();
 
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
         currentEvent = cfg.event || 'night_run';
+        currentYear = cfg.year || new Date().getFullYear();
     } catch {
         currentEvent = 'night_run';
     }
@@ -70,7 +72,7 @@ function updatePageTitle() {
     const name = eventNameMap[currentEvent] || currentEvent;
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
-    title.innerHTML = `Стартовый список<br><span class="page-title-event">${name}${dist}</span>`;
+    title.innerHTML = `Стартовый список<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
 }
 
 // Функция загрузки данных
