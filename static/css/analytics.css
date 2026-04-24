@@ -231,6 +231,7 @@ h1 {
 
 table {
     width: 100%;
+    min-width: 650px;
     border-collapse: collapse;
     margin-top: 20px;
     background-color: white;
@@ -244,6 +245,8 @@ table {
 .table-wrapper {
     border-radius: 12px;
     box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 th, td {
@@ -372,39 +375,70 @@ tr:hover {
     .container {
         padding: 15px;
     }
-    
+
     .filters {
         flex-direction: column;
         align-items: center;
         gap: 15px;
     }
-    
+
     .filter-group {
         width: 100%;
         justify-content: space-between;
     }
-    
+
+    .filter-group select {
+        min-width: 0;
+        flex: 1;
+    }
+
     .mode-selector {
         flex-direction: column;
         align-items: center;
     }
-    
+
     .mode-btn {
         width: 100%;
         max-width: 350px;
     }
-    
+
     table {
         font-size: 14px;
     }
-    
+
     th, td {
         padding: 12px 8px;
     }
-    
+
     .age-group-tag {
         font-size: 11px;
         padding: 3px 8px;
+    }
+
+    /* Event card */
+    .event-card {
+        height: auto;
+        min-height: 140px;
+        padding: 15px;
+        justify-content: center;
+    }
+
+    .event-card-content {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 15px;
+        gap: 12px;
+    }
+
+    .event-selector-group,
+    .year-selector-group {
+        width: 100%;
+    }
+
+    .event-selector-input,
+    .year-selector-input {
+        min-width: 0;
+        width: 100%;
     }
 }
 
@@ -820,10 +854,39 @@ tr:hover {
     .segments-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .segments-content-wrapper {
         flex-direction: column;
         padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 12px;
+        margin-top: 8px;
+    }
+
+    h1 {
+        font-size: 22px;
+        margin-bottom: 20px;
+    }
+
+    .mode-btn {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+
+    th, td {
+        padding: 8px 5px;
+    }
+
+    .segments-content-wrapper {
+        padding: 10px;
+    }
+
+    .segment-card {
+        padding: 12px;
     }
 }
 

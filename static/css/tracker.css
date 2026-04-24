@@ -465,23 +465,57 @@ body {
 @media (max-width: 768px) {
     .tracker-container {
         flex-direction: column;
+        padding: 12px;
+        gap: 12px;
     }
 
     .stats-panel {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
+    #map {
+        height: 350px;
+    }
+
     .controls-panel {
         order: 2;
-        margin-top: 15px;
+        margin-top: 0;
+        padding: 12px;
     }
-    
+
     .map-container {
         order: 1;
     }
-    
+
     .controls-buttons {
         flex-direction: column;
+    }
+
+    .gender-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 12px;
+    }
+
+    #map {
+        height: 260px;
+    }
+
+    .header h1 {
+        font-size: 18px;
+    }
+
+    .dist-btn {
+        padding: 7px 14px;
+        font-size: 13px;
+    }
+
+    .search-results {
+        max-height: 180px;
     }
 }
 
