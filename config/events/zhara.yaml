@@ -3,21 +3,21 @@ display_name: "Жара"
 year: 2026
 code: "zhara"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: null               # ← заполнить перед стартом
-start_lon: null               # ← заполнить перед стартом
+start_lat: 56.0126030               # ← заполнить перед стартом
+start_lon: 92.8936640               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом (разные для дистанций?)
 description: "Жара | Дистанции: 5 км, 21.1 км"
 
 distances:
   - distance: "21.1 км"
     distance_km: 21.1
-    db_event_id: null         # ← заполнить перед стартом
+    db_event_id: 116         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
-    gpx_file: null            # ← заполнить перед стартом
-    event_date: null          # ← заполнить перед стартом
+    gpx_file: "static/map/2026/zhara_21.gpx"            # ← заполнить перед стартом
+    event_date: "2026-08-23"         # ← заполнить перед стартом
     route:
       laps: 1
       total_km: 21.1
@@ -29,13 +29,13 @@ distances:
 
   - distance: "5 км"
     distance_km: 5.0
-    db_event_id: null         # ← заполнить перед стартом
+    db_event_id: 115         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
-    gpx_file: null            # ← заполнить перед стартом
-    event_date: null          # ← заполнить перед стартом
+    gpx_file: "static/map/2026/zhara_5.gpx"            # ← заполнить перед стартом
+    event_date: "2026-08-22"          # ← заполнить перед стартом
     route:
       laps: 1
       total_km: 5.0

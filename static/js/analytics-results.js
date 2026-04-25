@@ -793,32 +793,13 @@ function compareSegments(currentPace, previousPace) {
  * Переключает видимость раскрывающейся области сегментов после строки
  */
 async function toggleSegments(runnerRow, resultId, runnerName) {
-    console.log(`📊 Переключение сегментов для result_id=${resultId}`);
-    
-    const tbody = runnerRow.parentElement;
     const nextRow = runnerRow.nextElementSibling;
-    
-    // Если уже есть открытая строка сегментов, закрываем все остальные
-    const openSegmentsRows = tbody.querySelectorAll('.segments-row:not(.collapsed)');
+
     if (nextRow && nextRow.classList.contains('segments-row')) {
-        // Это наш ряд, просто переключаем его
-        if (nextRow.classList.contains('collapsed')) {
-            nextRow.classList.remove('collapsed');
-        } else {
-            nextRow.classList.add('collapsed');
-        }
+        // Уже есть строка — переключаем collapsed
+        nextRow.classList.toggle('collapsed');
     } else {
-        // Закрываем все открытые ряды
-        openSegmentsRows.forEach(row => {
-            row.classList.add('collapsed');
-        });
-        
-        // Если это была та же строка, просто закрываем и выходим
-        if (nextRow && nextRow.classList.contains('segments-row') && nextRow.classList.contains('collapsed')) {
-            return;
-        }
-        
-        // Создаём новую строку с сегментами
+        // Создаём новую строку с сегментами (другие не закрываем)
         const newSegmentsRow = await createSegmentsRow(resultId, runnerName);
         runnerRow.insertAdjacentElement('afterend', newSegmentsRow);
     }
@@ -1069,60 +1050,99 @@ async function renderSegmentView(runners) {
             if (!resp.ok) throw new Error(resp.statusText);
             segmentRankingsCache[code] = await resp.json();
         } catch (e) {
-            console.error('❌ renderSegmentView fetch:', e);
+            console.error('renderSegmentView fetch:', e);
             document.getElementById('segmentModeBody').innerHTML =
-                `<tr><td colspan="11" style="text-align:center;color:#888;">Ошибка загрузки данных</td></tr>`;
+                `<tr><td colspan="10" style="text-align:center;color:#888;">Ошибка загрузки данных</td></tr>`;
             return;
         }
     }
     const allRows = segmentRankingsCache[code];
 
-    // Фильтрация по filteredRunners через start_number
-    const filteredNums = new Set(runners.map(r => String(r.start_number || r.bib || '')));
+    // Lookup map: start_number → runner (для года рождения и дистанции)
+    const runnerByBib = {};
+    runners.forEach(r => {
+        const bib = String(r.start_number || '');
+        if (bib) runnerByBib[bib] = r;
+    });
+
+    // Фильтрация: исключаем пустые строки, чтобы Set пустого состояния имел size=0
+    const validBibs = new Set(
+        runners.map(r => String(r.start_number || '')).filter(n => n && n !== 'null' && n !== 'undefined')
+    );
     const useGun = timeMode === 'gun';
 
     const visible = allRows
-        .filter(r => filteredNums.size === 0 || filteredNums.has(String(r.start_number)))
+        .filter(r => validBibs.size === 0 || validBibs.has(String(r.start_number)))
         .sort((a, b) => {
             const ta = a[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
             const tb = b[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
             return ta.localeCompare(tb);
         });
 
-    // Заголовок таблицы
+    // Заголовок — 10 колонок как у основной таблицы
     document.getElementById('segmentModeHead').innerHTML = `<tr>
-        <th>#</th><th>№</th><th>Фамилия</th><th>Имя</th>
-        <th>Пол</th><th>Кат.</th>
+        <th>#</th>
+        <th>Фамилия</th>
+        <th>Имя</th>
+        <th>Год рождения</th>
+        <th>Дистанция</th>
+        <th>Пол</th>
+        <th>Возрастная группа</th>
+        <th>Статус</th>
         <th>${useGun ? 'Офиц. время' : 'Чистое время'}</th>
-        <th>Темп</th><th>М.общ.</th><th>М.пол</th><th>М.кат.</th>
+        <th>Темп (мин/км)</th>
     </tr>`;
 
     const tbody = document.getElementById('segmentModeBody');
     tbody.innerHTML = '';
 
     if (!visible.length) {
-        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#888;">Нет данных для выбранных фильтров</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#888;">Нет данных для выбранных фильтров</td></tr>`;
         return;
     }
 
     visible.forEach((row, idx) => {
+        const bib = String(row.start_number || '');
+        const runner = runnerByBib[bib] || {};
+
+        // Год рождения из основных данных
+        let birthYear = '-';
+        if (runner.birthdate) {
+            const year = new Date(runner.birthdate).getFullYear();
+            if (year > 0) birthYear = year;
+        }
+
+        // Дистанция из основных данных
+        const distance = runner.event || runner.distance || '-';
+
+        // Пол с тегом
+        const sexVal = row.sex || runner.gender || '';
+        let genderClass = '';
+        let genderText = sexVal || 'N/A';
+        if (sexVal === 'Мужчина' || sexVal === 'male') { genderClass = 'gender-male'; genderText = 'Мужчина'; }
+        else if (sexVal === 'Женщина' || sexVal === 'female') { genderClass = 'gender-female'; genderText = 'Женщина'; }
+
+        // Нормализуем категорию
+        const category = KMUtils.normalizeCategory(row.category || '');
+
         const rawTime = useGun ? (row.sg_time_gun || row.sg_time_clear) : row.sg_time_clear;
-        const pace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg || '-') : (row.sg_pace_avg || '-');
+        const rawPace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg) : row.sg_pace_avg;
+        const pace = rawPace ? formatSegmentPace(rawPace) : '-';
+
         const tr = document.createElement('tr');
         tr.className = 'runner-row';
         if (row.result_id) tr.dataset.resultId = row.result_id;
         tr.innerHTML = `
             <td>${idx + 1}</td>
-            <td>${row.start_number || '-'}</td>
             <td>${row.surname || ''}</td>
             <td>${row.name || ''}</td>
-            <td>${row.sex || '-'}</td>
-            <td>${row.category || '-'}</td>
-            <td>${formatTime(rawTime) || '-'}</td>
-            <td>${pace}</td>
-            <td>${row.sg_rank_absolute || '-'}</td>
-            <td>${row.sg_rank_sex || '-'}</td>
-            <td>${row.sg_rank_category || '-'}</td>
+            <td>${birthYear}</td>
+            <td class="distance-col">${distance}</td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
+            <td>${category}</td>
+            <td class="status-finished status-col">Финишировал</td>
+            <td class="time-cell time-col">${formatTime(rawTime) || '-'}</td>
+            <td class="pace-cell pace-col">${pace}</td>
         `;
         if (row.result_id) {
             const runnerName = `${row.surname || ''} ${row.name || ''}`.trim();

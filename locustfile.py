@@ -59,7 +59,7 @@ class SearchUser(HttpUser):
     @task(3)
     def search_athlete(self):
         q = random.choice(self.QUERIES)
-        self.client.get(f"/api/search-athletes?query={q}", name="/api/search-athletes")
+        self.client.get(f"/api/search-athletes?q={q}", name="/api/search-athletes")
 
     @task(1)
     def view_start_list_api(self):

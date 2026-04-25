@@ -3,8 +3,8 @@ display_name: "Женская семерка"
 year: 2026
 code: "girlseven"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: null               # ← заполнить перед стартом
-start_lon: null               # ← заполнить перед стартом
+start_lat: 56.0258580             # ← заполнить перед стартом
+start_lon: 92.9401780             # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
 description: "Женская семерка | Дистанция: 7 км"
 
@@ -16,7 +16,7 @@ distances:
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
-    gpx_file: null            # ← заполнить перед стартом
+    gpx_file: "static/map/2026/girlseven.gpx"            # ← заполнить перед стартом
     event_date: null          # ← заполнить перед стартом
     route:
       laps: 1

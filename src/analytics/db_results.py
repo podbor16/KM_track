@@ -712,6 +712,20 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
             connection.close()
 
 
+def _td_to_str(val) -> Optional[str]:
+    """Конвертирует datetime.timedelta (TIME из MySQL) в 'HH:MM:SS' строку."""
+    import datetime as _dt
+    if val is None:
+        return None
+    if isinstance(val, _dt.timedelta):
+        total = int(val.total_seconds())
+        h = total // 3600
+        m = (total % 3600) // 60
+        s = total % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return str(val)
+
+
 def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[str, Any]]:
     connection = get_pooled_connection()
     if not connection:
@@ -725,7 +739,8 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
             rs.segment_code,
             rs.sg_time_clear, rs.sg_time_gun,
             rs.sg_pace_avg,   rs.sg_pace_avg_gun,
-            rs.sg_rank_absolute, rs.sg_rank_sex, rs.sg_rank_category,
+            rs.sg_rank_absolute,     rs.sg_rank_sex,     rs.sg_rank_category,
+            rs.sg_rank_absolute_gun, rs.sg_rank_sex_gun, rs.sg_rank_category_gun,
             r.surname, r.name, r.start_number, r.sex, r.category
         FROM `result_segments` rs
         JOIN `results` r ON rs.result_id = r.id
@@ -736,7 +751,14 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
         cursor.execute(query, (event_id, segment_code))
         rows = cursor.fetchall()
         cursor.close()
-        return list(rows)
+        time_fields = ('sg_time_clear', 'sg_time_gun', 'sg_pace_avg', 'sg_pace_avg_gun')
+        result = []
+        for row in rows:
+            for f in time_fields:
+                if f in row:
+                    row[f] = _td_to_str(row[f])
+            result.append(row)
+        return result
     except Exception as e:
         logger.error(f"❌ Ошибка get_event_segment_rankings: {e}")
         return []
