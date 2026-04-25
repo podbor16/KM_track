@@ -712,6 +712,67 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
             connection.close()
 
 
+def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[str, Any]]:
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение для get_event_segment_rankings")
+        return []
+    try:
+        cursor = connection.cursor(dictionary=True, buffered=True)
+        query = """
+        SELECT
+            rs.segment_code,
+            rs.sg_time_clear, rs.sg_time_gun,
+            rs.sg_pace_avg,   rs.sg_pace_avg_gun,
+            rs.sg_rank_absolute, rs.sg_rank_sex, rs.sg_rank_category,
+            r.surname, r.name, r.start_number, r.sex, r.category
+        FROM `result_segments` rs
+        JOIN `results` r ON rs.result_id = r.id
+        WHERE rs.event_id = %s AND rs.segment_code = %s
+          AND rs.sg_time_clear IS NOT NULL
+        ORDER BY rs.sg_time_clear ASC
+        """
+        cursor.execute(query, (event_id, segment_code))
+        rows = cursor.fetchall()
+        cursor.close()
+        return list(rows)
+    except Exception as e:
+        logger.error(f"❌ Ошибка get_event_segment_rankings: {e}")
+        return []
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+
+def get_event_segment_codes(event_id: int) -> List[str]:
+    connection = get_pooled_connection()
+    if not connection:
+        logger.error("❌ Не удалось установить соединение для get_event_segment_codes")
+        return []
+    try:
+        cursor = connection.cursor(buffered=True)
+        query = """
+        SELECT DISTINCT segment_code,
+            CASE SUBSTRING_INDEX(segment_code, '-', 1)
+                WHEN 'start' THEN 0 WHEN 'kt1' THEN 1 WHEN 'kt2' THEN 2
+                WHEN 'kt3'   THEN 3 WHEN 'kt4' THEN 4 WHEN 'kt5' THEN 5
+                ELSE 99 END AS ord
+        FROM `result_segments`
+        WHERE event_id = %s AND sg_time_clear IS NOT NULL
+        ORDER BY ord ASC
+        """
+        cursor.execute(query, (event_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Ошибка get_event_segment_codes: {e}")
+        return []
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+
 def find_result_by_client_id(client_identifier) -> Optional[Dict[str, Any]]:
     """
     Строка результата в таблице `results` по client_id, start_number или id.

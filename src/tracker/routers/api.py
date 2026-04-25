@@ -430,6 +430,30 @@ async def get_result_segments_api(result_id: int = Query(...)) -> list:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/event-segment-codes")
+async def get_event_segment_codes_api(event_id: int = Query(...)):
+    """Список кодов сегментов для события (упорядочен по маршруту)."""
+    try:
+        from src.analytics.db_results import get_event_segment_codes
+        codes = get_event_segment_codes(event_id)
+        return {"codes": codes}
+    except Exception as e:
+        logger.error(f"get_event_segment_codes error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/event-segment-rankings")
+async def get_event_segment_rankings_api(event_id: int = Query(...), segment_code: str = Query(...)):
+    """Рейтинг участников по времени на конкретном сегменте маршрута."""
+    try:
+        from src.analytics.db_results import get_event_segment_rankings
+        rows = get_event_segment_rankings(event_id, segment_code)
+        return rows
+    except Exception as e:
+        logger.error(f"get_event_segment_rankings error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # СТАТИСТИКА ПО ЗАБЕГАМ (RACE STATS)
 # ============================================================================

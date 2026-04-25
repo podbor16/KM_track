@@ -182,6 +182,11 @@ async function loadRunnersData() {
         applyFilters();
         showLoading(false);
         document.getElementById('resultsWrapper').style.display = '';
+
+        // Загружаем кнопки КТ для одиночного event_id
+        if (eventIdOrIds !== undefined && !Array.isArray(eventIdOrIds)) {
+            loadSegmentTabs(eventIdOrIds);
+        }
     } catch (error) {
         console.error('❌ Ошибка загрузки данных:', error);
         showError('Ошибка загрузки данных: ' + error.message);
@@ -876,20 +881,23 @@ function createSegmentCard(segment, allSegments, segmentIndex) {
     card.classList.add('segment-card');
     
     const segmentCode = segment.segment_code || '-';
-    const time = formatTime(segment.sg_time_clear) || '-';
-    const pace = segment.sg_pace_avg || '-';
+    const useGun = timeMode === 'gun';
+    const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
+    const pace = useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg || '-') : (segment.sg_pace_avg || '-');
     const rankAbsolute = segment.sg_rank_absolute || '-';
     const rankSex = segment.sg_rank_sex || '-';
     const rankCategory = segment.sg_rank_category || '-';
-    
+
     const icon = getSegmentIcon(segmentCode);
     const name = formatSegmentName(segmentCode);
-    
+    const modeBadge = `<span class="segment-mode-badge">${useGun ? 'офиц.' : 'чист.'}</span>`;
+
     // Сравниваем с предыдущим сегментом
     let paceComparison = '';
     if (segmentIndex > 0) {
         const prevSegment = allSegments[segmentIndex - 1];
-        const comparison = compareSegments(pace, prevSegment.sg_pace_avg);
+        const prevPace = useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg;
+        const comparison = compareSegments(pace, prevPace);
         if (comparison) {
             const color = comparison.improved ? '#27ae60' : '#e74c3c';
             paceComparison = `
@@ -909,6 +917,7 @@ function createSegmentCard(segment, allSegments, segmentIndex) {
         <div class="segment-card-title">
             <span class="segment-icon">${icon}</span>
             <span>${name}</span>
+            ${modeBadge}
         </div>
         
         <div class="segment-info-row">
@@ -954,4 +963,96 @@ function createSegmentCard(segment, allSegments, segmentIndex) {
     `;
     
     return card;
+}
+
+// === Результаты по участкам (КТ) ===
+
+async function loadSegmentTabs(eventId) {
+    try {
+        const resp = await fetch(`/api/event-segment-codes?event_id=${eventId}`);
+        if (!resp.ok) return;
+        const { codes } = await resp.json();
+        if (!codes || !codes.length) return;
+
+        const panel = document.getElementById('segmentRankingsPanel');
+        const container = document.getElementById('segmentTabsContainer');
+        container.innerHTML = '';
+        panel.style.display = '';
+
+        codes.forEach(code => {
+            const btn = document.createElement('button');
+            btn.className = 'segment-tab-btn';
+            btn.textContent = formatSegmentName(code);
+            btn.dataset.code = code;
+            btn.onclick = () => loadSegmentRankings(eventId, code, btn);
+            container.appendChild(btn);
+        });
+    } catch (e) {
+        console.error('❌ loadSegmentTabs:', e);
+    }
+}
+
+async function loadSegmentRankings(eventId, segmentCode, activeBtn) {
+    document.querySelectorAll('.segment-tab-btn').forEach(b => b.classList.remove('active'));
+    activeBtn.classList.add('active');
+
+    const content = document.getElementById('segmentRankingsContent');
+    content.innerHTML = '<p class="segment-hint">Загрузка...</p>';
+
+    try {
+        const resp = await fetch(`/api/event-segment-rankings?event_id=${eventId}&segment_code=${encodeURIComponent(segmentCode)}`);
+        if (!resp.ok) throw new Error(resp.statusText);
+        const rows = await resp.json();
+
+        if (!rows.length) {
+            content.innerHTML = '<p class="segment-hint">Нет данных для этого участка</p>';
+            return;
+        }
+
+        const useGun = timeMode === 'gun';
+        const table = document.createElement('table');
+        table.className = 'segment-rankings-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>№</th>
+                    <th>Участник</th>
+                    <th>Пол</th>
+                    <th>Кат.</th>
+                    <th>Время ${useGun ? '(офиц.)' : '(чист.)'}</th>
+                    <th>Темп</th>
+                    <th>М.общ.</th>
+                    <th>М.пол</th>
+                    <th>М.кат.</th>
+                </tr>
+            </thead>
+        `;
+
+        const tbody = document.createElement('tbody');
+        rows.forEach((row, idx) => {
+            const rawTime = useGun ? (row.sg_time_gun || row.sg_time_clear) : row.sg_time_clear;
+            const pace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg || '-') : (row.sg_pace_avg || '-');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${idx + 1}</td>
+                <td>${row.start_number || '-'}</td>
+                <td>${row.surname || ''} ${row.name || ''}</td>
+                <td>${row.sex || '-'}</td>
+                <td>${row.category || '-'}</td>
+                <td>${formatTime(rawTime) || '-'}</td>
+                <td>${pace}</td>
+                <td>${row.sg_rank_absolute || '-'}</td>
+                <td>${row.sg_rank_sex || '-'}</td>
+                <td>${row.sg_rank_category || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        content.innerHTML = '';
+        content.appendChild(table);
+    } catch (e) {
+        console.error('❌ loadSegmentRankings:', e);
+        content.innerHTML = '<p class="segment-hint">Ошибка загрузки данных</p>';
+    }
 }

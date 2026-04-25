@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=6">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=7">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 
 </head>
@@ -123,8 +123,19 @@
        </div>
     </div>
 
+    <!-- Таблица результатов по участкам маршрута -->
+    <div class="container" style="margin-top: 0;">
+        <div id="segmentRankingsPanel" class="segment-rankings-panel" style="display:none;">
+            <h2>Результаты по участкам</h2>
+            <div id="segmentTabsContainer" class="segment-tabs"></div>
+            <div id="segmentRankingsContent">
+                <p class="segment-hint">Выберите участок маршрута</p>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/utils.js?v=4"></script>
-    <script src="/static/js/analytics-results.js?v=9"></script>
+    <script src="/static/js/analytics-results.js?v=10"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}
