@@ -721,6 +721,7 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
         cursor = connection.cursor(dictionary=True, buffered=True)
         query = """
         SELECT
+            rs.result_id,
             rs.segment_code,
             rs.sg_time_clear, rs.sg_time_gun,
             rs.sg_pace_avg,   rs.sg_pace_avg_gun,

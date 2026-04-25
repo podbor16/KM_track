@@ -6,6 +6,9 @@ let sortState = { column: 'time', direction: 'asc' }; // Дефолт: по оф
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
 let timeMode = 'net'; // 'net' = чистое, 'gun' = официальное
+let activeSegmentCode = null;
+let segmentRankingsCache = {};  // { segmentCode: [rows] }
+let activeSegmentEventId = null;
 
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
@@ -107,7 +110,11 @@ function setTimeMode(mode) {
     if (btnGun) btnGun.classList.toggle('active', mode === 'gun');
     const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
     if (th) th.textContent = mode === 'gun' ? 'Офиц. время' : 'Чистое время';
-    renderResultsTable(_sortArray(filteredRunners));
+    if (activeSegmentCode !== null) {
+        renderSegmentView(filteredRunners);
+    } else {
+        renderResultsTable(_sortArray(filteredRunners));
+    }
 }
 
 // Функция обновления фонового изображения карточки события
@@ -475,7 +482,15 @@ function applyFilters() {
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
-    renderResultsTable(_sortArray(filteredRunners));
+    if (activeSegmentCode !== null) {
+        document.getElementById('resultsWrapper').style.display = 'none';
+        document.getElementById('segmentModeWrapper').style.display = '';
+        renderSegmentView(filteredRunners);
+    } else {
+        document.getElementById('segmentModeWrapper').style.display = 'none';
+        document.getElementById('resultsWrapper').style.display = '';
+        renderResultsTable(_sortArray(filteredRunners));
+    }
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
@@ -974,85 +989,113 @@ async function loadSegmentTabs(eventId) {
         const { codes } = await resp.json();
         if (!codes || !codes.length) return;
 
-        const panel = document.getElementById('segmentRankingsPanel');
+        activeSegmentEventId = eventId;
+        segmentRankingsCache = {};
+
         const container = document.getElementById('segmentTabsContainer');
         container.innerHTML = '';
-        panel.style.display = '';
+
+        // Кнопка «Все результаты»
+        const allBtn = document.createElement('button');
+        allBtn.className = 'segment-tab-btn active';
+        allBtn.textContent = 'Все результаты';
+        allBtn.onclick = () => setActiveSegment(null, allBtn);
+        container.appendChild(allBtn);
 
         codes.forEach(code => {
             const btn = document.createElement('button');
             btn.className = 'segment-tab-btn';
             btn.textContent = formatSegmentName(code);
             btn.dataset.code = code;
-            btn.onclick = () => loadSegmentRankings(eventId, code, btn);
+            btn.onclick = () => setActiveSegment(code, btn);
             container.appendChild(btn);
         });
+
+        container.style.display = '';
     } catch (e) {
         console.error('❌ loadSegmentTabs:', e);
     }
 }
 
-async function loadSegmentRankings(eventId, segmentCode, activeBtn) {
-    document.querySelectorAll('.segment-tab-btn').forEach(b => b.classList.remove('active'));
+function setActiveSegment(code, activeBtn) {
+    activeSegmentCode = code;
+    document.querySelectorAll('#segmentTabsContainer .segment-tab-btn')
+        .forEach(b => b.classList.remove('active'));
     activeBtn.classList.add('active');
+    applyFilters();
+}
 
-    const content = document.getElementById('segmentRankingsContent');
-    content.innerHTML = '<p class="segment-hint">Загрузка...</p>';
+async function renderSegmentView(runners) {
+    const code = activeSegmentCode;
+    const eventId = activeSegmentEventId;
 
-    try {
-        const resp = await fetch(`/api/event-segment-rankings?event_id=${eventId}&segment_code=${encodeURIComponent(segmentCode)}`);
-        if (!resp.ok) throw new Error(resp.statusText);
-        const rows = await resp.json();
-
-        if (!rows.length) {
-            content.innerHTML = '<p class="segment-hint">Нет данных для этого участка</p>';
+    if (!segmentRankingsCache[code]) {
+        try {
+            const resp = await fetch(`/api/event-segment-rankings?event_id=${eventId}&segment_code=${encodeURIComponent(code)}`);
+            if (!resp.ok) throw new Error(resp.statusText);
+            segmentRankingsCache[code] = await resp.json();
+        } catch (e) {
+            console.error('❌ renderSegmentView fetch:', e);
+            document.getElementById('segmentModeBody').innerHTML =
+                `<tr><td colspan="11" style="text-align:center;color:#888;">Ошибка загрузки данных</td></tr>`;
             return;
         }
-
-        const useGun = timeMode === 'gun';
-        const table = document.createElement('table');
-        table.className = 'segment-rankings-table';
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>№</th>
-                    <th>Участник</th>
-                    <th>Пол</th>
-                    <th>Кат.</th>
-                    <th>Время ${useGun ? '(офиц.)' : '(чист.)'}</th>
-                    <th>Темп</th>
-                    <th>М.общ.</th>
-                    <th>М.пол</th>
-                    <th>М.кат.</th>
-                </tr>
-            </thead>
-        `;
-
-        const tbody = document.createElement('tbody');
-        rows.forEach((row, idx) => {
-            const rawTime = useGun ? (row.sg_time_gun || row.sg_time_clear) : row.sg_time_clear;
-            const pace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg || '-') : (row.sg_pace_avg || '-');
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${idx + 1}</td>
-                <td>${row.start_number || '-'}</td>
-                <td>${row.surname || ''} ${row.name || ''}</td>
-                <td>${row.sex || '-'}</td>
-                <td>${row.category || '-'}</td>
-                <td>${formatTime(rawTime) || '-'}</td>
-                <td>${pace}</td>
-                <td>${row.sg_rank_absolute || '-'}</td>
-                <td>${row.sg_rank_sex || '-'}</td>
-                <td>${row.sg_rank_category || '-'}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        content.innerHTML = '';
-        content.appendChild(table);
-    } catch (e) {
-        console.error('❌ loadSegmentRankings:', e);
-        content.innerHTML = '<p class="segment-hint">Ошибка загрузки данных</p>';
     }
+    const allRows = segmentRankingsCache[code];
+
+    // Фильтрация по filteredRunners через start_number
+    const filteredNums = new Set(runners.map(r => String(r.start_number || r.bib || '')));
+    const useGun = timeMode === 'gun';
+
+    const visible = allRows
+        .filter(r => filteredNums.size === 0 || filteredNums.has(String(r.start_number)))
+        .sort((a, b) => {
+            const ta = a[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
+            const tb = b[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
+            return ta.localeCompare(tb);
+        });
+
+    // Заголовок таблицы
+    document.getElementById('segmentModeHead').innerHTML = `<tr>
+        <th>#</th><th>№</th><th>Фамилия</th><th>Имя</th>
+        <th>Пол</th><th>Кат.</th>
+        <th>${useGun ? 'Офиц. время' : 'Чистое время'}</th>
+        <th>Темп</th><th>М.общ.</th><th>М.пол</th><th>М.кат.</th>
+    </tr>`;
+
+    const tbody = document.getElementById('segmentModeBody');
+    tbody.innerHTML = '';
+
+    if (!visible.length) {
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#888;">Нет данных для выбранных фильтров</td></tr>`;
+        return;
+    }
+
+    visible.forEach((row, idx) => {
+        const rawTime = useGun ? (row.sg_time_gun || row.sg_time_clear) : row.sg_time_clear;
+        const pace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg || '-') : (row.sg_pace_avg || '-');
+        const tr = document.createElement('tr');
+        tr.className = 'runner-row';
+        if (row.result_id) tr.dataset.resultId = row.result_id;
+        tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${row.start_number || '-'}</td>
+            <td>${row.surname || ''}</td>
+            <td>${row.name || ''}</td>
+            <td>${row.sex || '-'}</td>
+            <td>${row.category || '-'}</td>
+            <td>${formatTime(rawTime) || '-'}</td>
+            <td>${pace}</td>
+            <td>${row.sg_rank_absolute || '-'}</td>
+            <td>${row.sg_rank_sex || '-'}</td>
+            <td>${row.sg_rank_category || '-'}</td>
+        `;
+        if (row.result_id) {
+            const runnerName = `${row.surname || ''} ${row.name || ''}`.trim();
+            tr.addEventListener('click', function() {
+                toggleSegments(this, row.result_id, runnerName);
+            });
+        }
+        tbody.appendChild(tr);
+    });
 }

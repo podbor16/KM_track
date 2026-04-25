@@ -970,23 +970,12 @@ tr:hover {
     }
 }
 
-/* === Таблица результатов по участкам === */
-.segment-rankings-panel {
-    margin-top: 32px;
-    padding: 0 0 32px;
-}
-
-.segment-rankings-panel h2 {
-    margin-bottom: 16px;
-    font-size: 1.3rem;
-    color: var(--text-primary, #222);
-}
-
-.segment-tabs {
+/* === Кнопки участков маршрута (КТ) === */
+#segmentTabsContainer {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .segment-tab-btn {
@@ -1005,33 +994,6 @@ tr:hover {
 }
 
 .segment-tab-btn:hover:not(.active) {
-    background: #f5f5f5;
-}
-
-.segment-hint {
-    color: #888;
-    font-style: italic;
-}
-
-.segment-rankings-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-}
-
-.segment-rankings-table th,
-.segment-rankings-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #eee;
-    text-align: left;
-}
-
-.segment-rankings-table th {
-    background: #f8f8f8;
-    font-weight: 600;
-}
-
-.segment-rankings-table tbody tr:hover {
     background: #f5f5f5;
 }
 

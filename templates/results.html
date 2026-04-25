@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=7">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=8">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 
 </head>
@@ -99,6 +99,9 @@
            <button id="btnGun" class="time-mode-btn" onclick="setTimeMode('gun')">Официальное время</button>
        </div>
 
+       <!-- Кнопки участков маршрута (КТ) -->
+       <div id="segmentTabsContainer" class="segment-tabs" style="display:none;"></div>
+
        <!-- Контейнер для Результатов -->
        <div class="table-wrapper" id="resultsWrapper">
            <table id="resultsTable" class="during-mode-table">
@@ -121,21 +124,18 @@
            </tbody>
        </table>
        </div>
-    </div>
 
-    <!-- Таблица результатов по участкам маршрута -->
-    <div class="container" style="margin-top: 0;">
-        <div id="segmentRankingsPanel" class="segment-rankings-panel" style="display:none;">
-            <h2>Результаты по участкам</h2>
-            <div id="segmentTabsContainer" class="segment-tabs"></div>
-            <div id="segmentRankingsContent">
-                <p class="segment-hint">Выберите участок маршрута</p>
-            </div>
-        </div>
+       <!-- Таблица рейтинга по выбранному участку -->
+       <div class="table-wrapper" id="segmentModeWrapper" style="display:none;">
+           <table id="segmentModeTable" class="during-mode-table">
+               <thead id="segmentModeHead"></thead>
+               <tbody id="segmentModeBody"></tbody>
+           </table>
+       </div>
     </div>
 
     <script src="/static/js/utils.js?v=4"></script>
-    <script src="/static/js/analytics-results.js?v=10"></script>
+    <script src="/static/js/analytics-results.js?v=11"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}
