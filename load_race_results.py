@@ -702,15 +702,23 @@ class RaceLoader:
         if segments_batch:
             try:
                 insert_query = """
-                    INSERT INTO result_segments (result_id, event_id, segment_code, sg_time_clear, sg_pace_avg, sg_rank_absolute, sg_rank_sex, sg_rank_category)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO result_segments
+                        (result_id, event_id, segment_code, sg_time_clear, sg_time_gun, sg_pace_avg, sg_pace_avg_gun,
+                         sg_rank_absolute, sg_rank_sex, sg_rank_category,
+                         sg_rank_absolute_gun, sg_rank_sex_gun, sg_rank_category_gun)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE
                         sg_time_clear = VALUES(sg_time_clear),
+                        sg_time_gun = VALUES(sg_time_gun),
                         sg_pace_avg = VALUES(sg_pace_avg),
+                        sg_pace_avg_gun = VALUES(sg_pace_avg_gun),
                         event_id = VALUES(event_id),
                         sg_rank_absolute = VALUES(sg_rank_absolute),
                         sg_rank_sex = VALUES(sg_rank_sex),
-                        sg_rank_category = VALUES(sg_rank_category)
+                        sg_rank_category = VALUES(sg_rank_category),
+                        sg_rank_absolute_gun = VALUES(sg_rank_absolute_gun),
+                        sg_rank_sex_gun = VALUES(sg_rank_sex_gun),
+                        sg_rank_category_gun = VALUES(sg_rank_category_gun)
                 """
                 self.cursor.executemany(insert_query, segments_batch)
                 if self.connection:
@@ -880,12 +888,13 @@ class RaceLoader:
                 self.connection.rollback()
 
     def _recalculate_segment_ranks(self) -> None:
-        """Пересчитывает ранги для ВСЕХ сегментных комбинаций события."""
+        """Пересчитывает net и gun ранги для ВСЕХ сегментных комбинаций события."""
         if not self.cursor or not self.connection:
             return
         try:
             self.cursor.execute("""
-                SELECT rs.id AS seg_id, rs.result_id, rs.segment_code, rs.sg_time_clear,
+                SELECT rs.id AS seg_id, rs.result_id, rs.segment_code,
+                       rs.sg_time_clear, rs.sg_time_gun,
                        r.sex, r.category
                 FROM result_segments rs
                 JOIN results r ON rs.result_id = r.id
@@ -899,15 +908,17 @@ class RaceLoader:
             by_code: Dict[str, list] = defaultdict(list)
             for row in rows:
                 by_code[row['segment_code']].append({
-                    'id':            row['result_id'],
-                    'seg_id':        row['seg_id'],
-                    'sg_time_clear': row['sg_time_clear'],
-                    'sex':           row['sex'],
-                    'category':      row['category'],
+                    'id':                    row['result_id'],
+                    'seg_id':                row['seg_id'],
+                    'sg_time_clear':         row['sg_time_clear'],
+                    'sg_time_gun_effective': row['sg_time_gun'] or row['sg_time_clear'],
+                    'sex':                   row['sex'],
+                    'category':              row['category'],
                 })
 
             batch = []
             for seg_code, segs in by_code.items():
+                # Net ranks
                 abs_ranks = self._assign_ranks(segs, 'sg_time_clear')
                 sex_ranks: Dict[str, Dict[int, int]] = {}
                 for sex_val in set(s['sex'] for s in segs if s.get('sex')):
@@ -919,19 +930,39 @@ class RaceLoader:
                     cat_ranks[cat_val] = self._assign_ranks(
                         [s for s in segs if s.get('category') == cat_val], 'sg_time_clear'
                     )
+
+                # Gun ranks (fallback to sg_time_clear where sg_time_gun is NULL)
+                abs_ranks_gun = self._assign_ranks(segs, 'sg_time_gun_effective')
+                sex_ranks_gun: Dict[str, Dict[int, int]] = {}
+                for sex_val in set(s['sex'] for s in segs if s.get('sex')):
+                    sex_ranks_gun[sex_val] = self._assign_ranks(
+                        [s for s in segs if s.get('sex') == sex_val], 'sg_time_gun_effective'
+                    )
+                cat_ranks_gun: Dict[str, Dict[int, int]] = {}
+                for cat_val in set(s['category'] for s in segs if s.get('category')):
+                    cat_ranks_gun[cat_val] = self._assign_ranks(
+                        [s for s in segs if s.get('category') == cat_val], 'sg_time_gun_effective'
+                    )
+
                 for seg in segs:
                     rid = seg['id']
+                    sex_val = seg.get('sex', '')
+                    cat_val = seg.get('category', '')
                     batch.append((
                         abs_ranks.get(rid),
-                        sex_ranks.get(seg.get('sex', ''), {}).get(rid),
-                        cat_ranks.get(seg.get('category', ''), {}).get(rid),
+                        sex_ranks.get(sex_val, {}).get(rid),
+                        cat_ranks.get(cat_val, {}).get(rid),
+                        abs_ranks_gun.get(rid),
+                        sex_ranks_gun.get(sex_val, {}).get(rid),
+                        cat_ranks_gun.get(cat_val, {}).get(rid),
                         seg['seg_id'],
                     ))
 
             if batch:
                 self.cursor.executemany(
                     """UPDATE result_segments
-                       SET sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s
+                       SET sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s,
+                           sg_rank_absolute_gun = %s, sg_rank_sex_gun = %s, sg_rank_category_gun = %s
                        WHERE id = %s""",
                     batch,
                 )
@@ -956,6 +987,9 @@ class RaceLoader:
         }
         for i in range(1, num_kt + 1):
             times[f'kt{i}'] = runner_data.get(f'times.real_kt{i}')
+
+        # Волновая задержка: время от выстрела до пересечения старта участником
+        gun_offset_ms = runner_data.get('times.official_:::start:::') or 0
 
         segments = []
         for i in range(len(point_names)):
@@ -982,13 +1016,26 @@ class RaceLoader:
                 sg_pace = compute_pace((segment_ms / 1000.0) / seg_dist)
                 segment_code = f"{from_point}-{to_point}"
 
+                # Официальное время: для первого сегмента (start-*) добавляем волновую задержку;
+                # для внутренних сегментов смещение сокращается, gun == net.
+                if from_point == 'start' and gun_offset_ms > 0:
+                    gun_ms = segment_ms + gun_offset_ms
+                    sg_time_gun = milliseconds_to_time(gun_ms)
+                    sg_pace_gun = compute_pace((gun_ms / 1000.0) / seg_dist)
+                else:
+                    sg_time_gun = segment_time
+                    sg_pace_gun = sg_pace
+
                 segments.append((
                     result_id,
                     self.event_id,
                     segment_code,
                     segment_time,
+                    sg_time_gun,
                     sg_pace,
-                    None, None, None,
+                    sg_pace_gun,
+                    None, None, None,   # sg_rank_absolute, sg_rank_sex, sg_rank_category
+                    None, None, None,   # sg_rank_absolute_gun, sg_rank_sex_gun, sg_rank_category_gun
                 ))
 
         return segments

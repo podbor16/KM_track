@@ -14,10 +14,15 @@ class Segment(BaseModel):
     event_id: Optional[int] = Field(None, description="ID мероприятия")
     segment_code: str = Field(..., description="Код сегмента (kt1, kt2, kt3, kt4, kt5)")
     sg_time_clear: Optional[str] = Field(None, description="Чистое время прохождения (HH:MM:SS)")
-    sg_pace_avg: Optional[str] = Field(None, description="Средний темп на сегменте (м:сс)")
-    sg_rank_absolute: Optional[int] = Field(None, description="Абсолютное место на сегменте")
-    sg_rank_sex: Optional[int] = Field(None, description="Место по полу на сегменте")
-    sg_rank_category: Optional[int] = Field(None, description="Место по категории на сегменте")
+    sg_time_gun: Optional[str] = Field(None, description="Официальное время прохождения (HH:MM:SS)")
+    sg_pace_avg: Optional[str] = Field(None, description="Средний темп на сегменте, чистое (м:сс)")
+    sg_pace_avg_gun: Optional[str] = Field(None, description="Средний темп на сегменте, официальное (м:сс)")
+    sg_rank_absolute: Optional[int] = Field(None, description="Абсолютное место на сегменте (чист.)")
+    sg_rank_sex: Optional[int] = Field(None, description="Место по полу на сегменте (чист.)")
+    sg_rank_category: Optional[int] = Field(None, description="Место по категории на сегменте (чист.)")
+    sg_rank_absolute_gun: Optional[int] = Field(None, description="Абсолютное место на сегменте (офиц.)")
+    sg_rank_sex_gun: Optional[int] = Field(None, description="Место по полу на сегменте (офиц.)")
+    sg_rank_category_gun: Optional[int] = Field(None, description="Место по категории на сегменте (офиц.)")
     
     class Config:
         json_schema_extra = {

@@ -891,17 +891,46 @@ async function createSegmentsRow(resultId, runnerName) {
 /**
  * Создаёт карточку с диаграммой для одного сегмента
  */
+function formatSegmentPace(paceStr) {
+    if (!paceStr || paceStr === '-') return '-';
+    // PT format: PT5M46S → "5:46 мин/км"
+    if (typeof paceStr === 'string' && paceStr.startsWith('PT')) {
+        const m = paceStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+        if (m) {
+            const min = (parseInt(m[1] || 0) * 60) + parseInt(m[2] || 0);
+            const sec = Math.floor(parseFloat(m[3] || 0));
+            return `${min}:${sec.toString().padStart(2, '0')} мин/км`;
+        }
+    }
+    // HH:MM:SS format: 00:05:46 → "5:46 мин/км"
+    const parts = paceStr.split(':');
+    if (parts.length === 3) {
+        const min = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        const sec = parseInt(parts[2]);
+        return `${min}:${sec.toString().padStart(2, '0')} мин/км`;
+    }
+    return paceStr;
+}
+
 function createSegmentCard(segment, allSegments, segmentIndex) {
     const card = document.createElement('div');
     card.classList.add('segment-card');
-    
+
     const segmentCode = segment.segment_code || '-';
     const useGun = timeMode === 'gun';
     const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
-    const pace = useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg || '-') : (segment.sg_pace_avg || '-');
-    const rankAbsolute = segment.sg_rank_absolute || '-';
-    const rankSex = segment.sg_rank_sex || '-';
-    const rankCategory = segment.sg_rank_category || '-';
+    const pace = formatSegmentPace(
+        useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg) : segment.sg_pace_avg
+    );
+    const rankAbsolute = useGun
+        ? (segment.sg_rank_absolute_gun || segment.sg_rank_absolute || '-')
+        : (segment.sg_rank_absolute || '-');
+    const rankSex = useGun
+        ? (segment.sg_rank_sex_gun || segment.sg_rank_sex || '-')
+        : (segment.sg_rank_sex || '-');
+    const rankCategory = useGun
+        ? (segment.sg_rank_category_gun || segment.sg_rank_category || '-')
+        : (segment.sg_rank_category || '-');
 
     const icon = getSegmentIcon(segmentCode);
     const name = formatSegmentName(segmentCode);
@@ -911,7 +940,9 @@ function createSegmentCard(segment, allSegments, segmentIndex) {
     let paceComparison = '';
     if (segmentIndex > 0) {
         const prevSegment = allSegments[segmentIndex - 1];
-        const prevPace = useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg;
+        const prevPace = formatSegmentPace(
+            useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg
+        );
         const comparison = compareSegments(pace, prevPace);
         if (comparison) {
             const color = comparison.improved ? '#27ae60' : '#e74c3c';
