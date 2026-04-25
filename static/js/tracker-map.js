@@ -227,11 +227,17 @@ function buildPopupContent(runner) {
     } else if (status.includes('running') || status.includes('started')) {
         const lastCP = getLastCheckpoint(runner);
         const lastCPTime = lastCP ? parseDuration(lastCP.time) : '-';
-        const lastCPPace = lastCP ? parseDuration(lastCP.pace) : '-';
 
+        // Интервальный темп последнего участка (не кумулятивный)
+        const lastSegPace = lastCP?.interval_pace
+            ? parseDuration(lastCP.interval_pace)
+            : (lastCP ? parseDuration(lastCP.pace) : '-');
+
+        // Прогноз финиша на основе темпа последнего участка
         let predictedFinish = '-';
-        if (lastCP && lastCP.pace) {
-            const paceSeconds = durationToSeconds(lastCP.pace);
+        const paceForPrediction = lastCP?.interval_pace || lastCP?.pace;
+        if (paceForPrediction) {
+            const paceSeconds = durationToSeconds(paceForPrediction);
             if (paceSeconds > 0 && eventDistance > 0) {
                 const predictedSeconds = (eventDistance * 1000) / (1000 / paceSeconds);
                 predictedFinish = secondsToTime(predictedSeconds);
@@ -253,7 +259,7 @@ function buildPopupContent(runner) {
                 <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
                 <div><strong>Последняя КТ:</strong> ${lastCP ? lastCP.name : '-'}</div>
                 <div><strong>Время на КТ:</strong> ${lastCPTime}</div>
-                <div><strong>Темп на КТ:</strong> ${lastCPPace}</div>
+                <div><strong>Темп участка:</strong> ${lastSegPace} мин/км</div>
                 ${currentPace}
                 <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
                 <div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">

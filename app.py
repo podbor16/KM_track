@@ -6,12 +6,13 @@ FastAPI приложение KM_track
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 import logging
+import time as _time
 from pathlib import Path
 
 from src.config import settings
@@ -110,6 +111,20 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
+
+_perf_logger = logging.getLogger("km_track.perf")
+
+@app.middleware("http")
+async def log_request_duration(request: Request, call_next):
+    start = _time.time()
+    response = await call_next(request)
+    duration = _time.time() - start
+    response.headers["X-Process-Time"] = f"{duration:.3f}"
+    if duration > 0.5:
+        _perf_logger.warning(f"SLOW {request.method} {request.url.path} {duration:.3f}s")
+    else:
+        _perf_logger.debug(f"{request.method} {request.url.path} {duration:.3f}s {response.status_code}")
+    return response
 
 # Подключение статических файлов
 if STATIC_DIR.exists():

@@ -128,20 +128,42 @@ def calculate_live_position(
         current_distance = min(speed_kmh * elapsed_hours, total_distance)
         return speed_kmh, current_distance, _kmh_to_pace_str(speed_kmh)
 
-    # --- После КТN: скорость = дистанция_КТN / время_КТN ---
+    # --- После КТN: скорость по последнему участку (при ≥2 КТ) или кумулятивная ---
     kt_dist = checkpoint_distances[last_kt_idx]
     kt_hours = _timedelta_to_hours(last_kt_td)
 
-    if kt_hours > 0 and kt_dist > 0:
-        speed_kmh = kt_dist / kt_hours
-        kt_seconds = last_kt_td.total_seconds() if isinstance(last_kt_td, timedelta) else 0
-        secs_per_km = kt_seconds / kt_dist if kt_dist > 0 else 360
-        mins = int(secs_per_km // 60)
-        secs = int(secs_per_km % 60)
-        pace_str = f"{mins}:{secs:02d}"
+    if last_kt_idx >= 2:
+        # Темп последнего участка: КТ_{N-1} → КТ_N (точнее кумулятивного)
+        prev_kt_td = result.get(f'time_clear_kt{last_kt_idx - 1}')
+        prev_kt_dist = checkpoint_distances[last_kt_idx - 1]
+        if isinstance(prev_kt_td, timedelta):
+            seg_dist = kt_dist - prev_kt_dist
+            seg_h = _timedelta_to_hours(last_kt_td) - _timedelta_to_hours(prev_kt_td)
+            if seg_dist > 0 and seg_h > 0:
+                speed_kmh = seg_dist / seg_h
+                seg_secs = (last_kt_td - prev_kt_td).total_seconds()
+                secs_per_km = seg_secs / seg_dist
+            else:
+                speed_kmh = kt_dist / kt_hours if kt_hours > 0 and kt_dist > 0 else DEFAULT_SPEED
+                kt_sec = last_kt_td.total_seconds() if isinstance(last_kt_td, timedelta) else 0
+                secs_per_km = kt_sec / kt_dist if kt_dist > 0 else 360
+        else:
+            speed_kmh = kt_dist / kt_hours if kt_hours > 0 and kt_dist > 0 else DEFAULT_SPEED
+            kt_sec = last_kt_td.total_seconds() if isinstance(last_kt_td, timedelta) else 0
+            secs_per_km = kt_sec / kt_dist if kt_dist > 0 else 360
     else:
-        speed_kmh = DEFAULT_SPEED
-        pace_str = DEFAULT_PACE
+        # Первая КТ: кумулятив = интервал
+        if kt_hours > 0 and kt_dist > 0:
+            speed_kmh = kt_dist / kt_hours
+            kt_sec = last_kt_td.total_seconds() if isinstance(last_kt_td, timedelta) else 0
+            secs_per_km = kt_sec / kt_dist if kt_dist > 0 else 360
+        else:
+            speed_kmh = DEFAULT_SPEED
+            secs_per_km = 360
+
+    mins = int(secs_per_km // 60)
+    secs = int(secs_per_km % 60)
+    pace_str = f"{mins}:{secs:02d}"
 
     kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
     if kt_wall_dt > now:

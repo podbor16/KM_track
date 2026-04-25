@@ -241,17 +241,12 @@ class TestAfterKT2:
         assert dist == pytest.approx(7.0 + 10.0 / 60, rel=0.05)
 
     def test_kt1_ignored_when_kt2_present(self):
-        """Если KT2 пройдена, скорость считается по KT2, а не по KT1."""
-        result = _make_result(
-            time_clear_start=timedelta(hours=20),
-            time_clear_kt1=timedelta(minutes=18),  # 3.0/0.3 = 10.0 км/ч
-            time_clear_kt2=timedelta(minutes=42),  # 7.0/0.7 = 10.0 км/ч (совпадает)
-        )
-        # Изменим kt1 время, чтобы скорости отличались
+        """Если KT2 пройдена, скорость считается по интервалу KT1→KT2, а не кумулятивно от старта."""
+        # KT1 за 30 мин (медленный), KT2 за 42 мин суммарно
         result_kt1_slow = _make_result(
             time_clear_start=timedelta(hours=20),
-            time_clear_kt1=timedelta(minutes=30),  # 3.0/0.5 = 6.0 км/ч
-            time_clear_kt2=timedelta(minutes=42),  # 7.0/0.7 = 10.0 км/ч
+            time_clear_kt1=timedelta(minutes=30),  # 3.0/0.5 = 6.0 км/ч кумулятив
+            time_clear_kt2=timedelta(minutes=42),  # интервал: 4 км за 12 мин = 20.0 км/ч
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=43)
         with patch('src.tracker.services.runners_service.datetime') as mock_dt:
@@ -260,8 +255,9 @@ class TestAfterKT2:
             mock_dt.min = datetime.min
             speed, _, _ = calculate_live_position(result_kt1_slow, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
 
-        # Должен использовать KT2: 7.0 / (42/60) = 10.0 км/ч, не KT1: 3.0 / 0.5 = 6.0
-        assert speed == pytest.approx(10.0, rel=0.05)
+        # Интервальная скорость KT1→KT2: 4.0 км / (12/60 ч) = 20.0 км/ч
+        # (не KT1-кумулятив 6.0, не KT2-кумулятив 10.0)
+        assert speed == pytest.approx(20.0, rel=0.05)
 
     def test_distance_capped_at_finish_after_kt2(self):
         """Дистанция не превышает финиш даже после KT2."""

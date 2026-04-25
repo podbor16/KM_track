@@ -29,6 +29,10 @@ _results_cache: dict = {}
 _results_cache_ts: dict = {}
 RESULTS_CACHE_TTL = 60  # секунд — должен быть > RESPONSE_CACHE_TTL (30s)
 
+# Постоянные кеши для данных, не меняющихся в ходе мероприятия
+_event_info_cache: dict = {}   # get_event_info_by_id — структура события (имя, дистанция, КТ)
+_prev_year_cache: dict = {}    # get_prev_year_results — финиши прошлого года
+
 
 def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     """
@@ -389,6 +393,9 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
         Словарь с полями id, event_name, event_distance, event_date, checkpoint_distances
         или пустой словарь если не найдено.
     """
+    if event_id in _event_info_cache:
+        return _event_info_cache[event_id]
+
     connection = get_pooled_connection()
     if not connection:
         return {}
@@ -402,7 +409,9 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
         )
         row = cursor.fetchone()
         cursor.close()
-        return row or {}
+        result = dict(row) if row else {}
+        _event_info_cache[event_id] = result
+        return result
     except Exception as e:
         logger.error(f"❌ get_event_info_by_id error: {e}")
         return {}
@@ -415,6 +424,10 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
 
 def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Dict[str, Any]]:
     """Результаты финишировавших в предыдущем году для расчёта исторического темпа."""
+    _key = f"{event_name}|{event_distance}|{year}"
+    if _key in _prev_year_cache:
+        return _prev_year_cache[_key]
+
     connection = get_pooled_connection()
     if not connection:
         return []
@@ -452,7 +465,10 @@ def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Di
             )
             rows = cursor.fetchall()
         cursor.close()
-        return [dict(r) for r in rows] if rows else []
+        result = [dict(r) for r in rows] if rows else []
+        if result:  # не кешируем пустой список (мероприятие могло ещё не начаться)
+            _prev_year_cache[_key] = result
+        return result
     except Exception as e:
         logger.error(f"get_prev_year_results error: {e}")
         return []

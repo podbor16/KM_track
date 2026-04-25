@@ -519,21 +519,37 @@ class RaceLoader:
                     self.load_existing_results()
                     last_cache_reload = time.time()
 
+                t_fetch = time.time()
                 runners = self.load_race_data()
+                fetch_t = time.time() - t_fetch
+
                 if not runners:
                     self.logger.warning("⚠️ Ошибка получения данных, повторим...")
                     time.sleep(interval)
                     continue
 
+                t_calc = time.time()
                 updated_r, updated_s = self._update_existing(runners)
+                calc_t = time.time() - t_calc
+
+                t_rank = time.time()
                 self._recalculate_ranks()
                 self._recalculate_segment_ranks()
+                rank_t = time.time() - t_rank
 
                 cycle_time = time.time() - cycle_start
                 if updated_r > 0:
-                    self.logger.info(f"📊 Цикл #{self.update_cycles}: {updated_r} results + {updated_s} segments ({cycle_time:.2f}с)")
+                    self.logger.info(
+                        f"Цикл #{self.update_cycles}: "
+                        f"fetch={fetch_t:.2f}s calc={calc_t:.2f}s ranks={rank_t:.2f}s "
+                        f"total={cycle_time:.2f}s | updated={updated_r}r/{updated_s}s"
+                    )
                 else:
-                    self.logger.debug(f"📊 Цикл #{self.update_cycles}: 0 изменений ({cycle_time:.2f}с)")
+                    self.logger.debug(
+                        f"Цикл #{self.update_cycles}: "
+                        f"fetch={fetch_t:.2f}s calc={calc_t:.2f}s ranks={rank_t:.2f}s "
+                        f"total={cycle_time:.2f}s | 0 изменений"
+                    )
 
                 sleep_time = max(0, interval - cycle_time)
                 if sleep_time > 0:

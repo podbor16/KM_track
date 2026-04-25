@@ -394,15 +394,19 @@ async function loadAllRunners() {
     try {
         updateStatus('Загрузка участников...');
 
+        const _t0 = performance.now();
         const _params = new URLSearchParams({ v: Date.now() });
         if (CONFIG.EVENT_ID != null) _params.set('event_id', CONFIG.EVENT_ID);
         else if (CONFIG.EVENT_DB_NAME) _params.set('event_name', CONFIG.EVENT_DB_NAME);
         else if (CONFIG.EVENT_NAME)    _params.set('event_name', CONFIG.EVENT_NAME);
         const response = await fetch(`${CONFIG.API_BASE}/event-results?${_params}`);
+        const _fetchMs = performance.now() - _t0;
 
         if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
 
         const data = await response.json();
+        const _totalMs = performance.now() - _t0;
+        console.debug(`[perf] /api/event-results fetch=${_fetchMs.toFixed(0)}ms parse=${(_totalMs - _fetchMs).toFixed(0)}ms total=${_totalMs.toFixed(0)}ms runners=${data.results?.length ?? 0}`);
 
         if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
         if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
