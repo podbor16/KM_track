@@ -5,7 +5,7 @@ let filteredRunners = [];
 let sortState = { column: 'time', direction: 'asc' }; // Дефолт: по официальному времени
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
-let timeMode = 'net'; // 'net' = чистое, 'gun' = официальное
+let timeMode = 'gun'; // 'net' = чистое, 'gun' = официальное
 let activeSegmentCode = null;
 let segmentRankingsCache = {};  // { segmentCode: [rows] }
 let activeSegmentEventId = null;
@@ -575,6 +575,9 @@ function sortTable(columnName) {
 function renderResultsTable(runners) {
     const tbody = document.getElementById('resultsTableBody');
     tbody.innerHTML = '';
+    // Синхронизируем заголовок колонки времени
+    const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
+    if (th) th.textContent = timeMode === 'gun' ? 'Офиц. время' : 'Чистое время';
     
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
