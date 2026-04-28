@@ -27,8 +27,8 @@ CAT_SPEEDS_TTL = 600
 # Кэш финального ответа build_event_results (включает Python-обработку 1000+ участников)
 _response_cache: dict = {}
 _response_cache_ts: dict = {}
-RESPONSE_CACHE_TTL = 30    # секунд до первого перестроения
-STALE_TTL = 300            # секунд до принудительного синхронного перестроения (stale-while-revalidate)
+RESPONSE_CACHE_TTL = 5     # секунд до первого перестроения (live-режим: данные КТ должны быть свежими)
+STALE_TTL = 30             # секунд до принудительного синхронного перестроения
 
 # Singleflight: один поток пересчитывает при холодном кеше, остальные ждут
 _build_locks: dict = {}

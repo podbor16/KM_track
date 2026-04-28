@@ -27,10 +27,12 @@ logger = logging.getLogger(__name__)
 
 _results_cache: dict = {}
 _results_cache_ts: dict = {}
-RESULTS_CACHE_TTL = 60  # секунд — должен быть > RESPONSE_CACHE_TTL (30s)
+RESULTS_CACHE_TTL = 5  # секунд — короткий TTL для live-данных КТ
 
-# Постоянные кеши для данных, не меняющихся в ходе мероприятия
-_event_info_cache: dict = {}   # get_event_info_by_id — структура события (имя, дистанция, КТ)
+# Кеш данных события (gun_time и т.д.) — с TTL, чтобы изменения в events отражались быстро
+_event_info_cache: dict = {}
+_event_info_cache_ts: dict = {}
+EVENT_INFO_CACHE_TTL = 5  # секунд
 _prev_year_cache: dict = {}    # get_prev_year_results — финиши прошлого года
 
 
@@ -393,7 +395,8 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
         Словарь с полями id, event_name, event_distance, event_date, checkpoint_distances
         или пустой словарь если не найдено.
     """
-    if event_id in _event_info_cache:
+    _now = time.time()
+    if event_id in _event_info_cache and (_now - _event_info_cache_ts.get(event_id, 0)) < EVENT_INFO_CACHE_TTL:
         return _event_info_cache[event_id]
 
     connection = get_pooled_connection()
@@ -411,6 +414,7 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
         cursor.close()
         result = dict(row) if row else {}
         _event_info_cache[event_id] = result
+        _event_info_cache_ts[event_id] = _now
         return result
     except Exception as e:
         logger.error(f"❌ get_event_info_by_id error: {e}")
