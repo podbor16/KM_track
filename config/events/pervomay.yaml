@@ -1,0 +1,46 @@
+name: "Первомайский полумарафон"
+display_name: "Первомайский полумарафон"
+year: 2026
+code: "pervomay"
+is_active: true              # ← АКТИВНЫЙ забег: true у одного, false у остальных
+start_lat: 56.0061150             # ← заполнить перед стартом
+start_lon: 92.8682830               # ← заполнить перед стартом
+gun_time: null                # ← заполнить перед стартом (разные для дистанций?)
+description: "Первомайский полумарафон | Дистанции: 5 км, 21.1 км"
+
+distances:
+  - distance: "21.1 км"
+    distance_km: 21.1
+    db_event_id: 143         # ← заполнить перед стартом
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: [0, 3.0, 5.3, 8.3, 10.6, 13.6, 15.9, 18.9, 21.1]
+    checkpoints: []           # ← заполнить перед стартом
+    gpx_file: "static/map/2026/pervomay_21.gpx"            # ← заполнить перед стартом
+    event_date: "2026-05-01"         # ← заполнить перед стартом
+    route:
+      laps: 4
+      total_km: 21.1
+    copernico:
+      race_id: null           # ← заполнить перед стартом
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "21.1 км"
+
+  - distance: "5 км"
+    distance_km: 5.0
+    db_event_id: 142         # ← заполнить перед стартом
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: [0, 3.0, 5.0]
+    checkpoints: []           # ← заполнить перед стартом
+    gpx_file: "static/map/2026/pervomay_5.gpx"            # ← заполнить перед стартом
+    event_date: "2026-05-01"          # ← заполнить перед стартом
+    route:
+      laps: 1
+      total_km: 5.0
+    copernico:
+      race_id: null           # ← отдельный race_id для дистанции 5 км
+      login: "podbor250718@gmail.com"
+      preset: "km_analytics"
+      event: "5 км"

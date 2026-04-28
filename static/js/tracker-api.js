@@ -14,7 +14,8 @@ const CONFIG = {
     KT1_COORDS: [55.9988248, 92.8350464],
     GPX_FILE: '/static/map/2026/night_run.gpx',
     START_LAT: 56.0075,
-    START_LON: 92.7246
+    START_LON: 92.7246,
+    LAPS: 1
 };
 
 // Глобальные переменные (доступны всем модулям)
@@ -47,6 +48,8 @@ function _saveMaxDist(rId, dist) {
 
 let serverTimeUnix = Date.now();
 let raceGunUnixMs = null;
+
+const LAP_COLORS = ['#2196F3', '#4CAF50', '#FF9800', '#EE2D62'];
 
 const STATUS_COLORS = {
     'notstarted': '#9E9E9E',
@@ -100,10 +103,13 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-function getStatusColor(status) {
+function getStatusColor(status, lap = 0) {
     const s = (status || '').toLowerCase();
     if (s.includes('finish'))  return STATUS_COLORS.finished;
-    if (s.includes('running') || s.includes('started')) return STATUS_COLORS.running;
+    if (s.includes('running') || s.includes('started')) {
+        if (lap > 0 && CONFIG.LAPS > 1) return LAP_COLORS[(lap - 1) % LAP_COLORS.length];
+        return STATUS_COLORS.running;
+    }
     return STATUS_COLORS.notstarted;
 }
 
@@ -121,7 +127,9 @@ function getLastCheckpoint(runner) {
         { code: 'kt2', name: 'КТ2', data: runner.checkpoints.kt2 },
         { code: 'kt3', name: 'КТ3', data: runner.checkpoints.kt3 },
         { code: 'kt4', name: 'КТ4', data: runner.checkpoints.kt4 },
-        { code: 'kt5', name: 'КТ5', data: runner.checkpoints.kt5 }
+        { code: 'kt5', name: 'КТ5', data: runner.checkpoints.kt5 },
+        { code: 'kt6', name: 'КТ6', data: runner.checkpoints.kt6 },
+        { code: 'kt7', name: 'КТ7', data: runner.checkpoints.kt7 },
     ];
 
     let lastCheckpoint = null;
@@ -283,6 +291,7 @@ async function init() {
             if (defaultDist.gpx_file) CONFIG.GPX_FILE = '/' + defaultDist.gpx_file;
             CONFIG.EVENT_ID = defaultDist.db_event_id ?? null;
             CONFIG.CURRENT_DISTANCE = defaultDist.distance || '';
+            CONFIG.LAPS = defaultDist.laps ?? 1;
         } else {
             // Fallback: одиночное событие без массива distances
             if (cfg.gpx_file) CONFIG.GPX_FILE = '/' + cfg.gpx_file;
@@ -301,6 +310,7 @@ async function init() {
 
     loadSelectedFromStorage();
     await initMap();
+    initLapLegend();
     await loadAllRunners();
 
     if (selectedRunnerIds.size > 0) {
@@ -455,6 +465,7 @@ async function loadAllRunners() {
                 pace_source:          runner.pace_source || '',
                 prev_year:            runner.prev_year || null,
                 time_clear_start_s:   runner.time_clear_start_s ?? null,
+                lap:                  runner.lap ?? 1,
             };
         });
 

@@ -44,6 +44,7 @@ class DistanceInfo(BaseModel):
     gpx_file: Optional[str] = Field(None, description="Путь к GPX-файлу")
     event_date: Optional[str] = Field(None, description="Дата проведения YYYY-MM-DD")
     route_type: str = Field("loop", description="Тип маршрута (shuttle/loop)")
+    laps: int = Field(1, description="Количество кругов (1 для некруговых)")
 
 
 class CurrentEventResponse(BaseModel):

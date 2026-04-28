@@ -795,6 +795,7 @@ def get_event_segment_codes(event_id: int) -> List[str]:
             CASE SUBSTRING_INDEX(segment_code, '-', 1)
                 WHEN 'start' THEN 0 WHEN 'kt1' THEN 1 WHEN 'kt2' THEN 2
                 WHEN 'kt3'   THEN 3 WHEN 'kt4' THEN 4 WHEN 'kt5' THEN 5
+                WHEN 'kt6'   THEN 6 WHEN 'kt7' THEN 7
                 ELSE 99 END AS ord
         FROM `result_segments`
         WHERE event_id = %s AND sg_time_clear IS NOT NULL

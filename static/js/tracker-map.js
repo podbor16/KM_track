@@ -138,7 +138,7 @@ function initializeSelectedRunnersMarkers() {
 }
 
 function buildMarkerIcon(runner) {
-    const color = getStatusColor(runner.status);
+    const color = getStatusColor(runner.status, runner.lap ?? 0);
     const runnerId = String(runner.id);
     const fontSize = String(runner.start_number).length >= 3 ? '11px' : '13px';
 
@@ -426,4 +426,25 @@ function centerMap() {
     if (routeLayer && map) {
         map.fitBounds(routeLayer.getBounds(), { padding: [10, 10] });
     }
+}
+
+let _lapLegendControl = null;
+
+function initLapLegend() {
+    if (CONFIG.LAPS <= 1 || !map) return;
+
+    if (_lapLegendControl) {
+        map.removeControl(_lapLegendControl);
+        _lapLegendControl = null;
+    }
+
+    _lapLegendControl = L.control({ position: 'bottomleft' });
+    _lapLegendControl.onAdd = () => {
+        const div = L.DomUtil.create('div', 'lap-legend');
+        div.innerHTML = LAP_COLORS.slice(0, CONFIG.LAPS).map((color, i) =>
+            `<span><span class="lap-dot" style="background:${color}"></span>Круг ${i + 1}</span>`
+        ).join('');
+        return div;
+    };
+    _lapLegendControl.addTo(map);
 }

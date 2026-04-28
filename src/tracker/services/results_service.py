@@ -81,6 +81,16 @@ def _segment_pace(curr_td, prev_td, curr_dist: float, prev_dist: float) -> Optio
     return f"{m}:{s:02d}"
 
 
+def _calc_lap(current_dist: float, num_laps: int, checkpoint_distances: list) -> int:
+    if num_laps <= 1 or not checkpoint_distances:
+        return 1
+    total_km = checkpoint_distances[-1]
+    if total_km <= 0:
+        return 1
+    lap_km = total_km / num_laps
+    return min(num_laps, int(current_dist / lap_km) + 1)
+
+
 def _do_build(
     event_id: Optional[int],
     event_name: Optional[str],
@@ -163,6 +173,14 @@ def _do_build(
             checkpoint_distances = [0.0, total_km]
 
     category_speeds = _get_cached_category_speeds(ev_name, ev_distance, ev_year)
+
+    # Количество кругов из YAML (для цветовой индикации круга на карте)
+    num_laps = 1
+    _ev_cfg = get_event_by_name(events, ev_name)
+    if _ev_cfg:
+        _tracked_d = _ev_cfg.get_tracked()
+        if _tracked_d:
+            num_laps = _tracked_d.route.laps or 1
 
     # --- Исторический кеш (предыдущий год) ---
     _t_hist = time.time()
@@ -307,12 +325,31 @@ def _do_build(
                         checkpoint_distances[4] if len(checkpoint_distances) > 4 else 0.0,
                     ),
                 },
+                'kt6': {
+                    'time': runner.get('time_clear_kt6'),
+                    'pace': runner.get('pace_avg_kt6') or _kt_pace(runner.get('time_clear_kt6'), checkpoint_distances, 6),
+                    'interval_pace': _segment_pace(
+                        runner.get('time_clear_kt6'), runner.get('time_clear_kt5'),
+                        checkpoint_distances[6] if len(checkpoint_distances) > 6 else 0.0,
+                        checkpoint_distances[5] if len(checkpoint_distances) > 5 else 0.0,
+                    ),
+                },
+                'kt7': {
+                    'time': runner.get('time_clear_kt7'),
+                    'pace': runner.get('pace_avg_kt7') or _kt_pace(runner.get('time_clear_kt7'), checkpoint_distances, 7),
+                    'interval_pace': _segment_pace(
+                        runner.get('time_clear_kt7'), runner.get('time_clear_kt6'),
+                        checkpoint_distances[7] if len(checkpoint_distances) > 7 else 0.0,
+                        checkpoint_distances[6] if len(checkpoint_distances) > 6 else 0.0,
+                    ),
+                },
             },
             'speed': round(speed_kmh, 2),
             'current_distance': round(current_dist, 3),
             'current_pace': pace_str,
             'pace_source': pace_source,
             'prev_year': hist_data['prev_year'],
+            'lap': _calc_lap(current_dist, num_laps, checkpoint_distances),
             'time_clear_start_s': (
                 int(runner.get('time_clear_start').total_seconds())
                 if isinstance(runner.get('time_clear_start'), _td) else None

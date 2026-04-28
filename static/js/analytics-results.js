@@ -710,11 +710,13 @@ function formatSegmentName(code) {
     
     const names = {
         'start': 'Старт',
-        'kt1': 'Разворот',
+        'kt1': 'КТ1',
         'kt2': 'КТ2',
-        'kt3': 'КT3',
+        'kt3': 'КТ3',
         'kt4': 'КТ4',
         'kt5': 'КТ5',
+        'kt6': 'КТ6',
+        'kt7': 'КТ7',
         'finish': 'Финиш'
     };
     
@@ -729,11 +731,13 @@ function formatSegmentName(code) {
 function getSegmentIcon(code) {
     const icons = {
         'start': '🏁',
-        'kt1': '🔄',
+        'kt1': '🏃',
         'kt2': '🏃',
         'kt3': '🏃',
         'kt4': '🏃',
         'kt5': '🏃',
+        'kt6': '🏃',
+        'kt7': '🏃',
         'finish': '🎯'
     };
     

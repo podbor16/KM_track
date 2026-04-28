@@ -57,6 +57,7 @@ async def get_current_event() -> CurrentEventResponse:
             gpx_file=d.gpx_file,
             event_date=d.event_date,
             route_type='shuttle' if d.route.laps > 1 else 'loop',
+            laps=d.route.laps,
         )
         for d in tracked_distances
     ]

@@ -412,9 +412,10 @@ class RaceLoader:
                         race_status, time_gun_start, time_clear_start, time_gun_finish, 
                         time_clear_finish, rank_absolute, rank_sex, rank_category, 
                         finish_pace_avg_gun, finish_pace_avg_clean,
-                        time_clear_kt1, time_clear_kt2, time_clear_kt3, 
-                        time_clear_kt4, time_clear_kt5, pace_avg_kt1, pace_avg_kt2, 
-                        pace_avg_kt3, pace_avg_kt4, pace_avg_kt5
+                        time_clear_kt1, time_clear_kt2, time_clear_kt3,
+                        time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7,
+                        pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5,
+                        pace_avg_kt6, pace_avg_kt7
                 FROM results WHERE event_id = %s""",
                 (self.event_id,)
             )
@@ -423,7 +424,7 @@ class RaceLoader:
                 row_dict = dict(row)
                 for field in ['time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish']:
                     row_dict[field] = normalize_time(row_dict.get(field))
-                for kt in ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5']:
+                for kt in ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7']:
                     if row_dict.get(kt) is not None:
                         row_dict[kt] = normalize_time(row_dict[kt])
 
@@ -613,15 +614,17 @@ class RaceLoader:
             time_clear_kt3 = milliseconds_to_time(runner.get('times.real_kt3'))
             time_clear_kt4 = milliseconds_to_time(runner.get('times.real_kt4'))
             time_clear_kt5 = milliseconds_to_time(runner.get('times.real_kt5'))
+            time_clear_kt6 = milliseconds_to_time(runner.get('times.real_kt6'))
+            time_clear_kt7 = milliseconds_to_time(runner.get('times.real_kt7'))
 
             # Темпы КТ — вычисляются из чистого времени и дистанции до КТ
-            kt_clear_times = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5]
+            kt_clear_times = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7]
             pace_avg_kts = []
             for i, kt_time in enumerate(kt_clear_times):
                 cp_idx = i + 1
                 dist = self.checkpoint_distances[cp_idx] if self.checkpoint_distances and cp_idx < len(self.checkpoint_distances) else None
                 pace_avg_kts.append(_seconds_to_pace(_time_str_to_seconds(kt_time), dist))
-            pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5 = pace_avg_kts
+            pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5, pace_avg_kt6, pace_avg_kt7 = pace_avg_kts
 
             # === Сравнение всех полей ===
             changed_fields = []
@@ -654,8 +657,8 @@ class RaceLoader:
                     surname, name, birthdate, sex, category, race_status,
                     time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
                     finish_pace_avg_gun, finish_pace_avg_clean,
-                    time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5,
-                    pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5,
+                    time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7,
+                    pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5, pace_avg_kt6, pace_avg_kt7,
                     result_id
                 ))
 
@@ -683,6 +686,8 @@ class RaceLoader:
                 'time_clear_kt3': time_clear_kt3,
                 'time_clear_kt4': time_clear_kt4,
                 'time_clear_kt5': time_clear_kt5,
+                'time_clear_kt6': time_clear_kt6,
+                'time_clear_kt7': time_clear_kt7,
             }
 
         # Выполнить bulk UPDATE results
@@ -696,9 +701,9 @@ class RaceLoader:
                         time_gun_finish = %s, time_clear_finish = %s,
                         finish_pace_avg_gun = %s, finish_pace_avg_clean = %s,
                         time_clear_kt1 = %s, time_clear_kt2 = %s, time_clear_kt3 = %s,
-                        time_clear_kt4 = %s, time_clear_kt5 = %s,
+                        time_clear_kt4 = %s, time_clear_kt5 = %s, time_clear_kt6 = %s, time_clear_kt7 = %s,
                         pace_avg_kt1 = %s, pace_avg_kt2 = %s, pace_avg_kt3 = %s,
-                        pace_avg_kt4 = %s, pace_avg_kt5 = %s
+                        pace_avg_kt4 = %s, pace_avg_kt5 = %s, pace_avg_kt6 = %s, pace_avg_kt7 = %s
                     WHERE id = %s
                 """
                 self.cursor.executemany(update_query, results_batch)
@@ -843,7 +848,7 @@ class RaceLoader:
             self.logger.debug(f"🏆 Места пересчитаны: {len(rank_batch)} финишировавших")
 
             # --- Места на КТ ---
-            kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5']
+            kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7']
             for kt in kt_keys:
                 time_col = f'time_clear_{kt}'
                 self.cursor.execute(

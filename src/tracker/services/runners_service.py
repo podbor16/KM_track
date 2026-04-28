@@ -99,7 +99,7 @@ def calculate_live_position(
         return DEFAULT_SPEED, 0.0, DEFAULT_PACE
 
     # --- Определяем последнюю пройденную КТ ---
-    kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5']
+    kt_keys = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7']
     last_kt_idx = 0
     last_kt_td = None
 
