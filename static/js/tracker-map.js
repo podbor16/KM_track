@@ -289,7 +289,7 @@ function createRunnerMarker(runner) {
     const initialPosition = routeCoordinates[0] || [CONFIG.START_LAT, CONFIG.START_LON];
     const marker = L.marker(initialPosition, { icon: buildMarkerIcon(runner) }).addTo(map);
 
-    marker.bindPopup(buildPopupContent(runner), { minWidth: 200 });
+    marker.bindPopup(buildPopupContent(runner), { minWidth: 200, autopan: false });
     marker.on('click', e => e.target.openPopup());
     marker.on('popupopen',  () => activePopups.set(runnerId, true));
     marker.on('popupclose', () => activePopups.delete(runnerId));

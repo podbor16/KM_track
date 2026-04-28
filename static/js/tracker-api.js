@@ -351,7 +351,8 @@ function renderDistanceSwitcher(distances, activeDist) {
                 data-event-id="${d.db_event_id ?? ''}"
                 data-gpx="${d.gpx_file ? '/' + d.gpx_file : ''}"
                 data-route-type="${d.route_type || 'loop'}"
-                data-label="${d.distance}">
+                data-label="${d.distance}"
+                data-laps="${d.laps ?? 1}">
             ${d.distance}
         </button>
     `).join('');
@@ -364,16 +365,18 @@ function renderDistanceSwitcher(distances, activeDist) {
             const gpx = btn.dataset.gpx;
             const routeType = btn.dataset.routeType;
             const label = btn.dataset.label || '';
+            const laps = parseInt(btn.dataset.laps) || 1;
             container.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            switchDistance(eventId, gpx, routeType, label);
+            switchDistance(eventId, gpx, routeType, label, laps);
         });
     });
 }
 
-async function switchDistance(eventId, gpxFile, routeType, label) {
+async function switchDistance(eventId, gpxFile, routeType, label, laps = 1) {
     CONFIG.EVENT_ID = eventId;
     CONFIG.GPX_FILE = gpxFile;
+    CONFIG.LAPS = laps;
     if (label) CONFIG.CURRENT_DISTANCE = label;
     updateEventTitle();
 
@@ -391,6 +394,7 @@ async function switchDistance(eventId, gpxFile, routeType, label) {
     updateStatus('Переключение дистанции...');
 
     await reloadRoute(gpxFile);
+    initLapLegend();
     await loadAllRunners();
     await loadAnalytics();
 }

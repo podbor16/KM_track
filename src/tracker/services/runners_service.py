@@ -109,8 +109,6 @@ def calculate_live_position(
         if kt_time is not None and cp_idx < len(checkpoint_distances):
             last_kt_idx = cp_idx
             last_kt_td = kt_time
-        else:
-            break
 
     # --- До первой КТ: исторический или категорийный темп ---
     if last_kt_idx == 0:
