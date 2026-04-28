@@ -330,19 +330,21 @@ function animateRunnerFrame() {
     const now = Date.now();
     const totalDistKm = eventDistance || 5.0;
     const maxIdx = Math.max(0, routeCoordinates.length - 1);
+    // Если время выстрела ещё не наступило — все маркеры стоят на старте
+    const raceStarted = !raceGunUnixMs || now >= raceGunUnixMs;
 
     Object.entries(runnerAnimations).forEach(([runnerId, anim]) => {
         const marker = runnerMarkers[runnerId];
         if (!marker || !routeCoordinates.length) return;
 
         let distKm = 0;
-        if (anim.status === 'finished') {
+        if (raceStarted && anim.status === 'finished') {
             distKm = totalDistKm;
-        } else if (anim.status === 'running') {
+        } else if (raceStarted && anim.status === 'running') {
             const elapsedH = Math.max(0, now - (anim.baseTimeMs || now)) / 3_600_000;
             distKm = Math.min(totalDistKm, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH);
         }
-        // notstarted: distKm = 0
+        // notstarted или race not started: distKm = 0
 
         const idx = Math.min(maxIdx, Math.round(maxIdx * distKm / totalDistKm));
         const coord = routeCoordinates[idx];

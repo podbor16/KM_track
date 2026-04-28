@@ -81,14 +81,23 @@ def _segment_pace(curr_td, prev_td, curr_dist: float, prev_dist: float) -> Optio
     return f"{m}:{s:02d}"
 
 
-def _calc_lap(current_dist: float, num_laps: int, checkpoint_distances: list) -> int:
-    if num_laps <= 1 or not checkpoint_distances:
+def _calc_lap_from_kts(runner: dict, num_laps: int) -> int:
+    """
+    Круг по наличию парных KT-времён:
+      kt1+kt2 → круг 2; kt3+kt4 → круг 3; kt5+kt6 → круг 4.
+    Если нечётный KT есть, а чётного нет → ещё идёт предыдущий круг.
+    """
+    if num_laps <= 1:
         return 1
-    total_km = checkpoint_distances[-1]
-    if total_km <= 0:
-        return 1
-    lap_km = total_km / num_laps
-    return min(num_laps, int(current_dist / lap_km) + 1)
+    def has(n):
+        return runner.get(f'time_clear_kt{n}') is not None
+    if has(5) and has(6):
+        return 4
+    if has(3) and has(4):
+        return 3
+    if has(1) and has(2):
+        return 2
+    return 1
 
 
 def _do_build(
@@ -349,7 +358,7 @@ def _do_build(
             'current_pace': pace_str,
             'pace_source': pace_source,
             'prev_year': hist_data['prev_year'],
-            'lap': _calc_lap(current_dist, num_laps, checkpoint_distances),
+            'lap': _calc_lap_from_kts(runner, num_laps),
             'time_clear_start_s': (
                 int(runner.get('time_clear_start').total_seconds())
                 if isinstance(runner.get('time_clear_start'), _td) else None
