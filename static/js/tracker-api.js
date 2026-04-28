@@ -34,18 +34,6 @@ let eventDistance = 0;
 let runnerAnimations = {};
 let animationFrameId = null;
 
-const runnerMaxDistance = {};
-const _maxDistKeyPrefix = () => `km_max_dist_${CONFIG.EVENT_ID || CONFIG.EVENT_NAME || 'ev'}_`;
-
-function _loadMaxDist(rId) {
-    try { return parseFloat(sessionStorage.getItem(_maxDistKeyPrefix() + rId)) || 0; }
-    catch { return 0; }
-}
-function _saveMaxDist(rId, dist) {
-    try { sessionStorage.setItem(_maxDistKeyPrefix() + rId, String(dist)); }
-    catch {}
-}
-
 let serverTimeUnix = Date.now();
 let raceGunUnixMs = null;
 
@@ -644,23 +632,25 @@ function renderAnalyticsHTML(stats, results) {
 function startAutoUpdate() {
     let isLoading = false;
 
-    setInterval(() => {
-        if (!isLoading) {
-            isLoading = true;
-            loadAllRunners()
-                .catch(error => console.error('❌ Ошибка при загрузке данных:', error))
-                .finally(() => { isLoading = false; });
-        }
-
-        selectedRunnerIds.forEach(runnerId => {
-            const runner = allRunners.find(r => String(r.id) === String(runnerId));
-            if (runner) updateRunnerMarkerPosition(runner);
-        });
-
+    setInterval(async () => {
         updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
         updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
+        if (isLoading) return;
+        isLoading = true;
+        try {
+            await loadAllRunners();
+            // Обновляем состояние анимации после получения свежих данных
+            selectedRunnerIds.forEach(runnerId => {
+                const runner = allRunners.find(r => String(r.id) === String(runnerId));
+                if (runner) updateRunnerMarkerPosition(runner);
+            });
+        } catch (error) {
+            console.error('❌ Ошибка при загрузке данных:', error);
+        } finally {
+            isLoading = false;
+        }
     }, CONFIG.UPDATE_INTERVAL);
 }
 

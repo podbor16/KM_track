@@ -295,81 +295,32 @@ function createRunnerMarker(runner) {
     marker.on('popupclose', () => activePopups.delete(runnerId));
 
     runnerMarkers[runnerId] = marker;
-}
-
-function calculateCurrentDistanceKm(runner) {
-    const rId = String(runner.id);
-    const elapsedSinceApiH = (Date.now() - serverTimeUnix) / 3_600_000;
-    const speed = (runner.speed > 0) ? runner.speed : 10.0;
-
-    const apiExtrapolated = Math.max(0, (runner.current_distance || 0) + speed * elapsedSinceApiH);
-
-    let storedMax = _loadMaxDist(rId);
-    const serverDist = runner.current_distance || 0;
-    if (storedMax > 0 && serverDist > 0 && storedMax > serverDist * 1.1) {
-        storedMax = 0;
-        try { sessionStorage.removeItem(_maxDistKeyPrefix() + rId); } catch {}
-    }
-
-    const dist = Math.max(runnerMaxDistance[rId] || 0, storedMax, apiExtrapolated);
-    runnerMaxDistance[rId] = dist;
-    _saveMaxDist(rId, dist);
-    return dist;
+    updateRunnerMarkerPosition(runner);  // инициализировать anim сразу
 }
 
 function updateRunnerMarkerPosition(runner) {
     const runnerId = String(runner.id);
     const marker = runnerMarkers[runnerId];
-
     if (!marker || !routeCoordinates.length) return;
 
-    let targetProgressPercent = 0;
-    let shouldTeleport = false;
-
     const s = (runner.status || '').toLowerCase();
-    const totalDistKm = eventDistance || 5.0;
 
-    if (s.includes('notstart') || s.includes('not started')) {
-        targetProgressPercent = 0;
+    if (!runnerAnimations[runnerId]) runnerAnimations[runnerId] = {};
+    const anim = runnerAnimations[runnerId];
+
+    if (s.includes('notstart') || s === 'not started') {
+        anim.status = 'notstarted';
     } else if (s.includes('finish')) {
-        targetProgressPercent = 100;
-        shouldTeleport = true;
-    } else if (s.includes('running') || s.includes('started')) {
-        const distKm = calculateCurrentDistanceKm(runner);
-        targetProgressPercent = Math.min(100, distKm / totalDistKm * 100);
-    }
-
-    const maxIndex = Math.max(0, routeCoordinates.length - 1);
-    const targetIndex = Math.min(maxIndex, Math.round(maxIndex * targetProgressPercent / 100));
-
-    if (!runnerAnimations[runnerId]) {
-        runnerAnimations[runnerId] = {
-            currentIndex: targetIndex,
-            targetIndex: targetIndex,
-            startTime: Date.now(),
-            animationDuration: shouldTeleport ? 0 : CONFIG.UPDATE_INTERVAL
-        };
+        anim.status = 'finished';
     } else {
-        const now = Date.now();
-        const anim = runnerAnimations[runnerId];
-
-        if (shouldTeleport) {
-            anim.currentIndex = targetIndex;
-            anim.targetIndex = targetIndex;
-        } else {
-            const elapsed = Math.max(0, now - anim.startTime);
-            const progress = anim.animationDuration > 0 ? Math.min(1, elapsed / anim.animationDuration) : 1;
-            const currentIndex = anim.currentIndex + (anim.targetIndex - anim.currentIndex) * progress;
-            anim.currentIndex = currentIndex;
-            anim.targetIndex = targetIndex;
-        }
-
-        anim.startTime = now;
-        anim.animationDuration = shouldTeleport ? 0 : CONFIG.UPDATE_INTERVAL;
+        // Телепортируем baseDist к позиции из API (может быть меньше прошлой — это нормально при появлении КТ)
+        anim.status = 'running';
+        anim.baseDist   = runner.current_distance || 0;
+        anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
+        anim.baseTimeMs = serverTimeUnix;
     }
 
     marker.setIcon(buildMarkerIcon(runner));
-
     if (marker.getPopup()) {
         marker.getPopup().setContent(buildPopupContent(runner));
     }
@@ -377,40 +328,25 @@ function updateRunnerMarkerPosition(runner) {
 
 function animateRunnerFrame() {
     const now = Date.now();
+    const totalDistKm = eventDistance || 5.0;
+    const maxIdx = Math.max(0, routeCoordinates.length - 1);
 
     Object.entries(runnerAnimations).forEach(([runnerId, anim]) => {
         const marker = runnerMarkers[runnerId];
         if (!marker || !routeCoordinates.length) return;
 
-        const elapsed = now - anim.startTime;
-        const progress = Math.min(1, elapsed / anim.animationDuration);
-
-        const currentIndex = anim.currentIndex + (anim.targetIndex - anim.currentIndex) * progress;
-
-        const floorIndex = Math.floor(currentIndex);
-        const ceilIndex = Math.ceil(currentIndex);
-        const fracIndex = currentIndex - floorIndex;
-
-        let position;
-        if (floorIndex === ceilIndex) {
-            position = routeCoordinates[floorIndex];
-        } else {
-            const p1 = routeCoordinates[floorIndex];
-            const p2 = routeCoordinates[ceilIndex];
-            position = [
-                p1[0] + (p2[0] - p1[0]) * fracIndex,
-                p1[1] + (p2[1] - p1[1]) * fracIndex
-            ];
+        let distKm = 0;
+        if (anim.status === 'finished') {
+            distKm = totalDistKm;
+        } else if (anim.status === 'running') {
+            const elapsedH = Math.max(0, now - (anim.baseTimeMs || now)) / 3_600_000;
+            distKm = Math.min(totalDistKm, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH);
         }
+        // notstarted: distKm = 0
 
-        if (position) {
-            marker.setLatLng(position);
-        }
-
-        if (progress >= 1) {
-            anim.currentIndex = anim.targetIndex;
-            anim.startTime = now;
-        }
+        const idx = Math.min(maxIdx, Math.round(maxIdx * distKm / totalDistKm));
+        const coord = routeCoordinates[idx];
+        if (coord) marker.setLatLng(coord);
     });
 
     animationFrameId = requestAnimationFrame(animateRunnerFrame);
