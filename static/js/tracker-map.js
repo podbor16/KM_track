@@ -244,31 +244,46 @@ function buildPopupContent(runner) {
             }
         }
 
-        // Прогноз финиша: оставшаяся дистанция / текущая скорость → время прихода
+        // Прогноз финиша: консистентен с «Текущий темп» (кумулятивный sec/km)
         let finishEta = '-';
-        if (runner.speed > 0 && eventDistance > 0) {
+        const _buildEta = (finish_unix_ms) => {
+            let s = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            if (raceGunUnixMs) {
+                const res_s = Math.round((finish_unix_ms - raceGunUnixMs) / 1000);
+                if (res_s > 0) {
+                    const rh = Math.floor(res_s / 3600);
+                    const rm = Math.floor((res_s % 3600) / 60);
+                    const rs = res_s % 60;
+                    s += rh > 0
+                        ? ` (рез.: ${rh}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')})`
+                        : ` (рез.: ${rm}:${String(rs).padStart(2,'0')})`;
+                }
+            }
+            return s;
+        };
+
+        if (lastCP && eventDistance > 0) {
+            const ktSecs = durationToSeconds(lastCP.time);
+            const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
+            if (ktDist > 0 && ktSecs > 0) {
+                const remaining_km = eventDistance - ktDist;
+                if (remaining_km > 0) {
+                    const secsPerKm = ktSecs / ktDist;
+                    const remaining_secs = remaining_km * secsPerKm;
+                    const baseMs = runner.last_kt_unix_ms ? Math.max(runner.last_kt_unix_ms, serverTimeUnix) : serverTimeUnix;
+                    finishEta = _buildEta(baseMs + remaining_secs * 1000);
+                } else {
+                    finishEta = 'Финишировал';
+                }
+            }
+        } else if (runner.speed > 0 && eventDistance > 0) {
             const remaining_km = eventDistance - (runner.current_distance || 0);
             if (remaining_km > 0) {
                 const remaining_secs = remaining_km / runner.speed * 3600;
-                // current_distance = позиция на последней КТ (маркер ждёт до last_kt_unix_ms)
-                // поэтому отсчёт прогноза от max(last_kt_unix_ms, serverTimeUnix)
                 const baseMs = runner.last_kt_unix_ms ? Math.max(runner.last_kt_unix_ms, serverTimeUnix) : serverTimeUnix;
-                const finish_unix_ms = baseMs + remaining_secs * 1000;
-                finishEta = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
-                if (raceGunUnixMs) {
-                    const res_s = Math.round((finish_unix_ms - raceGunUnixMs) / 1000);
-                    if (res_s > 0) {
-                        const rh = Math.floor(res_s / 3600);
-                        const rm = Math.floor((res_s % 3600) / 60);
-                        const rs = res_s % 60;
-                        const resStr = rh > 0
-                            ? `${rh}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`
-                            : `${rm}:${String(rs).padStart(2,'0')}`;
-                        finishEta += ` (рез.: ${resStr})`;
-                    }
-                }
+                finishEta = _buildEta(baseMs + remaining_secs * 1000);
             } else {
                 finishEta = 'Финишировал';
             }
