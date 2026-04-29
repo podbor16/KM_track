@@ -313,26 +313,18 @@ function updateRunnerMarkerPosition(runner) {
     } else if (s.includes('finish')) {
         anim.status = 'finished';
     } else {
-        // Телепортируем baseDist к позиции из API (может быть меньше прошлой — это нормально при появлении КТ)
         anim.status = 'running';
         anim.baseDist   = runner.current_distance || 0;
         anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
         anim.baseTimeMs = serverTimeUnix;
     }
 
+    // Пока попап открыт — не трогаем иконку и контент: маркер стоит неподвижно, нет дрожания
+    if (activePopups.has(runnerId)) return;
+
     marker.setIcon(buildMarkerIcon(runner));
     const popup = marker.getPopup();
-    if (popup) {
-        const newContent = buildPopupContent(runner);
-        // Обновляем DOM напрямую, минуя _adjustPan Leaflet чтобы не было дрожания при setMaxBounds
-        const el = popup.getElement();
-        if (el) {
-            const contentEl = el.querySelector('.leaflet-popup-content');
-            if (contentEl) contentEl.innerHTML = newContent;
-        } else {
-            popup.setContent(newContent);
-        }
-    }
+    if (popup) popup.setContent(buildPopupContent(runner));
 }
 
 function animateRunnerFrame() {
@@ -345,6 +337,9 @@ function animateRunnerFrame() {
     Object.entries(runnerAnimations).forEach(([runnerId, anim]) => {
         const marker = runnerMarkers[runnerId];
         if (!marker || !routeCoordinates.length) return;
+
+        // Пока попап открыт — маркер стоит на месте, popup не дёргается
+        if (activePopups.has(runnerId)) return;
 
         let distKm = 0;
         if (raceStarted && anim.status === 'finished') {
