@@ -243,6 +243,18 @@ function buildPopupContent(runner) {
                 finishEta = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
                 });
+                if (raceGunUnixMs) {
+                    const res_s = Math.round((finish_unix_ms - raceGunUnixMs) / 1000);
+                    if (res_s > 0) {
+                        const rh = Math.floor(res_s / 3600);
+                        const rm = Math.floor((res_s % 3600) / 60);
+                        const rs = res_s % 60;
+                        const resStr = rh > 0
+                            ? `${rh}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`
+                            : `${rm}:${String(rs).padStart(2,'0')}`;
+                        finishEta += ` (рез.: ${resStr})`;
+                    }
+                }
             } else {
                 finishEta = 'Финишировал';
             }
