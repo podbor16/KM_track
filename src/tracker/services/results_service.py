@@ -83,11 +83,12 @@ def _segment_pace(curr_td, prev_td, curr_dist: float, prev_dist: float) -> Optio
 
 def _calc_last_kt_unix_ms(runner: dict, gun_start_dt) -> Optional[int]:
     """Unix ms реального времени когда участник прошёл последнюю КТ с данными."""
+    from datetime import timedelta
     if gun_start_dt is None:
         return None
     for kt in reversed(['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7']):
         kt_td = runner.get(f'time_clear_{kt}')
-        if isinstance(kt_td, _td):
+        if isinstance(kt_td, timedelta):
             kt_wall = gun_start_dt + kt_td
             return int(kt_wall.timestamp() * 1000)
     return None
