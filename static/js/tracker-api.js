@@ -111,29 +111,38 @@ function getLastCheckpoint(runner) {
     if (!runner.checkpoints) return null;
 
     const ktOrder = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7'];
-    let lastCheckpoint = null;
+    let lastKtIdx = -1;  // индекс в ktOrder последней КТ с данными
 
     for (let i = 0; i < ktOrder.length; i++) {
-        const kt = ktOrder[i];
-        const data = runner.checkpoints[kt];
-        if (data && data.time) {
-            // Индекс в eventCheckpoints: 0=Старт, 1=КТ1, 2=КТ2, ...
-            const cpIdx  = i + 1;
-            const prevIdx = i;
-            const cpName   = eventCheckpoints[cpIdx]?.name  ?? `КТ${i + 1}`;
-            const prevName = eventCheckpoints[prevIdx]?.name ?? (i === 0 ? 'Старт' : `КТ${i}`);
-            lastCheckpoint = {
-                name:          cpName,
-                prevName:      prevName,
-                code:          kt,
-                time:          data.time,
-                pace:          data.pace,
-                interval_pace: data.interval_pace,
-            };
+        const data = runner.checkpoints[ktOrder[i]];
+        if (data && data.time) lastKtIdx = i;
+    }
+
+    if (lastKtIdx < 0) return null;
+
+    const cpIdx  = lastKtIdx + 1;  // индекс в eventCheckpoints (0=Старт)
+    const cpName = eventCheckpoints[cpIdx]?.name ?? `КТ${lastKtIdx + 1}`;
+
+    // Найти фактическую предыдущую КТ с данными (не обязательно i-1)
+    let prevName = eventCheckpoints[0]?.name ?? 'Старт';
+    for (let pi = lastKtIdx - 1; pi >= 0; pi--) {
+        const prevData = runner.checkpoints[ktOrder[pi]];
+        if (prevData && prevData.time) {
+            prevName = eventCheckpoints[pi + 1]?.name ?? `КТ${pi + 1}`;
+            break;
         }
     }
 
-    return lastCheckpoint;
+    const data = runner.checkpoints[ktOrder[lastKtIdx]];
+    return {
+        name:          cpName,
+        prevName:      prevName,
+        code:          ktOrder[lastKtIdx],
+        cpIdx:         cpIdx,
+        time:          data.time,
+        pace:          data.pace,
+        interval_pace: data.interval_pace,
+    };
 }
 
 function durationToSeconds(duration) {
