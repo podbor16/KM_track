@@ -94,21 +94,45 @@ def _calc_last_kt_unix_ms(runner: dict, gun_start_dt) -> Optional[int]:
     return None
 
 
+def _find_prev_kt_td_and_dist(runner: dict, current_kt_1based_idx: int, checkpoint_distances: list):
+    """Найти предыдущую КТ с данными (не обязательно kt{N-1}). Возвращает (timedelta|None, dist_km)."""
+    from datetime import timedelta
+    for prev_i in range(current_kt_1based_idx - 1, 0, -1):
+        td = runner.get(f'time_clear_kt{prev_i}')
+        if isinstance(td, timedelta):
+            dist = checkpoint_distances[prev_i] if prev_i < len(checkpoint_distances) else 0.0
+            return td, dist
+    return None, checkpoint_distances[0] if checkpoint_distances else 0.0
+
+
+def _build_kt_checkpoints(runner: dict, checkpoint_distances: list) -> dict:
+    """Строит словарь kt2..kt7 с interval_pace от фактической предыдущей КТ с данными."""
+    result = {}
+    for n in range(2, 8):
+        prev_td, prev_dist = _find_prev_kt_td_and_dist(runner, n, checkpoint_distances)
+        curr_dist = checkpoint_distances[n] if n < len(checkpoint_distances) else 0.0
+        result[f'kt{n}'] = {
+            'time': runner.get(f'time_clear_kt{n}'),
+            'pace': runner.get(f'pace_avg_kt{n}') or _kt_pace(runner.get(f'time_clear_kt{n}'), checkpoint_distances, n),
+            'interval_pace': _segment_pace(runner.get(f'time_clear_kt{n}'), prev_td, curr_dist, prev_dist),
+        }
+    return result
+
+
 def _calc_lap_from_kts(runner: dict, num_laps: int) -> int:
     """
-    Круг по наличию парных KT-времён:
-      kt1+kt2 → круг 2; kt3+kt4 → круг 3; kt5+kt6 → круг 4.
-    Если нечётный KT есть, а чётного нет → ещё идёт предыдущий круг.
+    Круг по наличию KT-времён. Достаточно любой КТ из пары (чётной или нечётной).
+    kt2 или kt3 → круг 2; kt4 или kt5 → круг 3; kt6 или kt7 → круг 4.
     """
     if num_laps <= 1:
         return 1
     def has(n):
         return runner.get(f'time_clear_kt{n}') is not None
-    if has(5) and has(6):
+    if has(6) or has(7):
         return 4
-    if has(3) and has(4):
+    if has(4) or has(5):
         return 3
-    if has(1) and has(2):
+    if has(2) or has(3):
         return 2
     return 1
 
@@ -311,60 +335,7 @@ def _do_build(
                         checkpoint_distances[0] if checkpoint_distances else 0.0,
                     ),
                 },
-                'kt2': {
-                    'time': runner.get('time_clear_kt2'),
-                    'pace': runner.get('pace_avg_kt2') or _kt_pace(runner.get('time_clear_kt2'), checkpoint_distances, 2),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt2'), runner.get('time_clear_kt1'),
-                        checkpoint_distances[2] if len(checkpoint_distances) > 2 else 0.0,
-                        checkpoint_distances[1] if len(checkpoint_distances) > 1 else 0.0,
-                    ),
-                },
-                'kt3': {
-                    'time': runner.get('time_clear_kt3'),
-                    'pace': runner.get('pace_avg_kt3') or _kt_pace(runner.get('time_clear_kt3'), checkpoint_distances, 3),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt3'), runner.get('time_clear_kt2'),
-                        checkpoint_distances[3] if len(checkpoint_distances) > 3 else 0.0,
-                        checkpoint_distances[2] if len(checkpoint_distances) > 2 else 0.0,
-                    ),
-                },
-                'kt4': {
-                    'time': runner.get('time_clear_kt4'),
-                    'pace': runner.get('pace_avg_kt4') or _kt_pace(runner.get('time_clear_kt4'), checkpoint_distances, 4),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt4'), runner.get('time_clear_kt3'),
-                        checkpoint_distances[4] if len(checkpoint_distances) > 4 else 0.0,
-                        checkpoint_distances[3] if len(checkpoint_distances) > 3 else 0.0,
-                    ),
-                },
-                'kt5': {
-                    'time': runner.get('time_clear_kt5'),
-                    'pace': runner.get('pace_avg_kt5') or _kt_pace(runner.get('time_clear_kt5'), checkpoint_distances, 5),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt5'), runner.get('time_clear_kt4'),
-                        checkpoint_distances[5] if len(checkpoint_distances) > 5 else 0.0,
-                        checkpoint_distances[4] if len(checkpoint_distances) > 4 else 0.0,
-                    ),
-                },
-                'kt6': {
-                    'time': runner.get('time_clear_kt6'),
-                    'pace': runner.get('pace_avg_kt6') or _kt_pace(runner.get('time_clear_kt6'), checkpoint_distances, 6),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt6'), runner.get('time_clear_kt5'),
-                        checkpoint_distances[6] if len(checkpoint_distances) > 6 else 0.0,
-                        checkpoint_distances[5] if len(checkpoint_distances) > 5 else 0.0,
-                    ),
-                },
-                'kt7': {
-                    'time': runner.get('time_clear_kt7'),
-                    'pace': runner.get('pace_avg_kt7') or _kt_pace(runner.get('time_clear_kt7'), checkpoint_distances, 7),
-                    'interval_pace': _segment_pace(
-                        runner.get('time_clear_kt7'), runner.get('time_clear_kt6'),
-                        checkpoint_distances[7] if len(checkpoint_distances) > 7 else 0.0,
-                        checkpoint_distances[6] if len(checkpoint_distances) > 6 else 0.0,
-                    ),
-                },
+                **_build_kt_checkpoints(runner, checkpoint_distances),
             },
             'speed': round(speed_kmh, 2),
             'current_distance': round(current_dist, 3),

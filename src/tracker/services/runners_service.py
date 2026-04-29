@@ -131,9 +131,15 @@ def calculate_live_position(
     kt_hours = _timedelta_to_hours(last_kt_td)
 
     if last_kt_idx >= 2:
-        # Темп последнего участка: КТ_{N-1} → КТ_N (точнее кумулятивного)
-        prev_kt_td = result.get(f'time_clear_kt{last_kt_idx - 1}')
-        prev_kt_dist = checkpoint_distances[last_kt_idx - 1]
+        # Темп последнего участка от фактической предыдущей КТ с данными
+        prev_kt_td = None
+        prev_kt_dist = 0.0
+        for _pi in range(last_kt_idx - 1, 0, -1):
+            _candidate = result.get(f'time_clear_kt{_pi}')
+            if isinstance(_candidate, timedelta):
+                prev_kt_td = _candidate
+                prev_kt_dist = checkpoint_distances[_pi] if _pi < len(checkpoint_distances) else 0.0
+                break
         if isinstance(prev_kt_td, timedelta):
             seg_dist = kt_dist - prev_kt_dist
             seg_h = _timedelta_to_hours(last_kt_td) - _timedelta_to_hours(prev_kt_td)

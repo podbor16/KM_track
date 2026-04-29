@@ -239,7 +239,10 @@ function buildPopupContent(runner) {
             const remaining_km = eventDistance - (runner.current_distance || 0);
             if (remaining_km > 0) {
                 const remaining_secs = remaining_km / runner.speed * 3600;
-                const finish_unix_ms = serverTimeUnix + remaining_secs * 1000;
+                // current_distance = позиция на последней КТ (маркер ждёт до last_kt_unix_ms)
+                // поэтому отсчёт прогноза от max(last_kt_unix_ms, serverTimeUnix)
+                const baseMs = runner.last_kt_unix_ms ? Math.max(runner.last_kt_unix_ms, serverTimeUnix) : serverTimeUnix;
+                const finish_unix_ms = baseMs + remaining_secs * 1000;
                 finishEta = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
                 });
