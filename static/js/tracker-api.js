@@ -413,7 +413,9 @@ async function loadAllRunners() {
         if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
         if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
 
-        if (data.results && data.results.length > 0) {
+        if (data.total_distance_km) {
+            eventDistance = data.total_distance_km;
+        } else if (data.results && data.results.length > 0) {
             eventDistance = parseFloat(data.results[0].distance) || 0;
         }
 
@@ -425,9 +427,8 @@ async function loadAllRunners() {
                 kt1Time = null;
             }
 
-            const distanceKm = runner.distance || runner.event_distance || eventDistance;
-            const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, distanceKm);
-            const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, distanceKm);
+            const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, eventDistance || runner.event_distance);
+            const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, eventDistance || runner.event_distance);
 
             return {
                 id:                   runner.id || runner.start_number,

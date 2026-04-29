@@ -746,7 +746,7 @@ function renderAnalyticsHTML(stats, results) {
 
     return `
         <div class="analytics-section">
-            <h3>📊 Ночной забег 2025 (5 км) — Общая статистика</h3>
+            <h3>📊 ${evName} ${evYear}${distStr} — Общая статистика</h3>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-value">${stats.total}</div>

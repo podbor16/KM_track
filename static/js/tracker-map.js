@@ -321,8 +321,17 @@ function updateRunnerMarkerPosition(runner) {
     }
 
     marker.setIcon(buildMarkerIcon(runner));
-    if (marker.getPopup()) {
-        marker.getPopup().setContent(buildPopupContent(runner));
+    const popup = marker.getPopup();
+    if (popup) {
+        const newContent = buildPopupContent(runner);
+        // Обновляем DOM напрямую, минуя _adjustPan Leaflet чтобы не было дрожания при setMaxBounds
+        const el = popup.getElement();
+        if (el) {
+            const contentEl = el.querySelector('.leaflet-popup-content');
+            if (contentEl) contentEl.innerHTML = newContent;
+        } else {
+            popup.setContent(newContent);
+        }
     }
 }
 

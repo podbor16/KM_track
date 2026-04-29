@@ -107,3 +107,4 @@ class RaceResultsResponse(BaseModel):
     timestamp: str = Field(..., description="Время получения результатов")
     server_time_unix: Optional[int] = Field(None, description="Unix ms когда был сформирован ответ — для экстраполяции позиций на клиенте")
     race_gun_unix_ms: Optional[int] = Field(None, description="Unix ms момента выстрела стартового пистолета")
+    total_distance_km: Optional[float] = Field(None, description="Полная дистанция забега в км (для правильного масштаба маркера)")
