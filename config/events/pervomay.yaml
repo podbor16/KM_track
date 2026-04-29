@@ -16,15 +16,15 @@ distances:
     has_start_list: true
     checkpoint_distances: [0, 3.0, 5.3, 8.3, 10.6, 13.6, 15.9, 18.9, 21.1]
     checkpoints:
-      - {name: "Старт", distance_km: 0.0, lat: 56.0061150, lon: 92.8682830}
-      - {name: "КТ1 (Разворот 1)", distance_km: 3.0, lat: 55.99901, lon: 92.8356400}
-      - {name: "КТ2 (Старт/Финиш)", distance_km: 5.3, lat: 56.0061150, lon: 92.8682830}
-      - {name: "КТ3 (Разворот 2)", distance_km: 8.3, lat: 55.99901, lon: 92.8356400}
-      - {name: "КТ4 (Старт/Финиш)", distance_km: 10.6, lat: 56.0061150, lon: 92.8682830}
-      - {name: "КТ5 (Разворот 3)", distance_km: 13.6, lat: 55.99901, lon: 92.8356400}
-      - {name: "КТ6 (Старт/Финиш)", distance_km: 15.9, lat: 56.0061150, lon: 92.8682830}
-      - {name: "КТ7 (Разворот 4)", distance_km: 18.9, lat: 55.99901, lon: 92.8356400}
-      - {name: "Финиш", distance_km: 21.1, lat: 56.0061150, lon: 92.8682830}
+      - {name: "Старт",                   distance_km: 0.0,  lat: 56.0061150, lon: 92.8682830}
+      - {name: "КТ1 (Разворот 3 км)",    distance_km: 3.0,  lat: 55.99901,   lon: 92.8356400}
+      - {name: "КТ2 (5.3 км)",            distance_km: 5.3,  lat: 56.0061150, lon: 92.8682830}
+      - {name: "КТ3 (Разворот 8.3 км)",  distance_km: 8.3,  lat: 55.99901,   lon: 92.8356400}
+      - {name: "КТ4 (10.6 км)",           distance_km: 10.6, lat: 56.0061150, lon: 92.8682830}
+      - {name: "КТ5 (Разворот 13.6 км)", distance_km: 13.6, lat: 55.99901,   lon: 92.8356400}
+      - {name: "КТ6 (15.9 км)",           distance_km: 15.9, lat: 56.0061150, lon: 92.8682830}
+      - {name: "КТ7 (Разворот 18.9 км)", distance_km: 18.9, lat: 55.99901,   lon: 92.8356400}
+      - {name: "Финиш",                   distance_km: 21.1, lat: 56.0061150, lon: 92.8682830}
     gpx_file: "static/map/2026/pervomay_21.gpx"            # ← заполнить перед стартом
     event_date: "2026-05-01"         # ← заполнить перед стартом
     route:
@@ -43,9 +43,9 @@ distances:
     has_start_list: true
     checkpoint_distances: [0, 3.0, 5.0]
     checkpoints:
-      - {name: "Старт/Финиш", distance_km: 0.0, lat: 56.0061150, lon: 92.8682830}
-      - {name: "КТ1 (Разворот 1)", distance_km: 3.0, lat: 55.99901, lon: 92.8356400}
-      - {name: "Финиш", distance_km: 5.0, lat: 56.0061150, lon: 92.8682830}
+      - {name: "Старт",         distance_km: 0.0, lat: 56.0061150, lon: 92.8682830}
+      - {name: "Разворот 3 км", distance_km: 3.0, lat: 55.99901,   lon: 92.8356400}
+      - {name: "Финиш",         distance_km: 5.0, lat: 56.0061150, lon: 92.8682830}
     gpx_file: "static/map/2026/pervomay_5.gpx"            # ← заполнить перед стартом
     event_date: "2026-05-01"          # ← заполнить перед стартом
     route:

@@ -20,7 +20,7 @@ from src.core.dependencies import get_app_state
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
-    CurrentEventResponse, DistanceInfo, EventsListResponse, EventInfo,
+    CurrentEventResponse, DistanceInfo, CheckpointInfo, EventsListResponse, EventInfo,
     Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
@@ -58,6 +58,10 @@ async def get_current_event() -> CurrentEventResponse:
             event_date=d.event_date,
             route_type='shuttle' if d.route.laps > 1 else 'loop',
             laps=d.route.laps,
+            checkpoints=[
+                CheckpointInfo(name=cp.name, distance_km=cp.distance_km, lat=cp.lat, lon=cp.lon)
+                for cp in d.checkpoints
+            ],
         )
         for d in tracked_distances
     ]

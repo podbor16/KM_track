@@ -165,9 +165,8 @@ def calculate_live_position(
 
     kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
     if kt_wall_dt > now:
-        # kt_wall_dt в будущем — значит start_dt сдвинут (тест/конфиг), откатываемся к фазе "до КТ"
-        elapsed_hours = max(0.0, (now - start_dt).total_seconds() / 3600.0)
-        current_distance = min(speed_kmh * elapsed_hours, total_distance)
+        # КТ ещё впереди по реальному времени: маркер стоит точно на КТ и ждёт
+        current_distance = kt_dist
     else:
         elapsed_since_kt = (now - kt_wall_dt).total_seconds() / 3600.0
         # Ограничиваем разумным значением: не более 24 часов с момента КТ (защита от прошедших событий)

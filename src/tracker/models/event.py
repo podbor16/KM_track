@@ -35,6 +35,14 @@ class EventInfo(BaseModel):
         }
 
 
+class CheckpointInfo(BaseModel):
+    """Координаты и название контрольной точки"""
+    name: str
+    distance_km: float
+    lat: float
+    lon: float
+
+
 class DistanceInfo(BaseModel):
     """Информация об одной отслеживаемой дистанции события"""
 
@@ -45,6 +53,7 @@ class DistanceInfo(BaseModel):
     event_date: Optional[str] = Field(None, description="Дата проведения YYYY-MM-DD")
     route_type: str = Field("loop", description="Тип маршрута (shuttle/loop)")
     laps: int = Field(1, description="Количество кругов (1 для некруговых)")
+    checkpoints: List[CheckpointInfo] = Field(default_factory=list, description="Контрольные точки с координатами")
 
 
 class CurrentEventResponse(BaseModel):

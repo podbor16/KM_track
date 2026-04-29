@@ -33,6 +33,7 @@ let eventDistance = 0;
 
 let runnerAnimations = {};
 let animationFrameId = null;
+let eventCheckpoints = [];  // [{name, distance_km, lat, lon}, ...] — из /api/current-event
 
 let serverTimeUnix = Date.now();
 let raceGunUnixMs = null;
@@ -109,26 +110,25 @@ function updateStatus(message) {
 function getLastCheckpoint(runner) {
     if (!runner.checkpoints) return null;
 
-    const checkpoints = [
-        { code: 'start', name: 'Старт', data: { time: '0', pace: '0' } },
-        { code: 'kt1', name: 'КТ1', data: runner.checkpoints.kt1 },
-        { code: 'kt2', name: 'КТ2', data: runner.checkpoints.kt2 },
-        { code: 'kt3', name: 'КТ3', data: runner.checkpoints.kt3 },
-        { code: 'kt4', name: 'КТ4', data: runner.checkpoints.kt4 },
-        { code: 'kt5', name: 'КТ5', data: runner.checkpoints.kt5 },
-        { code: 'kt6', name: 'КТ6', data: runner.checkpoints.kt6 },
-        { code: 'kt7', name: 'КТ7', data: runner.checkpoints.kt7 },
-    ];
-
+    const ktOrder = ['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7'];
     let lastCheckpoint = null;
 
-    for (const checkpoint of checkpoints) {
-        if (checkpoint.data && checkpoint.data.time) {
+    for (let i = 0; i < ktOrder.length; i++) {
+        const kt = ktOrder[i];
+        const data = runner.checkpoints[kt];
+        if (data && data.time) {
+            // Индекс в eventCheckpoints: 0=Старт, 1=КТ1, 2=КТ2, ...
+            const cpIdx  = i + 1;
+            const prevIdx = i;
+            const cpName   = eventCheckpoints[cpIdx]?.name  ?? `КТ${i + 1}`;
+            const prevName = eventCheckpoints[prevIdx]?.name ?? (i === 0 ? 'Старт' : `КТ${i}`);
             lastCheckpoint = {
-                name: checkpoint.name,
-                code: checkpoint.code,
-                time: checkpoint.data.time,
-                pace: checkpoint.data.pace
+                name:          cpName,
+                prevName:      prevName,
+                code:          kt,
+                time:          data.time,
+                pace:          data.pace,
+                interval_pace: data.interval_pace,
             };
         }
     }
@@ -280,6 +280,7 @@ async function init() {
             CONFIG.EVENT_ID = defaultDist.db_event_id ?? null;
             CONFIG.CURRENT_DISTANCE = defaultDist.distance || '';
             CONFIG.LAPS = defaultDist.laps ?? 1;
+            eventCheckpoints = defaultDist.checkpoints || [];
         } else {
             // Fallback: одиночное событие без массива distances
             if (cfg.gpx_file) CONFIG.GPX_FILE = '/' + cfg.gpx_file;
@@ -340,7 +341,8 @@ function renderDistanceSwitcher(distances, activeDist) {
                 data-gpx="${d.gpx_file ? '/' + d.gpx_file : ''}"
                 data-route-type="${d.route_type || 'loop'}"
                 data-label="${d.distance}"
-                data-laps="${d.laps ?? 1}">
+                data-laps="${d.laps ?? 1}"
+                data-checkpoints="${encodeURIComponent(JSON.stringify(d.checkpoints || []))}">
             ${d.distance}
         </button>
     `).join('');
@@ -354,18 +356,20 @@ function renderDistanceSwitcher(distances, activeDist) {
             const routeType = btn.dataset.routeType;
             const label = btn.dataset.label || '';
             const laps = parseInt(btn.dataset.laps) || 1;
+            const checkpoints = JSON.parse(decodeURIComponent(btn.dataset.checkpoints || '%5B%5D'));
             container.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            switchDistance(eventId, gpx, routeType, label, laps);
+            switchDistance(eventId, gpx, routeType, label, laps, checkpoints);
         });
     });
 }
 
-async function switchDistance(eventId, gpxFile, routeType, label, laps = 1) {
+async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, checkpoints = []) {
     CONFIG.EVENT_ID = eventId;
     CONFIG.GPX_FILE = gpxFile;
     CONFIG.LAPS = laps;
     if (label) CONFIG.CURRENT_DISTANCE = label;
+    eventCheckpoints = checkpoints;
     updateEventTitle();
 
     // Сбросить выбранных участников — они принадлежат другой дистанции
@@ -459,6 +463,7 @@ async function loadAllRunners() {
                 prev_year:            runner.prev_year || null,
                 time_clear_start_s:   runner.time_clear_start_s ?? null,
                 lap:                  runner.lap ?? 1,
+                last_kt_unix_ms:      runner.last_kt_unix_ms ?? null,
             };
         });
 

@@ -81,6 +81,18 @@ def _segment_pace(curr_td, prev_td, curr_dist: float, prev_dist: float) -> Optio
     return f"{m}:{s:02d}"
 
 
+def _calc_last_kt_unix_ms(runner: dict, gun_start_dt) -> Optional[int]:
+    """Unix ms реального времени когда участник прошёл последнюю КТ с данными."""
+    if gun_start_dt is None:
+        return None
+    for kt in reversed(['kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7']):
+        kt_td = runner.get(f'time_clear_{kt}')
+        if isinstance(kt_td, _td):
+            kt_wall = gun_start_dt + kt_td
+            return int(kt_wall.timestamp() * 1000)
+    return None
+
+
 def _calc_lap_from_kts(runner: dict, num_laps: int) -> int:
     """
     Круг по наличию парных KT-времён:
@@ -363,6 +375,7 @@ def _do_build(
                 int(runner.get('time_clear_start').total_seconds())
                 if isinstance(runner.get('time_clear_start'), _td) else None
             ),
+            'last_kt_unix_ms': _calc_last_kt_unix_ms(runner, gun_start_dt),
         })
     _t_loop_done = time.time() - _t_loop
 

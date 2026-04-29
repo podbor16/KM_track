@@ -226,44 +226,51 @@ function buildPopupContent(runner) {
         `;
     } else if (status.includes('running') || status.includes('started')) {
         const lastCP = getLastCheckpoint(runner);
+        const ktLabel  = lastCP?.name ?? '-';
+        const segLabel = lastCP ? `${lastCP.prevName} → ${lastCP.name}` : '-';
         const lastCPTime = lastCP ? parseDuration(lastCP.time) : '-';
 
         // Интервальный темп последнего участка (не кумулятивный)
-        const lastSegPace = lastCP?.interval_pace
-            ? parseDuration(lastCP.interval_pace)
-            : (lastCP ? parseDuration(lastCP.pace) : '-');
+        const lastSegPace = lastCP?.interval_pace || lastCP?.pace || '-';
 
-        // Прогноз финиша на основе темпа последнего участка
-        let predictedFinish = '-';
-        const paceForPrediction = lastCP?.interval_pace || lastCP?.pace;
-        if (paceForPrediction) {
-            const paceSeconds = durationToSeconds(paceForPrediction);
-            if (paceSeconds > 0 && eventDistance > 0) {
-                const predictedSeconds = (eventDistance * 1000) / (1000 / paceSeconds);
-                predictedFinish = secondsToTime(predictedSeconds);
+        // Прогноз финиша: оставшаяся дистанция / текущая скорость → время прихода
+        let finishEta = '-';
+        if (runner.speed > 0 && eventDistance > 0) {
+            const remaining_km = eventDistance - (runner.current_distance || 0);
+            if (remaining_km > 0) {
+                const remaining_secs = remaining_km / runner.speed * 3600;
+                const finish_unix_ms = serverTimeUnix + remaining_secs * 1000;
+                finishEta = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+            } else {
+                finishEta = 'Финишировал';
             }
         }
 
-        let paceLabel = 'Текущий темп';
-        if (runner.pace_source === 'personal' && runner.prev_year) {
-            paceLabel = `Прогноз (личный ${runner.prev_year})`;
-        } else if (runner.pace_source === 'category' && runner.prev_year) {
-            paceLabel = `Прогноз (ср. кат. ${runner.prev_year})`;
+        // Прогноз из категории/личного рекорда — только когда нет КТ-данных
+        let forecastRow = '';
+        if (runner.pace_source && lastCP === null) {
+            const paceLabel = runner.pace_source === 'personal' && runner.prev_year
+                ? `Прогноз (личный ${runner.prev_year})`
+                : runner.pace_source === 'category' && runner.prev_year
+                    ? `Прогноз (ср. кат. ${runner.prev_year})`
+                    : 'Текущий темп';
+            forecastRow = runner.current_pace
+                ? `<div><strong>${paceLabel}:</strong> ${runner.current_pace} мин/км</div>`
+                : '';
         }
-        const currentPace = runner.current_pace
-            ? `<div><strong>${paceLabel}:</strong> ${runner.current_pace} мин/км</div>`
-            : '';
 
         contentHTML = `
             <div style="border-top: 1px solid #ddd; padding-top: 8px;">
                 <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                <div><strong>Последняя КТ:</strong> ${lastCP ? lastCP.name : '-'}</div>
-                <div><strong>Время на КТ:</strong> ${lastCPTime}</div>
-                <div><strong>Темп участка:</strong> ${lastSegPace} мин/км</div>
-                ${currentPace}
+                <div><strong>Последняя КТ:</strong> ${ktLabel}</div>
+                <div><strong>Время на ${ktLabel}:</strong> ${lastCPTime}</div>
+                <div><strong>Темп участка ${segLabel}:</strong> ${lastSegPace} мин/км</div>
+                ${forecastRow}
                 <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
                 <div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
-                    <div><strong>Прогноз финиша:</strong> ${predictedFinish}</div>
+                    <div><strong>Прогноз финиша:</strong> ${finishEta}</div>
                 </div>
             </div>
         `;
@@ -316,7 +323,8 @@ function updateRunnerMarkerPosition(runner) {
         anim.status = 'running';
         anim.baseDist   = runner.current_distance || 0;
         anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
-        anim.baseTimeMs = serverTimeUnix;
+        // Если есть время последней КТ — анимируем от неё; иначе от выстрела или serverTime
+        anim.baseTimeMs = runner.last_kt_unix_ms ?? raceGunUnixMs ?? serverTimeUnix;
     }
 
     marker.setIcon(buildMarkerIcon(runner));
@@ -339,17 +347,28 @@ function animateRunnerFrame() {
         if (raceStarted && anim.status === 'finished') {
             distKm = totalDistKm;
         } else if (raceStarted && anim.status === 'running') {
-            const elapsedH = Math.max(0, now - (anim.baseTimeMs || now)) / 3_600_000;
-            distKm = Math.min(totalDistKm, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH);
+            const elapsedH = (now - (anim.baseTimeMs || now)) / 3_600_000;
+            // Math.max: если КТ ещё в будущем (elapsedH < 0) — маркер стоит на baseDist
+            distKm = Math.min(totalDistKm, Math.max(anim.baseDist || 0, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH));
         }
         // notstarted или race not started: distKm = 0
 
-        const idx = Math.min(maxIdx, Math.round(maxIdx * distKm / totalDistKm));
-        const coord = routeCoordinates[idx];
+        const coord = getCoordForDist(distKm, totalDistKm, maxIdx);
         if (coord) marker.setLatLng(coord);
     });
 
     animationFrameId = requestAnimationFrame(animateRunnerFrame);
+}
+
+function getCoordForDist(distKm, totalDistKm, maxIdx) {
+    // Снапп к точным координатам КТ если маркер близко к ней (≤50м)
+    for (const cp of eventCheckpoints) {
+        if (Math.abs(distKm - cp.distance_km) <= 0.05) {
+            return [cp.lat, cp.lon];
+        }
+    }
+    const idx = Math.min(maxIdx, Math.round(maxIdx * distKm / totalDistKm));
+    return routeCoordinates[idx];
 }
 
 function startAnimationLoop() {
