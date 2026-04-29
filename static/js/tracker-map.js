@@ -54,7 +54,7 @@ async function loadRouteFromAPI() {
             const routeBounds = routeLayer.getBounds();
             map.fitBounds(routeBounds, { padding: [10, 10] });
 
-            const maxBounds = routeBounds.pad(0.25);
+            const maxBounds = routeBounds.pad(0.5);
             map.setMaxBounds(maxBounds);
             map.setMinZoom(map.getBoundsZoom(maxBounds));
         }
@@ -319,9 +319,6 @@ function updateRunnerMarkerPosition(runner) {
         anim.baseTimeMs = serverTimeUnix;
     }
 
-    // Пока попап открыт — не трогаем иконку и контент: маркер стоит неподвижно, нет дрожания
-    if (activePopups.has(runnerId)) return;
-
     marker.setIcon(buildMarkerIcon(runner));
     const popup = marker.getPopup();
     if (popup) popup.setContent(buildPopupContent(runner));
@@ -337,9 +334,6 @@ function animateRunnerFrame() {
     Object.entries(runnerAnimations).forEach(([runnerId, anim]) => {
         const marker = runnerMarkers[runnerId];
         if (!marker || !routeCoordinates.length) return;
-
-        // Пока попап открыт — маркер стоит на месте, popup не дёргается
-        if (activePopups.has(runnerId)) return;
 
         let distKm = 0;
         if (raceStarted && anim.status === 'finished') {
