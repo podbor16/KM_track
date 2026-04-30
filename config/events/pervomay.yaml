@@ -31,20 +31,20 @@ distances:
       laps: 4
       total_km: 21.1
     copernico:
-      race_id: null           # ← заполнить перед стартом
+      race_id: "--2026-99858"           # ← заполнить перед стартом
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
-      event: "21.1 км"
+      event: "21.1km"
 
   - distance: "5 км"
     distance_km: 5.0
     db_event_id: 142         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: [0, 3.0, 5.0]
+    checkpoint_distances: [0, 2.7, 5.0]
     checkpoints:
       - {name: "Старт",         distance_km: 0.0, lat: 56.0061150, lon: 92.8682830}
-      - {name: "Разворот 3 км", distance_km: 3.0, lat: 55.99901,   lon: 92.8356400}
+      - {name: "Разворот 2.7 км", distance_km: 2.7, lat: 55.99901,   lon: 92.8356400}
       - {name: "Финиш",         distance_km: 5.0, lat: 56.0061150, lon: 92.8682830}
     gpx_file: "static/map/2026/pervomay_5.gpx"            # ← заполнить перед стартом
     event_date: "2026-05-01"          # ← заполнить перед стартом
@@ -52,7 +52,7 @@ distances:
       laps: 1
       total_km: 5.0
     copernico:
-      race_id: null           # ← отдельный race_id для дистанции 5 км
+      race_id: "--2026-99858"          # ← отдельный race_id для дистанции 5 км
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
-      event: "5 км"
+      event: "5km"

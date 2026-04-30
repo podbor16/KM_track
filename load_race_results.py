@@ -281,6 +281,11 @@ class RaceLoader:
         self.copernico_event = copernico_event
         self.gun_time_utc: Optional[str] = None
 
+        # Performance stats
+        self._cycle_times: list = []
+        self._kt_reads_per_cycle: list = []  # [(timestamp, count), ...]
+        self._last_stats_log: float = time.time()
+
     def connect(self) -> bool:
         """Подключиться к БД и получить данные о событии"""
         self.logger.info("🔌 Подключение к БД...")
@@ -530,7 +535,7 @@ class RaceLoader:
                     continue
 
                 t_calc = time.time()
-                updated_r, updated_s = self._update_existing(runners)
+                updated_r, updated_s, kt_reads = self._update_existing(runners)
                 calc_t = time.time() - t_calc
 
                 t_rank = time.time()
@@ -543,7 +548,7 @@ class RaceLoader:
                     self.logger.info(
                         f"Цикл #{self.update_cycles}: "
                         f"fetch={fetch_t:.2f}s calc={calc_t:.2f}s ranks={rank_t:.2f}s "
-                        f"total={cycle_time:.2f}s | updated={updated_r}r/{updated_s}s"
+                        f"total={cycle_time:.2f}s | updated={updated_r}r/{updated_s}s kt_reads={kt_reads}"
                     )
                 else:
                     self.logger.debug(
@@ -551,6 +556,36 @@ class RaceLoader:
                         f"fetch={fetch_t:.2f}s calc={calc_t:.2f}s ranks={rank_t:.2f}s "
                         f"total={cycle_time:.2f}s | 0 изменений"
                     )
+
+                # Performance stats: накапливаем для анализа
+                self._cycle_times.append(cycle_time)
+                self._kt_reads_per_cycle.append((time.time(), kt_reads))
+
+                now_ts = time.time()
+                if now_ts - self._last_stats_log >= 60:
+                    recent_kt = sum(c for t, c in self._kt_reads_per_cycle if now_ts - t <= 10)
+                    n = len(self._cycle_times)
+                    avg_t = sum(self._cycle_times) / n
+                    min_t = min(self._cycle_times)
+                    max_t = max(self._cycle_times)
+                    self.logger.info(
+                        f"PERF [{n} циклов]: "
+                        f"цикл avg={avg_t:.2f}s min={min_t:.2f}s max={max_t:.2f}s | "
+                        f"chip reads/10s={recent_kt}"
+                    )
+                    stats = {
+                        "ts": datetime.now().isoformat(),
+                        "event_id": self.event_id,
+                        "cycles": n,
+                        "cycle_avg_s": round(avg_t, 3),
+                        "cycle_min_s": round(min_t, 3),
+                        "cycle_max_s": round(max_t, 3),
+                        "kt_reads_last_10s": recent_kt,
+                    }
+                    stats_path = LOG_DIR / f"perf_stats_{self.event_id}.json"
+                    with open(stats_path, "w", encoding="utf-8") as _sf:
+                        json.dump(stats, _sf, ensure_ascii=False, indent=2)
+                    self._last_stats_log = now_ts
 
                 sleep_time = max(0, interval - cycle_time)
                 if sleep_time > 0:
@@ -565,7 +600,7 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
 
-    def _update_existing(self, runners: List[Dict]) -> Tuple[int, int]:
+    def _update_existing(self, runners: List[Dict]) -> Tuple[int, int, int]:
         """Обновить все поля существующих записей И их сегменты"""
         if self.cursor is None:
             self.logger.error("❌ Нет курсора БД")
@@ -574,6 +609,7 @@ class RaceLoader:
         results_batch = []
         segments_batch = []
         updated_dorsals = []
+        kt_reads_this_cycle = 0
 
         for runner in runners:
             dorsal = str(runner.get('dorsal'))
@@ -646,6 +682,12 @@ class RaceLoader:
                 changed_fields.append(f'time_clear_start: {existing.get("time_clear_start")} → {time_clear_start}')
             if time_clear_finish != existing.get('time_clear_finish'):
                 changed_fields.append(f'time_clear_finish: {existing.get("time_clear_finish")} → {time_clear_finish}')
+
+            # Chip reads: считаем участников с новыми временами на КТ
+            kt_vals = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7]
+            kt_keys_list = ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7']
+            if any(v != existing.get(k) and v is not None for v, k in zip(kt_vals, kt_keys_list)):
+                kt_reads_this_cycle += 1
 
             if changed_fields:
                 updated_dorsals.append(dorsal)
@@ -751,7 +793,7 @@ class RaceLoader:
                 if self.connection:
                     self.connection.rollback()
 
-        return updated_results, updated_segments
+        return updated_results, updated_segments, kt_reads_this_cycle
 
     @staticmethod
     def _assign_ranks(runners: List[Dict], time_key: str) -> Dict[int, int]:
