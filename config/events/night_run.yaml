@@ -3,8 +3,8 @@ display_name: "Ночной забег"  # показывается пользо
 year: 2026
 code: "night_run"             # ключ в EVENTS — не менять
 is_active: true               # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: 56.0075            # ← широта точки старта (набережная)
-start_lon: 92.7246            # ← долгота точки старта
+start_lat: 56.0064            # ← широта точки старта (набережная)
+start_lon: 92.8715            # ← долгота точки старта
 gun_time: "09:47:00"          # ← астрономическое время выстрела стартового пистолета
 description: "Набережная, Красноярск | Дистанция: 5 км"
 
@@ -15,19 +15,19 @@ distances:
     tracked: true
     has_start_list: true
     checkpoint_distances: [0.0, 2.5, 5.0]
-    checkpoints:              # ← координаты контрольных точек
+    checkpoints:              # ← координаты контрольных точек (из GPX night_run.gpx)
       - name: "Старт"
         distance_km: 0.0
-        lat: 56.0075
-        lon: 92.7246
+        lat: 56.0064
+        lon: 92.8715
       - name: "КТ1"
         distance_km: 2.5
-        lat: 56.0103
-        lon: 92.7521
+        lat: 55.9988
+        lon: 92.8351
       - name: "Финиш"
         distance_km: 5.0
-        lat: 56.0075
-        lon: 92.7246
+        lat: 56.0064
+        lon: 92.8715
     gpx_file: "static/map/2026/night_run.gpx"
     event_date: "2026-03-29"  # ← ОБНОВЛЯТЬ каждый год
     route:
