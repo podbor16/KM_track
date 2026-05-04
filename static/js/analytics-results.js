@@ -868,15 +868,33 @@ async function createSegmentsRow(resultId, runnerName) {
             return row;
         }
         
-        // Создаём сетку со статистикой сегментов
+        // Кнопки управления
+        const controls = document.createElement('div');
+        controls.classList.add('segments-controls');
+        const btnExpandAll = document.createElement('button');
+        btnExpandAll.classList.add('segments-toggle-all-btn');
+        btnExpandAll.textContent = 'Развернуть все';
+        const btnCollapseAll = document.createElement('button');
+        btnCollapseAll.classList.add('segments-toggle-all-btn');
+        btnCollapseAll.textContent = 'Свернуть все';
+        controls.appendChild(btnExpandAll);
+        controls.appendChild(btnCollapseAll);
+        wrapper.appendChild(controls);
+
+        // Создаём сетку со статистикой сегментов (обратный порядок: последний вверху)
         const grid = document.createElement('div');
         grid.classList.add('segments-grid');
-        
-        segments.forEach((segment, index) => {
-            const card = createSegmentCard(segment, segments, index);
+
+        const reversed = [...segments].reverse();
+        reversed.forEach((segment, displayIndex) => {
+            const prevSegment = reversed[displayIndex + 1] || null;
+            const card = createSegmentCard(segment, prevSegment);
             grid.appendChild(card);
         });
-        
+
+        btnExpandAll.onclick = () => grid.querySelectorAll('.segment-card').forEach(c => c.classList.add('expanded'));
+        btnCollapseAll.onclick = () => grid.querySelectorAll('.segment-card').forEach(c => c.classList.remove('expanded'));
+
         wrapper.appendChild(grid);
         
     } catch (error) {
@@ -915,7 +933,19 @@ function formatSegmentPace(paceStr) {
     return paceStr;
 }
 
-function createSegmentCard(segment, allSegments, segmentIndex) {
+function calcSegmentDistanceKm(timeStr, paceStr) {
+    if (!timeStr || !paceStr || timeStr === '-' || paceStr === '-') return null;
+    const tParts = timeStr.split(':');
+    if (tParts.length !== 3) return null;
+    const timeSec = parseInt(tParts[0]) * 3600 + parseInt(tParts[1]) * 60 + parseInt(tParts[2]);
+    const paceMatch = paceStr.match(/(\d+):(\d+)/);
+    if (!paceMatch) return null;
+    const paceSec = parseInt(paceMatch[1]) * 60 + parseInt(paceMatch[2]);
+    if (paceSec === 0) return null;
+    return Math.round(timeSec / paceSec * 10) / 10;
+}
+
+function createSegmentCard(segment, prevSegment) {
     const card = document.createElement('div');
     card.classList.add('segment-card');
 
@@ -937,80 +967,94 @@ function createSegmentCard(segment, allSegments, segmentIndex) {
 
     const icon = getSegmentIcon(segmentCode);
     const name = formatSegmentName(segmentCode);
-    const modeBadge = `<span class="segment-mode-badge">${useGun ? 'офиц.' : 'чист.'}</span>`;
+    const modeLabel = useGun ? 'офиц.' : 'чист.';
 
-    // Сравниваем с предыдущим сегментом
-    let paceComparison = '';
-    if (segmentIndex > 0) {
-        const prevSegment = allSegments[segmentIndex - 1];
+    const distKm = calcSegmentDistanceKm(time, pace);
+    const distLabel = distKm !== null ? `${distKm} км` : '—';
+
+    // Сравниваем темп с предыдущим сегментом (более ранний по маршруту)
+    let comparisonHtml = '';
+    let comparisonHtmlDetail = '';
+    if (prevSegment) {
         const prevPace = formatSegmentPace(
             useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg
         );
         const comparison = compareSegments(pace, prevPace);
         if (comparison) {
             const color = comparison.improved ? '#27ae60' : '#e74c3c';
-            paceComparison = `
-                <div class="pace-comparison" style="color: ${color};">
-                    ${comparison.direction} ${comparison.percent}%
-                </div>
-            `;
+            comparisonHtml = `<span class="pace-comparison-mini" style="color:${color}">${comparison.direction}${comparison.percent}%</span>`;
+            comparisonHtmlDetail = `<span class="pace-comparison" style="color:${color}">${comparison.direction} ${comparison.percent}%</span>`;
         }
     }
-    
-    // Цвета для медалей
+
     const colorAbsolute = getRankColor(rankAbsolute);
     const colorSex = getRankColor(rankSex);
     const colorCategory = getRankColor(rankCategory);
-    
+
+    const miniBadge = (rank, color) =>
+        `<div class="rank-badge-mini" style="background:${color}">${rank}</div>`;
+
     card.innerHTML = `
-        <div class="segment-card-title">
-            <span class="segment-icon">${icon}</span>
-            <span>${name}</span>
-            ${modeBadge}
-        </div>
-        
-        <div class="segment-info-row">
-            <span class="segment-distance">📏 2,5 км</span>
-        </div>
-        
-        <div class="segment-stat">
-            <span class="segment-stat-label">⏱️ Время</span>
-            <span class="segment-time">${time}</span>
-        </div>
-        
-        <div class="segment-stat">
-            <div>
-                <span class="segment-stat-label">🏃 Темп</span>
-                <span class="segment-stat-value">${pace}</span>
+        <div class="segment-card-header">
+            <div class="segment-card-header-left">
+                <span class="segment-icon">${icon}</span>
+                <span class="segment-card-title-text">${name}</span>
+                <span class="segment-mode-badge">${modeLabel}</span>
+                <span class="segment-distance-badge">📏 ${distLabel}</span>
             </div>
-            ${paceComparison}
-        </div>
-        
-        <div class="segment-stat">
-            <span class="segment-stat-label">🏆 В абсолюте</span>
-            <div class="rank-container">
-                <div class="segment-rank" style="background-color: ${colorAbsolute};"> ${rankAbsolute}</div>
-                <div class="segment-rank-label">место</div>
+            <div class="segment-card-quick-stats">
+                <span class="segment-time-quick">${time}</span>
+                <span class="segment-pace-quick">${pace} ${comparisonHtml}</span>
+                <div class="segment-ranks-quick">
+                    ${miniBadge(rankAbsolute, colorAbsolute)}
+                    ${miniBadge(rankSex, colorSex)}
+                    ${miniBadge(rankCategory, colorCategory)}
+                </div>
             </div>
+            <span class="segment-card-toggle">▼</span>
         </div>
-        
-        <div class="segment-stat">
-            <span class="segment-stat-label">♀♂ По полу</span>
-            <div class="rank-container">
-                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorSex};"> ${rankSex}</div>
-                <div class="segment-rank-label">место</div>
+        <div class="segment-card-details">
+            <div class="segment-details-row">
+                <span class="segment-stat-label">⏱️ Время</span>
+                <span class="segment-time">${time}</span>
             </div>
-        </div>
-        
-        <div class="segment-stat">
-            <span class="segment-stat-label">🎂 По категории</span>
-            <div class="rank-container">
-                <div class="segment-rank" style="width: 28px; height: 28px; font-size: 12px; background-color: ${colorCategory};"> ${rankCategory}</div>
-                <div class="segment-rank-label">место</div>
+            <div class="segment-details-row">
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="segment-stat-label">🏃 Темп</span>
+                    <span class="segment-stat-value">${pace}</span>
+                </div>
+                ${comparisonHtmlDetail}
+            </div>
+            <div class="segment-details-ranks">
+                <div class="segment-detail-rank-item">
+                    <span class="segment-stat-label">🏆 Абсолют</span>
+                    <div class="rank-container">
+                        <div class="segment-rank" style="background:${colorAbsolute}">${rankAbsolute}</div>
+                        <div class="segment-rank-label">место</div>
+                    </div>
+                </div>
+                <div class="segment-detail-rank-item">
+                    <span class="segment-stat-label">♀♂ Пол</span>
+                    <div class="rank-container">
+                        <div class="segment-rank" style="background:${colorSex}">${rankSex}</div>
+                        <div class="segment-rank-label">место</div>
+                    </div>
+                </div>
+                <div class="segment-detail-rank-item">
+                    <span class="segment-stat-label">🎂 Категория</span>
+                    <div class="rank-container">
+                        <div class="segment-rank" style="background:${colorCategory}">${rankCategory}</div>
+                        <div class="segment-rank-label">место</div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
-    
+
+    card.querySelector('.segment-card-header').addEventListener('click', () => {
+        card.classList.toggle('expanded');
+    });
+
     return card;
 }
 

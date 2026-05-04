@@ -315,7 +315,7 @@ th:hover {
 }
 
 /* Ширины столбцов для таблицы результатов (during-mode-table) */
-.during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
 .during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
 .during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
 .during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
@@ -327,7 +327,7 @@ th:hover {
 .during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 10%; }   /* Темп */
 
 /* Ширины столбцов для таблицы стартового списка (before-mode-table) */
-.before-mode-table th:nth-child(1), .before-mode-table td:nth-child(1) { width: 4%; }      /* № - узкий */
+.before-mode-table th:nth-child(1), .before-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
 .before-mode-table th:nth-child(2), .before-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
 .before-mode-table th:nth-child(3), .before-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
 .before-mode-table th:nth-child(4), .before-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
@@ -758,91 +758,213 @@ tr:hover {
 }
 
 .segments-content-wrapper {
-    padding: 20px;
+    padding: 12px 16px 16px;
+}
+
+.segments-controls {
     display: flex;
-    gap: 20px;
-    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.segments-toggle-all-btn {
+    font-size: 11px;
+    padding: 3px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f8f9fa;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.segments-toggle-all-btn:hover {
+    background: #e9ecef;
+    color: #333;
 }
 
 .segments-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     width: 100%;
 }
 
+/* === КАРТОЧКА СЕГМЕНТА === */
 .segment-card {
     background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s;
 }
 
 .segment-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     border-color: var(--primary-color);
-    transform: translateY(-2px);
 }
 
-.segment-card-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--primary-color);
-    margin-bottom: 12px;
+/* Заголовок (всегда виден) */
+.segment-card-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 7px 12px;
+    cursor: pointer;
+    user-select: none;
+    min-height: 36px;
+}
+
+.segment-card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
 }
 
 .segment-icon {
-    font-size: 20px;
-    width: 24px;
-    height: 24px;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.segment-card-title-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.segment-mode-badge {
+    font-size: 10px;
+    color: #aaa;
+    border: 1px solid #ddd;
+    padding: 0 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.segment-distance-badge {
+    font-size: 11px;
+    color: #888;
+    background: #f0f0f0;
+    padding: 1px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Быстрая статистика в заголовке */
+.segment-card-quick-stats {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.segment-time-quick {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary-color);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.segment-pace-quick {
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.pace-comparison-mini {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.segment-ranks-quick {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.rank-badge-mini {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
 }
 
-.segment-stat {
+.segment-card-toggle {
+    font-size: 10px;
+    color: #aaa;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+}
+
+.segment-card.expanded .segment-card-toggle {
+    transform: rotate(180deg);
+}
+
+/* Детальное раскрытие */
+.segment-card-details {
+    display: none;
+    padding: 10px 14px 12px;
+    border-top: 1px solid #f0f0f0;
+    background: #fafafa;
+}
+
+.segment-card.expanded .segment-card-details {
+    display: block;
+}
+
+.segment-details-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 8px;
     gap: 8px;
-    flex-wrap: wrap;
 }
 
-.segment-stat:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: none;
-}
-
-.segment-stat > div {
+.segment-details-ranks {
     display: flex;
+    gap: 24px;
+    margin-top: 10px;
+}
+
+.segment-detail-rank-item {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
 }
 
 .segment-stat-label {
-    font-size: 12px;
+    font-size: 11px;
     color: #999;
     font-weight: 500;
     text-transform: uppercase;
 }
 
 .segment-stat-value {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: #2c3e50;
 }
 
 .segment-time {
-    font-size: 18px;
+    font-size: 16px;
     color: var(--primary-color);
     font-weight: 700;
 }
@@ -850,24 +972,18 @@ tr:hover {
 .segment-rank {
     color: white;
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-.segment-rank:hover {
-    transform: scale(1.1);
 }
 
 .segment-rank-label {
-    font-size: 11px;
+    font-size: 10px;
     color: #666;
-    margin-top: 4px;
     text-align: center;
 }
 
@@ -877,27 +993,10 @@ tr:hover {
     align-items: center;
 }
 
-.segment-info-row {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 8px;
-    padding: 8px;
-    background-color: #f5f5f5;
-    border-radius: 4px;
-    text-align: center;
-    font-weight: 500;
-}
-
-.segment-distance {
-    color: var(--primary-color);
-    font-weight: 600;
-}
-
 .pace-comparison {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    margin-left: 8px;
-    padding: 2px 6px;
+    padding: 1px 5px;
     border-radius: 3px;
     display: inline-block;
 }
@@ -931,13 +1030,11 @@ tr:hover {
 
 /* Адаптивность для мобильных */
 @media (max-width: 768px) {
-    .segments-grid {
-        grid-template-columns: 1fr;
+    .segment-card-quick-stats {
+        gap: 8px;
     }
-
-    .segments-content-wrapper {
-        flex-direction: column;
-        padding: 15px;
+    .segment-pace-quick {
+        display: none;
     }
 }
 
@@ -965,8 +1062,8 @@ tr:hover {
         padding: 10px;
     }
 
-    .segment-card {
-        padding: 12px;
+    .segment-ranks-quick {
+        display: none;
     }
 }
 
