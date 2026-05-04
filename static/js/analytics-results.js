@@ -589,6 +589,16 @@ function sortTable(columnName) {
 // Отрисовываем таблицу результатов
 function renderResultsTable(runners) {
     const tbody = document.getElementById('resultsTableBody');
+
+    // Сохраняем открытые строки сегментов перед очисткой
+    const openSegments = new Map(); // resultId → segmentsRow element
+    tbody.querySelectorAll('.segments-row:not(.collapsed)').forEach(segRow => {
+        const runnerRow = segRow.previousElementSibling;
+        if (runnerRow && runnerRow.dataset.resultId) {
+            openSegments.set(runnerRow.dataset.resultId, segRow);
+        }
+    });
+
     tbody.innerHTML = '';
     // Синхронизируем заголовок колонки времени
     const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
@@ -696,8 +706,13 @@ function renderResultsTable(runners) {
         });
         
         tbody.appendChild(row);
+
+        // Восстанавливаем ранее открытый блок сегментов
+        if (resultId && openSegments.has(resultId)) {
+            tbody.appendChild(openSegments.get(resultId));
+        }
     });
-    
+
     console.log(`✅ Отрисовано ${runners.length} строк таблицы результатов`);
 }
 

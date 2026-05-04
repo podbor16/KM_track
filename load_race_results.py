@@ -676,7 +676,9 @@ class RaceLoader:
             time_gun_start = milliseconds_to_time(runner.get('times.official_:::start:::'))
             time_clear_start = milliseconds_to_time(runner.get('times.real_:::start:::'))
             time_gun_finish = milliseconds_to_time(runner.get('times.official_:::finish:::'))
-            time_clear_finish = milliseconds_to_time(runner.get('times.real_:::finish:::'))
+            time_clear_finish = milliseconds_to_time(
+                runner.get('times.real_:::finish:::') or runner.get('times.official_:::finish:::')
+            )
 
             # Темпы финиша — вычисляются из времён и дистанции
             finish_pace_avg_gun = _seconds_to_pace(
@@ -817,13 +819,7 @@ class RaceLoader:
                         sg_time_gun = VALUES(sg_time_gun),
                         sg_pace_avg = VALUES(sg_pace_avg),
                         sg_pace_avg_gun = VALUES(sg_pace_avg_gun),
-                        event_id = VALUES(event_id),
-                        sg_rank_absolute = VALUES(sg_rank_absolute),
-                        sg_rank_sex = VALUES(sg_rank_sex),
-                        sg_rank_category = VALUES(sg_rank_category),
-                        sg_rank_absolute_gun = VALUES(sg_rank_absolute_gun),
-                        sg_rank_sex_gun = VALUES(sg_rank_sex_gun),
-                        sg_rank_category_gun = VALUES(sg_rank_category_gun)
+                        event_id = VALUES(event_id)
                 """
                 self.cursor.executemany(insert_query, segments_batch)
                 if self.connection:

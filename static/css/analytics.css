@@ -770,17 +770,16 @@ tr:hover {
 .segments-toggle-all-btn {
     font-size: 11px;
     padding: 3px 10px;
-    border: 1px solid #ddd;
+    border: none;
     border-radius: 4px;
-    background: #f8f9fa;
-    color: #555;
+    background: var(--primary-color, #ee2d62);
+    color: white;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: opacity 0.15s;
 }
 
 .segments-toggle-all-btn:hover {
-    background: #e9ecef;
-    color: #333;
+    opacity: 0.85;
 }
 
 .segments-grid {
