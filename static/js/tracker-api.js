@@ -321,6 +321,7 @@ async function init() {
     startAutoUpdate();
     startAnimationLoop();
     updateEventTitle();
+    setInterval(loadAnalytics, 30000);
 
     updateStatus(`✅ Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
 }

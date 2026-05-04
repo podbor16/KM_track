@@ -264,7 +264,9 @@ function buildPopupContent(runner) {
             return s;
         };
 
-        if (lastCP && eventDistance > 0) {
+        const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
+
+        if (hasStarted && lastCP && eventDistance > 0) {
             const ktSecs = durationToSeconds(lastCP.time);
             const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
             if (ktDist > 0 && ktSecs > 0) {
@@ -272,17 +274,17 @@ function buildPopupContent(runner) {
                 if (remaining_km > 0) {
                     const secsPerKm = ktSecs / ktDist;
                     const remaining_secs = remaining_km * secsPerKm;
-                    const baseMs = runner.last_kt_unix_ms ? Math.max(runner.last_kt_unix_ms, serverTimeUnix) : serverTimeUnix;
+                    const baseMs = runner.last_kt_unix_ms || serverTimeUnix;
                     finishEta = _buildEta(baseMs + remaining_secs * 1000);
                 } else {
                     finishEta = 'Финишировал';
                 }
             }
-        } else if (runner.speed > 0 && eventDistance > 0) {
+        } else if (hasStarted && runner.speed > 0 && eventDistance > 0) {
             const remaining_km = eventDistance - (runner.current_distance || 0);
             if (remaining_km > 0) {
                 const remaining_secs = remaining_km / runner.speed * 3600;
-                const baseMs = runner.last_kt_unix_ms ? Math.max(runner.last_kt_unix_ms, serverTimeUnix) : serverTimeUnix;
+                const baseMs = runner.last_kt_unix_ms || serverTimeUnix;
                 finishEta = _buildEta(baseMs + remaining_secs * 1000);
             } else {
                 finishEta = 'Финишировал';
@@ -310,9 +312,9 @@ function buildPopupContent(runner) {
                 ${lastCP ? `<div><strong>Темп участка ${segLabel}:</strong> ${lastSegPace} мин/км</div>
                 <div><strong>Текущий темп:</strong> ${currentPaceStr} мин/км</div>` : forecastRow}
                 <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
-                <div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
+                ${finishEta !== '-' ? `<div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
                     <div><strong>Прогноз финиша:</strong> ${finishEta}</div>
-                </div>
+                </div>` : ''}
             </div>
         `;
     } else {

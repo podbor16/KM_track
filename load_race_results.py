@@ -281,6 +281,9 @@ class RaceLoader:
         self.copernico_event = copernico_event
         self.gun_time_utc: Optional[str] = None
 
+        # КТ-маппинг: список из 7 элементов — имя поля Copernico для kt1..kt7 (None если нет)
+        self._kt_fields: Optional[List[Optional[str]]] = None
+
         # Performance stats
         self._cycle_times: list = []
         self._kt_reads_per_cycle: list = []  # [(timestamp, count), ...]
@@ -348,9 +351,18 @@ class RaceLoader:
                 self.logger.debug(f"Ответ API: {data}")
                 if isinstance(data, dict) and 'data' in data:
                     runners = data['data']
-                    self.gun_time_utc = data.get('gunTime')
+                    gun_time = data.get('gunTime')
+                    # Fallback: gunTime может быть per-runner полем
+                    if not gun_time and runners:
+                        gun_time = runners[0].get('gunTime')
+                    if gun_time:
+                        self.gun_time_utc = gun_time
                 elif isinstance(data, list):
                     runners = data
+                    if runners:
+                        gun_time = runners[0].get('gunTime')
+                        if gun_time:
+                            self.gun_time_utc = gun_time
                 else:
                     self.logger.error(f"❌ Неожиданный формат ответа: {type(data)}")
                     return []
@@ -600,6 +612,29 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
 
+    def _build_kt_field_map(self, sample_keys: set) -> List[Optional[str]]:
+        """Подобрать поля Copernico для КТ1..КТ7 по checkpoint_distances."""
+        if not self.checkpoint_distances or len(self.checkpoint_distances) < 2:
+            return [None] * 7
+
+        kt_dists = self.checkpoint_distances[1:-1]  # исключаем старт (0) и финиш
+        result = []
+        for dist in kt_dists:
+            dist_f = float(dist)
+            dist_str = str(int(dist_f)) if dist_f == int(dist_f) else str(dist_f)
+            candidates = [
+                f'times.official_{dist_str}km',
+                f'times.official_{dist_str}',
+                f'times.real_{dist_str}km',
+                f'times.real_{dist_str}',
+                f'times.real_kt{len(result) + 1}',
+            ]
+            matched = next((c for c in candidates if c in sample_keys), None)
+            result.append(matched)
+
+        result += [None] * (7 - len(result))
+        return result[:7]
+
     def _update_existing(self, runners: List[Dict]) -> Tuple[int, int, int]:
         """Обновить все поля существующих записей И их сегменты"""
         if self.cursor is None:
@@ -610,6 +645,13 @@ class RaceLoader:
         segments_batch = []
         updated_dorsals = []
         kt_reads_this_cycle = 0
+
+        # Лениво строим маппинг КТ-полей при первом вызове
+        if self._kt_fields is None and runners:
+            self._kt_fields = self._build_kt_field_map(set(runners[0].keys()))
+            mapped = [(i + 1, f) for i, f in enumerate(self._kt_fields) if f]
+            self.logger.info(f"📡 КТ-маппинг Copernico: {mapped}")
+        kt_f = self._kt_fields or [None] * 7
 
         for runner in runners:
             dorsal = str(runner.get('dorsal'))
@@ -644,14 +686,14 @@ class RaceLoader:
                 _time_str_to_seconds(time_clear_finish), self.event_distance_km
             )
 
-            # Времена КТ (чистые — chip time из Copernico)
-            time_clear_kt1 = milliseconds_to_time(runner.get('times.real_kt1'))
-            time_clear_kt2 = milliseconds_to_time(runner.get('times.real_kt2'))
-            time_clear_kt3 = milliseconds_to_time(runner.get('times.real_kt3'))
-            time_clear_kt4 = milliseconds_to_time(runner.get('times.real_kt4'))
-            time_clear_kt5 = milliseconds_to_time(runner.get('times.real_kt5'))
-            time_clear_kt6 = milliseconds_to_time(runner.get('times.real_kt6'))
-            time_clear_kt7 = milliseconds_to_time(runner.get('times.real_kt7'))
+            # Времена КТ — поля Copernico из динамического маппинга
+            time_clear_kt1 = milliseconds_to_time(runner.get(kt_f[0]) if kt_f[0] else None)
+            time_clear_kt2 = milliseconds_to_time(runner.get(kt_f[1]) if kt_f[1] else None)
+            time_clear_kt3 = milliseconds_to_time(runner.get(kt_f[2]) if kt_f[2] else None)
+            time_clear_kt4 = milliseconds_to_time(runner.get(kt_f[3]) if kt_f[3] else None)
+            time_clear_kt5 = milliseconds_to_time(runner.get(kt_f[4]) if kt_f[4] else None)
+            time_clear_kt6 = milliseconds_to_time(runner.get(kt_f[5]) if kt_f[5] else None)
+            time_clear_kt7 = milliseconds_to_time(runner.get(kt_f[6]) if kt_f[6] else None)
 
             # Темпы КТ — вычисляются из чистого времени и дистанции до КТ
             kt_clear_times = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7]
@@ -1044,12 +1086,14 @@ class RaceLoader:
         num_kt = len(self.checkpoint_distances) - 2
         point_names = ['start'] + [f'kt{i}' for i in range(1, num_kt + 1)] + ['finish']
 
+        kt_f = self._kt_fields or [None] * 7
         times: Dict[str, Optional[int]] = {
-            'start': runner_data.get('times.real_:::start:::'),
-            'finish': runner_data.get('times.real_:::finish:::'),
+            'start': runner_data.get('times.official_:::start:::'),
+            'finish': runner_data.get('times.official_:::finish:::'),
         }
         for i in range(1, num_kt + 1):
-            times[f'kt{i}'] = runner_data.get(f'times.real_kt{i}')
+            field = kt_f[i - 1] if i - 1 < len(kt_f) else None
+            times[f'kt{i}'] = runner_data.get(field) if field else None
 
         # Волновая задержка: время от выстрела до пересечения старта участником
         gun_offset_ms = runner_data.get('times.official_:::start:::') or 0

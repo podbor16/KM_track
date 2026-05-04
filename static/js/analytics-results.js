@@ -30,7 +30,8 @@ const eventYearToIdMap = {
     'xtrailrun_2025': 95,
     'xtrailrun_2026': 117,
     'snow7_2025': 99,
-    'snow7_2026': 119
+    'snow7_2026': 119,
+    'pervomay_2026': [142, 143]  // 5 км (142), 21.1 км (143)
 };
 
 // Инициализация страницы — дефолт: активный забег + прошлый год
@@ -39,7 +40,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
         currentEvent = cfg.event || 'night_run';
-        currentYear  = (cfg.year || new Date().getFullYear()) - 1;
+        const cfgYear = cfg.year || new Date().getFullYear();
+        // Показывать текущий год если для него есть данные, иначе прошлый
+        currentYear = eventYearToIdMap[`${currentEvent}_${cfgYear}`] !== undefined
+            ? cfgYear
+            : cfgYear - 1;
     } catch {
         currentEvent = 'night_run';
         currentYear  = new Date().getFullYear() - 1;
@@ -50,6 +55,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateEventCardBackground();
     updatePageTitle();
     loadRunnersData();
+
+    setInterval(() => loadRunnersData(true), 30000);
 });
 
 // Функция обновления цвета темы в зависимости от события
@@ -120,19 +127,21 @@ function setTimeMode(mode) {
 // Функция обновления фонового изображения карточки события
 function updateEventCardBackground() {
     const eventCard = document.getElementById('eventCard');
-    const eventDisplayName = eventNameMap[currentEvent];
-    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const eventDisplayName = eventNameMap[currentEvent] || '';
+    const imageUrl = eventDisplayName ? `/static/images/events/${encodeURIComponent(eventDisplayName)}.png` : '';
     eventCard.style.backgroundImage = `url('${imageUrl}')`;
 }
 
 // Функция загрузки данных
-async function loadRunnersData() {
+async function loadRunnersData(silent = false) {
     console.log(`Загрузка данных для результатов: ${currentEvent} ${currentYear}`);
-    allRunners = [];
-    filteredRunners = [];
-    document.getElementById('resultsTableBody').innerHTML = '';
-    document.getElementById('resultsWrapper').style.display = 'none';
-    showLoading(true);
+    if (!silent) {
+        allRunners = [];
+        filteredRunners = [];
+        document.getElementById('resultsTableBody').innerHTML = '';
+        document.getElementById('resultsWrapper').style.display = 'none';
+        showLoading(true);
+    }
 
     try {
         let rawData = [];
@@ -187,18 +196,24 @@ async function loadRunnersData() {
         populateDistances(allRunners);
         
         applyFilters();
-        showLoading(false);
-        document.getElementById('resultsWrapper').style.display = '';
+        if (!silent) {
+            showLoading(false);
+            document.getElementById('resultsWrapper').style.display = '';
+        }
 
         // Загружаем кнопки КТ для одиночного event_id
-        if (eventIdOrIds !== undefined && !Array.isArray(eventIdOrIds)) {
+        if (!silent && eventIdOrIds !== undefined && !Array.isArray(eventIdOrIds)) {
             loadSegmentTabs(eventIdOrIds);
         }
     } catch (error) {
-        console.error('❌ Ошибка загрузки данных:', error);
-        showError('Ошибка загрузки данных: ' + error.message);
-        showLoading(false);
-        document.getElementById('resultsWrapper').style.display = '';
+        if (!silent) {
+            console.error('❌ Ошибка загрузки данных:', error);
+            showError('Ошибка загрузки данных: ' + error.message);
+            showLoading(false);
+            document.getElementById('resultsWrapper').style.display = '';
+        } else {
+            console.warn('⚠️ Фоновое обновление результатов не удалось:', error.message);
+        }
     }
 }
 
@@ -642,7 +657,7 @@ function renderResultsTable(runners) {
         let category = runner.category || '';
         
         let rowHTML = `
-            <td>${index + 1}</td>
+            <td>${runner.start_number || index + 1}</td>
             <td>${lastName}</td>
             <td>${firstName}</td>
             <td>${birthYear}</td>
@@ -1137,7 +1152,7 @@ async function renderSegmentView(runners) {
         tr.className = 'runner-row';
         if (row.result_id) tr.dataset.resultId = row.result_id;
         tr.innerHTML = `
-            <td>${idx + 1}</td>
+            <td>${row.start_number || idx + 1}</td>
             <td>${row.surname || ''}</td>
             <td>${row.name || ''}</td>
             <td>${birthYear}</td>
