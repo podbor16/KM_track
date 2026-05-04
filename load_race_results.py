@@ -675,10 +675,21 @@ class RaceLoader:
             # Времена
             time_gun_start = milliseconds_to_time(runner.get('times.official_:::start:::'))
             time_clear_start = milliseconds_to_time(runner.get('times.real_:::start:::'))
-            time_gun_finish = milliseconds_to_time(runner.get('times.official_:::finish:::'))
-            time_clear_finish = milliseconds_to_time(
-                runner.get('times.real_:::finish:::') or runner.get('times.official_:::finish:::')
-            )
+            official_finish_ms = runner.get('times.official_:::finish:::')
+            official_start_ms = runner.get('times.official_:::start:::')
+            time_gun_finish = milliseconds_to_time(official_finish_ms)
+
+            # Чистое время = chip-время из Copernico, либо official_finish - wave_start_offset
+            chip_finish_ms = runner.get('times.real_:::finish:::')
+            if chip_finish_ms:
+                net_finish_ms = chip_finish_ms
+            elif official_finish_ms and official_start_ms:
+                net_finish_ms = official_finish_ms - official_start_ms
+                if net_finish_ms <= 0:
+                    net_finish_ms = official_finish_ms
+            else:
+                net_finish_ms = official_finish_ms
+            time_clear_finish = milliseconds_to_time(net_finish_ms)
 
             # Темпы финиша — вычисляются из времён и дистанции
             finish_pace_avg_gun = _seconds_to_pace(
