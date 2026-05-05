@@ -14,6 +14,18 @@ from src.tracker.models.analytics import RaceResultsResponse
 
 logger = logging.getLogger(__name__)
 
+
+def _fmt_distance_label(event_distance) -> str:
+    """'5.0' → '5 км', '21.1' → '21.1 км'"""
+    if event_distance is None:
+        return '5 км'
+    try:
+        f = float(event_distance)
+        return f"{int(f)} км" if f == int(f) else f"{f} км"
+    except (ValueError, TypeError):
+        return str(event_distance)
+
+
 # Кэш исторических данных (прошлый год)
 _hist_cache: dict = {}
 _hist_cache_ts: dict = {}
@@ -324,7 +336,7 @@ def _do_build(
             'finish_pace_avg_gun': runner.get('finish_pace_avg_gun'),
             'finish_pace_avg_clean': runner.get('finish_pace_avg_clean'),
             'distance': runner.get('event_distance') or runner.get('distance') or runner.get('distance_from_event') or '5 км',
-            'event': runner.get('distance', runner.get('distance_from_event', '5 км')),
+            'event': _fmt_distance_label(runner.get('event_distance')),
             'checkpoints': {
                 'kt1': {
                     'time': runner.get('time_clear_kt1'),

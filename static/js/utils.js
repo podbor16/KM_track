@@ -8,7 +8,8 @@ window.KMUtils = {
         'zhara':      'Жара',
         'kids':       'Детский забег',
         'xtrailrun':  'Х Трейл',
-        'snow7':      'Снежная семерка'
+        'snow7':      'Снежная семерка',
+        'pervomay':   'Первомайский полумарафон'
     },
 
     EVENT_COLORS: {
@@ -19,7 +20,8 @@ window.KMUtils = {
         'zhara':      '#ee2d62',
         'kids':       '#ee2d62',
         'xtrailrun':  '#562872',
-        'snow7':      '#00BFDF'
+        'snow7':      '#00BFDF',
+        'pervomay':   '#d0393b'
     },
 
     // Форматирует время в HH:MM:SS; принимает строку HH:MM:SS, ISO 8601 (PT...) или число мс
