@@ -83,8 +83,13 @@ async def get_current_event() -> CurrentEventResponse:
 
 
 @router.post("/api/admin/reload-config")
-async def reload_config() -> dict:
+async def reload_config(request: Request) -> dict:
     """Немедленно перезагружает YAML-конфиги забегов без перезапуска сервера."""
+    from src.core.auth import verify_session_cookie, COOKIE_NAME
+    try:
+        verify_session_cookie(request.cookies.get(COOKIE_NAME, ""))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Требуется авторизация")
     invalidate_events_cache()
     events = load_events_cached()
     active = get_active_event(events)

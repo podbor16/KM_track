@@ -19,6 +19,9 @@
             <li class="navbar-item">
                 <a href="/history" class="navbar-link">ИСТОРИЯ</a>
             </li>
+            <li class="navbar-item">
+                <a href="/business-analytics" class="navbar-link">АНАЛИТИКА</a>
+            </li>
         </ul>
     </div>
 </nav>
@@ -59,6 +62,8 @@
             navbarLinks[2]?.classList.add('active'); // Результаты
         } else if (currentPath === '/history') {
             navbarLinks[3]?.classList.add('active'); // История
+        } else if (currentPath === '/business-analytics') {
+            navbarLinks[4]?.classList.add('active'); // Аналитика
         }
     }
     

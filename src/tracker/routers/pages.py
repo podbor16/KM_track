@@ -3,17 +3,24 @@ HTML-страницы приложения KM_track.
 Все эндпоинты, возвращающие HTMLResponse (Jinja2 шаблоны).
 """
 
+import hmac
 import logging
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Request, Query
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, Request, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.config import settings
 from src.config.event_loader import get_event_by_name
+from src.core.auth import (
+    COOKIE_NAME,
+    EXPIRY_SECONDS,
+    create_session_cookie,
+    require_auth,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -168,3 +175,86 @@ async def athlete_profile_page(request: Request):
 async def race_analysis_page(request: Request):
     """Анализ забегов с выбором события и года."""
     return templates.TemplateResponse("race-analysis.html", {"request": request})
+
+
+# ============================================================================
+# АВТОРИЗАЦИЯ
+# ============================================================================
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@router.post("/login")
+async def login_submit(
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    creds_ok = (
+        username == settings.ADMIN_USERNAME
+        and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
+    )
+    if creds_ok:
+        cookie_value = create_session_cookie(username)
+        response = RedirectResponse("/business-analytics", status_code=302)
+        response.set_cookie(
+            COOKIE_NAME,
+            cookie_value,
+            httponly=True,
+            max_age=EXPIRY_SECONDS,
+            samesite="lax",
+        )
+        return response
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": {}, "error": "Неверный логин или пароль"},
+        status_code=401,
+    )
+
+
+@router.get("/logout")
+async def logout():
+    response = RedirectResponse("/login", status_code=302)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
+# ============================================================================
+# БИЗНЕС-АНАЛИТИКА (защищённая страница)
+# ============================================================================
+
+@router.get("/business-analytics", response_class=HTMLResponse)
+async def business_analytics_page(
+    request: Request,
+    user=Depends(require_auth),
+):
+    if isinstance(user, RedirectResponse):
+        return user
+
+    from src.analytics.db_business import (
+        get_event_summary,
+        get_participants_by_year,
+        get_top_cities,
+        get_gender_breakdown,
+    )
+    from src.core.datalens import make_embed_token
+
+    datalens_embeds = []
+    if settings.DATALENS_KEY_SECRET:
+        for cfg in settings.DATALENS_EMBEDS:
+            token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
+            embed_type = cfg.get("type", "dash")
+            datalens_embeds.append({
+                "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
+                "title": cfg.get("title", ""),
+            })
+
+    return templates.TemplateResponse("business-analytics.html", {
+        "request": request,
+        "datalens_embeds": datalens_embeds,
+        "event_summary": get_event_summary(),
+        "participants_by_year": get_participants_by_year(),
+        "top_cities": get_top_cities(),
+        "gender_breakdown": get_gender_breakdown(),
+    })

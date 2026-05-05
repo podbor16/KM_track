@@ -58,6 +58,26 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 # CORS
 CORS_ORIGINS = ["*"]
 
+# --- АВТОРИЗАЦИЯ ---
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+
+# --- DataLens приватный embed ---
+DATALENS_KEY_SECRET = os.getenv("DATALENS_KEY_SECRET", "")
+
+def _parse_datalens_embeds() -> list:
+    raw = os.getenv("DATALENS_EMBEDS", "")
+    if not raw:
+        return []
+    try:
+        import json as _json
+        return _json.loads(raw)
+    except Exception:
+        return []
+
+DATALENS_EMBEDS: list = _parse_datalens_embeds()
+
 # --- БАЗА ДАННЫХ MySQL ---
 DB_HOST = os.getenv("DB_HOST", "79.174.89.159")
 DB_PORT = int(os.getenv("DB_PORT", "16171"))
@@ -90,5 +110,10 @@ __all__ = [
     "DB_USER",
     "DB_PASSWORD",
     "DB_PORT",
+    "ADMIN_USERNAME",
+    "ADMIN_PASSWORD",
+    "SECRET_KEY",
+    "DATALENS_KEY_SECRET",
+    "DATALENS_EMBEDS",
     "logger",
 ]
