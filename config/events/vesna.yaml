@@ -2,7 +2,7 @@ name: "Весна"
 display_name: "Весна"
 year: 2026
 code: "vesna"
-is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
+is_active: true              # ← АКТИВНЫЙ забег: true у одного, false у остальных
 start_lat: 56.0063930               # ← заполнить перед стартом
 start_lon: 92.8714990               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
@@ -11,25 +11,28 @@ description: "Событие Весна | Дистанция: 5 км"
 distances:
   - distance: "5 км"
     distance_km: 5.0
-    db_event_id: null         # ← заполнить перед стартом
+    db_event_id: 106
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
-    gpx_file: "static/map/2026/vesna.gpx"            # ← заполнить: "static/gpx/vesna.gpx"
-    event_date: null          # ← заполнить перед стартом
+    checkpoint_distances: [0, 2.5, 5.0]
+    checkpoints:
+      - {name: "Старт",           distance_km: 0.0, lat: 56.0063930, lon: 92.8714990}
+      - {name: "Разворот 2.5 км", distance_km: 2.5, lat: 56.0001060, lon: 92.8394770}
+      - {name: "Финиш",           distance_km: 5.0, lat: 56.0063930, lon: 92.8714990}
+    gpx_file: "static/map/2026/vesna.gpx"
+    event_date: "2026-05-17"
     route:
       laps: 1
       total_km: 5.0
     copernico:
-      race_id: null           # ← заполнить перед стартом
+      race_id: null
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event: "5 км"
 
   - distance: "2 км"
     distance_km: 2.0
-    db_event_id: null
+    db_event_id: 107
     tracked: false
     has_start_list: true
     checkpoint_distances: []
