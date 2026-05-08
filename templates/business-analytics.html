@@ -65,25 +65,14 @@
         }
 
         /* ---- DataLens iframe ---- */
-        .datalens-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-            gap: 20px;
-        }
-
-        .datalens-card {
-            background: #1e1e1e;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            overflow: hidden;
-        }
-
-        .datalens-card iframe {
-            display: block;
+        .datalens-fullscreen {
             width: 100%;
-            height: 480px;
+            height: calc(100vh - 160px);
+            min-height: 600px;
             border: none;
+            display: block;
             background: #fff;
+            border-radius: 6px;
         }
 
         .datalens-empty {
@@ -223,23 +212,15 @@
             <div class="ba-section-title">Дашборды DataLens</div>
             <div class="ba-section-body">
                 {% if datalens_embeds %}
-                    <div class="datalens-grid">
-                        {% for embed in datalens_embeds %}
-                        <div class="datalens-card">
-                            {% if embed.title %}
-                            <div style="padding:10px 14px;font-size:13px;font-weight:600;color:#aaa;background:#1a1a1a;border-bottom:1px solid #3a3a3a;">
-                                {{ embed.title }}
-                            </div>
-                            {% endif %}
-                            <iframe
-                                src="{{ embed.url }}"
-                                loading="lazy"
-                                allowfullscreen
-                                title="{{ embed.title or 'DataLens дашборд' }}"
-                            ></iframe>
-                        </div>
-                        {% endfor %}
-                    </div>
+                    {% for embed in datalens_embeds %}
+                    <iframe
+                        id="dl-iframe-{{ loop.index0 }}"
+                        src="{{ embed.url }}"
+                        class="datalens-fullscreen"
+                        allowfullscreen
+                        title="{{ embed.title or 'DataLens дашборд' }}"
+                    ></iframe>
+                    {% endfor %}
                 {% else %}
                     <div class="datalens-empty">
                         Приватные embed-ключи DataLens не настроены.<br>
@@ -458,5 +439,23 @@
         </div>
 
     </div>
+
+    <script>
+        // Обновляем JWT-токены каждые 50 минут (TTL токена 60 мин)
+        async function refreshDatalensTokens() {
+            try {
+                const res = await fetch('/api/datalens-tokens');
+                if (!res.ok) return;
+                const data = await res.json();
+                data.embeds.forEach((embed, i) => {
+                    const iframe = document.getElementById('dl-iframe-' + i);
+                    if (iframe) iframe.src = embed.url;
+                });
+            } catch (e) {
+                console.warn('DataLens token refresh failed:', e);
+            }
+        }
+        setInterval(refreshDatalensTokens, 50 * 60 * 1000);
+    </script>
 </body>
 </html>

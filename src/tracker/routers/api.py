@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
+from fastapi.responses import RedirectResponse
 
 from src.config import settings
 from src.config.event_loader import (
@@ -17,6 +18,7 @@ from src.config.event_loader import (
 )
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
+from src.core.auth import require_auth
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
@@ -564,6 +566,30 @@ async def get_race_stats(event_name: str = Query(None)):
     except Exception as e:
         logger.error(f"get_race_stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# DATALENS
+# ============================================================================
+
+@router.get("/api/datalens-tokens")
+async def datalens_tokens(user=Depends(require_auth)):
+    """Свежие JWT-токены для DataLens embed. Вызывается клиентом каждые 50 минут."""
+    from src.core.datalens import make_embed_token
+    if isinstance(user, RedirectResponse):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not settings.DATALENS_KEY_SECRET:
+        raise HTTPException(status_code=503, detail="DataLens not configured")
+    result = []
+    for cfg in settings.DATALENS_EMBEDS:
+        token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
+        embed_type = cfg.get("type", "dash")
+        result.append({
+            "id": cfg["id"],
+            "title": cfg.get("title", ""),
+            "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
+        })
+    return {"embeds": result}
 
 
 # ============================================================================
