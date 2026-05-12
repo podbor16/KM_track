@@ -349,6 +349,69 @@ def check_preset_fields(dist_cfg):
         _row("G", "Поля доп.", "INFO", f"Лишние times-поля (не в конфиге): {sorted(extra)[:5]}")
 
 
+# ── Инспектор пресета ───────────────────────────────────────────────────────
+
+def inspect_preset(dist_cfg):
+    """Fetch из Copernico и вывести все поля первого участника — для составления preset YAML."""
+    cop = dist_cfg.get("copernico") or {}
+    race_id = cop.get("race_id")
+    preset_name = cop.get("preset")
+    login = cop.get("login", "podbor250718@gmail.com")
+    event_param = cop.get("event", "")
+
+    if not race_id:
+        print("\nFAIL: race_id не задан в конфиге. Добавьте его перед инспекцией.")
+        sys.exit(1)
+
+    encoded_preset = urllib.parse.quote(preset_name or "")
+    encoded_event  = urllib.parse.quote(event_param)
+    url = f"https://public-api.copernico.cloud/api/races/{race_id}/preset/{login}:::{encoded_preset}/{encoded_event}"
+    print(f"\nFetch: {url}\n")
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "KM_track/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"FAIL: HTTP {e.code}")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"FAIL: {e.reason}")
+        sys.exit(1)
+
+    runners = body.get("data", body) if isinstance(body, dict) else body
+    if not runners:
+        print("Copernico вернул пустой список участников.")
+        sys.exit(0)
+
+    runner = runners[0]
+    times_keys = sorted(k for k in runner if k.startswith("times."))
+    meta_keys  = sorted(k for k in runner if not k.startswith("times."))
+    gun_time   = body.get("gunTime") if isinstance(body, dict) else runner.get("gunTime")
+
+    print(f"=== Поля пресета '{preset_name}' (первый участник из {len(runners)}) ===\n")
+
+    print("--- Мета-поля ---")
+    for k in meta_keys:
+        print(f"  {k}: {runner[k]!r}")
+
+    print(f"\n--- Временны́е поля (times.*) ---")
+    for k in times_keys:
+        v = runner[k]
+        tag = " <-- ЕСТЬ ДАННЫЕ" if v is not None else ""
+        print(f"  {k!r}: {v}{tag}")
+
+    if gun_time:
+        print(f"\n  gunTime (top-level): {gun_time!r}")
+
+    print(f"\n--- Итого ---")
+    filled = [k for k in times_keys if runner[k] is not None]
+    empty  = [k for k in times_keys if runner[k] is None]
+    print(f"  times.* с данными: {filled}")
+    print(f"  times.* null:      {empty}")
+    print(f"\n  Используйте эти имена в config/copernico/{preset_name}.yaml")
+
+
 # ── main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -356,6 +419,8 @@ def main():
     parser.add_argument("--config", required=True, help="Путь к YAML конфигу события")
     parser.add_argument("--distance", required=True, help='Дистанция, напр. "5 км"')
     parser.add_argument("--server", default=None, help="URL сервера, напр. http://localhost:8000")
+    parser.add_argument("--inspect", action="store_true",
+                        help="Показать все поля из Copernico для данного пресета (для заполнения preset YAML)")
     args = parser.parse_args()
 
     config_path = project_root / args.config
@@ -364,6 +429,10 @@ def main():
     except (FileNotFoundError, ValueError) as e:
         print(f"FAIL  Конфиг: {e}")
         sys.exit(1)
+
+    if args.inspect:
+        inspect_preset(dist_cfg)
+        sys.exit(0)
 
     event_name = cfg.get("display_name") or cfg.get("name") or config_path.stem
     event_year = cfg.get("year") or ""
