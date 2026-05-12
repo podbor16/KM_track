@@ -10,6 +10,7 @@
 import sys
 import os
 import argparse
+import urllib.parse
 from pathlib import Path
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -267,6 +268,87 @@ def check_copernico(dist_cfg):
         fail("F", "Copernico", f"Недоступен: {e.reason}")
 
 
+# ── Блок G: Поля пресета ────────────────────────────────────────────────────
+
+def check_preset_fields(dist_cfg):
+    cop = dist_cfg.get("copernico") or {}
+    race_id = cop.get("race_id")
+    preset_name = cop.get("preset")
+
+    if not preset_name:
+        skip("G", "Пресет", "copernico.preset не задан")
+        return
+
+    # 1. Проверить что файл пресета существует
+    preset_path = project_root / "config" / "copernico" / f"{preset_name}.yaml"
+    if not preset_path.exists():
+        fail("G", "Пресет", f"config/copernico/{preset_name}.yaml не найден")
+        return
+    ok("G", "Пресет", f"config/copernico/{preset_name}.yaml найден")
+
+    if race_id is None:
+        skip("G", "Поля API", "race_id не задан — проверку полей пропускаем")
+        return
+
+    # 2. Загрузить preset-конфиг
+    try:
+        preset_cfg = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        fail("G", "Пресет YAML", f"Ошибка парсинга: {e}")
+        return
+
+    # 3. Собрать ожидаемые поля
+    time_fields_cfg = preset_cfg.get("time_fields", {})
+    expected = set()
+    for v in time_fields_cfg.values():
+        if v:
+            expected.add(v)
+    cp_fields = preset_cfg.get("checkpoint_fields") or {}
+    for v in cp_fields.values():
+        if v:
+            expected.add(v)
+
+    # 4. Fetch одного участника из Copernico
+    login = cop.get("login", "podbor250718@gmail.com")
+    event_param = cop.get("event", "")
+    encoded_preset = urllib.parse.quote(preset_name)
+    encoded_event  = urllib.parse.quote(event_param)
+    url = f"https://public-api.copernico.cloud/api/races/{race_id}/preset/{login}:::{encoded_preset}/{encoded_event}"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "KM_track/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        fail("G", "Поля API", f"HTTP {e.code} при fetch из Copernico")
+        return
+    except urllib.error.URLError as e:
+        fail("G", "Поля API", f"Copernico недоступен: {e.reason}")
+        return
+    except Exception as e:
+        fail("G", "Поля API", f"Ошибка: {e}")
+        return
+
+    runners = body.get("data", body) if isinstance(body, dict) else body
+    if not runners:
+        warn("G", "Поля API", "Copernico вернул пустой список")
+        return
+
+    received_keys = set(runners[0].keys())
+
+    # 5. Сравнить
+    missing = expected - received_keys
+    extra = [k for k in received_keys if k.startswith("times.") and k not in expected]
+
+    if missing:
+        fail("G", "Поля API", f"Отсутствуют в ответе: {sorted(missing)}")
+    else:
+        ok("G", "Поля API", f"Все ожидаемые поля присутствуют: {sorted(expected) or '(нет)'}")
+
+    if extra:
+        _row("G", "Поля доп.", "INFO", f"Лишние times-поля (не в конфиге): {sorted(extra)[:5]}")
+
+
 # ── main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -293,6 +375,7 @@ def main():
     check_participants(dist_cfg)
     check_api(cfg, dist_cfg, args.server)
     check_copernico(dist_cfg)
+    check_preset_fields(dist_cfg)
 
     total_ok   = STATUS["ok"]
     total_warn = STATUS["warn"]

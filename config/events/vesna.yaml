@@ -27,7 +27,7 @@ distances:
     copernico:
       race_id: null
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
+      preset: "km_vesna_5km_2026"
       event: "5 км"
 
   - distance: "2 км"

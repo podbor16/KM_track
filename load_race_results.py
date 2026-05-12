@@ -259,7 +259,8 @@ class RaceLoader:
                  copernico_race_id: Optional[str] = None,
                  copernico_login: Optional[str] = None,
                  copernico_preset: Optional[str] = None,
-                 copernico_event: Optional[str] = None):
+                 copernico_event: Optional[str] = None,
+                 preset_cfg: Optional[Dict] = None):
         self.event_id = event_id
         self.logger = logger
         self.connection = None
@@ -281,7 +282,11 @@ class RaceLoader:
         self.copernico_event = copernico_event
         self.gun_time_utc: Optional[str] = None
 
+        # Preset-конфиг: описание полей Copernico для этой дистанции
+        self._preset_cfg: Dict = preset_cfg or {}
+
         # КТ-маппинг: список из 7 элементов — имя поля Copernico для kt1..kt7 (None если нет)
+        # Заполняется один раз из preset_cfg при первом обновлении
         self._kt_fields: Optional[List[Optional[str]]] = None
 
         # Performance stats
@@ -612,28 +617,13 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
 
-    def _build_kt_field_map(self, sample_keys: set) -> List[Optional[str]]:
-        """Подобрать поля Copernico для КТ1..КТ7 по checkpoint_distances."""
-        if not self.checkpoint_distances or len(self.checkpoint_distances) < 2:
-            return [None] * 7
-
-        kt_dists = self.checkpoint_distances[1:-1]  # исключаем старт (0) и финиш
-        result = []
-        for dist in kt_dists:
-            dist_f = float(dist)
-            dist_str = str(int(dist_f)) if dist_f == int(dist_f) else str(dist_f)
-            candidates = [
-                f'times.official_{dist_str}km',
-                f'times.official_{dist_str}',
-                f'times.real_{dist_str}km',
-                f'times.real_{dist_str}',
-                f'times.real_kt{len(result) + 1}',
-            ]
-            matched = next((c for c in candidates if c in sample_keys), None)
-            result.append(matched)
-
-        result += [None] * (7 - len(result))
-        return result[:7]
+    def _build_kt_field_map_from_preset(self) -> List[Optional[str]]:
+        """Построить список КТ-полей (kt1..kt7) из preset-конфига."""
+        cp_fields = self._preset_cfg.get("checkpoint_fields") or {}
+        result = [cp_fields.get(f"kt{i + 1}") for i in range(7)]
+        mapped = [(i + 1, f) for i, f in enumerate(result) if f]
+        self.logger.info(f"📋 КТ-маппинг из preset: {mapped}")
+        return result
 
     def _update_existing(self, runners: List[Dict]) -> Tuple[int, int, int]:
         """Обновить все поля существующих записей И их сегменты"""
@@ -647,11 +637,9 @@ class RaceLoader:
         kt_reads_this_cycle = 0
 
         # Лениво строим маппинг КТ-полей при первом вызове
-        if self._kt_fields is None and runners:
-            self._kt_fields = self._build_kt_field_map(set(runners[0].keys()))
-            mapped = [(i + 1, f) for i, f in enumerate(self._kt_fields) if f]
-            self.logger.info(f"📡 КТ-маппинг Copernico: {mapped}")
-        kt_f = self._kt_fields or [None] * 7
+        if self._kt_fields is None:
+            self._kt_fields = self._build_kt_field_map_from_preset()
+        kt_f = self._kt_fields
 
         for runner in runners:
             dorsal = str(runner.get('dorsal'))
@@ -672,15 +660,21 @@ class RaceLoader:
             category = calculate_age_group(birthdate, sex) or runner.get('category', 'Unknown')
             race_status = convert_status(runner.get('status'))
 
-            # Времена
-            time_gun_start = milliseconds_to_time(runner.get('times.official_:::start:::'))
-            time_clear_start = milliseconds_to_time(runner.get('times.real_:::start:::'))
-            official_finish_ms = runner.get('times.official_:::finish:::')
-            official_start_ms = runner.get('times.official_:::start:::')
+            # Времена — поля из preset-конфига
+            TF = self._preset_cfg.get("time_fields", {})
+            gun_start_field   = TF.get("gun_start",   "times.official_:::start:::")
+            gun_finish_field  = TF.get("gun_finish",  "times.official_:::finish:::")
+            chip_start_field  = TF.get("chip_start")
+            chip_finish_field = TF.get("chip_finish")
+
+            time_gun_start = milliseconds_to_time(runner.get(gun_start_field))
+            time_clear_start = milliseconds_to_time(runner.get(chip_start_field) if chip_start_field else None)
+            official_finish_ms = runner.get(gun_finish_field)
+            official_start_ms = runner.get(gun_start_field)
             time_gun_finish = milliseconds_to_time(official_finish_ms)
 
             # Чистое время = chip-время из Copernico, либо official_finish - wave_start_offset
-            chip_finish_ms = runner.get('times.real_:::finish:::')
+            chip_finish_ms = runner.get(chip_finish_field) if chip_finish_field else None
             if chip_finish_ms:
                 net_finish_ms = chip_finish_ms
             elif official_finish_ms and official_start_ms:
@@ -1279,6 +1273,15 @@ def main():
         copernico_login   = cop.get("login", "podbor250718@gmail.com")
         copernico_preset  = cop.get("preset", "km_analytics")
         copernico_event   = cop.get("event", args.distance)
+
+        # Загружаем preset-конфиг из config/copernico/<preset>.yaml
+        preset_config_path = project_root / "config" / "copernico" / f"{copernico_preset}.yaml"
+        if not preset_config_path.exists():
+            parser.error(
+                f"Preset config не найден: {preset_config_path}\n"
+                f"Создайте файл config/copernico/{copernico_preset}.yaml перед запуском."
+            )
+        preset_cfg = yaml.safe_load(preset_config_path.read_text(encoding="utf-8")) or {}
     else:
         # Обратная совместимость: --event-id + хардкод
         if not args.event_id:
@@ -1288,6 +1291,7 @@ def main():
         copernico_login   = "podbor250718@gmail.com"
         copernico_preset  = "km_analytics"
         copernico_event   = "5 км"
+        preset_cfg = {}
 
     # Маршрутизация: обход VPN для доступа к БД
     if args.fix_routing:
@@ -1320,7 +1324,8 @@ def main():
         copernico_race_id=copernico_race_id,
         copernico_login=copernico_login,
         copernico_preset=copernico_preset,
-        copernico_event=copernico_event
+        copernico_event=copernico_event,
+        preset_cfg=preset_cfg,
     )
 
     try:

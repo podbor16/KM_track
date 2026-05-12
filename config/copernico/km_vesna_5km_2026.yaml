@@ -1,0 +1,21 @@
+description: "Весна 2026, 5км, 1 КТ (Разворот 2.5км). Chip-времена предоставляются."
+# ВНИМАНИЕ: chip_start, chip_finish и kt1 — placeholder.
+# Заполнить реальными именами полей из race_data.json после создания пресета в Copernico.
+
+fields:
+  bib: dorsal
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+time_fields:
+  gun_start:   "times.official_:::start:::"
+  gun_finish:  "times.official_:::finish:::"
+  chip_start:  null     # PLACEHOLDER: заполнить после получения данных из Copernico
+  chip_finish: null     # PLACEHOLDER: заполнить после получения данных из Copernico
+
+checkpoint_fields:
+  kt1: null             # PLACEHOLDER: заполнить реальным именем поля разворота
