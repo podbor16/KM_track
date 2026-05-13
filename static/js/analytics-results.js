@@ -657,10 +657,10 @@ function renderResultsTable(runners) {
         if (runner.gender) {
             // Теперь gender уже в правильном формате ("Мужчина"/"Женщина")
             if (runner.gender === 'Мужчина' || runner.gender === 'male') {
-                genderText = 'Мужчина';
+                genderText = 'М';
                 genderClass = 'gender-male';
             } else if (runner.gender === 'Женщина' || runner.gender === 'female') {
-                genderText = 'Женщина';
+                genderText = 'Ж';
                 genderClass = 'gender-female';
             } else {
                 genderText = runner.gender;
@@ -947,6 +947,9 @@ function createSegmentsTable(segments) {
     table.classList.add('segments-table');
 
     table.innerHTML = `
+        <colgroup>
+            <col/><col/><col/><col/><col/><col/>
+        </colgroup>
         <thead>
             <tr>
                 <th>Участок</th>
