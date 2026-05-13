@@ -526,6 +526,10 @@ function _sortArray(arr) {
     return [...arr].sort((a, b) => {
         let valA, valB;
         switch (sortState.column) {
+            case 'rank':
+                valA = a.rank_absolute || 9999;
+                valB = b.rank_absolute || 9999;
+                break;
             case 'surname':
                 valA = (a.surname || '').toLowerCase();
                 valB = (b.surname || '').toLowerCase();
@@ -672,14 +676,23 @@ function renderResultsTable(runners) {
         let distance = runner.event || runner.distance || '5 км';
         let category = runner.category || '';
         
+        const rankAbs = runner.rank_absolute;
+        const rankSex = runner.rank_sex;
+        const rankCat = runner.rank_category;
+        const rankClass = rankAbs === 1 ? 'rank-gold' : rankAbs === 2 ? 'rank-silver' : rankAbs === 3 ? 'rank-bronze' : '';
+        const rankDisplay = rankAbs ? `<span class="rank-abs ${rankClass}">${rankAbs}</span>` : '—';
+        const sexRankHtml = rankSex ? ` <span class="rank-inline">#${rankSex}</span>` : '';
+        const catRankHtml = rankCat ? ` <span class="rank-inline">#${rankCat}</span>` : '';
+
         let rowHTML = `
+            <td class="rank-col">${rankDisplay}</td>
             <td>${runner.start_number || index + 1}</td>
             <td>${lastName}</td>
             <td>${firstName}</td>
             <td>${birthYear}</td>
             <td class="distance-col">${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
-            <td>${category}</td>
+            <td><span class="gender-tag ${genderClass}">${genderText}</span>${sexRankHtml}</td>
+            <td>${category}${catRankHtml}</td>
             <td class="${statusClass} status-col">${status}</td>
             <td class="time-cell time-col">${time}</td>
             <td class="pace-cell pace-col">${pace}</td>
@@ -853,7 +866,7 @@ async function createSegmentsRow(resultId, runnerName) {
     row.classList.add('segments-row');
     
     const cell = document.createElement('td');
-    cell.colSpan = 10;
+    cell.colSpan = 11;
     
     const wrapper = document.createElement('div');
     wrapper.classList.add('segments-content-wrapper');

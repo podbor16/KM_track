@@ -314,18 +314,27 @@ th:hover {
     opacity: 0.8;
 }
 
-/* Ширины столбцов для таблицы результатов (during-mode-table) */
+/* Ширины столбцов для таблицы результатов (during-mode-table) — 11 колонок */
 .during-mode-table thead th { font-size: 11px; }
-.during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
-.during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
-.during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
-.during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 7%; }      /* Год рождения */
-.during-mode-table th:nth-child(5), .during-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
-.during-mode-table th:nth-child(6), .during-mode-table td:nth-child(6) { width: 5%; }      /* Пол */
-.during-mode-table th:nth-child(7), .during-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
-.during-mode-table th:nth-child(8), .during-mode-table td:nth-child(8) { width: 10%; }     /* Статус */
-.during-mode-table th:nth-child(9), .during-mode-table td:nth-child(9) { width: 12%; white-space: nowrap; }  /* Время */
-.during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 10%; }   /* Темп */
+.during-mode-table th:nth-child(1),  .during-mode-table td:nth-child(1)  { width: 5%;  text-align: center; }  /* Место */
+.during-mode-table th:nth-child(2),  .during-mode-table td:nth-child(2)  { width: 7%;  white-space: nowrap; } /* Стартовый номер */
+.during-mode-table th:nth-child(3),  .during-mode-table td:nth-child(3)  { width: 12%; }                      /* Фамилия */
+.during-mode-table th:nth-child(4),  .during-mode-table td:nth-child(4)  { width: 8%;  }                      /* Имя */
+.during-mode-table th:nth-child(5),  .during-mode-table td:nth-child(5)  { width: 6%;  }                      /* Год рождения */
+.during-mode-table th:nth-child(6),  .during-mode-table td:nth-child(6)  { width: 8%;  }                      /* Дистанция */
+.during-mode-table th:nth-child(7),  .during-mode-table td:nth-child(7)  { width: 7%;  }                      /* Пол */
+.during-mode-table th:nth-child(8),  .during-mode-table td:nth-child(8)  { width: 15%; }                      /* Возрастная группа */
+.during-mode-table th:nth-child(9),  .during-mode-table td:nth-child(9)  { width: 9%;  }                      /* Статус */
+.during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 11%; white-space: nowrap; } /* Время */
+.during-mode-table th:nth-child(11), .during-mode-table td:nth-child(11) { width: 9%;  }                      /* Темп */
+
+/* Колонка Место и inline-ранги */
+.rank-col { text-align: center; font-weight: 700; }
+.rank-abs { display: inline-block; min-width: 28px; text-align: center; font-weight: 700; font-size: 14px; }
+.rank-gold   { color: #b8860b; }
+.rank-silver { color: #7a7a7a; }
+.rank-bronze { color: #8B4513; }
+.rank-inline { font-size: 11px; color: #888; font-weight: 600; margin-left: 3px; white-space: nowrap; }
 
 /* Ширины столбцов для таблицы стартового списка (before-mode-table) */
 .before-mode-table th:nth-child(1), .before-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
