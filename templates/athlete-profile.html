@@ -345,7 +345,7 @@
                 profileInfo.innerHTML += `
                     <div class="info-item">
                         <div class="info-label">Категория</div>
-                        <div class="info-value">${currentAthlete.category}</div>
+                        <div class="info-value">${stripCategoryBirthYear(currentAthlete.category)}</div>
                     </div>
                 `;
             }
@@ -596,7 +596,7 @@
             });
 
             // Подготавливаем данные
-            const years = Object.keys(byYear).sort();
+            const years = Object.keys(byYear).sort((a, b) => Number(a) - Number(b));
             const counts = years.map(y => byYear[y].count);
             const distances = years.map(y => byYear[y].distance);
 
@@ -798,7 +798,12 @@
             const racesGrid = document.getElementById('racesGrid');
             racesGrid.innerHTML = '';
 
-            filteredResults.forEach((race, index) => {
+            const sortedRaces = [...filteredResults].sort((a, b) => {
+                const da = a.event_date ? new Date(a.event_date) : new Date(0);
+                const db = b.event_date ? new Date(b.event_date) : new Date(0);
+                return db - da;
+            });
+            sortedRaces.forEach((race, index) => {
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
                 const pace = formatPaceDisplay(race);
@@ -840,7 +845,12 @@
             const tbody = document.getElementById('racesTableBody');
             tbody.innerHTML = '';
 
-            filteredResults.forEach((race, index) => {
+            const sortedRaces = [...filteredResults].sort((a, b) => {
+                const da = a.event_date ? new Date(a.event_date) : new Date(0);
+                const db = b.event_date ? new Date(b.event_date) : new Date(0);
+                return db - da;
+            });
+            sortedRaces.forEach((race, index) => {
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
                 const pace = formatPaceDisplay(race);

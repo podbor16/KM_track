@@ -318,12 +318,12 @@ th:hover {
 .during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
 .during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
 .during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
-.during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 9%; }      /* Год рождения */
+.during-mode-table th:nth-child(4), .during-mode-table td:nth-child(4) { width: 7%; }      /* Год рождения */
 .during-mode-table th:nth-child(5), .during-mode-table td:nth-child(5) { width: 9%; }      /* Дистанция - узкий */
-.during-mode-table th:nth-child(6), .during-mode-table td:nth-child(6) { width: 7%; }      /* Пол */
+.during-mode-table th:nth-child(6), .during-mode-table td:nth-child(6) { width: 5%; }      /* Пол */
 .during-mode-table th:nth-child(7), .during-mode-table td:nth-child(7) { width: 15%; }     /* Возрастная группа - широкий */
 .during-mode-table th:nth-child(8), .during-mode-table td:nth-child(8) { width: 10%; }     /* Статус */
-.during-mode-table th:nth-child(9), .during-mode-table td:nth-child(9) { width: 8%; }      /* Время */
+.during-mode-table th:nth-child(9), .during-mode-table td:nth-child(9) { width: 12%; white-space: nowrap; }  /* Время */
 .during-mode-table th:nth-child(10), .during-mode-table td:nth-child(10) { width: 10%; }   /* Темп */
 
 /* Ширины столбцов для таблицы стартового списка (before-mode-table) */
@@ -787,6 +787,72 @@ tr:hover {
     flex-direction: column;
     gap: 4px;
     width: 100%;
+}
+
+/* === ТАБЛИЦА СЕГМЕНТОВ === */
+.segments-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.segments-table thead th {
+    background: #f5f5f5;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #e0e0e0;
+    white-space: nowrap;
+    color: #444;
+}
+
+.segments-table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.segments-table tbody tr:hover {
+    background: #fff3f7;
+}
+
+.segments-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+}
+
+.segments-table .seg-name {
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.segments-table .seg-time,
+.segments-table .seg-pace {
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.segments-table .seg-rank {
+    text-align: center;
+    padding: 6px 6px;
+}
+
+.seg-rank-badge {
+    display: inline-block;
+    min-width: 28px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.seg-mode-label {
+    font-size: 10px;
+    font-weight: 400;
+    color: #888;
+    text-transform: lowercase;
 }
 
 /* === КАРТОЧКА СЕГМЕНТА === */

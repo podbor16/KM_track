@@ -889,34 +889,7 @@ async function createSegmentsRow(resultId, runnerName) {
             return row;
         }
         
-        // Кнопки управления
-        const controls = document.createElement('div');
-        controls.classList.add('segments-controls');
-        const btnExpandAll = document.createElement('button');
-        btnExpandAll.classList.add('segments-toggle-all-btn');
-        btnExpandAll.textContent = 'Развернуть все';
-        const btnCollapseAll = document.createElement('button');
-        btnCollapseAll.classList.add('segments-toggle-all-btn');
-        btnCollapseAll.textContent = 'Свернуть все';
-        controls.appendChild(btnExpandAll);
-        controls.appendChild(btnCollapseAll);
-        wrapper.appendChild(controls);
-
-        // Создаём сетку со статистикой сегментов (обратный порядок: последний вверху)
-        const grid = document.createElement('div');
-        grid.classList.add('segments-grid');
-
-        const reversed = [...segments].reverse();
-        reversed.forEach((segment, displayIndex) => {
-            const prevSegment = reversed[displayIndex + 1] || null;
-            const card = createSegmentCard(segment, prevSegment);
-            grid.appendChild(card);
-        });
-
-        btnExpandAll.onclick = () => grid.querySelectorAll('.segment-card').forEach(c => c.classList.add('expanded'));
-        btnCollapseAll.onclick = () => grid.querySelectorAll('.segment-card').forEach(c => c.classList.remove('expanded'));
-
-        wrapper.appendChild(grid);
+        wrapper.appendChild(createSegmentsTable(segments));
         
     } catch (error) {
         console.error('❌ Ошибка загрузки сегментов:', error);
@@ -966,117 +939,65 @@ function calcSegmentDistanceKm(timeStr, paceStr) {
     return Math.round(timeSec / paceSec * 10) / 10;
 }
 
-function createSegmentCard(segment, prevSegment) {
-    const card = document.createElement('div');
-    card.classList.add('segment-card');
-
-    const segmentCode = segment.segment_code || '-';
+function createSegmentsTable(segments) {
     const useGun = timeMode === 'gun';
-    const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
-    const pace = formatSegmentPace(
-        useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg) : segment.sg_pace_avg
-    );
-    const rankAbsolute = useGun
-        ? (segment.sg_rank_absolute_gun || segment.sg_rank_absolute || '-')
-        : (segment.sg_rank_absolute || '-');
-    const rankSex = useGun
-        ? (segment.sg_rank_sex_gun || segment.sg_rank_sex || '-')
-        : (segment.sg_rank_sex || '-');
-    const rankCategory = useGun
-        ? (segment.sg_rank_category_gun || segment.sg_rank_category || '-')
-        : (segment.sg_rank_category || '-');
-
-    const icon = getSegmentIcon(segmentCode);
-    const name = formatSegmentName(segmentCode);
     const modeLabel = useGun ? 'офиц.' : 'чист.';
 
-    const distKm = calcSegmentDistanceKm(time, pace);
-    const distLabel = distKm !== null ? `${distKm} км` : '—';
+    const table = document.createElement('table');
+    table.classList.add('segments-table');
 
-    // Сравниваем темп с предыдущим сегментом (более ранний по маршруту)
-    let comparisonHtml = '';
-    let comparisonHtmlDetail = '';
-    if (prevSegment) {
-        const prevPace = formatSegmentPace(
-            useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg
-        );
-        const comparison = compareSegments(pace, prevPace);
-        if (comparison) {
-            const color = comparison.improved ? '#27ae60' : '#e74c3c';
-            comparisonHtml = `<span class="pace-comparison-mini" style="color:${color}">${comparison.direction}${comparison.percent}%</span>`;
-            comparisonHtmlDetail = `<span class="pace-comparison" style="color:${color}">${comparison.direction} ${comparison.percent}%</span>`;
-        }
-    }
-
-    const colorAbsolute = getRankColor(rankAbsolute);
-    const colorSex = getRankColor(rankSex);
-    const colorCategory = getRankColor(rankCategory);
-
-    const miniBadge = (rank, color) =>
-        `<div class="rank-badge-mini" style="background:${color}">${rank}</div>`;
-
-    card.innerHTML = `
-        <div class="segment-card-header">
-            <div class="segment-card-header-left">
-                <span class="segment-icon">${icon}</span>
-                <span class="segment-card-title-text">${name}</span>
-                <span class="segment-mode-badge">${modeLabel}</span>
-                <span class="segment-distance-badge">📏 ${distLabel}</span>
-            </div>
-            <div class="segment-card-quick-stats">
-                <span class="segment-time-quick">${time}</span>
-                <span class="segment-pace-quick">${pace} ${comparisonHtml}</span>
-                <div class="segment-ranks-quick">
-                    ${miniBadge(rankAbsolute, colorAbsolute)}
-                    ${miniBadge(rankSex, colorSex)}
-                    ${miniBadge(rankCategory, colorCategory)}
-                </div>
-            </div>
-            <span class="segment-card-toggle">▼</span>
-        </div>
-        <div class="segment-card-details">
-            <div class="segment-details-row">
-                <span class="segment-stat-label">⏱️ Время</span>
-                <span class="segment-time">${time}</span>
-            </div>
-            <div class="segment-details-row">
-                <div style="display:flex;align-items:center;gap:6px">
-                    <span class="segment-stat-label">🏃 Темп</span>
-                    <span class="segment-stat-value">${pace}</span>
-                </div>
-                ${comparisonHtmlDetail}
-            </div>
-            <div class="segment-details-ranks">
-                <div class="segment-detail-rank-item">
-                    <span class="segment-stat-label">🏆 Абсолют</span>
-                    <div class="rank-container">
-                        <div class="segment-rank" style="background:${colorAbsolute}">${rankAbsolute}</div>
-                        <div class="segment-rank-label">место</div>
-                    </div>
-                </div>
-                <div class="segment-detail-rank-item">
-                    <span class="segment-stat-label">♀♂ Пол</span>
-                    <div class="rank-container">
-                        <div class="segment-rank" style="background:${colorSex}">${rankSex}</div>
-                        <div class="segment-rank-label">место</div>
-                    </div>
-                </div>
-                <div class="segment-detail-rank-item">
-                    <span class="segment-stat-label">🎂 Категория</span>
-                    <div class="rank-container">
-                        <div class="segment-rank" style="background:${colorCategory}">${rankCategory}</div>
-                        <div class="segment-rank-label">место</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>Участок</th>
+                <th>Время <span class="seg-mode-label">${modeLabel}</span></th>
+                <th>Темп</th>
+                <th title="Место абсолют">🏆</th>
+                <th title="Место по полу">♂/♀</th>
+                <th title="Место в категории">🎂</th>
+            </tr>
+        </thead>
     `;
 
-    card.querySelector('.segment-card-header').addEventListener('click', () => {
-        card.classList.toggle('expanded');
+    const tbody = document.createElement('tbody');
+    segments.forEach((segment, i) => {
+        const prevSegment = i > 0 ? segments[i - 1] : null;
+        const code = segment.segment_code || '-';
+        const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
+        const pace = formatSegmentPace(useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg) : segment.sg_pace_avg);
+        const rankAbsolute = useGun ? (segment.sg_rank_absolute_gun || segment.sg_rank_absolute || '-') : (segment.sg_rank_absolute || '-');
+        const rankSex = useGun ? (segment.sg_rank_sex_gun || segment.sg_rank_sex || '-') : (segment.sg_rank_sex || '-');
+        const rankCategory = useGun ? (segment.sg_rank_category_gun || segment.sg_rank_category || '-') : (segment.sg_rank_category || '-');
+
+        let paceHtml = pace;
+        if (prevSegment) {
+            const prevPace = formatSegmentPace(useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg);
+            const cmp = compareSegments(pace, prevPace);
+            if (cmp) {
+                const color = cmp.improved ? '#27ae60' : '#e74c3c';
+                paceHtml += ` <span style="color:${color};font-size:0.85em">${cmp.direction}${cmp.percent}%</span>`;
+            }
+        }
+
+        const rankBadge = (rank) => {
+            const color = getRankColor(rank);
+            return `<span class="seg-rank-badge" style="background:${color}">${rank}</span>`;
+        };
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="seg-name">${getSegmentIcon(code)} ${formatSegmentName(code)}</td>
+            <td class="seg-time">${time}</td>
+            <td class="seg-pace">${paceHtml}</td>
+            <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
+            <td class="seg-rank">${rankBadge(rankSex)}</td>
+            <td class="seg-rank">${rankBadge(rankCategory)}</td>
+        `;
+        tbody.appendChild(tr);
     });
 
-    return card;
+    table.appendChild(tbody);
+    return table;
 }
 
 // === Результаты по участкам (КТ) ===
