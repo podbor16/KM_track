@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=8">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=9">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 
 </head>
@@ -94,12 +94,6 @@
        <div id="loadingIndicator" class="loading" style="display: none;">Загрузка данных...</div>
        <div id="errorIndicator" class="error" style="display: none;"></div>
        
-       <!-- Переключатель типа времени -->
-       <div class="time-mode-toggle">
-           <button id="btnNet" class="time-mode-btn" onclick="setTimeMode('net')">Чистое время</button>
-           <button id="btnGun" class="time-mode-btn active" onclick="setTimeMode('gun')">Официальное время</button>
-       </div>
-
        <!-- Кнопки участков маршрута (КТ) -->
        <div id="segmentTabsContainer" class="segment-tabs" style="display:none;"></div>
 
@@ -109,16 +103,10 @@
            <thead>
                <tr>
                    <th onclick="sortTable('rank')">Место</th>
-                   <th>Стартовый номер</th>
-                   <th onclick="sortTable('surname')">Фамилия</th>
-                   <th onclick="sortTable('name')">Имя</th>
-                   <th onclick="sortTable('birthdate')">Год рождения</th>
-                   <th onclick="sortTable('event')">Дистанция</th>
-                   <th onclick="sortTable('gender')">Пол</th>
-                   <th onclick="sortTable('category')">Возрастная группа</th>
-                   <th onclick="sortTable('status')">Статус</th>
-                   <th onclick="sortTable('time')">Время</th>
-                   <th onclick="sortTable('pace')">Темп</th>
+                   <th onclick="sortTable('bib')">Стартовый номер</th>
+                   <th onclick="sortTable('name')">Фамилия и Имя</th>
+                   <th onclick="sortTable('time_gun')">Официальное время</th>
+                   <th onclick="sortTable('time_net')">Чистое время</th>
                </tr>
            </thead>
            <tbody id="resultsTableBody">
@@ -138,7 +126,7 @@
 
     <script src="/static/js/utils.js?v=4"></script>
     <script src="/static/js/realtime.js?v=1"></script>
-    <script src="/static/js/analytics-results.js?v=15"></script>
+    <script src="/static/js/analytics-results.js?v=16"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}

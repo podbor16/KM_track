@@ -2,13 +2,14 @@
 // Javascript для страницы результатов забега
 let allRunners = [];
 let filteredRunners = [];
-let sortState = { column: 'time', direction: 'asc' }; // Дефолт: по официальному времени
+let sortState = { column: 'time_gun', direction: 'asc' }; // Дефолт: по официальному времени
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
-let timeMode = 'gun'; // 'net' = чистое, 'gun' = официальное
+const timeMode = 'gun'; // фиксировано для сегментных функций
 let activeSegmentCode = null;
 let segmentRankingsCache = {};  // { segmentCode: [rows] }
 let activeSegmentEventId = null;
+const runnerDataMap = new Map(); // resultId → runner object
 
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
@@ -113,21 +114,6 @@ function updatePageTitle() {
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
     title.innerHTML = `Результаты<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
-}
-
-function setTimeMode(mode) {
-    timeMode = mode;
-    const btnNet = document.getElementById('btnNet');
-    const btnGun = document.getElementById('btnGun');
-    if (btnNet) btnNet.classList.toggle('active', mode === 'net');
-    if (btnGun) btnGun.classList.toggle('active', mode === 'gun');
-    const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
-    if (th) th.textContent = mode === 'gun' ? 'Офиц. время' : 'Чистое время';
-    if (activeSegmentCode !== null) {
-        renderSegmentView(filteredRunners);
-    } else {
-        renderResultsTable(_sortArray(filteredRunners));
-    }
 }
 
 // Функция обновления фонового изображения карточки события
@@ -523,6 +509,7 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
 function _sortArray(arr) {
     if (!sortState.column) return arr;
+    const pri = s => s === 'finished' ? 0 : s === 'running' ? 1 : s === 'notstarted' ? 3 : 2;
     return [...arr].sort((a, b) => {
         let valA, valB;
         switch (sortState.column) {
@@ -530,52 +517,28 @@ function _sortArray(arr) {
                 valA = a.rank_absolute || 9999;
                 valB = b.rank_absolute || 9999;
                 break;
-            case 'surname':
-                valA = (a.surname || '').toLowerCase();
-                valB = (b.surname || '').toLowerCase();
+            case 'bib':
+                valA = parseInt(a.start_number) || 9999;
+                valB = parseInt(b.start_number) || 9999;
                 break;
             case 'name':
-                valA = (a.name || '').toLowerCase();
-                valB = (b.name || '').toLowerCase();
+                valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
+                valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 break;
-            case 'birthdate':
-                valA = a.birthdate ? new Date(a.birthdate).getFullYear() : 0;
-                valB = b.birthdate ? new Date(b.birthdate).getFullYear() : 0;
-                break;
-            case 'event':
-                valA = KMUtils.parseDistanceKm(a.event || a.distance);
-                valB = KMUtils.parseDistanceKm(b.event || b.distance);
-                break;
-            case 'gender':
-                valA = (a.gender || '').toLowerCase();
-                valB = (b.gender || '').toLowerCase();
-                break;
-            case 'category':
-                valA = KMUtils.categoryOrder(a.category);
-                valB = KMUtils.categoryOrder(b.category);
-                break;
-            case 'status':
-                valA = (a.status || '').toLowerCase();
-                valB = (b.status || '').toLowerCase();
-                break;
-            case 'time': {
-                // Статус-приоритет: finished=0, running=1, прочие=2, notstarted=3
-                const pri = s => s === 'finished' ? 0 : s === 'running' ? 1 : s === 'notstarted' ? 3 : 2;
+            case 'time_gun': {
                 const pa = pri(a.status), pb = pri(b.status);
-                if (pa !== pb) return pa - pb; // статусный порядок фиксирован независимо от направления
-                const fa = timeMode === 'gun' ? a.time_gun_finish : a.time_clear_finish;
-                const fb = timeMode === 'gun' ? b.time_gun_finish : b.time_clear_finish;
-                valA = KMUtils.parseTimeToSeconds(fa);
-                valB = KMUtils.parseTimeToSeconds(fb);
-                // Вторичная сортировка по фамилии при одинаковом времени (напр. все Not Started)
+                if (pa !== pb) return pa - pb;
+                valA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
+                valB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
                 if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
                 break;
             }
-            case 'pace': {
-                const p1 = calculatePace(a.time_clear_finish || a['times.official_:::finish:::'], a.distance || a.event);
-                const p2 = calculatePace(b.time_clear_finish || b['times.official_:::finish:::'], b.distance || b.event);
-                valA = p1 === '-' ? Infinity : parseFloat(p1);
-                valB = p2 === '-' ? Infinity : parseFloat(p2);
+            case 'time_net': {
+                const pa = pri(a.status), pb = pri(b.status);
+                if (pa !== pb) return pa - pb;
+                valA = KMUtils.parseTimeToSeconds(a.time_clear_finish);
+                valB = KMUtils.parseTimeToSeconds(b.time_clear_finish);
+                if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
                 break;
             }
             default:
@@ -599,140 +562,40 @@ function sortTable(columnName) {
 // Отрисовываем таблицу результатов
 function renderResultsTable(runners) {
     const tbody = document.getElementById('resultsTableBody');
-
-    // Сохраняем открытые строки сегментов перед очисткой
-    const openSegments = new Map(); // resultId → segmentsRow element
-    tbody.querySelectorAll('.segments-row:not(.collapsed)').forEach(segRow => {
-        const runnerRow = segRow.previousElementSibling;
-        if (runnerRow && runnerRow.dataset.resultId) {
-            openSegments.set(runnerRow.dataset.resultId, segRow);
-        }
-    });
-
     tbody.innerHTML = '';
-    // Синхронизируем заголовок колонки времени
-    const th = document.querySelector('#resultsTable thead tr th:nth-child(9)');
-    if (th) th.textContent = timeMode === 'gun' ? 'Офиц. время' : 'Чистое время';
-    
+
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
-        
-        // Год рождения
-        let birthYear = '-';
-        if (runner.birthdate) {
-            const year = new Date(runner.birthdate).getFullYear();
-            birthYear = year > 0 ? year : '-';
-        }
-        
-        // Статус и время (поддерживаем оба формата)
-        let status = '';
-        let time = '';
-        let statusClass = '';
-        
-        // Переводим статусы на русский
-        let statusRu = runner.status || 'Неизвестно';
-        if (runner.status === 'finished') statusRu = 'Финишировал';
-        if (runner.status === 'running') statusRu = 'Бежит';
-        if (runner.status === 'notstarted') statusRu = 'Не стартовал';
-        if (runner.status === 'disqualified') statusRu = 'Нарушение';
-        
-        status = statusRu;
-        statusClass = `status-${runner.status || 'unknown'}`;
-        
-        // Время финиша — зависит от режима тоггла
-        const finishTime = timeMode === 'gun'
-            ? (runner.time_gun_finish || runner.time_clear_finish)
-            : (runner.time_clear_finish || runner['times.official_:::finish:::']);
-        time = formatTime(finishTime);
 
-        // Темп — зависит от режима тоггла; parseDuration конвертирует PT3M12S → "3:12"
-        const rawPace = timeMode === 'gun'
-            ? (runner.finish_pace_avg_gun || runner.finish_pace_avg)
-            : (runner.finish_pace_avg_clean || runner.finish_pace_avg);
-        const paceStr = KMUtils.parseDuration(rawPace);
-        const pace = (paceStr && paceStr !== '#ЗНАЧ!') ? paceStr + ' мин/км' : '-';
-        
-        // Фамилия, имя, пол
-        let firstName = runner.name || 'N/A';
-        let lastName = runner.surname || 'N/A';
-        let genderClass = '';
-        let genderText = 'N/A';
-        
-        if (runner.gender) {
-            // Теперь gender уже в правильном формате ("Мужчина"/"Женщина")
-            if (runner.gender === 'Мужчина' || runner.gender === 'male') {
-                genderText = 'М';
-                genderClass = 'gender-male';
-            } else if (runner.gender === 'Женщина' || runner.gender === 'female') {
-                genderText = 'Ж';
-                genderClass = 'gender-female';
-            } else {
-                genderText = runner.gender;
-                genderClass = '';
-            }
-        }
-        
-        // Дистанция и возрастная группа
-        let distance = runner.event || runner.distance || '5 км';
-        let category = runner.category || '';
-        
         const rankAbs = runner.rank_absolute;
-        const rankSex = runner.rank_sex;
-        const rankCat = runner.rank_category;
         const rankClass = rankAbs === 1 ? 'rank-gold' : rankAbs === 2 ? 'rank-silver' : rankAbs === 3 ? 'rank-bronze' : '';
         const rankDisplay = rankAbs ? `<span class="rank-abs ${rankClass}">${rankAbs}</span>` : '—';
-        const sexRankHtml = rankSex ? ` <span class="rank-inline">#${rankSex}</span>` : '';
-        const catRankHtml = rankCat ? ` <span class="rank-inline">#${rankCat}</span>` : '';
 
-        let rowHTML = `
+        const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim() || 'N/A';
+        const timeGun = formatTime(runner.time_gun_finish) || '—';
+        const timeNet = formatTime(runner.time_clear_finish) || '—';
+
+        row.innerHTML = `
             <td class="rank-col">${rankDisplay}</td>
-            <td>${runner.start_number || index + 1}</td>
-            <td>${lastName}</td>
-            <td>${firstName}</td>
-            <td>${birthYear}</td>
-            <td class="distance-col">${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span>${sexRankHtml}</td>
-            <td>${category}${catRankHtml}</td>
-            <td class="${statusClass} status-col">${status}</td>
-            <td class="time-cell time-col">${time}</td>
-            <td class="pace-cell pace-col">${pace}</td>
+            <td>${runner.start_number || ''}</td>
+            <td>${fullName}</td>
+            <td class="time-cell">${timeGun}</td>
+            <td class="time-cell">${timeNet}</td>
         `;
-        
-        row.innerHTML = rowHTML;
-        
-        // Добавляем обработчик клика и сохраняем runner.id (result_id)
-        const resultId = runner.id || '';
+
+        const resultId = String(runner.id || '');
         row.dataset.resultId = resultId;
         row.classList.add('runner-row');
-        
-        // Логируем для отладки
+
         if (resultId) {
-            console.log(`✅ Строка ${index + 1} имеет result_id=${resultId}`);
-        } else {
-            console.warn(`⚠️ Строка ${index + 1} (${lastName} ${firstName}) не имеет result_id, runner объект:`, runner);
+            runnerDataMap.set(resultId, runner);
+            row.addEventListener('click', function() {
+                openDetailPanel(this, resultId);
+            });
         }
-        
-        // Обработчик клика для открытия/закрытия сегментов
-        row.addEventListener('click', function(e) {
-            e.preventDefault();
-            const rId = this.dataset.resultId;
-            console.log(`🖱️ Клик по строке. resultId=${rId}`);
-            if (rId) {
-                toggleSegments(this, rId, `${lastName} ${firstName}`);
-            } else {
-                console.warn('⚠️ result_id не определён');
-            }
-        });
-        
+
         tbody.appendChild(row);
-
-        // Восстанавливаем ранее открытый блок сегментов
-        if (resultId && openSegments.has(resultId)) {
-            tbody.appendChild(openSegments.get(resultId));
-        }
     });
-
-    console.log(`✅ Отрисовано ${runners.length} строк таблицы результатов`);
 }
 
 // Показываем индикатор загрузки
@@ -843,77 +706,115 @@ function compareSegments(currentPace, previousPace) {
 }
 
 /**
- * Переключает видимость раскрывающейся области сегментов после строки
+ * Открывает/закрывает детальную панель под строкой участника
  */
-async function toggleSegments(runnerRow, resultId, runnerName) {
-    const nextRow = runnerRow.nextElementSibling;
-
-    if (nextRow && nextRow.classList.contains('segments-row')) {
-        // Уже есть строка — переключаем collapsed
-        nextRow.classList.toggle('collapsed');
-    } else {
-        // Создаём новую строку с сегментами (другие не закрываем)
-        const newSegmentsRow = await createSegmentsRow(resultId, runnerName);
-        runnerRow.insertAdjacentElement('afterend', newSegmentsRow);
+async function openDetailPanel(runnerRow, resultId) {
+    const existing = runnerRow.nextElementSibling;
+    if (existing && existing.classList.contains('detail-panel-row')) {
+        existing.remove();
+        runnerRow.classList.remove('row-active');
+        return;
     }
+    // Закрываем все другие открытые панели
+    document.querySelectorAll('.detail-panel-row').forEach(r => r.remove());
+    document.querySelectorAll('.row-active').forEach(r => r.classList.remove('row-active'));
+    runnerRow.classList.add('row-active');
+
+    const runner = runnerDataMap.get(resultId);
+    const panelRow = document.createElement('tr');
+    panelRow.classList.add('detail-panel-row');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.innerHTML = buildDetailPanelHTML(runner);
+    panelRow.appendChild(cell);
+    runnerRow.insertAdjacentElement('afterend', panelRow);
+
+    cell.querySelector('.detail-panel-close').addEventListener('click', e => {
+        e.stopPropagation();
+        panelRow.remove();
+        runnerRow.classList.remove('row-active');
+    });
+
+    loadSegmentsIntoPanel(cell, resultId);
 }
 
 /**
- * Создаёт HTML строку с сегментами (диаграммами)
+ * Строит HTML детальной панели из данных участника
  */
-async function createSegmentsRow(resultId, runnerName) {
-    const row = document.createElement('tr');
-    row.classList.add('segments-row');
-    
-    const cell = document.createElement('td');
-    cell.colSpan = 11;
-    
-    const wrapper = document.createElement('div');
-    wrapper.classList.add('segments-content-wrapper');
-    
-    // Показываем индикатор загрузки
-    const loading = document.createElement('div');
-    loading.classList.add('segments-loading');
-    loading.textContent = 'Загрузка данных сегментов...';
-    wrapper.appendChild(loading);
-    
-    cell.appendChild(wrapper);
-    row.appendChild(cell);
-    
-    // Загружаем данные сегментов
-    try {
-        const response = await fetch(`/api/result-segments?result_id=${resultId}`);
-        
-        if (!response.ok) {
-            throw new Error(`Ошибка сервера: ${response.status}`);
-        }
-        
-        const segments = await response.json();
-        console.log(`✅ Получено ${segments.length} сегментов для result_id=${resultId}`, segments);
-        
-        // Удаляем индикатор загрузки
-        loading.remove();
-        
-        if (segments.length === 0) {
-            const error = document.createElement('div');
-            error.classList.add('segments-error');
-            error.textContent = 'Данные сегментов не найдены';
-            wrapper.appendChild(error);
-            return row;
-        }
-        
-        wrapper.appendChild(createSegmentsTable(segments));
-        
-    } catch (error) {
-        console.error('❌ Ошибка загрузки сегментов:', error);
-        loading.remove();
-        const errorDiv = document.createElement('div');
-        errorDiv.classList.add('segments-error');
-        errorDiv.textContent = `Ошибка загрузки: ${error.message}`;
-        wrapper.appendChild(errorDiv);
+function buildDetailPanelHTML(runner) {
+    if (!runner) return '<div style="padding:16px;color:#aaa">Нет данных</div>';
+
+    const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim();
+    const genderShort = runner.gender === 'Мужчина' ? 'М' : runner.gender === 'Женщина' ? 'Ж' : '';
+    const category = runner.category || '';
+    const distance = runner.event || runner.distance || '';
+    let birthYear = '';
+    if (runner.birthdate) {
+        const y = new Date(runner.birthdate).getFullYear();
+        if (y > 0) birthYear = y;
     }
-    
-    return row;
+    const metaParts = [distance, genderShort, birthYear ? `${birthYear} г.р.` : ''].filter(Boolean);
+
+    const timeGun = formatTime(runner.time_gun_finish) || '—';
+    const timeNet = formatTime(runner.time_clear_finish) || '—';
+    const paceGunRaw = KMUtils.parseDuration(runner.finish_pace_avg_gun || runner.finish_pace_avg);
+    const paceNetRaw = KMUtils.parseDuration(runner.finish_pace_avg_clean || runner.finish_pace_avg);
+    const paceGun = (paceGunRaw && paceGunRaw !== '#ЗНАЧ!') ? paceGunRaw + ' мин/км' : '—';
+    const paceNet = (paceNetRaw && paceNetRaw !== '#ЗНАЧ!') ? paceNetRaw + ' мин/км' : '—';
+
+    const rankAbs = runner.rank_absolute || '—';
+    const rankSex = runner.rank_sex ? `${genderShort} #${runner.rank_sex}` : '—';
+    const rankCat = runner.rank_category ? `#${runner.rank_category}` : '—';
+
+    const statusMap = { finished: 'Финишировал', running: 'Бежит', notstarted: 'Не стартовал', disqualified: 'Нарушение' };
+    const status = statusMap[runner.status] || runner.status || '—';
+
+    return `
+    <div class="detail-panel-header">
+        <div>
+            <div class="detail-panel-name">${fullName}</div>
+            <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
+        </div>
+        <button class="detail-panel-close" title="Закрыть">&times;</button>
+    </div>
+    <div class="detail-stats-grid">
+        <div class="detail-stat-block">
+            <h4>Официальные результаты</h4>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место</span><span class="detail-stat-value">${rankAbs}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место по полу</span><span class="detail-stat-value">${rankSex}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место в категории</span><span class="detail-stat-value">${rankCat} ${category}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Время</span><span class="detail-stat-value">${timeGun}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Темп</span><span class="detail-stat-value">${paceGun}</span></div>
+        </div>
+        <div class="detail-stat-block">
+            <h4>Чистые результаты</h4>
+            <div class="detail-stat-row"><span class="detail-stat-label">Время</span><span class="detail-stat-value">${timeNet}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Темп</span><span class="detail-stat-value">${paceNet}</span></div>
+        </div>
+    </div>
+    <div class="detail-segments-title">Время по контрольным точкам</div>
+    <div class="detail-segments-loading segments-placeholder">Загрузка...</div>
+    `;
+}
+
+/**
+ * Загружает сегменты и вставляет таблицу вместо заглушки
+ */
+async function loadSegmentsIntoPanel(cell, resultId) {
+    const placeholder = cell.querySelector('.segments-placeholder');
+    try {
+        const resp = await fetch(`/api/result-segments?result_id=${resultId}`);
+        if (!resp.ok) throw new Error(`Ошибка сервера: ${resp.status}`);
+        const segments = await resp.json();
+        if (placeholder) placeholder.remove();
+        if (!segments.length) {
+            cell.insertAdjacentHTML('beforeend', '<div style="color:#aaa;font-size:13px;padding:8px 0">Данные КТ не найдены</div>');
+            return;
+        }
+        cell.appendChild(createSegmentsTable(segments));
+    } catch (e) {
+        if (placeholder) placeholder.textContent = `Ошибка загрузки КТ: ${e.message}`;
+    }
 }
 
 /**
@@ -969,9 +870,9 @@ function createSegmentsTable(segments) {
                 <th>Участок</th>
                 <th>Время <span class="seg-mode-label">${modeLabel}</span></th>
                 <th>Темп</th>
-                <th title="Место абсолют">🏆</th>
-                <th title="Место по полу">♂/♀</th>
-                <th title="Место в категории">🎂</th>
+                <th title="Место абсолют">Абс.</th>
+                <th title="Место по полу">Пол</th>
+                <th title="Место в категории">Кат.</th>
             </tr>
         </thead>
     `;
@@ -1003,7 +904,7 @@ function createSegmentsTable(segments) {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="seg-name">${getSegmentIcon(code)} ${formatSegmentName(code)}</td>
+            <td class="seg-name">${formatSegmentName(code)}</td>
             <td class="seg-time">${time}</td>
             <td class="seg-pace">${paceHtml}</td>
             <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
@@ -1167,9 +1068,8 @@ async function renderSegmentView(runners) {
             <td class="pace-cell pace-col">${pace}</td>
         `;
         if (row.result_id) {
-            const runnerName = `${row.surname || ''} ${row.name || ''}`.trim();
             tr.addEventListener('click', function() {
-                toggleSegments(this, row.result_id, runnerName);
+                openDetailPanel(this, String(row.result_id));
             });
         }
         tbody.appendChild(tr);
