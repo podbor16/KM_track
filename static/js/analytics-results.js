@@ -248,10 +248,14 @@ function normalizeRunnerData(runners) {
             finish_pace_avg_gun: runner.finish_pace_avg_gun,
             finish_pace_avg_clean: runner.finish_pace_avg_clean,
             
-            // Место и ранк
+            // Место и ранк (официальное время)
             rank_absolute: runner.rank_absolute,
             rank_sex: runner.rank_sex,
             rank_category: runner.rank_category,
+            // Место по чистому времени
+            rank_absolute_clean: runner.rank_absolute_clean,
+            rank_sex_clean: runner.rank_sex_clean,
+            rank_category_clean: runner.rank_category_clean,
             start_number: runner.start_number,
             
             // Дистанция и событие - используем distance_from_event из БД если есть
@@ -765,6 +769,9 @@ function buildDetailPanelHTML(runner) {
     const rankAbs = runner.rank_absolute || '—';
     const rankSex = runner.rank_sex ? `${genderShort} #${runner.rank_sex}` : '—';
     const rankCat = runner.rank_category ? `#${runner.rank_category}` : '—';
+    const rankAbsClean = runner.rank_absolute_clean || '—';
+    const rankSexClean = runner.rank_sex_clean ? `${genderShort} #${runner.rank_sex_clean}` : '—';
+    const rankCatClean = runner.rank_category_clean ? `#${runner.rank_category_clean}` : '—';
 
     const statusMap = { finished: 'Финишировал', running: 'Бежит', notstarted: 'Не стартовал', disqualified: 'Нарушение' };
     const status = statusMap[runner.status] || runner.status || '—';
@@ -788,6 +795,9 @@ function buildDetailPanelHTML(runner) {
         </div>
         <div class="detail-stat-block">
             <h4>Чистые результаты</h4>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место</span><span class="detail-stat-value">${rankAbsClean}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место по полу</span><span class="detail-stat-value">${rankSexClean}</span></div>
+            <div class="detail-stat-row"><span class="detail-stat-label">Место в категории</span><span class="detail-stat-value">${rankCatClean} ${category}</span></div>
             <div class="detail-stat-row"><span class="detail-stat-label">Время</span><span class="detail-stat-value">${timeNet}</span></div>
             <div class="detail-stat-row"><span class="detail-stat-label">Темп</span><span class="detail-stat-value">${paceNet}</span></div>
         </div>
