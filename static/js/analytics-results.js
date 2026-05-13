@@ -948,7 +948,8 @@ function createSegmentsTable(segments) {
 
     table.innerHTML = `
         <colgroup>
-            <col/><col/><col/><col/><col/><col/>
+            <col width="30%"/><col width="18%"/><col width="24%"/>
+            <col width="9%"/><col width="9%"/><col width="9%"/>
         </colgroup>
         <thead>
             <tr>

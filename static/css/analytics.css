@@ -315,6 +315,7 @@ th:hover {
 }
 
 /* Ширины столбцов для таблицы результатов (during-mode-table) */
+.during-mode-table thead th { font-size: 11px; }
 .during-mode-table th:nth-child(1), .during-mode-table td:nth-child(1) { width: 7%; white-space: nowrap; }  /* № стартовый номер */
 .during-mode-table th:nth-child(2), .during-mode-table td:nth-child(2) { width: 13%; }     /* Фамилия - широкий */
 .during-mode-table th:nth-child(3), .during-mode-table td:nth-child(3) { width: 8%; }      /* Имя */
@@ -696,38 +697,7 @@ tr:hover {
     margin-bottom: 15px;
 }
 
-.segments-table {
-    width: 100%;
-    border-collapse: collapse;
-    background-color: white;
-}
-
-.segments-table thead {
-    background-color: #f1f3f5;
-    border-bottom: 2px solid var(--primary-color);
-}
-
-.segments-table th {
-    text-align: left;
-    padding: 12px;
-    font-weight: 600;
-    color: #2c3e50;
-    cursor: pointer;
-    user-select: none;
-}
-
-.segments-table td {
-    padding: 12px;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.segments-table tbody tr {
-    transition: background-color 0.2s;
-}
-
-.segments-table tbody tr:hover {
-    background-color: #f8f9fa;
-}
+/* (стили .segments-table перенесены ниже в блок ТАБЛИЦА СЕГМЕНТОВ) */
 
 /* Стиль для наведения на строку таблицы результатов */
 .during-mode-table tbody tr {
@@ -796,23 +766,22 @@ tr:hover {
     border-collapse: collapse;
     font-size: 13px;
     table-layout: fixed;
+    background: white;
 }
 
-.segments-table colgroup col:nth-child(1) { width: 32%; }
-.segments-table colgroup col:nth-child(2) { width: 18%; }
-.segments-table colgroup col:nth-child(3) { width: 22%; }
-.segments-table colgroup col:nth-child(4) { width: 9%; }
-.segments-table colgroup col:nth-child(5) { width: 9%; }
-.segments-table colgroup col:nth-child(6) { width: 9%; }
-
-.segments-table thead th {
-    background: #f5f5f5;
+.segments-table th,
+.segments-table td {
     padding: 7px 10px;
     text-align: left;
+    vertical-align: middle;
+}
+
+.segments-table thead th {
+    background: #f1f3f5;
     font-weight: 600;
-    border-bottom: 2px solid #e0e0e0;
+    border-bottom: 2px solid var(--primary-color);
     white-space: nowrap;
-    color: #444;
+    color: #2c3e50;
     overflow: hidden;
 }
 
@@ -825,26 +794,24 @@ tr:hover {
 }
 
 .segments-table td {
-    padding: 6px 10px;
-    border-bottom: 1px solid #f0f0f0;
-    vertical-align: middle;
+    border-bottom: 1px solid #e9ecef;
 }
 
 .segments-table .seg-name {
     white-space: nowrap;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .segments-table .seg-time,
 .segments-table .seg-pace {
     white-space: nowrap;
     font-family: monospace;
-    font-size: 12px;
 }
 
 .segments-table .seg-rank {
     text-align: center;
-    padding: 6px 6px;
 }
 
 .seg-rank-badge {
