@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateEventThemeColor();
     updatePageTitle();
     loadRunnersData();
+    new SSEClient('/api/sse/notify', {
+        startlist_updated: () => loadRunnersData()
+    });
 });
 
 // Функция обновления фонового изображения карточки события

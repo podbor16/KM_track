@@ -406,6 +406,75 @@ async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, chec
 // ЗАГРУЗКА ДАННЫХ ИЗ API
 // ============================================
 
+function _applyRunnerData(data) {
+    if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
+    if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
+
+    if (data.total_distance_km) {
+        eventDistance = data.total_distance_km;
+    } else if (data.results && data.results.length > 0) {
+        eventDistance = parseFloat(data.results[0].distance) || 0;
+    }
+
+    allRunners = (data.results || []).map((runner) => {
+        const kt1Data = runner.checkpoints?.kt1;
+        let kt1Time = kt1Data?.time;
+
+        if (kt1Time === 'undefined' || kt1Time === undefined || kt1Time === null || kt1Time === 'null') {
+            kt1Time = null;
+        }
+
+        const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, eventDistance || runner.event_distance);
+        const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, eventDistance || runner.event_distance);
+
+        return {
+            id:                   runner.id || runner.start_number,
+            start_number:         runner.start_number,
+            surname:              runner.surname || '',
+            name:                 runner.name || '',
+            full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
+            sex:                  runner.sex,
+            category:             runner.category || '',
+            status:               runner.race_status,
+            time_gun_finish:      parseDuration(runner.time_gun_finish),
+            time_clear_finish:    parseDuration(runner.time_clear_finish),
+            time_clear_kt1_raw:   kt1Time,
+            time_clear_kt1:       parseDuration(kt1Time),
+            finish_pace_avg:      parseDuration(runner.finish_pace_avg),
+            finish_pace_avg_gun:  calculatedGunPace,
+            finish_pace_avg_clean: calculatedCleanPace,
+            rank_absolute:        runner.rank_absolute,
+            rank_sex:             runner.rank_sex,
+            rank_category:        runner.rank_category,
+            bib:                  runner.start_number,
+            dorsal:               runner.start_number,
+            checkpoints:          runner.checkpoints || {},
+            speed:                runner.speed != null ? runner.speed : 10.0,
+            current_distance:     runner.current_distance || 0,
+            current_pace:         runner.current_pace || '6:00',
+            pace_source:          runner.pace_source || '',
+            prev_year:            runner.prev_year || null,
+            time_clear_start_s:   runner.time_clear_start_s ?? null,
+            lap:                  runner.lap ?? 1,
+            last_kt_unix_ms:      runner.last_kt_unix_ms ?? null,
+        };
+    });
+
+    selectedRunnerIds.forEach(id => {
+        const r = allRunners.find(x => String(x.id) === String(id));
+        if (r) console.log(
+            `[API_CHECK] #${r.start_number} ${r.full_name}:`,
+            `status=${r.status}`,
+            `speed=${r.speed}`,
+            `current_pace=${r.current_pace}`,
+            `pace_source=${r.pace_source}`
+        );
+    });
+
+    updateStatus(`✅ Загружено участников: ${allRunners.length}`);
+}
+
+
 async function loadAllRunners() {
     try {
         updateStatus('Загрузка участников...');
@@ -424,71 +493,7 @@ async function loadAllRunners() {
         const _totalMs = performance.now() - _t0;
         console.debug(`[perf] /api/event-results fetch=${_fetchMs.toFixed(0)}ms parse=${(_totalMs - _fetchMs).toFixed(0)}ms total=${_totalMs.toFixed(0)}ms runners=${data.results?.length ?? 0}`);
 
-        if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
-        if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
-
-        if (data.total_distance_km) {
-            eventDistance = data.total_distance_km;
-        } else if (data.results && data.results.length > 0) {
-            eventDistance = parseFloat(data.results[0].distance) || 0;
-        }
-
-        allRunners = (data.results || []).map((runner) => {
-            const kt1Data = runner.checkpoints?.kt1;
-            let kt1Time = kt1Data?.time;
-
-            if (kt1Time === 'undefined' || kt1Time === undefined || kt1Time === null || kt1Time === 'null') {
-                kt1Time = null;
-            }
-
-            const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, eventDistance || runner.event_distance);
-            const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, eventDistance || runner.event_distance);
-
-            return {
-                id:                   runner.id || runner.start_number,
-                start_number:         runner.start_number,
-                surname:              runner.surname || '',
-                name:                 runner.name || '',
-                full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
-                sex:                  runner.sex,
-                category:             runner.category || '',
-                status:               runner.race_status,
-                time_gun_finish:      parseDuration(runner.time_gun_finish),
-                time_clear_finish:    parseDuration(runner.time_clear_finish),
-                time_clear_kt1_raw:   kt1Time,
-                time_clear_kt1:       parseDuration(kt1Time),
-                finish_pace_avg:      parseDuration(runner.finish_pace_avg),
-                finish_pace_avg_gun:  calculatedGunPace,
-                finish_pace_avg_clean: calculatedCleanPace,
-                rank_absolute:        runner.rank_absolute,
-                rank_sex:             runner.rank_sex,
-                rank_category:        runner.rank_category,
-                bib:                  runner.start_number,
-                dorsal:               runner.start_number,
-                checkpoints:          runner.checkpoints || {},
-                speed:                runner.speed != null ? runner.speed : 10.0,
-                current_distance:     runner.current_distance || 0,
-                current_pace:         runner.current_pace || '6:00',
-                pace_source:          runner.pace_source || '',
-                prev_year:            runner.prev_year || null,
-                time_clear_start_s:   runner.time_clear_start_s ?? null,
-                lap:                  runner.lap ?? 1,
-                last_kt_unix_ms:      runner.last_kt_unix_ms ?? null,
-            };
-        });
-
-        selectedRunnerIds.forEach(id => {
-            const r = allRunners.find(x => String(x.id) === String(id));
-            if (r) console.log(
-                `[API_CHECK] #${r.start_number} ${r.full_name}:`,
-                `status=${r.status}`,
-                `speed=${r.speed}`,
-                `current_pace=${r.current_pace}`,
-                `pace_source=${r.pace_source}`
-            );
-        });
-
-        updateStatus(`✅ Загружено участников: ${allRunners.length}`);
+        _applyRunnerData(data);
 
     } catch (error) {
         console.error('❌ Ошибка при загрузке участников:', error);
@@ -646,28 +651,39 @@ function renderAnalyticsHTML(stats, results) {
 // ============================================
 
 function startAutoUpdate() {
-    let isLoading = false;
+    if (!CONFIG.EVENT_ID) {
+        console.warn('[SSE] EVENT_ID не задан, автообновление отключено');
+        return;
+    }
+    const source = new EventSource(`/api/sse/tracker?event_id=${CONFIG.EVENT_ID}`);
+    let isProcessing = false;
 
-    setInterval(async () => {
+    source.onmessage = async (e) => {
         updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
         updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
-        if (isLoading) return;
-        isLoading = true;
+        if (isProcessing) return;
+        isProcessing = true;
         try {
-            await loadAllRunners();
-            // Обновляем состояние анимации после получения свежих данных
+            const data = JSON.parse(e.data);
+            _applyRunnerData(data);
             selectedRunnerIds.forEach(runnerId => {
                 const runner = allRunners.find(r => String(r.id) === String(runnerId));
                 if (runner) updateRunnerMarkerPosition(runner);
             });
-        } catch (error) {
-            console.error('❌ Ошибка при загрузке данных:', error);
+        } catch (err) {
+            console.error('❌ Ошибка SSE данных:', err);
         } finally {
-            isLoading = false;
+            isProcessing = false;
         }
-    }, CONFIG.UPDATE_INTERVAL);
+    };
+
+    source.onerror = () => {
+        updateStatus('⚠️ SSE: переподключение...');
+    };
+
+    console.log(`[SSE] Трекер подключён: event_id=${CONFIG.EVENT_ID}`);
 }
 
 

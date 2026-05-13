@@ -56,7 +56,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     updatePageTitle();
     loadRunnersData();
 
-    setInterval(() => loadRunnersData(true), 30000);
+    new SSEClient('/api/sse/notify', {
+        results_updated: (msg) => {
+            const eventIds = eventYearToIdMap[`${currentEvent}_${currentYear}`];
+            const ids = Array.isArray(eventIds) ? eventIds : [eventIds];
+            if (!msg.event_id || ids.includes(msg.event_id)) loadRunnersData(true);
+        }
+    });
 });
 
 // Функция обновления цвета темы в зависимости от события
