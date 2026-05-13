@@ -3,6 +3,7 @@ JSON API эндпоинты KM_track.
 Все /api/* маршруты, возвращающие JSON.
 """
 
+import asyncio
 import logging
 import json
 from typing import Optional, List
@@ -11,6 +12,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
 from fastapi.responses import RedirectResponse
+from sse_starlette.sse import EventSourceResponse
+
+from src.tracker.services.notification_hub import tracker_hub, notification_hub
 
 from src.config import settings
 from src.config.event_loader import (
@@ -625,6 +629,51 @@ async def fetch_race_data_now():
         logger.error(f"fetch_race_data_now error: {e}", exc_info=True)
         return {"success": False, "message": str(e), "timestamp": datetime.now().isoformat()}
 
+
+# ============================================================================
+# SSE ENDPOINTS
+# ============================================================================
+
+@router.get("/api/sse/tracker", tags=["SSE"])
+async def sse_tracker(request: Request, event_id: int = Query(..., description="ID события")):
+    """SSE поток с полными данными трекера. Обновляется каждые 2 сек."""
+    queue = await tracker_hub.subscribe(event_id)
+
+    async def stream():
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield {"data": data}
+                except asyncio.TimeoutError:
+                    yield {"comment": "heartbeat"}
+                if await request.is_disconnected():
+                    break
+        finally:
+            tracker_hub.unsubscribe(event_id, queue)
+
+    return EventSourceResponse(stream())
+
+
+@router.get("/api/sse/notify", tags=["SSE"])
+async def sse_notify(request: Request):
+    """SSE поток лёгких уведомлений: results_updated, startlist_updated."""
+    queue = await notification_hub.subscribe()
+
+    async def stream():
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield {"data": data}
+                except asyncio.TimeoutError:
+                    yield {"comment": "heartbeat"}
+                if await request.is_disconnected():
+                    break
+        finally:
+            notification_hub.unsubscribe(queue)
+
+    return EventSourceResponse(stream())
 
 @router.get("/api/fetcher-status")
 async def fetcher_status():

@@ -83,9 +83,93 @@ async def lifespan(app: FastAPI):
             settings.logger.warning(f"Cache pre-warm failed: {_e}")
     asyncio.create_task(_prewarm_cache())
 
+    # === SSE BACKGROUND TASKS ===
+    from src.tracker.services.notification_hub import tracker_hub, notification_hub
+    from src.tracker.services.results_service import build_event_results
+    from src.config.event_loader import load_events_cached, get_active_event as _get_active
+
+    async def _tracker_broadcast():
+        """Строит позиции участников каждые 2 сек и рассылает через TrackerHub."""
+        while True:
+            try:
+                events = load_events_cached()
+                active = _get_active(events)
+                if active:
+                    for dist in active.distances:
+                        if not dist.tracked:
+                            continue
+                        result = await asyncio.get_event_loop().run_in_executor(
+                            None, build_event_results,
+                            dist.db_event_id, None, None, events
+                        )
+                        if result:
+                            await tracker_hub.broadcast(
+                                dist.db_event_id, result.model_dump_json()
+                            )
+            except Exception as _e:
+                settings.logger.warning(f"[SSE] tracker_broadcast error: {_e}")
+            await asyncio.sleep(2)
+
+    async def _results_watcher():
+        """Следит за новыми финишами; уведомляет results_updated."""
+        from src.analytics.db_connection_optimized import get_pooled_connection
+        last: dict[int, int] = {}
+        while True:
+            try:
+                conn = get_pooled_connection()
+                if conn:
+                    cur = conn.cursor(dictionary=True)
+                    cur.execute(
+                        "SELECT event_id, COUNT(*) AS cnt FROM results GROUP BY event_id"
+                    )
+                    for row in cur.fetchall():
+                        eid, cnt = row["event_id"], row["cnt"]
+                        if eid in last and last[eid] != cnt:
+                            await notification_hub.broadcast(
+                                "results_updated", {"event_id": eid}
+                            )
+                        last[eid] = cnt
+                    cur.close()
+                    conn.close()
+            except Exception as _e:
+                settings.logger.warning(f"[SSE] results_watcher error: {_e}")
+            await asyncio.sleep(5)
+
+    async def _startlist_watcher():
+        """Следит за новыми регистрациями в leads; уведомляет startlist_updated."""
+        from src.analytics.db_connection_optimized import get_pooled_connection
+        last: dict[int, int] = {}
+        while True:
+            try:
+                conn = get_pooled_connection()
+                if conn:
+                    cur = conn.cursor(dictionary=True)
+                    cur.execute(
+                        "SELECT event_id, COUNT(*) AS cnt FROM leads GROUP BY event_id"
+                    )
+                    for row in cur.fetchall():
+                        eid, cnt = row["event_id"], row["cnt"]
+                        if eid in last and last[eid] != cnt:
+                            await notification_hub.broadcast("startlist_updated")
+                        last[eid] = cnt
+                    cur.close()
+                    conn.close()
+            except Exception as _e:
+                settings.logger.warning(f"[SSE] startlist_watcher error: {_e}")
+            await asyncio.sleep(15)
+
+    _sse_tasks = [
+        asyncio.create_task(_tracker_broadcast()),
+        asyncio.create_task(_results_watcher()),
+        asyncio.create_task(_startlist_watcher()),
+    ]
+    settings.logger.info("[SSE] Background tasks started: tracker_broadcast, results_watcher, startlist_watcher")
+
     yield  # Приложение работает здесь
-    
+
     # === SHUTDOWN ===
+    for _t in _sse_tasks:
+        _t.cancel()
     settings.logger.info("Shutting down...")
 
 
