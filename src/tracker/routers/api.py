@@ -152,7 +152,9 @@ async def search_athletes(
     """Поиск спортсменов по фамилии/имени (таблица clients). Максимум 20 результатов."""
     try:
         from src.analytics.db_connection_optimized import search_clients_optimized
-        results = search_clients_optimized(q)
+        results = await asyncio.get_event_loop().run_in_executor(
+            None, search_clients_optimized, q
+        )
         return {'query': q, 'count': len(results), 'results': results[:20]}
     except Exception as e:
         logger.error(f"search_athletes error: {e}")
@@ -439,7 +441,9 @@ async def get_result_segments_api(result_id: int = Query(...)) -> list:
     """Сегменты (контрольные точки) для конкретного result_id."""
     try:
         from src.analytics.db_connection_optimized import get_result_segments
-        segments = get_result_segments(result_id)
+        segments = await asyncio.get_event_loop().run_in_executor(
+            None, get_result_segments, result_id
+        )
         return [dict(s) if not isinstance(s, dict) else s for s in segments]
     except Exception as e:
         logger.error(f"get_result_segments error: {e}", exc_info=True)

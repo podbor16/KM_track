@@ -94,6 +94,8 @@ _tables_cache = {}
 _tables_cache_time = None
 _tables_cache_ttl = 300  # 5 минут
 
+_columns_cache: dict[str, list] = {}
+
 
 def _is_tables_cache_valid() -> bool:
     global _tables_cache_time, _tables_cache_ttl
@@ -190,6 +192,9 @@ def get_table_row_count_fast(table_name: str) -> int:
 
 def get_table_columns(table_name: str) -> List[str]:
     """Возвращает список столбцов таблицы."""
+    if table_name in _columns_cache:
+        return _columns_cache[table_name]
+
     connection = get_pooled_connection()
     if not connection:
         return []
@@ -200,6 +205,7 @@ def get_table_columns(table_name: str) -> List[str]:
         fields = cursor.fetchall()
         columns = [f.get('Field', '') for f in fields] if fields else []
         cursor.close()
+        _columns_cache[table_name] = columns
         return columns
 
     except Exception as e:

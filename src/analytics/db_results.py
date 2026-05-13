@@ -29,6 +29,10 @@ _results_cache: dict = {}
 _results_cache_ts: dict = {}
 RESULTS_CACHE_TTL = 5  # секунд — короткий TTL для live-данных КТ
 
+_segments_cache: dict[int, list] = {}
+_segments_cache_ts: dict[int, float] = {}
+SEGMENTS_CACHE_TTL = 30  # секунд
+
 # Кеш данных события (gun_time и т.д.) — с TTL, чтобы изменения в events отражались быстро
 _event_info_cache: dict = {}
 _event_info_cache_ts: dict = {}
@@ -683,6 +687,11 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
     Returns:
         Список словарей с данными сегментов (segment_code, sg_time_clear, sg_pace_avg, ранги).
     """
+    _now = time.time()
+    if result_id in _segments_cache and (_now - _segments_cache_ts.get(result_id, 0)) < SEGMENTS_CACHE_TTL:
+        logger.debug(f"📦 Сегменты из кеша для result_id={result_id}")
+        return _segments_cache[result_id]
+
     logger.info(f"🔍 Загрузка сегментов для result_id={result_id}")
 
     connection = get_pooled_connection()
@@ -736,7 +745,10 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
         cursor.close()
 
         logger.info(f"{'✅' if segments else 'ℹ️'} {'Найдено ' + str(len(segments)) + ' сегментов' if segments else 'Сегменты не найдены'} для result_id={result_id}")
-        return list(segments) if segments else []
+        result = list(segments) if segments else []
+        _segments_cache[result_id] = result
+        _segments_cache_ts[result_id] = time.time()
+        return result
 
     except Exception as e:
         logger.error(f"❌ Ошибка при получении сегментов: {e}")

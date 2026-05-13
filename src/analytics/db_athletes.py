@@ -50,7 +50,7 @@ def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[st
             select_fields.append(birthday_field)
 
         fields_str = ', '.join([f'`{f}`' for f in select_fields])
-        search_term = f"%{search_query}%"
+        search_term = f"{search_query}%"
 
         query = f"""
         SELECT {fields_str}
