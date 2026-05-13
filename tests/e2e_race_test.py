@@ -351,17 +351,17 @@ async def run():
             WHERE id={result_ids[2]}""")
         ok(f"TEST_Кузнецов: Finished 00:30:45 (место 3)")
 
-        # Сегменты КТ1→Финиш
-        for i, (rid, kt1, fin, pace, sex_rank) in enumerate([
-            (result_ids[0], '00:13:00', '00:25:30', '00:05:00', 1),
-            (result_ids[1], '00:14:30', '00:28:15', '00:05:30', 1),
-            (result_ids[2], '00:15:20', '00:30:45', '00:06:14', 2),
+        # Сегменты КТ1→Финиш: sg_time_clear = время_финиша - время_КТ1
+        for i, (rid, kt1, fin, seg, pace, sex_rank) in enumerate([
+            (result_ids[0], '00:13:00', '00:25:30', '00:12:30', '00:05:00', 1),
+            (result_ids[1], '00:14:30', '00:28:15', '00:13:45', '00:05:30', 1),
+            (result_ids[2], '00:15:20', '00:30:45', '00:15:25', '00:06:10', 2),
         ]):
             sql_insert(
                 """INSERT INTO result_segments (event_id, result_id, segment_code, sg_time_clear, sg_time_gun,
                    sg_rank_absolute, sg_rank_sex, sg_rank_category, sg_pace_avg)
                    VALUES (%s,%s,'kt1-finish',%s,%s,%s,%s,%s,%s)""",
-                (EVENT_ID, rid, fin, fin, i+1, sex_rank, i+1, pace)
+                (EVENT_ID, rid, seg, seg, i+1, sex_rank, i+1, pace)
             )
         ok("Сегменты kt1-finish вставлены для всех участников")
 
