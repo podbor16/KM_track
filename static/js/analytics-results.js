@@ -1057,6 +1057,7 @@ function filterSplitSegments(segments) {
  */
 function renderPaceChart(consecutive, kmMap, canvas) {
     if (!consecutive || !consecutive.length) return null;
+    if (typeof Chart === 'undefined') return null;
     const useGun = typeof timeMode !== 'undefined' ? timeMode === 'gun' : true;
     const labels = [], values = [], colors = [];
 
@@ -1083,6 +1084,7 @@ function renderPaceChart(consecutive, kmMap, canvas) {
     values.forEach(v => colors.push(v <= avg ? 'rgba(39,174,96,0.75)' : 'rgba(238,45,98,0.75)'));
 
     const target = canvas || document.createElement('canvas');
+    Chart.getChart(target)?.destroy();
     new Chart(target, {
         type: 'bar',
         data: {
