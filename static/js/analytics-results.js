@@ -949,6 +949,95 @@ function filterSplitSegments(segments) {
     });
 }
 
+/**
+ * Рендерит бар-чарт темпа по последовательным отрезкам.
+ * Цвет и высота — относительная шкала per-participant.
+ * @param {Array} consecutive — результат filterConsecutiveSegments()
+ * @param {Object} kmMap — результат buildKmMap()
+ * @returns {HTMLElement|null} — контейнер чарта или null если нечего показать
+ */
+function renderPaceChart(consecutive, kmMap) {
+    if (!consecutive.length) return null;
+
+    const useGun = timeMode === 'gun';
+
+    // Вычислить темп в секундах/км для каждого отрезка
+    const paces = consecutive.map(seg => {
+        const paceStr = useGun
+            ? (seg.sg_pace_avg_gun || seg.sg_pace_avg)
+            : seg.sg_pace_avg;
+        if (!paceStr) return null;
+        const parts = paceStr.split(':').map(Number);
+        return parts[0] * 60 + parts[1]; // seconds/km
+    });
+
+    const validPaces = paces.filter(p => p !== null);
+    if (!validPaces.length) return null;
+
+    const minPace = Math.min(...validPaces);
+    const maxPace = Math.max(...validPaces);
+    const MIN_H = 14, MAX_H = 68;
+
+    const chart = document.createElement('div');
+    chart.className = 'pace-chart';
+
+    consecutive.forEach((seg, i) => {
+        if (paces[i] === null) return;
+
+        const pace = paces[i];
+        const ratio = maxPace === minPace ? 0 : (pace - minPace) / (maxPace - minPace);
+        const color = paceBarColor(ratio);
+        const height = Math.round(MIN_H + ratio * (MAX_H - MIN_H));
+
+        // Время прохождения
+        const timeStr = useGun
+            ? (seg.sg_time_gun || seg.sg_time_clear)
+            : seg.sg_time_clear;
+        const timeDisplay = formatTime(timeStr) || '—';
+
+        // Темп строкой
+        const paceDisplay = useGun
+            ? (seg.sg_pace_avg_gun || seg.sg_pace_avg || '—')
+            : (seg.sg_pace_avg || '—');
+
+        // Км-диапазон
+        const { from, to } = parseSegmentCode(seg.segment_code);
+        const fromKm = kmMap[from] !== undefined ? kmMap[from] : null;
+        const toKm   = kmMap[to]   !== undefined ? kmMap[to]   : null;
+        const distLabel = (fromKm !== null && toKm !== null)
+            ? `${fromKm}–${toKm} км`
+            : seg.segment_code;
+
+        // Дистанция участка над баром
+        const segKm = (fromKm !== null && toKm !== null)
+            ? `${Math.round((toKm - fromKm) * 10) / 10} км`
+            : '';
+
+        const col = document.createElement('div');
+        col.className = 'pace-bar-col';
+        col.innerHTML = `
+            <div class="pace-bar-col__top">
+                <div class="pace-bar-col__top-time" style="color:${color}">${timeDisplay}</div>
+                <div class="pace-bar-col__top-dist">${segKm}</div>
+            </div>
+            <div class="pace-bar-col__bar" style="background:${color};height:${height}px"></div>
+            <div class="pace-bar-col__pace" style="color:${color}">${paceDisplay} мин/км</div>
+            <div class="pace-bar-col__range">${distLabel}</div>
+        `;
+        chart.appendChild(col);
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(chart);
+
+    const legend = document.createElement('div');
+    legend.className = 'pace-chart-legend';
+    legend.textContent = 'Зелёный = быстрый отрезок · Красный = медленный · Шкала индивидуальная';
+    wrapper.appendChild(legend);
+
+    return wrapper;
+}
+
 function createSegmentsTable(segments) {
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
