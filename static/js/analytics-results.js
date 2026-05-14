@@ -862,8 +862,8 @@ async function loadSegmentsIntoPanel(cell, resultId) {
         if (segPlaceholder) segPlaceholder.remove();
         if (segsPane) {
             try {
-                renderSegmentSection(segsPane, 'Отрезки', '#e63946', consecutive);
-                renderSegmentSection(segsPane, 'Сплиты от старта', '#4a9eff', splits);
+                renderSegmentSection(segsPane, 'Отрезки', '#e63946', consecutive, kmMap);
+                renderSegmentSection(segsPane, 'Сплиты от старта', '#4a9eff', splits, kmMap);
             } catch (segErr) {
                 console.error('Ошибка renderSegmentSection:', segErr);
                 segsPane.insertAdjacentHTML('beforeend',
@@ -1059,12 +1059,10 @@ function renderPaceChart(consecutive, kmMap, canvas) {
     if (!consecutive || !consecutive.length) return null;
     if (typeof Chart === 'undefined') return null;
     const useGun = typeof timeMode !== 'undefined' ? timeMode === 'gun' : true;
-    const labels = [], values = [], colors = [];
+    const rangeLabels = [], values = [], colors = [], topLabels = [], paceStrs = [];
 
     consecutive.forEach(seg => {
-        const paceStr = useGun
-            ? (seg.sg_pace_avg_gun || seg.sg_pace_avg)
-            : seg.sg_pace_avg;
+        const paceStr = useGun ? (seg.sg_pace_avg_gun || seg.sg_pace_avg) : seg.sg_pace_avg;
         if (!paceStr) return;
         const secs = toTotalSec(paceStr);
         if (!secs) return;
@@ -1072,11 +1070,21 @@ function renderPaceChart(consecutive, kmMap, canvas) {
         const { from, to } = parseSegmentCode(seg.segment_code);
         const fromKm = kmMap && kmMap[from] !== undefined ? kmMap[from] : null;
         const toKm   = kmMap && kmMap[to]   !== undefined ? kmMap[to]   : null;
-        const label = (fromKm !== null && toKm !== null)
+        const rangeLabel = (fromKm !== null && toKm !== null)
             ? `${fromKm}–${toKm} км`
             : (seg.segment_code || '?');
-        labels.push(label);
-        values.push(parseFloat((secs / 60).toFixed(2)));
+
+        const rawTime = useGun ? (seg.sg_time_gun || seg.sg_time_clear) : seg.sg_time_clear;
+        const timeStr = formatTime(rawTime) || '—';
+
+        const paceMin = secs / 60;
+        const pm = Math.floor(paceMin);
+        const ps = Math.round((paceMin - pm) * 60);
+
+        rangeLabels.push(rangeLabel);
+        values.push(parseFloat(paceMin.toFixed(2)));
+        topLabels.push({ time: timeStr, dist: toKm !== null ? `${toKm} км` : '' });
+        paceStrs.push(`${pm}:${String(ps).padStart(2, '0')} мин/км`);
     });
     if (!values.length) return null;
 
@@ -1085,10 +1093,32 @@ function renderPaceChart(consecutive, kmMap, canvas) {
 
     const target = canvas || document.createElement('canvas');
     Chart.getChart(target)?.destroy();
+
+    const topLabelPlugin = {
+        id: 'kmTopLabels',
+        afterDatasetsDraw(chart) {
+            const ctx = chart.ctx;
+            const meta = chart.getDatasetMeta(0);
+            ctx.save();
+            ctx.textAlign = 'center';
+            meta.data.forEach((bar, i) => {
+                const x = bar.x;
+                const top = bar.y;
+                ctx.font = 'bold 11px "Courier New", monospace';
+                ctx.fillStyle = '#222';
+                ctx.fillText(topLabels[i].time, x, top - 14);
+                ctx.font = '10px Arial, sans-serif';
+                ctx.fillStyle = '#666';
+                ctx.fillText(topLabels[i].dist, x, top - 3);
+            });
+            ctx.restore();
+        }
+    };
+
     new Chart(target, {
         type: 'bar',
         data: {
-            labels,
+            labels: rangeLabels,
             datasets: [{
                 data: values,
                 backgroundColor: colors,
@@ -1100,6 +1130,7 @@ function renderPaceChart(consecutive, kmMap, canvas) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 32 } },
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { label: ctx => {
@@ -1118,17 +1149,30 @@ function renderPaceChart(consecutive, kmMap, canvas) {
                     }, font: { size: 11 } },
                     grid: { color: '#f0f0f0' }
                 },
-                x: { grid: { display: false }, ticks: { font: { size: 12, weight: '600' } } }
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        callback: (val, idx) => [paceStrs[idx], rangeLabels[idx]],
+                        font: { size: 10 }
+                    }
+                }
             }
-        }
+        },
+        plugins: [topLabelPlugin]
     });
     return canvas ? null : target;
 }
 
-function renderSegmentSection(container, title, color, rows) {
+function renderSegmentSection(container, title, color, rows, kmMap) {
     if (!rows.length) return;
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
+    const segKmName = code => {
+        const { from, to } = parseSegmentCode(code);
+        const fk = kmMap && kmMap[from] != null ? kmMap[from] : null;
+        const tk = kmMap && kmMap[to]   != null ? kmMap[to]   : null;
+        return (fk !== null && tk !== null) ? `${fk}–${tk} км` : formatSegmentName(code);
+    };
 
     const header = document.createElement('div');
     header.className = 'segment-section-header';
@@ -1182,7 +1226,7 @@ function renderSegmentSection(container, title, color, rows) {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="seg-name">${formatSegmentName(code)}</td>
+            <td class="seg-name">${segKmName(code)}</td>
             <td class="seg-time">${time}</td>
             <td class="seg-pace">${paceHtml}</td>
             <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
