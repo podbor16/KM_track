@@ -784,22 +784,33 @@ function buildDetailPanelHTML(runner) {
         </div>
         <button class="detail-panel-close" title="Закрыть">&times;</button>
     </div>
-    <div class="detail-stats-grid">
-        <div class="detail-stat-tablet detail-stat-tablet--gun">
-            <div class="detail-stat-tablet__label">Официальное</div>
-            <div class="detail-stat-tablet__time">${timeGun}</div>
-            <div class="detail-stat-tablet__pace">${paceGun}</div>
-            <div class="detail-stat-tablet__ranks">Место <strong>${rankAbs}</strong> · Пол <strong>${rankSex}</strong> · Кат <strong>${rankCat}</strong></div>
-        </div>
-        <div class="detail-stat-tablet detail-stat-tablet--net">
-            <div class="detail-stat-tablet__label">Чистое</div>
-            <div class="detail-stat-tablet__time">${timeNet}</div>
-            <div class="detail-stat-tablet__pace">${paceNet}</div>
-            <div class="detail-stat-tablet__ranks">Место <strong>${rankAbsClean}</strong> · Пол <strong>${rankSexClean}</strong> · Кат <strong>${rankCatClean}</strong></div>
+    <div class="detail-tabs">
+        <button class="detail-tab active" data-tab="result">Результат</button>
+        <button class="detail-tab" data-tab="pace">Темп</button>
+        <button class="detail-tab" data-tab="segments">Отрезки</button>
+    </div>
+    <div class="detail-tab-pane active" data-pane="result">
+        <div class="detail-result-block">
+            <div class="detail-result-divider">Официальное</div>
+            <div class="detail-result-row"><span class="detail-result-label">Время</span><span class="detail-result-value detail-result-value--gun">${timeGun}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Темп</span><span class="detail-result-value detail-result-value--gun">${paceGun}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Место</span><span class="detail-result-value">${rankAbs}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Пол</span><span class="detail-result-value">${rankSex}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Кат.</span><span class="detail-result-value">${rankCat}</span></div>
+            <div class="detail-result-divider">Чистое</div>
+            <div class="detail-result-row"><span class="detail-result-label">Время</span><span class="detail-result-value detail-result-value--net">${timeNet}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Темп</span><span class="detail-result-value detail-result-value--net">${paceNet}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Место</span><span class="detail-result-value">${rankAbsClean}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Пол</span><span class="detail-result-value">${rankSexClean}</span></div>
+            <div class="detail-result-row"><span class="detail-result-label">Кат.</span><span class="detail-result-value">${rankCatClean}</span></div>
         </div>
     </div>
-    <div class="detail-segments-title">Время по контрольным точкам</div>
-    <div class="detail-segments-loading segments-placeholder">Загрузка...</div>
+    <div class="detail-tab-pane" data-pane="pace">
+        <div class="segments-placeholder pace-placeholder">Загрузка...</div>
+    </div>
+    <div class="detail-tab-pane" data-pane="segments">
+        <div class="segments-placeholder segs-placeholder">Загрузка...</div>
+    </div>
     `;
 }
 
