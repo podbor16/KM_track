@@ -887,9 +887,23 @@ function buildKmMap(segments) {
         const timeStr = seg.sg_time_clear || seg.sg_time_gun;
         const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
         if (!timeStr || !paceStr) continue;
-
-        const km = calcSegmentDistanceKm(timeStr, paceStr);
-        if (km !== null) map[to] = km;
+        // "HH:MM:SS" → total seconds
+        const tParts = timeStr.split(':').map(Number);
+        if (tParts.length !== 3) continue;
+        const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
+        // pace may be "M:SS" (2-part) or "HH:MM:SS" (3-part)
+        const pParts = paceStr.split(':').map(Number);
+        let paceSec;
+        if (pParts.length === 3) {
+            paceSec = pParts[0] * 3600 + pParts[1] * 60 + pParts[2];
+        } else if (pParts.length === 2) {
+            paceSec = pParts[0] * 60 + pParts[1];
+        } else {
+            continue;
+        }
+        if (paceSec > 0) {
+            map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+        }
     }
     return map;
 }
@@ -909,18 +923,32 @@ function paceBarColor(ratio) {
  * Возвращает последовательные отрезки: start→kt1, kt1→kt2, ..., ktN→finish.
  * Только сегменты с данными (sg_time_clear или sg_time_gun не null).
  * Результат отсортирован по порядку маршрута.
+ * Смежность определяется по фактическому набору КТ участника,
+ * поэтому гонки с <7 КТ (например, 5 км с одним kt1) работают корректно.
  */
 function filterConsecutiveSegments(segments) {
+    // Собираем уникальные КТ, для которых есть данные
+    const ktsWithData = new Set();
+    for (const seg of segments) {
+        if (!(seg.sg_time_clear || seg.sg_time_gun)) continue;
+        const { from, to } = parseSegmentCode(seg.segment_code);
+        if (KT_ORDER.includes(from)) ktsWithData.add(from);
+        if (KT_ORDER.includes(to)) ktsWithData.add(to);
+    }
+    // Сортируем по позиции в KT_ORDER
+    const sortedKts = [...ktsWithData].sort(
+        (a, b) => KT_ORDER.indexOf(a) - KT_ORDER.indexOf(b)
+    );
+    // Сегмент считается последовательным, если from→to — соседи в фактическом наборе КТ
     return segments.filter(seg => {
         const { from, to } = parseSegmentCode(seg.segment_code);
-        const fi = KT_ORDER.indexOf(from);
-        const ti = KT_ORDER.indexOf(to);
-        const isConsecutive = fi >= 0 && ti === fi + 1;
-        const hasData = seg.sg_time_clear || seg.sg_time_gun;
-        return isConsecutive && hasData;
+        if (!(seg.sg_time_clear || seg.sg_time_gun)) return false;
+        const fi = sortedKts.indexOf(from);
+        const ti = sortedKts.indexOf(to);
+        return fi >= 0 && ti === fi + 1;
     }).sort((a, b) => {
-        const ai = KT_ORDER.indexOf(parseSegmentCode(a.segment_code).from);
-        const bi = KT_ORDER.indexOf(parseSegmentCode(b.segment_code).from);
+        const ai = sortedKts.indexOf(parseSegmentCode(a.segment_code).from);
+        const bi = sortedKts.indexOf(parseSegmentCode(b.segment_code).from);
         return ai - bi;
     });
 }
