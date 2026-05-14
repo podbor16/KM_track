@@ -1,9 +1,9 @@
 #!/bin/bash
 # Первоначальная настройка VPS для KM Track
-# Запускать от root на свежем Ubuntu 22.04
+# Запускать от root на свежем Ubuntu 24.04
 # Использование: bash setup.sh <git_repo_url>
 #
-# Пример: bash setup.sh https://github.com/USER/km_track.git
+# Пример: bash setup.sh https://github.com/podbor16/KM_track.git
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ fi
 
 echo "=== Установка зависимостей ==="
 apt update && apt install -y \
-    python3.11 python3.11-venv python3-pip \
+    python3.12 python3.12-venv python3-pip \
     nginx certbot python3-certbot-nginx \
     git curl htop
 
@@ -39,7 +39,7 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 echo "=== Virtualenv и зависимости ==="
 cd "$APP_DIR"
-python3.11 -m venv venv
+python3.12 -m venv venv
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 
