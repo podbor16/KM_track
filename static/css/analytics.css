@@ -354,9 +354,17 @@ h1 {
   .km-td { padding: 8px 5px; font-size: 12px; }
   .km-td--l { padding-left: 6px; }
 
-  /* Segments table scrolls within its pane (contained scroll, not page scroll) */
-  .detail-splits-section { overflow-x: auto; padding: 8px 10px; }
-  .segments-table { min-width: 440px; }
+  /* Segments table — hide rank columns (4-6), keep Участок / Время / Темп */
+  .detail-splits-section { overflow-x: visible; padding: 8px 10px; }
+  .segments-table { min-width: 0; width: 100%; table-layout: fixed; }
+  .segments-table thead th:nth-child(n+4),
+  .segments-table tbody td:nth-child(n+4) { display: none; }
+  .segments-table thead th:nth-child(1),
+  .segments-table tbody td:nth-child(1) { width: 42%; }
+  .segments-table thead th:nth-child(2),
+  .segments-table tbody td:nth-child(2) { width: 30%; }
+  .segments-table thead th:nth-child(3),
+  .segments-table tbody td:nth-child(3) { width: 28%; }
   .segments-table thead th,
   .segments-table tbody td { padding: 7px 8px; font-size: 11px; }
 }
