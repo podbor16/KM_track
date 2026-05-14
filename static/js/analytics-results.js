@@ -875,46 +875,51 @@ function parseSegmentCode(code) {
 }
 
 /**
+ * Конвертирует время/темп в секунды. Обрабатывает ISO 8601 PT-строки (timedelta от FastAPI),
+ * HH:MM:SS строки, MM:SS строки и числа (float total_seconds).
+ */
+function toTotalSec(val) {
+    if (!val && val !== 0) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val !== 'string') return null;
+    if (val.startsWith('PT')) {
+        const m = val.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+        if (!m) return null;
+        return parseInt(m[1]||0)*3600 + parseInt(m[2]||0)*60 + Math.floor(parseFloat(m[3]||0));
+    }
+    const parts = val.split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return null;
+}
+
+/**
  * Строит карту { 'start': 0, 'kt1': 3.0, 'kt2': 5.3, ..., 'finish': 21.1 }
- * из сегментов с from='start'. Вычисляет to_km = time_sec / pace_sec_per_km.
+ * Вычисляет to_km = time_sec / pace_sec_per_km.
  * Если данных нет — ключ отсутствует.
  */
 function buildKmMap(segments) {
     const map = { start: 0 };
 
-    // Pass 1: cumulative km from 'start-*' splits
+    // Pass 1: km-позиции от 'start-*' сплитов
     for (const seg of segments) {
         const { from, to } = parseSegmentCode(seg.segment_code);
         if (from !== 'start') continue;
-        const timeStr = seg.sg_time_clear || seg.sg_time_gun;
-        const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
-        if (!timeStr || !paceStr) continue;
-        const tParts = timeStr.split(':').map(Number);
-        const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
-        const pParts = paceStr.split(':').map(Number);
-        const paceSec = pParts.length >= 3
-            ? pParts[1] * 60 + pParts[2]   // "HH:MM:SS" pace format
-            : pParts[0] * 60 + pParts[1];  // "M:SS" pace format
-        if (paceSec > 0) map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+        const timeSec = toTotalSec(seg.sg_time_clear || seg.sg_time_gun);
+        const paceSec = toTotalSec(seg.sg_pace_avg || seg.sg_pace_avg_gun);
+        if (timeSec && paceSec) map[to] = Math.round((timeSec / paceSec) * 10) / 10;
     }
 
-    // Pass 2: fill missing keys using segments that start from a known position
+    // Pass 2: дополняем из последовательных сегментов
     let changed = true;
     while (changed) {
         changed = false;
         for (const seg of segments) {
             const { from, to } = parseSegmentCode(seg.segment_code);
             if (!(from in map) || to in map) continue;
-            const timeStr = seg.sg_time_clear || seg.sg_time_gun;
-            const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
-            if (!timeStr || !paceStr) continue;
-            const tParts = timeStr.split(':').map(Number);
-            const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
-            const pParts = paceStr.split(':').map(Number);
-            const paceSec = pParts.length >= 3
-                ? pParts[1] * 60 + pParts[2]
-                : pParts[0] * 60 + pParts[1];
-            if (paceSec > 0) {
+            const timeSec = toTotalSec(seg.sg_time_clear || seg.sg_time_gun);
+            const paceSec = toTotalSec(seg.sg_pace_avg || seg.sg_pace_avg_gun);
+            if (timeSec && paceSec) {
                 map[to] = Math.round((map[from] + timeSec / paceSec) * 10) / 10;
                 changed = true;
             }
@@ -1003,8 +1008,7 @@ function renderPaceChart(consecutive, kmMap) {
             ? (seg.sg_pace_avg_gun || seg.sg_pace_avg)
             : seg.sg_pace_avg;
         if (!paceStr) return null;
-        const parts = paceStr.split(':').map(Number);
-        return parts[0] * 60 + parts[1]; // seconds/km
+        return toTotalSec(paceStr) || null;
     });
 
     const validPaces = paces.filter(p => p !== null);
