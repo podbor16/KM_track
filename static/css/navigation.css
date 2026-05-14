@@ -1,197 +1,82 @@
-/* Глобальная навигация для всех страниц */
-
-/* Сброс box-sizing для корректного расчёта ширины на всех страницах */
-*, *::before, *::after {
-    box-sizing: border-box;
-}
-
-/* Подключение кастомного шрифта */
-@font-face {
-    font-family: 'Houschka Pro';
-    src: url('/static/houschkapro_demibold.otf') format('opentype');
-    font-weight: 600;
-    font-style: normal;
-}
-
-:root {
-    --primary-color: #EE2D62;
-    --primary-dark: #1a1a1a;
-    --secondary-color: #EE2D62;
-    --text-dark: #333;
-    --text-light: #666;
-    --background: #faf8fa;
-    --white: #ffffff;
-    --shadow: 0 2px 8px rgba(0,0,0,0.1);
-    --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-/* Основной контент */
-body {
-    margin: 0;
-    padding: 0;
-    background: var(--background);
-    /* Резервируем место под скролбар, чтобы ширина страницы
-       не прыгала между страницами со скроллом и без */
-    scrollbar-gutter: stable;
-}
-
-/* Навигационная панель */
 .navbar {
-    width: 100%;
-    background: #222222;
-    border-bottom: 2px solid #EE2D62;
-    padding: 0;
-    margin: 0;
-    position: sticky;
-    top: 0;
-    z-index: 1050;
+  background: var(--km-dark-nav);
+  border-bottom: 2px solid var(--km-primary);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
-
 .navbar-container {
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 20px;
-    height: 44px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
 }
-
 .navbar-menu {
-    display: flex;
-    list-style: none;
-    gap: 0;
-    align-items: center;
-    margin: 0;
-    padding: 0;
+  display: flex;
+  list-style: none;
+  gap: 0;
+  margin: 0;
+  padding: 0;
 }
-
-.navbar-item {
-    margin: 0;
-}
-
 .navbar-link {
-    color: #aaaaaa;
-    text-decoration: none;
-    padding: 0 16px;
-    height: 44px;
-    line-height: 44px;
-    display: inline-block;
-    font-family: 'Houschka Pro', Arial, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid transparent;
-    transition: color 0.2s ease, border-color 0.2s ease;
-    white-space: nowrap;
+  color: var(--km-text-muted);
+  text-decoration: none;
+  padding: 0 16px;
+  height: 44px;
+  line-height: 44px;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
 }
-
-.navbar-link:hover {
-    color: #ffffff;
-    border-bottom-color: transparent;
+.navbar-link:hover { color: #fff; }
+.navbar-link.active {
+  color: var(--km-primary);
+  border-bottom-color: var(--km-primary);
 }
-
-.navbar-link.active,
-.navbar-link.active-link {
-    color: #EE2D62;
-    border-bottom: 2px solid #EE2D62;
-}
-
-/* Мобильное меню */
 .navbar-toggle {
-    display: none;
-    background: none;
-    border: none;
-    color: var(--white);
-    font-size: 24px;
-    cursor: pointer;
-    padding: 8px;
-    transition: transform 0.3s ease;
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
 }
-
-.navbar-toggle:hover {
-    transform: scale(1.1);
-}
-
 .navbar-toggle span {
-    display: block;
-    width: 25px;
-    height: 3px;
-    background-color: var(--white);
-    margin: 5px 0;
-    transition: 0.3s;
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
 }
-
-/* Адаптивность */
-@media (max-width: 768px) {
-    .navbar-container {
-        height: 44px;
-        justify-content: space-between;
-        padding: 0 15px;
-    }
-
-    .navbar-toggle {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-
-    .navbar-menu {
-        position: absolute;
-        top: 44px;
-        left: 0;
-        right: 0;
-        background: #222222;
-        flex-direction: column;
-        gap: 0;
-        padding: 8px 0;
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease;
-        box-shadow: var(--shadow);
-        z-index: 999;
-    }
-
-    .navbar-menu.active {
-        max-height: 300px;
-    }
-
-    .navbar-item {
-        width: 100%;
-    }
-
-    .navbar-link {
-        display: block;
-        height: auto;
-        line-height: normal;
-        padding: 12px 20px;
-        border-bottom: none;
-        border-left: 2px solid transparent;
-    }
-
-    .navbar-link.active,
-    .navbar-link.active-link {
-        border-bottom: none;
-        border-left: 2px solid #EE2D62;
-    }
-
-    .navbar-link:hover {
-        background-color: rgba(255, 255, 255, 0.05);
-    }
-
-    /* Заглушки для удалённых классов логотипа */
-    .navbar-brand {
-        display: none;
-    }
-
-    .navbar-brand-icon {
-        font-size: 22px;
-    }
-}
-
-/* Основной контент под навигацией */
-.page-content {
-    margin-top: 0;
-    padding-top: 20px;
+@media (max-width: 640px) {
+  .navbar-container { justify-content: flex-end; }
+  .navbar-toggle { display: flex; }
+  .navbar-menu {
+    display: none;
+    position: absolute;
+    top: 44px;
+    left: 0;
+    right: 0;
+    background: var(--km-dark-nav);
+    flex-direction: column;
+    border-top: 1px solid #333;
+    z-index: 200;
+  }
+  .navbar-menu.active { display: flex; }
+  .navbar-link {
+    padding: 12px 20px;
+    height: auto;
+    line-height: 1.4;
+    border-bottom: 1px solid #333;
+  }
+  .navbar-link.active { border-bottom: 1px solid var(--km-primary); }
 }

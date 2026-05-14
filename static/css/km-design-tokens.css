@@ -1,0 +1,42 @@
+@font-face {
+  font-family: 'HouschkaRoundedAlt';
+  src: url('/static/fonts/HouschkaRoundedAlt-Bold.woff') format('woff');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HouschkaRoundedAlt';
+  src: url('/static/fonts/HouschkaRoundedAlt-Medium.woff') format('woff');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HouschkaPro';
+  src: url('/static/fonts/HouschkaPro-DemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --km-primary: #EE2D62;
+  --km-dark: #1a1a1a;
+  --km-dark-nav: #222222;
+  --km-bg-page: #faf8fa;
+  --km-bg-card: #ffffff;
+  --km-bg-footer: #efefef;
+  --km-text-body: #333333;
+  --km-text-secondary: #666666;
+  --km-text-muted: #aaaaaa;
+  --km-border-light: #e0e0e0;
+  --km-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  --km-shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
+  --km-font-brand: 'HouschkaRoundedAlt', Arial, sans-serif;
+  --km-font-ui: 'HouschkaPro', 'HouschkaRoundedAlt', Arial, sans-serif;
+  --km-radius-card: 12px;
+  --km-radius-btn: 50px;
+  --km-radius-input: 8px;
+  --primary-color: var(--km-primary);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--km-font-ui); background: var(--km-bg-page); color: var(--km-text-body); }
