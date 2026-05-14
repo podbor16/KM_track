@@ -785,21 +785,17 @@ function buildDetailPanelHTML(runner) {
         <button class="detail-panel-close" title="Закрыть">&times;</button>
     </div>
     <div class="detail-stats-grid">
-        <div class="detail-stat-block">
-            <h4>Официальные результаты</h4>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место</span><span class="detail-stat-value">${rankAbs}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место по полу</span><span class="detail-stat-value">${rankSex}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место в категории</span><span class="detail-stat-value">${rankCat} ${category}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Время</span><span class="detail-stat-value">${timeGun}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Темп</span><span class="detail-stat-value">${paceGun}</span></div>
+        <div class="detail-stat-tablet detail-stat-tablet--gun">
+            <div class="detail-stat-tablet__label">Официальное</div>
+            <div class="detail-stat-tablet__time">${timeGun}</div>
+            <div class="detail-stat-tablet__pace">${paceGun}</div>
+            <div class="detail-stat-tablet__ranks">Место <strong>${rankAbs}</strong> · Пол <strong>${rankSex}</strong> · Кат <strong>${rankCat}</strong></div>
         </div>
-        <div class="detail-stat-block">
-            <h4>Чистые результаты</h4>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место</span><span class="detail-stat-value">${rankAbsClean}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место по полу</span><span class="detail-stat-value">${rankSexClean}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Место в категории</span><span class="detail-stat-value">${rankCatClean} ${category}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Время</span><span class="detail-stat-value">${timeNet}</span></div>
-            <div class="detail-stat-row"><span class="detail-stat-label">Темп</span><span class="detail-stat-value">${paceNet}</span></div>
+        <div class="detail-stat-tablet detail-stat-tablet--net">
+            <div class="detail-stat-tablet__label">Чистое</div>
+            <div class="detail-stat-tablet__time">${timeNet}</div>
+            <div class="detail-stat-tablet__pace">${paceNet}</div>
+            <div class="detail-stat-tablet__ranks">Место <strong>${rankAbsClean}</strong> · Пол <strong>${rankSexClean}</strong> · Кат <strong>${rankCatClean}</strong></div>
         </div>
     </div>
     <div class="detail-segments-title">Время по контрольным точкам</div>
