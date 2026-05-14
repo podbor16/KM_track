@@ -354,17 +354,48 @@ h1 {
   .km-td { padding: 8px 5px; font-size: 12px; }
   .km-td--l { padding-left: 6px; }
 
-  /* Segments table — hide rank columns (4-6), keep Участок / Время / Темп */
+  /* Segments table — card layout on mobile, all data visible */
   .detail-splits-section { overflow-x: visible; padding: 8px 10px; }
-  .segments-table { min-width: 0; width: 100%; table-layout: fixed; }
-  .segments-table thead th:nth-child(n+4),
-  .segments-table tbody td:nth-child(n+4) { display: none; }
-  .segments-table thead th:nth-child(1),
-  .segments-table tbody td:nth-child(1) { width: 42%; }
-  .segments-table thead th:nth-child(2),
-  .segments-table tbody td:nth-child(2) { width: 30%; }
-  .segments-table thead th:nth-child(3),
-  .segments-table tbody td:nth-child(3) { width: 28%; }
-  .segments-table thead th,
-  .segments-table tbody td { padding: 7px 8px; font-size: 11px; }
+  .segments-table,
+  .segments-table tbody { display: block; }
+  .segments-table colgroup,
+  .segments-table thead { display: none; }
+  .segments-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 6px;
+    background: #fff;
+  }
+  .segments-table tbody tr:nth-child(even) { background: #fafafa; }
+  .segments-table tbody .seg-name {
+    grid-column: 1 / -1;
+    padding: 7px 10px;
+    font-weight: 700;
+    font-size: 12px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+  }
+  .segments-table tbody .seg-time,
+  .segments-table tbody .seg-pace {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    text-align: left;
+  }
+  .segments-table tbody .seg-time { grid-column: 1 / 2; border-right: 1px solid #f0f0f0; }
+  .segments-table tbody .seg-pace { grid-column: 2 / 4; }
+  .segments-table tbody .seg-time::before { content: "Время\A"; white-space: pre; color: #888; font-size: 9px; text-transform: uppercase; font-weight: 600; }
+  .segments-table tbody .seg-pace::before { content: "Темп\A"; white-space: pre; color: #888; font-size: 9px; text-transform: uppercase; font-weight: 600; }
+  .segments-table tbody .seg-rank {
+    padding: 5px 4px;
+    text-align: center;
+    font-size: 11px;
+  }
+  .segments-table tbody .seg-rank:nth-child(4)::before { content: "Абс.\A"; white-space: pre; color: #888; font-size: 9px; text-transform: uppercase; font-weight: 600; display: block; }
+  .segments-table tbody .seg-rank:nth-child(5)::before { content: "Пол\A"; white-space: pre; color: #888; font-size: 9px; text-transform: uppercase; font-weight: 600; display: block; }
+  .segments-table tbody .seg-rank:nth-child(6)::before { content: "Кат.\A"; white-space: pre; color: #888; font-size: 9px; text-transform: uppercase; font-weight: 600; display: block; }
 }
