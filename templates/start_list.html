@@ -19,16 +19,16 @@
     {% include 'krasmarafon_header.html' %}
     {% include 'header.html' %}
 
-    <div class="container">
+    <div class="km-page">
         <h1 id="pageTitle">Стартовый список</h1>
-        
+
         <!-- Карточка события с фото и селектором -->
-        <div class="event-card" id="eventCard" style="background-image: url('/static/images/events/Ночной%20забег.png');">
-            <div class="event-card-overlay"></div>
-            <div class="event-card-content">
-                <div class="event-selector-group">
-                    <label for="eventSelector">Событие:</label>
-                    <select id="eventSelector" onchange="switchEvent()" class="event-selector-input">
+        <div class="km-event-card" id="eventCard">
+            <div class="km-event-card__overlay"></div>
+            <div class="km-event-card__controls">
+                <div class="km-select-group">
+                    <label class="km-label" for="eventSelector">Событие:</label>
+                    <select id="eventSelector" onchange="switchEvent()" class="km-select">
                         <option value="night_run">Ночной забег</option>
                         <option value="vesna">Весна</option>
                         <option value="colorrun">Красочный забег</option>
@@ -41,70 +41,68 @@
                 </div>
             </div>
         </div>
-        
-       <div class="filters">
-           <div class="filter-group">
-               <label for="genderFilter">Пол:</label>
-               <select id="genderFilter" onchange="onGenderChange()">
-                   <option value="">Все</option>
-                   <option value="Мужчина">Мужчина</option>
-                   <option value="Женщина">Женщина</option>
-               </select>
-           </div>
-           
-           <div class="filter-group" id="ageGroupFilterGroup">
-               <label for="ageGroupFilter">Возрастная группа:</label>
-               <select id="ageGroupFilter" onchange="applyFilters()">
-                   <!-- Возрастные группы будут заполнены динамически -->
-               </select>
-           </div>
-           
-           <div class="filter-group" id="distanceFilterGroup">
-               <label for="distanceFilter">Дистанция:</label>
-               <select id="distanceFilter" onchange="applyFilters()">
-                   <!-- Дистанции будут заполнены динамически -->
-               </select>
-           </div>
-       </div>
-       
-       <!-- Поле поиска по фамилии -->
-       <div class="search-section">
-           <div class="filter-group search-filter-group">
-               <label for="surnameSearch">Поиск:</label>
-               <input 
-                   type="text" 
-                   id="surnameSearch" 
-                   placeholder="Введите фамилию..." 
-                   onkeyup="applyFilters()"
-                   class="surname-search-input"
-               >
-           </div>
-       </div>
-       
-       <div id="loadingIndicator" class="loading" style="display: none;">Загрузка данных...</div>
-       <div id="errorIndicator" class="error" style="display: none;"></div>
-       
-       <!-- Контейнер для Стартового списка -->
-       <div class="table-wrapper" id="startListWrapper">
-           <table id="startListTable" class="before-mode-table">
-           <thead>
-               <tr>
-                   <th>№</th>
-                   <th onclick="sortTable('surname')">Фамилия</th>
-                   <th onclick="sortTable('name')">Имя</th>
-                   <th onclick="sortTable('birthday')">Год рождения</th>
-                   <th onclick="sortTable('distance')">Дистанция</th>
-                   <th onclick="sortTable('sex')">Пол</th>
-                   <th onclick="sortTable('category')">Возрастная группа</th>
-                   <th onclick="sortTable('city')">Город</th>
-                   <th onclick="sortTable('club')">Клуб</th>
-               </tr>
-           </thead>
-           <tbody id="startListBody">
-               <!-- Данные будут добавлены через JavaScript -->
-           </tbody>
-       </table>
-       </div>
+
+        <div class="km-toolbar">
+            <div class="km-filters">
+                <div class="km-filter-group">
+                    <label class="km-label" for="genderFilter">Пол:</label>
+                    <select id="genderFilter" onchange="onGenderChange()" class="km-select">
+                        <option value="">Все</option>
+                        <option value="Мужчина">Мужчина</option>
+                        <option value="Женщина">Женщина</option>
+                    </select>
+                </div>
+
+                <div class="km-filter-group" id="ageGroupFilterGroup">
+                    <label class="km-label" for="ageGroupFilter">Возрастная группа:</label>
+                    <select id="ageGroupFilter" onchange="applyFilters()" class="km-select">
+                        <!-- Возрастные группы будут заполнены динамически -->
+                    </select>
+                </div>
+
+                <div class="km-filter-group" id="distanceFilterGroup">
+                    <label class="km-label" for="distanceFilter">Дистанция:</label>
+                    <select id="distanceFilter" onchange="applyFilters()" class="km-select">
+                        <!-- Дистанции будут заполнены динамически -->
+                    </select>
+                </div>
+            </div>
+            <div class="km-filter-group km-search-group">
+                <label class="km-label" for="surnameSearch">Поиск:</label>
+                <input
+                    type="text"
+                    id="surnameSearch"
+                    placeholder="Введите фамилию..."
+                    onkeyup="applyFilters()"
+                    class="km-input"
+                >
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="km-loading" style="display: none;">Загрузка данных...</div>
+        <div id="errorIndicator" class="km-error" style="display: none;"></div>
+
+        <!-- Контейнер для Стартового списка -->
+        <div class="km-table-wrap" id="startListWrapper">
+            <table id="startListTable" class="km-table">
+                <thead>
+                    <tr>
+                        <th class="km-th km-th--c">№</th>
+                        <th class="km-th km-th--l km-th--sort" onclick="sortTable('surname')">Фамилия</th>
+                        <th class="km-th km-th--l km-th--sort" onclick="sortTable('name')">Имя</th>
+                        <th class="km-th km-th--c km-th--sort" onclick="sortTable('birthday')">Год рождения</th>
+                        <th class="km-th km-th--c km-th--sort" onclick="sortTable('distance')">Дистанция</th>
+                        <th class="km-th km-th--c km-th--sort" onclick="sortTable('sex')">Пол</th>
+                        <th class="km-th km-th--c km-th--sort" onclick="sortTable('category')">Возрастная группа</th>
+                        <th class="km-th km-th--l km-th--sort" onclick="sortTable('city')">Город</th>
+                        <th class="km-th km-th--l km-th--sort" onclick="sortTable('club')">Клуб</th>
+                    </tr>
+                </thead>
+                <tbody id="startListBody">
+                    <!-- Данные будут добавлены через JavaScript -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script src="/static/js/utils.js?v=4"></script>

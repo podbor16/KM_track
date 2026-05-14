@@ -395,6 +395,7 @@ function renderStartList(runners) {
     
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
+        row.className = 'km-tr';
         
         // Фамилия, имя
         let firstName = runner.name || 'N/A';
@@ -439,16 +440,17 @@ function renderStartList(runners) {
         let city = (runner.city && runner.city.toLowerCase() !== 'n/a' && runner.city.toLowerCase() !== 'null') ? runner.city : '';
         let club = (runner.club && runner.club.toLowerCase() !== 'n/a' && runner.club.toLowerCase() !== 'null') ? runner.club : '';
         
+        const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
         let rowHTML = `
-            <td>${index + 1}</td>
-            <td>${lastName}</td>
-            <td>${firstName}</td>
-            <td>${birthYear}</td>
-            <td>${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
-            <td><span class="age-group-tag">${category}</span></td>
-            <td>${city}</td>
-            <td>${club}</td>
+            <td class="km-td km-td--c ${rowBg}">${index + 1}</td>
+            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div></td>
+            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${firstName}</div></td>
+            <td class="km-td km-td--c ${rowBg}">${birthYear}</td>
+            <td class="km-td km-td--c ${rowBg}">${distance}</td>
+            <td class="km-td km-td--c ${rowBg}"><span class="gender-tag ${genderClass}">${genderText}</span></td>
+            <td class="km-td km-td--c ${rowBg}"><span class="age-group-tag">${category}</span></td>
+            <td class="km-td km-td--l ${rowBg}">${city}</td>
+            <td class="km-td km-td--l ${rowBg}">${club}</td>
         `;
         
         row.innerHTML = rowHTML;
