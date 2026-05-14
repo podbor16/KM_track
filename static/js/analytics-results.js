@@ -580,26 +580,30 @@ function renderResultsTable(runners) {
 
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
+        row.className = 'km-tr';
 
         const rankAbs = runner.rank_absolute;
-        const rankClass = rankAbs === 1 ? 'rank-gold' : rankAbs === 2 ? 'rank-silver' : rankAbs === 3 ? 'rank-bronze' : '';
-        const rankDisplay = rankAbs ? `<span class="rank-abs ${rankClass}">${rankAbs}</span>` : '—';
+        let rankDisplay;
+        if (rankAbs === 1) rankDisplay = `<span class="km-rank-medal km-rank-medal--1">1</span>`;
+        else if (rankAbs === 2) rankDisplay = `<span class="km-rank-medal km-rank-medal--2">2</span>`;
+        else if (rankAbs === 3) rankDisplay = `<span class="km-rank-medal km-rank-medal--3">3</span>`;
+        else rankDisplay = rankAbs ? `<span class="km-rank-num">${rankAbs}</span>` : '—';
 
         const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim() || 'N/A';
         const timeGun = formatTime(runner.time_gun_finish) || '—';
         const timeNet = formatTime(runner.time_clear_finish) || '—';
+        const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
 
         row.innerHTML = `
-            <td class="rank-col">${rankDisplay}</td>
-            <td>${runner.start_number || ''}</td>
-            <td>${fullName}</td>
-            <td class="time-cell">${timeGun}</td>
-            <td class="time-cell">${timeNet}</td>
+            <td class="km-td ${rowBg}">${rankDisplay}</td>
+            <td class="km-td ${rowBg}"><span class="km-bib">${runner.start_number || ''}</span></td>
+            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
+            <td class="km-td ${rowBg}"><span class="km-time-gun">${timeGun}</span></td>
+            <td class="km-td ${rowBg}"><span class="km-time-net">${timeNet}</span></td>
         `;
 
         const resultId = String(runner.id || '');
         row.dataset.resultId = resultId;
-        row.classList.add('runner-row');
 
         if (resultId) {
             runnerDataMap.set(resultId, runner);
@@ -757,15 +761,13 @@ async function openDetailPanel(runnerRow, resultId) {
  */
 function buildDetailPanelHTML(runner) {
     if (!runner) return '<div style="padding:16px;color:#aaa">Нет данных</div>';
-
     const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim();
     const genderShort = runner.gender === 'Мужчина' ? 'М' : runner.gender === 'Женщина' ? 'Ж' : '';
-    const category = runner.category || '';
     const distance = runner.event || runner.distance || '';
     let birthYear = '';
     if (runner.birthdate) {
         const y = new Date(runner.birthdate).getFullYear();
-        if (y > 0) birthYear = y;
+        if (y > 1900) birthYear = y;
     }
     const metaParts = [distance, genderShort, birthYear ? `${birthYear} г.р.` : ''].filter(Boolean);
 
@@ -782,9 +784,18 @@ function buildDetailPanelHTML(runner) {
     const rankAbsClean = runner.rank_absolute_clean || '—';
     const rankSexClean = runner.rank_sex_clean ? `${genderShort} #${runner.rank_sex_clean}` : '—';
     const rankCatClean = runner.rank_category_clean ? `#${runner.rank_category_clean}` : '—';
-
     const statusMap = { finished: 'Финишировал', running: 'Бежит', notstarted: 'Не стартовал', disqualified: 'Нарушение' };
     const status = statusMap[runner.status] || runner.status || '—';
+
+    const timeCol = (title, time, cls, pace, absR, sexR, catR) => `
+        <div class="detail-time-col detail-time-col--${cls}">
+            <div class="detail-time-col-title">${title}</div>
+            <div class="detail-time-big detail-time-big--${cls}">${time}</div>
+            <div class="detail-rank-row"><span class="detail-rank-label">Темп</span><span class="detail-rank-val">${pace}</span></div>
+            <div class="detail-rank-row"><span class="detail-rank-label">Место абс.</span><span class="detail-rank-val"><span class="detail-rank-num">#${absR}</span></span></div>
+            <div class="detail-rank-row"><span class="detail-rank-label">По полу</span><span class="detail-rank-val">${sexR}</span></div>
+            <div class="detail-rank-row"><span class="detail-rank-label">По кат.</span><span class="detail-rank-val">${catR}</span></div>
+        </div>`;
 
     return `
     <div class="detail-panel-header">
@@ -792,52 +803,50 @@ function buildDetailPanelHTML(runner) {
             <div class="detail-panel-name">${fullName}</div>
             <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
         </div>
-        <button class="detail-panel-close" title="Закрыть">&times;</button>
+        <div class="detail-panel-actions">
+            <button class="detail-panel-close" title="Закрыть">&times;</button>
+        </div>
     </div>
     <div class="detail-tabs">
-        <button class="detail-tab active" data-tab="result">Результат</button>
-        <button class="detail-tab" data-tab="pace">Темп</button>
-        <button class="detail-tab" data-tab="segments">Отрезки</button>
+        <button class="detail-tab active" data-tab="times">Время и место</button>
+        <button class="detail-tab" data-tab="pace">График темпа</button>
+        <button class="detail-tab" data-tab="segments">Сегменты</button>
     </div>
-    <div class="detail-tab-pane active" data-pane="result">
-        <div class="detail-result-block">
-            <div class="detail-result-divider">Официальное</div>
-            <div class="detail-result-row"><span class="detail-result-label">Время</span><span class="detail-result-value detail-result-value--gun">${timeGun}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Темп</span><span class="detail-result-value detail-result-value--gun">${paceGun}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Место</span><span class="detail-result-value">${rankAbs}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Пол</span><span class="detail-result-value">${rankSex}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Кат.</span><span class="detail-result-value">${rankCat}</span></div>
-            <div class="detail-result-divider">Чистое</div>
-            <div class="detail-result-row"><span class="detail-result-label">Время</span><span class="detail-result-value detail-result-value--net">${timeNet}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Темп</span><span class="detail-result-value detail-result-value--net">${paceNet}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Место</span><span class="detail-result-value">${rankAbsClean}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Пол</span><span class="detail-result-value">${rankSexClean}</span></div>
-            <div class="detail-result-row"><span class="detail-result-label">Кат.</span><span class="detail-result-value">${rankCatClean}</span></div>
+    <div class="detail-tab-pane active" data-pane="times">
+        <div class="detail-times-grid">
+            ${timeCol('ОФИЦИАЛЬНОЕ ВРЕМЯ', timeGun, 'gun', paceGun, rankAbs, rankSex, rankCat)}
+            ${timeCol('ЧИСТОЕ ВРЕМЯ', timeNet, 'net', paceNet, rankAbsClean, rankSexClean, rankCatClean)}
         </div>
     </div>
     <div class="detail-tab-pane" data-pane="pace">
-        <div class="segments-placeholder pace-placeholder">Загрузка...</div>
+        <div class="detail-chart-section">
+            <div class="detail-section-title">График темпа по отрезкам</div>
+            <div class="detail-chart-canvas-wrap"><canvas class="pace-chart-canvas"></canvas></div>
+        </div>
     </div>
     <div class="detail-tab-pane" data-pane="segments">
-        <div class="segments-placeholder segs-placeholder">Загрузка...</div>
-    </div>
-    `;
+        <div class="detail-splits-section">
+            <div class="detail-section-title">Сегменты и сплиты</div>
+            <div class="segments-placeholder segs-placeholder">Загрузка...</div>
+        </div>
+    </div>`;
 }
 
 /**
  * Загружает сегменты и вставляет таблицу вместо заглушки
  */
 async function loadSegmentsIntoPanel(cell, resultId) {
-    const pacePlaceholder = cell.querySelector('.pace-placeholder');
-    const segPlaceholder  = cell.querySelector('.segs-placeholder');
+    const segPlaceholder = cell.querySelector('.segs-placeholder');
     try {
         const resp = await fetch(`/api/result-segments?result_id=${resultId}`);
         if (!resp.ok) throw new Error(`Ошибка сервера: ${resp.status}`);
         const segments = await resp.json();
 
         if (!segments.length) {
-            if (pacePlaceholder) pacePlaceholder.textContent = 'Данные КТ не найдены';
-            if (segPlaceholder)  segPlaceholder.textContent  = 'Данные КТ не найдены';
+            const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
+            if (paceCanvas) paceCanvas.closest('.detail-chart-canvas-wrap').innerHTML =
+                '<div style="color:#aaa;font-size:13px;padding:8px 0;text-align:center">Данные КТ не найдены</div>';
+            if (segPlaceholder) segPlaceholder.textContent = 'Данные КТ не найдены';
             return;
         }
 
@@ -845,24 +854,34 @@ async function loadSegmentsIntoPanel(cell, resultId) {
         const splits       = filterSplitSegments(segments);
         const kmMap        = buildKmMap(segments);
 
-        const pacePane = cell.querySelector('[data-pane="pace"]');
-        if (pacePlaceholder) pacePlaceholder.remove();
-        const chart = renderPaceChart(consecutive, kmMap);
-        if (chart && pacePane) pacePane.appendChild(chart);
+        // Рендер графика темпа прямо на canvas, встроенный в HTML
+        const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
+        if (paceCanvas) renderPaceChart(consecutive, kmMap, paceCanvas);
 
-        const segsPane = cell.querySelector('[data-pane="segments"]');
+        const segsPane = cell.querySelector('[data-pane="segments"] .detail-splits-section');
         if (segPlaceholder) segPlaceholder.remove();
         if (segsPane) {
-            renderSegmentSection(segsPane, 'Отрезки', '#e63946', consecutive);
-            renderSegmentSection(segsPane, 'Сплиты от старта', '#4a9eff', splits);
-            if (!consecutive.length && !splits.length) {
+            try {
+                renderSegmentSection(segsPane, 'Отрезки', '#e63946', consecutive);
+                renderSegmentSection(segsPane, 'Сплиты от старта', '#4a9eff', splits);
+            } catch (segErr) {
+                console.error('Ошибка renderSegmentSection:', segErr);
                 segsPane.insertAdjacentHTML('beforeend',
-                    '<div style="color:#aaa;font-size:13px;padding:8px 0">Данные КТ не найдены</div>');
+                    `<div style="color:#c0392b;font-size:13px;padding:8px 0">Ошибка отрезков: ${segErr.message}</div>`);
             }
         }
     } catch (e) {
-        if (pacePlaceholder) pacePlaceholder.textContent = `Ошибка загрузки КТ: ${e.message}`;
-        if (segPlaceholder)  segPlaceholder.textContent  = `Ошибка загрузки КТ: ${e.message}`;
+        console.error('Ошибка loadSegmentsIntoPanel:', e);
+        const errMsg = `Ошибка загрузки КТ: ${e.message}`;
+        const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
+        if (paceCanvas) paceCanvas.closest('.detail-chart-canvas-wrap').innerHTML =
+            `<div style="color:#c0392b;font-size:13px;padding:8px 0;text-align:center">${errMsg}</div>`;
+        if (segPlaceholder) segPlaceholder.textContent = errMsg;
+        else {
+            const segsPane = cell.querySelector('[data-pane="segments"]');
+            if (segsPane) segsPane.insertAdjacentHTML('beforeend',
+                `<div style="color:#c0392b;font-size:13px;padding:8px 0">${errMsg}</div>`);
+        }
     }
 }
 
@@ -1036,87 +1055,72 @@ function filterSplitSegments(segments) {
  * @param {Object} kmMap — результат buildKmMap()
  * @returns {HTMLElement|null} — контейнер чарта или null если нечего показать
  */
-function renderPaceChart(consecutive, kmMap) {
-    if (!consecutive.length) return null;
+function renderPaceChart(consecutive, kmMap, canvas) {
+    if (!consecutive || !consecutive.length) return null;
+    const useGun = typeof timeMode !== 'undefined' ? timeMode === 'gun' : true;
+    const labels = [], values = [], colors = [];
 
-    const useGun = timeMode === 'gun';
-
-    // Вычислить темп в секундах/км для каждого отрезка
-    const paces = consecutive.map(seg => {
+    consecutive.forEach(seg => {
         const paceStr = useGun
             ? (seg.sg_pace_avg_gun || seg.sg_pace_avg)
             : seg.sg_pace_avg;
-        if (!paceStr) return null;
-        return toTotalSec(paceStr) || null;
-    });
+        if (!paceStr) return;
+        const secs = toTotalSec(paceStr);
+        if (!secs) return;
 
-    const validPaces = paces.filter(p => p !== null);
-    if (!validPaces.length) return null;
-
-    const minPace = Math.min(...validPaces);
-    const maxPace = Math.max(...validPaces);
-    const MIN_H = 20; // px, fastest segment bar height
-    const MAX_H = 100; // px, slowest segment bar height
-
-    const chart = document.createElement('div');
-    chart.className = 'pace-chart';
-
-    consecutive.forEach((seg, i) => {
-        if (paces[i] === null) return;
-
-        const pace = paces[i];
-        const ratio = maxPace === minPace ? 0 : (pace - minPace) / (maxPace - minPace);
-        const color = paceBarColor(ratio);
-        const height = Math.round(MIN_H + Math.sqrt(ratio) * (MAX_H - MIN_H));
-
-        // Время прохождения
-        const timeStr = useGun
-            ? (seg.sg_time_gun || seg.sg_time_clear)
-            : seg.sg_time_clear;
-        const timeDisplay = formatTime(timeStr) || '—';
-
-        // Темп строкой
-        const paceDisplay = formatSegmentPace(useGun
-            ? (seg.sg_pace_avg_gun || seg.sg_pace_avg)
-            : seg.sg_pace_avg);
-
-        // Км-диапазон
         const { from, to } = parseSegmentCode(seg.segment_code);
-        const fromKm = kmMap[from] !== undefined ? kmMap[from] : null;
-        const toKm   = kmMap[to]   !== undefined ? kmMap[to]   : null;
-        const distLabel = (fromKm !== null && toKm !== null)
+        const fromKm = kmMap && kmMap[from] !== undefined ? kmMap[from] : null;
+        const toKm   = kmMap && kmMap[to]   !== undefined ? kmMap[to]   : null;
+        const label = (fromKm !== null && toKm !== null)
             ? `${fromKm}–${toKm} км`
-            : seg.segment_code;
-
-        // Дистанция участка над баром
-        const segKm = (fromKm !== null && toKm !== null)
-            ? `${Math.round((toKm - fromKm) * 10) / 10} км`
-            : '';
-
-        const col = document.createElement('div');
-        col.className = 'pace-bar-col';
-        col.innerHTML = `
-            <div class="pace-bar-col__top">
-                <div class="pace-bar-col__top-time" style="color:${color}">${timeDisplay}</div>
-                <div class="pace-bar-col__top-dist">${segKm}</div>
-            </div>
-            <div class="pace-bar-col__bar" style="background:${color};height:${height}px"></div>
-            <div class="pace-bar-col__pace" style="color:${color}">${paceDisplay}</div>
-            <div class="pace-bar-col__range">${distLabel}</div>
-        `;
-        chart.appendChild(col);
+            : (seg.segment_code || '?');
+        labels.push(label);
+        values.push(parseFloat((secs / 60).toFixed(2)));
     });
+    if (!values.length) return null;
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'pace-chart-wrapper';
-    wrapper.appendChild(chart);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    values.forEach(v => colors.push(v <= avg ? 'rgba(39,174,96,0.75)' : 'rgba(238,45,98,0.75)'));
 
-    const legend = document.createElement('div');
-    legend.className = 'pace-chart__legend';
-    legend.textContent = 'Зелёный = быстрый отрезок · Красный = медленный · Шкала индивидуальная';
-    wrapper.appendChild(legend);
-
-    return wrapper;
+    const target = canvas || document.createElement('canvas');
+    new Chart(target, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: colors,
+                borderColor: colors.map(c => c.replace('0.75', '1')),
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => {
+                    const sec = Math.round(ctx.raw * 60);
+                    const m = Math.floor(sec / 60);
+                    const s = sec % 60;
+                    return `Темп: ${m}:${String(s).padStart(2, '0')}/км`;
+                }}}
+            },
+            scales: {
+                y: {
+                    ticks: { callback: val => {
+                        const m = Math.floor(val);
+                        const s = Math.round((val - m) * 60);
+                        return `${m}:${String(s).padStart(2, '0')}`;
+                    }, font: { size: 11 } },
+                    grid: { color: '#f0f0f0' }
+                },
+                x: { grid: { display: false }, ticks: { font: { size: 12, weight: '600' } } }
+            }
+        }
+    });
+    return canvas ? null : target;
 }
 
 function renderSegmentSection(container, title, color, rows) {
