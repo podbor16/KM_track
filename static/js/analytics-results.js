@@ -66,6 +66,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 });
 
+document.addEventListener('click', e => {
+    const tab = e.target.closest('.detail-tab');
+    if (!tab) return;
+    const panel = tab.closest('td');
+    panel.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t === tab));
+    panel.querySelectorAll('.detail-tab-pane').forEach(p =>
+        p.classList.toggle('active', p.dataset.pane === tab.dataset.tab)
+    );
+});
+
 // Функция обновления цвета темы в зависимости от события
 function updateEventThemeColor() {
     const color = eventColorMap[currentEvent] || '#EE2D62';
@@ -818,19 +828,41 @@ function buildDetailPanelHTML(runner) {
  * Загружает сегменты и вставляет таблицу вместо заглушки
  */
 async function loadSegmentsIntoPanel(cell, resultId) {
-    const placeholder = cell.querySelector('.segments-placeholder');
+    const pacePlaceholder = cell.querySelector('.pace-placeholder');
+    const segPlaceholder  = cell.querySelector('.segs-placeholder');
     try {
         const resp = await fetch(`/api/result-segments?result_id=${resultId}`);
         if (!resp.ok) throw new Error(`Ошибка сервера: ${resp.status}`);
         const segments = await resp.json();
-        if (placeholder) placeholder.remove();
+
         if (!segments.length) {
-            cell.insertAdjacentHTML('beforeend', '<div style="color:#aaa;font-size:13px;padding:8px 0">Данные КТ не найдены</div>');
+            if (pacePlaceholder) pacePlaceholder.textContent = 'Данные КТ не найдены';
+            if (segPlaceholder)  segPlaceholder.textContent  = 'Данные КТ не найдены';
             return;
         }
-        cell.appendChild(createSegmentsPanel(segments));
+
+        const consecutive = filterConsecutiveSegments(segments);
+        const splits       = filterSplitSegments(segments);
+        const kmMap        = buildKmMap(segments);
+
+        const pacePane = cell.querySelector('[data-pane="pace"]');
+        if (pacePlaceholder) pacePlaceholder.remove();
+        const chart = renderPaceChart(consecutive, kmMap);
+        if (chart && pacePane) pacePane.appendChild(chart);
+
+        const segsPane = cell.querySelector('[data-pane="segments"]');
+        if (segPlaceholder) segPlaceholder.remove();
+        if (segsPane) {
+            renderSegmentSection(segsPane, 'Отрезки', '#e63946', consecutive);
+            renderSegmentSection(segsPane, 'Сплиты от старта', '#4a9eff', splits);
+            if (!consecutive.length && !splits.length) {
+                segsPane.insertAdjacentHTML('beforeend',
+                    '<div style="color:#aaa;font-size:13px;padding:8px 0">Данные КТ не найдены</div>');
+            }
+        }
     } catch (e) {
-        if (placeholder) placeholder.textContent = `Ошибка загрузки КТ: ${e.message}`;
+        if (pacePlaceholder) pacePlaceholder.textContent = `Ошибка загрузки КТ: ${e.message}`;
+        if (segPlaceholder)  segPlaceholder.textContent  = `Ошибка загрузки КТ: ${e.message}`;
     }
 }
 
@@ -1087,102 +1119,75 @@ function renderPaceChart(consecutive, kmMap) {
     return wrapper;
 }
 
-function createSegmentsPanel(segments) {
+function renderSegmentSection(container, title, color, rows) {
+    if (!rows.length) return;
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
 
-    const consecutive = filterConsecutiveSegments(segments);
-    const splits      = filterSplitSegments(segments);
-    const kmMap       = buildKmMap(segments);
+    const header = document.createElement('div');
+    header.className = 'segment-section-header';
+    header.style.color = color;
+    header.textContent = title;
+    container.appendChild(header);
 
-    const panel = document.createElement('div');
+    const table = document.createElement('table');
+    table.classList.add('segments-table');
+    table.innerHTML = `
+        <colgroup>
+            <col width="30%"/><col width="18%"/><col width="24%"/>
+            <col width="9%"/><col width="9%"/><col width="9%"/>
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Участок</th>
+                <th>Время <span class="seg-mode-label">${modeLabel}</span></th>
+                <th>Темп</th>
+                <th title="Место абсолют">Абс.</th>
+                <th title="Место по полу">Пол</th>
+                <th title="Место в категории">Кат.</th>
+            </tr>
+        </thead>
+    `;
 
-    // 1. Бар-чарт (только если есть последовательные отрезки)
-    const chart = renderPaceChart(consecutive, kmMap);
-    if (chart) panel.appendChild(chart);
+    const tbody = document.createElement('tbody');
+    rows.forEach((segment, i) => {
+        const prevSegment = i > 0 ? rows[i - 1] : null;
+        const code = segment.segment_code || '-';
+        const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
+        const pace = formatSegmentPace(useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg) : segment.sg_pace_avg);
+        const rankAbsolute = useGun ? (segment.sg_rank_absolute_gun || segment.sg_rank_absolute || '-') : (segment.sg_rank_absolute || '-');
+        const rankSex      = useGun ? (segment.sg_rank_sex_gun      || segment.sg_rank_sex      || '-') : (segment.sg_rank_sex      || '-');
+        const rankCategory = useGun ? (segment.sg_rank_category_gun || segment.sg_rank_category || '-') : (segment.sg_rank_category || '-');
 
-    // Хелпер: рендер одной секции таблицы
-    function renderSection(title, color, rows) {
-        if (!rows.length) return;
-
-        const header = document.createElement('div');
-        header.className = 'segment-section-header';
-        header.style.color = color;
-        header.textContent = title;
-        panel.appendChild(header);
-
-        const table = document.createElement('table');
-        table.classList.add('segments-table');
-        table.innerHTML = `
-            <colgroup>
-                <col width="30%"/><col width="18%"/><col width="24%"/>
-                <col width="9%"/><col width="9%"/><col width="9%"/>
-            </colgroup>
-            <thead>
-                <tr>
-                    <th>Участок</th>
-                    <th>Время <span class="seg-mode-label">${modeLabel}</span></th>
-                    <th>Темп</th>
-                    <th title="Место абсолют">Абс.</th>
-                    <th title="Место по полу">Пол</th>
-                    <th title="Место в категории">Кат.</th>
-                </tr>
-            </thead>
-        `;
-
-        const tbody = document.createElement('tbody');
-        rows.forEach((segment, i) => {
-            const prevSegment = i > 0 ? rows[i - 1] : null;
-            const code = segment.segment_code || '-';
-            const time = formatTime(useGun ? (segment.sg_time_gun || segment.sg_time_clear) : segment.sg_time_clear) || '-';
-            const pace = formatSegmentPace(useGun ? (segment.sg_pace_avg_gun || segment.sg_pace_avg) : segment.sg_pace_avg);
-            const rankAbsolute = useGun ? (segment.sg_rank_absolute_gun || segment.sg_rank_absolute || '-') : (segment.sg_rank_absolute || '-');
-            const rankSex      = useGun ? (segment.sg_rank_sex_gun      || segment.sg_rank_sex      || '-') : (segment.sg_rank_sex      || '-');
-            const rankCategory = useGun ? (segment.sg_rank_category_gun || segment.sg_rank_category || '-') : (segment.sg_rank_category || '-');
-
-            let paceHtml = pace;
-            if (prevSegment) {
-                const prevPace = formatSegmentPace(useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg);
-                const cmp = compareSegments(pace, prevPace);
-                if (cmp) {
-                    const clr = cmp.improved ? '#27ae60' : '#e74c3c';
-                    paceHtml += ` <span style="color:${clr};font-size:0.85em">${cmp.direction}${cmp.percent}%</span>`;
-                }
+        let paceHtml = pace;
+        if (prevSegment) {
+            const prevPace = formatSegmentPace(useGun ? (prevSegment.sg_pace_avg_gun || prevSegment.sg_pace_avg) : prevSegment.sg_pace_avg);
+            const cmp = compareSegments(pace, prevPace);
+            if (cmp) {
+                const clr = cmp.improved ? '#27ae60' : '#e74c3c';
+                paceHtml += ` <span style="color:${clr};font-size:0.85em">${cmp.direction}${cmp.percent}%</span>`;
             }
+        }
 
-            const rankBadge = (rank) => {
-                const clr = getRankColor(rank);
-                return `<span class="seg-rank-badge" style="background:${clr}">${rank}</span>`;
-            };
+        const rankBadge = (rank) => {
+            const clr = getRankColor(rank);
+            return `<span class="seg-rank-badge" style="background:${clr}">${rank}</span>`;
+        };
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="seg-name">${formatSegmentName(code)}</td>
-                <td class="seg-time">${time}</td>
-                <td class="seg-pace">${paceHtml}</td>
-                <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
-                <td class="seg-rank">${rankBadge(rankSex)}</td>
-                <td class="seg-rank">${rankBadge(rankCategory)}</td>
-            `;
-            tbody.appendChild(tr);
-        });
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="seg-name">${formatSegmentName(code)}</td>
+            <td class="seg-time">${time}</td>
+            <td class="seg-pace">${paceHtml}</td>
+            <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
+            <td class="seg-rank">${rankBadge(rankSex)}</td>
+            <td class="seg-rank">${rankBadge(rankCategory)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 
-        table.appendChild(tbody);
-        panel.appendChild(table);
-    }
-
-    renderSection('Отрезки', '#e63946', consecutive);
-    renderSection('Сплиты от старта', '#4a9eff', splits);
-
-    // Если нет ни отрезков, ни сплитов — показать весь список как раньше
-    if (!consecutive.length && !splits.length) {
-        const fallback = document.createElement('div');
-        fallback.style.cssText = 'color:#aaa;font-size:13px;padding:8px 0';
-        fallback.textContent = 'Данные КТ не найдены';
-        panel.appendChild(fallback);
-    }
-
-    return panel;
+    table.appendChild(tbody);
+    container.appendChild(table);
 }
 
 // === Результаты по участкам (КТ) ===
