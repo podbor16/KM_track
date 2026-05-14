@@ -339,4 +339,24 @@ h1 {
   .detail-times-grid { grid-template-columns: 1fr; }
   .detail-time-col--gun { border-right: none; border-bottom: 1px solid #eee; }
   .detail-time-big { font-size: 22px; }
+
+  /* Fit results table in viewport so detail panel doesn't overflow */
+  #resultsTable { table-layout: fixed; }
+  #resultsTable .km-th:nth-child(1),
+  #resultsTable .km-td:nth-child(1) { width: 38px; }
+  #resultsTable .km-th:nth-child(2),
+  #resultsTable .km-td:nth-child(2) { width: 34px; }
+  #resultsTable .km-th:nth-child(4),
+  #resultsTable .km-td:nth-child(4) { width: 76px; }
+  #resultsTable .km-th:nth-child(5),
+  #resultsTable .km-td:nth-child(5) { width: 76px; }
+  .km-th { padding: 10px 5px; font-size: 9px; }
+  .km-td { padding: 8px 5px; font-size: 12px; }
+  .km-td--l { padding-left: 6px; }
+
+  /* Segments table scrolls within its pane (contained scroll, not page scroll) */
+  .detail-splits-section { overflow-x: auto; padding: 8px 10px; }
+  .segments-table { min-width: 440px; }
+  .segments-table thead th,
+  .segments-table tbody td { padding: 7px 8px; font-size: 11px; }
 }
