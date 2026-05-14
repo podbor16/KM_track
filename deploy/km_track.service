@@ -1,0 +1,24 @@
+[Unit]
+Description=KM Track FastAPI Application
+After=network.target
+Wants=network-online.target
+
+[Service]
+User=km
+Group=km
+WorkingDirectory=/opt/km_track
+EnvironmentFile=/opt/km_track/.env
+ExecStart=/opt/km_track/venv/bin/uvicorn app:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --log-level info
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=km_track
+
+[Install]
+WantedBy=multi-user.target
