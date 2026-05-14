@@ -56,7 +56,8 @@ DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 # CORS
-CORS_ORIGINS = ["*"]
+_cors_raw = os.getenv("CORS_ORIGINS", "*")
+CORS_ORIGINS = ["*"] if _cors_raw == "*" else [o.strip() for o in _cors_raw.split(",")]
 
 # --- АВТОРИЗАЦИЯ ---
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
