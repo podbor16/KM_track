@@ -863,6 +863,54 @@ function calcSegmentDistanceKm(timeStr, paceStr) {
     return Math.round(timeSec / paceSec * 10) / 10;
 }
 
+/**
+ * Разбирает сегментный код "start-kt1" → {from: 'start', to: 'kt1'}
+ */
+function parseSegmentCode(code) {
+    const idx = code.lastIndexOf('-');
+    return { from: code.slice(0, idx), to: code.slice(idx + 1) };
+}
+
+/**
+ * Строит карту { 'start': 0, 'kt1': 3.0, 'kt2': 5.3, ..., 'finish': 21.1 }
+ * из сегментов с from='start'. Вычисляет to_km = time_sec / pace_sec_per_km.
+ * Если данных нет — ключ отсутствует.
+ */
+function buildKmMap(segments) {
+    const map = { start: 0 };
+    for (const seg of segments) {
+        const { from, to } = parseSegmentCode(seg.segment_code);
+        if (from !== 'start') continue;
+        const timeStr = seg.sg_time_clear || seg.sg_time_gun;
+        const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
+        if (!timeStr || !paceStr) continue;
+
+        // "HH:MM:SS" → seconds
+        const tParts = timeStr.split(':').map(Number);
+        const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
+
+        // "M:SS" → seconds/km
+        const pParts = paceStr.split(':').map(Number);
+        const paceSec = pParts[0] * 60 + pParts[1];
+
+        if (paceSec > 0) {
+            map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+        }
+    }
+    return map;
+}
+
+/**
+ * Линейная интерполяция зелёный→красный по ratio [0..1].
+ * ratio=0 → #4caf50 (быстрый), ratio=1 → #ef5350 (медленный).
+ */
+function paceBarColor(ratio) {
+    const r = Math.round(76  + ratio * (239 - 76));
+    const g = Math.round(175 + ratio * (83  - 175));
+    const b = 80;
+    return `rgb(${r},${g},${b})`;
+}
+
 function createSegmentsTable(segments) {
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
