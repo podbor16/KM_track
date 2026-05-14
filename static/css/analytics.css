@@ -1181,7 +1181,7 @@ tr:hover {
 
 .pace-bar-col__top {
     text-align: center;
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1.35;
     width: 100%;
 }
@@ -1202,14 +1202,14 @@ tr:hover {
 }
 
 .pace-bar-col__pace {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: bold;
     white-space: nowrap;
     text-align: center;
 }
 
 .pace-bar-col__range {
-    font-size: 7px;
+    font-size: 9px;
     color: #555;
     text-align: center;
     line-height: 1.3;
@@ -1221,7 +1221,7 @@ tr:hover {
 }
 
 .pace-chart__legend {
-    font-size: 9px;
+    font-size: 11px;
     color: #444;
     margin-top: 8px;
     padding-top: 6px;
@@ -1231,7 +1231,7 @@ tr:hover {
 /* ── Segment section header ─────────────────────────────── */
 .segment-section-header {
     padding: 5px 0 4px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: bold;
     letter-spacing: 0.5px;
     text-transform: uppercase;
@@ -1239,3 +1239,211 @@ tr:hover {
     border-bottom: 1px solid #2a2a3e;
 }
 
+/* ── Mobile card layout ≤640px ──────────────────────────── */
+@media (max-width: 640px) {
+
+  .table-wrapper {
+    overflow-x: visible;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .during-mode-table,
+  .before-mode-table {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  /* ── Results table ── */
+  .during-mode-table thead { display: none; }
+
+  .during-mode-table tbody tr:not(.detail-panel-row) {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    grid-template-rows: auto auto;
+    row-gap: 2px;
+    column-gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    cursor: pointer;
+  }
+
+  /* Rank — левая колонка, обе строки */
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    width: auto;
+    border: none;
+  }
+
+  /* Bib — скрыть */
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(2) {
+    display: none;
+  }
+
+  /* Имя — строка 1 */
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+    display: block;
+    padding: 0;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: left;
+    border: none;
+    width: auto;
+  }
+
+  /* Оф. время — строка 2 */
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2;
+    display: inline-block;
+    padding: 0;
+    font-size: 12px;
+    color: #aaa;
+    border: none;
+    width: auto;
+  }
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(4)::before {
+    content: "Оф: ";
+    font-size: 10px;
+    color: #666;
+  }
+
+  /* Чистое время — строка 2, inline */
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(5) {
+    grid-column: 2;
+    grid-row: 2;
+    display: inline-block;
+    padding: 0 0 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    width: auto;
+  }
+  .during-mode-table tbody tr:not(.detail-panel-row) td:nth-child(5)::before {
+    content: "Чист: ";
+    font-size: 10px;
+    color: #666;
+    font-weight: normal;
+  }
+
+  /* Detail panel — полная ширина */
+  .during-mode-table tbody tr.detail-panel-row {
+    display: block;
+  }
+  .during-mode-table tbody tr.detail-panel-row td {
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+
+  /* ── Start list table ── */
+  /* Карточка:
+       №   Фамилия               год
+           Имя
+           Дист · [пол] · [группа]
+           Город · Клуб
+  */
+  .before-mode-table thead { display: none; }
+
+  .before-mode-table tbody tr {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    grid-template-rows: auto auto auto auto;
+    row-gap: 3px;
+    column-gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .before-mode-table tbody tr td {
+    display: block;
+    padding: 0;
+    border: none;
+    text-align: left;
+    width: auto;
+  }
+
+  /* № — col 1, row 1 */
+  .before-mode-table tbody tr td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 12px;
+    color: #777;
+    text-align: center;
+  }
+
+  /* Фамилия — col 2, row 1 */
+  .before-mode-table tbody tr td:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  /* Имя — col 2, row 2 */
+  .before-mode-table tbody tr td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 14px;
+  }
+
+  /* Год рождения — col 3, row 1 */
+  .before-mode-table tbody tr td:nth-child(4) {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 12px;
+    color: #888;
+    text-align: right;
+  }
+
+  /* Дистанция — col 2, row 3 */
+  .before-mode-table tbody tr td:nth-child(5) {
+    grid-column: 2;
+    grid-row: 3;
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  /* Пол — col 2, row 3 inline */
+  .before-mode-table tbody tr td:nth-child(6) {
+    grid-column: 2;
+    grid-row: 3;
+    display: inline-block;
+    padding-left: 6px;
+  }
+
+  /* Возрастная группа — col 3, row 3 */
+  .before-mode-table tbody tr td:nth-child(7) {
+    grid-column: 3;
+    grid-row: 3;
+    text-align: right;
+  }
+
+  /* Город + Клуб — полная ширина, row 4 */
+  .before-mode-table tbody tr td:nth-child(8),
+  .before-mode-table tbody tr td:nth-child(9) {
+    grid-column: 1 / 4;
+    grid-row: 4;
+    font-size: 11px;
+    color: #666;
+    display: inline-block;
+  }
+  .before-mode-table tbody tr td:nth-child(9):not(:empty) {
+    padding-left: 6px;
+  }
+  .before-mode-table tbody tr td:nth-child(9):not(:empty)::before {
+    content: "· ";
+    color: #444;
+  }
+
+} /* end @media 640px */
