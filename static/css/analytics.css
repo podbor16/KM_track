@@ -1214,7 +1214,11 @@ tr:hover {
     white-space: nowrap;
 }
 
-.pace-chart-legend {
+.pace-chart-wrapper {
+    margin-bottom: 8px;
+}
+
+.pace-chart__legend {
     font-size: 9px;
     color: #444;
     margin-top: 8px;
