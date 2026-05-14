@@ -1166,6 +1166,7 @@ tr:hover {
     gap: 6px;
     padding: 14px 0 0;
     min-height: 140px;
+    justify-content: center;
 }
 
 .pace-bar-col {
@@ -1175,6 +1176,7 @@ tr:hover {
     align-items: center;
     gap: 2px;
     min-width: 0;
+    max-width: 80px;
 }
 
 .pace-bar-col__top {

@@ -881,30 +881,46 @@ function parseSegmentCode(code) {
  */
 function buildKmMap(segments) {
     const map = { start: 0 };
+
+    // Pass 1: cumulative km from 'start-*' splits
     for (const seg of segments) {
         const { from, to } = parseSegmentCode(seg.segment_code);
         if (from !== 'start') continue;
         const timeStr = seg.sg_time_clear || seg.sg_time_gun;
         const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
         if (!timeStr || !paceStr) continue;
-        // "HH:MM:SS" → total seconds
         const tParts = timeStr.split(':').map(Number);
-        if (tParts.length !== 3) continue;
         const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
-        // pace may be "M:SS" (2-part) or "HH:MM:SS" (3-part)
         const pParts = paceStr.split(':').map(Number);
-        let paceSec;
-        if (pParts.length === 3) {
-            paceSec = pParts[0] * 3600 + pParts[1] * 60 + pParts[2];
-        } else if (pParts.length === 2) {
-            paceSec = pParts[0] * 60 + pParts[1];
-        } else {
-            continue;
-        }
-        if (paceSec > 0) {
-            map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+        const paceSec = pParts.length >= 3
+            ? pParts[1] * 60 + pParts[2]   // "HH:MM:SS" pace format
+            : pParts[0] * 60 + pParts[1];  // "M:SS" pace format
+        if (paceSec > 0) map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+    }
+
+    // Pass 2: fill missing keys using segments that start from a known position
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const seg of segments) {
+            const { from, to } = parseSegmentCode(seg.segment_code);
+            if (!(from in map) || to in map) continue;
+            const timeStr = seg.sg_time_clear || seg.sg_time_gun;
+            const paceStr = seg.sg_pace_avg || seg.sg_pace_avg_gun;
+            if (!timeStr || !paceStr) continue;
+            const tParts = timeStr.split(':').map(Number);
+            const timeSec = tParts[0] * 3600 + tParts[1] * 60 + tParts[2];
+            const pParts = paceStr.split(':').map(Number);
+            const paceSec = pParts.length >= 3
+                ? pParts[1] * 60 + pParts[2]
+                : pParts[0] * 60 + pParts[1];
+            if (paceSec > 0) {
+                map[to] = Math.round((map[from] + timeSec / paceSec) * 10) / 10;
+                changed = true;
+            }
         }
     }
+
     return map;
 }
 
@@ -996,8 +1012,8 @@ function renderPaceChart(consecutive, kmMap) {
 
     const minPace = Math.min(...validPaces);
     const maxPace = Math.max(...validPaces);
-    const MIN_H = 14; // px, fastest segment bar height
-    const MAX_H = 68; // px, slowest segment bar height
+    const MIN_H = 20; // px, fastest segment bar height
+    const MAX_H = 100; // px, slowest segment bar height
 
     const chart = document.createElement('div');
     chart.className = 'pace-chart';
@@ -1008,7 +1024,7 @@ function renderPaceChart(consecutive, kmMap) {
         const pace = paces[i];
         const ratio = maxPace === minPace ? 0 : (pace - minPace) / (maxPace - minPace);
         const color = paceBarColor(ratio);
-        const height = Math.round(MIN_H + ratio * (MAX_H - MIN_H));
+        const height = Math.round(MIN_H + Math.sqrt(ratio) * (MAX_H - MIN_H));
 
         // Время прохождения
         const timeStr = useGun
