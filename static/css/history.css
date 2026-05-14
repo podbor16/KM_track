@@ -1,370 +1,247 @@
-/* history.css - Стили для страницы История */
+/* history.css — /history page styles */
+/* Design tokens are loaded globally from km-design-tokens.css */
 
-/* Переменные цветов (соответствие проекту) */
-:root {
-    --primary-color: #EE2D62;
-    --primary-dark: #1a1a1a;
-    --text-dark: #333;
-    --text-light: #666;
-    --background: #faf8fa;
-    --white: #ffffff;
-    --shadow: 0 2px 8px rgba(0,0,0,0.1);
-    --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-/* Основные стили страницы */
 body {
-    font-family: 'Houschka Pro', Arial, sans-serif;
-    background: var(--background);
+  font-family: 'Houschka Pro', Arial, sans-serif;
+  background: #faf8fa;
 }
 
-/* Контейнер с основным контентом */
 .container {
-    max-width: 1400px;
-    margin: 0 auto;
-    background-color: var(--background);
-    padding: 40px 40px;
-    border-radius: 0;
-    box-shadow: none;
-    text-align: center;
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 30px;
+  background: #fff;
+  border-radius: var(--km-radius-card, 12px);
+  box-shadow: var(--km-shadow, 0 2px 8px rgba(0,0,0,0.1));
 }
 
-/* Заголовок страницы */
 .container h1 {
-    text-align: center;
-    color: var(--text-dark);
-    margin: 20px auto 30px;
-    font-size: 36px;
-    font-weight: 600;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
-    max-width: 1400px;
-    padding: 0 20px;
-    box-sizing: border-box;
+  text-align: center;
+  color: #2c3e50;
+  margin-bottom: 12px;
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--km-font-brand, Arial, sans-serif);
 }
 
-/* Вводная секция */
 .intro-section {
-    text-align: center;
-    margin: 0 auto 50px;
-    padding: 0 20px;
-    max-width: 1400px;
+  text-align: center;
+  color: #666;
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 560px;
+  margin: 0 auto 40px;
 }
 
-.intro-section p {
-    color: var(--text-light);
-    font-size: 16px;
-    line-height: 1.8;
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-/* Сетка с опциями */
 .history-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 40px;
-    margin: 40px auto;
-    padding: 0 20px;
-    max-width: 1400px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
-/* Карточка опции */
 .search-option {
-    background: var(--white);
-    border: 2px solid var(--primary-color);
-    border-radius: 12px;
-    padding: 35px 30px;
-    transition: all 0.3s ease;
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    min-height: 220px;
+  background: #fff;
+  border: 2px solid var(--km-primary, #EE2D62);
+  border-radius: 12px;
+  padding: 32px 28px;
+  box-shadow: var(--km-shadow, 0 2px 8px rgba(0,0,0,0.1));
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  transition: all 0.3s ease;
 }
 
 .search-option:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-hover);
-    border-color: #d41f52;
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  border-color: #d41f52;
 }
 
-/* Заголовок опции */
 .search-option h2 {
-    color: var(--primary-color);
-    margin: 0 0 20px 0;
-    font-size: 22px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+  color: var(--km-primary, #EE2D62);
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  font-family: var(--km-font-brand, Arial, sans-serif);
 }
 
-/* Описание опции */
 .search-option p {
-    color: var(--text-light);
-    font-size: 14px;
-    line-height: 1.6;
-    margin: 0 0 20px 0;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 20px;
 }
 
-/* Форма поиска */
-.search-form,
-.search-athlete-form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    margin-top: 20px;
-}
-
-/* Поле ввода */
-.search-input {
-    padding: 14px 16px;
-    border: 2px solid var(--primary-color);
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: 'Houschka Pro', Arial, sans-serif;
-    color: var(--text-dark);
-    background-color: rgba(255, 255, 255, 0.8);
-    transition: all 0.3s ease;
-    outline: none;
-}
-
-.search-input::placeholder {
-    color: #ccc;
-    font-weight: 500;
-}
-
-.search-input:focus {
-    border-color: #d41f52;
-    box-shadow: 0 0 0 3px rgba(238, 45, 98, 0.1);
-    background-color: var(--white);
-}
-
-/* Контейнер для кнопки */
-.athlete-button-container,
-.race-link-container {
-    display: flex;
-    justify-content: center;
-    margin-top: auto;
-}
-
-/* Кнопка поиска */
-.search-btn,
-.race-analysis-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 14px 40px;
-    background: linear-gradient(135deg, var(--primary-color), #d41f52);
-    color: var(--white);
-    text-decoration: none;
-    border: none;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-    font-family: 'Houschka Pro', Arial, sans-serif;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(238, 45, 98, 0.3);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.search-btn:hover,
-.race-analysis-btn:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 20px rgba(238, 45, 98, 0.4);
-    background: linear-gradient(135deg, #d41f52, #b81649);
-}
-
-.search-btn:active,
-.race-analysis-btn:active {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(238, 45, 98, 0.3);
-}
-
-/* Ссылка на анализ */
-.race-analysis-btn {
-    display: inline-flex;
-    width: auto;
-}
-
-/* Адаптивность */
-@media (max-width: 768px) {
-    .container {
-        padding: 30px 20px;
-    }
-
-    .container h1 {
-        font-size: 28px;
-        margin: 20px auto 20px;
-        padding: 0 10px;
-    }
-
-    .history-container {
-        grid-template-columns: 1fr;
-        gap: 30px;
-        margin: 30px auto;
-        padding: 0 auto;
-    }
-
-    .search-option {
-        min-height: 200px;
-        padding: 25px 20px;
-    }
-
-    .search-option h2 {
-        font-size: 20px;
-        margin-bottom: 15px;
-    }
-
-    .intro-section {
-        margin: 0 auto 30px;
-        padding: 0 auto;
-    }
-
-    .intro-section p {
-        font-size: 15px;
-    }
-
-    .search-btn,
-    .race-analysis-btn {
-        padding: 12px 30px;
-        font-size: 14px;
-    }
-}
-
-@media (max-width: 480px) {
-    .container {
-        padding: 20px 15px;
-    }
-
-    .container h1 {
-        font-size: 24px;
-        margin: 15px auto 15px;
-        padding: 0 10px;
-    }
-
-    .intro-section p {
-        font-size: 14px;
-        line-height: 1.6;
-    }
-
-    .history-container {
-        gap: 20px;
-        margin: 20px auto;
-        padding: 0 auto;
-    }
-
-    .search-option {
-        padding: 20px 15px;
-        min-height: 180px;
-    }
-
-    .search-option h2 {
-        font-size: 18px;
-    }
-
-    .search-btn,
-    .race-analysis-btn {
-        padding: 12px 25px;
-        font-size: 13px;
-    }
-}
-
-/* Поиск спортсмена с автокомплитом */
+/* Athlete search input */
 .athlete-search-container {
-    position: relative;
-    width: 100%;
-    margin-bottom: 20px;
+  position: relative;
+  width: 100%;
+  margin-bottom: 8px;
 }
 
-.athlete-search-input {
-    width: 100%;
-    padding: 12px 15px;
-    font-size: 16px;
-    border: 2px solid #EE2D62;
-    border-radius: 4px;
-    box-sizing: border-box;
-    transition: border-color 0.3s;
+.athlete-search-input,
+.athlete-search-container input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid var(--km-primary, #EE2D62);
+  border-radius: var(--km-radius-input, 8px);
+  font-size: 14px;
+  color: #333;
+  background: #fff;
+  outline: none;
+  font-family: var(--km-font-ui, Arial, sans-serif);
+  box-sizing: border-box;
+  transition: box-shadow .15s;
 }
 
-.athlete-search-input:focus {
-    outline: none;
-    border-color: #EE2D62;
+.athlete-search-input:focus,
+.athlete-search-container input:focus {
+  border-color: #d41f52;
+  box-shadow: 0 0 0 3px rgba(238,45,98,.12);
 }
 
+/* Autocomplete dropdown */
 .autocomplete-results {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 2px solid #EE2D62;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    max-height: 300px;
-    overflow-y: auto;
-    z-index: 1000;
-    display: none;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 2px solid var(--km-primary, #EE2D62);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 
 .autocomplete-results.show {
-    display: block;
+  display: block;
 }
 
 .autocomplete-item {
-    padding: 12px 15px;
-    cursor: pointer;
-    border-bottom: 1px solid #eee;
-    transition: background-color 0.2s;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+  transition: background-color .2s;
 }
 
 .autocomplete-item:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 .autocomplete-item:hover {
-    background-color: #f5f5f5;
+  background-color: #f9f9f9;
 }
 
 .autocomplete-item.selected {
-    background-color: #ffe6d5;
+  background-color: #fde8ef;
 }
 
 .athlete-info {
-    display: block;
-    color: #333;
+  display: block;
+  color: #333;
 }
+
+.athlete-result-name { font-weight: 700; color: #333; font-size: 14px; }
+.athlete-result-meta { font-size: 12px; color: #888; margin-top: 2px; }
 
 .no-results {
-    padding: 20px 15px;
-    text-align: left;
-    color: #999;
-    background-color: #f9f9f9;
+  padding: 12px 14px;
+  color: #aaa;
+  font-size: 13px;
+  font-style: italic;
 }
 
+/* Status text */
+.search-status {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+
+/* Loader spinner */
 .search-loader {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #EE2D62;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-left: 10px;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid var(--km-primary, #EE2D62);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 10px;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.search-status {
-    font-size: 12px;
-    color: #999;
-    margin-top: 5px;
-    min-height: 18px;
+/* Race analysis button container */
+.race-link-container {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.race-analysis-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 36px;
+  background: linear-gradient(135deg, var(--km-primary, #EE2D62), #d41f52);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--km-font-ui, Arial, sans-serif);
+  box-shadow: 0 4px 12px rgba(238,45,98,.3);
+  text-transform: uppercase;
+  text-decoration: none;
+  letter-spacing: .5px;
+  transition: all .3s;
+}
+
+.race-analysis-btn:hover {
+  background: linear-gradient(135deg, #d41f52, #b81a45);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(238,45,98,.4);
+}
+
+.race-analysis-btn:active {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(238,45,98,.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .history-container {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .container {
+    padding: 16px;
+  }
+
+  .container h1 {
+    font-size: 24px;
+  }
+
+  .search-option {
+    padding: 24px 18px;
+    min-height: 180px;
+  }
+
+  .race-analysis-btn {
+    padding: 12px 28px;
+    font-size: 13px;
+  }
 }
