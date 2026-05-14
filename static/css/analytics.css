@@ -332,15 +332,11 @@ h1 {
 /* ── Mobile ──────────────────────────────────────── */
 @media (max-width: 640px) {
   .km-page { padding: 12px; margin: 8px; border-radius: 8px; }
-  /* No photo on mobile — solid brand color + compact controls */
   .km-event-card {
-    background-image: none !important;
-    background-color: var(--km-primary);
-    height: auto;
-    padding: 12px;
+    height: 110px;
+    padding: 0 12px;
     justify-content: center;
   }
-  .km-event-card__overlay { display: none; }
   .km-event-card__controls { padding: 10px 12px; gap: 8px; width: 100%; }
   .km-toolbar { gap: 6px; }
   .km-input { min-width: 0; }

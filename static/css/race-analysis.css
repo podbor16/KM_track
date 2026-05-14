@@ -602,7 +602,5 @@
         font-size: 24px;
     }
 
-    .race-card-description { display: none; }
-    .race-analysis-header { display: none; }
-    .back-button { display: none; }
+    .race-card-content { display: none; }
 }
