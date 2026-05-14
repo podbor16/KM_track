@@ -911,6 +911,44 @@ function paceBarColor(ratio) {
     return `rgb(${r},${g},${b})`;
 }
 
+/**
+ * Возвращает последовательные отрезки: start→kt1, kt1→kt2, ..., ktN→finish.
+ * Только сегменты с данными (sg_time_clear или sg_time_gun не null).
+ * Результат отсортирован по порядку маршрута.
+ */
+function filterConsecutiveSegments(segments) {
+    const KT_ORDER = ['start', 'kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7', 'finish'];
+    return segments.filter(seg => {
+        const { from, to } = parseSegmentCode(seg.segment_code);
+        const fi = KT_ORDER.indexOf(from);
+        const ti = KT_ORDER.indexOf(to);
+        const isConsecutive = fi >= 0 && ti === fi + 1;
+        const hasData = seg.sg_time_clear || seg.sg_time_gun;
+        return isConsecutive && hasData;
+    }).sort((a, b) => {
+        const ai = KT_ORDER.indexOf(parseSegmentCode(a.segment_code).from);
+        const bi = KT_ORDER.indexOf(parseSegmentCode(b.segment_code).from);
+        return ai - bi;
+    });
+}
+
+/**
+ * Возвращает сплиты от старта: start→kt1, start→kt2, ..., start→finish.
+ * Только сегменты с данными. Отсортированы по to_km (по to в KT_ORDER).
+ */
+function filterSplitSegments(segments) {
+    const KT_ORDER = ['start', 'kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7', 'finish'];
+    return segments.filter(seg => {
+        const { from } = parseSegmentCode(seg.segment_code);
+        const hasData = seg.sg_time_clear || seg.sg_time_gun;
+        return from === 'start' && hasData;
+    }).sort((a, b) => {
+        const ai = KT_ORDER.indexOf(parseSegmentCode(a.segment_code).to);
+        const bi = KT_ORDER.indexOf(parseSegmentCode(b.segment_code).to);
+        return ai - bi;
+    });
+}
+
 function createSegmentsTable(segments) {
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
