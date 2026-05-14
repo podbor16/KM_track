@@ -603,4 +603,6 @@
     }
 
     .race-card-description { display: none; }
+    .race-analysis-header { display: none; }
+    .back-button { display: none; }
 }
