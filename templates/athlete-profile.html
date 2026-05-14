@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
     <link rel="stylesheet" href="/static/css/analytics.css?v=6">
-    <link rel="stylesheet" href="/static/css/athlete-profile.css?v=2">
+    <link rel="stylesheet" href="/static/css/athlete-profile.css?v=3">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
@@ -97,8 +97,8 @@
                 </div>
                 
                 <div id="racesViewToggle" style="margin-bottom: 20px;">
-                    <button id="gridViewBtn" class="view-btn active" style="padding: 10px 20px; margin-right: 10px; background-color: #EE2D62; color: white; border: none; border-radius: 4px; cursor: pointer;">Сетка</button>
-                    <button id="tableViewBtn" class="view-btn" style="padding: 10px 20px; background-color: #ccc; color: #333; border: none; border-radius: 4px; cursor: pointer;">Таблица</button>
+                    <button id="gridViewBtn" class="view-toggle-btn view-toggle-btn--active">Сетка</button>
+                    <button id="tableViewBtn" class="view-toggle-btn" style="margin-left: 10px;">Таблица</button>
                 </div>
 
                 <div id="racesGrid" class="races-grid"></div>
@@ -777,19 +777,15 @@
             document.getElementById('gridViewBtn').onclick = () => {
                 document.getElementById('racesGrid').style.display = 'grid';
                 document.getElementById('racesTableWrapper').style.display = 'none';
-                document.getElementById('gridViewBtn').style.backgroundColor = '#EE2D62';
-                document.getElementById('gridViewBtn').style.color = 'white';
-                document.getElementById('tableViewBtn').style.backgroundColor = '#ccc';
-                document.getElementById('tableViewBtn').style.color = '#333';
+                document.getElementById('gridViewBtn').classList.add('view-toggle-btn--active');
+                document.getElementById('tableViewBtn').classList.remove('view-toggle-btn--active');
             };
 
             document.getElementById('tableViewBtn').onclick = () => {
                 document.getElementById('racesGrid').style.display = 'none';
                 document.getElementById('racesTableWrapper').style.display = 'block';
-                document.getElementById('tableViewBtn').style.backgroundColor = '#EE2D62';
-                document.getElementById('tableViewBtn').style.color = 'white';
-                document.getElementById('gridViewBtn').style.backgroundColor = '#ccc';
-                document.getElementById('gridViewBtn').style.color = '#333';
+                document.getElementById('tableViewBtn').classList.add('view-toggle-btn--active');
+                document.getElementById('gridViewBtn').classList.remove('view-toggle-btn--active');
             };
         }
 
