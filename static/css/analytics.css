@@ -302,6 +302,33 @@ h1 {
 .seg-pace-bar--fast { background: #27ae60; }
 .seg-pace-bar--slow { background: var(--km-primary); }
 
+/* ── Gender & age-group badges ───────────────────── */
+.gender-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.gender-male { background: #e3f2fd; color: #1565c0; }
+.gender-female { background: #fce4ec; color: #c62828; }
+.age-group-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f0f0f0;
+  color: #555;
+}
+.page-title-event {
+  text-align: center;
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 16px;
+  margin-top: -12px;
+}
+
 /* ── Mobile ──────────────────────────────────────── */
 @media (max-width: 640px) {
   .km-page { padding: 12px; margin: 8px; border-radius: 8px; }
