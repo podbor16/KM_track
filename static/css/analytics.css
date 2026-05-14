@@ -336,16 +336,24 @@ th:hover {
 .detail-panel-meta { font-size: 13px; color: #777; margin-top: 2px; }
 .detail-panel-close { cursor: pointer; font-size: 22px; color: #999; background: none; border: none; padding: 4px 8px; line-height: 1; }
 .detail-panel-close:hover { color: #333; }
-.detail-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-@media (max-width: 600px) { .detail-stats-grid { grid-template-columns: 1fr; } }
-.detail-stat-block { background: white; border-radius: 8px; padding: 16px 20px; border-left: 4px solid var(--primary-color); }
-.detail-stat-block h4 { font-size: 11px; color: #999; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
-.detail-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
-.detail-stat-row:last-child { border-bottom: none; }
-.detail-stat-label { color: #888; }
-.detail-stat-value { font-weight: 600; color: #222; }
-.detail-stat-value-big { font-size: 26px; font-weight: 700; color: #222; }
-.detail-stat-value-big + .detail-stat-label { font-size: 12px; }
+.detail-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+
+.detail-stat-tablet { background: white; border-radius: 8px; padding: 10px 12px; text-align: center; }
+.detail-stat-tablet--gun { border-top: 3px solid var(--primary-color); }
+.detail-stat-tablet--net { border-top: 3px solid #4a9eff; }
+
+.detail-stat-tablet__label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.detail-stat-tablet--gun .detail-stat-tablet__label { color: var(--primary-color); }
+.detail-stat-tablet--net .detail-stat-tablet__label { color: #4a9eff; }
+
+.detail-stat-tablet__time { font-size: 20px; font-weight: 700; color: #222; line-height: 1.1; }
+.detail-stat-tablet--net .detail-stat-tablet__time { color: #4a9eff; }
+
+.detail-stat-tablet__pace { font-size: 11px; color: #888; margin-top: 2px; }
+
+.detail-stat-tablet__ranks { font-size: 10px; color: #aaa; margin-top: 4px; line-height: 1.4; }
+.detail-stat-tablet__ranks strong { color: #444; }
+
 .detail-segments-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #666; margin-bottom: 12px; letter-spacing: 0.6px; }
 .detail-segments-loading { color: #aaa; font-size: 13px; padding: 12px 0; }
 .row-active td { background: #e8f4fd !important; }
