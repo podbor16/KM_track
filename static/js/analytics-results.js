@@ -1083,7 +1083,8 @@ function renderPaceChart(consecutive, kmMap, canvas) {
 
         rangeLabels.push(rangeLabel);
         values.push(parseFloat(paceMin.toFixed(2)));
-        topLabels.push({ time: timeStr, dist: toKm !== null ? `${toKm} км` : '' });
+        const segDist = (fromKm !== null && toKm !== null) ? toKm - fromKm : null;
+        topLabels.push({ time: timeStr, dist: segDist !== null ? `${segDist} км` : '' });
         paceStrs.push(`${pm}:${String(ps).padStart(2, '0')} мин/км`);
     });
     if (!values.length) return null;
