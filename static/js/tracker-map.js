@@ -165,7 +165,7 @@ function buildMarkerIcon(runner) {
     const isActive = runnerId === activeRunnerId;
     const statusClass = anim?.status === 'running' ? 'running'
                       : anim?.status === 'finished' ? 'finished' : '';
-    const activeClass = isActive ? ' runner-marker--active' : '';
+    const activeClass = isActive ? 'runner-marker--active' : '';
 
     // Phase-sync: negative delay places animation at the correct point in the
     // global clock so icon rebuilds (every 1500 ms) don't reset the rhythm.
@@ -189,7 +189,7 @@ function buildMarkerIcon(runner) {
     }
 
     return L.divIcon({
-        className: `runner-marker runner-${runnerId} ${statusClass}${activeClass}`,
+        className: ['runner-marker', `runner-${runnerId}`, statusClass, activeClass].filter(Boolean).join(' '),
         html: `<div style="position:relative;width:52px;height:52px;overflow:visible;">
             ${trailHtml}
             <div class="runner-circle" style="
