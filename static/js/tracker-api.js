@@ -33,6 +33,11 @@ let eventDistance = 0;
 
 let runnerAnimations = {};
 let animationFrameId = null;
+
+// Аналитика
+let topFinishersGender = 'all'; // 'all' | 'Мужчина' | 'Женщина'
+let _analyticsResults  = [];    // кэш последних results для перерисовки топа
+let _lastAnalyticsRefresh = 0;  // throttle: не чаще раза в 10 сек
 let eventCheckpoints = [];  // [{name, distance_km, lat, lon}, ...] — из /api/current-event
 let activeRunnerId = null;  // id участника, чья панель сейчас открыта
 
@@ -520,6 +525,7 @@ async function loadAnalytics() {
 
         const data = await response.json();
         const results = data.results || [];
+        _analyticsResults = results;
 
         const stats = {
             total:        results.length,
@@ -552,33 +558,82 @@ async function loadAnalytics() {
     }
 }
 
-function renderAnalyticsHTML(stats, results) {
-    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
-    const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
-    const distStr = (results.length > 0 && results[0].distance) ? ` (${results[0].distance})` : '';
+function refreshAnalyticsFromMemory() {
+    if (!allRunners.length) return;
+    _analyticsResults = allRunners;
+    const stats = {
+        total:        allRunners.length,
+        finished:     allRunners.filter(r => r.status === 'Finished').length,
+        not_started:  allRunners.filter(r => r.status === 'Not started').length,
+        running:      allRunners.filter(r => r.status === 'Running').length,
+        withdrawn:    allRunners.filter(r => r.status === 'Withdrawn' || r.status === 'Disqualified').length,
+        disqualified: 0,
+        male:         allRunners.filter(r => r.sex === 'Мужчина').length,
+        female:       allRunners.filter(r => r.sex === 'Женщина').length
+    };
+    const analyticsPanel = document.getElementById('analyticsContent');
+    if (analyticsPanel) {
+        analyticsPanel.innerHTML = renderAnalyticsHTML(stats, allRunners);
+    }
+}
 
-    const finishedRunners = results
-        .filter(r => r.race_status === 'Finished' && r.rank_absolute)
-        .sort((a, b) => (a.rank_absolute || 999) - (b.rank_absolute || 999))
-        .slice(0, 5);
+window.setTopGender = function(gender) {
+    topFinishersGender = gender;
+    const el = document.getElementById('topFinishersTable');
+    if (el) el.innerHTML = renderTopTableHTML(_analyticsResults, gender);
+    document.querySelectorAll('.top-gender-btn').forEach(btn => {
+        const labels = { all: 'Все', 'Мужчина': 'Мужчины', 'Женщина': 'Женщины' };
+        btn.classList.toggle('active', btn.textContent === labels[gender]);
+    });
+};
 
-    const topHTML = finishedRunners.length
-        ? finishedRunners.map(runner => {
+function renderTopTableHTML(results, gender) {
+    const statusField = results.length && results[0].race_status !== undefined ? 'race_status' : 'status';
+    let filtered = results.filter(r => r[statusField] === 'Finished' && r.rank_absolute);
+    if (gender !== 'all') filtered = filtered.filter(r => r.sex === gender);
+    const rankField = gender !== 'all' ? 'rank_sex' : 'rank_absolute';
+    filtered.sort((a, b) => (a[rankField] || 999) - (b[rankField] || 999));
+    const top10 = filtered.slice(0, 10);
+
+    const rows = top10.length
+        ? top10.map(runner => {
             const paceStr = parseDuration(runner.finish_pace_avg_gun) || parseDuration(runner.finish_pace_avg);
             const pace = paceStr ? paceStr + ' мин/км' : '-';
-            return `
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 8px; text-align: center;">${runner.rank_absolute}</td>
+            return `<tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 8px; text-align: center;">${runner[rankField] || '—'}</td>
                 <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>
                 <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
                 <td style="padding: 8px;">${KMUtils.normalizeCategory(runner.category) || '-'}</td>
                 <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
                 <td style="padding: 8px; font-family: monospace;">${pace}</td>
-            </tr>
-        `;}).join('')
+            </tr>`;
+        }).join('')
         : '<tr><td colspan="6" style="padding: 10px; text-align: center;">Результатов нет</td></tr>';
 
+    return `<table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+            <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+                <th style="padding: 10px; text-align: center;">#</th>
+                <th style="padding: 10px; text-align: center;">№</th>
+                <th style="padding: 10px; text-align: left;">Фамилия Имя</th>
+                <th style="padding: 10px; text-align: left;">Категория</th>
+                <th style="padding: 8px; text-align: left;">Офиц. время</th>
+                <th style="padding: 8px; text-align: left;">Темп</th>
+            </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderAnalyticsHTML(stats, results) {
+    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
+    const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
+    const distStr = (results.length > 0 && results[0].distance) ? ` (${results[0].distance})` : '';
     const totalSafe = stats.total || 1;
+    const genderBtns = ['all', 'Мужчина', 'Женщина'].map(g => {
+        const labels = { all: 'Все', 'Мужчина': 'Мужчины', 'Женщина': 'Женщины' };
+        return `<button class="top-gender-btn${topFinishersGender === g ? ' active' : ''}" onclick="setTopGender('${g}')">${labels[g]}</button>`;
+    }).join('');
 
     return `
         <div class="analytics-section">
@@ -624,23 +679,12 @@ function renderAnalyticsHTML(stats, results) {
         </div>
 
         <div class="analytics-section">
-            <h3>🏆 Топ-5 финишёров</h3>
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                    <thead>
-                        <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
-                            <th style="padding: 10px; text-align: center;">#</th>
-                            <th style="padding: 10px; text-align: center;">№</th>
-                            <th style="padding: 10px; text-align: left;">Фамилия Имя</th>
-                            <th style="padding: 10px; text-align: left;">Категория</th>
-                            <th style="padding: 8px; text-align: left;">Офиц. время</th>
-                            <th style="padding: 8px; text-align: left;">Темп</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${topHTML}
-                    </tbody>
-                </table>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                <h3 style="margin: 0;">🏆 Топ-10 финишёров</h3>
+                <div class="top-gender-tabs">${genderBtns}</div>
+            </div>
+            <div style="overflow-x: auto;" id="topFinishersTable">
+                ${renderTopTableHTML(results, topFinishersGender)}
             </div>
         </div>
     `;
@@ -679,6 +723,12 @@ function startAutoUpdate() {
                     const content = document.getElementById('runner-panel-content');
                     if (content) content.innerHTML = buildPopupContent(activeRunner);
                 }
+            }
+            // Обновляем аналитику не чаще раза в 10 сек
+            const _now = Date.now();
+            if (_now - _lastAnalyticsRefresh > 10000) {
+                _lastAnalyticsRefresh = _now;
+                refreshAnalyticsFromMemory();
             }
         } catch (err) {
             console.error('❌ Ошибка SSE данных:', err);

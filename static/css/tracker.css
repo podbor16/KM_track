@@ -370,6 +370,21 @@ body {
     text-align: center;
 }
 
+.top-gender-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.top-gender-btn {
+    padding: 4px 12px;
+    border: 1.5px solid #EE2D62;
+    border-radius: 14px;
+    background: #fff;
+    color: #EE2D62;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.top-gender-btn.active,
+.top-gender-btn:hover { background: #EE2D62; color: #fff; }
+
 .top-finishers {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
