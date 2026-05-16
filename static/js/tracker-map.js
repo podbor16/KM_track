@@ -2,7 +2,7 @@
 
 let checkpointMarkers = [];
 const runnerTrailHistory = {};
-const runnerTrailMarkers = {};
+const runnerTrailLayers  = {};
 let trailLastUpdateMs = 0;
 
 async function initMap() {
@@ -54,9 +54,12 @@ async function loadRouteFromAPI() {
             startMarker = L.marker(routeCoordinates[0], {
                 icon: L.divIcon({
                     className: 'start-marker',
-                    html: '<div style="background: #EE2D62; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; white-space: nowrap;">СТАРТ</div>',
-                    iconSize: [72, 26],
-                    iconAnchor: [36, 80]
+                    html: `<div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="background:#EE2D62;color:white;padding:4px 10px;border-radius:4px;font-weight:bold;font-size:11px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.2);">СТАРТ</div>
+                        <div style="width:2px;height:22px;background:#EE2D62;"></div>
+                    </div>`,
+                    iconSize: [60, 48],
+                    iconAnchor: [30, 48]
                 })
             }).addTo(map);
             drawCheckpointMarkers();
@@ -525,15 +528,16 @@ function drawCheckpointMarkers() {
             className: 'kt-marker',
             html: `<div style="
                 background: #FF9500; color: white;
-                width: 28px; height: 28px; border-radius: 50%;
-                display: flex; align-items: center; justify-content: center;
-                font-weight: 700; font-size: 10px;
+                width: 36px; height: 36px; border-radius: 50%;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                font-weight: 700; line-height: 1.1;
                 border: 2px solid white;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.3);
                 box-sizing: border-box;
-            ">${label}</div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
+            "><span style="font-size:11px">${label}</span><span style="font-size:8px">км</span></div>`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
         });
 
         const m = L.marker([cp.lat, cp.lon], { icon, interactive: false }).addTo(map);
@@ -553,32 +557,28 @@ function updateTrails() {
 
         const pos = marker.getLatLng();
         if (!runnerTrailHistory[runnerId]) runnerTrailHistory[runnerId] = [];
-        runnerTrailHistory[runnerId].unshift({ lat: pos.lat, lng: pos.lng });
-        if (runnerTrailHistory[runnerId].length > 2) runnerTrailHistory[runnerId].length = 2;
+        runnerTrailHistory[runnerId].unshift([pos.lat, pos.lng]);
+        if (runnerTrailHistory[runnerId].length > 5) runnerTrailHistory[runnerId].length = 5;
 
         const color = anim.color || '#EE2D62';
+        const coords = runnerTrailHistory[runnerId];
 
-        runnerTrailHistory[runnerId].forEach((coord, i) => {
-            const radius  = i === 0 ? 11 : 7;
-            const opacity = i === 0 ? 0.35 : 0.15;
-            if (!runnerTrailMarkers[runnerId]) runnerTrailMarkers[runnerId] = [];
-            if (!runnerTrailMarkers[runnerId][i]) {
-                runnerTrailMarkers[runnerId][i] = L.circleMarker(
-                    [coord.lat, coord.lng],
-                    { radius, fillColor: color, fillOpacity: opacity, stroke: false, interactive: false }
-                ).addTo(map);
-            } else {
-                runnerTrailMarkers[runnerId][i].setLatLng([coord.lat, coord.lng]);
-                runnerTrailMarkers[runnerId][i].setStyle({ fillColor: color, fillOpacity: opacity });
-            }
-        });
+        if (!runnerTrailLayers[runnerId]) {
+            runnerTrailLayers[runnerId] = L.polyline(coords, {
+                color, weight: 3, opacity: 0.45,
+                interactive: false, smoothFactor: 1
+            }).addTo(map);
+        } else {
+            runnerTrailLayers[runnerId].setLatLngs(coords);
+            runnerTrailLayers[runnerId].setStyle({ color });
+        }
     });
 }
 
 function clearRunnerTrail(runnerId) {
-    if (runnerTrailMarkers[runnerId]) {
-        runnerTrailMarkers[runnerId].forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
-        delete runnerTrailMarkers[runnerId];
+    if (runnerTrailLayers[runnerId]) {
+        if (map.hasLayer(runnerTrailLayers[runnerId])) map.removeLayer(runnerTrailLayers[runnerId]);
+        delete runnerTrailLayers[runnerId];
     }
     delete runnerTrailHistory[runnerId];
 }
