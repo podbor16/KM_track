@@ -364,7 +364,7 @@ function buildPopupContent(runner) {
                 <div class="card-c__stat-lbl">Темп</div>
             </div>
             <div class="card-c__stat">
-                <div class="card-c__stat-val">${distCurrent}<span class="unit">/${distTotal}</span></div>
+                <div class="card-c__stat-val" id="panel-stat-dist">${distCurrent}<span class="unit">/${distTotal}</span></div>
                 <div class="card-c__stat-lbl">км</div>
             </div>
             <div class="card-c__stat">
@@ -654,6 +654,11 @@ function animateRunnerFrame() {
 
         const coord = getCoordForDist(distKm, totalDistKm, maxIdx);
         if (coord) marker.setLatLng(coord);
+
+        if (runnerId === activeRunnerId && anim.status === 'running') {
+            const distEl = document.getElementById('panel-stat-dist');
+            if (distEl) distEl.firstChild.textContent = distKm.toFixed(1);
+        }
     });
 
     animationFrameId = requestAnimationFrame(animateRunnerFrame);
