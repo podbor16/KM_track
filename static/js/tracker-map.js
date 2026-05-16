@@ -1,5 +1,10 @@
 // tracker-map.js — карта, маршрут, маркеры, анимация
 
+let checkpointMarkers = [];
+const runnerTrailHistory = {};
+const runnerTrailMarkers = {};
+let trailLastUpdateMs = 0;
+
 async function initMap() {
     map = L.map('map').setView([CONFIG.START_LAT, CONFIG.START_LON], 15);
     map.attributionControl.setPrefix('');
@@ -49,11 +54,12 @@ async function loadRouteFromAPI() {
             startMarker = L.marker(routeCoordinates[0], {
                 icon: L.divIcon({
                     className: 'start-marker',
-                    html: '<div style="background: #EE2D62; color: white; padding: 8px 12px; border-radius: 5px; font-weight: bold; text-align: center;">🏁 СТАРТ</div>',
-                    iconSize: [100, 35],
-                    iconAnchor: [50, 35]
+                    html: '<div style="background: #EE2D62; color: white; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; text-align: center; white-space: nowrap;">СТАРТ</div>',
+                    iconSize: [72, 26],
+                    iconAnchor: [36, 80]
                 })
             }).addTo(map);
+            drawCheckpointMarkers();
 
             const routeBounds = routeLayer.getBounds();
             map.fitBounds(routeBounds, { padding: [10, 10] });
@@ -128,8 +134,9 @@ function parseGPXToCoordinates(gpxContent) {
 }
 
 function initializeSelectedRunnersMarkers() {
-    Object.values(runnerMarkers).forEach(marker => {
-        if (map.hasLayer(marker)) map.removeLayer(marker);
+    Object.keys(runnerMarkers).forEach(runnerId => {
+        if (map.hasLayer(runnerMarkers[runnerId])) map.removeLayer(runnerMarkers[runnerId]);
+        clearRunnerTrail(runnerId);
     });
     runnerMarkers = {};
     runnerPositions = {};
@@ -165,7 +172,7 @@ function buildMarkerIcon(runner) {
                     text-align: center;
                     line-height: 1;
                     overflow: hidden;
-               ">№${runner.start_number}</div>`,
+               ">${runner.start_number}</div>`,
         iconSize: [52, 52],
         iconAnchor: [26, 26],
         popupAnchor: [0, -28]
@@ -437,9 +444,8 @@ function updateRunnerMarkerPosition(runner) {
         anim.status = 'running';
         anim.baseDist   = runner.current_distance || 0;
         anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
-        // KT-runners: baseDist = kt_dist, baseTimeMs = last_kt_unix_ms → маркер у КТ, анимируем вперёд
-        // No-KT runners: baseDist = hist-позиция на serverTimeUnix, baseTimeMs = serverTimeUnix
         anim.baseTimeMs = runner.last_kt_unix_ms ?? serverTimeUnix;
+        anim.color      = getStatusColor(runner.status, runner.lap ?? 0);
     }
 
     marker.setIcon(buildMarkerIcon(runner));
@@ -449,6 +455,10 @@ function updateRunnerMarkerPosition(runner) {
 
 function animateRunnerFrame() {
     const now = Date.now();
+    if (now - trailLastUpdateMs > 1500) {
+        trailLastUpdateMs = now;
+        updateTrails();
+    }
     const totalDistKm = eventDistance || 5.0;
     const maxIdx = Math.max(0, routeCoordinates.length - 1);
     // Если время выстрела ещё не наступило — все маркеры стоят на старте
@@ -496,6 +506,81 @@ function centerMap() {
     if (routeLayer && map) {
         map.fitBounds(routeLayer.getBounds(), { padding: [10, 10] });
     }
+}
+
+function drawCheckpointMarkers() {
+    checkpointMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
+    checkpointMarkers = [];
+    if (!eventCheckpoints || !eventCheckpoints.length) return;
+
+    const totalDist = eventDistance || 5.0;
+
+    eventCheckpoints.forEach(cp => {
+        if (!cp.lat || !cp.lon) return;
+        if (cp.distance_km <= 0 || cp.distance_km >= totalDist) return;
+
+        const label = cp.distance_km % 1 === 0 ? String(cp.distance_km | 0) : String(cp.distance_km);
+
+        const icon = L.divIcon({
+            className: 'kt-marker',
+            html: `<div style="
+                background: #FF9500; color: white;
+                width: 28px; height: 28px; border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
+                font-weight: 700; font-size: 10px;
+                border: 2px solid white;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                box-sizing: border-box;
+            ">${label}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+        });
+
+        const m = L.marker([cp.lat, cp.lon], { icon, interactive: false }).addTo(map);
+        checkpointMarkers.push(m);
+    });
+}
+
+function updateTrails() {
+    Object.keys(runnerAnimations).forEach(runnerId => {
+        const anim = runnerAnimations[runnerId];
+        const marker = runnerMarkers[runnerId];
+
+        if (!marker || anim.status !== 'running') {
+            clearRunnerTrail(runnerId);
+            return;
+        }
+
+        const pos = marker.getLatLng();
+        if (!runnerTrailHistory[runnerId]) runnerTrailHistory[runnerId] = [];
+        runnerTrailHistory[runnerId].unshift({ lat: pos.lat, lng: pos.lng });
+        if (runnerTrailHistory[runnerId].length > 2) runnerTrailHistory[runnerId].length = 2;
+
+        const color = anim.color || '#EE2D62';
+
+        runnerTrailHistory[runnerId].forEach((coord, i) => {
+            const radius  = i === 0 ? 11 : 7;
+            const opacity = i === 0 ? 0.35 : 0.15;
+            if (!runnerTrailMarkers[runnerId]) runnerTrailMarkers[runnerId] = [];
+            if (!runnerTrailMarkers[runnerId][i]) {
+                runnerTrailMarkers[runnerId][i] = L.circleMarker(
+                    [coord.lat, coord.lng],
+                    { radius, fillColor: color, fillOpacity: opacity, stroke: false, interactive: false }
+                ).addTo(map);
+            } else {
+                runnerTrailMarkers[runnerId][i].setLatLng([coord.lat, coord.lng]);
+                runnerTrailMarkers[runnerId][i].setStyle({ fillColor: color, fillOpacity: opacity });
+            }
+        });
+    });
+}
+
+function clearRunnerTrail(runnerId) {
+    if (runnerTrailMarkers[runnerId]) {
+        runnerTrailMarkers[runnerId].forEach(m => { if (m && map.hasLayer(m)) map.removeLayer(m); });
+        delete runnerTrailMarkers[runnerId];
+    }
+    delete runnerTrailHistory[runnerId];
 }
 
 let _lapLegendControl = null;
