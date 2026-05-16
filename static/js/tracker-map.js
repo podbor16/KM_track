@@ -2,8 +2,8 @@
 
 let checkpointMarkers = [];
 const runnerTrailHistory = {};
-const runnerTrailLayers  = {};
 let trailLastUpdateMs = 0;
+let startMarkerIsFinish = false;
 
 async function initMap() {
     map = L.map('map').setView([CONFIG.START_LAT, CONFIG.START_LON], 15);
@@ -51,13 +51,11 @@ async function loadRouteFromAPI() {
             }).addTo(map);
 
             if (startMarker && map) map.removeLayer(startMarker);
+            startMarkerIsFinish = false;
             startMarker = L.marker(routeCoordinates[0], {
                 icon: L.divIcon({
                     className: 'start-marker',
-                    html: `<div style="display:flex;flex-direction:column;align-items:center;">
-                        <div style="background:#EE2D62;color:white;padding:4px 10px;border-radius:4px;font-weight:bold;font-size:11px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.2);">СТАРТ</div>
-                        <div style="width:2px;height:22px;background:#EE2D62;"></div>
-                    </div>`,
+                    html: makeStartFlagHtml('СТАРТ'),
                     iconSize: [60, 48],
                     iconAnchor: [30, 48]
                 })
@@ -151,31 +149,43 @@ function initializeSelectedRunnersMarkers() {
     });
 }
 
+function makeStartFlagHtml(label) {
+    return `<div style="display:flex;flex-direction:column;align-items:center;">
+        <div style="background:#EE2D62;color:white;padding:4px 10px;border-radius:4px;font-weight:bold;font-size:11px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.2);">${label}</div>
+        <div style="width:2px;height:22px;background:#EE2D62;"></div>
+    </div>`;
+}
+
 function buildMarkerIcon(runner) {
-    const color = getStatusColor(runner.status, runner.lap ?? 0);
     const runnerId = String(runner.id);
+    const color = getStatusColor(runner.status, runner.lap ?? 0);
     const fontSize = String(runner.start_number).length >= 3 ? '11px' : '13px';
+
+    const anim = runnerAnimations[runnerId];
+    let trailHtml = '';
+    if (anim && anim.status === 'running' && anim.bearing != null) {
+        const rad = anim.bearing * Math.PI / 180;
+        const dx1 = -Math.sin(rad) * 26, dy1 = Math.cos(rad) * 26;
+        const dx2 = -Math.sin(rad) * 44, dy2 = Math.cos(rad) * 44;
+        trailHtml = `
+            <div style="position:absolute;top:${26+dy1}px;left:${26+dx1}px;width:13px;height:13px;border-radius:50%;background:${color};opacity:0.4;transform:translate(-50%,-50%);pointer-events:none;"></div>
+            <div style="position:absolute;top:${26+dy2}px;left:${26+dx2}px;width:8px;height:8px;border-radius:50%;background:${color};opacity:0.2;transform:translate(-50%,-50%);pointer-events:none;"></div>`;
+    }
 
     return L.divIcon({
         className: `runner-marker runner-${runnerId}`,
-        html: `<div style="
-                    background: ${color};
-                    color: white;
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: bold;
-                    font-size: ${fontSize};
-                    border: 2px solid white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    box-sizing: border-box;
-                    text-align: center;
-                    line-height: 1;
-                    overflow: hidden;
-               ">${runner.start_number}</div>`,
+        html: `<div style="position:relative;width:52px;height:52px;overflow:visible;">
+            ${trailHtml}
+            <div style="
+                position:absolute;top:0;left:0;
+                background:${color};color:white;
+                width:52px;height:52px;border-radius:50%;
+                display:flex;align-items:center;justify-content:center;
+                font-weight:bold;font-size:${fontSize};
+                border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);
+                box-sizing:border-box;text-align:center;line-height:1;overflow:hidden;
+            ">${runner.start_number}</div>
+        </div>`,
         iconSize: [52, 52],
         iconAnchor: [26, 26],
         popupAnchor: [0, -28]
@@ -462,6 +472,24 @@ function animateRunnerFrame() {
         trailLastUpdateMs = now;
         updateTrails();
     }
+
+    // Переключаем СТАРТ → ФИНИШ после выстрела
+    const raceNowStarted = !!(raceGunUnixMs && now >= raceGunUnixMs);
+    if (raceNowStarted !== startMarkerIsFinish && startMarker && routeCoordinates.length) {
+        startMarkerIsFinish = raceNowStarted;
+        const label = raceNowStarted ? 'ФИНИШ' : 'СТАРТ';
+        const coord = raceNowStarted
+            ? routeCoordinates[routeCoordinates.length - 1]
+            : routeCoordinates[0];
+        startMarker.setLatLng(coord);
+        startMarker.setIcon(L.divIcon({
+            className: 'start-marker',
+            html: makeStartFlagHtml(label),
+            iconSize: [60, 48],
+            iconAnchor: [30, 48]
+        }));
+    }
+
     const totalDistKm = eventDistance || 5.0;
     const maxIdx = Math.max(0, routeCoordinates.length - 1);
     // Если время выстрела ещё не наступило — все маркеры стоят на старте
@@ -549,38 +577,42 @@ function updateTrails() {
     Object.keys(runnerAnimations).forEach(runnerId => {
         const anim = runnerAnimations[runnerId];
         const marker = runnerMarkers[runnerId];
+        if (!marker) return;
 
-        if (!marker || anim.status !== 'running') {
-            clearRunnerTrail(runnerId);
+        const runner = allRunners.find(r => String(r.id) === runnerId);
+        if (!runner) return;
+
+        if (anim.status !== 'running') {
+            if (anim.bearing != null) {
+                anim.bearing = null;
+                marker.setIcon(buildMarkerIcon(runner));
+            }
             return;
         }
 
         const pos = marker.getLatLng();
         if (!runnerTrailHistory[runnerId]) runnerTrailHistory[runnerId] = [];
-        runnerTrailHistory[runnerId].unshift([pos.lat, pos.lng]);
-        if (runnerTrailHistory[runnerId].length > 5) runnerTrailHistory[runnerId].length = 5;
+        const prev = runnerTrailHistory[runnerId][0];
 
-        const color = anim.color || '#EE2D62';
-        const coords = runnerTrailHistory[runnerId];
-
-        if (!runnerTrailLayers[runnerId]) {
-            runnerTrailLayers[runnerId] = L.polyline(coords, {
-                color, weight: 3, opacity: 0.45,
-                interactive: false, smoothFactor: 1
-            }).addTo(map);
-        } else {
-            runnerTrailLayers[runnerId].setLatLngs(coords);
-            runnerTrailLayers[runnerId].setStyle({ color });
+        if (prev && (Math.abs(prev.lat - pos.lat) > 1e-6 || Math.abs(prev.lng - pos.lng) > 1e-6)) {
+            const lat1 = prev.lat * Math.PI / 180;
+            const lat2 = pos.lat * Math.PI / 180;
+            const dLon = (pos.lng - prev.lng) * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+            anim.bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
         }
+
+        runnerTrailHistory[runnerId].unshift({ lat: pos.lat, lng: pos.lng });
+        if (runnerTrailHistory[runnerId].length > 2) runnerTrailHistory[runnerId].length = 2;
+
+        marker.setIcon(buildMarkerIcon(runner));
     });
 }
 
 function clearRunnerTrail(runnerId) {
-    if (runnerTrailLayers[runnerId]) {
-        if (map.hasLayer(runnerTrailLayers[runnerId])) map.removeLayer(runnerTrailLayers[runnerId]);
-        delete runnerTrailLayers[runnerId];
-    }
     delete runnerTrailHistory[runnerId];
+    if (runnerAnimations[runnerId]) runnerAnimations[runnerId].bearing = null;
 }
 
 let _lapLegendControl = null;
