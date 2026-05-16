@@ -233,6 +233,10 @@ function getKtRanks(runner, ktCode) {
     };
 }
 
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
     const isRunning = status.includes('running') || status.includes('started');
@@ -263,11 +267,11 @@ function buildPopupContent(runner) {
     const topHTML = `
         <div class="card-c__top">
             <div class="card-c__circle" style="background:${circleColor};font-size:${numFontSize}">
-                ${runner.start_number}
+                ${escHtml(runner.start_number)}
             </div>
             <div class="card-c__title">
-                <div class="card-c__name">${runner.full_name}</div>
-                ${subParts.length ? `<div class="card-c__sub">${subParts.join(' · ')}</div>` : ''}
+                <div class="card-c__name">${escHtml(runner.full_name)}</div>
+                ${subParts.length ? `<div class="card-c__sub">${escHtml(subParts.join(' · '))}</div>` : ''}
             </div>
             <div class="${pillClass}">${pillLabel}</div>
         </div>`;
@@ -288,7 +292,7 @@ function buildPopupContent(runner) {
         const statsHTML = `
             <div class="card-c__stats-grid">
                 <div class="card-c__stat">
-                    <div class="card-c__stat-val">${finishPace}</div>
+                    <div class="card-c__stat-val">${escHtml(finishPace)}</div>
                     <div class="card-c__stat-lbl">Темп</div>
                 </div>
                 <div class="card-c__stat">
@@ -300,7 +304,7 @@ function buildPopupContent(runner) {
                     <div class="card-c__stat-lbl">Место</div>
                 </div>
                 <div class="card-c__stat card-c__stat--desktop-only">
-                    <div class="card-c__stat-val">${clearTime || gunTime || '-'}</div>
+                    <div class="card-c__stat-val">${escHtml(clearTime || gunTime || '-')}</div>
                     <div class="card-c__stat-lbl">Чистое вр.</div>
                 </div>
             </div>`;
@@ -330,8 +334,8 @@ function buildPopupContent(runner) {
             <div class="card-c__eta" style="grid-column:1/-1">
                 <div class="card-c__eta-lbl">Результат</div>
                 <div class="card-c__eta-vals">
-                    <div class="card-c__eta-val">${gunTime}</div>
-                    ${clearTime ? `<div class="card-c__eta-time">чистое ${clearTime}</div>` : ''}
+                    <div class="card-c__eta-val">${escHtml(gunTime)}</div>
+                    ${clearTime ? `<div class="card-c__eta-time">чистое ${escHtml(clearTime)}</div>` : ''}
                 </div>
             </div>` : '';
 
@@ -369,7 +373,7 @@ function buildPopupContent(runner) {
             </div>
             <div class="card-c__stat card-c__stat--desktop-only">
                 <div class="card-c__stat-val">${ktTimeShort}</div>
-                <div class="card-c__stat-lbl">${ktDesktopLbl}</div>
+                <div class="card-c__stat-lbl">${escHtml(ktDesktopLbl)}</div>
             </div>
         </div>`;
 
@@ -387,7 +391,7 @@ function buildPopupContent(runner) {
             <div class="card-c__kt-block">
                 <div class="card-c__kt-left">
                     <div class="card-c__kt-label">Последняя КТ</div>
-                    <div class="card-c__kt-name">${lastCP.name}${ktDist > 0 ? ` · ${ktDist} км` : ''}</div>
+                    <div class="card-c__kt-name">${escHtml(lastCP.name)}${ktDist > 0 ? ` · ${ktDist} км` : ''}</div>
                 </div>
                 <div class="card-c__kt-right">
                     <div class="card-c__kt-time">${parseDuration(lastCP.time)}</div>
@@ -423,7 +427,7 @@ function buildPopupContent(runner) {
 
     // ETA
     let etaHTML = '';
-    const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
+    const hasStarted = isRunning;
     let finishEtaMs = null;
     if (hasStarted && lastCP && eventDistance > 0) {
         const ktSecs = durationToSeconds(lastCP.time);
