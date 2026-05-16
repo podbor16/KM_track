@@ -6,9 +6,6 @@ let sortState = { column: 'time_gun', direction: 'asc' }; // Дефолт: по 
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
 const timeMode = 'gun'; // фиксировано для сегментных функций
-let activeSegmentCode = null;
-let segmentRankingsCache = {};  // { segmentCode: [rows] }
-let activeSegmentEventId = null;
 const runnerDataMap = new Map(); // resultId → runner object
 
 const eventNameMap = KMUtils.EVENT_NAMES;
@@ -201,11 +198,6 @@ async function loadRunnersData(silent = false) {
         if (!silent) {
             showLoading(false);
             document.getElementById('resultsWrapper').style.display = '';
-        }
-
-        // Загружаем кнопки КТ для одиночного event_id
-        if (!silent && eventIdOrIds !== undefined && !Array.isArray(eventIdOrIds)) {
-            loadSegmentTabs(eventIdOrIds);
         }
     } catch (error) {
         if (!silent) {
@@ -503,15 +495,8 @@ function applyFilters() {
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
-    if (activeSegmentCode !== null) {
-        document.getElementById('resultsWrapper').style.display = 'none';
-        document.getElementById('segmentModeWrapper').style.display = '';
-        renderSegmentView(filteredRunners);
-    } else {
-        document.getElementById('segmentModeWrapper').style.display = 'none';
-        document.getElementById('resultsWrapper').style.display = '';
-        renderResultsTable(_sortArray(filteredRunners));
-    }
+    document.getElementById('resultsWrapper').style.display = '';
+    renderResultsTable(_sortArray(filteredRunners));
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
@@ -778,21 +763,33 @@ function buildDetailPanelHTML(runner) {
     const paceGun = (paceGunRaw && paceGunRaw !== '#ЗНАЧ!') ? paceGunRaw + ' мин/км' : '—';
     const paceNet = (paceNetRaw && paceNetRaw !== '#ЗНАЧ!') ? paceNetRaw + ' мин/км' : '—';
 
-    const rankAbs = runner.rank_absolute || '—';
-    const rankSex = runner.rank_sex ? `${genderShort} #${runner.rank_sex}` : '—';
-    const rankCat = runner.rank_category ? `#${runner.rank_category}` : '—';
-    const rankAbsClean = runner.rank_absolute_clean || '—';
-    const rankSexClean = runner.rank_sex_clean ? `${genderShort} #${runner.rank_sex_clean}` : '—';
-    const rankCatClean = runner.rank_category_clean ? `#${runner.rank_category_clean}` : '—';
     const statusMap = { finished: 'Финишировал', running: 'Бежит', notstarted: 'Не стартовал', disqualified: 'Нарушение' };
     const status = statusMap[runner.status] || runner.status || '—';
+
+    // Ranks with X/N suffix when race is complete
+    const { raceComplete } = getRaceStats();
+    const nAll = raceComplete ? allRunners.filter(r => r.status === 'Finished').length : null;
+    const nSex = raceComplete ? allRunners.filter(r => r.status === 'Finished' && r.gender === runner.gender).length : null;
+    const nCat = raceComplete ? allRunners.filter(r => r.status === 'Finished' && r.category === runner.category).length : null;
+    const fmtRank = (rank, total) => {
+        if (!rank) return '—';
+        return total ? `${rank}/${total}` : `#${rank}`;
+    };
+    const rankAbs      = fmtRank(runner.rank_absolute,       nAll);
+    const rankSex      = runner.rank_sex      ? `${genderShort} ${fmtRank(runner.rank_sex,      nSex)}` : '—';
+    const rankCat      = runner.rank_category ? fmtRank(runner.rank_category, nCat) : '—';
+    const rankAbsClean = fmtRank(runner.rank_absolute_clean, nAll);
+    const rankSexClean = runner.rank_sex_clean      ? `${genderShort} ${fmtRank(runner.rank_sex_clean,      nSex)}` : '—';
+    const rankCatClean = runner.rank_category_clean ? fmtRank(runner.rank_category_clean, nCat) : '—';
+
+    const profileUrl = `/athlete-profile?surname=${encodeURIComponent(runner.surname || '')}&name=${encodeURIComponent(runner.name || '')}`;
 
     const timeCol = (title, time, cls, pace, absR, sexR, catR) => `
         <div class="detail-time-col detail-time-col--${cls}">
             <div class="detail-time-col-title">${title}</div>
             <div class="detail-time-big detail-time-big--${cls}">${time}</div>
             <div class="detail-rank-row"><span class="detail-rank-label">Темп</span><span class="detail-rank-val">${pace}</span></div>
-            <div class="detail-rank-row"><span class="detail-rank-label">Место абс.</span><span class="detail-rank-val"><span class="detail-rank-num">#${absR}</span></span></div>
+            <div class="detail-rank-row"><span class="detail-rank-label">Место абс.</span><span class="detail-rank-val"><span class="detail-rank-num">${absR}</span></span></div>
             <div class="detail-rank-row"><span class="detail-rank-label">По полу</span><span class="detail-rank-val">${sexR}</span></div>
             <div class="detail-rank-row"><span class="detail-rank-label">По кат.</span><span class="detail-rank-val">${catR}</span></div>
         </div>`;
@@ -800,7 +797,10 @@ function buildDetailPanelHTML(runner) {
     return `
     <div class="detail-panel-header">
         <div>
-            <div class="detail-panel-name">${fullName}</div>
+            <div class="detail-name-row">
+                <span class="detail-panel-name">${fullName}</span>
+                <a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>
+            </div>
             <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
         </div>
         <div class="detail-panel-actions">
@@ -1241,160 +1241,10 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
     container.appendChild(table);
 }
 
-// === Результаты по участкам (КТ) ===
+// === Вспомогательные функции ===
 
-async function loadSegmentTabs(eventId) {
-    try {
-        const resp = await fetch(`/api/event-segment-codes?event_id=${eventId}`);
-        if (!resp.ok) return;
-        const { codes } = await resp.json();
-        if (!codes || !codes.length) return;
-
-        activeSegmentEventId = eventId;
-        segmentRankingsCache = {};
-
-        const container = document.getElementById('segmentTabsContainer');
-        container.innerHTML = '';
-
-        // Кнопка «Все результаты»
-        const allBtn = document.createElement('button');
-        allBtn.className = 'segment-tab-btn active';
-        allBtn.textContent = 'Все результаты';
-        allBtn.onclick = () => setActiveSegment(null, allBtn);
-        container.appendChild(allBtn);
-
-        codes.forEach(code => {
-            const btn = document.createElement('button');
-            btn.className = 'segment-tab-btn';
-            btn.textContent = formatSegmentName(code);
-            btn.dataset.code = code;
-            btn.onclick = () => setActiveSegment(code, btn);
-            container.appendChild(btn);
-        });
-
-        container.style.display = '';
-    } catch (e) {
-        console.error('❌ loadSegmentTabs:', e);
-    }
-}
-
-function setActiveSegment(code, activeBtn) {
-    activeSegmentCode = code;
-    document.querySelectorAll('#segmentTabsContainer .segment-tab-btn')
-        .forEach(b => b.classList.remove('active'));
-    activeBtn.classList.add('active');
-    applyFilters();
-}
-
-async function renderSegmentView(runners) {
-    const code = activeSegmentCode;
-    const eventId = activeSegmentEventId;
-
-    if (!segmentRankingsCache[code]) {
-        try {
-            const resp = await fetch(`/api/event-segment-rankings?event_id=${eventId}&segment_code=${encodeURIComponent(code)}`);
-            if (!resp.ok) throw new Error(resp.statusText);
-            segmentRankingsCache[code] = await resp.json();
-        } catch (e) {
-            console.error('renderSegmentView fetch:', e);
-            document.getElementById('segmentModeBody').innerHTML =
-                `<tr><td colspan="10" style="text-align:center;color:#888;">Ошибка загрузки данных</td></tr>`;
-            return;
-        }
-    }
-    const allRows = segmentRankingsCache[code];
-
-    // Lookup map: start_number → runner (для года рождения и дистанции)
-    const runnerByBib = {};
-    runners.forEach(r => {
-        const bib = String(r.start_number || '');
-        if (bib) runnerByBib[bib] = r;
-    });
-
-    // Фильтрация: исключаем пустые строки, чтобы Set пустого состояния имел size=0
-    const validBibs = new Set(
-        runners.map(r => String(r.start_number || '')).filter(n => n && n !== 'null' && n !== 'undefined')
-    );
-    const useGun = timeMode === 'gun';
-
-    const visible = allRows
-        .filter(r => validBibs.size === 0 || validBibs.has(String(r.start_number)))
-        .sort((a, b) => {
-            const ta = a[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
-            const tb = b[useGun ? 'sg_time_gun' : 'sg_time_clear'] || '';
-            return ta.localeCompare(tb);
-        });
-
-    // Заголовок — 10 колонок как у основной таблицы
-    document.getElementById('segmentModeHead').innerHTML = `<tr>
-        <th>#</th>
-        <th>Фамилия</th>
-        <th>Имя</th>
-        <th>Год рождения</th>
-        <th>Дистанция</th>
-        <th>Пол</th>
-        <th>Возрастная группа</th>
-        <th>Статус</th>
-        <th>${useGun ? 'Офиц. время' : 'Чистое время'}</th>
-        <th>Темп (мин/км)</th>
-    </tr>`;
-
-    const tbody = document.getElementById('segmentModeBody');
-    tbody.innerHTML = '';
-
-    if (!visible.length) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#888;">Нет данных для выбранных фильтров</td></tr>`;
-        return;
-    }
-
-    visible.forEach((row, idx) => {
-        const bib = String(row.start_number || '');
-        const runner = runnerByBib[bib] || {};
-
-        // Год рождения из основных данных
-        let birthYear = '-';
-        if (runner.birthdate) {
-            const year = new Date(runner.birthdate).getFullYear();
-            if (year > 0) birthYear = year;
-        }
-
-        // Дистанция из основных данных
-        const distance = runner.event || runner.distance || '-';
-
-        // Пол с тегом
-        const sexVal = row.sex || runner.gender || '';
-        let genderClass = '';
-        let genderText = sexVal || 'N/A';
-        if (sexVal === 'Мужчина' || sexVal === 'male') { genderClass = 'gender-male'; genderText = 'Мужчина'; }
-        else if (sexVal === 'Женщина' || sexVal === 'female') { genderClass = 'gender-female'; genderText = 'Женщина'; }
-
-        // Нормализуем категорию
-        const category = KMUtils.normalizeCategory(row.category || '');
-
-        const rawTime = useGun ? (row.sg_time_gun || row.sg_time_clear) : row.sg_time_clear;
-        const rawPace = useGun ? (row.sg_pace_avg_gun || row.sg_pace_avg) : row.sg_pace_avg;
-        const pace = rawPace ? formatSegmentPace(rawPace) : '-';
-
-        const tr = document.createElement('tr');
-        tr.className = 'runner-row';
-        if (row.result_id) tr.dataset.resultId = row.result_id;
-        tr.innerHTML = `
-            <td>${row.start_number || idx + 1}</td>
-            <td>${row.surname || ''}</td>
-            <td>${row.name || ''}</td>
-            <td>${birthYear}</td>
-            <td class="distance-col">${distance}</td>
-            <td><span class="gender-tag ${genderClass}">${genderText}</span></td>
-            <td>${category}</td>
-            <td class="status-finished status-col">Финишировал</td>
-            <td class="time-cell time-col">${formatTime(rawTime) || '-'}</td>
-            <td class="pace-cell pace-col">${pace}</td>
-        `;
-        if (row.result_id) {
-            tr.addEventListener('click', function() {
-                openDetailPanel(this, String(row.result_id));
-            });
-        }
-        tbody.appendChild(tr);
-    });
+function getRaceStats() {
+    const finishers = allRunners.filter(r => r.status === 'Finished').length;
+    const raceComplete = finishers > 0 && !allRunners.some(r => r.status === 'Running');
+    return { finishers, raceComplete };
 }

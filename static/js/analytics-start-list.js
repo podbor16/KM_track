@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     updatePageTitle();
     loadRunnersData();
     new SSEClient('/api/sse/notify', {
-        startlist_updated: () => loadRunnersData()
+        startlist_updated: () => loadRunnersData(true)
     });
 });
 
@@ -79,12 +79,14 @@ function updatePageTitle() {
 }
 
 // Функция загрузки данных
-async function loadRunnersData() {
+async function loadRunnersData(silent = false) {
     console.log('Загрузка данных для стартового списка, событие:', currentEvent);
-    allRunners = [];
-    filteredRunners = [];
-    document.getElementById('startListBody').innerHTML = '';
-    showLoading(true);
+    if (!silent) {
+        allRunners = [];
+        filteredRunners = [];
+        document.getElementById('startListBody').innerHTML = '';
+        showLoading(true);
+    }
 
     try {
         // Загружаем зарегистрированных участников из БД с фильтром по событию
@@ -110,13 +112,17 @@ async function loadRunnersData() {
         // Заполняем фильтры
         populateAgeGroups(allRunners);
         populateDistances(allRunners);
-        
+
         applyFilters();
-        showLoading(false);
+        if (!silent) showLoading(false);
     } catch (error) {
-        console.error('Ошибка загрузки данных:', error);
-        showError('Ошибка загрузки данных: ' + error.message);
-        showLoading(false);
+        if (!silent) {
+            console.error('Ошибка загрузки данных:', error);
+            showError('Ошибка загрузки данных: ' + error.message);
+            showLoading(false);
+        } else {
+            console.warn('⚠️ Фоновое обновление стартового списка не удалось:', error.message);
+        }
     }
 }
 

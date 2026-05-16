@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=12">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=13">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 
 </head>
@@ -78,7 +78,6 @@
 
       <div id="loadingIndicator" class="km-loading" style="display:none">Загрузка данных...</div>
       <div id="errorIndicator" class="km-error" style="display:none"></div>
-      <div id="segmentTabsContainer" class="km-segment-tabs" style="display:none"></div>
 
       <div class="km-table-wrap" id="resultsWrapper">
         <table id="resultsTable" class="km-table">
@@ -95,18 +94,12 @@
         </table>
       </div>
 
-      <div class="km-table-wrap" id="segmentModeWrapper" style="display:none">
-        <table id="segmentModeTable" class="km-table">
-          <thead id="segmentModeHead"></thead>
-          <tbody id="segmentModeBody"></tbody>
-        </table>
-      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script src="/static/js/utils.js?v=4"></script>
     <script src="/static/js/realtime.js?v=1"></script>
-    <script src="/static/js/analytics-results.js?v=19"></script>
+    <script src="/static/js/analytics-results.js?v=20"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}

@@ -100,21 +100,21 @@ h1 {
   margin-bottom: 12px;
 }
 
-/* ── Segment tabs (КТ buttons) ───────────────────── */
-.km-segment-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.segment-tab-btn {
-  padding: 6px 14px;
-  border: 2px solid var(--km-primary);
-  border-radius: 20px;
-  background: #fff;
+/* ── Profile button ──────────────────────────────── */
+.detail-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.km-btn-profile {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1.5px solid var(--km-primary);
+  border-radius: 12px;
   color: var(--km-primary);
+  font-size: 11px;
   font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
-  font-family: var(--km-font-ui);
-  transition: all .15s;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
 }
-.segment-tab-btn.active, .segment-tab-btn:hover { background: var(--km-primary); color: #fff; }
+.km-btn-profile:hover { background: var(--km-primary); color: #fff; }
 
 /* ── Results table ───────────────────────────────── */
 .km-table-wrap {
