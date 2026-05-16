@@ -169,13 +169,7 @@ def calculate_live_position(
     secs = int(secs_per_km % 60)
     pace_str = f"{mins}:{secs:02d}"
 
-    kt_wall_dt = start_dt + last_kt_td if isinstance(last_kt_td, timedelta) else start_dt
-    if kt_wall_dt > now:
-        # КТ ещё впереди по реальному времени: маркер стоит точно на КТ и ждёт
-        current_distance = kt_dist
-    else:
-        elapsed_since_kt = (now - kt_wall_dt).total_seconds() / 3600.0
-        # Ограничиваем разумным значением: не более 24 часов с момента КТ (защита от прошедших событий)
-        elapsed_since_kt = min(elapsed_since_kt, 24.0)
-        current_distance = min(kt_dist + speed_kmh * elapsed_since_kt, total_distance)
+    # JS анимирует от last_kt_unix_ms: distKm = kt_dist + speed × (now − last_kt_unix_ms)
+    # Возвращаем позицию AT checkpoint — экстраполяцию делает клиент
+    current_distance = kt_dist
     return speed_kmh, current_distance, pace_str
