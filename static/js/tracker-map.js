@@ -162,21 +162,37 @@ function buildMarkerIcon(runner) {
     const fontSize = String(runner.start_number).length >= 3 ? '11px' : '13px';
 
     const anim = runnerAnimations[runnerId];
+    const isActive = runnerId === activeRunnerId;
+    const statusClass = anim?.status === 'running' ? 'running'
+                      : anim?.status === 'finished' ? 'finished' : '';
+    const activeClass = isActive ? ' runner-marker--active' : '';
+
+    // Phase-sync: negative delay places animation at the correct point in the
+    // global clock so icon rebuilds (every 1500 ms) don't reset the rhythm.
+    const BREATHE_MS = 2200;
+    const SEL_MS     = 2000;
+    const now        = Date.now();
+    const breatheDelay = -(now % BREATHE_MS);
+    const trail1Delay  = breatheDelay + 150;  // trail follows circle by 150 ms
+    const trail2Delay  = breatheDelay + 300;
+    const selDelay     = -(now % SEL_MS);
+    const circleDelay  = isActive ? selDelay : breatheDelay;
+
     let trailHtml = '';
     if (anim && anim.status === 'running' && anim.bearing != null) {
         const rad = anim.bearing * Math.PI / 180;
         const dx1 = -Math.sin(rad) * 26, dy1 = Math.cos(rad) * 26;
         const dx2 = -Math.sin(rad) * 44, dy2 = Math.cos(rad) * 44;
         trailHtml = `
-            <div style="position:absolute;top:${26+dy1}px;left:${26+dx1}px;width:20px;height:20px;border-radius:50%;background:${color};opacity:0.55;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);transform:translate(-50%,-50%);pointer-events:none;"></div>
-            <div style="position:absolute;top:${26+dy2}px;left:${26+dx2}px;width:13px;height:13px;border-radius:50%;background:${color};opacity:0.35;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transform:translate(-50%,-50%);pointer-events:none;"></div>`;
+            <div class="runner-trail-1" style="position:absolute;top:${26+dy1}px;left:${26+dx1}px;width:20px;height:20px;border-radius:50%;background:${color};opacity:0.55;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);transform:translate(-50%,-50%);pointer-events:none;animation-delay:${trail1Delay}ms;"></div>
+            <div class="runner-trail-2" style="position:absolute;top:${26+dy2}px;left:${26+dx2}px;width:13px;height:13px;border-radius:50%;background:${color};opacity:0.35;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transform:translate(-50%,-50%);pointer-events:none;animation-delay:${trail2Delay}ms;"></div>`;
     }
 
     return L.divIcon({
-        className: `runner-marker runner-${runnerId}`,
+        className: `runner-marker runner-${runnerId} ${statusClass}${activeClass}`,
         html: `<div style="position:relative;width:52px;height:52px;overflow:visible;">
             ${trailHtml}
-            <div style="
+            <div class="runner-circle" style="
                 position:absolute;top:0;left:0;
                 background:${color};color:white;
                 width:52px;height:52px;border-radius:50%;
@@ -184,6 +200,7 @@ function buildMarkerIcon(runner) {
                 font-weight:bold;font-size:${fontSize};
                 border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);
                 box-sizing:border-box;text-align:center;line-height:1;overflow:hidden;
+                animation-delay:${circleDelay}ms;
             ">${runner.start_number}</div>
         </div>`,
         iconSize: [52, 52],
@@ -458,35 +475,51 @@ function updateRunnerMarkerPosition(runner) {
         const newSpeed = runner.speed > 0 ? runner.speed : 10.0;
         anim.color  = getStatusColor(runner.status, runner.lap ?? 0);
 
-        const now = Date.now();
+        // --- плавная коррекция позиции (lerp) при изменении данных ---
+        const nowMs = Date.now();
+        const isNewKt = runner.last_kt_unix_ms && (runner.last_kt_unix_ms !== anim.lastKtUnixMs);
 
-        // Опорная точка из новых данных сервера
-        let newBaseDist, newBaseTimeMs;
+        if (runner.last_kt_unix_ms && !isNewKt && anim.baseDist != null) {
+            // Та же КТ, изменились speed или данные — рассчитываем отклонение
+            const elH = (nowMs - (anim.baseTimeMs || nowMs)) / 3_600_000;
+            const phys = Math.min(eventDistance || 5, Math.max(
+                anim.baseDist || 0, (anim.baseDist || 0) + (anim.speed || 10) * elH
+            ));
+            let currentRender = phys;
+            if (anim.correctionStartMs && (nowMs - anim.correctionStartMs) < (anim.correctionDurationMs || 1500)) {
+                const ct = Math.min(1, (nowMs - anim.correctionStartMs) / (anim.correctionDurationMs || 1500));
+                const ce = ct < 0.5 ? 2*ct*ct : -1+(4-2*ct)*ct;
+                currentRender = phys + (anim.renderCorrection || 0) * (1 - ce);
+            }
+            const newPhysDist = (runner.current_distance || 0)
+                + newSpeed * (nowMs - runner.last_kt_unix_ms) / 3_600_000;
+            const delta = currentRender - newPhysDist;
+            if (delta > 0.03) {
+                // Рендер впереди истины — мгновенный snap (не рисуем движение назад)
+                anim.renderCorrection = 0;
+                anim.correctionStartMs = null;
+            } else if (delta < -0.03) {
+                // Рендер позади истины — плавный catch-up за 1.5 сек
+                anim.renderCorrection = delta;
+                anim.correctionStartMs = nowMs;
+                anim.correctionDurationMs = 1500;
+            }
+        } else {
+            // Новая КТ или первое обновление — мгновенный snap
+            anim.renderCorrection = 0;
+            anim.correctionStartMs = null;
+        }
+        anim.lastKtUnixMs = runner.last_kt_unix_ms;
+        anim.speed = newSpeed;
+
         if (runner.last_kt_unix_ms) {
-            newBaseDist   = runner.current_distance || 0;
-            newBaseTimeMs = runner.last_kt_unix_ms;
+            anim.baseDist   = runner.current_distance || 0;
+            anim.baseTimeMs = runner.last_kt_unix_ms;
         } else {
             const startOffsetMs = (runner.time_clear_start_s ?? 0) * 1000;
-            newBaseDist   = 0;
-            newBaseTimeMs = raceGunUnixMs ? raceGunUnixMs + startOffsetMs : serverTimeUnix;
+            anim.baseDist   = 0;
+            anim.baseTimeMs = raceGunUnixMs ? raceGunUnixMs + startOffsetMs : serverTimeUnix;
         }
-
-        // Экстраполируем обе опорные точки к текущему моменту
-        const newNow = newBaseDist + newSpeed * (now - newBaseTimeMs) / 3_600_000;
-        const curNow = anim.baseDist !== undefined
-            ? (anim.baseDist || 0) + (anim.speed || newSpeed) * (now - (anim.baseTimeMs || now)) / 3_600_000
-            : -1;
-
-        if (newNow > curNow) {
-            // Сервер впереди нашей оценки — принимаем новую опорную точку (КТ-прыжок)
-            anim.baseDist   = newBaseDist;
-            anim.baseTimeMs = newBaseTimeMs;
-        } else {
-            // Наша оценка впереди — сохраняем текущую позицию, обновляем только скорость
-            anim.baseDist   = Math.max(0, curNow);
-            anim.baseTimeMs = now;
-        }
-        anim.speed = newSpeed;
     }
 
     marker.setIcon(buildMarkerIcon(runner));
@@ -532,8 +565,16 @@ function animateRunnerFrame() {
             distKm = totalDistKm;
         } else if (raceStarted && anim.status === 'running') {
             const elapsedH = (now - (anim.baseTimeMs || now)) / 3_600_000;
-            // Math.max: если КТ ещё в будущем (elapsedH < 0) — маркер стоит на baseDist
-            distKm = Math.min(totalDistKm, Math.max(anim.baseDist || 0, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH));
+            const physDist = Math.min(totalDistKm, Math.max(anim.baseDist || 0, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH));
+            if (anim.correctionStartMs && (now - anim.correctionStartMs) < (anim.correctionDurationMs || 1500)) {
+                const t = (now - anim.correctionStartMs) / (anim.correctionDurationMs || 1500);
+                const eased = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+                distKm = physDist + (anim.renderCorrection || 0) * (1 - eased);
+            } else {
+                anim.correctionStartMs = null;
+                anim.renderCorrection = 0;
+                distKm = physDist;
+            }
         }
         // notstarted или race not started: distKm = 0
 
@@ -545,14 +586,18 @@ function animateRunnerFrame() {
 }
 
 function getCoordForDist(distKm, totalDistKm, maxIdx) {
-    // Снапп к точным координатам КТ если маркер близко к ней (≤50м)
     for (const cp of eventCheckpoints) {
         if (Math.abs(distKm - cp.distance_km) <= 0.05) {
             return [cp.lat, cp.lon];
         }
     }
-    const idx = Math.min(maxIdx, Math.round(maxIdx * distKm / totalDistKm));
-    return routeCoordinates[idx];
+    const exactIdx = maxIdx * distKm / totalDistKm;
+    const i0 = Math.min(maxIdx - 1, Math.floor(exactIdx));
+    const i1 = i0 + 1;
+    const t = exactIdx - i0;
+    const p0 = routeCoordinates[i0];
+    const p1 = routeCoordinates[i1];
+    return [p0[0] + t * (p1[0] - p0[0]), p0[1] + t * (p1[1] - p0[1])];
 }
 
 function startAnimationLoop() {
