@@ -369,12 +369,21 @@ function buildPopupContent(runner) {
 }
 
 function showRunnerPanel(runner) {
+    // Сбрасываем z-index предыдущего активного маркера
+    if (activeRunnerId && runnerMarkers[activeRunnerId]) {
+        runnerMarkers[activeRunnerId].setZIndexOffset(0);
+    }
+
     const panel = document.getElementById('runner-panel');
     const content = document.getElementById('runner-panel-content');
     content.innerHTML = buildPopupContent(runner);
     panel.classList.remove('runner-panel--hidden');
     activeRunnerId = String(runner.id);
     updateSelectedList();
+
+    // Поднимаем маркер выбранного участника наверх
+    const marker = runnerMarkers[activeRunnerId];
+    if (marker) marker.setZIndexOffset(1000);
 }
 
 function showRunnerPanelById(runnerId) {
@@ -383,6 +392,9 @@ function showRunnerPanelById(runnerId) {
 }
 
 function hideRunnerPanel() {
+    if (activeRunnerId && runnerMarkers[activeRunnerId]) {
+        runnerMarkers[activeRunnerId].setZIndexOffset(0);
+    }
     document.getElementById('runner-panel').classList.add('runner-panel--hidden');
     activeRunnerId = null;
     updateSelectedList();
