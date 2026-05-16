@@ -235,180 +235,243 @@ function getKtRanks(runner, ktCode) {
 
 function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
+    const isRunning = status.includes('running') || status.includes('started');
+    const isFinished = status.includes('finish');
 
-    let startClockHTML = '';
+    // Circle badge — same color as map marker
+    const circleColor = getStatusColor(runner.status, runner.lap ?? 0);
+    const numLen = String(runner.start_number).length;
+    const numFontSize = numLen >= 4 ? '10px' : numLen >= 3 ? '11px' : '13px';
+
+    // Start time string
+    let startTimeStr = '';
     if (raceGunUnixMs != null) {
         const offset = runner.time_clear_start_s ?? 0;
         const startUnix = raceGunUnixMs + offset * 1000;
-        const startTime = new Date(startUnix).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        startClockHTML = `<div><strong>Время старта:</strong> ${startTime}</div>`;
+        startTimeStr = new Date(startUnix).toLocaleTimeString('ru-RU', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
     }
 
-    const baseHTML = `
-        <div style="font-size: 12px; min-width: 220px; text-align: left;">
-            <div style="text-align: center; margin-bottom: 8px;">
-                <div><strong>№${runner.start_number}</strong></div>
-                <div><strong>${runner.full_name}</strong></div>
+    const pillLabel = isFinished ? 'Финишировал' : isRunning ? 'Бежит' : 'Не стартовал';
+    const pillClass = isFinished ? 'card-c__pill card-c__pill--finished' : 'card-c__pill';
+    const subParts = [
+        runner.category ? KMUtils.normalizeCategory(runner.category) : null,
+        startTimeStr ? `Старт ${startTimeStr}` : null
+    ].filter(Boolean);
+
+    const topHTML = `
+        <div class="card-c__top">
+            <div class="card-c__circle" style="background:${circleColor};font-size:${numFontSize}">
+                ${runner.start_number}
             </div>
-            <div style="border-top: 1px solid #ddd; padding-top: 8px; margin-bottom: 8px;">
-                ${runner.category ? `<div><strong>Категория:</strong> ${KMUtils.normalizeCategory(runner.category)}</div>` : ''}
-                ${startClockHTML}
+            <div class="card-c__title">
+                <div class="card-c__name">${runner.full_name}</div>
+                ${subParts.length ? `<div class="card-c__sub">${subParts.join(' · ')}</div>` : ''}
             </div>
-    `;
+            <div class="${pillClass}">${pillLabel}</div>
+        </div>`;
 
-    let contentHTML = '';
-
-    if (status.includes('finish')) {
-        const officialTime = runner.time_gun_finish
-            ? `<div><strong>Официальное время:</strong> ${runner.time_gun_finish}</div>`
-            : '';
-        const clearTime = runner.time_clear_finish
-            ? `<div><strong>Чистое время:</strong> ${runner.time_clear_finish}</div>`
-            : '';
-        const officialPace = runner.finish_pace_avg_gun
-            ? `<div><strong>Официальный темп:</strong> ${runner.finish_pace_avg_gun}</div>`
-            : '';
-        const cleanPace = runner.finish_pace_avg_clean
-            ? `<div><strong>Чистый темп:</strong> ${runner.finish_pace_avg_clean}</div>`
-            : '';
-        const rankSex = runner.rank_sex
-            ? `<div><strong>Место (пол):</strong> ${runner.rank_sex}</div>`
-            : '';
-        const rankCategory = runner.rank_category
-            ? `<div><strong>Место (категория):</strong> ${runner.rank_category}</div>`
-            : '';
-
-        contentHTML = `
-            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                ${officialTime}
-                ${clearTime}
-                ${officialPace}
-                ${cleanPace}
-                <div><strong>Место (абсолют):</strong> ${runner.rank_absolute || '-'}</div>
-                ${rankSex}
-                ${rankCategory}
-            </div>
-        `;
-    } else if (status.includes('running') || status.includes('started')) {
-        const lastCP = getLastCheckpoint(runner);
-        const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
-
-        // --- Прогноз финиша ---
-        let finishEta = '-';
-        const _buildEta = (finish_unix_ms) => {
-            let s = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-            if (raceGunUnixMs) {
-                const res_s = Math.round((finish_unix_ms - raceGunUnixMs) / 1000);
-                if (res_s > 0) {
-                    const rh = Math.floor(res_s / 3600);
-                    const rm = Math.floor((res_s % 3600) / 60);
-                    const rs = res_s % 60;
-                    s += rh > 0
-                        ? ` (рез.: ${rh}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')})`
-                        : ` (рез.: ${rm}:${String(rs).padStart(2,'0')})`;
-                }
-            }
-            return s;
-        };
-
-        if (hasStarted && lastCP && eventDistance > 0) {
-            const ktSecs = durationToSeconds(lastCP.time);
-            const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
-            if (ktDist > 0 && ktSecs > 0) {
-                const remaining_km = eventDistance - ktDist;
-                if (remaining_km > 0) {
-                    const secsPerKm = ktSecs / ktDist;
-                    const remaining_secs = remaining_km * secsPerKm;
-                    const baseMs = runner.last_kt_unix_ms || serverTimeUnix;
-                    finishEta = _buildEta(baseMs + remaining_secs * 1000);
-                } else {
-                    finishEta = 'Финишировал';
-                }
-            }
-        } else if (hasStarted && runner.speed > 0 && eventDistance > 0 && raceGunUnixMs) {
-            const startUnixMs = raceGunUnixMs + (runner.time_clear_start_s ?? 0) * 1000;
-            const totalRaceSecs = eventDistance / runner.speed * 3600;
-            finishEta = _buildEta(startUnixMs + totalRaceSecs * 1000);
-        }
-
-        const etaHTML = finishEta !== '-'
-            ? `<div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
-                   <div><strong>Прогноз финиша:</strong> ${finishEta}</div>
-               </div>`
-            : '';
-
-        if (lastCP === null) {
-            // ── До первой КТ: только статус, темп и прогноз ──
-            const paceLabel = runner.pace_source === 'personal' && runner.prev_year
-                ? `Темп (личный ${runner.prev_year})`
-                : runner.pace_source === 'category' && runner.prev_year
-                    ? `Темп (ср. кат. ${runner.prev_year})`
-                    : 'Расчётный темп';
-            const paceRow = runner.current_pace
-                ? `<div><strong>${paceLabel}:</strong> ${runner.current_pace} мин/км</div>`
-                : '';
-
-            contentHTML = `
-                <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-                    <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                    ${paceRow}
-                    ${etaHTML}
-                </div>
-            `;
-        } else {
-            // ── После КТ: КТ + время + темп + места + прогноз ──
-            const ktLabel    = lastCP.name;
-            const ktTimeStr  = parseDuration(lastCP.time);
-
-            // Кумулятивный темп до этой КТ
-            let paceRow = '';
-            const ktSecs = durationToSeconds(lastCP.time);
-            const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
-            if (ktSecs > 0 && ktDist > 0) {
-                const spk = ktSecs / ktDist;
-                const paceStr = `${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')}`;
-                paceRow = `<div><strong>Темп:</strong> ${paceStr} мин/км</div>`;
-            }
-
-            // Места на КТ (рассчитываются по allRunners)
-            let placesHTML = '';
-            const ranks = getKtRanks(runner, lastCP.code);
-            if (ranks) {
-                const sexLabel = runner.sex === 'Ж' || runner.sex === 'F' || runner.sex === 'female' ? 'жен.' : 'муж.';
-                placesHTML = `
-                    <div><strong>Место на «${ktLabel}» (абсолют):</strong> ${ranks.absolute ?? '-'}</div>
-                    ${ranks.sex     ? `<div><strong>Место на «${ktLabel}» (${sexLabel}):</strong> ${ranks.sex}</div>`  : ''}
-                    ${ranks.category ? `<div><strong>Место на «${ktLabel}» (кат.):</strong> ${ranks.category}</div>` : ''}
-                `;
-            }
-
-            contentHTML = `
-                <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-                    <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                    <div><strong>Последняя КТ:</strong> ${ktLabel}</div>
-                    <div><strong>Время на «${ktLabel}»:</strong> ${ktTimeStr}</div>
-                    ${paceRow}
-                    ${placesHTML}
-                    ${etaHTML}
-                </div>
-            `;
-        }
-    } else {
-        contentHTML = `
-            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-            </div>
-        `;
+    // ── Not started ──────────────────────────────────
+    if (!isRunning && !isFinished) {
+        return `<div class="card-c">${topHTML}</div>`;
     }
 
-    return baseHTML + contentHTML + '</div>';
+    // ── Finished ─────────────────────────────────────
+    if (isFinished) {
+        const finishPace = runner.finish_pace_avg_gun || runner.finish_pace_avg_clean || '-';
+        const distVal = eventDistance > 0 ? String(eventDistance) : '-';
+        const rankAbs = runner.rank_absolute || '-';
+        const clearTime = runner.time_clear_finish || '';
+        const gunTime = runner.time_gun_finish || '';
+
+        const statsHTML = `
+            <div class="card-c__stats-grid">
+                <div class="card-c__stat">
+                    <div class="card-c__stat-val">${finishPace}</div>
+                    <div class="card-c__stat-lbl">Темп</div>
+                </div>
+                <div class="card-c__stat">
+                    <div class="card-c__stat-val">${distVal}<span class="unit"> км</span></div>
+                    <div class="card-c__stat-lbl">Дистанция</div>
+                </div>
+                <div class="card-c__stat">
+                    <div class="card-c__stat-val">${rankAbs}</div>
+                    <div class="card-c__stat-lbl">Место</div>
+                </div>
+                <div class="card-c__stat card-c__stat--desktop-only">
+                    <div class="card-c__stat-val">${clearTime || gunTime || '-'}</div>
+                    <div class="card-c__stat-lbl">Чистое вр.</div>
+                </div>
+            </div>`;
+
+        let ranksHTML = '';
+        if (runner.rank_absolute || runner.rank_sex || runner.rank_category) {
+            ranksHTML = `
+                <div class="card-c__ranks-col">
+                    <div class="card-c__ranks-row">
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${runner.rank_absolute || '-'}</div>
+                            <div class="card-c__rank-lbl">Абсолют</div>
+                        </div>
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${runner.rank_sex || '-'}</div>
+                            <div class="card-c__rank-lbl">Пол</div>
+                        </div>
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${runner.rank_category || '-'}</div>
+                            <div class="card-c__rank-lbl">Катег.</div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        const resultHTML = gunTime ? `
+            <div class="card-c__eta" style="grid-column:1/-1">
+                <div class="card-c__eta-lbl">Результат</div>
+                <div class="card-c__eta-vals">
+                    <div class="card-c__eta-val">${gunTime}</div>
+                    ${clearTime ? `<div class="card-c__eta-time">чистое ${clearTime}</div>` : ''}
+                </div>
+            </div>` : '';
+
+        return `<div class="card-c">${topHTML}${statsHTML}<div class="card-c__body">${ranksHTML}${resultHTML}</div></div>`;
+    }
+
+    // ── Running ──────────────────────────────────────
+    const lastCP = getLastCheckpoint(runner);
+    const pace = runner.current_pace || '-';
+    const distCurrent = runner.current_distance != null ? Number(runner.current_distance).toFixed(1) : '?';
+    const distTotal = eventDistance > 0 ? Number(eventDistance).toFixed(1) : '?';
+    const rankAbs = runner.rank_absolute || '-';
+
+    // 4th desktop stat: KT time
+    let ktTimeShort = '-';
+    let ktDesktopLbl = 'Время КТ';
+    if (lastCP) {
+        ktTimeShort = parseDuration(lastCP.time);
+        ktDesktopLbl = `Время ${lastCP.name}`;
+    }
+
+    const statsHTML = `
+        <div class="card-c__stats-grid">
+            <div class="card-c__stat">
+                <div class="card-c__stat-val">${pace}</div>
+                <div class="card-c__stat-lbl">Темп</div>
+            </div>
+            <div class="card-c__stat">
+                <div class="card-c__stat-val">${distCurrent}<span class="unit">/${distTotal}</span></div>
+                <div class="card-c__stat-lbl">км</div>
+            </div>
+            <div class="card-c__stat">
+                <div class="card-c__stat-val">${rankAbs}</div>
+                <div class="card-c__stat-lbl">Место</div>
+            </div>
+            <div class="card-c__stat card-c__stat--desktop-only">
+                <div class="card-c__stat-val">${ktTimeShort}</div>
+                <div class="card-c__stat-lbl">${ktDesktopLbl}</div>
+            </div>
+        </div>`;
+
+    // KT block
+    let ktBlockHTML = '';
+    if (lastCP) {
+        const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
+        const ktSecs = durationToSeconds(lastCP.time);
+        let ktPaceStr = '';
+        if (ktSecs > 0 && ktDist > 0) {
+            const spk = ktSecs / ktDist;
+            ktPaceStr = `${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')} мин/км`;
+        }
+        ktBlockHTML = `
+            <div class="card-c__kt-block">
+                <div class="card-c__kt-left">
+                    <div class="card-c__kt-label">Последняя КТ</div>
+                    <div class="card-c__kt-name">${lastCP.name}${ktDist > 0 ? ` · ${ktDist} км` : ''}</div>
+                </div>
+                <div class="card-c__kt-right">
+                    <div class="card-c__kt-time">${parseDuration(lastCP.time)}</div>
+                    ${ktPaceStr ? `<div class="card-c__kt-pace">${ktPaceStr}</div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    // Ranks on last KT
+    let ranksHTML = '';
+    if (lastCP) {
+        const ranks = getKtRanks(runner, lastCP.code);
+        if (ranks) {
+            ranksHTML = `
+                <div class="card-c__ranks-col">
+                    <div class="card-c__ranks-row">
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${ranks.absolute ?? '-'}</div>
+                            <div class="card-c__rank-lbl">Абсолют</div>
+                        </div>
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${ranks.sex ?? '-'}</div>
+                            <div class="card-c__rank-lbl">Пол</div>
+                        </div>
+                        <div class="card-c__rank">
+                            <div class="card-c__rank-val">${ranks.category ?? '-'}</div>
+                            <div class="card-c__rank-lbl">Катег.</div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+    }
+
+    // ETA
+    let etaHTML = '';
+    const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
+    let finishEtaMs = null;
+    if (hasStarted && lastCP && eventDistance > 0) {
+        const ktSecs = durationToSeconds(lastCP.time);
+        const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
+        if (ktDist > 0 && ktSecs > 0) {
+            const remaining_km = eventDistance - ktDist;
+            if (remaining_km > 0) {
+                const secsPerKm = ktSecs / ktDist;
+                const baseMs = runner.last_kt_unix_ms || serverTimeUnix;
+                finishEtaMs = baseMs + remaining_km * secsPerKm * 1000;
+            }
+        }
+    } else if (hasStarted && runner.speed > 0 && eventDistance > 0 && raceGunUnixMs) {
+        const startUnixMs = raceGunUnixMs + (runner.time_clear_start_s ?? 0) * 1000;
+        finishEtaMs = startUnixMs + (eventDistance / runner.speed) * 3_600_000;
+    }
+
+    if (finishEtaMs) {
+        const astroStr = new Date(finishEtaMs).toLocaleTimeString('ru-RU', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        let resultStr = '';
+        if (raceGunUnixMs) {
+            const res_s = Math.round((finishEtaMs - raceGunUnixMs) / 1000);
+            if (res_s > 0) {
+                const rh = Math.floor(res_s / 3600);
+                const rm = Math.floor((res_s % 3600) / 60);
+                const rs = res_s % 60;
+                resultStr = rh > 0
+                    ? `${rh}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`
+                    : `${rm}:${String(rs).padStart(2,'0')}`;
+            }
+        }
+        etaHTML = `
+            <div class="card-c__eta" style="grid-column:1/-1">
+                <div class="card-c__eta-lbl">Прогноз финиша</div>
+                <div class="card-c__eta-vals">
+                    <div class="card-c__eta-val">${resultStr || astroStr}</div>
+                    ${resultStr ? `<div class="card-c__eta-time">финиш в ${astroStr}</div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    return `<div class="card-c">${topHTML}${statsHTML}<div class="card-c__body">${ktBlockHTML}${ranksHTML}${etaHTML}</div></div>`;
 }
 
 function showRunnerPanel(runner) {
-    // Сбрасываем z-index предыдущего активного маркера
+    // Reset z-index of previous active marker
     if (activeRunnerId && runnerMarkers[activeRunnerId]) {
         runnerMarkers[activeRunnerId].setZIndexOffset(0);
     }
@@ -416,11 +479,18 @@ function showRunnerPanel(runner) {
     const panel = document.getElementById('runner-panel');
     const content = document.getElementById('runner-panel-content');
     content.innerHTML = buildPopupContent(runner);
+
+    // Apply desktop layout modifier
+    const card = content.querySelector('.card-c');
+    if (card) {
+        card.classList.toggle('card-c--desktop', window.innerWidth >= 640);
+    }
+
     panel.classList.remove('runner-panel--hidden');
     activeRunnerId = String(runner.id);
     updateSelectedList();
 
-    // Поднимаем маркер выбранного участника наверх
+    // Elevate selected marker
     const marker = runnerMarkers[activeRunnerId];
     if (marker) marker.setZIndexOffset(1000);
 }
