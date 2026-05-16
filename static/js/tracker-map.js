@@ -168,8 +168,8 @@ function buildMarkerIcon(runner) {
         const dx1 = -Math.sin(rad) * 26, dy1 = Math.cos(rad) * 26;
         const dx2 = -Math.sin(rad) * 44, dy2 = Math.cos(rad) * 44;
         trailHtml = `
-            <div style="position:absolute;top:${26+dy1}px;left:${26+dx1}px;width:13px;height:13px;border-radius:50%;background:${color};opacity:0.4;transform:translate(-50%,-50%);pointer-events:none;"></div>
-            <div style="position:absolute;top:${26+dy2}px;left:${26+dx2}px;width:8px;height:8px;border-radius:50%;background:${color};opacity:0.2;transform:translate(-50%,-50%);pointer-events:none;"></div>`;
+            <div style="position:absolute;top:${26+dy1}px;left:${26+dx1}px;width:20px;height:20px;border-radius:50%;background:${color};opacity:0.55;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);transform:translate(-50%,-50%);pointer-events:none;"></div>
+            <div style="position:absolute;top:${26+dy2}px;left:${26+dx2}px;width:13px;height:13px;border-radius:50%;background:${color};opacity:0.35;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transform:translate(-50%,-50%);pointer-events:none;"></div>`;
     }
 
     return L.divIcon({
