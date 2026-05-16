@@ -669,6 +669,12 @@ body {
     white-space: nowrap;
 }
 
+.card-c__pill--finished {
+    color: #888;
+    background: #f2f2f2;
+    border-color: #ddd;
+}
+
 /* STATS GRID */
 .card-c__stats-grid {
     display: grid;
