@@ -455,10 +455,19 @@ function updateRunnerMarkerPosition(runner) {
         anim.status = 'finished';
     } else {
         anim.status = 'running';
-        anim.baseDist   = runner.current_distance || 0;
-        anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
-        anim.baseTimeMs = runner.last_kt_unix_ms ?? serverTimeUnix;
-        anim.color      = getStatusColor(runner.status, runner.lap ?? 0);
+        anim.speed  = runner.speed > 0 ? runner.speed : 10.0;
+        anim.color  = getStatusColor(runner.status, runner.lap ?? 0);
+
+        if (runner.last_kt_unix_ms) {
+            // Есть данные КТ — экстраполируем от последней контрольной точки
+            anim.baseDist   = runner.current_distance || 0;
+            anim.baseTimeMs = runner.last_kt_unix_ms;
+        } else {
+            // Нет КТ — стартуем от личного времени пересечения линии старта
+            const startOffsetMs = (runner.time_clear_start_s ?? 0) * 1000;
+            anim.baseDist   = 0;
+            anim.baseTimeMs = raceGunUnixMs ? raceGunUnixMs + startOffsetMs : serverTimeUnix;
+        }
     }
 
     marker.setIcon(buildMarkerIcon(runner));
