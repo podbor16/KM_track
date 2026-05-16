@@ -34,6 +34,7 @@ let eventDistance = 0;
 let runnerAnimations = {};
 let animationFrameId = null;
 let eventCheckpoints = [];  // [{name, distance_km, lat, lon}, ...] — из /api/current-event
+let activeRunnerId = null;  // id участника, чья панель сейчас открыта
 
 let serverTimeUnix = Date.now();
 let raceGunUnixMs = null;
@@ -182,7 +183,7 @@ function calculatePaceFromTime(isoTime, distanceKm) {
     const minutes = Math.floor(secondsPerKm / 60);
     const seconds = Math.round(secondsPerKm % 60);
 
-    return `${minutes}'${String(seconds).padStart(2, '0')}"/km`;
+    return `${minutes}:${String(seconds).padStart(2, '0')} мин/км`;
 }
 
 function findNearestPointOnRoute(targetLat, targetLon) {
@@ -672,6 +673,13 @@ function startAutoUpdate() {
                 const runner = allRunners.find(r => String(r.id) === String(runnerId));
                 if (runner) updateRunnerMarkerPosition(runner);
             });
+            if (activeRunnerId) {
+                const activeRunner = allRunners.find(r => String(r.id) === activeRunnerId);
+                if (activeRunner) {
+                    const content = document.getElementById('runner-panel-content');
+                    if (content) content.innerHTML = buildPopupContent(activeRunner);
+                }
+            }
         } catch (err) {
             console.error('❌ Ошибка SSE данных:', err);
         } finally {

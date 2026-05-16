@@ -8,6 +8,8 @@ async function initMap() {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
+    map.on('click', hideRunnerPanel);
+
     await loadRouteFromAPI();
 }
 
@@ -168,12 +170,37 @@ function buildMarkerIcon(runner) {
     });
 }
 
+function getKtRanks(runner, ktCode) {
+    const passed = allRunners.filter(r => {
+        const cp = r.checkpoints?.[ktCode];
+        return cp && cp.time;
+    });
+    if (passed.length === 0) return null;
+
+    const toSec = r => durationToSeconds(r.checkpoints[ktCode].time);
+    const sorted = [...passed].sort((a, b) => toSec(a) - toSec(b));
+    const myId = String(runner.id);
+
+    const absPos  = sorted.findIndex(r => String(r.id) === myId) + 1;
+    const sexList = sorted.filter(r => r.sex === runner.sex);
+    const sexPos  = sexList.findIndex(r => String(r.id) === myId) + 1;
+    const catList = sorted.filter(r => r.category === runner.category);
+    const catPos  = catList.findIndex(r => String(r.id) === myId) + 1;
+
+    return {
+        absolute: absPos  > 0 ? `${absPos} / ${sorted.length}`  : null,
+        sex:      sexPos  > 0 ? `${sexPos} / ${sexList.length}`  : null,
+        category: catPos  > 0 ? `${catPos} / ${catList.length}`  : null,
+    };
+}
+
 function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
 
     let startClockHTML = '';
-    if (raceGunUnixMs != null && runner.time_clear_start_s != null) {
-        const startUnix = raceGunUnixMs + runner.time_clear_start_s * 1000;
+    if (raceGunUnixMs != null) {
+        const offset = runner.time_clear_start_s ?? 0;
+        const startUnix = raceGunUnixMs + offset * 1000;
         const startTime = new Date(startUnix).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         startClockHTML = `<div><strong>Время старта:</strong> ${startTime}</div>`;
     }
@@ -215,36 +242,20 @@ function buildPopupContent(runner) {
         contentHTML = `
             <div style="border-top: 1px solid #ddd; padding-top: 8px;">
                 <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                <div><strong>Место (абсолют):</strong> ${runner.rank_absolute || '-'}</div>
                 ${officialTime}
                 ${clearTime}
                 ${officialPace}
                 ${cleanPace}
+                <div><strong>Место (абсолют):</strong> ${runner.rank_absolute || '-'}</div>
                 ${rankSex}
                 ${rankCategory}
             </div>
         `;
     } else if (status.includes('running') || status.includes('started')) {
         const lastCP = getLastCheckpoint(runner);
-        const ktLabel  = lastCP?.name ?? '-';
-        const segLabel = lastCP ? `${lastCP.prevName} → ${lastCP.name}` : '-';
-        const lastCPTime = lastCP ? parseDuration(lastCP.time) : '-';
+        const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
 
-        // Интервальный темп последнего участка (не кумулятивный)
-        const lastSegPace = lastCP?.interval_pace || lastCP?.pace || '-';
-
-        // Кумулятивный темп: время_на_КТN / дистанция_до_КТN
-        let currentPaceStr = '-';
-        if (lastCP) {
-            const ktSecs = durationToSeconds(lastCP.time);
-            const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
-            if (ktSecs > 0 && ktDist > 0) {
-                const spk = ktSecs / ktDist;
-                currentPaceStr = `${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')}`;
-            }
-        }
-
-        // Прогноз финиша: консистентен с «Текущий темп» (кумулятивный sec/km)
+        // --- Прогноз финиша ---
         let finishEta = '-';
         const _buildEta = (finish_unix_ms) => {
             let s = new Date(finish_unix_ms).toLocaleTimeString('ru-RU', {
@@ -264,8 +275,6 @@ function buildPopupContent(runner) {
             return s;
         };
 
-        const hasStarted = runner.status && !['Not started', 'notstarted'].includes(runner.status);
-
         if (hasStarted && lastCP && eventDistance > 0) {
             const ktSecs = durationToSeconds(lastCP.time);
             const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
@@ -280,43 +289,74 @@ function buildPopupContent(runner) {
                     finishEta = 'Финишировал';
                 }
             }
-        } else if (hasStarted && runner.speed > 0 && eventDistance > 0) {
-            const remaining_km = eventDistance - (runner.current_distance || 0);
-            if (remaining_km > 0) {
-                const remaining_secs = remaining_km / runner.speed * 3600;
-                const baseMs = runner.last_kt_unix_ms || serverTimeUnix;
-                finishEta = _buildEta(baseMs + remaining_secs * 1000);
-            } else {
-                finishEta = 'Финишировал';
-            }
+        } else if (hasStarted && runner.speed > 0 && eventDistance > 0 && raceGunUnixMs) {
+            const startUnixMs = raceGunUnixMs + (runner.time_clear_start_s ?? 0) * 1000;
+            const totalRaceSecs = eventDistance / runner.speed * 3600;
+            finishEta = _buildEta(startUnixMs + totalRaceSecs * 1000);
         }
 
-        // Прогноз из категории/личного рекорда — только когда нет КТ-данных
-        let forecastRow = '';
-        if (runner.pace_source && lastCP === null) {
+        const etaHTML = finishEta !== '-'
+            ? `<div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
+                   <div><strong>Прогноз финиша:</strong> ${finishEta}</div>
+               </div>`
+            : '';
+
+        if (lastCP === null) {
+            // ── До первой КТ: только статус, темп и прогноз ──
             const paceLabel = runner.pace_source === 'personal' && runner.prev_year
-                ? `Прогноз (личный ${runner.prev_year})`
+                ? `Темп (личный ${runner.prev_year})`
                 : runner.pace_source === 'category' && runner.prev_year
-                    ? `Прогноз (ср. кат. ${runner.prev_year})`
-                    : 'Текущий темп';
-            forecastRow = runner.current_pace
+                    ? `Темп (ср. кат. ${runner.prev_year})`
+                    : 'Расчётный темп';
+            const paceRow = runner.current_pace
                 ? `<div><strong>${paceLabel}:</strong> ${runner.current_pace} мин/км</div>`
                 : '';
-        }
 
-        contentHTML = `
-            <div style="border-top: 1px solid #ddd; padding-top: 8px;">
-                <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
-                <div><strong>Последняя КТ:</strong> ${ktLabel}</div>
-                <div><strong>Время на ${ktLabel}:</strong> ${lastCPTime}</div>
-                ${lastCP ? `<div><strong>Темп участка ${segLabel}:</strong> ${lastSegPace} мин/км</div>
-                <div><strong>Текущий темп:</strong> ${currentPaceStr} мин/км</div>` : forecastRow}
-                <div><strong>Место:</strong> ${runner.rank_absolute || '-'}</div>
-                ${finishEta !== '-' ? `<div style="border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px;">
-                    <div><strong>Прогноз финиша:</strong> ${finishEta}</div>
-                </div>` : ''}
-            </div>
-        `;
+            contentHTML = `
+                <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+                    <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                    ${paceRow}
+                    ${etaHTML}
+                </div>
+            `;
+        } else {
+            // ── После КТ: КТ + время + темп + места + прогноз ──
+            const ktLabel    = lastCP.name;
+            const ktTimeStr  = parseDuration(lastCP.time);
+
+            // Кумулятивный темп до этой КТ
+            let paceRow = '';
+            const ktSecs = durationToSeconds(lastCP.time);
+            const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
+            if (ktSecs > 0 && ktDist > 0) {
+                const spk = ktSecs / ktDist;
+                const paceStr = `${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')}`;
+                paceRow = `<div><strong>Темп:</strong> ${paceStr} мин/км</div>`;
+            }
+
+            // Места на КТ (рассчитываются по allRunners)
+            let placesHTML = '';
+            const ranks = getKtRanks(runner, lastCP.code);
+            if (ranks) {
+                const sexLabel = runner.sex === 'Ж' || runner.sex === 'F' || runner.sex === 'female' ? 'жен.' : 'муж.';
+                placesHTML = `
+                    <div><strong>Место на «${ktLabel}» (абсолют):</strong> ${ranks.absolute ?? '-'}</div>
+                    ${ranks.sex     ? `<div><strong>Место на «${ktLabel}» (${sexLabel}):</strong> ${ranks.sex}</div>`  : ''}
+                    ${ranks.category ? `<div><strong>Место на «${ktLabel}» (кат.):</strong> ${ranks.category}</div>` : ''}
+                `;
+            }
+
+            contentHTML = `
+                <div style="border-top: 1px solid #ddd; padding-top: 8px;">
+                    <div><strong>Статус:</strong> ${getStatusText(runner.status)}</div>
+                    <div><strong>Последняя КТ:</strong> ${ktLabel}</div>
+                    <div><strong>Время на «${ktLabel}»:</strong> ${ktTimeStr}</div>
+                    ${paceRow}
+                    ${placesHTML}
+                    ${etaHTML}
+                </div>
+            `;
+        }
     } else {
         contentHTML = `
             <div style="border-top: 1px solid #ddd; padding-top: 8px;">
@@ -326,6 +366,26 @@ function buildPopupContent(runner) {
     }
 
     return baseHTML + contentHTML + '</div>';
+}
+
+function showRunnerPanel(runner) {
+    const panel = document.getElementById('runner-panel');
+    const content = document.getElementById('runner-panel-content');
+    content.innerHTML = buildPopupContent(runner);
+    panel.classList.remove('runner-panel--hidden');
+    activeRunnerId = String(runner.id);
+    updateSelectedList();
+}
+
+function showRunnerPanelById(runnerId) {
+    const runner = allRunners.find(r => String(r.id) === String(runnerId));
+    if (runner) showRunnerPanel(runner);
+}
+
+function hideRunnerPanel() {
+    document.getElementById('runner-panel').classList.add('runner-panel--hidden');
+    activeRunnerId = null;
+    updateSelectedList();
 }
 
 function createRunnerMarker(runner) {
@@ -339,10 +399,7 @@ function createRunnerMarker(runner) {
     const initialPosition = routeCoordinates[0] || [CONFIG.START_LAT, CONFIG.START_LON];
     const marker = L.marker(initialPosition, { icon: buildMarkerIcon(runner) }).addTo(map);
 
-    marker.bindPopup(buildPopupContent(runner), { minWidth: 200, autopan: false });
-    marker.on('click', e => e.target.openPopup());
-    marker.on('popupopen',  () => activePopups.set(runnerId, true));
-    marker.on('popupclose', () => activePopups.delete(runnerId));
+    marker.on('click', () => showRunnerPanel(runner));
 
     runnerMarkers[runnerId] = marker;
     updateRunnerMarkerPosition(runner);  // инициализировать anim сразу
@@ -366,8 +423,9 @@ function updateRunnerMarkerPosition(runner) {
         anim.status = 'running';
         anim.baseDist   = runner.current_distance || 0;
         anim.speed      = runner.speed > 0 ? runner.speed : 10.0;
-        // Если есть время последней КТ — анимируем от неё; иначе от выстрела или serverTime
-        anim.baseTimeMs = runner.last_kt_unix_ms ?? raceGunUnixMs ?? serverTimeUnix;
+        // KT-runners: baseDist = kt_dist, baseTimeMs = last_kt_unix_ms → маркер у КТ, анимируем вперёд
+        // No-KT runners: baseDist = hist-позиция на serverTimeUnix, baseTimeMs = serverTimeUnix
+        anim.baseTimeMs = runner.last_kt_unix_ms ?? serverTimeUnix;
     }
 
     marker.setIcon(buildMarkerIcon(runner));

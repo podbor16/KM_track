@@ -68,29 +68,30 @@ function updateSelectedList() {
     if (!selectedListDiv) return;
 
     if (selectedRunnerIds.size === 0) {
-        selectedListDiv.innerHTML = '<div style="color: #999; text-align: center; padding: 15px; font-size: 13px;">Нет отслеживаемых участников</div>';
+        selectedListDiv.innerHTML = '<div class="empty-selection">Нет отслеживаемых участников</div>';
         return;
     }
 
-    let html = '<div style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; max-height: 320px; overflow-y: auto; background: #f9f9f9;">';
+    let html = '<div class="selected-runner-list">';
 
     selectedRunnerIds.forEach(runnerId => {
         const runner = allRunners.find(r => String(r.id) === String(runnerId));
         if (!runner) return;
+        const isActive = activeRunnerId === String(runnerId);
         html += `
-            <div style="padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <div style="flex: 1; min-width: 0;">
-                    <strong style="display: block; font-size: 13px;">№${runner.start_number}</strong>
-                    <div style="font-size: 12px; font-weight: 500; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${runner.full_name}</div>
-                    <div style="font-size: 11px; color: #666;">${runner.category || ''}</div>
+            <div class="selected-runner-item${isActive ? ' selected-runner-item--active' : ''}" onclick="showRunnerPanelById('${runnerId}')">
+                <div class="selected-runner-info">
+                    <strong class="selected-runner-number">№${runner.start_number}</strong>
+                    <div class="selected-runner-name">${runner.full_name}</div>
+                    <div class="selected-runner-category">${runner.category || ''}</div>
                 </div>
-                <button onclick="deselectRunner('${runnerId}')" style="padding: 3px 6px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap;">✕</button>
+                <button class="selected-runner-remove" onclick="event.stopPropagation(); deselectRunner('${runnerId}')">✕</button>
             </div>
         `;
     });
 
     html += '</div>';
-    html += `<button onclick="clearSelection()" style="margin-top: 8px; padding: 6px 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; cursor: pointer; width: 100%; font-size: 12px;">🗑️ Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
+    html += `<button class="selected-runner-clear" onclick="clearSelection()">🗑️ Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
 
     selectedListDiv.innerHTML = html;
 }

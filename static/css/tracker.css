@@ -96,6 +96,7 @@ body {
     box-shadow: 0 4px 15px rgba(238,45,98,.15);
     padding: 14px;
     margin-bottom: 14px;
+    isolation: isolate;
 }
 
 /* ── Map wrapper (.map-container) ───────────────── */
@@ -104,7 +105,6 @@ body {
     border-radius: 8px;
     overflow: hidden;
     position: relative;
-    min-height: 480px;
 }
 
 #map {
@@ -476,16 +476,138 @@ body {
     margin-top: 5px;
 }
 
-/* ── Leaflet popup ───────────────────────────────── */
-.km-popup .leaflet-popup-content-wrapper {
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+/* ── Selected runner list (sidebar) ─────────────── */
+.selected-runner-list {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
 }
 
-.km-popup .leaflet-popup-content {
-    margin: 0;
-    padding: 14px;
+.selected-runner-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.15s;
 }
+
+.selected-runner-item:last-child { border-bottom: none; }
+
+.selected-runner-item:hover {
+    background: #fff0f4;
+}
+
+.selected-runner-item--active {
+    background: #fde2ea;
+    border-left: 3px solid var(--km-primary, #EE2D62);
+}
+
+.selected-runner-item--active:hover {
+    background: #fcd0dd;
+}
+
+.selected-runner-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.selected-runner-number {
+    display: block;
+    font-size: 13px;
+    color: var(--km-primary, #EE2D62);
+}
+
+.selected-runner-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.selected-runner-category {
+    font-size: 11px;
+    color: #888;
+}
+
+.selected-runner-remove {
+    padding: 3px 7px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.selected-runner-remove:hover {
+    background: var(--km-primary, #EE2D62);
+    color: #fff;
+    border-color: var(--km-primary, #EE2D62);
+}
+
+.selected-runner-clear {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 12px;
+    transition: background 0.15s;
+}
+
+.selected-runner-clear:hover {
+    background: #fff3cd;
+}
+
+/* ── Runner panel ───────────────────────────────── */
+#runner-panel {
+    background: white;
+    border: 2px solid #EE2D62;
+    border-radius: 12px;
+    padding: 12px 16px 16px;
+    box-shadow: 0 4px 15px rgba(238,45,98,.15);
+    position: relative;
+    max-height: 600px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    transition: max-height 0.25s ease-out, padding 0.25s ease-out,
+                margin 0.25s ease-out, border-width 0.25s ease-out;
+}
+
+#runner-panel.runner-panel--hidden {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-width: 0;
+    overflow: hidden;
+}
+
+.runner-panel__close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.runner-panel__close:hover { color: #555; }
 
 /* ── Marker animations ───────────────────────────── */
 @keyframes pulse {

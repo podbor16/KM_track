@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
     <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/tracker.css?v=3">
+    <link rel="stylesheet" href="/static/css/tracker.css?v=6">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
 </head>
 <body>
@@ -27,6 +27,11 @@
 
         <!-- Переключатель дистанций (скрыт если дистанция одна) -->
         <div id="distanceSwitcher" class="distance-switcher" style="display:none;"></div>
+
+        <div id="runner-panel" class="runner-panel runner-panel--hidden">
+            <button class="runner-panel__close" onclick="hideRunnerPanel()">✕</button>
+            <div id="runner-panel-content"></div>
+        </div>
 
         <div class="tracker-container">
             <div class="map-container">
@@ -83,9 +88,9 @@
     </script>
     <script src="/static/js/utils.js?v=4"></script>
     <script src="/static/js/realtime.js?v=1"></script>
-    <script src="/static/js/tracker-api.js?v=7"></script>
-    <script src="/static/js/tracker-search.js?v=4"></script>
-    <script src="/static/js/tracker-map.js?v=5"></script>
+    <script src="/static/js/tracker-api.js?v=9"></script>
+    <script src="/static/js/tracker-search.js?v=6"></script>
+    <script src="/static/js/tracker-map.js?v=12"></script>
     <script>
         console.log('🚀 Инициализация трекера для Event ID =', window.EVENT_CONFIG.id);
         CONFIG.EVENT_NAME = window.EVENT_CONFIG.code;
