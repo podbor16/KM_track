@@ -735,8 +735,11 @@ class RaceLoader:
             # Chip reads: считаем участников с новыми временами на КТ
             kt_vals = [time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7]
             kt_keys_list = ['time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4', 'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7']
-            if any(v != existing.get(k) and v is not None for v, k in zip(kt_vals, kt_keys_list)):
-                kt_reads_this_cycle += 1
+            for v, k in zip(kt_vals, kt_keys_list):
+                if v != existing.get(k) and v is not None:
+                    kt_reads_this_cycle += 1
+                    changed_fields.append(f'{k}: {existing.get(k)} → {v}')
+                    break  # одного хватит для счётчика, остальные войдут через changed_fields
 
             if changed_fields:
                 updated_dorsals.append(dorsal)
