@@ -455,19 +455,38 @@ function updateRunnerMarkerPosition(runner) {
         anim.status = 'finished';
     } else {
         anim.status = 'running';
-        anim.speed  = runner.speed > 0 ? runner.speed : 10.0;
+        const newSpeed = runner.speed > 0 ? runner.speed : 10.0;
         anim.color  = getStatusColor(runner.status, runner.lap ?? 0);
 
+        const now = Date.now();
+
+        // Опорная точка из новых данных сервера
+        let newBaseDist, newBaseTimeMs;
         if (runner.last_kt_unix_ms) {
-            // Есть данные КТ — экстраполируем от последней контрольной точки
-            anim.baseDist   = runner.current_distance || 0;
-            anim.baseTimeMs = runner.last_kt_unix_ms;
+            newBaseDist   = runner.current_distance || 0;
+            newBaseTimeMs = runner.last_kt_unix_ms;
         } else {
-            // Нет КТ — стартуем от личного времени пересечения линии старта
             const startOffsetMs = (runner.time_clear_start_s ?? 0) * 1000;
-            anim.baseDist   = 0;
-            anim.baseTimeMs = raceGunUnixMs ? raceGunUnixMs + startOffsetMs : serverTimeUnix;
+            newBaseDist   = 0;
+            newBaseTimeMs = raceGunUnixMs ? raceGunUnixMs + startOffsetMs : serverTimeUnix;
         }
+
+        // Экстраполируем обе опорные точки к текущему моменту
+        const newNow = newBaseDist + newSpeed * (now - newBaseTimeMs) / 3_600_000;
+        const curNow = anim.baseDist !== undefined
+            ? (anim.baseDist || 0) + (anim.speed || newSpeed) * (now - (anim.baseTimeMs || now)) / 3_600_000
+            : -1;
+
+        if (newNow > curNow) {
+            // Сервер впереди нашей оценки — принимаем новую опорную точку (КТ-прыжок)
+            anim.baseDist   = newBaseDist;
+            anim.baseTimeMs = newBaseTimeMs;
+        } else {
+            // Наша оценка впереди — сохраняем текущую позицию, обновляем только скорость
+            anim.baseDist   = Math.max(0, curNow);
+            anim.baseTimeMs = now;
+        }
+        anim.speed = newSpeed;
     }
 
     marker.setIcon(buildMarkerIcon(runner));
