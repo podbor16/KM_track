@@ -356,8 +356,8 @@ def _do_build(
             'prev_year': hist_data['prev_year'],
             'lap': _calc_lap_from_kts(runner, num_laps),
             'time_clear_start_s': (
-                int(runner.get('time_clear_start').total_seconds())
-                if isinstance(runner.get('time_clear_start'), _td) else None
+                int(runner.get('time_gun_start').total_seconds())
+                if isinstance(runner.get('time_gun_start'), _td) else None
             ),
             'last_kt_unix_ms': _calc_last_kt_unix_ms(runner, gun_start_dt),
         })

@@ -88,7 +88,7 @@ def calculate_live_position(
         return 0.0, total_distance, str(finish_pace) if finish_pace else DEFAULT_PACE
 
     # --- Не стартовал (нет времени старта) ---
-    start_td = result.get('time_clear_start')
+    start_td = result.get('time_gun_start')
     if gun_start_dt is not None:
         # Используем точное UTC-время выстрела + задержку старта участника
         delay = start_td if isinstance(start_td, timedelta) else timedelta(0)
