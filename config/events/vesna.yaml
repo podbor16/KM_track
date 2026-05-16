@@ -17,7 +17,7 @@ distances:
     checkpoint_distances: [0, 2.5, 5.0]
     checkpoints:
       - {name: "Старт",           distance_km: 0.0, lat: 56.0063930, lon: 92.8714990}
-      - {name: "Разворот 2.5 км", distance_km: 2.5, lat: 56.0001060, lon: 92.8394770}
+      - {name: "Разворот 2.5 км", distance_km: 2.5, lat: 55.99875, lon: 92.835}
       - {name: "Финиш",           distance_km: 5.0, lat: 56.0063930, lon: 92.8714990}
     gpx_file: "static/map/2026/vesna.gpx"
     event_date: "2026-05-17"
