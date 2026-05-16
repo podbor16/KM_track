@@ -4,11 +4,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Houschka Pro', Arial, sans-serif;
+    font-family: var(--km-font-ui, 'HouschkaPro', 'HouschkaRoundedAlt', Arial, sans-serif);
 }
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--km-font-ui, 'HouschkaPro', 'HouschkaRoundedAlt', Arial, sans-serif);
     background: #faf8fa;
 }
 
@@ -241,8 +241,8 @@ body {
 .selected-list {
     flex: 1;
     overflow-y: auto;
-    max-height: 200px;
     padding-right: 5px;
+    min-height: 0;
 }
 
 .empty-selection {
@@ -641,6 +641,11 @@ body {
 .runner-marker  { transition: transform .3s ease-out; }
 .runner-marker:hover { transform: scale(1.2); }
 .moving-marker  { transition: transform 2s cubic-bezier(.2,0,.2,1); }
+
+/* ── Hide Leaflet attribution ────────────────────── */
+.leaflet-control-attribution {
+    display: none !important;
+}
 
 /* ── Lap legend ──────────────────────────────────── */
 .lap-legend {
