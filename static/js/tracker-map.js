@@ -4,8 +4,10 @@ async function initMap() {
     map = L.map('map').setView([CONFIG.START_LAT, CONFIG.START_LON], 15);
     map.attributionControl.setPrefix('');
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
     }).addTo(map);
 
     map.on('click', hideRunnerPanel);
@@ -38,8 +40,8 @@ async function loadRouteFromAPI() {
         if (routeCoordinates.length > 0) {
             routeLayer = L.polyline(routeCoordinates, {
                 color: '#EE2D62',
-                weight: 5,
-                opacity: 0.7,
+                weight: 7,
+                opacity: 0.95,
                 smoothFactor: 1
             }).addTo(map);
 
