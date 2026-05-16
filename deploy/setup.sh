@@ -33,7 +33,7 @@ if [ -d "$APP_DIR/.git" ]; then
     echo "Репозиторий уже склонирован, обновляю..."
     git -C "$APP_DIR" pull
 else
-    git clone "$REPO_URL" "$APP_DIR"
+    git clone -b Map "$REPO_URL" "$APP_DIR"
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
