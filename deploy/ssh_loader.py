@@ -10,11 +10,16 @@
   python deploy/ssh_loader.py logs vesna_5km    # journalctl последние 50 строк
 """
 
+import io
 import os
 import sys
 import glob
 import paramiko
 from pathlib import Path
+
+# Принудительно UTF-8 для вывода на Windows-консоли
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 HOST = "89.108.88.104"
 USER = "root"
