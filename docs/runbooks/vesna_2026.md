@@ -117,16 +117,34 @@ Application startup complete.
 
 ## УТРО 17 МАЯ — ЗАПУСК
 
-### 8. Открыть 2 терминала
+### 8. Запустить loader на VPS (рекомендуется)
 
-**Терминал 1 — FastAPI сервер:**
+Loader работает на VPS — стабильно, не зависит от wifi ноутбука.
+
 ```bash
-cd c:\Users\podbo\Работа\КРАСМАРАФОН\KM_track
+# Первый раз на этом VPS (устанавливает systemd-сервис):
+python deploy/ssh_loader.py setup
+
+# Инициализация + старт для vesna 5 км:
+python deploy/ssh_loader.py init vesna_5km
+
+# Проверить статус:
+python deploy/ssh_loader.py status
+
+# Просмотр логов:
+python deploy/ssh_loader.py logs vesna_5km
+```
+
+**Альтернатива: локальный запуск (запасной вариант)**
+
+Если VPS недоступен — запустить локально в двух терминалах:
+
+*Терминал 1 — FastAPI (уже запущен на VPS, этот вариант только для локальной разработки):*
+```bash
 python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
 ```
-Ждать: `Application startup complete.`
 
-**Терминал 2 — Loader 5 км:**
+*Терминал 2 — Loader:*
 ```bash
 python load_race_results.py --config config/events/vesna.yaml --distance "5 км" --interval 5 --debug
 ```
