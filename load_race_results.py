@@ -351,7 +351,7 @@ class RaceLoader:
         self.logger.info(f"📡 Запрос к Copernico API: {url}")
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
                 if isinstance(data, dict) and 'data' in data:
@@ -1337,7 +1337,7 @@ def main():
 
         # Первая загрузка данных (из API или файла)
         runners = loader.load_race_data()
-        if not runners:
+        if not runners and args.init:
             logger.error("❌ Нет данных для загрузки")
             return 1
 
@@ -1346,7 +1346,7 @@ def main():
                 return 1
         else:
             loader.load_existing_results()
-            loader.continuous_mode(runners, args.interval, args.reset_cache)
+            loader.continuous_mode(runners or [], args.interval, args.reset_cache)
 
         return 0
 
