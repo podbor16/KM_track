@@ -350,29 +350,30 @@ class RaceLoader:
         url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
         self.logger.info(f"📡 Запрос к Copernico API: {url}")
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
-                if isinstance(data, dict) and 'data' in data:
-                    runners = data['data']
-                    gun_time = data.get('gunTime')
-                    # Fallback: gunTime может быть per-runner полем
-                    if not gun_time and runners:
-                        gun_time = runners[0].get('gunTime')
+            import requests as _req
+            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 30))
+            response.raise_for_status()
+            data = response.json()
+            self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
+            if isinstance(data, dict) and 'data' in data:
+                runners = data['data']
+                gun_time = data.get('gunTime')
+                # Fallback: gunTime может быть per-runner полем
+                if not gun_time and runners:
+                    gun_time = runners[0].get('gunTime')
+                if gun_time:
+                    self.gun_time_utc = gun_time
+            elif isinstance(data, list):
+                runners = data
+                if runners:
+                    gun_time = runners[0].get('gunTime')
                     if gun_time:
                         self.gun_time_utc = gun_time
-                elif isinstance(data, list):
-                    runners = data
-                    if runners:
-                        gun_time = runners[0].get('gunTime')
-                        if gun_time:
-                            self.gun_time_utc = gun_time
-                else:
-                    self.logger.error(f"❌ Неожиданный формат ответа: {type(data)}")
-                    return []
-                self.logger.info(f"✅ Получено {len(runners)} участников из API")
-                return runners
+            else:
+                self.logger.error(f"❌ Неожиданный формат ответа: {type(data)}")
+                return []
+            self.logger.info(f"✅ Получено {len(runners)} участников из API")
+            return runners
         except Exception as e:
             self.logger.error(f"❌ Ошибка при запросе к API: {e}")
             return []
