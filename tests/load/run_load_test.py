@@ -84,8 +84,15 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
     k6_proc = subprocess.Popen(k6_cmd, cwd=REPO_ROOT)
 
-    locust_proc.wait()
-    k6_proc.wait()
+    try:
+        locust_proc.wait(timeout=600)
+        k6_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        print(f"\n  WARN: процесс не завершился вовремя — принудительно останавливаем")
+        locust_proc.terminate()
+        k6_proc.terminate()
+        locust_proc.wait()
+        k6_proc.wait()
 
     locust_ok = locust_proc.returncode == 0
     k6_ok = k6_proc.returncode == 0
