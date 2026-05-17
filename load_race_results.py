@@ -656,8 +656,8 @@ class RaceLoader:
             name = (runner.get('name') or '').strip()
             birthdate = runner.get('birthdate')
             sex = convert_gender(runner.get('gender'))
-            # Категория вычисляется из года рождения и пола, не из Copernico
-            category = calculate_age_group(birthdate, sex) or runner.get('category', 'Unknown')
+            # Категория берётся из Copernico как есть
+            category = (runner.get('category') or '').strip() or 'Unknown'
             race_status = convert_status(runner.get('status'))
 
             # Времена — поля из preset-конфига
