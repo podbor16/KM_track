@@ -699,6 +699,21 @@ body {
     margin-top: 3px;
 }
 .card-c__stat--desktop-only { display: none; }
+.card-c__stats-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.card-c__stat-val--primary { color: #EE2D62; }
+.card-c__stat-val--blue { color: #2563EB; }
+
+/* KT ROW (finished popup) */
+.card-c__kt-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0 4px;
+    font-size: 12px;
+}
+.card-c__kt-row .card-c__kt-label { font-size: 10px; color: #bbb; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.card-c__kt-row .card-c__kt-val { font-weight: 700; color: #1a1a1a; }
+.card-c__kt-row .card-c__kt-pace { color: #aaa; margin-left: auto; }
 
 /* BODY */
 .card-c__body {

@@ -283,63 +283,68 @@ function buildPopupContent(runner) {
 
     // ── Finished ─────────────────────────────────────
     if (isFinished) {
-        const finishPace = runner.finish_pace_avg_gun || runner.finish_pace_avg_clean || '-';
-        const distVal = eventDistance > 0 ? String(eventDistance) : '-';
-        const rankAbs = runner.rank_absolute || '-';
+        const finishPaceGun   = runner.finish_pace_avg_gun   || '-';
+        const finishPaceClean = runner.finish_pace_avg_clean || runner.finish_pace_avg_gun || '-';
         const clearTime = runner.time_clear_finish || '';
-        const gunTime = runner.time_gun_finish || '';
+        const gunTime   = runner.time_gun_finish   || '';
+        const timesEqual = gunTime && clearTime && gunTime === clearTime;
 
+        // Строка: Офиц. время | Дист. | Темп (gun) | Чист. время
         const statsHTML = `
-            <div class="card-c__stats-grid">
+            <div class="card-c__stats-grid card-c__stats-grid--4">
                 <div class="card-c__stat">
-                    <div class="card-c__stat-val">${escHtml(finishPace)}</div>
+                    <div class="card-c__stat-val card-c__stat-val--primary">${escHtml(gunTime || '-')}</div>
+                    <div class="card-c__stat-lbl">Офиц. время</div>
+                </div>
+                <div class="card-c__stat">
+                    <div class="card-c__stat-val card-c__stat-val--blue">${escHtml(timesEqual ? clearTime : (clearTime || gunTime || '-'))}</div>
+                    <div class="card-c__stat-lbl">Чист. время</div>
+                </div>
+                <div class="card-c__stat">
+                    <div class="card-c__stat-val">${escHtml(finishPaceGun)}</div>
                     <div class="card-c__stat-lbl">Темп</div>
                 </div>
                 <div class="card-c__stat">
-                    <div class="card-c__stat-val">${distVal}<span class="unit"> км</span></div>
+                    <div class="card-c__stat-val">${eventDistance > 0 ? eventDistance : '-'}<span class="unit"> км</span></div>
                     <div class="card-c__stat-lbl">Дистанция</div>
-                </div>
-                <div class="card-c__stat">
-                    <div class="card-c__stat-val">${rankAbs}</div>
-                    <div class="card-c__stat-lbl">Место</div>
-                </div>
-                <div class="card-c__stat card-c__stat--desktop-only">
-                    <div class="card-c__stat-val">${escHtml(clearTime || gunTime || '-')}</div>
-                    <div class="card-c__stat-lbl">Чистое вр.</div>
                 </div>
             </div>`;
 
-        let ranksHTML = '';
-        if (runner.rank_absolute || runner.rank_sex || runner.rank_category) {
-            ranksHTML = `
-                <div class="card-c__ranks-col">
-                    <div class="card-c__ranks-row">
-                        <div class="card-c__rank">
-                            <div class="card-c__rank-val">${runner.rank_absolute || '-'}</div>
-                            <div class="card-c__rank-lbl">Абсолют</div>
-                        </div>
-                        <div class="card-c__rank">
-                            <div class="card-c__rank-val">${runner.rank_sex || '-'}</div>
-                            <div class="card-c__rank-lbl">Пол</div>
-                        </div>
-                        <div class="card-c__rank">
-                            <div class="card-c__rank-val">${runner.rank_category || '-'}</div>
-                            <div class="card-c__rank-lbl">Катег.</div>
-                        </div>
-                    </div>
-                </div>`;
-        }
+        // Ранги — всегда показываем для финишировавших
+        const fmtR = v => v ? `#${v}` : '—';
+        const sexPrefix = runner.sex === 'Мужчина' ? 'М' : runner.sex === 'Женщина' ? 'Ж' : '';
+        const rankSexStr = runner.rank_sex ? `${sexPrefix} #${runner.rank_sex}` : '—';
 
-        const resultHTML = gunTime ? `
-            <div class="card-c__eta" style="grid-column:1/-1">
-                <div class="card-c__eta-lbl">Результат</div>
-                <div class="card-c__eta-vals">
-                    <div class="card-c__eta-val">${escHtml(gunTime)}</div>
-                    ${clearTime ? `<div class="card-c__eta-time">чистое ${escHtml(clearTime)}</div>` : ''}
+        const ranksHTML = `
+            <div class="card-c__ranks-col">
+                <div class="card-c__ranks-row">
+                    <div class="card-c__rank">
+                        <div class="card-c__rank-val">${fmtR(runner.rank_absolute)}</div>
+                        <div class="card-c__rank-lbl">Место абс.</div>
+                    </div>
+                    <div class="card-c__rank">
+                        <div class="card-c__rank-val">${rankSexStr}</div>
+                        <div class="card-c__rank-lbl">По полу</div>
+                    </div>
+                    <div class="card-c__rank">
+                        <div class="card-c__rank-val">${fmtR(runner.rank_category)}</div>
+                        <div class="card-c__rank-lbl">По кат.</div>
+                    </div>
                 </div>
+            </div>`;
+
+        // КТ-время если есть
+        const kt1 = runner.checkpoints?.kt1;
+        const kt1Time = kt1?.time ? parseDuration(kt1.time) : null;
+        const kt1Pace = kt1?.pace ? parseDuration(kt1.pace) : null;
+        const ktHTML = kt1Time ? `
+            <div class="card-c__kt-row">
+                <span class="card-c__kt-label">КТ 1</span>
+                <span class="card-c__kt-val">${escHtml(kt1Time)}</span>
+                ${kt1Pace ? `<span class="card-c__kt-pace">${escHtml(kt1Pace)} мин/км</span>` : ''}
             </div>` : '';
 
-        return `<div class="card-c">${topHTML}${statsHTML}<div class="card-c__body">${ranksHTML}${resultHTML}</div></div>`;
+        return `<div class="card-c">${topHTML}${statsHTML}${ranksHTML}${ktHTML}</div>`;
     }
 
     // ── Running ──────────────────────────────────────
