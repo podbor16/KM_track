@@ -353,7 +353,7 @@ class RaceLoader:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode('utf-8'))
-                self.logger.debug(f"Ответ API: {data}")
+                self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
                 if isinstance(data, dict) and 'data' in data:
                     runners = data['data']
                     gun_time = data.get('gunTime')
@@ -478,9 +478,9 @@ class RaceLoader:
                 dorsal = runner.get('dorsal')
                 surname = (runner.get('surname') or '').strip()
                 name = (runner.get('name') or '').strip()
-                birthdate = runner.get('birthdate')
+                birthdate = runner.get('birthdate') or '1900-01-01'
 
-                if not dorsal or not surname or not name or not birthdate:
+                if not dorsal or not surname or not name:
                     continue
 
                 batch.append((
