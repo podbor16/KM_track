@@ -557,8 +557,10 @@ class RaceLoader:
                 calc_t = time.time() - t_calc
 
                 t_rank = time.time()
-                self._recalculate_ranks()
-                self._recalculate_segment_ranks()
+                if updated_r > 0:
+                    self._recalculate_ranks()
+                if updated_s > 0:
+                    self._recalculate_segment_ranks()
                 rank_t = time.time() - t_rank
 
                 cycle_time = time.time() - cycle_start
@@ -749,12 +751,12 @@ class RaceLoader:
                 # Добавляем в батч для UPDATE только если есть изменения
                 # Ранги (rank_absolute/sex/category) управляются _recalculate_ranks()
                 results_batch.append((
+                    result_id,
                     surname, name, birthdate, sex, category, race_status,
                     time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
                     finish_pace_avg_gun, finish_pace_avg_clean,
                     time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7,
                     pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5, pace_avg_kt6, pace_avg_kt7,
-                    result_id
                 ))
 
             # === СЕГМЕНТЫ (всегда обновляем) ===
@@ -785,23 +787,28 @@ class RaceLoader:
                 'time_clear_kt7': time_clear_kt7,
             }
 
-        # Выполнить bulk UPDATE results
+        # Выполнить bulk UPDATE results (один запрос вместо N)
         updated_results = 0
         if results_batch:
             try:
-                update_query = """
-                    UPDATE results SET
-                        surname = %s, name = %s, birthday = %s, sex = %s, category = %s,
-                        race_status = %s, time_gun_start = %s, time_clear_start = %s,
-                        time_gun_finish = %s, time_clear_finish = %s,
-                        finish_pace_avg_gun = %s, finish_pace_avg_clean = %s,
-                        time_clear_kt1 = %s, time_clear_kt2 = %s, time_clear_kt3 = %s,
-                        time_clear_kt4 = %s, time_clear_kt5 = %s, time_clear_kt6 = %s, time_clear_kt7 = %s,
-                        pace_avg_kt1 = %s, pace_avg_kt2 = %s, pace_avg_kt3 = %s,
-                        pace_avg_kt4 = %s, pace_avg_kt5 = %s, pace_avg_kt6 = %s, pace_avg_kt7 = %s
-                    WHERE id = %s
-                """
-                self.cursor.executemany(update_query, results_batch)
+                self._bulk_upsert(
+                    'results',
+                    ['id', 'surname', 'name', 'birthday', 'sex', 'category', 'race_status',
+                     'time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish',
+                     'finish_pace_avg_gun', 'finish_pace_avg_clean',
+                     'time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4',
+                     'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7',
+                     'pace_avg_kt1', 'pace_avg_kt2', 'pace_avg_kt3', 'pace_avg_kt4',
+                     'pace_avg_kt5', 'pace_avg_kt6', 'pace_avg_kt7'],
+                    results_batch,
+                    ['surname', 'name', 'birthday', 'sex', 'category', 'race_status',
+                     'time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish',
+                     'finish_pace_avg_gun', 'finish_pace_avg_clean',
+                     'time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4',
+                     'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7',
+                     'pace_avg_kt1', 'pace_avg_kt2', 'pace_avg_kt3', 'pace_avg_kt4',
+                     'pace_avg_kt5', 'pace_avg_kt6', 'pace_avg_kt7'],
+                )
                 if self.connection:
                     self.connection.commit()
                 updated_results = len(results_batch)
@@ -817,20 +824,15 @@ class RaceLoader:
         updated_segments = 0
         if segments_batch:
             try:
-                insert_query = """
-                    INSERT INTO result_segments
-                        (result_id, event_id, segment_code, sg_time_clear, sg_time_gun, sg_pace_avg, sg_pace_avg_gun,
-                         sg_rank_absolute, sg_rank_sex, sg_rank_category,
-                         sg_rank_absolute_gun, sg_rank_sex_gun, sg_rank_category_gun)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        sg_time_clear = VALUES(sg_time_clear),
-                        sg_time_gun = VALUES(sg_time_gun),
-                        sg_pace_avg = VALUES(sg_pace_avg),
-                        sg_pace_avg_gun = VALUES(sg_pace_avg_gun),
-                        event_id = VALUES(event_id)
-                """
-                self.cursor.executemany(insert_query, segments_batch)
+                self._bulk_upsert(
+                    'result_segments',
+                    ['result_id', 'event_id', 'segment_code', 'sg_time_clear', 'sg_time_gun',
+                     'sg_pace_avg', 'sg_pace_avg_gun',
+                     'sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category',
+                     'sg_rank_absolute_gun', 'sg_rank_sex_gun', 'sg_rank_category_gun'],
+                    segments_batch,
+                    ['sg_time_clear', 'sg_time_gun', 'sg_pace_avg', 'sg_pace_avg_gun', 'event_id'],
+                )
                 if self.connection:
                     self.connection.commit()
                 updated_segments = len(segments_batch)
@@ -910,28 +912,29 @@ class RaceLoader:
                 group = [r for r in with_clean if r.get('category') == cat_val]
                 cat_clean[cat_val] = self._assign_ranks(group, 'time_clear_finish')
 
-            # Bulk UPDATE ranks
+            # Bulk UPDATE ranks (один запрос вместо N)
             rank_batch = []
             for r in finished:
                 rid = r['id']
                 sex_val = r.get('sex', '')
                 cat_val = r.get('category', '')
                 rank_batch.append((
+                    rid,
                     abs_gun.get(rid),
                     sex_gun.get(sex_val, {}).get(rid),
                     cat_gun.get(cat_val, {}).get(rid),
                     abs_clean.get(rid),
                     sex_clean.get(sex_val, {}).get(rid),
                     cat_clean.get(cat_val, {}).get(rid),
-                    rid,
                 ))
 
-            self.cursor.executemany(
-                """UPDATE results SET
-                       rank_absolute = %s, rank_sex = %s, rank_category = %s,
-                       rank_absolute_clean = %s, rank_sex_clean = %s, rank_category_clean = %s
-                   WHERE id = %s""",
+            self._bulk_upsert(
+                'results',
+                ['id', 'rank_absolute', 'rank_sex', 'rank_category',
+                 'rank_absolute_clean', 'rank_sex_clean', 'rank_category_clean'],
                 rank_batch,
+                ['rank_absolute', 'rank_sex', 'rank_category',
+                 'rank_absolute_clean', 'rank_sex_clean', 'rank_category_clean'],
             )
             self.connection.commit()
             self.logger.debug(f"🏆 Места пересчитаны: {len(rank_batch)} финишировавших")
@@ -962,7 +965,7 @@ class RaceLoader:
                     group = [r for r in kt_runners if r.get('category') == cat_val]
                     kt_cat[cat_val] = self._assign_ranks(group, time_col)
 
-                # Обновляем колонки rank_*_kt{i} в таблице results
+                # Обновляем колонки rank_*_kt{i} в таблице results (один запрос вместо N)
                 kt_batch = []
                 seg_batch = []
                 seg_code = f'start-{kt}'
@@ -973,22 +976,20 @@ class RaceLoader:
                     ra = kt_abs.get(rid)
                     rs = kt_sex.get(sex_val, {}).get(rid)
                     rc = kt_cat.get(cat_val, {}).get(rid)
-                    kt_batch.append((ra, rs, rc, rid))
-                    seg_batch.append((ra, rs, rc, rid, seg_code))
+                    kt_batch.append((rid, ra, rs, rc))
+                    seg_batch.append((rid, seg_code, ra, rs, rc))
 
-                self.cursor.executemany(
-                    f"""UPDATE results SET
-                            rank_absolute_{kt} = %s,
-                            rank_sex_{kt} = %s,
-                            rank_category_{kt} = %s
-                        WHERE id = %s""",
+                self._bulk_upsert(
+                    'results',
+                    ['id', f'rank_absolute_{kt}', f'rank_sex_{kt}', f'rank_category_{kt}'],
                     kt_batch,
+                    [f'rank_absolute_{kt}', f'rank_sex_{kt}', f'rank_category_{kt}'],
                 )
-                self.cursor.executemany(
-                    """UPDATE result_segments SET
-                           sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s
-                       WHERE result_id = %s AND segment_code = %s""",
+                self._bulk_upsert(
+                    'result_segments',
+                    ['result_id', 'segment_code', 'sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category'],
                     seg_batch,
+                    ['sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category'],
                 )
                 self.connection.commit()
 
@@ -1059,22 +1060,23 @@ class RaceLoader:
                     sex_val = seg.get('sex', '')
                     cat_val = seg.get('category', '')
                     batch.append((
+                        seg['seg_id'],
                         abs_ranks.get(rid),
                         sex_ranks.get(sex_val, {}).get(rid),
                         cat_ranks.get(cat_val, {}).get(rid),
                         abs_ranks_gun.get(rid),
                         sex_ranks_gun.get(sex_val, {}).get(rid),
                         cat_ranks_gun.get(cat_val, {}).get(rid),
-                        seg['seg_id'],
                     ))
 
             if batch:
-                self.cursor.executemany(
-                    """UPDATE result_segments
-                       SET sg_rank_absolute = %s, sg_rank_sex = %s, sg_rank_category = %s,
-                           sg_rank_absolute_gun = %s, sg_rank_sex_gun = %s, sg_rank_category_gun = %s
-                       WHERE id = %s""",
+                self._bulk_upsert(
+                    'result_segments',
+                    ['id', 'sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category',
+                     'sg_rank_absolute_gun', 'sg_rank_sex_gun', 'sg_rank_category_gun'],
                     batch,
+                    ['sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category',
+                     'sg_rank_absolute_gun', 'sg_rank_sex_gun', 'sg_rank_category_gun'],
                 )
                 self.connection.commit()
                 self.logger.debug(f"🏆 Ранги сегментов пересчитаны: {len(batch)} записей")
@@ -1169,6 +1171,18 @@ class RaceLoader:
         except Exception as e:
             self.logger.error(f"❌ INSERT: {e}")
             return 0
+
+    def _bulk_upsert(self, table: str, col_names: list, batch: list, update_cols: list) -> int:
+        """Один INSERT...ON DUPLICATE KEY UPDATE вместо N executemany-запросов."""
+        if not batch or not self.cursor:
+            return 0
+        row_ph = "(" + ",".join(["%s"] * len(col_names)) + ")"
+        all_rows = ",".join([row_ph] * len(batch))
+        upd = ",".join(f"`{c}`=VALUES(`{c}`)" for c in update_cols)
+        cols = ",".join(f"`{c}`" for c in col_names)
+        sql = f"INSERT INTO `{table}` ({cols}) VALUES {all_rows} ON DUPLICATE KEY UPDATE {upd}"
+        self.cursor.execute(sql, [v for row in batch for v in row])
+        return len(batch)
 
     def close(self):
         """Закрыть соединение с БД"""
