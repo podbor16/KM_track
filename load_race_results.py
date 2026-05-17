@@ -928,13 +928,11 @@ class RaceLoader:
                     cat_clean.get(cat_val, {}).get(rid),
                 ))
 
-            self._bulk_upsert(
-                'results',
-                ['id', 'rank_absolute', 'rank_sex', 'rank_category',
-                 'rank_absolute_clean', 'rank_sex_clean', 'rank_category_clean'],
-                rank_batch,
+            self._bulk_update_join(
+                'results', ['id'],
                 ['rank_absolute', 'rank_sex', 'rank_category',
                  'rank_absolute_clean', 'rank_sex_clean', 'rank_category_clean'],
+                rank_batch,
             )
             self.connection.commit()
             self.logger.debug(f"🏆 Места пересчитаны: {len(rank_batch)} финишировавших")
@@ -979,17 +977,15 @@ class RaceLoader:
                     kt_batch.append((rid, ra, rs, rc))
                     seg_batch.append((rid, seg_code, ra, rs, rc))
 
-                self._bulk_upsert(
-                    'results',
-                    ['id', f'rank_absolute_{kt}', f'rank_sex_{kt}', f'rank_category_{kt}'],
-                    kt_batch,
+                self._bulk_update_join(
+                    'results', ['id'],
                     [f'rank_absolute_{kt}', f'rank_sex_{kt}', f'rank_category_{kt}'],
+                    kt_batch,
                 )
-                self._bulk_upsert(
-                    'result_segments',
-                    ['result_id', 'segment_code', 'sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category'],
-                    seg_batch,
+                self._bulk_update_join(
+                    'result_segments', ['result_id', 'segment_code'],
                     ['sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category'],
+                    seg_batch,
                 )
                 self.connection.commit()
 
@@ -1070,13 +1066,11 @@ class RaceLoader:
                     ))
 
             if batch:
-                self._bulk_upsert(
-                    'result_segments',
-                    ['id', 'sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category',
-                     'sg_rank_absolute_gun', 'sg_rank_sex_gun', 'sg_rank_category_gun'],
-                    batch,
+                self._bulk_update_join(
+                    'result_segments', ['id'],
                     ['sg_rank_absolute', 'sg_rank_sex', 'sg_rank_category',
                      'sg_rank_absolute_gun', 'sg_rank_sex_gun', 'sg_rank_category_gun'],
+                    batch,
                 )
                 self.connection.commit()
                 self.logger.debug(f"🏆 Ранги сегментов пересчитаны: {len(batch)} записей")
@@ -1173,7 +1167,8 @@ class RaceLoader:
             return 0
 
     def _bulk_upsert(self, table: str, col_names: list, batch: list, update_cols: list) -> int:
-        """Один INSERT...ON DUPLICATE KEY UPDATE вместо N executemany-запросов."""
+        """Один INSERT...ON DUPLICATE KEY UPDATE вместо N executemany-запросов.
+        Требует все NOT NULL колонки в col_names (используется в _update_existing)."""
         if not batch or not self.cursor:
             return 0
         row_ph = "(" + ",".join(["%s"] * len(col_names)) + ")"
@@ -1181,6 +1176,26 @@ class RaceLoader:
         upd = ",".join(f"`{c}`=VALUES(`{c}`)" for c in update_cols)
         cols = ",".join(f"`{c}`" for c in col_names)
         sql = f"INSERT INTO `{table}` ({cols}) VALUES {all_rows} ON DUPLICATE KEY UPDATE {upd}"
+        self.cursor.execute(sql, [v for row in batch for v in row])
+        return len(batch)
+
+    def _bulk_update_join(self, table: str, join_cols: list, update_cols: list, batch: list) -> int:
+        """Один UPDATE ... JOIN (SELECT ... UNION ALL ...) вместо N executemany-запросов.
+        Безопасен для частичных обновлений — не затрагивает NOT NULL колонки.
+        join_cols: колонки для JOIN (первые в tuple), update_cols: что обновлять (остальные)."""
+        if not batch or not self.cursor:
+            return 0
+        all_cols = join_cols + update_cols
+        col_aliases = ", ".join(f"%s AS `{c}`" for c in all_cols)
+        union_row = f"SELECT {col_aliases}"
+        union_sql = " UNION ALL ".join([union_row] * len(batch))
+        join_cond = " AND ".join(f"`{table}`.`{c}` = v.`{c}`" for c in join_cols)
+        set_clause = ", ".join(f"`{table}`.`{c}` = v.`{c}`" for c in update_cols)
+        sql = (
+            f"UPDATE `{table}` "
+            f"INNER JOIN ({union_sql}) v ON {join_cond} "
+            f"SET {set_clause}"
+        )
         self.cursor.execute(sql, [v for row in batch for v in row])
         return len(batch)
 
