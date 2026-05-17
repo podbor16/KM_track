@@ -280,65 +280,52 @@ def get_checkpoint_distances(event_id: int) -> List[float]:
 def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[str, float]:
     """
     Средняя скорость (км/ч) финишировавших по категориям для заданного события.
+    Считает из time_clear_finish / event_distance, т.к. finish_pace_avg может быть NULL.
+    Fallback: предыдущие годы того же event_name + дистанции.
 
     Returns:
         Dict {category_str: avg_speed_kmh}
     """
-
-    def _pace_to_kmh(pace_str: str) -> float:
-        try:
-            parts = pace_str.strip().split(':')
-            minutes = int(parts[0])
-            seconds = int(parts[1]) if len(parts) > 1 else 0
-            total_secs = minutes * 60 + seconds
-            return 3600.0 / total_secs if total_secs > 0 else 0.0
-        except Exception:
-            return 0.0
-
     connection = get_pooled_connection()
     if not connection:
         logger.error("❌ get_category_avg_paces: нет соединения")
         return {}
 
+    BASE_SQL = """
+        SELECT r.category,
+               TIME_TO_SEC(r.time_clear_finish) AS finish_secs,
+               CAST(e.event_distance AS DECIMAL(6,2)) AS dist_km
+        FROM results r
+        INNER JOIN events e ON r.event_id = e.id
+        WHERE {where}
+          AND r.race_status = 'Finished'
+          AND r.time_clear_finish IS NOT NULL
+          AND r.category IS NOT NULL AND r.category != ''
+    """
+
+    queries = [
+        # 1. Текущий год + точная дистанция
+        (BASE_SQL.format(where="e.event_name = %s AND e.event_year = %s AND e.event_distance = %s"),
+         (event_name, year, str(event_distance))),
+        # 2. Текущий год, любая дистанция
+        (BASE_SQL.format(where="e.event_name = %s AND e.event_year = %s"),
+         (event_name, year)),
+        # 3. Все годы + точная дистанция
+        (BASE_SQL.format(where="e.event_name = %s AND e.event_distance = %s"),
+         (event_name, str(event_distance))),
+        # 4. Все годы, любая дистанция
+        (BASE_SQL.format(where="e.event_name = %s"),
+         (event_name,)),
+    ]
+
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
-
-        cursor.execute(
-            """
-            SELECT r.category, r.finish_pace_avg
-            FROM results r
-            INNER JOIN events e ON r.event_id = e.id
-            WHERE e.event_name = %s
-              AND e.event_year = %s
-              AND e.event_distance = %s
-              AND r.race_status = 'Finished'
-              AND r.finish_pace_avg IS NOT NULL
-              AND r.finish_pace_avg != ''
-              AND r.category IS NOT NULL
-              AND r.category != ''
-            """,
-            (event_name, year, str(event_distance)),
-        )
-        rows = cursor.fetchall()
-
-        if not rows:
-            cursor.execute(
-                """
-                SELECT r.category, r.finish_pace_avg
-                FROM results r
-                INNER JOIN events e ON r.event_id = e.id
-                WHERE e.event_name = %s
-                  AND e.event_year = %s
-                  AND r.race_status = 'Finished'
-                  AND r.finish_pace_avg IS NOT NULL
-                  AND r.finish_pace_avg != ''
-                  AND r.category IS NOT NULL
-                  AND r.category != ''
-                """,
-                (event_name, year),
-            )
+        rows = []
+        for sql, params in queries:
+            cursor.execute(sql, params)
             rows = cursor.fetchall()
-
+            if rows:
+                break
         cursor.close()
 
         if not rows:
@@ -349,10 +336,12 @@ def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[s
         speeds_by_cat: Dict[str, list] = defaultdict(list)
         for row in rows:
             cat = (row.get("category") or "").strip()
-            pace_str = (row.get("finish_pace_avg") or "").strip()
-            if cat and pace_str:
-                kmh = _pace_to_kmh(pace_str)
-                if kmh > 0:
+            finish_secs = row.get("finish_secs")
+            dist_km = float(row.get("dist_km") or 0)
+            if cat and finish_secs and dist_km > 0:
+                hours = float(finish_secs) / 3600.0
+                kmh = dist_km / hours
+                if 3.0 <= kmh <= 30.0:  # разумный диапазон для бегуна
                     speeds_by_cat[cat].append(kmh)
 
         result = {cat: sum(speeds) / len(speeds) for cat, speeds in speeds_by_cat.items()}
