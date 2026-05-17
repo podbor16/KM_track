@@ -351,7 +351,7 @@ class RaceLoader:
         self.logger.info(f"📡 Запрос к Copernico API: {url}")
         try:
             import requests as _req
-            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 30))
+            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 90))
             response.raise_for_status()
             data = response.json()
             self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
