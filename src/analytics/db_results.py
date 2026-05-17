@@ -39,6 +39,10 @@ _event_info_cache_ts: dict = {}
 EVENT_INFO_CACHE_TTL = 5  # секунд
 _prev_year_cache: dict = {}    # get_prev_year_results — финиши прошлого года
 
+_stats_cache: dict = {}
+_stats_cache_ts: dict = {}
+STATS_CACHE_TTL = 60  # секунд — статистика не требует real-time точности
+
 
 def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     """
@@ -280,8 +284,9 @@ def get_checkpoint_distances(event_id: int) -> List[float]:
 def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[str, float]:
     """
     Средняя скорость (км/ч) финишировавших по категориям для заданного события.
-    Считает из time_clear_finish / event_distance, т.к. finish_pace_avg может быть NULL.
-    Fallback: предыдущие годы того же event_name + дистанции.
+    Считает из time_clear_finish / event_distance (finish_pace_avg часто NULL).
+    Fallback по приоритету: год+дистанция → все годы+дистанция → все годы.
+    Один DB round-trip через UNION ALL с полем priority.
 
     Returns:
         Dict {category_str: avg_speed_kmh}
@@ -291,61 +296,75 @@ def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[s
         logger.error("❌ get_category_avg_paces: нет соединения")
         return {}
 
-    BASE_SQL = """
-        SELECT r.category,
-               TIME_TO_SEC(r.time_clear_finish) AS finish_secs,
-               CAST(e.event_distance AS DECIMAL(6,2)) AS dist_km
-        FROM results r
-        INNER JOIN events e ON r.event_id = e.id
-        WHERE {where}
-          AND r.race_status = 'Finished'
-          AND r.time_clear_finish IS NOT NULL
-          AND r.category IS NOT NULL AND r.category != ''
-    """
+    # Один запрос: приоритет 1=точный год+дистанция, 2=все годы+дистанция, 3=все годы
+    UNION_SQL = """
+        SELECT category, finish_secs, dist_km, priority FROM (
+            SELECT r.category,
+                   TIME_TO_SEC(r.time_clear_finish) AS finish_secs,
+                   CAST(e.event_distance AS DECIMAL(6,2)) AS dist_km,
+                   1 AS priority
+            FROM results r INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s AND e.event_year = %s AND e.event_distance = %s
+              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.category IS NOT NULL AND r.category != ''
 
-    queries = [
-        # 1. Текущий год + точная дистанция
-        (BASE_SQL.format(where="e.event_name = %s AND e.event_year = %s AND e.event_distance = %s"),
-         (event_name, year, str(event_distance))),
-        # 2. Текущий год, любая дистанция
-        (BASE_SQL.format(where="e.event_name = %s AND e.event_year = %s"),
-         (event_name, year)),
-        # 3. Все годы + точная дистанция
-        (BASE_SQL.format(where="e.event_name = %s AND e.event_distance = %s"),
-         (event_name, str(event_distance))),
-        # 4. Все годы, любая дистанция
-        (BASE_SQL.format(where="e.event_name = %s"),
-         (event_name,)),
-    ]
+            UNION ALL
+
+            SELECT r.category,
+                   TIME_TO_SEC(r.time_clear_finish),
+                   CAST(e.event_distance AS DECIMAL(6,2)),
+                   2
+            FROM results r INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s AND e.event_distance = %s
+              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.category IS NOT NULL AND r.category != ''
+
+            UNION ALL
+
+            SELECT r.category,
+                   TIME_TO_SEC(r.time_clear_finish),
+                   CAST(e.event_distance AS DECIMAL(6,2)),
+                   3
+            FROM results r INNER JOIN events e ON r.event_id = e.id
+            WHERE e.event_name = %s
+              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.category IS NOT NULL AND r.category != ''
+        ) AS combined
+        ORDER BY priority ASC
+    """
 
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
-        rows = []
-        for sql, params in queries:
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            if rows:
-                break
+        cursor.execute(UNION_SQL, (
+            event_name, year, str(event_distance),  # priority 1
+            event_name, str(event_distance),          # priority 2
+            event_name,                               # priority 3
+        ))
+        rows = cursor.fetchall()
         cursor.close()
 
         if not rows:
             logger.warning(f"⚠️ get_category_avg_paces: нет финишировавших для {event_name} {year} дист={event_distance}")
             return {}
 
+        # Берём только строки с наименьшим priority среди тех, что нашлись
+        min_priority = min(r["priority"] for r in rows)
+        best_rows = [r for r in rows if r["priority"] == min_priority]
+
         from collections import defaultdict
         speeds_by_cat: Dict[str, list] = defaultdict(list)
-        for row in rows:
+        for row in best_rows:
             cat = (row.get("category") or "").strip()
             finish_secs = row.get("finish_secs")
             dist_km = float(row.get("dist_km") or 0)
             if cat and finish_secs and dist_km > 0:
                 hours = float(finish_secs) / 3600.0
                 kmh = dist_km / hours
-                if 3.0 <= kmh <= 30.0:  # разумный диапазон для бегуна
+                if 3.0 <= kmh <= 30.0:
                     speeds_by_cat[cat].append(kmh)
 
         result = {cat: sum(speeds) / len(speeds) for cat, speeds in speeds_by_cat.items()}
-        logger.info(f"✅ get_category_avg_paces: {len(result)} категорий для {event_name} {year}")
+        logger.info(f"✅ get_category_avg_paces: {len(result)} категорий для {event_name} {year} (priority={min_priority})")
         return result
 
     except Exception as e:
@@ -499,6 +518,10 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
     Статистика по забегу: лучший результат, средние темпы по полам, история по годам.
     Группировка по дистанции (поддержка мультидистанционных событий типа «Жара»).
     """
+    _now = time.time()
+    if event_name in _stats_cache and (_now - _stats_cache_ts.get(event_name, 0)) < STATS_CACHE_TTL:
+        return _stats_cache[event_name]
+
     logger.info(f"🔍 Получение статистики забега: {event_name}")
 
     connection = get_pooled_connection()
@@ -649,10 +672,10 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
             })
 
         logger.info(f"✅ Статистика загружена: {event_name}, дистанций: {len(distances_out)}")
-        return {
-            'race_name': event_name,
-            'distances': distances_out,
-        }
+        result = {'race_name': event_name, 'distances': distances_out}
+        _stats_cache[event_name] = result
+        _stats_cache_ts[event_name] = time.time()
+        return result
 
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}\n{repr(e)}")
