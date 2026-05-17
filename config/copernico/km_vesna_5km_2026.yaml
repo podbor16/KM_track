@@ -17,4 +17,4 @@ time_fields:
   chip_finish: null
 
 checkpoint_fields:
-  kt1: "times.official_3km"   # разворот 2.5 км — имя поля в Copernico
+  kt1: "times.official_2,5 км"   # разворот 2.5 км — имя поля в Copernico

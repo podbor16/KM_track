@@ -25,10 +25,10 @@ distances:
       laps: 1
       total_km: 5.0
     copernico:
-      race_id: "------------"
+      race_id: "-2026-94087"
       login: "podbor250718@gmail.com"
       preset: "km_vesna_5km_2026"
-      event: "10 км"
+      event: "5 км"
 
   - distance: "2 км"
     distance_km: 2.0
