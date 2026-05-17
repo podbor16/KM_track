@@ -220,7 +220,21 @@ python scripts/fix_post_race.py
 
 ## ПОСТГОНОЧНЫЕ ЗАДАЧИ
 
-- [ ] Проверить `/results` — нет NULL в `time_gun_finish`, `time_clear_finish`
-- [ ] Проверить сегменты — ранги не прочерки
+- [x] Проверить `/results` — нет NULL в `time_gun_finish`, `time_clear_finish` ✓ (897 финишировавших с временами)
+- [x] Проверить сегменты — ранги не прочерки ✓ (892 участника с данными КТ1)
 - [ ] Обновить `is_active: false` в `config/events/vesna.yaml`
-- [ ] Сохранить сессию в Obsidian: `sessions/YYYY-MM-DD-vesna-postrace.md`
+- [x] Остановить loader: `Ctrl+C` в терминале `python run_loader.py vesna_5km`
+- [x] Сохранить сессию в Obsidian: `sessions/2026-05-17-vesna-postrace.md`
+
+---
+
+## ИТОГИ ЗАБЕГА
+
+| Показатель | Значение |
+|-----------|---------|
+| Всего участников | 1003 |
+| Финишировали | 897 |
+| Не стартовали | 106 |
+| Первый финиш | 00:15:22 |
+| Последний финиш | 00:52:08 |
+| С данными КТ (разворот 2.5 км) | 892 |

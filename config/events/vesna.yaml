@@ -2,7 +2,7 @@ name: "Весна"
 display_name: "Весна"
 year: 2026
 code: "vesna"
-is_active: true              # ← АКТИВНЫЙ забег: true у одного, false у остальных
+is_active: false             # ← АКТИВНЫЙ забег: true у одного, false у остальных
 start_lat: 56.0063930               # ← заполнить перед стартом
 start_lon: 92.8714990               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
