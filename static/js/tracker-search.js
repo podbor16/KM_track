@@ -4,17 +4,17 @@ async function selectRunner(runnerId) {
     const runnerId_str = String(runnerId);
 
     if (selectedRunnerIds.size >= CONFIG.MAX_SELECTED) {
-        alert(`❌ Максимум можно выбрать ${CONFIG.MAX_SELECTED} участников`);
+        alert(`Максимум можно выбрать ${CONFIG.MAX_SELECTED} участников`);
         return;
     }
     if (selectedRunnerIds.has(runnerId_str)) {
-        alert('✅ Этот участник уже отслеживается');
+        alert('Этот участник уже отслеживается');
         return;
     }
 
     const runner = allRunners.find(r => String(r.id) === runnerId_str);
     if (!runner) {
-        alert('❌ Участник не найден в базе');
+        alert('Участник не найден в базе');
         return;
     }
 
@@ -30,7 +30,7 @@ async function selectRunner(runnerId) {
     }
 
     updateSelectedList();
-    updateStatus(`✅ Отслеживание: ${runner.full_name} (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})`);
+    updateStatus(`Отслеживание: ${runner.full_name} (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})`);
 
     const resultsDiv = document.getElementById('searchResults');
     if (resultsDiv && resultsDiv.style.display !== 'none') {
@@ -91,7 +91,7 @@ function updateSelectedList() {
     });
 
     html += '</div>';
-    html += `<button class="selected-runner-clear" onclick="clearSelection()">🗑️ Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
+    html += `<button class="selected-runner-clear" onclick="clearSelection()">Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
 
     selectedListDiv.innerHTML = html;
 }
@@ -115,7 +115,7 @@ function searchRunners() {
     ).slice(0, 15);
 
     if (results.length === 0) {
-        resultsDiv.innerHTML = '<div style="padding: 10px; color: #999;">❌ Участники не найдены</div>';
+        resultsDiv.innerHTML = '<div style="padding: 10px; color: #999;">Участники не найдены</div>';
         resultsDiv.style.display = 'block';
         return;
     }

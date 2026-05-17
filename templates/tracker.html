@@ -22,7 +22,7 @@
 
     <div class="container">
         <div class="header">
-            <h1 id="eventTitle">🏃 Трекер забега</h1>
+            <h1 id="eventTitle">Трекер забега</h1>
         </div>
 
         <!-- Переключатель дистанций (скрыт если дистанция одна) -->
@@ -84,7 +84,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         window.EVENT_CONFIG = {{ event_config | tojson }};
-        console.log('✅ Event config установлен:', window.EVENT_CONFIG);
+        console.log('Event config установлен:', window.EVENT_CONFIG);
     </script>
     <script src="/static/js/utils.js?v=4"></script>
     <script src="/static/js/realtime.js?v=1"></script>
@@ -92,7 +92,7 @@
     <script src="/static/js/tracker-search.js?v=6"></script>
     <script src="/static/js/tracker-map.js?v=23"></script>
     <script>
-        console.log('🚀 Инициализация трекера для Event ID =', window.EVENT_CONFIG.id);
+        console.log('Инициализация трекера для Event ID =', window.EVENT_CONFIG.id);
         CONFIG.EVENT_NAME = window.EVENT_CONFIG.code;
         CONFIG.EVENT_ID   = window.EVENT_CONFIG.id;
         setTimeout(() => { init(); }, 100);

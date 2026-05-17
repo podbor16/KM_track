@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentSelectedIndex = -1;
 
     if (!searchInput || !resultsContainer || !searchStatus) {
-        console.error('❌ history.js: не найдены обязательные элементы DOM');
+        console.error('history.js: не найдены обязательные элементы DOM');
         return;
     }
 
@@ -60,9 +60,9 @@ document.addEventListener('DOMContentLoaded', function() {
             currentSelectedIndex = -1;
 
         } catch (error) {
-            console.error('❌ Ошибка при поиске:', error);
+            console.error('Ошибка при поиске:', error);
             resultsContainer.innerHTML = `<div class="no-results">Ошибка при поиске:<br><small>${error.message}</small></div>`;
-            searchStatus.textContent = '❌ Ошибка поиска';
+            searchStatus.textContent = 'Ошибка поиска';
             resultsContainer.classList.add('show');
         }
     }

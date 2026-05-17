@@ -151,7 +151,7 @@ async function loadRunnersData(silent = false) {
         
         if (eventIdOrIds !== undefined) {
             // Загружаем из БД через API с правильным event_id
-            console.log('📊 Загрузка результатов из БД через API');
+            console.log('Загрузка результатов из БД через API');
             
             // Если это массив дистанций (для Жары), загружаем все вместе
             const eventIds = Array.isArray(eventIdOrIds) ? eventIdOrIds : [eventIdOrIds];
@@ -164,7 +164,7 @@ async function loadRunnersData(silent = false) {
                 }
                 
                 const data = await response.json();
-                console.log(`✅ Загружено из БД (event_id=${eventId}):`, data.results ? data.results.length : 0, 'участников');
+                console.log(`Загружено из БД (event_id=${eventId}):`, data.results ? data.results.length : 0, 'участников');
                 rawData = rawData.concat(data.results || []);
             }
         } else {
@@ -645,19 +645,19 @@ function formatSegmentName(code) {
  */
 function getSegmentIcon(code) {
     const icons = {
-        'start': '🏁',
-        'kt1': '🏃',
-        'kt2': '🏃',
-        'kt3': '🏃',
-        'kt4': '🏃',
-        'kt5': '🏃',
-        'kt6': '🏃',
-        'kt7': '🏃',
-        'finish': '🎯'
+        'start': '',
+        'kt1': '',
+        'kt2': '',
+        'kt3': '',
+        'kt4': '',
+        'kt5': '',
+        'kt6': '',
+        'kt7': '',
+        'finish': ''
     };
-    
+
     const mainPart = code.split('-')[0];
-    return icons[mainPart] || '⚡';
+    return icons[mainPart] || '';
 }
 
 /**

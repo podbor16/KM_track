@@ -309,7 +309,7 @@ async function init() {
             renderDistanceSwitcher(trackedDistances, defaultDist);
         }
     } catch (e) {
-        console.error('❌ Ошибка загрузки конфига события:', e);
+        console.error('Ошибка загрузки конфига события:', e);
     }
 
     loadSelectedFromStorage();
@@ -329,7 +329,7 @@ async function init() {
     updateEventTitle();
     setInterval(loadAnalytics, 30000);
 
-    updateStatus(`✅ Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
+    updateStatus(`Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
 }
 
 
@@ -339,7 +339,7 @@ function updateEventTitle() {
     const name = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || '';
     const year = CONFIG.EVENT_YEAR || '';
     const dist = CONFIG.CURRENT_DISTANCE ? `, ${CONFIG.CURRENT_DISTANCE}` : '';
-    h1.textContent = `🏃 Трекер забега. «${name}» ${year}${dist}.`;
+    h1.textContent = `Трекер забега. «${name}» ${year}${dist}.`;
 }
 
 
@@ -477,7 +477,7 @@ function _applyRunnerData(data) {
         );
     });
 
-    updateStatus(`✅ Загружено участников: ${allRunners.length}`);
+    updateStatus(`Загружено участников: ${allRunners.length}`);
 }
 
 
@@ -502,7 +502,7 @@ async function loadAllRunners() {
         _applyRunnerData(data);
 
     } catch (error) {
-        console.error('❌ Ошибка при загрузке участников:', error);
+        console.error('Ошибка при загрузке участников:', error);
         allRunners = [];
         updateStatus('Ошибка загрузки участников');
     }
@@ -550,7 +550,7 @@ async function loadAnalytics() {
         }
 
     } catch (error) {
-        console.error('❌ Ошибка загрузки аналитики:', error);
+        console.error('Ошибка загрузки аналитики:', error);
         const analyticsPanel = document.getElementById('analyticsContent');
         if (analyticsPanel) {
             analyticsPanel.innerHTML = `<p style="color: red;">Ошибка загрузки аналитики: ${error.message}</p>`;
@@ -637,7 +637,7 @@ function renderAnalyticsHTML(stats, results) {
 
     return `
         <div class="analytics-section">
-            <h3>📊 ${evName} ${evYear}${distStr} — Общая статистика</h3>
+            <h3>${evName} ${evYear}${distStr} — Общая статистика</h3>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-value">${stats.total}</div>
@@ -663,15 +663,15 @@ function renderAnalyticsHTML(stats, results) {
         </div>
 
         <div class="analytics-section">
-            <h3>👥 Распределение по полу</h3>
+            <h3>Распределение по полу</h3>
             <div class="gender-stats">
                 <div class="gender-stat">
-                    <div class="gender-title">👨 Мужчины</div>
+                    <div class="gender-title">Мужчины</div>
                     <div class="gender-count">${stats.male}</div>
                     <div class="gender-avg-time">${((stats.male / totalSafe) * 100).toFixed(1)}%</div>
                 </div>
                 <div class="gender-stat">
-                    <div class="gender-title">👩 Женщины</div>
+                    <div class="gender-title">Женщины</div>
                     <div class="gender-count">${stats.female}</div>
                     <div class="gender-avg-time">${((stats.female / totalSafe) * 100).toFixed(1)}%</div>
                 </div>
@@ -680,7 +680,7 @@ function renderAnalyticsHTML(stats, results) {
 
         <div class="analytics-section">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
-                <h3 style="margin: 0;">🏆 Топ-10 финишёров</h3>
+                <h3 style="margin: 0;">Топ-10 финишёров</h3>
                 <div class="top-gender-tabs">${genderBtns}</div>
             </div>
             <div style="overflow-x: auto;" id="topFinishersTable">
@@ -706,7 +706,7 @@ function startAutoUpdate() {
     source.onmessage = async (e) => {
         updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
-        updateStatus(`🔄 Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
+        updateStatus(`Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
         if (isProcessing) return;
         isProcessing = true;
@@ -731,14 +731,14 @@ function startAutoUpdate() {
                 refreshAnalyticsFromMemory();
             }
         } catch (err) {
-            console.error('❌ Ошибка SSE данных:', err);
+            console.error('Ошибка SSE данных:', err);
         } finally {
             isProcessing = false;
         }
     };
 
     source.onerror = () => {
-        updateStatus('⚠️ SSE: переподключение...');
+        updateStatus('SSE: переподключение...');
     };
 
     console.log(`[SSE] Трекер подключён: event_id=${CONFIG.EVENT_ID}`);
