@@ -239,8 +239,8 @@ function escHtml(s) {
 
 function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
-    const isRunning = status.includes('running') || status.includes('started');
-    const isFinished = status.includes('finish');
+    const isRunning = status === 'running' || status === 'started' || status === 'на трассе';
+    const isFinished = status === 'finished' || status === 'финишировал' || status.startsWith('finish');
 
     // Circle badge — same color as map marker
     const circleColor = getStatusColor(runner.status, runner.lap ?? 0);

@@ -3,8 +3,44 @@
 """
 
 import logging
+import re
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
+
+# Маппинг краткого формата категорий (Весна/Первомай 2026) → исторический
+_CAT_MAP = {
+    'М 49':   'мужчины до 49 лет',
+    'Ж 49':   'женщины до 49 лет',
+    'М 50-59': 'мужчины 50-59 лет',
+    'Ж 50-59': 'женщины 50-59 лет',
+    'М 60-64': 'мужчины 60-64 года',
+    'Ж 60-64': 'женщины 60-64 года',
+    'М 65-69': 'мужчины 65-69 лет',
+    'Ж 65-69': 'женщины 65 лет и старше',
+    'М 70-74': 'мужчины 70-74 года',
+    'Ж 70-74': 'женщины 60-64 года',
+    'М 75-79': 'мужчины 75 лет и старше',
+    'М 80+':   'мужчины 75 лет и старше',
+    'Ж 75-79': 'женщины 65 лет и старше',
+    'Ж 80+':   'женщины 65 лет и старше',
+}
+
+def _normalize_cat(cat: str) -> str:
+    """Убирает суффикс с годом рождения: 'мужчины до 49 лет (1977 г.р.)' → 'мужчины до 49 лет'"""
+    return re.sub(r'\s*\([^)]+\)', '', cat).strip().lower()
+
+def _resolve_speed(category: str, category_speeds: Dict[str, float], default: float) -> float:
+    """Находит скорость по категории с учётом маппинга и нормализации."""
+    if not category:
+        return default
+    if category in category_speeds:
+        return category_speeds[category]
+    cat_lookup = _CAT_MAP.get(category, category)
+    cat_norm = _normalize_cat(cat_lookup)
+    for key, speed in category_speeds.items():
+        if _normalize_cat(key) == cat_norm:
+            return speed
+    return default
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +152,7 @@ def calculate_live_position(
             speed_kmh = hist_speed
         else:
             category = (result.get('category') or '').strip()
-            speed_kmh = category_speeds.get(category, DEFAULT_SPEED)
+            speed_kmh = _resolve_speed(category, category_speeds, DEFAULT_SPEED)
             if speed_kmh <= 0:
                 speed_kmh = DEFAULT_SPEED
 
