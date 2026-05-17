@@ -21,6 +21,9 @@ LIVE_EVENT_ID = os.environ.get("LOCUST_LIVE_EVENT_ID", "106")
 # Пароль для бизнес-аналитики (из .env или переменной окружения)
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD", "km2026admin")
 
+# Имя пользователя для бизнес-аналитики
+ADMIN_USERNAME = os.environ.get("LOCUST_ADMIN_USERNAME", "admin")
+
 
 class TrackerUser(HttpUser):
     """55% трафика — открыли трекер и polling каждые 2–4s."""
@@ -103,12 +106,14 @@ class BusinessUser(HttpUser):
 
     def on_start(self):
         """Войти один раз при старте VU — cookie сохраняется автоматически."""
-        self.client.post(
+        resp = self.client.post(
             "/login",
-            data={"password": ADMIN_PASSWORD},
+            data={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
             name="/login",
             allow_redirects=True,
         )
+        if resp.status_code not in (200, 302):
+            self.environment.runner.quit()
 
     @task(1)
     def view_business_analytics(self):
