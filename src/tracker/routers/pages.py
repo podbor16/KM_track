@@ -242,13 +242,17 @@ async def business_analytics_page(
 
     datalens_embeds = []
     if settings.DATALENS_KEY_SECRET:
-        for cfg in settings.DATALENS_EMBEDS:
-            token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
-            embed_type = cfg.get("type", "dash")
-            datalens_embeds.append({
-                "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
-                "title": cfg.get("title", ""),
-            })
+        try:
+            for cfg in settings.DATALENS_EMBEDS:
+                token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
+                embed_type = cfg.get("type", "dash")
+                datalens_embeds.append({
+                    "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
+                    "title": cfg.get("title", ""),
+                })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"DataLens embed token error: {e}")
 
     return templates.TemplateResponse("business-analytics.html", {
         "request": request,
