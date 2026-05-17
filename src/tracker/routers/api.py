@@ -645,6 +645,7 @@ async def sse_tracker(request: Request, event_id: int = Query(..., description="
 
     async def stream():
         try:
+            yield {"comment": "connected"}
             while True:
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=25)

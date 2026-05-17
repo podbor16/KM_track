@@ -82,7 +82,13 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
 
     print(f"\n  Запуск Locust + k6 одновременно...")
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
-    k6_proc = subprocess.Popen(k6_cmd, cwd=REPO_ROOT)
+    try:
+        k6_proc = subprocess.Popen(k6_cmd, cwd=REPO_ROOT)
+    except FileNotFoundError:
+        locust_proc.terminate()
+        locust_proc.wait()
+        print(f"\n  ОШИБКА: k6 не найден. Установи: winget install k6 --id k6.k6")
+        return False
 
     try:
         locust_proc.wait(timeout=600)
@@ -108,6 +114,7 @@ def main():
     parser = argparse.ArgumentParser(description="Оркестратор нагрузочного тестирования KM_track")
     parser.add_argument("--level", choices=["L1", "L2", "L3", "L4"], help="Запустить только один уровень")
     parser.add_argument("--smoke", action="store_true", help="Smoke-тест (5+10 users, 1 мин)")
+    parser.add_argument("--yes", "-y", action="store_true", help="Не спрашивать подтверждение (для conda run / CI)")
     args = parser.parse_args()
 
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -132,7 +139,11 @@ def main():
         duration = DURATION
         print(f"\nРежим: ПОЛНЫЙ тест L1→L4 (~40 мин)")
 
-    input("\nНажмите Enter для начала или Ctrl+C для отмены...")
+    if not args.yes:
+        try:
+            input("\nНажмите Enter для начала или Ctrl+C для отмены...")
+        except EOFError:
+            pass  # conda run не пробрасывает stdin — продолжаем без паузы
 
     all_ok = True
     for i, level in enumerate(levels):
