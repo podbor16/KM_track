@@ -1,6 +1,9 @@
 """
 Оркестратор нагрузочного тестирования KM_track.
-Запускает Locust + k6 одновременно для каждого уровня L1→L4.
+Запускает Locust (HTTP) + sse_load.py (SSE) одновременно для каждого уровня L1→L4.
+
+SSE тест использует asyncio/aiohttp вместо k6: k6 http.get() не держит
+chunked SSE-потоки и возвращается после первого чанка (известное ограничение).
 
 Запуск:
     python tests/load/run_load_test.py
@@ -9,7 +12,7 @@
 
 Переменные окружения:
     LOAD_TEST_HOST          — хост (по умолч. https://analytics.krasmarafon.ru)
-    LIVE_EVENT_ID           — event_id live-гонки (по умолч. 106)
+    LIVE_EVENT_ID           — event_id live-гонки (по умолч. 104)
     LOCUST_ADMIN_PASSWORD   — пароль бизнес-аналитики (по умолч. km2026admin)
 """
 
@@ -26,13 +29,23 @@ LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")  # 104=Ночной за�
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD", "km2026admin")
 
 LEVELS = [
-    {"name": "L1", "locust_users": 165,  "k6_vus": 335,  "spawn_rate": 20},
-    {"name": "L2", "locust_users": 665,  "k6_vus": 1335, "spawn_rate": 40},
-    {"name": "L3", "locust_users": 1665, "k6_vus": 3335, "spawn_rate": 80},
-    {"name": "L4", "locust_users": 3335, "k6_vus": 6665, "spawn_rate": 100},
+    {"name": "L1", "locust_users": 165,  "sse_vus": 335,  "spawn_rate": 20},
+    {"name": "L2", "locust_users": 665,  "sse_vus": 1335, "spawn_rate": 40},
+    {"name": "L3", "locust_users": 1665, "sse_vus": 3335, "spawn_rate": 80},
+    {"name": "L4", "locust_users": 3335, "sse_vus": 6665, "spawn_rate": 100},
 ]
 
-SMOKE = {"name": "smoke", "locust_users": 5, "k6_vus": 10, "spawn_rate": 5}
+SMOKE = {"name": "smoke", "locust_users": 5, "sse_vus": 10, "spawn_rate": 5}
+
+
+def _duration_to_seconds(duration: str) -> int:
+    """Конвертирует '8m', '1m', '30s' → секунды."""
+    duration = duration.strip()
+    if duration.endswith("m"):
+        return int(duration[:-1]) * 60
+    if duration.endswith("s"):
+        return int(duration[:-1])
+    return int(duration)
 
 DURATION = "8m"
 PAUSE_BETWEEN_S = 120  # 2 минуты
@@ -42,17 +55,20 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 
 def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
     name = level["name"]
-    total = level["locust_users"] + level["k6_vus"]
+    total = level["locust_users"] + level["sse_vus"]
 
     print(f"\n{'=' * 60}")
-    print(f"  Уровень {name}: {level['locust_users']} HTTP + {level['k6_vus']} SSE = {total} пользователей")
+    print(f"  Уровень {name}: {level['locust_users']} HTTP + {level['sse_vus']} SSE = {total} пользователей")
     print(f"  Хост: {HOST}  |  Live event_id: {LIVE_EVENT_ID}")
     print(f"{'=' * 60}")
 
     report_dir.mkdir(parents=True, exist_ok=True)
     locust_report = report_dir / f"locust_{name}.html"
-    k6_summary   = report_dir / f"k6_{name}_summary.json"  # агрегированные метрики (~KB)
-    k6_stdout    = report_dir / f"k6_{name}_stdout.txt"    # живой вывод k6 с прогрессом
+    sse_stdout    = report_dir / f"sse_{name}_stdout.txt"
+
+    # Длительность SSE: CONN_HOLD_S + буфер, чтобы уложиться в duration
+    hold_s = _duration_to_seconds(duration) - 20
+    hold_s = max(hold_s, 10)
 
     locust_cmd = [
         sys.executable, "-m", "locust",
@@ -65,63 +81,54 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
         "--headless",
     ]
 
-    k6_cmd = [
-        "k6", "run",
-        str(REPO_ROOT / "tests" / "load" / "sse_test.js"),
-        "--vus", str(level["k6_vus"]),
-        "--duration", duration,
-        "--summary-export", str(k6_summary),   # только итоговая сводка (~KB, не GB)
-        "--env", f"K6_HOST={HOST}",
-        "--env", f"K6_EVENT_ID={LIVE_EVENT_ID}",
+    sse_cmd = [
+        sys.executable,
+        str(REPO_ROOT / "tests" / "load" / "sse_load_remote.py"),
+        "--vus", str(level["sse_vus"]),
+        "--hold", str(hold_s),
     ]
 
     env = {
         **os.environ,
         "LOCUST_LIVE_EVENT_ID": LIVE_EVENT_ID,
         "LOCUST_ADMIN_PASSWORD": ADMIN_PASSWORD,
+        "PYTHONIOENCODING": "utf-8",
     }
 
-    print(f"\n  Запуск Locust + k6 одновременно...")
+    print(f"\n  Запуск Locust (HTTP) + sse_load.py (SSE) одновременно...")
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
-    try:
-        with open(k6_stdout, "w", encoding="utf-8") as k6_log:
-            k6_proc = subprocess.Popen(
-                k6_cmd, cwd=REPO_ROOT,
-                stdout=k6_log, stderr=subprocess.STDOUT,
-            )
-    except FileNotFoundError:
-        locust_proc.terminate()
-        locust_proc.wait()
-        print(f"\n  ОШИБКА: k6 не найден. Установи: winget install k6 --id k6.k6")
-        return False
+    with open(sse_stdout, "w", encoding="utf-8") as sse_log:
+        sse_proc = subprocess.Popen(
+            sse_cmd, env=env, cwd=REPO_ROOT,
+            stdout=sse_log, stderr=subprocess.STDOUT,
+        )
 
+    locust_timeout = _duration_to_seconds(duration) + 60
     try:
-        locust_proc.wait(timeout=600)
-        k6_proc.wait(timeout=60)
+        locust_proc.wait(timeout=locust_timeout)
+        sse_proc.wait(timeout=120)
     except subprocess.TimeoutExpired:
         print(f"\n  WARN: процесс не завершился вовремя — принудительно останавливаем")
-        locust_proc.terminate()
-        k6_proc.terminate()
-        locust_proc.wait()
-        k6_proc.wait()
+        for p in (locust_proc, sse_proc):
+            p.terminate()
+            p.wait()
 
     locust_ok = locust_proc.returncode == 0
-    k6_ok = k6_proc.returncode == 0
+    sse_ok = sse_proc.returncode == 0
 
-    # Показываем финальную сводку k6 из лога
-    if k6_stdout.exists():
-        lines = k6_stdout.read_text(encoding="utf-8", errors="replace").splitlines()
-        summary_lines = [l for l in lines if any(x in l for x in ["http_req", "sse_", "checks", "iterations", "✓", "✗"])]
-        if summary_lines:
-            print(f"\n  k6 сводка:")
-            for l in summary_lines[-20:]:
-                print(f"    {l}")
+    # Показываем финальную сводку SSE
+    if sse_stdout.exists():
+        lines = sse_stdout.read_text(encoding="utf-8", errors="replace").splitlines()
+        tail = lines[-25:] if len(lines) > 25 else lines
+        print(f"\n  SSE сводка:")
+        for l in tail:
+            print(f"    {l}")
 
     print(f"\n  Locust: {'OK' if locust_ok else 'FAIL'} (exit {locust_proc.returncode})")
-    print(f"  k6:     {'OK' if k6_ok else 'FAIL'} (exit {k6_proc.returncode})")
-    print(f"  Отчёты: {locust_report.name}, {k6_summary.name}, {k6_stdout.name}")
+    print(f"  SSE:    {'OK' if sse_ok else 'FAIL'} (exit {sse_proc.returncode})")
+    print(f"  Отчёты: {locust_report.name}, {sse_stdout.name}")
 
-    return locust_ok and k6_ok
+    return locust_ok and sse_ok
 
 
 def main():
