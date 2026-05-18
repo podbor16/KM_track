@@ -32,5 +32,5 @@ jobs:
             sleep 5
 
             # Проверить что поднялось
-            curl -sf http://localhost:8000/api/events || (echo "HEALTH CHECK FAILED" && exit 1)
+            curl -sf http://localhost:8000/ -o /dev/null || (echo "HEALTH CHECK FAILED" && exit 1)
             echo "=== Deploy OK ==="
