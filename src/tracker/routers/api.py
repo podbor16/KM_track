@@ -359,7 +359,7 @@ async def get_registered_runners(
         from src.analytics.db_connection_optimized import get_test_table_data
         from src.tracker.models.analytics import RegisteredRunnerInfo
 
-        all_data = get_test_table_data()
+        all_data = await asyncio.get_event_loop().run_in_executor(None, get_test_table_data)
 
         filtered = [
             r for r in all_data
