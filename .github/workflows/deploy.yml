@@ -1,0 +1,36 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [Map]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          timeout: 60s
+          script: |
+            set -e
+
+            # Обновить код
+            git config --global --add safe.directory /opt/km_track
+            git -C /opt/km_track pull origin Map
+
+            # Применить nginx конфиг если изменился
+            cp /opt/km_track/deploy/nginx.conf /etc/nginx/nginx.conf
+            nginx -t
+            systemctl reload nginx
+
+            # Перезапустить приложение
+            systemctl restart km_track
+            sleep 3
+
+            # Проверить что поднялось
+            curl -sf http://localhost:8000/health || (echo "HEALTH CHECK FAILED" && exit 1)
+            echo "=== Deploy OK ==="
