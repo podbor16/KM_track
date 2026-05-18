@@ -14,3 +14,4 @@ pytest-mock>=3.12
 cryptography>=42.0
 PyYAML>=6.0
 sse-starlette>=1.6
+redis[hiredis]>=5.0
