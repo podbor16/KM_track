@@ -3,7 +3,7 @@ import logging
 import math
 import re
 
-_log = logging.getLogger("km_track.webhook")
+_log = logging.getLogger(__name__)
 
 
 def decode_from_db_format(value):

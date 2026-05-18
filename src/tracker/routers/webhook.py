@@ -14,7 +14,7 @@ from src.analytics.db_connection_optimized import get_pooled_connection
 from src.tracker.services.tilda_webhook import transform_tilda_payload
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
-_log = logging.getLogger("km_track.webhook")
+_log = logging.getLogger(__name__)
 
 
 @router.post("/tilda/{token}")
