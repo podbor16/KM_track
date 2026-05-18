@@ -33,6 +33,13 @@ export const options = {
   },
 };
 
+// Уникальный IP на каждый VU — имитирует разных пользователей с разных адресов.
+// nginx читает X-Forwarded-For для rate limiting (см. deploy/nginx.conf map).
+function vuFakeIP() {
+  const vu = __VU;
+  return `${(vu % 223) + 1}.${Math.floor(vu / 223) % 254 + 1}.${Math.floor(vu / 56802) % 254 + 1}.1`;
+}
+
 export default function () {
   const url = `${HOST}/api/sse/tracker?event_id=${EVENT_ID}`;
 
@@ -40,6 +47,7 @@ export default function () {
     headers: {
       'Accept': 'text/event-stream',
       'Cache-Control': 'no-cache',
+      'X-Forwarded-For': vuFakeIP(),
     },
     timeout: `${CONN_HOLD_S + 10}s`,
   });

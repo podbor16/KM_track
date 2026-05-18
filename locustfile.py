@@ -12,6 +12,22 @@ import os
 import random
 from locust import HttpUser, task, between
 
+
+class FakeIPUser(HttpUser):
+    """Базовый класс: каждый VU получает уникальный X-Forwarded-For.
+    Nginx читает этот заголовок для rate limiting → имитируем разные IP.
+    """
+    abstract = True
+
+    def on_start(self):
+        fake_ip = (
+            f"{random.randint(1, 223)}."
+            f"{random.randint(1, 254)}."
+            f"{random.randint(1, 254)}."
+            f"{random.randint(1, 254)}"
+        )
+        self.client.headers.update({"X-Forwarded-For": fake_ip})
+
 # Event IDs, которые реально есть в БД
 EVENT_IDS = [67, 71, 75, 104, 106, 121]
 
@@ -25,7 +41,7 @@ ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD", "km2026admin")
 ADMIN_USERNAME = os.environ.get("LOCUST_ADMIN_USERNAME", "admin")
 
 
-class TrackerUser(HttpUser):
+class TrackerUser(FakeIPUser):
     """55% трафика — открыли трекер и polling каждые 2–4s."""
     weight = 55
     wait_time = between(2, 4)
@@ -42,7 +58,7 @@ class TrackerUser(HttpUser):
         )
 
 
-class ResultsUser(HttpUser):
+class ResultsUser(FakeIPUser):
     """25% трафика — просматривают и переключают результаты событий."""
     weight = 25
     wait_time = between(3, 10)
@@ -61,7 +77,7 @@ class ResultsUser(HttpUser):
         self.client.get("/race-analysis", name="/race-analysis")
 
 
-class StartListUser(HttpUser):
+class StartListUser(FakeIPUser):
     """10% трафика — смотрят стартовый список."""
     weight = 10
     wait_time = between(5, 15)
@@ -82,7 +98,7 @@ class StartListUser(HttpUser):
         self.client.get("/history", name="/history")
 
 
-class SearchUser(HttpUser):
+class SearchUser(FakeIPUser):
     """5% трафика — ищут конкретного спортсмена."""
     weight = 5
     wait_time = between(5, 15)
@@ -99,12 +115,13 @@ class SearchUser(HttpUser):
         self.client.get("/health", name="/health")
 
 
-class BusinessUser(HttpUser):
+class BusinessUser(FakeIPUser):
     """5% трафика — организаторы в бизнес-аналитике."""
     weight = 5
     wait_time = between(10, 30)
 
     def on_start(self):
+        super().on_start()  # назначить уникальный X-Forwarded-For
         """Войти один раз при старте VU — cookie сохраняется автоматически."""
         resp = self.client.post(
             "/login",
