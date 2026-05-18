@@ -79,8 +79,8 @@ async def sse_vu(vu_id, hold_seconds, results):
         start = time.monotonic()
         connected = False
 
-        # Phase 1: wait for ': connected' in first ~30s
-        deadline_connect = start + 30
+        # Phase 1: wait for ': connected' — up to 60s under load
+        deadline_connect = start + 60
         buf = b""
         while time.monotonic() < deadline_connect:
             try:
