@@ -22,15 +22,25 @@ async def tilda_webhook(token: str, request: Request):
     if not settings.TILDA_WEBHOOK_SECRET or token != settings.TILDA_WEBHOOK_SECRET:
         raise HTTPException(status_code=403, detail="Invalid token")
 
+    content_type = request.headers.get("content-type", "")
     try:
-        body = await request.json()
+        if "application/json" in content_type:
+            body = await request.json()
+        elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            form = await request.form()
+            body = dict(form)
+        else:
+            # попробуем JSON, потом form
+            raw = await request.body()
+            try:
+                body = json.loads(raw)
+            except Exception:
+                from urllib.parse import parse_qs
+                parsed = parse_qs(raw.decode("utf-8", errors="replace"))
+                body = {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
     except Exception:
-        raw = await request.body()
-        try:
-            body = json.loads(raw)
-        except Exception:
-            _log.warning("tilda_webhook: не удалось распарсить тело запроса")
-            return JSONResponse({"ok": False, "error": "bad body"})
+        _log.warning("tilda_webhook: не удалось распарсить тело запроса")
+        return JSONResponse({"ok": False, "error": "bad body"})
 
     try:
         data = transform_tilda_payload(body)
