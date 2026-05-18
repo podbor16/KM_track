@@ -164,9 +164,9 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(15)
 
     async def _metrics_flusher():
-        """Каждые 5с снимает bucket метрик и пишет в SQLite."""
+        """Каждые 60с снимает bucket метрик и пишет в SQLite."""
         while True:
-            await asyncio.sleep(5)
+            await asyncio.sleep(60)
             sse_count = tracker_hub.total_sse_count()
             await metrics_collector.flush(sse_connections=sse_count)
 
