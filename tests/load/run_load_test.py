@@ -113,7 +113,10 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
             p.terminate()
             p.wait()
 
-    locust_ok = locust_proc.returncode == 0
+    # Locust возвращает exit 1 при наличии ЛЮБЫХ ошибок.
+    # Реальный критерий: < 1% ошибок. Считаем OK по HTML-отчёту если он есть.
+    # Fallback: exit 0 = OK, exit 1 = посмотрим на отчёт вручную.
+    locust_ok = locust_proc.returncode == 0  # строгий: любая ошибка = FAIL
     sse_ok = sse_proc.returncode == 0
 
     # Показываем финальную сводку SSE

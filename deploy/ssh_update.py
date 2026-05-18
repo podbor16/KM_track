@@ -1,0 +1,25 @@
+import paramiko, time
+
+HOST = "89.108.88.104"
+USER = "root"
+PASSWORD = "shsfzw5fHiQY8v6g"
+
+def run(client, cmd, timeout=60):
+    print(f">>> {cmd}")
+    stdin, stdout, stderr = client.exec_command(cmd, timeout=timeout, get_pty=True)
+    out = stdout.read().decode().strip()
+    if out: print(out)
+    return out
+
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(HOST, username=USER, password=PASSWORD, timeout=30)
+
+run(client, "git config --global --add safe.directory /opt/km_track")
+run(client, "git -C /opt/km_track pull origin Map")
+run(client, "systemctl restart km_track")
+time.sleep(3)
+run(client, "systemctl status km_track --no-pager | head -4")
+
+client.close()
+print("=== Обновлено ===")
