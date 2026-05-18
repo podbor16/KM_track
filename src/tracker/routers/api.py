@@ -668,6 +668,7 @@ async def sse_notify(request: Request):
 
     async def stream():
         try:
+            yield {"comment": "connected"}
             while True:
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=25)
