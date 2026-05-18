@@ -200,6 +200,9 @@ async function loadHistory(hours) {
     if (!res.ok) return;
     const json = await res.json();
     setData(json.points, json.meta.bucket_secs || 5);
+    if (json.points.length > 0) {
+      updateKpi(json.points[json.points.length - 1]);
+    }
   } catch(e) { console.error('loadHistory:', e); }
 }
 

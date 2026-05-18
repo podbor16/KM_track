@@ -214,7 +214,7 @@ _perf_logger = logging.getLogger("km_track.perf")
 @app.middleware("http")
 async def log_request_duration(request: Request, call_next):
     # BaseHTTPMiddleware несовместим с SSE-стримингом — пропускаем без обработки
-    if request.url.path.startswith("/api/sse"):
+    if request.url.path.startswith("/api/sse") or request.url.path == "/api/admin/metrics/live":
         return await call_next(request)
     start = _time.time()
     response = await call_next(request)
