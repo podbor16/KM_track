@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 HOST = os.environ.get("LOAD_TEST_HOST", "https://analytics.krasmarafon.ru")
-LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "106")
+LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")  # 104=Ночной забег, реальные данные
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD", "km2026admin")
 
 LEVELS = [
