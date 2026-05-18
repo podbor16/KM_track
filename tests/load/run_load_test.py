@@ -53,7 +53,25 @@ PAUSE_BETWEEN_S = 120  # 2 минуты
 REPO_ROOT = Path(__file__).parent.parent.parent
 
 
-def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
+def _setup_race_data() -> bool:
+    print("\n  [realistic] Генерация тест-данных (3000 бегунов)...")
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tests" / "load" / "setup_race_data.py"), "--setup"],
+        cwd=REPO_ROOT, timeout=120,
+    )
+    return result.returncode == 0
+
+
+def _teardown_race_data() -> bool:
+    print("\n  [realistic] Очистка тест-данных...")
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tests" / "load" / "setup_race_data.py"), "--teardown"],
+        cwd=REPO_ROOT, timeout=60,
+    )
+    return result.returncode == 0
+
+
+def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic: bool = False) -> bool:
     name = level["name"]
     total = level["locust_users"] + level["sse_vus"]
 
@@ -81,10 +99,18 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
         "--headless",
     ]
 
+    if realistic:
+        tracker_vus = level["sse_vus"] * 2 // 3
+        notify_vus = level["sse_vus"] - tracker_vus
+    else:
+        tracker_vus = level["sse_vus"]
+        notify_vus = 0
+
     sse_cmd = [
         sys.executable,
         str(REPO_ROOT / "tests" / "load" / "sse_load_remote.py"),
-        "--vus", str(level["sse_vus"]),
+        "--vus", str(tracker_vus),
+        "--notify-vus", str(notify_vus),
         "--hold", str(hold_s),
     ]
 
@@ -94,6 +120,24 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
         "LOCUST_ADMIN_PASSWORD": ADMIN_PASSWORD,
         "PYTHONIOENCODING": "utf-8",
     }
+
+    sim_proc = None
+    sim_log = None
+    if realistic:
+        if not _setup_race_data():
+            print("  [realistic] ОШИБКА: не удалось вставить тест-данные")
+            return False
+        print("  [realistic] Пауза 10с для прогрева кеша трекера...")
+        time.sleep(10)
+        sim_duration = _duration_to_seconds(duration) + 30
+        sim_log_path = report_dir / f"simulator_{name}.txt"
+        sim_log = open(sim_log_path, "w", encoding="utf-8")
+        sim_proc = subprocess.Popen(
+            [sys.executable, str(REPO_ROOT / "tests" / "load" / "race_simulator.py"),
+             "--duration", str(sim_duration)],
+            stdout=sim_log, stderr=subprocess.STDOUT, cwd=REPO_ROOT,
+        )
+        print(f"  [realistic] Симулятор запущен (pid={sim_proc.pid})")
 
     print(f"\n  Запуск Locust (HTTP) + sse_load.py (SSE) одновременно...")
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
@@ -119,6 +163,14 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
     locust_ok = locust_proc.returncode == 0  # строгий: любая ошибка = FAIL
     sse_ok = sse_proc.returncode == 0
 
+    if sim_proc:
+        sim_proc.terminate()
+        sim_proc.wait()
+    if sim_log:
+        sim_log.close()
+    if realistic:
+        _teardown_race_data()
+
     # Показываем финальную сводку SSE
     if sse_stdout.exists():
         lines = sse_stdout.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -139,6 +191,7 @@ def main():
     parser.add_argument("--level", choices=["L1", "L2", "L3", "L4"], help="Запустить только один уровень")
     parser.add_argument("--smoke", action="store_true", help="Smoke-тест (5+10 users, 1 мин)")
     parser.add_argument("--yes", "-y", action="store_true", help="Не спрашивать подтверждение (для conda run / CI)")
+    parser.add_argument("--realistic", action="store_true", help="3000 участников + notify SSE + race simulator")
     args = parser.parse_args()
 
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -171,7 +224,7 @@ def main():
 
     all_ok = True
     for i, level in enumerate(levels):
-        ok = run_level(level, report_dir, duration)
+        ok = run_level(level, report_dir, duration, realistic=args.realistic)
         all_ok = all_ok and ok
 
         if i < len(levels) - 1:
