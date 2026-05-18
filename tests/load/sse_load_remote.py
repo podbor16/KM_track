@@ -21,32 +21,52 @@ VPS_PASSWORD = "shsfzw5fHiQY8v6g"
 
 SSE_URL = "http://127.0.0.1:8000/api/sse/tracker?event_id=104"
 
+SSH_RETRIES = 5
+SSH_RETRY_DELAY = 10  # seconds between retries
+
+
+def _ssh_connect() -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    last_exc = None
+    for attempt in range(1, SSH_RETRIES + 1):
+        try:
+            client.connect(VPS_HOST, username=VPS_USER, password=VPS_PASSWORD, timeout=30)
+            return client
+        except Exception as e:
+            last_exc = e
+            print(f"  SSH connect attempt {attempt}/{SSH_RETRIES} failed: {e}")
+            if attempt < SSH_RETRIES:
+                time.sleep(SSH_RETRY_DELAY)
+    raise last_exc
+
 
 def run_remote(vus: int, hold_seconds: int) -> bool:
-    print(f"\nSSE нагрузочный тест (VPS remote via SSH)")
+    print(f"\nSSE load test (VPS remote via SSH)")
     print(f"  URL:    {SSE_URL}")
     print(f"  VUs:    {vus}")
     print(f"  Hold:   {hold_seconds}s")
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(VPS_HOST, username=VPS_USER, password=VPS_PASSWORD, timeout=30)
+    client = _ssh_connect()
 
     # Bash скрипт: N параллельных curl SSE + подсчёт успешных
-    # Каждый curl держит соединение ровно hold_seconds секунд
-    # Если получен `: connected` — соединение живое
+    # Каждый curl держит соединение hold_seconds + random(0..30)s
+    # чтобы соединения не закрылись одновременно (503 spike)
+    jitter = 30
     bash_script = f"""#!/bin/bash
 VUS={vus}
 HOLD={hold_seconds}
+JITTER={jitter}
 URL="{SSE_URL}"
 TMPDIR=$(mktemp -d)
 
-echo "Starting $VUS SSE connections, hold ${{HOLD}}s..."
+echo "Starting $VUS SSE connections, hold ${{HOLD}}+0..{jitter}s..."
 t_start=$(date +%s)
 
 for i in $(seq 1 $VUS); do
     IP="$((i % 223 + 1)).$((i / 223 % 254 + 1)).1.$i"
-    curl -s --max-time $HOLD \\
+    hold_i=$((HOLD + RANDOM % (JITTER + 1)))
+    curl -s --max-time $hold_i \\
         -H "Accept: text/event-stream" \\
         -H "X-Forwarded-For: $IP" \\
         "$URL" > "$TMPDIR/vu_$i.txt" 2>/dev/null &
@@ -106,21 +126,18 @@ fi
     sftp.chmod("/tmp/sse_load_test.sh", 0o755)
     sftp.close()
 
-    # Запускаем с увеличенным timeout (hold + рэмп + буфер)
-    timeout = hold_seconds + vus // 20 + 60
-    stdin, stdout, stderr = client.exec_command(
-        "bash /tmp/sse_load_test.sh", timeout=timeout
-    )
+    # Запускаем без timeout на channel: команда сама завершится через hold+рэмп секунд.
+    # paramiko timeout на recv() вызывает PipeTimeout на длинных командах — не используем.
+    stdin, stdout, stderr = client.exec_command("bash /tmp/sse_load_test.sh")
+    stdout.channel.settimeout(None)  # Блокирующий режим
 
-    # Стримим вывод
-    ok = False
-    for line in stdout:
-        line = line.rstrip()
-        print(f"  {line}")
-        if "ПРОЙДЕН" in line or "PROVALEN" in line:
-            ok = "ПРОЙДЕН" in line
-
+    # Читаем весь вывод после завершения команды
+    out = stdout.read().decode("utf-8", errors="replace")
     err = stderr.read().decode("utf-8", errors="replace").strip()
+
+    for line in out.splitlines():
+        print(f"  {line}")
+
     if err:
         print(f"  STDERR: {err}")
 
