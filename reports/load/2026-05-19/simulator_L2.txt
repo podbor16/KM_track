@@ -1,0 +1,21 @@
+
+Старт симулятора забега (duration=510s)...
+  [sim] Simulator started, duration=510s
+  [sim]   [0s] +10 finishes, +1 lead
+  [sim]   [30s] +10 finishes, +0 lead
+  [sim]   [60s] +10 finishes, +1 lead
+  [sim]   [90s] +10 finishes, +0 lead
+  [sim]   [120s] +10 finishes, +1 lead
+  [sim]   [150s] +10 finishes, +0 lead
+  [sim]   [180s] +10 finishes, +1 lead
+  [sim]   [210s] +10 finishes, +0 lead
+  [sim]   [240s] +10 finishes, +1 lead
+  [sim]   [270s] +10 finishes, +0 lead
+  [sim]   [300s] +10 finishes, +1 lead
+  [sim]   [330s] +10 finishes, +0 lead
+  [sim]   [360s] +10 finishes, +1 lead
+  [sim]   [390s] +10 finishes, +0 lead
+  [sim]   [420s] +10 finishes, +1 lead
+  [sim]   [450s] +10 finishes, +0 lead
+  [sim]   [480s] +10 finishes, +1 lead
+  [sim] Simulator stopped

@@ -1,0 +1,2187 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: C:\Users\podbo\Работа\КРАСМАРАФОН\KM_track\tests\load\sse_test.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 335 max VUs, 8m30s max duration (incl. graceful stop):
+              * default: 335 looping VUs for 8m0s (gracefulStop: 30s)
+
+
+running (0m01.0s), 335/335 VUs, 0 complete and 0 interrupted iterations
+default   [   0% ] 335 VUs  0m01.0s/8m0s
+
+running (0m02.0s), 335/335 VUs, 0 complete and 0 interrupted iterations
+default   [   0% ] 335 VUs  0m02.0s/8m0s
+
+running (0m03.0s), 335/335 VUs, 1962 complete and 0 interrupted iterations
+default   [   1% ] 335 VUs  0m03.0s/8m0s
+
+running (0m04.0s), 335/335 VUs, 4822 complete and 0 interrupted iterations
+default   [   1% ] 335 VUs  0m04.0s/8m0s
+
+running (0m05.0s), 335/335 VUs, 7736 complete and 0 interrupted iterations
+default   [   1% ] 335 VUs  0m05.0s/8m0s
+
+running (0m06.0s), 335/335 VUs, 10616 complete and 0 interrupted iterations
+default   [   1% ] 335 VUs  0m06.0s/8m0s
+
+running (0m07.0s), 335/335 VUs, 13434 complete and 0 interrupted iterations
+default   [   1% ] 335 VUs  0m07.0s/8m0s
+
+running (0m08.0s), 335/335 VUs, 16220 complete and 0 interrupted iterations
+default   [   2% ] 335 VUs  0m08.0s/8m0s
+
+running (0m09.0s), 335/335 VUs, 18801 complete and 0 interrupted iterations
+default   [   2% ] 335 VUs  0m09.0s/8m0s
+
+running (0m10.0s), 335/335 VUs, 22991 complete and 0 interrupted iterations
+default   [   2% ] 335 VUs  0m10.0s/8m0s
+
+running (0m11.0s), 335/335 VUs, 27311 complete and 0 interrupted iterations
+default   [   2% ] 335 VUs  0m11.0s/8m0s
+
+running (0m12.0s), 335/335 VUs, 31673 complete and 0 interrupted iterations
+default   [   2% ] 335 VUs  0m12.0s/8m0s
+
+running (0m13.0s), 335/335 VUs, 35886 complete and 0 interrupted iterations
+default   [   3% ] 335 VUs  0m13.0s/8m0s
+
+running (0m14.0s), 335/335 VUs, 40191 complete and 0 interrupted iterations
+default   [   3% ] 335 VUs  0m14.0s/8m0s
+
+running (0m15.0s), 335/335 VUs, 44526 complete and 0 interrupted iterations
+default   [   3% ] 335 VUs  0m15.0s/8m0s
+
+running (0m16.0s), 335/335 VUs, 48953 complete and 0 interrupted iterations
+default   [   3% ] 335 VUs  0m16.0s/8m0s
+
+running (0m17.0s), 335/335 VUs, 53220 complete and 0 interrupted iterations
+default   [   4% ] 335 VUs  0m17.0s/8m0s
+
+running (0m18.0s), 335/335 VUs, 57399 complete and 0 interrupted iterations
+default   [   4% ] 335 VUs  0m18.0s/8m0s
+
+running (0m19.0s), 335/335 VUs, 61687 complete and 0 interrupted iterations
+default   [   4% ] 335 VUs  0m19.0s/8m0s
+
+running (0m20.0s), 335/335 VUs, 66048 complete and 0 interrupted iterations
+default   [   4% ] 335 VUs  0m20.0s/8m0s
+
+running (0m21.0s), 335/335 VUs, 70429 complete and 0 interrupted iterations
+default   [   4% ] 335 VUs  0m21.0s/8m0s
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:25:16+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (0m22.0s), 335/335 VUs, 73807 complete and 0 interrupted iterations
+default   [   5% ] 335 VUs  0m22.0s/8m0s
+
+running (0m23.0s), 335/335 VUs, 78272 complete and 0 interrupted iterations
+default   [   5% ] 335 VUs  0m23.0s/8m0s
+
+running (0m24.0s), 335/335 VUs, 82694 complete and 0 interrupted iterations
+default   [   5% ] 335 VUs  0m24.0s/8m0s
+
+running (0m25.0s), 335/335 VUs, 87132 complete and 0 interrupted iterations
+default   [   5% ] 335 VUs  0m25.0s/8m0s
+
+running (0m26.0s), 335/335 VUs, 91641 complete and 0 interrupted iterations
+default   [   5% ] 335 VUs  0m26.0s/8m0s
+
+running (0m27.0s), 335/335 VUs, 96061 complete and 0 interrupted iterations
+default   [   6% ] 335 VUs  0m27.0s/8m0s
+
+running (0m28.0s), 335/335 VUs, 100459 complete and 0 interrupted iterations
+default   [   6% ] 335 VUs  0m28.0s/8m0s
+
+running (0m29.0s), 335/335 VUs, 104627 complete and 0 interrupted iterations
+default   [   6% ] 335 VUs  0m29.0s/8m0s
+
+running (0m30.0s), 335/335 VUs, 108904 complete and 0 interrupted iterations
+default   [   6% ] 335 VUs  0m30.0s/8m0s
+
+running (0m31.0s), 335/335 VUs, 113341 complete and 0 interrupted iterations
+default   [   6% ] 335 VUs  0m31.0s/8m0s
+
+running (0m32.0s), 335/335 VUs, 117817 complete and 0 interrupted iterations
+default   [   7% ] 335 VUs  0m32.0s/8m0s
+
+running (0m33.0s), 335/335 VUs, 122247 complete and 0 interrupted iterations
+default   [   7% ] 335 VUs  0m33.0s/8m0s
+
+running (0m34.0s), 335/335 VUs, 126232 complete and 0 interrupted iterations
+default   [   7% ] 335 VUs  0m34.0s/8m0s
+
+running (0m35.0s), 335/335 VUs, 130664 complete and 0 interrupted iterations
+default   [   7% ] 335 VUs  0m35.0s/8m0s
+
+running (0m36.0s), 335/335 VUs, 135299 complete and 0 interrupted iterations
+default   [   7% ] 335 VUs  0m36.0s/8m0s
+
+running (0m37.0s), 335/335 VUs, 139665 complete and 0 interrupted iterations
+default   [   8% ] 335 VUs  0m37.0s/8m0s
+
+running (0m38.0s), 335/335 VUs, 144044 complete and 0 interrupted iterations
+default   [   8% ] 335 VUs  0m38.0s/8m0s
+
+running (0m39.0s), 335/335 VUs, 148747 complete and 0 interrupted iterations
+default   [   8% ] 335 VUs  0m39.0s/8m0s
+
+running (0m40.0s), 335/335 VUs, 153199 complete and 0 interrupted iterations
+default   [   8% ] 335 VUs  0m40.0s/8m0s
+time="2026-05-18T13:25:34+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:34+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:34+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:25:35+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (0m41.0s), 335/335 VUs, 153573 complete and 0 interrupted iterations
+default   [   9% ] 335 VUs  0m41.0s/8m0s
+
+running (0m42.0s), 335/335 VUs, 157640 complete and 0 interrupted iterations
+default   [   9% ] 335 VUs  0m42.0s/8m0s
+
+running (0m43.0s), 335/335 VUs, 161961 complete and 0 interrupted iterations
+default   [   9% ] 335 VUs  0m43.0s/8m0s
+
+running (0m44.0s), 335/335 VUs, 166664 complete and 0 interrupted iterations
+default   [   9% ] 335 VUs  0m44.0s/8m0s
+
+running (0m45.0s), 335/335 VUs, 171119 complete and 0 interrupted iterations
+default   [   9% ] 335 VUs  0m45.0s/8m0s
+
+running (0m46.0s), 335/335 VUs, 175488 complete and 0 interrupted iterations
+default   [  10% ] 335 VUs  0m46.0s/8m0s
+
+running (0m47.0s), 335/335 VUs, 179952 complete and 0 interrupted iterations
+default   [  10% ] 335 VUs  0m47.0s/8m0s
+
+running (0m48.0s), 335/335 VUs, 184505 complete and 0 interrupted iterations
+default   [  10% ] 335 VUs  0m48.0s/8m0s
+
+running (0m49.0s), 335/335 VUs, 188872 complete and 0 interrupted iterations
+default   [  10% ] 335 VUs  0m49.0s/8m0s
+
+running (0m50.0s), 335/335 VUs, 193325 complete and 0 interrupted iterations
+default   [  10% ] 335 VUs  0m50.0s/8m0s
+
+running (0m51.0s), 335/335 VUs, 197666 complete and 0 interrupted iterations
+default   [  11% ] 335 VUs  0m51.0s/8m0s
+
+running (0m52.0s), 335/335 VUs, 202035 complete and 0 interrupted iterations
+default   [  11% ] 335 VUs  0m52.0s/8m0s
+
+running (0m53.0s), 335/335 VUs, 206395 complete and 0 interrupted iterations
+default   [  11% ] 335 VUs  0m53.0s/8m0s
+
+running (0m54.0s), 335/335 VUs, 210774 complete and 0 interrupted iterations
+default   [  11% ] 335 VUs  0m54.0s/8m0s
+
+running (0m55.0s), 335/335 VUs, 215093 complete and 0 interrupted iterations
+default   [  11% ] 335 VUs  0m55.0s/8m0s
+
+running (0m56.0s), 335/335 VUs, 219677 complete and 0 interrupted iterations
+default   [  12% ] 335 VUs  0m56.0s/8m0s
+
+running (0m57.0s), 335/335 VUs, 224047 complete and 0 interrupted iterations
+default   [  12% ] 335 VUs  0m57.0s/8m0s
+
+running (0m58.0s), 335/335 VUs, 228173 complete and 0 interrupted iterations
+default   [  12% ] 335 VUs  0m58.0s/8m0s
+
+running (0m59.0s), 335/335 VUs, 232457 complete and 0 interrupted iterations
+default   [  12% ] 335 VUs  0m59.0s/8m0s
+
+running (1m00.0s), 335/335 VUs, 236854 complete and 0 interrupted iterations
+default   [  12% ] 335 VUs  1m00.0s/8m0s
+
+running (1m01.0s), 335/335 VUs, 241238 complete and 0 interrupted iterations
+default   [  13% ] 335 VUs  1m01.0s/8m0s
+time="2026-05-18T13:25:56+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (1m02.0s), 335/335 VUs, 245303 complete and 0 interrupted iterations
+default   [  13% ] 335 VUs  1m02.0s/8m0s
+
+running (1m03.0s), 335/335 VUs, 249826 complete and 0 interrupted iterations
+default   [  13% ] 335 VUs  1m03.0s/8m0s
+
+running (1m04.0s), 335/335 VUs, 254265 complete and 0 interrupted iterations
+default   [  13% ] 335 VUs  1m04.0s/8m0s
+
+running (1m05.0s), 335/335 VUs, 258575 complete and 0 interrupted iterations
+default   [  14% ] 335 VUs  1m05.0s/8m0s
+
+running (1m06.0s), 335/335 VUs, 262987 complete and 0 interrupted iterations
+default   [  14% ] 335 VUs  1m06.0s/8m0s
+
+running (1m07.0s), 335/335 VUs, 267501 complete and 0 interrupted iterations
+default   [  14% ] 335 VUs  1m07.0s/8m0s
+
+running (1m08.0s), 335/335 VUs, 271785 complete and 0 interrupted iterations
+default   [  14% ] 335 VUs  1m08.0s/8m0s
+
+running (1m09.0s), 335/335 VUs, 275448 complete and 0 interrupted iterations
+default   [  14% ] 335 VUs  1m09.0s/8m0s
+
+running (1m10.0s), 335/335 VUs, 277893 complete and 0 interrupted iterations
+default   [  15% ] 335 VUs  1m10.0s/8m0s
+
+running (1m11.0s), 335/335 VUs, 280122 complete and 0 interrupted iterations
+default   [  15% ] 335 VUs  1m11.0s/8m0s
+
+running (1m12.0s), 335/335 VUs, 282466 complete and 0 interrupted iterations
+default   [  15% ] 335 VUs  1m12.0s/8m0s
+
+running (1m13.0s), 335/335 VUs, 284763 complete and 0 interrupted iterations
+default   [  15% ] 335 VUs  1m13.0s/8m0s
+
+running (1m14.0s), 335/335 VUs, 286451 complete and 0 interrupted iterations
+default   [  15% ] 335 VUs  1m14.0s/8m0s
+
+running (1m15.0s), 335/335 VUs, 288151 complete and 0 interrupted iterations
+default   [  16% ] 335 VUs  1m15.0s/8m0s
+
+running (1m16.0s), 335/335 VUs, 289838 complete and 0 interrupted iterations
+default   [  16% ] 335 VUs  1m16.0s/8m0s
+
+running (1m17.0s), 335/335 VUs, 293407 complete and 0 interrupted iterations
+default   [  16% ] 335 VUs  1m17.0s/8m0s
+
+running (1m18.0s), 335/335 VUs, 297581 complete and 0 interrupted iterations
+default   [  16% ] 335 VUs  1m18.0s/8m0s
+
+running (1m19.0s), 335/335 VUs, 301943 complete and 0 interrupted iterations
+default   [  16% ] 335 VUs  1m19.0s/8m0s
+
+running (1m20.0s), 335/335 VUs, 306163 complete and 0 interrupted iterations
+default   [  17% ] 335 VUs  1m20.0s/8m0s
+
+running (1m21.0s), 335/335 VUs, 310559 complete and 0 interrupted iterations
+default   [  17% ] 335 VUs  1m21.0s/8m0s
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:16+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (1m22.0s), 335/335 VUs, 311417 complete and 0 interrupted iterations
+default   [  17% ] 335 VUs  1m22.0s/8m0s
+
+running (1m23.0s), 335/335 VUs, 314527 complete and 0 interrupted iterations
+default   [  17% ] 335 VUs  1m23.0s/8m0s
+
+running (1m24.0s), 335/335 VUs, 319165 complete and 0 interrupted iterations
+default   [  17% ] 335 VUs  1m24.0s/8m0s
+
+running (1m25.0s), 335/335 VUs, 323550 complete and 0 interrupted iterations
+default   [  18% ] 335 VUs  1m25.0s/8m0s
+
+running (1m26.0s), 335/335 VUs, 327784 complete and 0 interrupted iterations
+default   [  18% ] 335 VUs  1m26.0s/8m0s
+
+running (1m27.0s), 335/335 VUs, 332339 complete and 0 interrupted iterations
+default   [  18% ] 335 VUs  1m27.0s/8m0s
+
+running (1m28.0s), 335/335 VUs, 336821 complete and 0 interrupted iterations
+default   [  18% ] 335 VUs  1m28.0s/8m0s
+
+running (1m29.0s), 335/335 VUs, 341288 complete and 0 interrupted iterations
+default   [  19% ] 335 VUs  1m29.0s/8m0s
+
+running (1m30.0s), 335/335 VUs, 345667 complete and 0 interrupted iterations
+default   [  19% ] 335 VUs  1m30.0s/8m0s
+time="2026-05-18T13:26:25+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:26:25+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (1m31.0s), 335/335 VUs, 350004 complete and 0 interrupted iterations
+default   [  19% ] 335 VUs  1m31.0s/8m0s
+
+running (1m32.0s), 335/335 VUs, 354508 complete and 0 interrupted iterations
+default   [  19% ] 335 VUs  1m32.0s/8m0s
+
+running (1m33.0s), 335/335 VUs, 358860 complete and 0 interrupted iterations
+default   [  19% ] 335 VUs  1m33.0s/8m0s
+
+running (1m34.0s), 335/335 VUs, 363105 complete and 0 interrupted iterations
+default   [  20% ] 335 VUs  1m34.0s/8m0s
+
+running (1m35.0s), 335/335 VUs, 367633 complete and 0 interrupted iterations
+default   [  20% ] 335 VUs  1m35.0s/8m0s
+
+running (1m36.0s), 335/335 VUs, 371977 complete and 0 interrupted iterations
+default   [  20% ] 335 VUs  1m36.0s/8m0s
+time="2026-05-18T13:26:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:26:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (1m37.0s), 335/335 VUs, 376130 complete and 0 interrupted iterations
+default   [  20% ] 335 VUs  1m37.0s/8m0s
+
+running (1m38.0s), 335/335 VUs, 380523 complete and 0 interrupted iterations
+default   [  20% ] 335 VUs  1m38.0s/8m0s
+
+running (1m39.0s), 335/335 VUs, 384962 complete and 0 interrupted iterations
+default   [  21% ] 335 VUs  1m39.0s/8m0s
+
+running (1m40.0s), 335/335 VUs, 389446 complete and 0 interrupted iterations
+default   [  21% ] 335 VUs  1m40.0s/8m0s
+
+running (1m41.0s), 335/335 VUs, 393798 complete and 0 interrupted iterations
+default   [  21% ] 335 VUs  1m41.0s/8m0s
+
+running (1m42.0s), 335/335 VUs, 398282 complete and 0 interrupted iterations
+default   [  21% ] 335 VUs  1m42.0s/8m0s
+
+running (1m43.0s), 335/335 VUs, 402647 complete and 0 interrupted iterations
+default   [  21% ] 335 VUs  1m43.0s/8m0s
+
+running (1m44.0s), 335/335 VUs, 406871 complete and 0 interrupted iterations
+default   [  22% ] 335 VUs  1m44.0s/8m0s
+
+running (1m45.0s), 335/335 VUs, 411383 complete and 0 interrupted iterations
+default   [  22% ] 335 VUs  1m45.0s/8m0s
+
+running (1m46.0s), 335/335 VUs, 415669 complete and 0 interrupted iterations
+default   [  22% ] 335 VUs  1m46.0s/8m0s
+
+running (1m47.0s), 335/335 VUs, 419898 complete and 0 interrupted iterations
+default   [  22% ] 335 VUs  1m47.0s/8m0s
+
+running (1m48.0s), 335/335 VUs, 424125 complete and 0 interrupted iterations
+default   [  22% ] 335 VUs  1m48.0s/8m0s
+
+running (1m49.0s), 335/335 VUs, 428381 complete and 0 interrupted iterations
+default   [  23% ] 335 VUs  1m49.0s/8m0s
+
+running (1m50.0s), 335/335 VUs, 432614 complete and 0 interrupted iterations
+default   [  23% ] 335 VUs  1m50.0s/8m0s
+
+running (1m51.0s), 335/335 VUs, 436637 complete and 0 interrupted iterations
+default   [  23% ] 335 VUs  1m51.0s/8m0s
+
+running (1m52.0s), 335/335 VUs, 440886 complete and 0 interrupted iterations
+default   [  23% ] 335 VUs  1m52.0s/8m0s
+
+running (1m53.0s), 335/335 VUs, 444402 complete and 0 interrupted iterations
+default   [  24% ] 335 VUs  1m53.0s/8m0s
+
+running (1m54.0s), 335/335 VUs, 448540 complete and 0 interrupted iterations
+default   [  24% ] 335 VUs  1m54.0s/8m0s
+
+running (1m55.0s), 335/335 VUs, 452936 complete and 0 interrupted iterations
+default   [  24% ] 335 VUs  1m55.0s/8m0s
+
+running (1m56.0s), 335/335 VUs, 457169 complete and 0 interrupted iterations
+default   [  24% ] 335 VUs  1m56.0s/8m0s
+
+running (1m57.0s), 335/335 VUs, 461479 complete and 0 interrupted iterations
+default   [  24% ] 335 VUs  1m57.0s/8m0s
+
+running (1m58.0s), 335/335 VUs, 465652 complete and 0 interrupted iterations
+default   [  25% ] 335 VUs  1m58.0s/8m0s
+
+running (1m59.0s), 335/335 VUs, 466063 complete and 0 interrupted iterations
+default   [  25% ] 335 VUs  1m59.0s/8m0s
+
+running (2m00.0s), 335/335 VUs, 467214 complete and 0 interrupted iterations
+default   [  25% ] 335 VUs  2m00.0s/8m0s
+
+running (2m01.0s), 335/335 VUs, 470163 complete and 0 interrupted iterations
+default   [  25% ] 335 VUs  2m01.0s/8m0s
+
+running (2m02.0s), 335/335 VUs, 474583 complete and 0 interrupted iterations
+default   [  25% ] 335 VUs  2m02.0s/8m0s
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:26:57+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (2m03.0s), 335/335 VUs, 476291 complete and 0 interrupted iterations
+default   [  26% ] 335 VUs  2m03.0s/8m0s
+
+running (2m04.0s), 335/335 VUs, 479161 complete and 0 interrupted iterations
+default   [  26% ] 335 VUs  2m04.0s/8m0s
+
+running (2m05.0s), 335/335 VUs, 483697 complete and 0 interrupted iterations
+default   [  26% ] 335 VUs  2m05.0s/8m0s
+
+running (2m06.0s), 335/335 VUs, 487873 complete and 0 interrupted iterations
+default   [  26% ] 335 VUs  2m06.0s/8m0s
+
+running (2m07.0s), 335/335 VUs, 492296 complete and 0 interrupted iterations
+default   [  26% ] 335 VUs  2m07.0s/8m0s
+
+running (2m08.0s), 335/335 VUs, 496608 complete and 0 interrupted iterations
+default   [  27% ] 335 VUs  2m08.0s/8m0s
+
+running (2m09.0s), 335/335 VUs, 501145 complete and 0 interrupted iterations
+default   [  27% ] 335 VUs  2m09.0s/8m0s
+
+running (2m10.0s), 335/335 VUs, 505422 complete and 0 interrupted iterations
+default   [  27% ] 335 VUs  2m10.0s/8m0s
+time="2026-05-18T13:27:05+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:27:05+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:27:05+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:27:05+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (2m11.0s), 335/335 VUs, 509597 complete and 0 interrupted iterations
+default   [  27% ] 335 VUs  2m11.0s/8m0s
+
+running (2m12.0s), 335/335 VUs, 513631 complete and 0 interrupted iterations
+default   [  27% ] 335 VUs  2m12.0s/8m0s
+
+running (2m13.0s), 335/335 VUs, 518023 complete and 0 interrupted iterations
+default   [  28% ] 335 VUs  2m13.0s/8m0s
+
+running (2m14.0s), 335/335 VUs, 522438 complete and 0 interrupted iterations
+default   [  28% ] 335 VUs  2m14.0s/8m0s
+
+running (2m15.0s), 335/335 VUs, 526938 complete and 0 interrupted iterations
+default   [  28% ] 335 VUs  2m15.0s/8m0s
+
+running (2m16.0s), 335/335 VUs, 531421 complete and 0 interrupted iterations
+default   [  28% ] 335 VUs  2m16.0s/8m0s
+
+running (2m17.0s), 335/335 VUs, 535615 complete and 0 interrupted iterations
+default   [  29% ] 335 VUs  2m17.0s/8m0s
+
+running (2m18.0s), 335/335 VUs, 540081 complete and 0 interrupted iterations
+default   [  29% ] 335 VUs  2m18.0s/8m0s
+
+running (2m19.0s), 335/335 VUs, 544442 complete and 0 interrupted iterations
+default   [  29% ] 335 VUs  2m19.0s/8m0s
+
+running (2m20.0s), 335/335 VUs, 549002 complete and 0 interrupted iterations
+default   [  29% ] 335 VUs  2m20.0s/8m0s
+
+running (2m21.0s), 335/335 VUs, 552903 complete and 0 interrupted iterations
+default   [  29% ] 335 VUs  2m21.0s/8m0s
+
+running (2m22.0s), 335/335 VUs, 556760 complete and 0 interrupted iterations
+default   [  30% ] 335 VUs  2m22.0s/8m0s
+
+running (2m23.0s), 335/335 VUs, 559907 complete and 0 interrupted iterations
+default   [  30% ] 335 VUs  2m23.0s/8m0s
+time="2026-05-18T13:27:18+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (2m24.0s), 335/335 VUs, 562967 complete and 0 interrupted iterations
+default   [  30% ] 335 VUs  2m24.0s/8m0s
+
+running (2m25.0s), 335/335 VUs, 565276 complete and 0 interrupted iterations
+default   [  30% ] 335 VUs  2m25.0s/8m0s
+
+running (2m26.0s), 335/335 VUs, 568307 complete and 0 interrupted iterations
+default   [  30% ] 335 VUs  2m26.0s/8m0s
+
+running (2m27.0s), 335/335 VUs, 570876 complete and 0 interrupted iterations
+default   [  31% ] 335 VUs  2m27.0s/8m0s
+
+running (2m28.0s), 335/335 VUs, 574210 complete and 0 interrupted iterations
+default   [  31% ] 335 VUs  2m28.0s/8m0s
+
+running (2m29.0s), 335/335 VUs, 577440 complete and 0 interrupted iterations
+default   [  31% ] 335 VUs  2m29.0s/8m0s
+
+running (2m30.0s), 335/335 VUs, 581211 complete and 0 interrupted iterations
+default   [  31% ] 335 VUs  2m30.0s/8m0s
+
+running (2m31.0s), 335/335 VUs, 585216 complete and 0 interrupted iterations
+default   [  31% ] 335 VUs  2m31.0s/8m0s
+
+running (2m32.0s), 335/335 VUs, 589059 complete and 0 interrupted iterations
+default   [  32% ] 335 VUs  2m32.0s/8m0s
+
+running (2m33.0s), 335/335 VUs, 593072 complete and 0 interrupted iterations
+default   [  32% ] 335 VUs  2m33.0s/8m0s
+
+running (2m34.0s), 335/335 VUs, 597057 complete and 0 interrupted iterations
+default   [  32% ] 335 VUs  2m34.0s/8m0s
+
+running (2m35.0s), 335/335 VUs, 600429 complete and 0 interrupted iterations
+default   [  32% ] 335 VUs  2m35.0s/8m0s
+
+running (2m36.0s), 335/335 VUs, 604332 complete and 0 interrupted iterations
+default   [  32% ] 335 VUs  2m36.0s/8m0s
+
+running (2m37.0s), 335/335 VUs, 608383 complete and 0 interrupted iterations
+default   [  33% ] 335 VUs  2m37.0s/8m0s
+
+running (2m38.0s), 335/335 VUs, 612477 complete and 0 interrupted iterations
+default   [  33% ] 335 VUs  2m38.0s/8m0s
+
+running (2m39.0s), 335/335 VUs, 616716 complete and 0 interrupted iterations
+default   [  33% ] 335 VUs  2m39.0s/8m0s
+
+running (2m40.0s), 335/335 VUs, 620919 complete and 0 interrupted iterations
+default   [  33% ] 335 VUs  2m40.0s/8m0s
+
+running (2m41.0s), 335/335 VUs, 625074 complete and 0 interrupted iterations
+default   [  34% ] 335 VUs  2m41.0s/8m0s
+
+running (2m42.0s), 335/335 VUs, 629223 complete and 0 interrupted iterations
+default   [  34% ] 335 VUs  2m42.0s/8m0s
+time="2026-05-18T13:27:37+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (2m43.0s), 335/335 VUs, 633330 complete and 0 interrupted iterations
+default   [  34% ] 335 VUs  2m43.0s/8m0s
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:27:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (2m44.0s), 335/335 VUs, 635114 complete and 0 interrupted iterations
+default   [  34% ] 335 VUs  2m44.0s/8m0s
+
+running (2m45.0s), 335/335 VUs, 635941 complete and 0 interrupted iterations
+default   [  34% ] 335 VUs  2m45.0s/8m0s
+
+running (2m46.0s), 335/335 VUs, 640721 complete and 0 interrupted iterations
+default   [  35% ] 335 VUs  2m46.0s/8m0s
+
+running (2m47.0s), 335/335 VUs, 644711 complete and 0 interrupted iterations
+default   [  35% ] 335 VUs  2m47.0s/8m0s
+
+running (2m48.0s), 335/335 VUs, 649105 complete and 0 interrupted iterations
+default   [  35% ] 335 VUs  2m48.0s/8m0s
+
+running (2m49.0s), 335/335 VUs, 653248 complete and 0 interrupted iterations
+default   [  35% ] 335 VUs  2m49.0s/8m0s
+
+running (2m50.0s), 335/335 VUs, 657844 complete and 0 interrupted iterations
+default   [  35% ] 335 VUs  2m50.0s/8m0s
+
+running (2m51.0s), 335/335 VUs, 662159 complete and 0 interrupted iterations
+default   [  36% ] 335 VUs  2m51.0s/8m0s
+
+running (2m52.0s), 335/335 VUs, 666719 complete and 0 interrupted iterations
+default   [  36% ] 335 VUs  2m52.0s/8m0s
+
+running (2m53.0s), 335/335 VUs, 671188 complete and 0 interrupted iterations
+default   [  36% ] 335 VUs  2m53.0s/8m0s
+
+running (2m54.0s), 335/335 VUs, 675515 complete and 0 interrupted iterations
+default   [  36% ] 335 VUs  2m54.0s/8m0s
+
+running (2m55.0s), 335/335 VUs, 679863 complete and 0 interrupted iterations
+default   [  36% ] 335 VUs  2m55.0s/8m0s
+
+running (2m56.0s), 335/335 VUs, 684261 complete and 0 interrupted iterations
+default   [  37% ] 335 VUs  2m56.0s/8m0s
+
+running (2m57.0s), 335/335 VUs, 688662 complete and 0 interrupted iterations
+default   [  37% ] 335 VUs  2m57.0s/8m0s
+
+running (2m58.0s), 335/335 VUs, 693111 complete and 0 interrupted iterations
+default   [  37% ] 335 VUs  2m58.0s/8m0s
+
+running (2m59.0s), 335/335 VUs, 697481 complete and 0 interrupted iterations
+default   [  37% ] 335 VUs  2m59.0s/8m0s
+
+running (3m00.0s), 335/335 VUs, 701495 complete and 0 interrupted iterations
+default   [  37% ] 335 VUs  3m00.0s/8m0s
+
+running (3m01.0s), 335/335 VUs, 705555 complete and 0 interrupted iterations
+default   [  38% ] 335 VUs  3m01.0s/8m0s
+
+running (3m02.0s), 335/335 VUs, 710129 complete and 0 interrupted iterations
+default   [  38% ] 335 VUs  3m02.0s/8m0s
+
+running (3m03.0s), 335/335 VUs, 714378 complete and 0 interrupted iterations
+default   [  38% ] 335 VUs  3m03.0s/8m0s
+
+running (3m04.0s), 335/335 VUs, 718584 complete and 0 interrupted iterations
+default   [  38% ] 335 VUs  3m04.0s/8m0s
+
+running (3m05.0s), 335/335 VUs, 722801 complete and 0 interrupted iterations
+default   [  39% ] 335 VUs  3m05.0s/8m0s
+
+running (3m06.0s), 335/335 VUs, 726818 complete and 0 interrupted iterations
+default   [  39% ] 335 VUs  3m06.0s/8m0s
+
+running (3m07.0s), 335/335 VUs, 731180 complete and 0 interrupted iterations
+default   [  39% ] 335 VUs  3m07.0s/8m0s
+
+running (3m08.0s), 335/335 VUs, 735244 complete and 0 interrupted iterations
+default   [  39% ] 335 VUs  3m08.0s/8m0s
+
+running (3m09.0s), 335/335 VUs, 739681 complete and 0 interrupted iterations
+default   [  39% ] 335 VUs  3m09.0s/8m0s
+
+running (3m10.0s), 335/335 VUs, 744349 complete and 0 interrupted iterations
+default   [  40% ] 335 VUs  3m10.0s/8m0s
+
+running (3m11.0s), 335/335 VUs, 748821 complete and 0 interrupted iterations
+default   [  40% ] 335 VUs  3m11.0s/8m0s
+
+running (3m12.0s), 335/335 VUs, 752559 complete and 0 interrupted iterations
+default   [  40% ] 335 VUs  3m12.0s/8m0s
+
+running (3m13.0s), 335/335 VUs, 756371 complete and 0 interrupted iterations
+default   [  40% ] 335 VUs  3m13.0s/8m0s
+
+running (3m14.0s), 335/335 VUs, 760443 complete and 0 interrupted iterations
+default   [  40% ] 335 VUs  3m14.0s/8m0s
+
+running (3m15.0s), 335/335 VUs, 764413 complete and 0 interrupted iterations
+default   [  41% ] 335 VUs  3m15.0s/8m0s
+
+running (3m16.0s), 335/335 VUs, 768677 complete and 0 interrupted iterations
+default   [  41% ] 335 VUs  3m16.0s/8m0s
+
+running (3m17.0s), 335/335 VUs, 772860 complete and 0 interrupted iterations
+default   [  41% ] 335 VUs  3m17.0s/8m0s
+
+running (3m18.0s), 335/335 VUs, 777333 complete and 0 interrupted iterations
+default   [  41% ] 335 VUs  3m18.0s/8m0s
+
+running (3m19.0s), 335/335 VUs, 781668 complete and 0 interrupted iterations
+default   [  41% ] 335 VUs  3m19.0s/8m0s
+
+running (3m20.0s), 335/335 VUs, 786191 complete and 0 interrupted iterations
+default   [  42% ] 335 VUs  3m20.0s/8m0s
+
+running (3m21.0s), 335/335 VUs, 790438 complete and 0 interrupted iterations
+default   [  42% ] 335 VUs  3m21.0s/8m0s
+
+running (3m22.0s), 335/335 VUs, 794832 complete and 0 interrupted iterations
+default   [  42% ] 335 VUs  3m22.0s/8m0s
+
+running (3m23.0s), 335/335 VUs, 799138 complete and 0 interrupted iterations
+default   [  42% ] 335 VUs  3m23.0s/8m0s
+time="2026-05-18T13:28:18+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:18+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:18+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:18+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (3m24.0s), 335/335 VUs, 803492 complete and 0 interrupted iterations
+default   [  42% ] 335 VUs  3m24.0s/8m0s
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (3m25.0s), 335/335 VUs, 808014 complete and 0 interrupted iterations
+default   [  43% ] 335 VUs  3m25.0s/8m0s
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:19+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:20+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:28:20+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (3m26.0s), 335/335 VUs, 812835 complete and 0 interrupted iterations
+default   [  43% ] 335 VUs  3m26.0s/8m0s
+
+running (3m27.0s), 335/335 VUs, 817362 complete and 0 interrupted iterations
+default   [  43% ] 335 VUs  3m27.0s/8m0s
+
+running (3m28.0s), 335/335 VUs, 821630 complete and 0 interrupted iterations
+default   [  43% ] 335 VUs  3m28.0s/8m0s
+
+running (3m29.0s), 335/335 VUs, 825771 complete and 0 interrupted iterations
+default   [  44% ] 335 VUs  3m29.0s/8m0s
+
+running (3m30.0s), 335/335 VUs, 830281 complete and 0 interrupted iterations
+default   [  44% ] 335 VUs  3m30.0s/8m0s
+
+running (3m31.0s), 335/335 VUs, 834488 complete and 0 interrupted iterations
+default   [  44% ] 335 VUs  3m31.0s/8m0s
+
+running (3m32.0s), 335/335 VUs, 838901 complete and 0 interrupted iterations
+default   [  44% ] 335 VUs  3m32.0s/8m0s
+
+running (3m33.0s), 335/335 VUs, 843166 complete and 0 interrupted iterations
+default   [  44% ] 335 VUs  3m33.0s/8m0s
+
+running (3m34.0s), 335/335 VUs, 846994 complete and 0 interrupted iterations
+default   [  45% ] 335 VUs  3m34.0s/8m0s
+
+running (3m35.0s), 335/335 VUs, 850784 complete and 0 interrupted iterations
+default   [  45% ] 335 VUs  3m35.0s/8m0s
+
+running (3m36.0s), 335/335 VUs, 854244 complete and 0 interrupted iterations
+default   [  45% ] 335 VUs  3m36.0s/8m0s
+time="2026-05-18T13:28:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:28:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:28:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:28:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:28:31+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (3m37.0s), 335/335 VUs, 857749 complete and 0 interrupted iterations
+default   [  45% ] 335 VUs  3m37.0s/8m0s
+
+running (3m38.0s), 335/335 VUs, 861742 complete and 0 interrupted iterations
+default   [  45% ] 335 VUs  3m38.0s/8m0s
+
+running (3m39.0s), 335/335 VUs, 865992 complete and 0 interrupted iterations
+default   [  46% ] 335 VUs  3m39.0s/8m0s
+
+running (3m40.0s), 335/335 VUs, 869946 complete and 0 interrupted iterations
+default   [  46% ] 335 VUs  3m40.0s/8m0s
+
+running (3m41.0s), 335/335 VUs, 874323 complete and 0 interrupted iterations
+default   [  46% ] 335 VUs  3m41.0s/8m0s
+
+running (3m42.0s), 335/335 VUs, 878365 complete and 0 interrupted iterations
+default   [  46% ] 335 VUs  3m42.0s/8m0s
+
+running (3m43.0s), 335/335 VUs, 882582 complete and 0 interrupted iterations
+default   [  46% ] 335 VUs  3m43.0s/8m0s
+time="2026-05-18T13:28:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (3m44.0s), 335/335 VUs, 886830 complete and 0 interrupted iterations
+default   [  47% ] 335 VUs  3m44.0s/8m0s
+
+running (3m45.0s), 335/335 VUs, 890845 complete and 0 interrupted iterations
+default   [  47% ] 335 VUs  3m45.0s/8m0s
+time="2026-05-18T13:28:40+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (3m46.0s), 335/335 VUs, 895101 complete and 0 interrupted iterations
+default   [  47% ] 335 VUs  3m46.0s/8m0s
+
+running (3m47.0s), 335/335 VUs, 899506 complete and 0 interrupted iterations
+default   [  47% ] 335 VUs  3m47.0s/8m0s
+
+running (3m48.0s), 335/335 VUs, 903834 complete and 0 interrupted iterations
+default   [  47% ] 335 VUs  3m48.0s/8m0s
+
+running (3m49.0s), 335/335 VUs, 908100 complete and 0 interrupted iterations
+default   [  48% ] 335 VUs  3m49.0s/8m0s
+
+running (3m50.0s), 335/335 VUs, 912097 complete and 0 interrupted iterations
+default   [  48% ] 335 VUs  3m50.0s/8m0s
+
+running (3m51.0s), 335/335 VUs, 916159 complete and 0 interrupted iterations
+default   [  48% ] 335 VUs  3m51.0s/8m0s
+
+running (3m52.0s), 335/335 VUs, 920385 complete and 0 interrupted iterations
+default   [  48% ] 335 VUs  3m52.0s/8m0s
+
+running (3m53.0s), 335/335 VUs, 924340 complete and 0 interrupted iterations
+default   [  49% ] 335 VUs  3m53.0s/8m0s
+time="2026-05-18T13:28:48+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (3m54.0s), 335/335 VUs, 928715 complete and 0 interrupted iterations
+default   [  49% ] 335 VUs  3m54.0s/8m0s
+
+running (3m55.0s), 335/335 VUs, 933021 complete and 0 interrupted iterations
+default   [  49% ] 335 VUs  3m55.0s/8m0s
+
+running (3m56.0s), 335/335 VUs, 937476 complete and 0 interrupted iterations
+default   [  49% ] 335 VUs  3m56.0s/8m0s
+
+running (3m57.0s), 335/335 VUs, 941917 complete and 0 interrupted iterations
+default   [  49% ] 335 VUs  3m57.0s/8m0s
+
+running (3m58.0s), 335/335 VUs, 946337 complete and 0 interrupted iterations
+default   [  50% ] 335 VUs  3m58.0s/8m0s
+
+running (3m59.0s), 335/335 VUs, 950856 complete and 0 interrupted iterations
+default   [  50% ] 335 VUs  3m59.0s/8m0s
+
+running (4m00.0s), 335/335 VUs, 955005 complete and 0 interrupted iterations
+default   [  50% ] 335 VUs  4m00.0s/8m0s
+
+running (4m01.0s), 335/335 VUs, 959354 complete and 0 interrupted iterations
+default   [  50% ] 335 VUs  4m01.0s/8m0s
+
+running (4m02.0s), 335/335 VUs, 963800 complete and 0 interrupted iterations
+default   [  50% ] 335 VUs  4m02.0s/8m0s
+
+running (4m03.0s), 335/335 VUs, 968252 complete and 0 interrupted iterations
+default   [  51% ] 335 VUs  4m03.0s/8m0s
+
+running (4m04.0s), 335/335 VUs, 972428 complete and 0 interrupted iterations
+default   [  51% ] 335 VUs  4m04.0s/8m0s
+time="2026-05-18T13:28:59+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m05.0s), 335/335 VUs, 976433 complete and 0 interrupted iterations
+default   [  51% ] 335 VUs  4m05.0s/8m0s
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m06.0s), 335/335 VUs, 978525 complete and 0 interrupted iterations
+default   [  51% ] 335 VUs  4m06.0s/8m0s
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:00+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:01+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:01+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m07.0s), 335/335 VUs, 979696 complete and 0 interrupted iterations
+default   [  51% ] 335 VUs  4m07.0s/8m0s
+
+running (4m08.0s), 335/335 VUs, 984234 complete and 0 interrupted iterations
+default   [  52% ] 335 VUs  4m08.0s/8m0s
+
+running (4m09.0s), 335/335 VUs, 988436 complete and 0 interrupted iterations
+default   [  52% ] 335 VUs  4m09.0s/8m0s
+
+running (4m10.0s), 335/335 VUs, 992748 complete and 0 interrupted iterations
+default   [  52% ] 335 VUs  4m10.0s/8m0s
+
+running (4m11.0s), 335/335 VUs, 997119 complete and 0 interrupted iterations
+default   [  52% ] 335 VUs  4m11.0s/8m0s
+
+running (4m12.0s), 335/335 VUs, 1001482 complete and 0 interrupted iterations
+default   [  52% ] 335 VUs  4m12.0s/8m0s
+
+running (4m13.0s), 335/335 VUs, 1005733 complete and 0 interrupted iterations
+default   [  53% ] 335 VUs  4m13.0s/8m0s
+
+running (4m14.0s), 335/335 VUs, 1010087 complete and 0 interrupted iterations
+default   [  53% ] 335 VUs  4m14.0s/8m0s
+
+running (4m15.0s), 335/335 VUs, 1014146 complete and 0 interrupted iterations
+default   [  53% ] 335 VUs  4m15.0s/8m0s
+
+running (4m16.0s), 335/335 VUs, 1018469 complete and 0 interrupted iterations
+default   [  53% ] 335 VUs  4m16.0s/8m0s
+
+running (4m17.0s), 335/335 VUs, 1023065 complete and 0 interrupted iterations
+default   [  54% ] 335 VUs  4m17.0s/8m0s
+
+running (4m18.0s), 335/335 VUs, 1027293 complete and 0 interrupted iterations
+default   [  54% ] 335 VUs  4m18.0s/8m0s
+
+running (4m19.0s), 335/335 VUs, 1030914 complete and 0 interrupted iterations
+default   [  54% ] 335 VUs  4m19.0s/8m0s
+
+running (4m20.0s), 335/335 VUs, 1035064 complete and 0 interrupted iterations
+default   [  54% ] 335 VUs  4m20.0s/8m0s
+
+running (4m21.0s), 335/335 VUs, 1038973 complete and 0 interrupted iterations
+default   [  54% ] 335 VUs  4m21.0s/8m0s
+
+running (4m22.0s), 335/335 VUs, 1042550 complete and 0 interrupted iterations
+default   [  55% ] 335 VUs  4m22.0s/8m0s
+
+running (4m23.0s), 335/335 VUs, 1046733 complete and 0 interrupted iterations
+default   [  55% ] 335 VUs  4m23.0s/8m0s
+
+running (4m24.0s), 335/335 VUs, 1051020 complete and 0 interrupted iterations
+default   [  55% ] 335 VUs  4m24.0s/8m0s
+
+running (4m25.0s), 335/335 VUs, 1055334 complete and 0 interrupted iterations
+default   [  55% ] 335 VUs  4m25.0s/8m0s
+
+running (4m26.0s), 335/335 VUs, 1059595 complete and 0 interrupted iterations
+default   [  55% ] 335 VUs  4m26.0s/8m0s
+
+running (4m27.0s), 335/335 VUs, 1063911 complete and 0 interrupted iterations
+default   [  56% ] 335 VUs  4m27.0s/8m0s
+
+running (4m28.0s), 335/335 VUs, 1068067 complete and 0 interrupted iterations
+default   [  56% ] 335 VUs  4m28.0s/8m0s
+
+running (4m29.0s), 335/335 VUs, 1072530 complete and 0 interrupted iterations
+default   [  56% ] 335 VUs  4m29.0s/8m0s
+
+running (4m30.0s), 335/335 VUs, 1076907 complete and 0 interrupted iterations
+default   [  56% ] 335 VUs  4m30.0s/8m0s
+
+running (4m31.0s), 335/335 VUs, 1081158 complete and 0 interrupted iterations
+default   [  56% ] 335 VUs  4m31.0s/8m0s
+
+running (4m32.0s), 335/335 VUs, 1085247 complete and 0 interrupted iterations
+default   [  57% ] 335 VUs  4m32.0s/8m0s
+
+running (4m33.0s), 335/335 VUs, 1089474 complete and 0 interrupted iterations
+default   [  57% ] 335 VUs  4m33.0s/8m0s
+
+running (4m34.0s), 335/335 VUs, 1093428 complete and 0 interrupted iterations
+default   [  57% ] 335 VUs  4m34.0s/8m0s
+
+running (4m35.0s), 335/335 VUs, 1097334 complete and 0 interrupted iterations
+default   [  57% ] 335 VUs  4m35.0s/8m0s
+
+running (4m36.0s), 335/335 VUs, 1101532 complete and 0 interrupted iterations
+default   [  57% ] 335 VUs  4m36.0s/8m0s
+
+running (4m37.0s), 335/335 VUs, 1105916 complete and 0 interrupted iterations
+default   [  58% ] 335 VUs  4m37.0s/8m0s
+
+running (4m38.0s), 335/335 VUs, 1110143 complete and 0 interrupted iterations
+default   [  58% ] 335 VUs  4m38.0s/8m0s
+
+running (4m39.0s), 335/335 VUs, 1114051 complete and 0 interrupted iterations
+default   [  58% ] 335 VUs  4m39.0s/8m0s
+
+running (4m40.0s), 335/335 VUs, 1118100 complete and 0 interrupted iterations
+default   [  58% ] 335 VUs  4m40.0s/8m0s
+
+running (4m41.0s), 335/335 VUs, 1121696 complete and 0 interrupted iterations
+default   [  59% ] 335 VUs  4m41.0s/8m0s
+time="2026-05-18T13:29:36+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:29:36+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (4m42.0s), 335/335 VUs, 1125225 complete and 0 interrupted iterations
+default   [  59% ] 335 VUs  4m42.0s/8m0s
+
+running (4m43.0s), 335/335 VUs, 1128763 complete and 0 interrupted iterations
+default   [  59% ] 335 VUs  4m43.0s/8m0s
+
+running (4m44.0s), 335/335 VUs, 1132586 complete and 0 interrupted iterations
+default   [  59% ] 335 VUs  4m44.0s/8m0s
+
+running (4m45.0s), 335/335 VUs, 1136014 complete and 0 interrupted iterations
+default   [  59% ] 335 VUs  4m45.0s/8m0s
+time="2026-05-18T13:29:40+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:40+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m46.0s), 335/335 VUs, 1139480 complete and 0 interrupted iterations
+default   [  60% ] 335 VUs  4m46.0s/8m0s
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m47.0s), 335/335 VUs, 1142414 complete and 0 interrupted iterations
+default   [  60% ] 335 VUs  4m47.0s/8m0s
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:41+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:29:42+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (4m48.0s), 335/335 VUs, 1142711 complete and 0 interrupted iterations
+default   [  60% ] 335 VUs  4m48.0s/8m0s
+
+running (4m49.0s), 335/335 VUs, 1146179 complete and 0 interrupted iterations
+default   [  60% ] 335 VUs  4m49.0s/8m0s
+
+running (4m50.0s), 335/335 VUs, 1150584 complete and 0 interrupted iterations
+default   [  60% ] 335 VUs  4m50.0s/8m0s
+
+running (4m51.0s), 335/335 VUs, 1154997 complete and 0 interrupted iterations
+default   [  61% ] 335 VUs  4m51.0s/8m0s
+
+running (4m52.0s), 335/335 VUs, 1159255 complete and 0 interrupted iterations
+default   [  61% ] 335 VUs  4m52.0s/8m0s
+
+running (4m53.0s), 335/335 VUs, 1163394 complete and 0 interrupted iterations
+default   [  61% ] 335 VUs  4m53.0s/8m0s
+
+running (4m54.0s), 335/335 VUs, 1167653 complete and 0 interrupted iterations
+default   [  61% ] 335 VUs  4m54.0s/8m0s
+
+running (4m55.0s), 335/335 VUs, 1171861 complete and 0 interrupted iterations
+default   [  61% ] 335 VUs  4m55.0s/8m0s
+
+running (4m56.0s), 335/335 VUs, 1176451 complete and 0 interrupted iterations
+default   [  62% ] 335 VUs  4m56.0s/8m0s
+
+running (4m57.0s), 335/335 VUs, 1180948 complete and 0 interrupted iterations
+default   [  62% ] 335 VUs  4m57.0s/8m0s
+
+running (4m58.0s), 335/335 VUs, 1184973 complete and 0 interrupted iterations
+default   [  62% ] 335 VUs  4m58.0s/8m0s
+
+running (4m59.0s), 335/335 VUs, 1189184 complete and 0 interrupted iterations
+default   [  62% ] 335 VUs  4m59.0s/8m0s
+
+running (5m00.0s), 335/335 VUs, 1193500 complete and 0 interrupted iterations
+default   [  62% ] 335 VUs  5m00.0s/8m0s
+
+running (5m01.0s), 335/335 VUs, 1197781 complete and 0 interrupted iterations
+default   [  63% ] 335 VUs  5m01.0s/8m0s
+
+running (5m02.0s), 335/335 VUs, 1202167 complete and 0 interrupted iterations
+default   [  63% ] 335 VUs  5m02.0s/8m0s
+
+running (5m03.0s), 335/335 VUs, 1206325 complete and 0 interrupted iterations
+default   [  63% ] 335 VUs  5m03.0s/8m0s
+
+running (5m04.0s), 335/335 VUs, 1210348 complete and 0 interrupted iterations
+default   [  63% ] 335 VUs  5m04.0s/8m0s
+
+running (5m05.0s), 335/335 VUs, 1214371 complete and 0 interrupted iterations
+default   [  64% ] 335 VUs  5m05.0s/8m0s
+
+running (5m06.0s), 335/335 VUs, 1218438 complete and 0 interrupted iterations
+default   [  64% ] 335 VUs  5m06.0s/8m0s
+
+running (5m07.0s), 335/335 VUs, 1222642 complete and 0 interrupted iterations
+default   [  64% ] 335 VUs  5m07.0s/8m0s
+
+running (5m08.0s), 335/335 VUs, 1226648 complete and 0 interrupted iterations
+default   [  64% ] 335 VUs  5m08.0s/8m0s
+
+running (5m09.0s), 335/335 VUs, 1230748 complete and 0 interrupted iterations
+default   [  64% ] 335 VUs  5m09.0s/8m0s
+
+running (5m10.0s), 335/335 VUs, 1234527 complete and 0 interrupted iterations
+default   [  65% ] 335 VUs  5m10.0s/8m0s
+
+running (5m11.0s), 335/335 VUs, 1236841 complete and 0 interrupted iterations
+default   [  65% ] 335 VUs  5m11.0s/8m0s
+
+running (5m12.0s), 335/335 VUs, 1239601 complete and 0 interrupted iterations
+default   [  65% ] 335 VUs  5m12.0s/8m0s
+
+running (5m13.0s), 335/335 VUs, 1244336 complete and 0 interrupted iterations
+default   [  65% ] 335 VUs  5m13.0s/8m0s
+
+running (5m14.0s), 335/335 VUs, 1248548 complete and 0 interrupted iterations
+default   [  65% ] 335 VUs  5m14.0s/8m0s
+
+running (5m15.0s), 335/335 VUs, 1252978 complete and 0 interrupted iterations
+default   [  66% ] 335 VUs  5m15.0s/8m0s
+
+running (5m16.0s), 335/335 VUs, 1256767 complete and 0 interrupted iterations
+default   [  66% ] 335 VUs  5m16.0s/8m0s
+
+running (5m17.0s), 335/335 VUs, 1260801 complete and 0 interrupted iterations
+default   [  66% ] 335 VUs  5m17.0s/8m0s
+
+running (5m18.0s), 335/335 VUs, 1264606 complete and 0 interrupted iterations
+default   [  66% ] 335 VUs  5m18.0s/8m0s
+
+running (5m19.0s), 335/335 VUs, 1268550 complete and 0 interrupted iterations
+default   [  66% ] 335 VUs  5m19.0s/8m0s
+
+running (5m20.0s), 335/335 VUs, 1272810 complete and 0 interrupted iterations
+default   [  67% ] 335 VUs  5m20.0s/8m0s
+
+running (5m21.0s), 335/335 VUs, 1277097 complete and 0 interrupted iterations
+default   [  67% ] 335 VUs  5m21.0s/8m0s
+
+running (5m22.0s), 335/335 VUs, 1281245 complete and 0 interrupted iterations
+default   [  67% ] 335 VUs  5m22.0s/8m0s
+
+running (5m23.0s), 335/335 VUs, 1285563 complete and 0 interrupted iterations
+default   [  67% ] 335 VUs  5m23.0s/8m0s
+
+running (5m24.0s), 335/335 VUs, 1290022 complete and 0 interrupted iterations
+default   [  67% ] 335 VUs  5m24.0s/8m0s
+
+running (5m25.0s), 335/335 VUs, 1294218 complete and 0 interrupted iterations
+default   [  68% ] 335 VUs  5m25.0s/8m0s
+
+running (5m26.0s), 335/335 VUs, 1298589 complete and 0 interrupted iterations
+default   [  68% ] 335 VUs  5m26.0s/8m0s
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (5m27.0s), 335/335 VUs, 1302101 complete and 0 interrupted iterations
+default   [  68% ] 335 VUs  5m27.0s/8m0s
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:21+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:22+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:22+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:22+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (5m28.0s), 335/335 VUs, 1306337 complete and 0 interrupted iterations
+default   [  68% ] 335 VUs  5m28.0s/8m0s
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:30:23+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (5m29.0s), 335/335 VUs, 1307223 complete and 0 interrupted iterations
+default   [  69% ] 335 VUs  5m29.0s/8m0s
+
+running (5m30.0s), 335/335 VUs, 1310883 complete and 0 interrupted iterations
+default   [  69% ] 335 VUs  5m30.0s/8m0s
+
+running (5m31.0s), 335/335 VUs, 1315405 complete and 0 interrupted iterations
+default   [  69% ] 335 VUs  5m31.0s/8m0s
+
+running (5m32.0s), 335/335 VUs, 1319570 complete and 0 interrupted iterations
+default   [  69% ] 335 VUs  5m32.0s/8m0s
+
+running (5m33.0s), 335/335 VUs, 1323754 complete and 0 interrupted iterations
+default   [  69% ] 335 VUs  5m33.0s/8m0s
+
+running (5m34.0s), 335/335 VUs, 1327743 complete and 0 interrupted iterations
+default   [  70% ] 335 VUs  5m34.0s/8m0s
+
+running (5m35.0s), 335/335 VUs, 1331937 complete and 0 interrupted iterations
+default   [  70% ] 335 VUs  5m35.0s/8m0s
+
+running (5m36.0s), 335/335 VUs, 1336244 complete and 0 interrupted iterations
+default   [  70% ] 335 VUs  5m36.0s/8m0s
+
+running (5m37.0s), 335/335 VUs, 1340510 complete and 0 interrupted iterations
+default   [  70% ] 335 VUs  5m37.0s/8m0s
+
+running (5m38.0s), 335/335 VUs, 1345166 complete and 0 interrupted iterations
+default   [  70% ] 335 VUs  5m38.0s/8m0s
+
+running (5m39.0s), 335/335 VUs, 1349538 complete and 0 interrupted iterations
+default   [  71% ] 335 VUs  5m39.0s/8m0s
+
+running (5m40.0s), 335/335 VUs, 1354062 complete and 0 interrupted iterations
+default   [  71% ] 335 VUs  5m40.0s/8m0s
+
+running (5m41.0s), 335/335 VUs, 1358524 complete and 0 interrupted iterations
+default   [  71% ] 335 VUs  5m41.0s/8m0s
+
+running (5m42.0s), 335/335 VUs, 1362654 complete and 0 interrupted iterations
+default   [  71% ] 335 VUs  5m42.0s/8m0s
+
+running (5m43.0s), 335/335 VUs, 1366692 complete and 0 interrupted iterations
+default   [  71% ] 335 VUs  5m43.0s/8m0s
+
+running (5m44.0s), 335/335 VUs, 1370959 complete and 0 interrupted iterations
+default   [  72% ] 335 VUs  5m44.0s/8m0s
+
+running (5m45.0s), 335/335 VUs, 1375058 complete and 0 interrupted iterations
+default   [  72% ] 335 VUs  5m45.0s/8m0s
+
+running (5m46.0s), 335/335 VUs, 1379471 complete and 0 interrupted iterations
+default   [  72% ] 335 VUs  5m46.0s/8m0s
+
+running (5m47.0s), 335/335 VUs, 1383545 complete and 0 interrupted iterations
+default   [  72% ] 335 VUs  5m47.0s/8m0s
+
+running (5m48.0s), 335/335 VUs, 1387965 complete and 0 interrupted iterations
+default   [  72% ] 335 VUs  5m48.0s/8m0s
+
+running (5m49.0s), 335/335 VUs, 1392183 complete and 0 interrupted iterations
+default   [  73% ] 335 VUs  5m49.0s/8m0s
+
+running (5m50.0s), 335/335 VUs, 1396589 complete and 0 interrupted iterations
+default   [  73% ] 335 VUs  5m50.0s/8m0s
+
+running (5m51.0s), 335/335 VUs, 1400957 complete and 0 interrupted iterations
+default   [  73% ] 335 VUs  5m51.0s/8m0s
+
+running (5m52.0s), 335/335 VUs, 1404856 complete and 0 interrupted iterations
+default   [  73% ] 335 VUs  5m52.0s/8m0s
+
+running (5m53.0s), 335/335 VUs, 1408980 complete and 0 interrupted iterations
+default   [  74% ] 335 VUs  5m53.0s/8m0s
+
+running (5m54.0s), 335/335 VUs, 1412106 complete and 0 interrupted iterations
+default   [  74% ] 335 VUs  5m54.0s/8m0s
+
+running (5m55.0s), 335/335 VUs, 1416302 complete and 0 interrupted iterations
+default   [  74% ] 335 VUs  5m55.0s/8m0s
+
+running (5m56.0s), 335/335 VUs, 1418988 complete and 0 interrupted iterations
+default   [  74% ] 335 VUs  5m56.0s/8m0s
+
+running (5m57.0s), 335/335 VUs, 1422231 complete and 0 interrupted iterations
+default   [  74% ] 335 VUs  5m57.0s/8m0s
+
+running (5m58.0s), 335/335 VUs, 1425900 complete and 0 interrupted iterations
+default   [  75% ] 335 VUs  5m58.0s/8m0s
+
+running (5m59.0s), 335/335 VUs, 1429507 complete and 0 interrupted iterations
+default   [  75% ] 335 VUs  5m59.0s/8m0s
+
+running (6m00.0s), 335/335 VUs, 1433741 complete and 0 interrupted iterations
+default   [  75% ] 335 VUs  6m00.0s/8m0s
+
+running (6m01.0s), 335/335 VUs, 1438069 complete and 0 interrupted iterations
+default   [  75% ] 335 VUs  6m01.0s/8m0s
+
+running (6m02.0s), 335/335 VUs, 1442529 complete and 0 interrupted iterations
+default   [  75% ] 335 VUs  6m02.0s/8m0s
+
+running (6m03.0s), 335/335 VUs, 1446827 complete and 0 interrupted iterations
+default   [  76% ] 335 VUs  6m03.0s/8m0s
+
+running (6m04.0s), 335/335 VUs, 1450925 complete and 0 interrupted iterations
+default   [  76% ] 335 VUs  6m04.0s/8m0s
+
+running (6m05.0s), 335/335 VUs, 1455357 complete and 0 interrupted iterations
+default   [  76% ] 335 VUs  6m05.0s/8m0s
+
+running (6m06.0s), 335/335 VUs, 1459798 complete and 0 interrupted iterations
+default   [  76% ] 335 VUs  6m06.0s/8m0s
+
+running (6m07.0s), 335/335 VUs, 1464150 complete and 0 interrupted iterations
+default   [  76% ] 335 VUs  6m07.0s/8m0s
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m08.0s), 335/335 VUs, 1468413 complete and 0 interrupted iterations
+default   [  77% ] 335 VUs  6m08.0s/8m0s
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:02+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:03+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:03+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m09.0s), 335/335 VUs, 1472779 complete and 0 interrupted iterations
+default   [  77% ] 335 VUs  6m09.0s/8m0s
+time="2026-05-18T13:31:04+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:04+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:04+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:04+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:04+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m10.0s), 335/335 VUs, 1477068 complete and 0 interrupted iterations
+default   [  77% ] 335 VUs  6m10.0s/8m0s
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:05+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m11.0s), 335/335 VUs, 1478010 complete and 0 interrupted iterations
+default   [  77% ] 335 VUs  6m11.0s/8m0s
+
+running (6m12.0s), 335/335 VUs, 1482064 complete and 0 interrupted iterations
+default   [  77% ] 335 VUs  6m12.0s/8m0s
+
+running (6m13.0s), 335/335 VUs, 1486660 complete and 0 interrupted iterations
+default   [  78% ] 335 VUs  6m13.0s/8m0s
+
+running (6m14.0s), 335/335 VUs, 1491028 complete and 0 interrupted iterations
+default   [  78% ] 335 VUs  6m14.0s/8m0s
+
+running (6m15.0s), 335/335 VUs, 1495447 complete and 0 interrupted iterations
+default   [  78% ] 335 VUs  6m15.0s/8m0s
+
+running (6m16.0s), 335/335 VUs, 1499737 complete and 0 interrupted iterations
+default   [  78% ] 335 VUs  6m16.0s/8m0s
+
+running (6m17.0s), 335/335 VUs, 1503999 complete and 0 interrupted iterations
+default   [  79% ] 335 VUs  6m17.0s/8m0s
+
+running (6m18.0s), 335/335 VUs, 1508412 complete and 0 interrupted iterations
+default   [  79% ] 335 VUs  6m18.0s/8m0s
+
+running (6m19.0s), 335/335 VUs, 1512914 complete and 0 interrupted iterations
+default   [  79% ] 335 VUs  6m19.0s/8m0s
+
+running (6m20.0s), 335/335 VUs, 1516929 complete and 0 interrupted iterations
+default   [  79% ] 335 VUs  6m20.0s/8m0s
+
+running (6m21.0s), 335/335 VUs, 1517451 complete and 0 interrupted iterations
+default   [  79% ] 335 VUs  6m21.0s/8m0s
+
+running (6m22.0s), 335/335 VUs, 1519047 complete and 0 interrupted iterations
+default   [  80% ] 335 VUs  6m22.0s/8m0s
+
+running (6m23.0s), 335/335 VUs, 1523411 complete and 0 interrupted iterations
+default   [  80% ] 335 VUs  6m23.0s/8m0s
+
+running (6m24.0s), 335/335 VUs, 1527769 complete and 0 interrupted iterations
+default   [  80% ] 335 VUs  6m24.0s/8m0s
+
+running (6m25.0s), 335/335 VUs, 1531940 complete and 0 interrupted iterations
+default   [  80% ] 335 VUs  6m25.0s/8m0s
+
+running (6m26.0s), 335/335 VUs, 1536141 complete and 0 interrupted iterations
+default   [  80% ] 335 VUs  6m26.0s/8m0s
+
+running (6m27.0s), 335/335 VUs, 1540233 complete and 0 interrupted iterations
+default   [  81% ] 335 VUs  6m27.0s/8m0s
+
+running (6m28.0s), 335/335 VUs, 1544775 complete and 0 interrupted iterations
+default   [  81% ] 335 VUs  6m28.0s/8m0s
+
+running (6m29.0s), 335/335 VUs, 1549231 complete and 0 interrupted iterations
+default   [  81% ] 335 VUs  6m29.0s/8m0s
+
+running (6m30.0s), 335/335 VUs, 1553465 complete and 0 interrupted iterations
+default   [  81% ] 335 VUs  6m30.0s/8m0s
+
+running (6m31.0s), 335/335 VUs, 1557893 complete and 0 interrupted iterations
+default   [  81% ] 335 VUs  6m31.0s/8m0s
+
+running (6m32.0s), 335/335 VUs, 1561973 complete and 0 interrupted iterations
+default   [  82% ] 335 VUs  6m32.0s/8m0s
+
+running (6m33.0s), 335/335 VUs, 1566521 complete and 0 interrupted iterations
+default   [  82% ] 335 VUs  6m33.0s/8m0s
+
+running (6m34.0s), 335/335 VUs, 1570820 complete and 0 interrupted iterations
+default   [  82% ] 335 VUs  6m34.0s/8m0s
+
+running (6m35.0s), 335/335 VUs, 1575304 complete and 0 interrupted iterations
+default   [  82% ] 335 VUs  6m35.0s/8m0s
+
+running (6m36.0s), 335/335 VUs, 1579804 complete and 0 interrupted iterations
+default   [  82% ] 335 VUs  6m36.0s/8m0s
+
+running (6m37.0s), 335/335 VUs, 1583917 complete and 0 interrupted iterations
+default   [  83% ] 335 VUs  6m37.0s/8m0s
+
+running (6m38.0s), 335/335 VUs, 1587889 complete and 0 interrupted iterations
+default   [  83% ] 335 VUs  6m38.0s/8m0s
+
+running (6m39.0s), 335/335 VUs, 1591917 complete and 0 interrupted iterations
+default   [  83% ] 335 VUs  6m39.0s/8m0s
+
+running (6m40.0s), 335/335 VUs, 1595989 complete and 0 interrupted iterations
+default   [  83% ] 335 VUs  6m40.0s/8m0s
+
+running (6m41.0s), 335/335 VUs, 1599713 complete and 0 interrupted iterations
+default   [  84% ] 335 VUs  6m41.0s/8m0s
+
+running (6m42.0s), 335/335 VUs, 1603238 complete and 0 interrupted iterations
+default   [  84% ] 335 VUs  6m42.0s/8m0s
+
+running (6m43.0s), 335/335 VUs, 1607496 complete and 0 interrupted iterations
+default   [  84% ] 335 VUs  6m43.0s/8m0s
+
+running (6m44.0s), 335/335 VUs, 1611839 complete and 0 interrupted iterations
+default   [  84% ] 335 VUs  6m44.0s/8m0s
+
+running (6m45.0s), 335/335 VUs, 1615817 complete and 0 interrupted iterations
+default   [  84% ] 335 VUs  6m45.0s/8m0s
+
+running (6m46.0s), 335/335 VUs, 1620013 complete and 0 interrupted iterations
+default   [  85% ] 335 VUs  6m46.0s/8m0s
+
+running (6m47.0s), 335/335 VUs, 1624370 complete and 0 interrupted iterations
+default   [  85% ] 335 VUs  6m47.0s/8m0s
+
+running (6m48.0s), 335/335 VUs, 1628452 complete and 0 interrupted iterations
+default   [  85% ] 335 VUs  6m48.0s/8m0s
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m49.0s), 335/335 VUs, 1632732 complete and 0 interrupted iterations
+default   [  85% ] 335 VUs  6m49.0s/8m0s
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:43+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:44+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:44+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m50.0s), 335/335 VUs, 1636862 complete and 0 interrupted iterations
+default   [  85% ] 335 VUs  6m50.0s/8m0s
+time="2026-05-18T13:31:45+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:45+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:45+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:45+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m51.0s), 335/335 VUs, 1640946 complete and 0 interrupted iterations
+default   [  86% ] 335 VUs  6m51.0s/8m0s
+time="2026-05-18T13:31:45+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:31:46+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (6m52.0s), 335/335 VUs, 1642330 complete and 0 interrupted iterations
+default   [  86% ] 335 VUs  6m52.0s/8m0s
+
+running (6m53.0s), 335/335 VUs, 1645717 complete and 0 interrupted iterations
+default   [  86% ] 335 VUs  6m53.0s/8m0s
+
+running (6m54.0s), 335/335 VUs, 1650327 complete and 0 interrupted iterations
+default   [  86% ] 335 VUs  6m54.0s/8m0s
+
+running (6m55.0s), 335/335 VUs, 1654497 complete and 0 interrupted iterations
+default   [  86% ] 335 VUs  6m55.0s/8m0s
+
+running (6m56.0s), 335/335 VUs, 1658667 complete and 0 interrupted iterations
+default   [  87% ] 335 VUs  6m56.0s/8m0s
+
+running (6m57.0s), 335/335 VUs, 1662761 complete and 0 interrupted iterations
+default   [  87% ] 335 VUs  6m57.0s/8m0s
+
+running (6m58.0s), 335/335 VUs, 1666972 complete and 0 interrupted iterations
+default   [  87% ] 335 VUs  6m58.0s/8m0s
+time="2026-05-18T13:31:53+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:31:53+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (6m59.0s), 335/335 VUs, 1671100 complete and 0 interrupted iterations
+default   [  87% ] 335 VUs  6m59.0s/8m0s
+
+running (7m00.0s), 335/335 VUs, 1675412 complete and 0 interrupted iterations
+default   [  87% ] 335 VUs  7m00.0s/8m0s
+
+running (7m01.0s), 335/335 VUs, 1679598 complete and 0 interrupted iterations
+default   [  88% ] 335 VUs  7m01.0s/8m0s
+
+running (7m02.0s), 335/335 VUs, 1683640 complete and 0 interrupted iterations
+default   [  88% ] 335 VUs  7m02.0s/8m0s
+
+running (7m03.0s), 335/335 VUs, 1687756 complete and 0 interrupted iterations
+default   [  88% ] 335 VUs  7m03.0s/8m0s
+
+running (7m04.0s), 335/335 VUs, 1691883 complete and 0 interrupted iterations
+default   [  88% ] 335 VUs  7m04.0s/8m0s
+
+running (7m05.0s), 335/335 VUs, 1695874 complete and 0 interrupted iterations
+default   [  89% ] 335 VUs  7m05.0s/8m0s
+
+running (7m06.0s), 335/335 VUs, 1699863 complete and 0 interrupted iterations
+default   [  89% ] 335 VUs  7m06.0s/8m0s
+
+running (7m07.0s), 335/335 VUs, 1703565 complete and 0 interrupted iterations
+default   [  89% ] 335 VUs  7m07.0s/8m0s
+
+running (7m08.0s), 335/335 VUs, 1707246 complete and 0 interrupted iterations
+default   [  89% ] 335 VUs  7m08.0s/8m0s
+
+running (7m09.0s), 335/335 VUs, 1711071 complete and 0 interrupted iterations
+default   [  89% ] 335 VUs  7m09.0s/8m0s
+
+running (7m10.0s), 335/335 VUs, 1714530 complete and 0 interrupted iterations
+default   [  90% ] 335 VUs  7m10.0s/8m0s
+
+running (7m11.0s), 335/335 VUs, 1718391 complete and 0 interrupted iterations
+default   [  90% ] 335 VUs  7m11.0s/8m0s
+
+running (7m12.0s), 335/335 VUs, 1722609 complete and 0 interrupted iterations
+default   [  90% ] 335 VUs  7m12.0s/8m0s
+
+running (7m13.0s), 335/335 VUs, 1726164 complete and 0 interrupted iterations
+default   [  90% ] 335 VUs  7m13.0s/8m0s
+
+running (7m14.0s), 335/335 VUs, 1730643 complete and 0 interrupted iterations
+default   [  90% ] 335 VUs  7m14.0s/8m0s
+
+running (7m15.0s), 335/335 VUs, 1735156 complete and 0 interrupted iterations
+default   [  91% ] 335 VUs  7m15.0s/8m0s
+
+running (7m16.0s), 335/335 VUs, 1739620 complete and 0 interrupted iterations
+default   [  91% ] 335 VUs  7m16.0s/8m0s
+
+running (7m17.0s), 335/335 VUs, 1743536 complete and 0 interrupted iterations
+default   [  91% ] 335 VUs  7m17.0s/8m0s
+
+running (7m18.0s), 335/335 VUs, 1748070 complete and 0 interrupted iterations
+default   [  91% ] 335 VUs  7m18.0s/8m0s
+
+running (7m19.0s), 335/335 VUs, 1752416 complete and 0 interrupted iterations
+default   [  91% ] 335 VUs  7m19.0s/8m0s
+
+running (7m20.0s), 335/335 VUs, 1756716 complete and 0 interrupted iterations
+default   [  92% ] 335 VUs  7m20.0s/8m0s
+
+running (7m21.0s), 335/335 VUs, 1760512 complete and 0 interrupted iterations
+default   [  92% ] 335 VUs  7m21.0s/8m0s
+
+running (7m22.0s), 335/335 VUs, 1764424 complete and 0 interrupted iterations
+default   [  92% ] 335 VUs  7m22.0s/8m0s
+
+running (7m23.0s), 335/335 VUs, 1768465 complete and 0 interrupted iterations
+default   [  92% ] 335 VUs  7m23.0s/8m0s
+
+running (7m24.0s), 335/335 VUs, 1772409 complete and 0 interrupted iterations
+default   [  92% ] 335 VUs  7m24.0s/8m0s
+
+running (7m25.0s), 335/335 VUs, 1776734 complete and 0 interrupted iterations
+default   [  93% ] 335 VUs  7m25.0s/8m0s
+
+running (7m26.0s), 335/335 VUs, 1781337 complete and 0 interrupted iterations
+default   [  93% ] 335 VUs  7m26.0s/8m0s
+
+running (7m27.0s), 335/335 VUs, 1785820 complete and 0 interrupted iterations
+default   [  93% ] 335 VUs  7m27.0s/8m0s
+
+running (7m28.0s), 335/335 VUs, 1790321 complete and 0 interrupted iterations
+default   [  93% ] 335 VUs  7m28.0s/8m0s
+
+running (7m29.0s), 335/335 VUs, 1794475 complete and 0 interrupted iterations
+default   [  94% ] 335 VUs  7m29.0s/8m0s
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (7m30.0s), 335/335 VUs, 1798601 complete and 0 interrupted iterations
+default   [  94% ] 335 VUs  7m30.0s/8m0s
+time="2026-05-18T13:32:24+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:25+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:25+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:25+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (7m31.0s), 335/335 VUs, 1802100 complete and 0 interrupted iterations
+default   [  94% ] 335 VUs  7m31.0s/8m0s
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:26+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (7m32.0s), 335/335 VUs, 1805268 complete and 0 interrupted iterations
+default   [  94% ] 335 VUs  7m32.0s/8m0s
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:27+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (7m33.0s), 335/335 VUs, 1808694 complete and 0 interrupted iterations
+default   [  94% ] 335 VUs  7m33.0s/8m0s
+time="2026-05-18T13:32:28+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:28+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:32:28+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (7m34.0s), 335/335 VUs, 1812855 complete and 0 interrupted iterations
+default   [  95% ] 335 VUs  7m34.0s/8m0s
+
+running (7m35.0s), 335/335 VUs, 1817153 complete and 0 interrupted iterations
+default   [  95% ] 335 VUs  7m35.0s/8m0s
+
+running (7m36.0s), 335/335 VUs, 1821259 complete and 0 interrupted iterations
+default   [  95% ] 335 VUs  7m36.0s/8m0s
+
+running (7m37.0s), 335/335 VUs, 1825566 complete and 0 interrupted iterations
+default   [  95% ] 335 VUs  7m37.0s/8m0s
+
+running (7m38.0s), 335/335 VUs, 1829400 complete and 0 interrupted iterations
+default   [  95% ] 335 VUs  7m38.0s/8m0s
+
+running (7m39.0s), 335/335 VUs, 1833553 complete and 0 interrupted iterations
+default   [  96% ] 335 VUs  7m39.0s/8m0s
+
+running (7m40.0s), 335/335 VUs, 1837603 complete and 0 interrupted iterations
+default   [  96% ] 335 VUs  7m40.0s/8m0s
+
+running (7m41.0s), 335/335 VUs, 1841343 complete and 0 interrupted iterations
+default   [  96% ] 335 VUs  7m41.0s/8m0s
+
+running (7m42.0s), 335/335 VUs, 1845202 complete and 0 interrupted iterations
+default   [  96% ] 335 VUs  7m42.0s/8m0s
+time="2026-05-18T13:32:37+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:37+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (7m43.0s), 335/335 VUs, 1849320 complete and 0 interrupted iterations
+default   [  96% ] 335 VUs  7m43.0s/8m0s
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+time="2026-05-18T13:32:38+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (7m44.0s), 335/335 VUs, 1853170 complete and 0 interrupted iterations
+default   [  97% ] 335 VUs  7m44.0s/8m0s
+
+running (7m45.0s), 335/335 VUs, 1857086 complete and 0 interrupted iterations
+default   [  97% ] 335 VUs  7m45.0s/8m0s
+
+running (7m46.0s), 335/335 VUs, 1861403 complete and 0 interrupted iterations
+default   [  97% ] 335 VUs  7m46.0s/8m0s
+
+running (7m47.0s), 335/335 VUs, 1865579 complete and 0 interrupted iterations
+default   [  97% ] 335 VUs  7m47.0s/8m0s
+
+running (7m48.0s), 335/335 VUs, 1869753 complete and 0 interrupted iterations
+default   [  97% ] 335 VUs  7m48.0s/8m0s
+
+running (7m49.0s), 335/335 VUs, 1873674 complete and 0 interrupted iterations
+default   [  98% ] 335 VUs  7m49.0s/8m0s
+
+running (7m50.0s), 335/335 VUs, 1877730 complete and 0 interrupted iterations
+default   [  98% ] 335 VUs  7m50.0s/8m0s
+
+running (7m51.0s), 335/335 VUs, 1881652 complete and 0 interrupted iterations
+default   [  98% ] 335 VUs  7m51.0s/8m0s
+
+running (7m52.0s), 335/335 VUs, 1885784 complete and 0 interrupted iterations
+default   [  98% ] 335 VUs  7m52.0s/8m0s
+
+running (7m53.0s), 335/335 VUs, 1890100 complete and 0 interrupted iterations
+default   [  99% ] 335 VUs  7m53.0s/8m0s
+time="2026-05-18T13:32:48+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (7m54.0s), 335/335 VUs, 1894483 complete and 0 interrupted iterations
+default   [  99% ] 335 VUs  7m54.0s/8m0s
+
+running (7m55.0s), 335/335 VUs, 1898847 complete and 0 interrupted iterations
+default   [  99% ] 335 VUs  7m55.0s/8m0s
+
+running (7m56.0s), 335/335 VUs, 1903257 complete and 0 interrupted iterations
+default   [  99% ] 335 VUs  7m56.0s/8m0s
+time="2026-05-18T13:32:51+07:00" level=warning msg="Request Failed" error="Get \"https://analytics.krasmarafon.ru/api/sse/tracker?event_id=104\": dial tcp 89.108.88.104:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."
+
+running (7m57.0s), 335/335 VUs, 1907254 complete and 0 interrupted iterations
+default   [  99% ] 335 VUs  7m57.0s/8m0s
+
+running (7m58.0s), 335/335 VUs, 1911676 complete and 0 interrupted iterations
+default   [ 100% ] 335 VUs  7m58.0s/8m0s
+
+running (7m59.0s), 335/335 VUs, 1915981 complete and 0 interrupted iterations
+default   [ 100% ] 335 VUs  7m59.0s/8m0s
+
+running (8m00.0s), 335/335 VUs, 1919515 complete and 0 interrupted iterations
+default   [ 100% ] 335 VUs  8m00.0s/8m0s
+
+running (8m01.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m02.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m03.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m04.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m05.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m06.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m07.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m08.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m09.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+
+running (8m10.0s), 050/335 VUs, 1919840 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (8m11.0s), 043/335 VUs, 1919847 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:05+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:06+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:06+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:06+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (8m12.0s), 039/335 VUs, 1919851 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:07+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:07+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:07+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (8m13.0s), 036/335 VUs, 1919854 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:08+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (8m14.0s), 004/335 VUs, 1919886 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:09+07:00" level=warning msg="Request Failed" error="request timeout"
+
+running (8m15.0s), 003/335 VUs, 1919887 complete and 0 interrupted iterations
+default ↓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:10+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:10+07:00" level=warning msg="Request Failed" error="request timeout"
+time="2026-05-18T13:33:10+07:00" level=warning msg="Request Failed" error="request timeout"
+
+
+  █ THRESHOLDS 
+
+    sse_error_rate
+    ✗ 'rate<0.01' rate=99.96%
+
+    sse_ttfb_ms
+    ✓ 'p(95)<3000' p(95)=90.61ms
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 3839780 7756.607559/s
+    checks_succeeded...: 0.03%   1200 out of 3839780
+    checks_failed......: 99.96%  3838580 out of 3839780
+
+    ✗ SSE: соединение живо (timeout=OK или статус 200)
+      ↳  0% — ✓ 600 / ✗ 1919290
+    ✗ SSE: нет быстрого отказа
+      ↳  0% — ✓ 600 / ✗ 1919290
+
+    CUSTOM
+    sse_error_rate.......: 99.96%  1919290 out of 1919890
+    sse_ttfb_ms..........: avg=71.95ms min=40.01ms med=63.7ms  max=9.6s   p(90)=81.12ms p(95)=90.61ms
+
+    HTTP
+    http_req_duration....: avg=82.3ms  min=0s      med=63.76ms max=40.01s p(90)=81.19ms p(95)=90.7ms 
+    http_req_failed......: 100.00% 1919890 out of 1919890
+    http_reqs............: 1919890 3878.303779/s
+
+    EXECUTION
+    iteration_duration...: avg=84.08ms min=40.01ms med=63.93ms max=40.01s p(90)=81.45ms p(95)=91.17ms
+    iterations...........: 1919890 3878.303779/s
+    vus..................: 3       min=3                  max=335
+    vus_max..............: 335     min=335                max=335
+
+    NETWORK
+    data_received........: 802 MB  1.6 MB/s
+    data_sent............: 406 MB  820 kB/s
+
+
+
+
+running (8m15.0s), 000/335 VUs, 1919890 complete and 0 interrupted iterations
+default ✓ [ 100% ] 335 VUs  8m0s
+time="2026-05-18T13:33:13+07:00" level=error msg="thresholds on metrics 'sse_error_rate' have been crossed"

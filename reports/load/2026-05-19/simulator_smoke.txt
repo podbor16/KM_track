@@ -1,0 +1,6 @@
+
+Старт симулятора забега (duration=90s)...
+  [sim] Simulator started, duration=90s
+  [sim]   [0s] +10 finishes, +1 lead
+  [sim]   [30s] +10 finishes, +0 lead
+  [sim]   [60s] +10 finishes, +1 lead

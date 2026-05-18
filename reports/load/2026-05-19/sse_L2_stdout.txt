@@ -1,31 +1,28 @@
 
 SSE load test (VPS asyncio via SSH)
   URL:    http://127.0.0.1:8000/api/sse/tracker?event_id=104
-  VUs:    1335
+  VUs:    890 tracker + 445 notify
   Hold:   460s
 
   Running on VPS...
-  Starting 1335 SSE VUs (asyncio), hold 460+0..30s...
-    [60s] done=182/1335 held=0 active=1153
-    [120s] done=317/1335 held=0 active=1018
-    [180s] done=317/1335 held=0 active=1018
-    [240s] done=317/1335 held=0 active=1018
-    [300s] done=317/1335 held=0 active=1018
-    [360s] done=317/1335 held=0 active=1018
-    [420s] done=317/1335 held=0 active=1018
-    [480s] done=393/1335 held=76 active=942
-    [540s] done=1298/1335 held=981 active=37
+  Starting 890 tracker SSE + 445 notify SSE VUs, hold 460+0..30s...
+    [60s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [120s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [180s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [240s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [300s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [360s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [420s] tracker=220/890 held=0 active=670 | notify=0/445 held=0 active=445
+    [480s] tracker=309/890 held=89 active=581 | notify=0/445 held=0 active=445
+    [540s] tracker=890/890 held=670 active=0 | notify=282/445 held=282 active=163
   
   =======================================================
   SSE Load Test Results (asyncio)
   =======================================================
-  Total VUs:       1335
-  Connected+held:  1018 (76%)
-  No :connected:   0
-  Errors:          317
-  Total time:      550s
+  Tracker SSE (890 VUs):       670 held (75%)
+  Notify  SSE (445 VUs):       445 held (100%)
+  Total time:  557s
   =======================================================
-  
-  RESULT: FAILED (<95% VUs connected)
+  RESULT: FAILED tracker SSE (75% < 95%)
 
-  Test completed in 550.4s (exit=1)
+  Test completed in 557.5s (exit=1)
