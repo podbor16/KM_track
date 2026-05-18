@@ -150,4 +150,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     searchInput.focus();
+
+    new SSEClient('/api/sse/notify', {
+        results_updated: () => {
+            const badge = document.getElementById('live-race-badge');
+            if (badge) {
+                badge.style.display = 'block';
+                badge.textContent = '🟢 Появились новые финиши в текущем забеге';
+            }
+        }
+    });
 });
