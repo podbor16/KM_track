@@ -42,15 +42,11 @@ async def tilda_webhook(token: str, request: Request):
         _log.warning("tilda_webhook: не удалось распарсить тело запроса")
         return JSONResponse({"ok": False, "error": "bad body"})
 
-    _log.info(f"tilda_webhook: body keys={list(body.keys())}, payment_len={len(str(body.get('payment',''))[:100])}")
-
     try:
         data = transform_tilda_payload(body)
     except Exception as e:
         _log.error(f"tilda_webhook: ошибка трансформации: {e}", exc_info=True)
         return JSONResponse({"ok": False, "error": "transform failed"})
-
-    _log.info(f"tilda_webhook: data event_year={data.get('event_year')!r} event_name={data.get('event_name')!r}")
 
     try:
         _insert_lead(data)

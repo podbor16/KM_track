@@ -47,7 +47,6 @@ def parse_products(products, birthday=None):
         return empty
 
     products_str = products[0] if isinstance(products, list) else str(products)
-    _log.info(f"parse_products: products_str={products_str!r}")
 
     match = re.match(
         r"^(\d+(?:\.\d+)?)\s+(км|km)\s+(.+?)\s+(\d{4})\s*\(",
@@ -55,7 +54,6 @@ def parse_products(products, birthday=None):
         re.IGNORECASE,
     )
     if match:
-        _log.info(f"parse_products: matched groups={match.groups()}")
         distance_num = match.group(1)
         unit = "км"
         event_name = match.group(3).strip()
@@ -102,8 +100,6 @@ def parse_payment(payment_raw):
     except (json.JSONDecodeError, TypeError) as e:
         _log.warning(f"parse_payment: json.loads ошибка: {e}, raw={payment_raw!r:.200}")
         return result
-    _log.info(f"parse_payment: products={parsed.get('products')!r}")
-
     result["payment_system"] = parsed.get("sys", "")
     result["transaction_id"] = parsed.get("systranid", "")
     result["order_id"] = parsed.get("orderid", "")
