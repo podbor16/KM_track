@@ -26,6 +26,10 @@ class TrackerHub:
                 slow.add(q)
         self._subs.get(event_id, set()).difference_update(slow)
 
+    def total_sse_count(self) -> int:
+        """Суммарное число активных SSE-подписчиков по всем event_id."""
+        return sum(len(queues) for queues in self._subs.values())
+
 
 class NotificationHub:
     """Глобальный SSE хаб: лёгкие уведомления {type, ...payload} для results/startlist."""
