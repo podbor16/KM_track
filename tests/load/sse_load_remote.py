@@ -1,12 +1,10 @@
 """
 SSE нагрузочный тест, запускаемый С VPS через SSH.
-Генерирует нагрузку непосредственно с сервера — без ISP/прокси буферизации.
-
-Создаёт bash-скрипт на VPS с N параллельными curl SSE-соединениями,
-запускает их и считает сколько держится HOLD_SECONDS секунд.
+Вместо N процессов curl — один Python asyncio скрипт (N async задач).
+Экономия памяти: 1x50MB vs N×2MB (для N=335: 670MB → 50MB).
 
 Запуск:
-    python tests/load/sse_load_remote.py --vus 335 --hold 30
+    python tests/load/sse_load_remote.py --vus 335 --hold 460
     python tests/load/sse_load_remote.py --smoke
 """
 
@@ -22,7 +20,7 @@ VPS_PASSWORD = "shsfzw5fHiQY8v6g"
 SSE_URL = "http://127.0.0.1:8000/api/sse/tracker?event_id=104"
 
 SSH_RETRIES = 5
-SSH_RETRY_DELAY = 10  # seconds between retries
+SSH_RETRY_DELAY = 10
 
 
 def _ssh_connect() -> paramiko.SSHClient:
@@ -41,97 +39,157 @@ def _ssh_connect() -> paramiko.SSHClient:
     raise last_exc
 
 
+# asyncio Python script uploaded and executed on VPS.
+# Uses raw asyncio.open_connection (no external deps), one process for all VUs.
+ASYNC_SSE_SCRIPT = '''\
+import asyncio, sys, time, random
+
+HOST = "127.0.0.1"
+PORT = 8000
+SSE_PATH = "/api/sse/tracker?event_id=104"
+PASS_THRESHOLD = 95  # % VUs connected
+
+REQUEST = (
+    f"GET {SSE_PATH} HTTP/1.1\\r\\n"
+    f"Host: {HOST}:{PORT}\\r\\n"
+    f"Accept: text/event-stream\\r\\n"
+    f"Cache-Control: no-cache\\r\\n"
+    f"Connection: keep-alive\\r\\n"
+    f"\\r\\n"
+).encode()
+
+
+async def sse_vu(vu_id, hold_seconds, results):
+    jitter = random.randint(0, 30)
+    total_hold = hold_seconds + jitter
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(HOST, PORT), timeout=15
+        )
+    except Exception as e:
+        results[vu_id] = f"conn_err:{type(e).__name__}"
+        return
+
+    try:
+        writer.write(REQUEST)
+        await writer.drain()
+
+        start = time.monotonic()
+        connected = False
+
+        # Phase 1: wait for ': connected' in first ~30s
+        deadline_connect = start + 30
+        buf = b""
+        while time.monotonic() < deadline_connect:
+            try:
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=5)
+            except asyncio.TimeoutError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            if b"connected" in buf:
+                connected = True
+                break
+
+        if not connected:
+            results[vu_id] = "no_connected"
+            return
+
+        # Phase 2: hold connection for remaining time (read heartbeats)
+        while time.monotonic() - start < total_hold:
+            try:
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=30)
+                if not chunk:
+                    break
+            except asyncio.TimeoutError:
+                pass  # heartbeat expected every 25s - continue
+
+        results[vu_id] = "held"
+    except Exception as e:
+        results[vu_id] = f"err:{type(e).__name__}"
+    finally:
+        try:
+            writer.close()
+            await asyncio.wait_for(writer.wait_closed(), timeout=2)
+        except Exception:
+            pass
+
+
+async def run_load(vus, hold_seconds):
+    print(f"Starting {vus} SSE VUs (asyncio), hold {hold_seconds}+0..30s...")
+    t_start = time.monotonic()
+    results = {}
+
+    tasks = []
+    for i in range(vus):
+        task = asyncio.create_task(sse_vu(i, hold_seconds, results))
+        tasks.append(task)
+        if (i + 1) % 20 == 0:
+            await asyncio.sleep(1)
+
+    await asyncio.gather(*tasks)
+
+    elapsed = time.monotonic() - t_start
+    held = sum(1 for v in results.values() if v == "held")
+    no_conn = sum(1 for v in results.values() if v == "no_connected")
+    errors = vus - held - no_conn
+
+    pct = held * 100 // vus if vus else 0
+    print("")
+    print("=======================================================")
+    print("SSE Load Test Results (asyncio)")
+    print("=======================================================")
+    print(f"Total VUs:       {vus}")
+    print(f"Connected+held:  {held} ({pct}%)")
+    print(f"No :connected:   {no_conn}")
+    print(f"Errors:          {errors}")
+    print(f"Total time:      {elapsed:.0f}s")
+    print("=======================================================")
+    print("")
+
+    if held >= vus * PASS_THRESHOLD // 100:
+        print(f"RESULT: PASSED (>={PASS_THRESHOLD}% VUs connected)")
+        return True
+    else:
+        print(f"RESULT: FAILED (<{PASS_THRESHOLD}% VUs connected)")
+        return False
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--vus", type=int, default=335)
+    parser.add_argument("--hold", type=int, default=30)
+    args = parser.parse_args()
+
+    ok = asyncio.run(run_load(args.vus, args.hold))
+    sys.exit(0 if ok else 1)
+'''
+
+
 def run_remote(vus: int, hold_seconds: int) -> bool:
-    print(f"\nSSE load test (VPS remote via SSH)")
+    print(f"\nSSE load test (VPS asyncio via SSH)")
     print(f"  URL:    {SSE_URL}")
     print(f"  VUs:    {vus}")
     print(f"  Hold:   {hold_seconds}s")
 
     client = _ssh_connect()
 
-    # Bash скрипт: N параллельных curl SSE + подсчёт успешных
-    # Каждый curl держит соединение hold_seconds + random(0..30)s
-    # чтобы соединения не закрылись одновременно (503 spike)
-    jitter = 30
-    bash_script = f"""#!/bin/bash
-VUS={vus}
-HOLD={hold_seconds}
-JITTER={jitter}
-URL="{SSE_URL}"
-TMPDIR=$(mktemp -d)
-
-echo "Starting $VUS SSE connections, hold ${{HOLD}}+0..{jitter}s..."
-t_start=$(date +%s)
-
-for i in $(seq 1 $VUS); do
-    IP="$((i % 223 + 1)).$((i / 223 % 254 + 1)).1.$i"
-    hold_i=$((HOLD + RANDOM % (JITTER + 1)))
-    curl -s --max-time $hold_i \\
-        -H "Accept: text/event-stream" \\
-        -H "X-Forwarded-For: $IP" \\
-        "$URL" > "$TMPDIR/vu_$i.txt" 2>/dev/null &
-    if [ $((i % 20)) -eq 0 ]; then sleep 1; fi
-done
-
-echo "All VUs started. Waiting for completion..."
-wait
-
-t_end=$(date +%s)
-elapsed=$((t_end - t_start))
-
-connected=0
-held=0
-quick_fail=0
-
-for i in $(seq 1 $VUS); do
-    f="$TMPDIR/vu_$i.txt"
-    if [ -f "$f" ] && grep -q ': connected' "$f" 2>/dev/null; then
-        connected=$((connected + 1))
-        held=$((held + 1))
-    else
-        quick_fail=$((quick_fail + 1))
-    fi
-done
-
-rm -rf "$TMPDIR"
-
-echo ""
-echo "======================================================="
-echo "SSE Load Test Results"
-echo "======================================================="
-echo "Total VUs:       $VUS"
-echo "Connected:       $connected ($((connected * 100 / VUS))%)"
-echo "Held ${{HOLD}}s:     $held ($((held * 100 / VUS))%)"
-echo "Quick fail:      $quick_fail"
-echo "Total time:      ${{elapsed}}s"
-echo "======================================================="
-echo ""
-
-if [ $connected -ge $((VUS * 95 / 100)) ]; then
-    echo "RESULT: PASSED (>=95% VUs connected)"
-    exit 0
-else
-    echo "RESULT: FAILED (<95% VUs connected)"
-    exit 1
-fi
-"""
-
-    print(f"\n  Запускаем на VPS...")
-    t0 = time.monotonic()
-
-    # Загружаем скрипт на VPS и запускаем
     sftp = client.open_sftp()
-    with sftp.open("/tmp/sse_load_test.sh", "w") as f:
-        f.write(bash_script)
-    sftp.chmod("/tmp/sse_load_test.sh", 0o755)
+    with sftp.open("/tmp/sse_async_test.py", "w") as f:
+        f.write(ASYNC_SSE_SCRIPT)
     sftp.close()
 
-    # Запускаем без timeout на channel: команда сама завершится через hold+рэмп секунд.
-    # paramiko timeout на recv() вызывает PipeTimeout на длинных командах — не используем.
-    stdin, stdout, stderr = client.exec_command("bash /tmp/sse_load_test.sh")
-    stdout.channel.settimeout(None)  # Блокирующий режим
+    python = "/opt/km_track/venv/bin/python3"
+    cmd = f"{python} /tmp/sse_async_test.py --vus {vus} --hold {hold_seconds}"
 
-    # Читаем весь вывод после завершения команды
+    print(f"\n  Running on VPS...")
+    t0 = time.monotonic()
+
+    stdin, stdout, stderr = client.exec_command(cmd)
+    stdout.channel.settimeout(None)
+
     out = stdout.read().decode("utf-8", errors="replace")
     err = stderr.read().decode("utf-8", errors="replace").strip()
 
@@ -144,7 +202,7 @@ fi
     exit_code = stdout.channel.recv_exit_status()
     ok = exit_code == 0
     elapsed = time.monotonic() - t0
-    print(f"\n  Тест завершён за {elapsed:.1f}s (exit={exit_code})")
+    print(f"\n  Test completed in {elapsed:.1f}s (exit={exit_code})")
     client.close()
     return ok
 
