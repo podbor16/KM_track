@@ -756,14 +756,14 @@ def _get_metrics_collector() -> MetricsCollector:
 
 @router.get("/api/admin/metrics", tags=["Admin"])
 async def get_server_metrics(
-    hours: int = Query(default=24, description="Диапазон: 1,6,24,168,720"),
+    hours: int = Query(default=24, description="Диапазон: 1,6,24,168,720,2160,4320,8760"),
     user=Depends(require_auth),
 ):
     """История метрик сервера с downsampling по диапазону."""
     import time
     if isinstance(user, RedirectResponse):
         return user
-    allowed = {1, 6, 24, 168, 720}
+    allowed = {1, 6, 24, 168, 720, 2160, 4320, 8760}
     if hours not in allowed:
         hours = 24
     bucket_secs = hours_to_bucket_secs(hours)
@@ -780,6 +780,7 @@ async def get_server_metrics(
             "to_ts": now,
             "bucket_secs": bucket_secs,
             "hours": hours,
+            "uptime_secs": collector.get_uptime_secs(),
         },
     }
 
