@@ -37,6 +37,10 @@ class NotificationHub:
     def __init__(self):
         self._queues: set[asyncio.Queue] = set()
 
+    def total_sse_count(self) -> int:
+        """Число активных подписчиков (results/startlist страницы)."""
+        return len(self._queues)
+
     async def subscribe(self) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=20)
         self._queues.add(queue)

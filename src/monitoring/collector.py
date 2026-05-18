@@ -219,7 +219,7 @@ class MetricsCollector:
                     CASE WHEN SUM(total_requests) > 0
                          THEN SUM(total_response_ms) / SUM(total_requests)
                          ELSE 0 END                        AS avg_response_ms,
-                    CAST(AVG(sse_connections) AS INTEGER)  AS sse_connections,
+                    SUM(sse_connections)                   AS sse_connections,
                     ROUND(AVG(cpu_percent), 1)             AS cpu_percent,
                     CAST(AVG(ram_used_mb) AS INTEGER)      AS ram_used_mb,
                     CAST(AVG(ram_total_mb) AS INTEGER)     AS ram_total_mb
