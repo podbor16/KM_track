@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Мониторинг сервера · KM_track</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2235;--border:#262b3d;
+  --text:#e2e8f0;--muted:#7c87a0;--accent:#6366f1;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#38bdf8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}
+
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.header-left{display:flex;align-items:center;gap:12px}
+.header-title{font-size:16px;font-weight:700}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);
+  display:inline-block;margin-right:4px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-dot.dead{background:var(--muted);animation:none}
+.live-label{font-size:11px;color:var(--muted)}
+.btn-link{background:none;border:1px solid var(--border);color:var(--muted);
+  padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;text-decoration:none}
+.btn-link:hover{color:var(--text);border-color:var(--muted)}
+
+.main{padding:20px 24px;max-width:1400px;margin:0 auto}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.kpi .lbl{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.kpi .val{font-size:26px;font-weight:800;line-height:1.1}
+.kpi .sub{color:var(--muted);font-size:11px;margin-top:3px}
+.kpi.green .val{color:var(--green)}
+.kpi.red .val{color:var(--red)}
+.kpi.blue .val{color:var(--blue)}
+.kpi.yellow .val{color:var(--yellow)}
+
+.controls{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.controls label{color:var(--muted);font-size:11px}
+.range-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  padding:5px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s}
+.range-btn:hover,.range-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+@media(max-width:860px){.chart-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
+.chart-card h3{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:10px}
+.chart-card.wide{grid-column:1/-1}
+
+.footer-note{color:var(--muted);font-size:11px;text-align:center;padding:12px 0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-title">Мониторинг сервера · KM_track</div>
+    <div>
+      <span class="live-dot" id="liveDot"></span>
+      <span class="live-label" id="liveLabel">live</span>
+    </div>
+  </div>
+  <a class="btn-link" href="/logout">Выйти</a>
+</div>
+
+<div class="main">
+
+  <div class="kpi-row">
+    <div class="kpi blue"><div class="lbl">IP сейчас</div><div class="val" id="kpiIp">—</div><div class="sub">уникальных адресов</div></div>
+    <div class="kpi green"><div class="lbl">SSE соединений</div><div class="val" id="kpiSse">—</div><div class="sub">живых подключений</div></div>
+    <div class="kpi"><div class="lbl">RPS (5с)</div><div class="val" id="kpiRps">—</div><div class="sub">запросов/сек</div></div>
+    <div class="kpi"><div class="lbl">Среднее время</div><div class="val" id="kpiRt">—</div><div class="sub">мс</div></div>
+    <div class="kpi" id="kpiErrCard"><div class="lbl">Ошибки (5с)</div><div class="val" id="kpiErr">—</div><div class="sub">4xx + 5xx</div></div>
+  </div>
+
+  <div class="controls">
+    <label>Диапазон:</label>
+    <button class="range-btn" data-h="1">1ч</button>
+    <button class="range-btn" data-h="6">6ч</button>
+    <button class="range-btn active" data-h="24">24ч</button>
+    <button class="range-btn" data-h="168">7д</button>
+    <button class="range-btn" data-h="720">30д</button>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card wide">
+      <h3>Пользователи на сервере</h3>
+      <canvas id="chartUsers" height="130"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>Запросы в секунду (RPS) и ошибки</h3>
+      <canvas id="chartRps" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>Среднее время ответа сервера (мс)</h3>
+      <canvas id="chartRt" height="180"></canvas>
+    </div>
+  </div>
+
+  <div class="footer-note">Данные обновляются каждые 5 секунд · История 30 дней</div>
+</div>
+
+<script>
+const SCALE_X = { ticks:{color:'#4a5568',maxTicksLimit:10,font:{size:10}}, grid:{color:'#1a1f30'} };
+const SCALE_Y = lbl => ({
+  ticks:{color:'#4a5568',font:{size:10}}, grid:{color:'#1a1f30'},
+  title:{display:!!lbl,text:lbl,color:'#4a5568',font:{size:10}}, min:0
+});
+
+function mkChart(id, datasets, yLabel) {
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{ labels:[], datasets },
+    options:{
+      responsive:true, animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#7c87a0',boxWidth:12,font:{size:10}}},
+        tooltip:{
+          callbacks:{
+            title: items => {
+              const d = new Date(items[0].label * 1000);
+              return d.toLocaleString('ru-RU');
+            }
+          }
+        }
+      },
+      scales:{ x:{...SCALE_X, ticks:{...SCALE_X.ticks, callback:(_,i,ticks)=>{
+        const ts = ticks[i]?.value;
+        if (!ts) return '';
+        const d = new Date(ts*1000);
+        return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      }}}, y:SCALE_Y(yLabel) }
+    }
+  });
+}
+
+const chartUsers = mkChart('chartUsers', [
+  {label:'Уникальные IP', data:[], borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)', fill:true, tension:.3, pointRadius:0},
+  {label:'SSE соединения', data:[], borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.08)', fill:true, tension:.3, pointRadius:0},
+], 'Пользователей');
+
+const chartRps = mkChart('chartRps', [
+  {label:'RPS', data:[], borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)', fill:true, tension:.3, pointRadius:0},
+  {label:'Ошибки/с', data:[], borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', fill:true, tension:.3, pointRadius:0},
+], 'Запросов / сек');
+
+const chartRt = mkChart('chartRt', [
+  {label:'Среднее время (мс)', data:[], borderColor:'#f59e0b', tension:.3, pointRadius:0, borderWidth:2},
+], 'Мс');
+
+let currentHours = 24;
+
+function setData(points, bucketSecs) {
+  const labels = points.map(p => p.ts);
+  chartUsers.data.labels = labels;
+  chartUsers.data.datasets[0].data = points.map(p => p.unique_ips);
+  chartUsers.data.datasets[1].data = points.map(p => p.sse_connections);
+  chartUsers.update('none');
+
+  chartRps.data.labels = labels;
+  chartRps.data.datasets[0].data = points.map(p => +(p.total_requests / bucketSecs).toFixed(2));
+  chartRps.data.datasets[1].data = points.map(p => +(p.http_errors / bucketSecs).toFixed(3));
+  chartRps.update('none');
+
+  chartRt.data.labels = labels;
+  chartRt.data.datasets[0].data = points.map(p => p.avg_response_ms);
+  chartRt.update('none');
+}
+
+function appendPoint(point) {
+  const bSec = 5;
+  const maxPoints = currentHours === 1 ? 720 : 500;
+
+  [chartUsers, chartRps, chartRt].forEach(c => {
+    c.data.labels.push(point.ts);
+    if (c.data.labels.length > maxPoints) c.data.labels.shift();
+  });
+
+  chartUsers.data.datasets[0].data.push(point.unique_ips);
+  chartUsers.data.datasets[1].data.push(point.sse_connections);
+  chartRps.data.datasets[0].data.push(+(point.total_requests / bSec).toFixed(2));
+  chartRps.data.datasets[1].data.push(+(point.http_errors / bSec).toFixed(3));
+  chartRt.data.datasets[0].data.push(point.avg_response_ms);
+
+  [chartUsers, chartRps, chartRt].forEach(c => {
+    c.data.datasets.forEach(d => { if (d.data.length > maxPoints) d.data.shift(); });
+    c.update('none');
+  });
+}
+
+async function loadHistory(hours) {
+  try {
+    const res = await fetch(`/api/admin/metrics?hours=${hours}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    setData(json.points, json.meta.bucket_secs || 5);
+  } catch(e) { console.error('loadHistory:', e); }
+}
+
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentHours = parseInt(btn.dataset.h);
+    loadHistory(currentHours);
+  });
+});
+
+function updateKpi(point) {
+  document.getElementById('kpiIp').textContent = point.unique_ips ?? '—';
+  document.getElementById('kpiSse').textContent = point.sse_connections ?? '—';
+  document.getElementById('kpiRps').textContent = point.total_requests
+    ? (point.total_requests / 5).toFixed(1) : '0';
+  document.getElementById('kpiRt').textContent = point.avg_response_ms ?? '—';
+  const err = point.http_errors || 0;
+  document.getElementById('kpiErr').textContent = err;
+  document.getElementById('kpiErrCard').className = 'kpi ' + (err > 0 ? 'red' : '');
+}
+
+function connectLive() {
+  const dot = document.getElementById('liveDot');
+  const label = document.getElementById('liveLabel');
+  const es = new EventSource('/api/admin/metrics/live');
+
+  es.onopen = () => {
+    dot.classList.remove('dead');
+    label.textContent = 'live';
+  };
+  es.onmessage = e => {
+    try {
+      const point = JSON.parse(e.data);
+      appendPoint(point);
+      updateKpi(point);
+    } catch(_) {}
+  };
+  es.onerror = () => {
+    dot.classList.add('dead');
+    label.textContent = 'переподключение...';
+    es.close();
+    setTimeout(connectLive, 3000);
+  };
+}
+
+loadHistory(24);
+connectLive();
+</script>
+</body>
+</html>
