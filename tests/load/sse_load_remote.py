@@ -30,6 +30,8 @@ def _ssh_connect() -> paramiko.SSHClient:
     for attempt in range(1, SSH_RETRIES + 1):
         try:
             client.connect(VPS_HOST, username=VPS_USER, password=VPS_PASSWORD, timeout=30)
+            # Keepalive every 30s prevents SSH idle-timeout disconnect during long tests
+            client.get_transport().set_keepalive(30)
             return client
         except Exception as e:
             last_exc = e
@@ -116,10 +118,23 @@ async def sse_vu(vu_id, hold_seconds, results):
             pass
 
 
+async def progress_reporter(results, vus, t_start, interval=60):
+    """Print progress every interval seconds to keep SSH connection alive."""
+    while True:
+        await asyncio.sleep(interval)
+        held = sum(1 for v in results.values() if v == "held")
+        active = vus - len(results)
+        elapsed = time.monotonic() - t_start
+        print(f"  [{elapsed:.0f}s] done={len(results)}/{vus} held={held} active={active}", flush=True)
+
+
 async def run_load(vus, hold_seconds):
     print(f"Starting {vus} SSE VUs (asyncio), hold {hold_seconds}+0..30s...")
     t_start = time.monotonic()
     results = {}
+
+    # Progress reporter runs in background to prevent SSH idle-timeout
+    reporter = asyncio.create_task(progress_reporter(results, vus, t_start))
 
     tasks = []
     for i in range(vus):
@@ -129,6 +144,7 @@ async def run_load(vus, hold_seconds):
             await asyncio.sleep(1)
 
     await asyncio.gather(*tasks)
+    reporter.cancel()
 
     elapsed = time.monotonic() - t_start
     held = sum(1 for v in results.values() if v == "held")
