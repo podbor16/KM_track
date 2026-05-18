@@ -27,6 +27,10 @@ jobs:
             nginx -t
             systemctl reload nginx
 
+            # Применить systemd unit если изменился
+            cp /opt/km_track/deploy/km_track.service /etc/systemd/system/km_track.service
+            systemctl daemon-reload
+
             # Перезапустить приложение
             systemctl restart km_track
             sleep 5
