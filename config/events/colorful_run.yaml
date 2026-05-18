@@ -2,7 +2,7 @@ name: "Красочный забег"
 display_name: "Красочный забег"
 year: 2026
 code: "colorrun"
-is_active: false               # ← АКТИВНЫЙ забег: true у одного, false у остальных
+is_active: true               # ← АКТИВНЫЙ забег: true у одного, false у остальных
 start_lat: 56.0265860              # ← заполнить перед стартом
 start_lon: 92.9398610             # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
