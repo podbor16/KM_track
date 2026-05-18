@@ -29,8 +29,8 @@ jobs:
 
             # Перезапустить приложение
             systemctl restart km_track
-            sleep 3
+            sleep 5
 
             # Проверить что поднялось
-            curl -sf http://localhost:8000/health || (echo "HEALTH CHECK FAILED" && exit 1)
+            curl -sf http://localhost:8000/api/events || (echo "HEALTH CHECK FAILED" && exit 1)
             echo "=== Deploy OK ==="
