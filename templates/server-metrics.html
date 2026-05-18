@@ -9,7 +9,7 @@
 :root{
   --bg:#0f1117;--surface:#181c27;--surface2:#1e2235;--border:#262b3d;
   --text:#e2e8f0;--muted:#7c87a0;--accent:#6366f1;
-  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#38bdf8;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#38bdf8;--orange:#f97316;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}
@@ -22,27 +22,31 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
   display:inline-block;margin-right:4px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .live-dot.dead{background:var(--muted);animation:none}
-.live-label{font-size:11px;color:var(--muted)}
+.live-status{font-size:11px;color:var(--muted)}
 .btn-link{background:none;border:1px solid var(--border);color:var(--muted);
   padding:4px 12px;border-radius:5px;cursor:pointer;font-size:11px;text-decoration:none}
 .btn-link:hover{color:var(--text);border-color:var(--muted)}
 
 .main{padding:20px 24px;max-width:1400px;margin:0 auto}
 
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:20px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;
+  transition:border-color .4s,box-shadow .4s}
 .kpi .lbl{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .kpi .val{font-size:26px;font-weight:800;line-height:1.1}
 .kpi .sub{color:var(--muted);font-size:11px;margin-top:3px}
-.kpi.green .val{color:var(--green)}
-.kpi.red .val{color:var(--red)}
 .kpi.blue .val{color:var(--blue)}
-.kpi.yellow .val{color:var(--yellow)}
+.kpi.green .val{color:var(--green)}
+.kpi.orange .val{color:var(--orange)}
 
-.controls{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+#kpiLoad{border-width:2px}
+#kpiLoadVal{font-size:20px;font-weight:800}
+
+.controls{display:flex;align-items:center;gap:6px;margin:14px 0;flex-wrap:wrap}
 .controls label{color:var(--muted);font-size:11px}
 .range-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);
-  padding:5px 14px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s}
+  padding:5px 11px;border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s}
 .range-btn:hover,.range-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
@@ -62,7 +66,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
     <div class="header-title">Мониторинг сервера · KM_track</div>
     <div>
       <span class="live-dot" id="liveDot"></span>
-      <span class="live-label" id="liveLabel">live</span>
+      <span class="live-status">
+        <span id="liveLabel">live</span>
+        · <span id="countdownLabel">обновление через 60с</span>
+      </span>
     </div>
   </div>
   <a class="btn-link" href="/logout">Выйти</a>
@@ -70,14 +77,55 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 
 <div class="main">
 
+  <!-- KPI ряд 1 -->
   <div class="kpi-row">
-    <div class="kpi blue"><div class="lbl">IP сейчас</div><div class="val" id="kpiIp">—</div><div class="sub">уникальных адресов</div></div>
-    <div class="kpi green"><div class="lbl">SSE соединений</div><div class="val" id="kpiSse">—</div><div class="sub">живых подключений</div></div>
-    <div class="kpi"><div class="lbl">RPS (5с)</div><div class="val" id="kpiRps">—</div><div class="sub">запросов/сек</div></div>
-    <div class="kpi"><div class="lbl">Среднее время</div><div class="val" id="kpiRt">—</div><div class="sub">мс</div></div>
-    <div class="kpi" id="kpiErrCard"><div class="lbl">Ошибки (5с)</div><div class="val" id="kpiErr">—</div><div class="sub">4xx + 5xx</div></div>
+    <div class="kpi" id="kpiLoad">
+      <div class="lbl">Нагрузка</div>
+      <div class="val" id="kpiLoadVal">—</div>
+      <div class="sub" id="kpiLoadSub">score: —</div>
+    </div>
+    <div class="kpi blue">
+      <div class="lbl">IP сейчас</div>
+      <div class="val" id="kpiIp">—</div>
+      <div class="sub">уникальных адресов</div>
+    </div>
+    <div class="kpi green">
+      <div class="lbl">SSE соединений</div>
+      <div class="val" id="kpiSse">—</div>
+      <div class="sub">живых подключений</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">RPS (1мин)</div>
+      <div class="val" id="kpiRps">—</div>
+      <div class="sub">запросов/сек</div>
+    </div>
   </div>
 
+  <!-- KPI ряд 2 -->
+  <div class="kpi-row">
+    <div class="kpi orange">
+      <div class="lbl">RAM</div>
+      <div class="val" id="kpiRam">—</div>
+      <div class="sub" id="kpiRamSub">МБ / —</div>
+    </div>
+    <div class="kpi blue">
+      <div class="lbl">CPU</div>
+      <div class="val" id="kpiCpu">—</div>
+      <div class="sub">загрузка ядра</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Среднее время</div>
+      <div class="val" id="kpiRt">—</div>
+      <div class="sub">мс</div>
+    </div>
+    <div class="kpi" id="kpiErrCard">
+      <div class="lbl">Ошибки (1мин)</div>
+      <div class="val" id="kpiErr">—</div>
+      <div class="sub">4xx + 5xx</div>
+    </div>
+  </div>
+
+  <!-- Диапазон -->
   <div class="controls">
     <label>Диапазон:</label>
     <button class="range-btn" data-h="1">1ч</button>
@@ -85,113 +133,216 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
     <button class="range-btn active" data-h="24">24ч</button>
     <button class="range-btn" data-h="168">7д</button>
     <button class="range-btn" data-h="720">30д</button>
+    <button class="range-btn" data-h="2160">3м</button>
+    <button class="range-btn" data-h="4320">6м</button>
+    <button class="range-btn" data-h="8760">12м</button>
   </div>
 
+  <!-- Графики -->
   <div class="chart-grid">
     <div class="chart-card wide">
       <h3>Пользователи на сервере</h3>
-      <canvas id="chartUsers" height="130"></canvas>
+      <canvas id="chartUsers" height="110"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>RAM % и CPU %</h3>
+      <canvas id="chartSys" height="180"></canvas>
     </div>
     <div class="chart-card">
       <h3>Запросы в секунду (RPS) и ошибки</h3>
       <canvas id="chartRps" height="180"></canvas>
     </div>
-    <div class="chart-card">
+    <div class="chart-card wide">
       <h3>Среднее время ответа сервера (мс)</h3>
-      <canvas id="chartRt" height="180"></canvas>
+      <canvas id="chartRt" height="110"></canvas>
     </div>
   </div>
 
-  <div class="footer-note">Данные обновляются каждые 5 секунд · История 30 дней</div>
+  <div class="footer-note" id="footerNote">
+    Данные обновляются каждую минуту · История 1 год
+  </div>
 </div>
 
 <script>
-const SCALE_X = { ticks:{color:'#4a5568',maxTicksLimit:10,font:{size:10}}, grid:{color:'#1a1f30'} };
-const SCALE_Y = lbl => ({
-  ticks:{color:'#4a5568',font:{size:10}}, grid:{color:'#1a1f30'},
-  title:{display:!!lbl,text:lbl,color:'#4a5568',font:{size:10}}, min:0
+// ── Chart.js helpers ──────────────────────────────────────────────────────────
+const SCALE_X = {
+  ticks:{color:'#4a5568',maxTicksLimit:10,font:{size:10}},
+  grid:{color:'#1a1f30'}
+};
+const mkY = (lbl, max) => ({
+  ticks:{color:'#4a5568',font:{size:10}},
+  grid:{color:'#1a1f30'},
+  title:{display:!!lbl,text:lbl,color:'#4a5568',font:{size:10}},
+  min:0,
+  ...(max != null ? {max} : {}),
 });
 
-function mkChart(id, datasets, yLabel) {
+function mkChart(id, datasets, yLabel, yMax) {
   return new Chart(document.getElementById(id), {
     type:'line',
-    data:{ labels:[], datasets },
+    data:{labels:[], datasets},
     options:{
       responsive:true, animation:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{labels:{color:'#7c87a0',boxWidth:12,font:{size:10}}},
-        tooltip:{
-          callbacks:{
-            title: items => {
-              const d = new Date(items[0].label * 1000);
-              return d.toLocaleString('ru-RU');
-            }
-          }
-        }
+        tooltip:{callbacks:{title: items => {
+          return new Date(items[0].label * 1000).toLocaleString('ru-RU');
+        }}},
       },
-      scales:{ x:{...SCALE_X, ticks:{...SCALE_X.ticks, callback:(_,i,ticks)=>{
-        const ts = ticks[i]?.value;
-        if (!ts) return '';
-        const d = new Date(ts*1000);
-        return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-      }}}, y:SCALE_Y(yLabel) }
-    }
+      scales:{
+        x:{...SCALE_X, ticks:{...SCALE_X.ticks, callback:(_,i,ticks)=>{
+          const ts = ticks[i]?.value;
+          if (!ts) return '';
+          return new Date(ts*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+        }}},
+        y: mkY(yLabel, yMax),
+      },
+    },
   });
 }
 
+// ── Chart instances ───────────────────────────────────────────────────────────
 const chartUsers = mkChart('chartUsers', [
-  {label:'Уникальные IP', data:[], borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)', fill:true, tension:.3, pointRadius:0},
+  {label:'Уникальные IP',  data:[], borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)', fill:true, tension:.3, pointRadius:0},
   {label:'SSE соединения', data:[], borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.08)', fill:true, tension:.3, pointRadius:0},
 ], 'Пользователей');
 
+const chartSys = mkChart('chartSys', [
+  {label:'RAM %', data:[], borderColor:'#f97316', tension:.3, pointRadius:0, borderWidth:2},
+  {label:'CPU %', data:[], borderColor:'#38bdf8', tension:.3, pointRadius:0, borderWidth:2},
+], '%', 100);
+
 const chartRps = mkChart('chartRps', [
-  {label:'RPS', data:[], borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)', fill:true, tension:.3, pointRadius:0},
-  {label:'Ошибки/с', data:[], borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', fill:true, tension:.3, pointRadius:0},
+  {label:'RPS',       data:[], borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)', fill:true, tension:.3, pointRadius:0},
+  {label:'Ошибки/с', data:[], borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)',   fill:true, tension:.3, pointRadius:0},
 ], 'Запросов / сек');
 
 const chartRt = mkChart('chartRt', [
   {label:'Среднее время (мс)', data:[], borderColor:'#f59e0b', tension:.3, pointRadius:0, borderWidth:2},
 ], 'Мс');
 
-let currentHours = 24;
+const ALL_CHARTS = [chartUsers, chartSys, chartRps, chartRt];
 
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentHours = 24;
+let countdown = 60;
+let countdownInterval = null;
+
+// ── Load badge ────────────────────────────────────────────────────────────────
+const LOAD_COLORS = {
+  'Низкая':      '#22c55e',
+  'Умеренная':   '#f59e0b',
+  'Высокая':     '#f97316',
+  'Критическая': '#ef4444',
+};
+
+function updateLoadBadge(label, score) {
+  const color = LOAD_COLORS[label] || '#7c87a0';
+  const card = document.getElementById('kpiLoad');
+  card.style.borderColor = color;
+  card.style.boxShadow = `0 0 12px ${color}33`;
+  document.getElementById('kpiLoadVal').style.color = color;
+  document.getElementById('kpiLoadVal').textContent = label || '—';
+  document.getElementById('kpiLoadSub').textContent =
+    score != null ? `score: ${score}%` : 'score: —';
+}
+
+// ── Client-side load score (для исторических точек без load_label) ────────────
+function computeLoad(ramPct, avgMs, errRate) {
+  const rt = avgMs < 500 ? 0 : avgMs < 1500 ? 35 : avgMs < 3000 ? 70 : 100;
+  const s = ramPct * 0.4 + rt * 0.4 + errRate * 0.2;
+  const label = s < 25 ? 'Низкая' : s < 55 ? 'Умеренная' : s < 80 ? 'Высокая' : 'Критическая';
+  return {score: Math.round(s * 10) / 10, label};
+}
+
+function ramPct(used, total) {
+  return total > 0 ? Math.round(used / total * 100) : 0;
+}
+
+// ── KPI update ────────────────────────────────────────────────────────────────
+function updateKpi(point, bucketSecs) {
+  const b = bucketSecs || 60;
+  const rp = ramPct(point.ram_used_mb, point.ram_total_mb);
+  const errRate = point.total_requests > 0
+    ? (point.http_errors / point.total_requests * 100) : 0;
+
+  if (point.load_label != null) {
+    updateLoadBadge(point.load_label, point.load_score);
+  } else {
+    const {score, label} = computeLoad(rp, point.avg_response_ms || 0, errRate);
+    updateLoadBadge(label, score);
+  }
+
+  document.getElementById('kpiIp').textContent  = point.unique_ips ?? '—';
+  document.getElementById('kpiSse').textContent = point.sse_connections ?? '—';
+  document.getElementById('kpiRps').textContent = point.total_requests
+    ? (point.total_requests / b).toFixed(1) : '0';
+  document.getElementById('kpiRam').textContent    = rp ? `${rp}%` : '—';
+  document.getElementById('kpiRamSub').textContent = point.ram_total_mb
+    ? `${point.ram_used_mb} / ${point.ram_total_mb} МБ` : 'МБ / —';
+  document.getElementById('kpiCpu').textContent = point.cpu_percent != null
+    ? `${(+point.cpu_percent).toFixed(1)}%` : '—';
+  document.getElementById('kpiRt').textContent = point.avg_response_ms ?? '—';
+  const err = point.http_errors || 0;
+  document.getElementById('kpiErr').textContent = err;
+  document.getElementById('kpiErr').style.color = err > 0 ? 'var(--red)' : '';
+}
+
+// ── Chart data ────────────────────────────────────────────────────────────────
 function setData(points, bucketSecs) {
+  const b = bucketSecs || 60;
   const labels = points.map(p => p.ts);
+
   chartUsers.data.labels = labels;
   chartUsers.data.datasets[0].data = points.map(p => p.unique_ips);
   chartUsers.data.datasets[1].data = points.map(p => p.sse_connections);
-  chartUsers.update('none');
+
+  chartSys.data.labels = labels;
+  chartSys.data.datasets[0].data = points.map(p => ramPct(p.ram_used_mb, p.ram_total_mb));
+  chartSys.data.datasets[1].data = points.map(p => p.cpu_percent ?? 0);
 
   chartRps.data.labels = labels;
-  chartRps.data.datasets[0].data = points.map(p => +(p.total_requests / bucketSecs).toFixed(2));
-  chartRps.data.datasets[1].data = points.map(p => +(p.http_errors / bucketSecs).toFixed(3));
-  chartRps.update('none');
+  chartRps.data.datasets[0].data = points.map(p => +(p.total_requests / b).toFixed(2));
+  chartRps.data.datasets[1].data = points.map(p => +(p.http_errors / b).toFixed(3));
 
   chartRt.data.labels = labels;
   chartRt.data.datasets[0].data = points.map(p => p.avg_response_ms);
-  chartRt.update('none');
+
+  ALL_CHARTS.forEach(c => c.update('none'));
 }
 
 function appendPoint(point) {
-  const bSec = 5;
-  const maxPoints = currentHours === 1 ? 720 : 500;
+  const b = 60;
+  const maxPts = 500;
 
-  [chartUsers, chartRps, chartRt].forEach(c => {
+  ALL_CHARTS.forEach(c => {
     c.data.labels.push(point.ts);
-    if (c.data.labels.length > maxPoints) c.data.labels.shift();
+    if (c.data.labels.length > maxPts) c.data.labels.shift();
   });
 
   chartUsers.data.datasets[0].data.push(point.unique_ips);
   chartUsers.data.datasets[1].data.push(point.sse_connections);
-  chartRps.data.datasets[0].data.push(+(point.total_requests / bSec).toFixed(2));
-  chartRps.data.datasets[1].data.push(+(point.http_errors / bSec).toFixed(3));
+  chartSys.data.datasets[0].data.push(ramPct(point.ram_used_mb, point.ram_total_mb));
+  chartSys.data.datasets[1].data.push(point.cpu_percent ?? 0);
+  chartRps.data.datasets[0].data.push(+(point.total_requests / b).toFixed(2));
+  chartRps.data.datasets[1].data.push(+(point.http_errors / b).toFixed(3));
   chartRt.data.datasets[0].data.push(point.avg_response_ms);
 
-  [chartUsers, chartRps, chartRt].forEach(c => {
-    c.data.datasets.forEach(d => { if (d.data.length > maxPoints) d.data.shift(); });
+  ALL_CHARTS.forEach(c => {
+    c.data.datasets.forEach(d => { if (d.data.length > maxPts) d.data.shift(); });
     c.update('none');
   });
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function formatUptime(secs) {
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (d > 0) return `${d}д ${h}ч ${m}м`;
+  if (h > 0) return `${h}ч ${m}м`;
+  return `${m}м`;
 }
 
 async function loadHistory(hours) {
@@ -199,35 +350,46 @@ async function loadHistory(hours) {
     const res = await fetch(`/api/admin/metrics?hours=${hours}`);
     if (!res.ok) return;
     const json = await res.json();
-    setData(json.points, json.meta.bucket_secs || 5);
+    setData(json.points, json.meta.bucket_secs);
     if (json.points.length > 0) {
-      updateKpi(json.points[json.points.length - 1]);
+      updateKpi(json.points[json.points.length - 1], json.meta.bucket_secs);
+    }
+    if (json.meta.uptime_secs) {
+      document.getElementById('footerNote').textContent =
+        `Данные обновляются каждую минуту · Аптайм: ${formatUptime(json.meta.uptime_secs)} · История 1 год`;
     }
   } catch(e) { console.error('loadHistory:', e); }
 }
 
+// ── Range buttons ─────────────────────────────────────────────────────────────
 document.querySelectorAll('.range-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentHours = parseInt(btn.dataset.h);
+    startCountdown();
     loadHistory(currentHours);
   });
 });
 
-function updateKpi(point) {
-  document.getElementById('kpiIp').textContent = point.unique_ips ?? '—';
-  document.getElementById('kpiSse').textContent = point.sse_connections ?? '—';
-  document.getElementById('kpiRps').textContent = point.total_requests
-    ? (point.total_requests / 5).toFixed(1) : '0';
-  document.getElementById('kpiRt').textContent = point.avg_response_ms ?? '—';
-  const err = point.http_errors || 0;
-  document.getElementById('kpiErr').textContent = err;
-  document.getElementById('kpiErrCard').className = 'kpi ' + (err > 0 ? 'red' : '');
+// ── Countdown ─────────────────────────────────────────────────────────────────
+function startCountdown() {
+  clearInterval(countdownInterval);
+  countdown = 60;
+  document.getElementById('countdownLabel').textContent = `обновление через ${countdown}с`;
+  countdownInterval = setInterval(() => {
+    countdown--;
+    document.getElementById('countdownLabel').textContent = `обновление через ${countdown}с`;
+    if (countdown <= 0) {
+      countdown = 60;
+      loadHistory(currentHours);
+    }
+  }, 1000);
 }
 
+// ── Live SSE ──────────────────────────────────────────────────────────────────
 function connectLive() {
-  const dot = document.getElementById('liveDot');
+  const dot   = document.getElementById('liveDot');
   const label = document.getElementById('liveLabel');
   const es = new EventSource('/api/admin/metrics/live');
 
@@ -239,7 +401,8 @@ function connectLive() {
     try {
       const point = JSON.parse(e.data);
       appendPoint(point);
-      updateKpi(point);
+      updateKpi(point, 60);
+      countdown = 60;
     } catch(_) {}
   };
   es.onerror = () => {
@@ -250,7 +413,9 @@ function connectLive() {
   };
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 loadHistory(24);
+startCountdown();
 connectLive();
 </script>
 </body>
