@@ -1,10 +1,13 @@
 import asyncio
 import os
+import platform
 import sqlite3
 import time
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+
+_IS_LINUX = platform.system() == "Linux"
 
 
 @dataclass
@@ -16,11 +19,14 @@ class _Bucket:
 
 
 _HOURS_TO_BUCKET_SECS = {
-    1:   5,
-    6:   60,
-    24:  300,
-    168: 1800,
-    720: 7200,
+    1:    60,
+    6:    300,
+    24:   600,
+    168:  3600,
+    720:  7200,
+    2160: 21600,
+    4320: 43200,
+    8760: 86400,
 }
 
 
@@ -28,11 +34,52 @@ def hours_to_bucket_secs(hours: int) -> int:
     for h, b in sorted(_HOURS_TO_BUCKET_SECS.items()):
         if hours <= h:
             return b
-    return 7200
+    return 86400
+
+
+def _read_ram() -> tuple[int, int]:
+    """Возвращает (used_mb, total_mb) из /proc/meminfo."""
+    info: dict[str, int] = {}
+    with open("/proc/meminfo") as f:
+        for line in f:
+            parts = line.split(":")
+            if len(parts) == 2:
+                info[parts[0].strip()] = int(parts[1].split()[0])
+    total = info.get("MemTotal", 0)
+    available = info.get("MemAvailable", info.get("MemFree", 0))
+    return (total - available) // 1024, total // 1024
+
+
+def _read_cpu_stat() -> tuple[int, int]:
+    """Возвращает (idle_jiffies, total_jiffies) из /proc/stat."""
+    with open("/proc/stat") as f:
+        line = f.readline()
+    vals = [int(x) for x in line.split()[1:8]]
+    idle = vals[3] + vals[4]   # idle + iowait
+    return idle, sum(vals)
+
+
+def _read_uptime_secs() -> int:
+    with open("/proc/uptime") as f:
+        return int(float(f.read().split()[0]))
+
+
+def _load_score(ram_pct: float, avg_ms: float, err_rate: float) -> tuple[float, str]:
+    """Возвращает (score 0-100, label). Вес: RAM 40%, RT 40%, ошибки 20%."""
+    if avg_ms < 500:      rt = 0.0
+    elif avg_ms < 1500:   rt = 35.0
+    elif avg_ms < 3000:   rt = 70.0
+    else:                 rt = 100.0
+    score = ram_pct * 0.4 + rt * 0.4 + err_rate * 0.2
+    if score < 25:    label = "Низкая"
+    elif score < 55:  label = "Умеренная"
+    elif score < 80:  label = "Высокая"
+    else:             label = "Критическая"
+    return round(score, 1), label
 
 
 class MetricsCollector:
-    def __init__(self, db_path: str, retention_days: int = 30):
+    def __init__(self, db_path: str, retention_days: int = 365):
         self._db_path = db_path
         self._retention_secs = retention_days * 86400
         self._worker_id = os.getpid()
@@ -40,6 +87,7 @@ class MetricsCollector:
         self._bucket = _Bucket()
         self._subscribers: set[asyncio.Queue] = set()
         self._last_point: dict = {}
+        self._prev_cpu: tuple[int, int] | None = None
         self._init_db()
 
     def _init_db(self) -> None:
@@ -56,12 +104,22 @@ class MetricsCollector:
                     http_errors       INTEGER NOT NULL,
                     total_response_ms REAL    NOT NULL,
                     sse_connections   INTEGER NOT NULL,
+                    cpu_percent       REAL    DEFAULT 0,
+                    ram_used_mb       INTEGER DEFAULT 0,
+                    ram_total_mb      INTEGER DEFAULT 0,
                     PRIMARY KEY (ts, worker_id)
                 )
             """)
-            con.execute(
-                "CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics(ts)"
-            )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics(ts)")
+            for col, typedef in [
+                ("cpu_percent", "REAL DEFAULT 0"),
+                ("ram_used_mb", "INTEGER DEFAULT 0"),
+                ("ram_total_mb", "INTEGER DEFAULT 0"),
+            ]:
+                try:
+                    con.execute(f"ALTER TABLE metrics ADD COLUMN {col} {typedef}")
+                except sqlite3.OperationalError:
+                    pass  # столбец уже существует
             con.commit()
             con.close()
         except Exception as e:
@@ -89,22 +147,42 @@ class MetricsCollector:
         total_ms = bucket.total_ms
         avg_ms = (total_ms / total_req) if total_req else 0.0
 
+        cpu_pct = 0.0
+        ram_used_mb = 0
+        ram_total_mb = 0
+        if _IS_LINUX:
+            try:
+                idle_now, total_now = _read_cpu_stat()
+                if self._prev_cpu:
+                    idle_prev, total_prev = self._prev_cpu
+                    dt = total_now - total_prev
+                    cpu_pct = (1 - (idle_now - idle_prev) / dt) * 100 if dt else 0.0
+                self._prev_cpu = (idle_now, total_now)
+            except Exception:
+                pass
+            try:
+                ram_used_mb, ram_total_mb = _read_ram()
+            except Exception:
+                pass
+
         try:
             con = sqlite3.connect(self._db_path)
             con.execute("PRAGMA journal_mode=WAL")
             con.execute(
-                "INSERT OR REPLACE INTO metrics VALUES (?,?,?,?,?,?,?)",
-                (ts, self._worker_id, unique_ips, total_req, errors, total_ms, sse_connections),
+                "INSERT OR REPLACE INTO metrics VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (ts, self._worker_id, unique_ips, total_req, errors, total_ms,
+                 sse_connections, round(cpu_pct, 2), ram_used_mb, ram_total_mb),
             )
-            con.execute(
-                "DELETE FROM metrics WHERE ts < ?",
-                (ts - self._retention_secs,),
-            )
+            con.execute("DELETE FROM metrics WHERE ts < ?", (ts - self._retention_secs,))
             con.commit()
             con.close()
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"MetricsCollector: flush write failed: {e}")
+
+        ram_pct = (ram_used_mb / ram_total_mb * 100) if ram_total_mb else 0.0
+        err_rate = (errors / total_req * 100) if total_req else 0.0
+        load_score, load_label = _load_score(ram_pct, avg_ms, err_rate)
 
         point = {
             "ts": ts,
@@ -113,6 +191,11 @@ class MetricsCollector:
             "http_errors": errors,
             "avg_response_ms": round(avg_ms, 1),
             "sse_connections": sse_connections,
+            "cpu_percent": round(cpu_pct, 1),
+            "ram_used_mb": ram_used_mb,
+            "ram_total_mb": ram_total_mb,
+            "load_score": load_score,
+            "load_label": load_label,
         }
         self._last_point = point
 
@@ -136,7 +219,10 @@ class MetricsCollector:
                     CASE WHEN SUM(total_requests) > 0
                          THEN SUM(total_response_ms) / SUM(total_requests)
                          ELSE 0 END                        AS avg_response_ms,
-                    CAST(AVG(sse_connections) AS INTEGER)  AS sse_connections
+                    CAST(AVG(sse_connections) AS INTEGER)  AS sse_connections,
+                    ROUND(AVG(cpu_percent), 1)             AS cpu_percent,
+                    CAST(AVG(ram_used_mb) AS INTEGER)      AS ram_used_mb,
+                    CAST(AVG(ram_total_mb) AS INTEGER)     AS ram_total_mb
                 FROM metrics
                 WHERE ts >= :since AND ts < :until
                 GROUP BY period
@@ -151,6 +237,9 @@ class MetricsCollector:
                     "http_errors": r[3] or 0,
                     "avg_response_ms": round(r[4] or 0.0, 1),
                     "sse_connections": r[5] or 0,
+                    "cpu_percent": r[6] or 0.0,
+                    "ram_used_mb": r[7] or 0,
+                    "ram_total_mb": r[8] or 0,
                 }
                 for r in rows
             ]
@@ -162,12 +251,28 @@ class MetricsCollector:
     def current_snapshot(self) -> dict:
         with self._lock:
             b = self._bucket
-            return {
+            snap = {
                 "unique_ips": len(b.ips),
                 "total_requests": b.requests,
                 "http_errors": b.errors,
                 "avg_response_ms": round(b.total_ms / b.requests, 1) if b.requests else 0.0,
             }
+        lp = self._last_point
+        snap["cpu_percent"] = lp.get("cpu_percent", 0.0)
+        snap["ram_used_mb"] = lp.get("ram_used_mb", 0)
+        snap["ram_total_mb"] = lp.get("ram_total_mb", 0)
+        ram_pct = (snap["ram_used_mb"] / snap["ram_total_mb"] * 100) if snap["ram_total_mb"] else 0.0
+        err_rate = (snap["http_errors"] / snap["total_requests"] * 100) if snap["total_requests"] else 0.0
+        snap["load_score"], snap["load_label"] = _load_score(ram_pct, snap["avg_response_ms"], err_rate)
+        return snap
+
+    def get_uptime_secs(self) -> int:
+        if not _IS_LINUX:
+            return 0
+        try:
+            return _read_uptime_secs()
+        except Exception:
+            return 0
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=10)
