@@ -71,3 +71,6 @@ htmlcov/
 node_modules/
 package-lock.json
 yarn.lock
+
+# k6 raw NDJSON output (может весить гигабайты — только L1+ уровни)
+reports/load/**/k6_L*.json
