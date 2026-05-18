@@ -26,7 +26,7 @@ from src.core.auth import require_auth
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
-    CurrentEventResponse, DistanceInfo, CheckpointInfo, EventsListResponse, EventInfo,
+    CurrentEventResponse, DistanceInfo, CheckpointInfo, EventsListResponse,
     Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
@@ -110,13 +110,12 @@ async def get_events() -> EventsListResponse:
     events_list = []
     for code, event in settings.EVENTS.items():
         tracked = event.get_tracked()
-        events_list.append(EventInfo(
-            id=code,
-            name=event.name,
-            title=event.title,
-            way_id=0,
-            distance=tracked.distance_km if tracked else 0,
-        ))
+        events_list.append({
+            "id": code,
+            "name": event.name,
+            "title": event.title,
+            "distance": tracked.distance_km if tracked else 0,
+        })
     return EventsListResponse(events=events_list, current=settings.CURRENT_EVENT)
 
 
