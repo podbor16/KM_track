@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
 from src.tracker.services.notification_hub import tracker_hub, notification_hub
@@ -400,12 +400,12 @@ async def get_registered_runners(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/api/event-results", response_model=RaceResultsResponse)
+@router.get("/api/event-results")
 async def get_event_results(
     event_id: int = Query(None, description="ID события в БД"),
     event_name: str = Query(None, description="Название события"),
     year: int = Query(None, description="Год события"),
-) -> RaceResultsResponse:
+) -> Response:
     """
     Результаты события из БД с live-позициями участников.
 
@@ -416,18 +416,19 @@ async def get_event_results(
     import time
     import asyncio
     from src.tracker.services.results_service import (
-        build_event_results, _response_cache, _response_cache_ts, RESPONSE_CACHE_TTL
+        build_event_results, _json_cache, _response_cache_ts, RESPONSE_CACHE_TTL
     )
-    # Fast path: serve directly from cache without touching thread pool
+    # Fast path: return pre-serialized JSON without Pydantic validation per-request
     _key = f"{event_id}|{event_name}|{year}"
-    if _key in _response_cache and (time.time() - _response_cache_ts.get(_key, 0)) < RESPONSE_CACHE_TTL:
-        return _response_cache[_key]
+    if _key in _json_cache and (time.time() - _response_cache_ts.get(_key, 0)) < RESPONSE_CACHE_TTL:
+        return Response(content=_json_cache[_key], media_type="application/json")
 
-    # Cache miss: run sync build in thread pool to avoid blocking event loop
+    # Cache miss or stale: build in thread pool
     try:
-        return await asyncio.get_event_loop().run_in_executor(
+        result = await asyncio.get_event_loop().run_in_executor(
             None, build_event_results, event_id, event_name, year, settings.EVENTS
         )
+        return Response(content=_json_cache.get(_key) or result.model_dump_json(), media_type="application/json")
     except HTTPException:
         raise
     except Exception as e:

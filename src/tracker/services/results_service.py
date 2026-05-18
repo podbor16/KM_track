@@ -39,6 +39,7 @@ CAT_SPEEDS_TTL = 600
 # Кэш финального ответа build_event_results (включает Python-обработку 1000+ участников)
 _response_cache: dict = {}
 _response_cache_ts: dict = {}
+_json_cache: dict = {}      # pre-serialized JSON string to avoid per-request Pydantic cost
 RESPONSE_CACHE_TTL = 5     # секунд до первого перестроения (live-режим: данные КТ должны быть свежими)
 STALE_TTL = 30             # секунд до принудительного синхронного перестроения
 
@@ -400,6 +401,7 @@ def _background_rebuild(resp_key: str, event_id, event_name, year, events):
         result = _do_build(event_id, event_name, year, events)
         _response_cache[resp_key] = result
         _response_cache_ts[resp_key] = time.time()
+        _json_cache[resp_key] = result.model_dump_json()
         logger.info(f"Background rebuild done: {resp_key}")
     except Exception as e:
         logger.warning(f"Background rebuild error for {resp_key}: {e}")
@@ -459,4 +461,5 @@ def build_event_results(
         result = _do_build(event_id, event_name, year, events)
         _response_cache[_resp_key] = result
         _response_cache_ts[_resp_key] = time.time()
+        _json_cache[_resp_key] = result.model_dump_json()
         return result
