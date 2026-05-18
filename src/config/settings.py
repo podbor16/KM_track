@@ -63,6 +63,7 @@ CORS_ORIGINS = ["*"] if _cors_raw == "*" else [o.strip() for o in _cors_raw.spli
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+TILDA_WEBHOOK_SECRET = os.getenv("TILDA_WEBHOOK_SECRET", "")
 
 # --- DataLens приватный embed ---
 DATALENS_KEY_SECRET = os.getenv("DATALENS_KEY_SECRET", "")
@@ -114,6 +115,7 @@ __all__ = [
     "ADMIN_USERNAME",
     "ADMIN_PASSWORD",
     "SECRET_KEY",
+    "TILDA_WEBHOOK_SECRET",
     "DATALENS_KEY_SECRET",
     "DATALENS_EMBEDS",
     "logger",
