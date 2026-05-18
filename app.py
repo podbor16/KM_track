@@ -19,11 +19,16 @@ from src.config import settings
 from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
 from src.analytics.db_connection_optimized import initialize_connection_pool
+from src.monitoring.collector import MetricsCollector
 
 # Пути (нужны до lifespan)
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
+
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+metrics_collector = MetricsCollector(db_path=str(DATA_DIR / "server_metrics.db"))
 
 
 # Инициализация приложения
@@ -158,12 +163,20 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[SSE] startlist_watcher error: {_e}")
             await asyncio.sleep(15)
 
+    async def _metrics_flusher():
+        """Каждые 5с снимает bucket метрик и пишет в SQLite."""
+        while True:
+            await asyncio.sleep(5)
+            sse_count = tracker_hub.total_sse_count()
+            await metrics_collector.flush(sse_connections=sse_count)
+
     _sse_tasks = [
         asyncio.create_task(_tracker_broadcast()),
         asyncio.create_task(_results_watcher()),
         asyncio.create_task(_startlist_watcher()),
+        asyncio.create_task(_metrics_flusher()),
     ]
-    settings.logger.info("[SSE] Background tasks started: tracker_broadcast, results_watcher, startlist_watcher")
+    settings.logger.info("[SSE] Background tasks started: tracker_broadcast, results_watcher, startlist_watcher, metrics_flusher")
 
     yield  # Приложение работает здесь
 
@@ -211,6 +224,11 @@ async def log_request_duration(request: Request, call_next):
         _perf_logger.warning(f"SLOW {request.method} {request.url.path} {duration:.3f}s")
     else:
         _perf_logger.debug(f"{request.method} {request.url.path} {duration:.3f}s {response.status_code}")
+    metrics_collector.record(
+        ip=request.client.host if request.client else None,
+        duration_ms=duration * 1000,
+        status=response.status_code,
+    )
     return response
 
 # Подключение статических файлов
