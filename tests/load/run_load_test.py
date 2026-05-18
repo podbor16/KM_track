@@ -51,7 +51,8 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
 
     report_dir.mkdir(parents=True, exist_ok=True)
     locust_report = report_dir / f"locust_{name}.html"
-    k6_report = report_dir / f"k6_{name}.json"
+    k6_summary   = report_dir / f"k6_{name}_summary.json"  # агрегированные метрики (~KB)
+    k6_stdout    = report_dir / f"k6_{name}_stdout.txt"    # живой вывод k6 с прогрессом
 
     locust_cmd = [
         sys.executable, "-m", "locust",
@@ -69,7 +70,7 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
         str(REPO_ROOT / "tests" / "load" / "sse_test.js"),
         "--vus", str(level["k6_vus"]),
         "--duration", duration,
-        "--out", f"json={k6_report}",
+        "--summary-export", str(k6_summary),   # только итоговая сводка (~KB, не GB)
         "--env", f"K6_HOST={HOST}",
         "--env", f"K6_EVENT_ID={LIVE_EVENT_ID}",
     ]
@@ -83,7 +84,11 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
     print(f"\n  Запуск Locust + k6 одновременно...")
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
     try:
-        k6_proc = subprocess.Popen(k6_cmd, cwd=REPO_ROOT)
+        with open(k6_stdout, "w", encoding="utf-8") as k6_log:
+            k6_proc = subprocess.Popen(
+                k6_cmd, cwd=REPO_ROOT,
+                stdout=k6_log, stderr=subprocess.STDOUT,
+            )
     except FileNotFoundError:
         locust_proc.terminate()
         locust_proc.wait()
@@ -103,9 +108,18 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION) -> bool:
     locust_ok = locust_proc.returncode == 0
     k6_ok = k6_proc.returncode == 0
 
+    # Показываем финальную сводку k6 из лога
+    if k6_stdout.exists():
+        lines = k6_stdout.read_text(encoding="utf-8", errors="replace").splitlines()
+        summary_lines = [l for l in lines if any(x in l for x in ["http_req", "sse_", "checks", "iterations", "✓", "✗"])]
+        if summary_lines:
+            print(f"\n  k6 сводка:")
+            for l in summary_lines[-20:]:
+                print(f"    {l}")
+
     print(f"\n  Locust: {'OK' if locust_ok else 'FAIL'} (exit {locust_proc.returncode})")
     print(f"  k6:     {'OK' if k6_ok else 'FAIL'} (exit {k6_proc.returncode})")
-    print(f"  Отчёты: {locust_report.name}, {k6_report.name}")
+    print(f"  Отчёты: {locust_report.name}, {k6_summary.name}, {k6_stdout.name}")
 
     return locust_ok and k6_ok
 

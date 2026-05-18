@@ -72,5 +72,7 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# k6 raw NDJSON output (может весить гигабайты — только L1+ уровни)
+# k6 raw NDJSON output (может весить гигабайты)
 reports/load/**/k6_L*.json
+# НЕ игнорировать итоговые сводки (маленькие, нужны для отчёта)
+!reports/load/**/*_summary.json
