@@ -198,7 +198,7 @@ def run_remote(vus: int, hold_seconds: int) -> bool:
     sftp.close()
 
     python = "/opt/km_track/venv/bin/python3"
-    cmd = f"{python} /tmp/sse_async_test.py --vus {vus} --hold {hold_seconds}"
+    cmd = f"ulimit -n 65535 && {python} /tmp/sse_async_test.py --vus {vus} --hold {hold_seconds}"
 
     print(f"\n  Running on VPS...")
     t0 = time.monotonic()
