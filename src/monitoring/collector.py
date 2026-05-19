@@ -1,11 +1,16 @@
 import asyncio
+import csv
+import logging
 import os
 import platform
 import sqlite3
 import time
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 _IS_LINUX = platform.system() == "Linux"
 
@@ -78,12 +83,18 @@ def _load_score(ram_pct: float, avg_ms: float, err_rate: float) -> tuple[float, 
     return round(score, 1), label
 
 
+_ALERT_CPU_THRESHOLD = 70.0   # % CPU → пишем в файл тревог
+_ALERT_LOAD_LABELS = {"Высокая", "Критическая"}
+
+
 class MetricsCollector:
     def __init__(self, db_path: str, retention_days: int = 365):
         self._db_path = db_path
+        self._alerts_path = Path(db_path).parent / "high_load_alerts.csv"
         self._retention_secs = retention_days * 86400
         self._worker_id = os.getpid()
         self._lock = threading.Lock()
+        self._file_lock = threading.Lock()
         self._bucket = _Bucket()
         self._subscribers: set[asyncio.Queue] = set()
         self._last_point: dict = {}
@@ -199,6 +210,9 @@ class MetricsCollector:
         }
         self._last_point = point
 
+        if load_label in _ALERT_LOAD_LABELS or cpu_pct >= _ALERT_CPU_THRESHOLD:
+            self._write_alert(point, ram_pct)
+
         stale = set()
         for q in self._subscribers:
             try:
@@ -206,6 +220,39 @@ class MetricsCollector:
             except asyncio.QueueFull:
                 stale.add(q)
         self._subscribers -= stale
+
+    def _write_alert(self, point: dict, ram_pct: float) -> None:
+        need_header = not self._alerts_path.exists() or self._alerts_path.stat().st_size == 0
+        try:
+            with self._file_lock:
+                with open(self._alerts_path, "a", newline="", encoding="utf-8") as f:
+                    w = csv.writer(f)
+                    if need_header:
+                        w.writerow([
+                            "datetime", "ts", "worker_id",
+                            "load_label", "load_score",
+                            "cpu_pct", "ram_pct", "ram_used_mb", "ram_total_mb",
+                            "sse_connections", "unique_ips",
+                            "requests", "http_errors", "avg_ms",
+                        ])
+                    w.writerow([
+                        datetime.fromtimestamp(point["ts"]).strftime("%Y-%m-%d %H:%M:%S"),
+                        point["ts"],
+                        self._worker_id,
+                        point["load_label"],
+                        point["load_score"],
+                        point["cpu_percent"],
+                        round(ram_pct, 1),
+                        point["ram_used_mb"],
+                        point["ram_total_mb"],
+                        point["sse_connections"],
+                        point["unique_ips"],
+                        point["total_requests"],
+                        point["http_errors"],
+                        point["avg_response_ms"],
+                    ])
+        except Exception as e:
+            _log.warning(f"MetricsCollector: alert write failed: {e}")
 
     def query(self, since_ts: int, until_ts: int, bucket_secs: int) -> list[dict]:
         try:
