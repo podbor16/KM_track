@@ -6,7 +6,7 @@ SSE load test (VPS asyncio via SSH)
 
   Running on VPS...
   Starting 6 tracker SSE + 4 notify SSE VUs, hold 40+0..30s...
-    [60s] tracker=3/6 held=3 active=3 | notify=1/4 held=1 active=3
+    [60s] tracker=6/6 held=6 active=0 | notify=1/4 held=1 active=3
   
   =======================================================
   SSE Load Test Results (asyncio)
@@ -17,4 +17,4 @@ SSE load test (VPS asyncio via SSH)
   =======================================================
   RESULT: PASSED (>=95% on all channels)
 
-  Test completed in 75.4s (exit=0)
+  Test completed in 75.5s (exit=0)

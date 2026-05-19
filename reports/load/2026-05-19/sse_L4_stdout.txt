@@ -1,0 +1,10 @@
+Socket exception: Удаленный хост принудительно разорвал существующее подключение (10054)
+
+SSE load test (VPS asyncio via SSH)
+  URL:    http://127.0.0.1:8000/api/sse/tracker?event_id=104
+  VUs:    4443 tracker + 2222 notify
+  Hold:   460s
+
+  Running on VPS...
+
+  Test completed in 49.4s (exit=-1)
