@@ -1,11 +1,10 @@
 """
 Деплоит конфигурацию Netdata-алертов на VPS:
-  - /etc/netdata/custom-notify.sh   — отправка уведомлений через ntfy.sh
-  - /etc/netdata/health_alarm_notify.conf (дополнение) — SEND_CUSTOM=YES
+  - /etc/netdata/health_alarm_notify.conf (дополнение) — нативный ntfy-sender
   - /etc/netdata/health.d/km_track.conf — 4 правила алертов
 После загрузки перезагружает health-правила (netdatacli reload-health).
 
-Флаг --test запускает smoke-тест custom-notify.sh.
+Флаг --test запускает smoke-тест через alarm-notify.sh test.
 """
 import io
 import sys
@@ -20,32 +19,16 @@ HOST = VPS_HOST
 # Контент файлов
 # ---------------------------------------------------------------------------
 
-CUSTOM_NOTIFY_SH = """\
-#!/bin/bash
-# Called by Netdata alarm-notify.sh for CUSTOM notifications
-NTFY_URL="https://ntfy.sh/km-analytics-monitoring-2026"
-PRIORITY="default"
-[ "$status" = "CRITICAL" ] && PRIORITY="urgent"
-[ "$status" = "WARNING" ]  && PRIORITY="high"
+# Метка-разделитель — всё от неё до конца файла заменяется при повторном деплое
+_BLOCK_MARKER = "# KM_track ntfy notifications"
 
-curl -s -X POST "$NTFY_URL" \\
-  -H "Title: KM_track — $alarm on $host" \\
-  -H "Priority: $PRIORITY" \\
-  -H "Tags: warning,server" \\
-  -d "$status: $alarm
-Chart: $chart
-Value: $value $units
-Info: $info"
-"""
-
-NOTIFY_CONF_BLOCK = """
+NOTIFY_CONF_BLOCK = f"""\
+{_BLOCK_MARKER}
 ###############################################################################
-# KM_track custom ntfy sender
-###############################################################################
-SEND_CUSTOM=YES
-DEFAULT_RECIPIENT_CUSTOM="admin"
-CUSTOM_SENDER_ENABLED=YES
+SEND_NTFY=YES
+DEFAULT_RECIPIENT_NTFY="https://ntfy.sh/km-analytics-monitoring-2026"
 
+SEND_CUSTOM=NO
 SEND_EMAIL=NO
 SEND_SLACK=NO
 SEND_TELEGRAM=NO
@@ -64,39 +47,38 @@ lookup: average -3m unaligned of user,system
   warn: $this > 80
   crit: $this > 95
   info: CPU utilization high
-    to: admin
+    to: sysadmin
   delay: up 0 down 3m multiplier 1.5 max 1h
 
 alarm: km_track_ram_high
-    on: mem.ram
-lookup: average -1m unaligned of used
+    on: system.ram
+lookup: average -1m unaligned percentage of used
  units: %
  every: 1m
   warn: $this > 75
   crit: $this > 90
   info: RAM usage high
-    to: admin
+    to: sysadmin
   delay: up 0 down 5m multiplier 1.5 max 1h
 
 alarm: km_track_service_down
-    on: systemd_service_units.service_unit_state
- filter: *km_track*
+    on: systemdunits_service-units.unit_km_track_service_state
 lookup: average -30s unaligned of active
  units: state
  every: 30s
-  crit: $this != 1
+  crit: $this < 1
   info: km_track.service is not active
-    to: admin
+    to: sysadmin
   delay: up 0 down 0 multiplier 1 max 1h
 
 alarm: redis_down
-    on: redis.operations
-lookup: average -30s unaligned of operations
- units: operations/s
+    on: redis_local.ping_latency
+lookup: average -30s unaligned of avg
+ units: ms
  every: 30s
   crit: $this == nan
   info: Redis is not responding
-    to: admin
+    to: sysadmin
   delay: up 0 down 0 multiplier 1 max 1h
 """
 
@@ -142,50 +124,41 @@ print(f"Подключился к {HOST}\n")
 
 sftp = client.open_sftp()
 
-# 1. Загружаем custom-notify.sh
-print("=== 1. Загрузка custom-notify.sh ===")
-upload_text(sftp, CUSTOM_NOTIFY_SH, "/etc/netdata/custom-notify.sh")
-run(client, "chmod +x /etc/netdata/custom-notify.sh", check=True)
-run(client, "chown netdata:netdata /etc/netdata/custom-notify.sh", check=True)
-
-# 2. Патчим health_alarm_notify.conf (добавляем блок, если ещё нет)
-print("\n=== 2. Патч health_alarm_notify.conf ===")
+# 1. Патчим health_alarm_notify.conf
+# Всё от маркера до конца файла заменяется — идемпотентный деплой
+print("=== 1. Патч health_alarm_notify.conf ===")
 NOTIFY_CONF_PATH = "/etc/netdata/health_alarm_notify.conf"
-already = run(client, f"grep -c 'SEND_CUSTOM=YES' {NOTIFY_CONF_PATH} 2>/dev/null || echo 0")
-if already.strip() != "0":
-    print("SEND_CUSTOM=YES уже присутствует — пропускаем патч")
+file_exists = run(client, f"test -f {NOTIFY_CONF_PATH} && echo yes || echo no")
+if file_exists.strip() == "yes":
+    current_content = read_remote(sftp, NOTIFY_CONF_PATH)
+    # Обрезаем всё от нашего маркера вниз (предыдущий деплой или старый custom-блок)
+    for old_marker in (_BLOCK_MARKER, "# KM_track custom ntfy sender"):
+        if old_marker in current_content:
+            current_content = current_content[:current_content.index(old_marker)]
+            break
 else:
-    file_exists = run(client, f"test -f {NOTIFY_CONF_PATH} && echo yes || echo no")
-    if file_exists.strip() == "yes":
-        current_content = read_remote(sftp, NOTIFY_CONF_PATH)
-    else:
-        print(f"{NOTIFY_CONF_PATH} не найден — создаём с нуля")
-        current_content = ""
-    new_content = current_content + NOTIFY_CONF_BLOCK
-    upload_text(sftp, new_content, NOTIFY_CONF_PATH)
-    print("Блок SEND_CUSTOM добавлен")
+    print(f"{NOTIFY_CONF_PATH} не найден — создаём с нуля")
+    current_content = ""
+new_content = current_content.rstrip("\n") + "\n\n" + NOTIFY_CONF_BLOCK
+upload_text(sftp, new_content, NOTIFY_CONF_PATH)
+print("Блок ntfy записан")
 
-# 3. Загружаем health.d/km_track.conf
-print("\n=== 3. Загрузка health.d/km_track.conf ===")
+# 2. Загружаем health.d/km_track.conf
+print("\n=== 2. Загрузка health.d/km_track.conf ===")
 run(client, "mkdir -p /etc/netdata/health.d")
 upload_text(sftp, KM_TRACK_HEALTH_CONF, "/etc/netdata/health.d/km_track.conf")
 run(client, "chown netdata:netdata /etc/netdata/health.d/km_track.conf", check=True)
 
 sftp.close()
 
-# 4. Перезагружаем health-правила
-print("\n=== 4. Перезагрузка Netdata health ===")
+# 3. Перезагружаем health-правила
+print("\n=== 3. Перезагрузка Netdata health ===")
 run(client, "netdatacli reload-health", check=True)
 
-# 5. Smoke-тест (флаг --test)
+# 4. Smoke-тест (флаг --test) — через alarm-notify.sh test
 if "--test" in sys.argv:
-    print("\n=== Smoke-тест custom-notify.sh ===")
-    smoke_cmd = (
-        'status=WARNING alarm=test_alarm host=$(hostname) chart=system.cpu '
-        'value=85 units="%" info="Smoke test from deploy script" '
-        '/etc/netdata/custom-notify.sh'
-    )
-    run(client, smoke_cmd, timeout=15)
+    print("\n=== Smoke-тест ntfy (alarm-notify.sh test) ===")
+    run(client, "/usr/libexec/netdata/plugins.d/alarm-notify.sh test", timeout=30)
     print("Smoke-тест отправлен — проверь ntfy.sh/km-analytics-monitoring-2026")
 
 client.close()
