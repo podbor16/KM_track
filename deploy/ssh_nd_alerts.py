@@ -104,15 +104,19 @@ lookup: average -30s unaligned of operations
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 
-def run(client, cmd, timeout=60):
+def run(client, cmd, timeout=60, check=False):
     print(f">>> {cmd[:120]}")
     _, sout, serr = client.exec_command(cmd, timeout=timeout, get_pty=False)
     out = sout.read().decode("utf-8", errors="replace").strip()
     err = serr.read().decode("utf-8", errors="replace").strip()
+    exit_code = sout.channel.recv_exit_status()
     if out:
         print(out[:600])
     if err and not any(x in err.lower() for x in ["warning", "deprecated", "notice"]):
         print(f"[err] {err[:300]}")
+    if check and exit_code != 0:
+        print(f"ERROR: command exited with code {exit_code}: {cmd[:120]}")
+        raise SystemExit(1)
     return out
 
 
@@ -141,8 +145,8 @@ sftp = client.open_sftp()
 # 1. Загружаем custom-notify.sh
 print("=== 1. Загрузка custom-notify.sh ===")
 upload_text(sftp, CUSTOM_NOTIFY_SH, "/etc/netdata/custom-notify.sh")
-run(client, "chmod +x /etc/netdata/custom-notify.sh")
-run(client, "chown netdata:netdata /etc/netdata/custom-notify.sh")
+run(client, "chmod +x /etc/netdata/custom-notify.sh", check=True)
+run(client, "chown netdata:netdata /etc/netdata/custom-notify.sh", check=True)
 
 # 2. Патчим health_alarm_notify.conf (добавляем блок, если ещё нет)
 print("\n=== 2. Патч health_alarm_notify.conf ===")
@@ -160,13 +164,13 @@ else:
 print("\n=== 3. Загрузка health.d/km_track.conf ===")
 run(client, "mkdir -p /etc/netdata/health.d")
 upload_text(sftp, KM_TRACK_HEALTH_CONF, "/etc/netdata/health.d/km_track.conf")
-run(client, "chown netdata:netdata /etc/netdata/health.d/km_track.conf")
+run(client, "chown netdata:netdata /etc/netdata/health.d/km_track.conf", check=True)
 
 sftp.close()
 
 # 4. Перезагружаем health-правила
 print("\n=== 4. Перезагрузка Netdata health ===")
-run(client, "netdatacli reload-health")
+run(client, "netdatacli reload-health", check=True)
 
 # 5. Smoke-тест (флаг --test)
 if "--test" in sys.argv:
