@@ -3,11 +3,17 @@ import csv
 import logging
 import os
 import platform
+import smtplib
+import ssl
 import sqlite3
 import time
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
@@ -83,8 +89,11 @@ def _load_score(ram_pct: float, avg_ms: float, err_rate: float) -> tuple[float, 
     return round(score, 1), label
 
 
-_ALERT_CPU_THRESHOLD = 70.0   # % CPU → пишем в файл тревог
+_ALERT_CPU_THRESHOLD = 70.0     # % CPU → пишем в CSV
 _ALERT_LOAD_LABELS = {"Высокая", "Критическая"}
+_EMAIL_CPU_THRESHOLD = 90.0     # % CPU → отправляем email
+_EMAIL_LOAD_LABELS = {"Критическая"}
+_EMAIL_COOLDOWN_S = 900         # 15 минут между письмами
 
 
 class MetricsCollector:
@@ -99,6 +108,13 @@ class MetricsCollector:
         self._subscribers: set[asyncio.Queue] = set()
         self._last_point: dict = {}
         self._prev_cpu: tuple[int, int] | None = None
+        self._last_email_ts: float = 0.0
+        self._smtp_host = os.environ.get("SMTP_HOST", "smtp.yandex.ru")
+        self._smtp_port = int(os.environ.get("SMTP_PORT", "465"))
+        self._smtp_user = os.environ.get("SMTP_USER", "")
+        self._smtp_password = os.environ.get("SMTP_PASSWORD", "")
+        self._alert_from = os.environ.get("ALERT_EMAIL_FROM", self._smtp_user)
+        self._alert_to = os.environ.get("ALERT_EMAIL_TO", "")
         self._init_db()
 
     def _init_db(self) -> None:
@@ -213,6 +229,9 @@ class MetricsCollector:
         if load_label in _ALERT_LOAD_LABELS or cpu_pct >= _ALERT_CPU_THRESHOLD:
             self._write_alert(point, ram_pct)
 
+        if load_label in _EMAIL_LOAD_LABELS or cpu_pct >= _EMAIL_CPU_THRESHOLD:
+            self._send_alert_email(point, ram_pct)
+
         stale = set()
         for q in self._subscribers:
             try:
@@ -253,6 +272,53 @@ class MetricsCollector:
                     ])
         except Exception as e:
             _log.warning(f"MetricsCollector: alert write failed: {e}")
+
+    def _send_alert_email(self, point: dict, ram_pct: float) -> None:
+        if not self._smtp_user or not self._alert_to:
+            return
+        now = time.time()
+        if now - self._last_email_ts < _EMAIL_COOLDOWN_S:
+            return
+        self._last_email_ts = now
+
+        dt = datetime.fromtimestamp(point["ts"]).strftime("%Y-%m-%d %H:%M:%S")
+        subject = f"[KM_track] {point['load_label']} нагрузка — {dt}"
+        body = (
+            f"Сервер analytics.krasmarafon.ru\n\n"
+            f"Время:            {dt}\n"
+            f"Уровень нагрузки: {point['load_label']} (score={point['load_score']})\n"
+            f"CPU:              {point['cpu_percent']}%\n"
+            f"RAM:              {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
+            f"SSE-соединений:   {point['sse_connections']}\n"
+            f"Уникальных IP:    {point['unique_ips']}\n"
+            f"Запросов:         {point['total_requests']}\n"
+            f"HTTP-ошибок:      {point['http_errors']}\n"
+            f"Среднее время:    {point['avg_response_ms']} мс\n\n"
+            f"CSV с историей тревог приложен к письму."
+        )
+
+        msg = MIMEMultipart()
+        msg["From"] = self._alert_from
+        msg["To"] = self._alert_to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        if self._alerts_path.exists() and self._alerts_path.stat().st_size > 0:
+            with open(self._alerts_path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", 'attachment; filename="high_load_alerts.csv"')
+            msg.attach(part)
+
+        try:
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(self._smtp_host, self._smtp_port, context=ctx) as server:
+                server.login(self._smtp_user, self._smtp_password)
+                server.sendmail(self._alert_from, self._alert_to, msg.as_bytes())
+            _log.info(f"[Alert] Email отправлен: {subject}")
+        except Exception as e:
+            _log.warning(f"[Alert] Ошибка отправки email: {e}")
 
     def query(self, since_ts: int, until_ts: int, bucket_secs: int) -> list[dict]:
         try:
