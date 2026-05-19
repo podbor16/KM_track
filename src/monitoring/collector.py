@@ -104,9 +104,8 @@ class MetricsCollector:
         self._subscribers: set[asyncio.Queue] = set()
         self._last_point: dict = {}
         self._prev_cpu: tuple[int, int] | None = None
-        self._last_tg_ts: float = 0.0
-        self._tg_token = os.environ.get("TG_BOT_TOKEN", "")
-        self._tg_chat_id = os.environ.get("TG_CHAT_ID", "")
+        self._last_alert_ts: float = 0.0
+        self._ntfy_url = os.environ.get("NTFY_URL", "")
         self._init_db()
 
     def _init_db(self) -> None:
@@ -222,7 +221,7 @@ class MetricsCollector:
             self._write_alert(point, ram_pct)
 
         if load_label in _EMAIL_LOAD_LABELS or cpu_pct >= _EMAIL_CPU_THRESHOLD:
-            self._send_tg_alert(point, ram_pct)
+            self._send_ntfy_alert(point, ram_pct)
 
         stale = set()
         for q in self._subscribers:
@@ -265,67 +264,52 @@ class MetricsCollector:
         except Exception as e:
             _log.warning(f"MetricsCollector: alert write failed: {e}")
 
-    def _send_tg_alert(self, point: dict, ram_pct: float) -> None:
-        if not self._tg_token or not self._tg_chat_id:
+    def _send_ntfy_alert(self, point: dict, ram_pct: float) -> None:
+        if not self._ntfy_url:
             return
         now = time.time()
-        if now - self._last_tg_ts < _EMAIL_COOLDOWN_S:
+        if now - self._last_alert_ts < _EMAIL_COOLDOWN_S:
             return
-        self._last_tg_ts = now
+        self._last_alert_ts = now
 
         dt = datetime.fromtimestamp(point["ts"]).strftime("%Y-%m-%d %H:%M:%S")
-        text = (
-            f"🚨 *KM\\_track — {point['load_label']} нагрузка*\n\n"
-            f"🕐 {dt}\n"
-            f"📊 Score: {point['load_score']} / 100\n"
-            f"💻 CPU: {point['cpu_percent']}%\n"
-            f"🧠 RAM: {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
-            f"📡 SSE: {point['sse_connections']} соединений\n"
-            f"👥 IP: {point['unique_ips']} уникальных\n"
-            f"📨 Запросов: {point['total_requests']} | Ошибок: {point['http_errors']}\n"
-            f"⏱ Среднее время: {point['avg_response_ms']} мс"
-        )
-        self._tg_send_message(text)
+        body = (
+            f"Время: {dt}\n"
+            f"Score: {point['load_score']} / 100\n"
+            f"CPU: {point['cpu_percent']}%\n"
+            f"RAM: {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
+            f"SSE: {point['sse_connections']} соединений\n"
+            f"IP: {point['unique_ips']} уникальных\n"
+            f"Запросов: {point['total_requests']} | Ошибок: {point['http_errors']}\n"
+            f"Среднее время: {point['avg_response_ms']} мс"
+        ).encode("utf-8")
+
+        req = urllib.request.Request(self._ntfy_url, data=body, method="POST")
+        req.add_header("Title", f"KM_track — {point['load_label']} нагрузка")
+        req.add_header("Priority", "urgent" if point["load_label"] == "Критическая" else "high")
+        req.add_header("Tags", "warning,server")
+        req.add_header("Content-Type", "text/plain; charset=utf-8")
+        try:
+            urllib.request.urlopen(req, timeout=10)
+            _log.info(f"[ntfy] Уведомление отправлено: {point['load_label']}")
+        except Exception as e:
+            _log.warning(f"[ntfy] Ошибка отправки: {e}")
 
         if self._alerts_path.exists() and self._alerts_path.stat().st_size > 0:
-            self._tg_send_document(self._alerts_path, "high_load_alerts.csv")
+            self._ntfy_send_csv(self._alerts_path)
 
-    def _tg_send_message(self, text: str) -> None:
-        url = f"https://api.telegram.org/bot{self._tg_token}/sendMessage"
-        payload = urllib.parse.urlencode({
-            "chat_id": self._tg_chat_id,
-            "text": text,
-            "parse_mode": "MarkdownV2",
-        }).encode()
-        try:
-            urllib.request.urlopen(url, data=payload, timeout=10)
-            _log.info("[TG Alert] Сообщение отправлено")
-        except Exception as e:
-            _log.warning(f"[TG Alert] Ошибка sendMessage: {e}")
-
-    def _tg_send_document(self, path: Path, filename: str) -> None:
-        import email.mime.multipart, email.mime.base, email.mime.application
-        boundary = "----TGBoundary"
+    def _ntfy_send_csv(self, path: Path) -> None:
         with open(path, "rb") as f:
-            file_data = f.read()
-        body = (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-            f"{self._tg_chat_id}\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'
-            f"Content-Type: text/csv\r\n\r\n"
-        ).encode() + file_data + f"\r\n--{boundary}--\r\n".encode()
-        url = f"https://api.telegram.org/bot{self._tg_token}/sendDocument"
-        req = urllib.request.Request(
-            url, data=body,
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        )
+            data = f.read()
+        req = urllib.request.Request(self._ntfy_url, data=data, method="PUT")
+        req.add_header("Title", "KM_track — high_load_alerts.csv")
+        req.add_header("Filename", "high_load_alerts.csv")
+        req.add_header("Content-Type", "text/csv")
         try:
             urllib.request.urlopen(req, timeout=15)
-            _log.info("[TG Alert] CSV отправлен")
+            _log.info("[ntfy] CSV отправлен")
         except Exception as e:
-            _log.warning(f"[TG Alert] Ошибка sendDocument: {e}")
+            _log.warning(f"[ntfy] Ошибка отправки CSV: {e}")
 
     def query(self, since_ts: int, until_ts: int, bucket_secs: int) -> list[dict]:
         try:
