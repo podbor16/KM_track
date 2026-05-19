@@ -55,12 +55,12 @@ def _teardown_race_data():
     )
 
 
-def run_level(sse_vus: int, report_dir: Path, duration: str, realistic: bool) -> dict:
+def run_level(sse_vus: int, report_dir: Path, duration: str, realistic: bool, http_users: int = HTTP_USERS) -> dict:
     """Возвращает dict с результатами: sse_pct, ram_max_pct, locust_ok."""
     name = f"T{sse_vus}"
-    total = HTTP_USERS + sse_vus
+    total = http_users + sse_vus
     print(f"\n{'=' * 60}")
-    print(f"  {name}: {HTTP_USERS} HTTP + {sse_vus} SSE = {total} users | {duration}")
+    print(f"  {name}: {http_users} HTTP + {sse_vus} SSE = {total} users | {duration}")
     print(f"{'=' * 60}")
     report_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,7 +97,7 @@ def run_level(sse_vus: int, report_dir: Path, duration: str, realistic: bool) ->
         sys.executable, "-m", "locust",
         "-f", str(REPO_ROOT / "locustfile.py"),
         "--host", HOST,
-        "--users", str(HTTP_USERS),
+        "--users", str(http_users),
         "--spawn-rate", str(HTTP_SPAWN_RATE),
         "--run-time", duration,
         "--html", str(locust_report),
@@ -125,14 +125,14 @@ def run_level(sse_vus: int, report_dir: Path, duration: str, realistic: bool) ->
     except subprocess.TimeoutExpired:
         for p in (locust_proc, sse_proc):
             p.terminate(); p.wait()
-
-    monitor.stop()
-    if sim_proc:
-        sim_proc.terminate(); sim_proc.wait()
-    if sim_log:
-        sim_log.close()
-    if realistic:
-        _teardown_race_data()
+    finally:
+        monitor.stop()
+        if sim_proc:
+            sim_proc.terminate(); sim_proc.wait()
+        if sim_log:
+            sim_log.close()
+        if realistic:
+            _teardown_race_data()
 
     sse_pct = 0
     if sse_stdout.exists():
@@ -166,7 +166,7 @@ def main():
     parser.add_argument("--http-users", type=int, default=HTTP_USERS)
     parser.add_argument("--duration", default=DURATION)
     parser.add_argument("--realistic", action="store_true")
-    parser.add_argument("--stop-on-fail", action="store_true", default=True)
+    parser.add_argument("--stop-on-fail", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--yes", "-y", action="store_true")
     args = parser.parse_args()
 
@@ -186,7 +186,7 @@ def main():
 
     results = []
     for sse_vus in levels:
-        res = run_level(sse_vus, report_dir, args.duration, args.realistic)
+        res = run_level(sse_vus, report_dir, args.duration, args.realistic, args.http_users)
         res["sse_vus"] = sse_vus
         results.append(res)
 

@@ -55,7 +55,7 @@ class VpsMonitor:
                     if len(lines) >= 2:
                         parts = lines[0].split()
                         ram_used, ram_total = int(parts[0]), int(parts[1])
-                        ram_pct = round(ram_used / ram_total * 100, 1)
+                        ram_pct = round(ram_used / ram_total * 100, 1) if ram_total > 0 else 0.0
                         cpu_idle = int(lines[1].strip())
                         ts = int(time.time())
                         writer.writerow([ts, ram_used, ram_total, ram_pct, cpu_idle])
