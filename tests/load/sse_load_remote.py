@@ -12,10 +12,7 @@ import argparse
 import sys
 import time
 import paramiko
-
-VPS_HOST = "89.108.88.104"
-VPS_USER = "root"
-VPS_PASSWORD = "shsfzw5fHiQY8v6g"
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 SSE_URL = "http://127.0.0.1:8000/api/sse/tracker?event_id=104"
 

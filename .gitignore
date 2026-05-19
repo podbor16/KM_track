@@ -76,3 +76,6 @@ yarn.lock
 reports/load/**/k6_L*.json
 # НЕ игнорировать итоговые сводки (маленькие, нужны для отчёта)
 !reports/load/**/*_summary.json
+
+# Deploy credentials (never commit)
+deploy/_vps_config.py
