@@ -3,17 +3,13 @@ import csv
 import logging
 import os
 import platform
-import smtplib
-import ssl
 import sqlite3
 import time
 import threading
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
@@ -108,13 +104,9 @@ class MetricsCollector:
         self._subscribers: set[asyncio.Queue] = set()
         self._last_point: dict = {}
         self._prev_cpu: tuple[int, int] | None = None
-        self._last_email_ts: float = 0.0
-        self._smtp_host = os.environ.get("SMTP_HOST", "smtp.yandex.ru")
-        self._smtp_port = int(os.environ.get("SMTP_PORT", "465"))
-        self._smtp_user = os.environ.get("SMTP_USER", "")
-        self._smtp_password = os.environ.get("SMTP_PASSWORD", "")
-        self._alert_from = os.environ.get("ALERT_EMAIL_FROM", self._smtp_user)
-        self._alert_to = os.environ.get("ALERT_EMAIL_TO", "")
+        self._last_tg_ts: float = 0.0
+        self._tg_token = os.environ.get("TG_BOT_TOKEN", "")
+        self._tg_chat_id = os.environ.get("TG_CHAT_ID", "")
         self._init_db()
 
     def _init_db(self) -> None:
@@ -230,7 +222,7 @@ class MetricsCollector:
             self._write_alert(point, ram_pct)
 
         if load_label in _EMAIL_LOAD_LABELS or cpu_pct >= _EMAIL_CPU_THRESHOLD:
-            self._send_alert_email(point, ram_pct)
+            self._send_tg_alert(point, ram_pct)
 
         stale = set()
         for q in self._subscribers:
@@ -273,52 +265,67 @@ class MetricsCollector:
         except Exception as e:
             _log.warning(f"MetricsCollector: alert write failed: {e}")
 
-    def _send_alert_email(self, point: dict, ram_pct: float) -> None:
-        if not self._smtp_user or not self._alert_to:
+    def _send_tg_alert(self, point: dict, ram_pct: float) -> None:
+        if not self._tg_token or not self._tg_chat_id:
             return
         now = time.time()
-        if now - self._last_email_ts < _EMAIL_COOLDOWN_S:
+        if now - self._last_tg_ts < _EMAIL_COOLDOWN_S:
             return
-        self._last_email_ts = now
+        self._last_tg_ts = now
 
         dt = datetime.fromtimestamp(point["ts"]).strftime("%Y-%m-%d %H:%M:%S")
-        subject = f"[KM_track] {point['load_label']} нагрузка — {dt}"
-        body = (
-            f"Сервер analytics.krasmarafon.ru\n\n"
-            f"Время:            {dt}\n"
-            f"Уровень нагрузки: {point['load_label']} (score={point['load_score']})\n"
-            f"CPU:              {point['cpu_percent']}%\n"
-            f"RAM:              {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
-            f"SSE-соединений:   {point['sse_connections']}\n"
-            f"Уникальных IP:    {point['unique_ips']}\n"
-            f"Запросов:         {point['total_requests']}\n"
-            f"HTTP-ошибок:      {point['http_errors']}\n"
-            f"Среднее время:    {point['avg_response_ms']} мс\n\n"
-            f"CSV с историей тревог приложен к письму."
+        text = (
+            f"🚨 *KM\\_track — {point['load_label']} нагрузка*\n\n"
+            f"🕐 {dt}\n"
+            f"📊 Score: {point['load_score']} / 100\n"
+            f"💻 CPU: {point['cpu_percent']}%\n"
+            f"🧠 RAM: {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
+            f"📡 SSE: {point['sse_connections']} соединений\n"
+            f"👥 IP: {point['unique_ips']} уникальных\n"
+            f"📨 Запросов: {point['total_requests']} | Ошибок: {point['http_errors']}\n"
+            f"⏱ Среднее время: {point['avg_response_ms']} мс"
         )
-
-        msg = MIMEMultipart()
-        msg["From"] = self._alert_from
-        msg["To"] = self._alert_to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain", "utf-8"))
+        self._tg_send_message(text)
 
         if self._alerts_path.exists() and self._alerts_path.stat().st_size > 0:
-            with open(self._alerts_path, "rb") as f:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(f.read())
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", 'attachment; filename="high_load_alerts.csv"')
-            msg.attach(part)
+            self._tg_send_document(self._alerts_path, "high_load_alerts.csv")
 
+    def _tg_send_message(self, text: str) -> None:
+        url = f"https://api.telegram.org/bot{self._tg_token}/sendMessage"
+        payload = urllib.parse.urlencode({
+            "chat_id": self._tg_chat_id,
+            "text": text,
+            "parse_mode": "MarkdownV2",
+        }).encode()
         try:
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP_SSL(self._smtp_host, self._smtp_port, context=ctx) as server:
-                server.login(self._smtp_user, self._smtp_password)
-                server.sendmail(self._alert_from, self._alert_to, msg.as_bytes())
-            _log.info(f"[Alert] Email отправлен: {subject}")
+            urllib.request.urlopen(url, data=payload, timeout=10)
+            _log.info("[TG Alert] Сообщение отправлено")
         except Exception as e:
-            _log.warning(f"[Alert] Ошибка отправки email: {e}")
+            _log.warning(f"[TG Alert] Ошибка sendMessage: {e}")
+
+    def _tg_send_document(self, path: Path, filename: str) -> None:
+        import email.mime.multipart, email.mime.base, email.mime.application
+        boundary = "----TGBoundary"
+        with open(path, "rb") as f:
+            file_data = f.read()
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+            f"{self._tg_chat_id}\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'
+            f"Content-Type: text/csv\r\n\r\n"
+        ).encode() + file_data + f"\r\n--{boundary}--\r\n".encode()
+        url = f"https://api.telegram.org/bot{self._tg_token}/sendDocument"
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=15)
+            _log.info("[TG Alert] CSV отправлен")
+        except Exception as e:
+            _log.warning(f"[TG Alert] Ошибка sendDocument: {e}")
 
     def query(self, since_ts: int, until_ts: int, bucket_secs: int) -> list[dict]:
         try:
