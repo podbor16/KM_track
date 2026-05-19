@@ -13,10 +13,7 @@ import io
 import random
 import sys
 import paramiko
-
-VPS_HOST = "89.108.88.104"
-VPS_USER = "root"
-VPS_PASSWORD = "shsfzw5fHiQY8v6g"
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 N_RUNNERS = 3000
 EVENT_ID = 104

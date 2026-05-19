@@ -16,14 +16,15 @@ import sys
 import glob
 import paramiko
 from pathlib import Path
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 # Принудительно UTF-8 для вывода на Windows-консоли
 if hasattr(sys.stdout, 'buffer'):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-HOST = "89.108.88.104"
+HOST = VPS_HOST
 USER = "root"
-PASSWORD = "shsfzw5fHiQY8v6g"
+PASSWORD = VPS_PASSWORD
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOADER_CONFIGS_LOCAL = PROJECT_ROOT / "config" / "loader"

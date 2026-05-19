@@ -5,10 +5,11 @@
 import sys
 import time
 import paramiko
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
-VPS_HOST = "89.108.88.104"
+VPS_HOST = VPS_HOST
 VPS_USER = "root"
-VPS_PASS = "shsfzw5fHiQY8v6g"
+VPS_PASS = VPS_PASSWORD
 
 REMOTE_HOST = "79.174.89.159"
 REMOTE_PORT = 16171

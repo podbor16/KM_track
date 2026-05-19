@@ -1,9 +1,10 @@
 """Настройка VPS после апгрейда до 2 CPU / 2 GB RAM."""
 import paramiko, time
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+c.connect(VPS_HOST, username='root', password=VPS_PASSWORD, timeout=15)
 
 def run(cmd, timeout=20):
     transport = c.get_transport()

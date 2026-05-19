@@ -1,10 +1,11 @@
 import paramiko
 import time
 import sys
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
-HOST = "89.108.88.104"
+HOST = VPS_HOST
 USER = "root"
-PASSWORD = "shsfzw5fHiQY8v6g"
+PASSWORD = VPS_PASSWORD
 REPO_URL = "https://github.com/podbor16/KM_track.git"
 
 SSH_PUB_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJn4bGA7Ljr3u7iRD73mXlZtRIQtPt6Cs7QlzJzjfIt0 claude-deploy"

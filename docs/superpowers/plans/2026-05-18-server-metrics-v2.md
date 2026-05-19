@@ -1090,7 +1090,7 @@ python deploy/ssh_update.py
 import paramiko, time
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+client.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=15)
 time.sleep(75)  # ждём первый flush
 _, stdout, _ = client.exec_command(
     'python3 -c "import sqlite3; c=sqlite3.connect(\'/opt/km_track/data/server_metrics.db\'); '
@@ -1107,7 +1107,7 @@ client.close()
 import paramiko
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+client.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=15)
 _, stdout, _ = client.exec_command(
     'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/admin/metrics?hours=8760'
 )

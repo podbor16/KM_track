@@ -1,8 +1,9 @@
 import paramiko, time
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
-HOST = "89.108.88.104"
+HOST = VPS_HOST
 USER = "root"
-PASSWORD = "shsfzw5fHiQY8v6g"
+PASSWORD = VPS_PASSWORD
 
 def run(client, cmd, timeout=60):
     print(f">>> {cmd}")

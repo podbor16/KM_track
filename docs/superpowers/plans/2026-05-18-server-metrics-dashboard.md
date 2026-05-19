@@ -981,7 +981,7 @@ python -c "
 import paramiko, sys, time
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+client.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=15)
 time.sleep(70)
 stdin, stdout, stderr = client.exec_command('systemctl is-active km_track && git -C /opt/km_track log --oneline -1')
 sys.stdout.buffer.write(stdout.read())
@@ -997,7 +997,7 @@ python -c "
 import paramiko, sys
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+client.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=15)
 # Проверяем что API отвечает (без авторизации должно вернуть redirect)
 stdin, stdout, stderr = client.exec_command(
     'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/admin/metrics'
@@ -1020,7 +1020,7 @@ python -c "
 import paramiko, sys
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=15)
+client.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=15)
 stdin, stdout, stderr = client.exec_command(
     'ls -lh /opt/km_track/data/server_metrics.db 2>/dev/null || echo NOT_FOUND'
 )

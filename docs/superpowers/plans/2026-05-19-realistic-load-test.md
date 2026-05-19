@@ -98,9 +98,9 @@ import argparse
 import sys
 import paramiko
 
-VPS_HOST = "89.108.88.104"
+VPS_HOST = "VPS_HOST"
 VPS_USER = "root"
-VPS_PASSWORD = "shsfzw5fHiQY8v6g"
+VPS_PASSWORD = "VPS_PASSWORD"
 
 N_RUNNERS = 3000
 EVENT_ID = 104
@@ -319,9 +319,9 @@ import sys
 import time
 import paramiko
 
-VPS_HOST = "89.108.88.104"
+VPS_HOST = "VPS_HOST"
 VPS_USER = "root"
-VPS_PASSWORD = "shsfzw5fHiQY8v6g"
+VPS_PASSWORD = "VPS_PASSWORD"
 
 SIMULATOR_SCRIPT = r"""
 import mysql.connector
@@ -895,7 +895,7 @@ python -c "
 import paramiko
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('89.108.88.104', username='root', password='shsfzw5fHiQY8v6g', timeout=30)
+c.connect('VPS_HOST', username='root', password='VPS_PASSWORD', timeout=30)
 _, out, _ = c.exec_command(\"mysql -u km_analytic -pCneZbvlOS2H-BLsQ krasmarafon -e 'SELECT COUNT(*) FROM results WHERE event_id=104 AND start_number BETWEEN 90001 AND 93000;'\", timeout=15)
 print('Remaining test runners:', out.read().decode().strip())
 c.close()

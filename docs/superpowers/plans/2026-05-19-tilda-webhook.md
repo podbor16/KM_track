@@ -546,7 +546,7 @@ conda run -n base python tests/load/_check_db.py
 import paramiko
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect("89.108.88.104", username="root", password="shsfzw5fHiQY8v6g", timeout=30)
+c.connect("VPS_HOST", username="root", password="VPS_PASSWORD", timeout=30)
 _, o, _ = c.exec_command("mysql -u root krasmarafon -e \"DESCRIBE leads;\"", timeout=10)
 print(o.read().decode())
 c.close()

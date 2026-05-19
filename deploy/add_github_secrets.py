@@ -8,14 +8,15 @@ import os
 import sys
 import urllib.request
 from base64 import b64encode
+from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 REPO = "podbor16/KM_track"
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 SECRETS = {
-    "VPS_HOST": "89.108.88.104",
+    "VPS_HOST": VPS_HOST,
     "VPS_USER": "root",
-    "VPS_PASSWORD": "shsfzw5fHiQY8v6g",
+    "VPS_PASSWORD": VPS_PASSWORD,
 }
 
 if not TOKEN:
