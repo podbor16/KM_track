@@ -412,70 +412,87 @@ async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, chec
 // ЗАГРУЗКА ДАННЫХ ИЗ API
 // ============================================
 
+function _parseRunner(runner) {
+    const kt1Data = runner.checkpoints?.kt1;
+    let kt1Time = kt1Data?.time;
+    if (kt1Time === 'undefined' || kt1Time === undefined || kt1Time === null || kt1Time === 'null') {
+        kt1Time = null;
+    }
+    const dist = eventDistance || runner.event_distance;
+    return {
+        id:                    runner.id || runner.start_number,
+        start_number:          runner.start_number,
+        surname:               runner.surname || '',
+        name:                  runner.name || '',
+        full_name:             `${runner.surname || ''} ${runner.name || ''}`.trim(),
+        sex:                   runner.sex,
+        category:              runner.category || '',
+        status:                runner.race_status,
+        time_gun_finish:       parseDuration(runner.time_gun_finish),
+        time_clear_finish:     parseDuration(runner.time_clear_finish),
+        time_clear_kt1_raw:    kt1Time,
+        time_clear_kt1:        parseDuration(kt1Time),
+        finish_pace_avg:       parseDuration(runner.finish_pace_avg),
+        finish_pace_avg_gun:   calculatePaceFromTime(runner.time_gun_finish, dist),
+        finish_pace_avg_clean: calculatePaceFromTime(runner.time_clear_finish, dist),
+        rank_absolute:         runner.rank_absolute,
+        rank_sex:              runner.rank_sex,
+        rank_category:         runner.rank_category,
+        bib:                   runner.start_number,
+        dorsal:                runner.start_number,
+        checkpoints:           runner.checkpoints || {},
+        speed:                 runner.speed != null ? runner.speed : 10.0,
+        current_distance:      runner.current_distance || 0,
+        current_pace:          runner.current_pace || '6:00',
+        pace_source:           runner.pace_source || '',
+        prev_year:             runner.prev_year || null,
+        time_clear_start_s:    runner.time_clear_start_s ?? null,
+        lap:                   runner.lap ?? 1,
+        last_kt_unix_ms:       runner.last_kt_unix_ms ?? null,
+    };
+}
+
 function _applyRunnerData(data) {
     if (data.server_time_unix) serverTimeUnix = data.server_time_unix;
     if (data.race_gun_unix_ms) raceGunUnixMs = data.race_gun_unix_ms;
-
     if (data.total_distance_km) {
         eventDistance = data.total_distance_km;
-    } else if (data.results && data.results.length > 0) {
+    } else if (data.results && data.results.length > 0 && data.initial !== false) {
         eventDistance = parseFloat(data.results[0].distance) || 0;
     }
 
-    allRunners = (data.results || []).map((runner) => {
-        const kt1Data = runner.checkpoints?.kt1;
-        let kt1Time = kt1Data?.time;
+    const parsed = (data.results || []).map(_parseRunner);
 
-        if (kt1Time === 'undefined' || kt1Time === undefined || kt1Time === null || kt1Time === 'null') {
-            kt1Time = null;
+    if (data.initial !== false) {
+        // Полный снимок (initial=true или HTTP-ответ без поля initial)
+        allRunners = parsed;
+    } else {
+        // Дельта: мержим только изменившихся участников
+        const byId = new Map(parsed.map(r => [String(r.id), r]));
+        for (let i = 0; i < allRunners.length; i++) {
+            const upd = byId.get(String(allRunners[i].id));
+            if (upd) allRunners[i] = { ...allRunners[i], ...upd };
         }
+    }
 
-        const calculatedGunPace = calculatePaceFromTime(runner.time_gun_finish, eventDistance || runner.event_distance);
-        const calculatedCleanPace = calculatePaceFromTime(runner.time_clear_finish, eventDistance || runner.event_distance);
+    // Логируем выбранных участников при изменении их данных
+    if (selectedRunnerIds.size > 0) {
+        const changedIds = data.initial !== false
+            ? selectedRunnerIds
+            : new Set(parsed.map(r => String(r.id)).filter(id => selectedRunnerIds.has(id)));
+        changedIds.forEach(id => {
+            const r = allRunners.find(x => String(x.id) === id);
+            if (r) console.log(
+                `[API_CHECK] #${r.start_number} ${r.full_name}:`,
+                `status=${r.status}`, `speed=${r.speed}`,
+                `current_pace=${r.current_pace}`, `pace_source=${r.pace_source}`
+            );
+        });
+    }
 
-        return {
-            id:                   runner.id || runner.start_number,
-            start_number:         runner.start_number,
-            surname:              runner.surname || '',
-            name:                 runner.name || '',
-            full_name:            `${runner.surname || ''} ${runner.name || ''}`.trim(),
-            sex:                  runner.sex,
-            category:             runner.category || '',
-            status:               runner.race_status,
-            time_gun_finish:      parseDuration(runner.time_gun_finish),
-            time_clear_finish:    parseDuration(runner.time_clear_finish),
-            time_clear_kt1_raw:   kt1Time,
-            time_clear_kt1:       parseDuration(kt1Time),
-            finish_pace_avg:      parseDuration(runner.finish_pace_avg),
-            finish_pace_avg_gun:  calculatedGunPace,
-            finish_pace_avg_clean: calculatedCleanPace,
-            rank_absolute:        runner.rank_absolute,
-            rank_sex:             runner.rank_sex,
-            rank_category:        runner.rank_category,
-            bib:                  runner.start_number,
-            dorsal:               runner.start_number,
-            checkpoints:          runner.checkpoints || {},
-            speed:                runner.speed != null ? runner.speed : 10.0,
-            current_distance:     runner.current_distance || 0,
-            current_pace:         runner.current_pace || '6:00',
-            pace_source:          runner.pace_source || '',
-            prev_year:            runner.prev_year || null,
-            time_clear_start_s:   runner.time_clear_start_s ?? null,
-            lap:                  runner.lap ?? 1,
-            last_kt_unix_ms:      runner.last_kt_unix_ms ?? null,
-        };
-    });
-
-    selectedRunnerIds.forEach(id => {
-        const r = allRunners.find(x => String(x.id) === String(id));
-        if (r) console.log(
-            `[API_CHECK] #${r.start_number} ${r.full_name}:`,
-            `status=${r.status}`,
-            `speed=${r.speed}`,
-            `current_pace=${r.current_pace}`,
-            `pace_source=${r.pace_source}`
-        );
-    });
+    // Обновляем маркеры: при дельте — только изменившиеся, при полном — все
+    const toUpdate = data.initial !== false ? allRunners : parsed;
+    toUpdate.forEach(runner => updateRunnerMarkerPosition(runner));
 
     updateStatus(`Загружено участников: ${allRunners.length}`);
 }
@@ -713,15 +730,16 @@ function startAutoUpdate() {
         try {
             const data = JSON.parse(e.data);
             _applyRunnerData(data);
-            selectedRunnerIds.forEach(runnerId => {
-                const runner = allRunners.find(r => String(r.id) === String(runnerId));
-                if (runner) updateRunnerMarkerPosition(runner);
-            });
+            // Обновляем панель активного участника если он среди изменившихся
             if (activeRunnerId) {
-                const activeRunner = allRunners.find(r => String(r.id) === activeRunnerId);
-                if (activeRunner) {
-                    const content = document.getElementById('runner-panel-content');
-                    if (content) content.innerHTML = buildPopupContent(activeRunner);
+                const inDelta = data.initial !== false ||
+                    (data.results || []).some(r => String(r.id || r.start_number) === activeRunnerId);
+                if (inDelta) {
+                    const activeRunner = allRunners.find(r => String(r.id) === activeRunnerId);
+                    if (activeRunner) {
+                        const content = document.getElementById('runner-panel-content');
+                        if (content) content.innerHTML = buildPopupContent(activeRunner);
+                    }
                 }
             }
             // Обновляем аналитику не чаще раза в 10 сек

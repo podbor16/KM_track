@@ -32,6 +32,36 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 metrics_collector = MetricsCollector(db_path=str(DATA_DIR / "server_metrics.db"))
 
+# Delta SSE: трекинг предыдущего состояния для вычисления дельты
+_tracker_prev_state: dict[int, dict] = {}  # event_id -> {runner_id -> runner_dict}
+_DELTA_KEYS = (
+    'last_kt_unix_ms', 'race_status', 'status',
+    'rank_absolute', 'rank_sex', 'rank_category', 'time_gun_finish',
+)
+
+
+def _runner_changed(prev: dict, curr: dict) -> bool:
+    return (any(prev.get(k) != curr.get(k) for k in _DELTA_KEYS) or
+            prev.get('checkpoints') != curr.get('checkpoints'))
+
+
+def _build_delta_payload(result, event_id: int) -> str:
+    curr_runners = result.results
+    prev = _tracker_prev_state.get(event_id, {})
+    is_initial = not bool(prev)
+    delta = curr_runners if is_initial else [
+        r for r in curr_runners if _runner_changed(prev.get(r['id'], {}), r)
+    ]
+    _tracker_prev_state[event_id] = {r['id']: r for r in curr_runners}
+    return json.dumps({
+        'initial': is_initial,
+        'server_time_unix': result.server_time_unix,
+        'race_gun_unix_ms': result.race_gun_unix_ms if is_initial else None,
+        'total_distance_km': result.total_distance_km if is_initial else None,
+        'total_results': result.total_results,
+        'results': delta,
+    })
+
 
 # Инициализация приложения
 @asynccontextmanager
@@ -133,9 +163,15 @@ async def lifespan(app: FastAPI):
                                 dist.db_event_id, None, None, events
                             )
                             if result:
+                                payload = _build_delta_payload(result, dist.db_event_id)
+                                n_delta = len(json.loads(payload)['results'])
+                                settings.logger.debug(
+                                    f"[Delta] event={dist.db_event_id} "
+                                    f"changed={n_delta}/{len(result.results)}"
+                                )
                                 await redis_client.publish(
                                     f"tracker:event:{dist.db_event_id}",
-                                    result.model_dump_json()
+                                    payload
                                 )
             except Exception as _e:
                 settings.logger.warning(f"[SSE] tracker_broadcast error: {_e}")

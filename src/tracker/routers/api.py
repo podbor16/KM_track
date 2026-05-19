@@ -641,12 +641,27 @@ async def fetch_race_data_now():
 
 @router.get("/api/sse/tracker", tags=["SSE"])
 async def sse_tracker(request: Request, event_id: int = Query(..., description="ID события")):
-    """SSE поток с полными данными трекера. Обновляется каждые 2 сек."""
+    """SSE поток трекера. Первое сообщение — полный снимок, далее — дельта изменений."""
+    from src.tracker.services.results_service import build_event_results
     queue = await tracker_hub.subscribe(event_id)
 
     async def stream():
         try:
             yield {"comment": "connected"}
+            # Немедленный полный снимок для нового клиента (из кеша, <5ms если тёплый)
+            events = load_events_cached()
+            initial = await asyncio.get_event_loop().run_in_executor(
+                None, build_event_results, event_id, None, None, events
+            )
+            if initial:
+                yield {"data": json.dumps({
+                    'initial': True,
+                    'server_time_unix': initial.server_time_unix,
+                    'race_gun_unix_ms': initial.race_gun_unix_ms,
+                    'total_distance_km': initial.total_distance_km,
+                    'total_results': initial.total_results,
+                    'results': initial.results,
+                })}
             while True:
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=25)
