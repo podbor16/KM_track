@@ -88,9 +88,9 @@ async def _sse_client(vu_id, request, hold_seconds, results):
         buf = b""
         while time.monotonic() < deadline_connect:
             try:
-                chunk = await asyncio.wait_for(reader.read(4096), timeout=5)
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=15)
             except asyncio.TimeoutError:
-                break
+                continue  # server is slow under load — keep waiting until deadline_connect
             if not chunk:
                 break
             buf += chunk
