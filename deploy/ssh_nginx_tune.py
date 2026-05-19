@@ -34,6 +34,7 @@ if "successful" in test:
 else:
     print("Ошибка конфига — откат")
     run("sed -i 's/keepalive_timeout 15/keepalive_timeout 65/' /etc/nginx/nginx.conf")
+    run("sed -i 's/keepalive_timeout 15/keepalive_timeout 65/' /etc/nginx/conf.d/*.conf 2>/dev/null || true")
 
 print("\n=== Новый keepalive_timeout ===")
 print(run("grep keepalive_timeout /etc/nginx/nginx.conf"))
