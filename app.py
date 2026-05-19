@@ -90,8 +90,8 @@ async def lifespan(app: FastAPI):
     app_state = init_app_state()
     settings.logger.info(f"AppState инициализирован: {app_state}")
     
-    # Инициализируем пул БД соединений (pool_size=3: 3 workers × 3 = 9 < max_connections=20)
-    pool = initialize_connection_pool(pool_size=3)
+    # Инициализируем пул БД соединений (pool_size=2: 2 workers × 2 = 4 < max_connections=20)
+    pool = initialize_connection_pool(pool_size=2)
     settings.logger.info(f"📍 Swagger UI: http://localhost:8000/docs")
     settings.logger.info(f"📍 ReDoc: http://localhost:8000/redoc")
     settings.logger.info(f"📍 Трекер: http://localhost:8000/tracker")
