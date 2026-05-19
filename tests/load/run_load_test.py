@@ -17,9 +17,11 @@ chunked SSE-потоки и возвращается после первого �
 """
 
 import argparse
+import csv
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -34,10 +36,11 @@ LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")  # 104=Ночной за�
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD", "")
 
 LEVELS = [
-    {"name": "L1", "locust_users": 165,  "sse_vus": 335,  "spawn_rate": 20},
-    {"name": "L2", "locust_users": 665,  "sse_vus": 1335, "spawn_rate": 40},
-    {"name": "L3", "locust_users": 1665, "sse_vus": 3335, "spawn_rate": 80},
-    {"name": "L4", "locust_users": 3335, "sse_vus": 6665, "spawn_rate": 100},
+    {"name": "L1",   "locust_users": 165,  "sse_vus": 335,  "spawn_rate": 20},
+    {"name": "L2",   "locust_users": 665,  "sse_vus": 1335, "spawn_rate": 40},
+    {"name": "L2.5", "locust_users": 1000, "sse_vus": 2000, "spawn_rate": 50},
+    {"name": "L3",   "locust_users": 1665, "sse_vus": 3335, "spawn_rate": 80},
+    {"name": "L4",   "locust_users": 3335, "sse_vus": 6665, "spawn_rate": 100},
 ]
 
 SMOKE = {"name": "smoke", "locust_users": 5, "sse_vus": 10, "spawn_rate": 5}
@@ -74,6 +77,56 @@ def _teardown_race_data() -> bool:
         env={**os.environ, "PYTHONPATH": str(REPO_ROOT), "PYTHONIOENCODING": "utf-8"},
     )
     return result.returncode == 0
+
+
+def _monitor_vps_bg(csv_path: Path, stop_event: threading.Event, interval: int = 10) -> None:
+    """Собирает метрики VPS в фоновом потоке через paramiko SSH.
+    Расширенный формат: RAM, CPU, TCP-соединения, открытые FD у uvicorn.
+    """
+    try:
+        import paramiko
+        from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
+    except ImportError:
+        return
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(VPS_HOST, username=VPS_USER, password=VPS_PASSWORD, timeout=10)
+    except Exception as e:
+        print(f"  [monitor] SSH недоступен: {e}")
+        return
+
+    def run(cmd):
+        try:
+            _, sout, _ = client.exec_command(cmd, timeout=8)
+            return sout.read().decode("utf-8", errors="replace").strip()
+        except Exception:
+            return ""
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["ts", "ram_used_mb", "ram_total_mb", "ram_pct",
+                         "cpu_idle_pct", "tcp_estab", "uvicorn_fds", "oom_events"])
+        f.flush()
+        while not stop_event.is_set():
+            ts = int(time.time())
+            ram = run("free -m | awk '/^Mem:/{print $3,$2}'")
+            cpu = run("top -bn1 | awk '/^%Cpu/{print $8}'")
+            tcp = run("ss -s | awk '/estab/{print $4}' | tr -d ','")
+            fds = run("ls /proc/$(pgrep -f 'uvicorn' | head -1)/fd 2>/dev/null | wc -l")
+            oom = run("dmesg --time-format iso 2>/dev/null | grep -c 'oom\\|killed process' || echo 0")
+            try:
+                ram_used, ram_total = ram.split()
+                ram_pct = round(int(ram_used) / int(ram_total) * 100, 1)
+            except Exception:
+                ram_used = ram_total = ram_pct = ""
+            writer.writerow([ts, ram_used, ram_total, ram_pct,
+                             cpu or "", tcp or "", fds or "", oom or ""])
+            f.flush()
+            stop_event.wait(interval)
+
+    client.close()
 
 
 def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic: bool = False) -> bool:
@@ -145,6 +198,14 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic
         )
         print(f"  [realistic] Симулятор запущен (pid={sim_proc.pid})")
 
+    # Запускаем фоновый мониторинг VPS (RAM, CPU, TCP, FD)
+    vps_csv = report_dir / f"vps_{name}.csv"
+    monitor_stop = threading.Event()
+    monitor_thread = threading.Thread(
+        target=_monitor_vps_bg, args=(vps_csv, monitor_stop), daemon=True
+    )
+    monitor_thread.start()
+
     print(f"\n  Запуск Locust (HTTP) + sse_load.py (SSE) одновременно...")
     locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
     with open(sse_stdout, "w", encoding="utf-8") as sse_log:
@@ -162,6 +223,9 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic
         for p in (locust_proc, sse_proc):
             p.terminate()
             p.wait()
+
+    monitor_stop.set()
+    monitor_thread.join(timeout=15)
 
     # Locust возвращает exit 1 при наличии ЛЮБЫХ ошибок.
     # Реальный критерий: < 1% ошибок. Считаем OK по HTML-отчёту если он есть.
@@ -194,7 +258,7 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic
 
 def main():
     parser = argparse.ArgumentParser(description="Оркестратор нагрузочного тестирования KM_track")
-    parser.add_argument("--level", choices=["L1", "L2", "L3", "L4"], help="Запустить только один уровень")
+    parser.add_argument("--level", choices=["L1", "L2", "L2.5", "L3", "L4"], help="Запустить только один уровень")
     parser.add_argument("--smoke", action="store_true", help="Smoke-тест (5+10 users, 1 мин)")
     parser.add_argument("--yes", "-y", action="store_true", help="Не спрашивать подтверждение (для conda run / CI)")
     parser.add_argument("--realistic", action="store_true", help="3000 участников + notify SSE + race simulator")
@@ -206,8 +270,7 @@ def main():
     print(f"\nKM_track Load Test Orchestrator")
     print(f"Хост: {HOST}")
     print(f"Отчёты: {report_dir}")
-    print(f"\nВАЖНО: Перед запуском войдите на VPS и запустите:")
-    print(f"  ./monitor_vps.sh <LEVEL>")
+    print(f"Мониторинг VPS (RAM/CPU/TCP/FD): автоматически → vps_<LEVEL>.csv")
 
     if args.smoke:
         levels = [SMOKE]

@@ -42,32 +42,41 @@ ADMIN_USERNAME = os.environ.get("LOCUST_ADMIN_USERNAME", "admin")
 
 
 class TrackerUser(FakeIPUser):
-    """55% трафика — открыли трекер и polling каждые 2–4s."""
+    """55% трафика — открыли трекер один раз, подключились к SSE.
+    HTTP-активность минимальна: загрузка страницы при входе + редкий поиск.
+    Основная нагрузка от этих пользователей — SSE-соединение (sse_load_remote.py).
+    """
     weight = 55
-    wait_time = between(2, 4)
+    wait_time = between(30, 120)  # реалистично: действие раз в 30-120с
 
-    @task(1)
-    def view_tracker(self):
+    SEARCH_NAMES = ["Ива", "Пет", "Алек", "Сер", "Мар", "Ан", "Дм", "Ол"]
+
+    def on_start(self):
+        super().on_start()
+        # Одноразовая загрузка при входе
         self.client.get("/tracker", name="/tracker")
-
-    @task(8)
-    def poll_event_results(self):
         self.client.get(
             f"/api/event-results?event_id={LIVE_EVENT_ID}",
             name="/api/event-results[live]",
         )
 
+    @task(1)
+    def occasional_search(self):
+        """Редкий поиск конкретного участника."""
+        q = random.choice(self.SEARCH_NAMES)
+        self.client.get(f"/api/search-athletes?q={q}", name="/api/search-athletes")
+
 
 class ResultsUser(FakeIPUser):
-    """25% трафика — просматривают и переключают результаты событий."""
+    """25% трафика — просматривают результаты, иногда переключают события."""
     weight = 25
-    wait_time = between(3, 10)
+    wait_time = between(10, 30)  # читают таблицу результатов, не polling
 
     @task(3)
     def view_results_page(self):
         self.client.get("/results", name="/results")
 
-    @task(5)
+    @task(2)
     def load_event_results(self):
         eid = random.choice(EVENT_IDS)
         self.client.get(f"/api/event-results?event_id={eid}", name="/api/event-results")
