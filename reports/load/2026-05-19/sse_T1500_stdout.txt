@@ -1,0 +1,24 @@
+
+SSE load test (VPS asyncio via SSH)
+  URL:    http://127.0.0.1:8000/api/sse/tracker?event_id=104
+  VUs:    1500 tracker + 0 notify
+  Hold:   280s
+
+  Running on VPS...
+  Starting 1500 tracker SSE + 0 notify SSE VUs, hold 280+0..30s...
+    [60s] tracker=0/1500 held=0 active=1500 | notify=0/0 held=0 active=0
+    [120s] tracker=0/1500 held=0 active=1500 | notify=0/0 held=0 active=0
+    [180s] tracker=0/1500 held=0 active=1500 | notify=0/0 held=0 active=0
+    [240s] tracker=0/1500 held=0 active=1500 | notify=0/0 held=0 active=0
+    [300s] tracker=64/1500 held=64 active=1436 | notify=0/0 held=0 active=0
+    [360s] tracker=1194/1500 held=1194 active=306 | notify=0/0 held=0 active=0
+  
+  =======================================================
+  SSE Load Test Results (asyncio)
+  =======================================================
+  Tracker SSE (1500 VUs):       1500 held (100%)
+  Total time:  390s
+  =======================================================
+  RESULT: PASSED (>=95% on all channels)
+
+  Test completed in 390.8s (exit=0)
