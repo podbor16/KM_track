@@ -1,28 +1,27 @@
 
 SSE load test (VPS asyncio via SSH)
   URL:    http://127.0.0.1:8000/api/sse/tracker?event_id=104
-  VUs:    890 tracker + 445 notify
+  VUs:    1335 tracker + 0 notify
   Hold:   460s
 
   Running on VPS...
-  Starting 890 tracker SSE + 445 notify SSE VUs, hold 460+0..30s...
-    [60s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [120s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [180s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [240s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [300s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [360s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [420s] tracker=826/890 held=826 active=64 | notify=0/445 held=0 active=445
-    [480s] tracker=848/890 held=848 active=42 | notify=0/445 held=0 active=445
-    [540s] tracker=890/890 held=890 active=0 | notify=258/445 held=258 active=187
+  Starting 1335 tracker SSE + 0 notify SSE VUs, hold 460+0..30s...
+    [60s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [120s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [180s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [240s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [300s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [360s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [420s] tracker=0/1335 held=0 drop=0 active=1335 | notify=0/0 held=0 active=0
+    [480s] tracker=90/1335 held=90 drop=0 active=1245 | notify=0/0 held=0 active=0
+    [540s] tracker=1163/1335 held=1163 drop=0 active=172 | notify=0/0 held=0 active=0
   
   =======================================================
   SSE Load Test Results (asyncio)
   =======================================================
-  Tracker SSE (890 VUs):       890 held (100%)
-  Notify  SSE (445 VUs):       445 held (100%)
-  Total time:  558s
+  Tracker SSE (1335 VUs):       1335 held (100%) | 0 early-drop
+  Total time:  562s
   =======================================================
   RESULT: PASSED (>=95% on all channels)
 
-  Test completed in 558.0s (exit=0)
+  Test completed in 562.3s (exit=0)

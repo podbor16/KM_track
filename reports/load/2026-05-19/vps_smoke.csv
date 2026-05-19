@@ -1,0 +1,6 @@
+ts,ram_used_mb,ram_total_mb,ram_pct,cpu_idle_pct,tcp_estab,uvicorn_fds,oom_events
+1779208770,1140,2972,38.4,96.8,41,9,"0
+0"
+1779208782,1147,2972,38.6,93.5,61,9,"0
+0"
+1779208794,1154,2972,38.8,,,,

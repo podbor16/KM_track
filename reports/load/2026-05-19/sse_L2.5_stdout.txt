@@ -1,0 +1,28 @@
+
+SSE load test (VPS asyncio via SSH)
+  URL:    http://127.0.0.1:8000/api/sse/tracker?event_id=104
+  VUs:    2000 tracker + 0 notify
+  Hold:   460s
+  SSH connect attempt 1/5 failed: [WinError 10060] Попытка установить соединение была безуспешной, т.к. от другого компьютера за требуемое время не получен нужный отклик, или было разорвано уже установленное соединение из-за неверного отклика уже подключенного компьютера
+
+  Running on VPS...
+  Starting 2000 tracker SSE + 0 notify SSE VUs, hold 460+0..30s...
+    [60s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [120s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [180s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [240s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [300s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [360s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [420s] tracker=0/2000 held=0 drop=0 active=2000 | notify=0/0 held=0 active=0
+    [480s] tracker=87/2000 held=87 drop=0 active=1913 | notify=0/0 held=0 active=0
+    [540s] tracker=1197/2000 held=1197 drop=0 active=803 | notify=0/0 held=0 active=0
+  
+  =======================================================
+  SSE Load Test Results (asyncio)
+  =======================================================
+  Tracker SSE (2000 VUs):       2000 held (100%) | 0 early-drop
+  Total time:  595s
+  =======================================================
+  RESULT: PASSED (>=95% on all channels)
+
+  Test completed in 595.4s (exit=0)
