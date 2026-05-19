@@ -23,10 +23,15 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+REPO_ROOT = Path(__file__).parent.parent.parent
+load_dotenv(REPO_ROOT / ".env")
 
 HOST = os.environ.get("LOAD_TEST_HOST", "https://analytics.krasmarafon.ru")
+
 LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")  # 104=Ночной забег, реальные данные
-ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD", "km2026admin")
+ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD", "")
 
 LEVELS = [
     {"name": "L1", "locust_users": 165,  "sse_vus": 335,  "spawn_rate": 20},
@@ -50,14 +55,13 @@ def _duration_to_seconds(duration: str) -> int:
 DURATION = "8m"
 PAUSE_BETWEEN_S = 120  # 2 минуты
 
-REPO_ROOT = Path(__file__).parent.parent.parent
-
 
 def _setup_race_data() -> bool:
     print("\n  [realistic] Генерация тест-данных (3000 бегунов)...")
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tests" / "load" / "setup_race_data.py"), "--setup"],
         cwd=REPO_ROOT, timeout=120,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT), "PYTHONIOENCODING": "utf-8"},
     )
     return result.returncode == 0
 
@@ -67,6 +71,7 @@ def _teardown_race_data() -> bool:
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tests" / "load" / "setup_race_data.py"), "--teardown"],
         cwd=REPO_ROOT, timeout=60,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT), "PYTHONIOENCODING": "utf-8"},
     )
     return result.returncode == 0
 
@@ -119,6 +124,7 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic
         "LOCUST_LIVE_EVENT_ID": LIVE_EVENT_ID,
         "LOCUST_ADMIN_PASSWORD": ADMIN_PASSWORD,
         "PYTHONIOENCODING": "utf-8",
+        "PYTHONPATH": str(REPO_ROOT),
     }
 
     sim_proc = None
@@ -214,7 +220,7 @@ def main():
     else:
         levels = LEVELS
         duration = DURATION
-        print(f"\nРежим: ПОЛНЫЙ тест L1→L4 (~40 мин)")
+        print(f"\nРежим: ПОЛНЫЙ тест L1->L4 (~40 мин)")
 
     if not args.yes:
         try:

@@ -155,7 +155,12 @@ already = run(client, f"grep -c 'SEND_CUSTOM=YES' {NOTIFY_CONF_PATH} 2>/dev/null
 if already.strip() != "0":
     print("SEND_CUSTOM=YES уже присутствует — пропускаем патч")
 else:
-    current_content = read_remote(sftp, NOTIFY_CONF_PATH)
+    file_exists = run(client, f"test -f {NOTIFY_CONF_PATH} && echo yes || echo no")
+    if file_exists.strip() == "yes":
+        current_content = read_remote(sftp, NOTIFY_CONF_PATH)
+    else:
+        print(f"{NOTIFY_CONF_PATH} не найден — создаём с нуля")
+        current_content = ""
     new_content = current_content + NOTIFY_CONF_BLOCK
     upload_text(sftp, new_content, NOTIFY_CONF_PATH)
     print("Блок SEND_CUSTOM добавлен")
