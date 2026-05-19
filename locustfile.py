@@ -132,14 +132,12 @@ class BusinessUser(FakeIPUser):
     def on_start(self):
         super().on_start()  # назначить уникальный X-Forwarded-For
         """Войти один раз при старте VU — cookie сохраняется автоматически."""
-        resp = self.client.post(
+        self.client.post(
             "/login",
             data={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
             name="/login",
             allow_redirects=True,
         )
-        if resp.status_code not in (200, 302):
-            self.environment.runner.quit()
 
     @task(1)
     def view_business_analytics(self):

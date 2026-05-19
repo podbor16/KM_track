@@ -97,14 +97,18 @@ async def _sse_client(vu_id, request, hold_seconds, results):
         if not connected:
             results[vu_id] = "no_connected"
             return
-        while time.monotonic() - start < total_hold:
+        hold_start = time.monotonic()
+        dropped = False
+        while time.monotonic() - hold_start < total_hold:
             try:
                 chunk = await asyncio.wait_for(reader.read(4096), timeout=30)
                 if not chunk:
+                    dropped = True
                     break
             except asyncio.TimeoutError:
                 pass
-        results[vu_id] = "held"
+        actual_hold = time.monotonic() - hold_start
+        results[vu_id] = "held" if not dropped else f"drop_{actual_hold:.0f}s"
     except Exception as e:
         results[vu_id] = f"err:{type(e).__name__}"
     finally:
@@ -119,10 +123,11 @@ async def progress_reporter(t_res, n_res, vus, notify_vus, t_start, interval=60)
     while True:
         await asyncio.sleep(interval)
         t_held = sum(1 for v in t_res.values() if v == "held")
+        t_drop = sum(1 for v in t_res.values() if isinstance(v, str) and v.startswith("drop_"))
         n_held = sum(1 for v in n_res.values() if v == "held")
         elapsed = time.monotonic() - t_start
         print(
-            f"  [{elapsed:.0f}s] tracker={len(t_res)}/{vus} held={t_held} active={vus - len(t_res)}"
+            f"  [{elapsed:.0f}s] tracker={len(t_res)}/{vus} held={t_held} drop={t_drop} active={vus - len(t_res)}"
             f" | notify={len(n_res)}/{notify_vus} held={n_held} active={notify_vus - len(n_res)}",
             flush=True
         )
@@ -155,6 +160,7 @@ async def run_load(vus, notify_vus, hold_seconds):
 
     elapsed = time.monotonic() - t_start
     t_held = sum(1 for v in tracker_results.values() if v == "held")
+    t_drop = sum(1 for v in tracker_results.values() if isinstance(v, str) and v.startswith("drop_"))
     n_held = sum(1 for v in notify_results.values() if v == "held")
     t_pct = t_held * 100 // vus if vus else 100
     n_pct = n_held * 100 // notify_vus if notify_vus else 100
@@ -163,7 +169,7 @@ async def run_load(vus, notify_vus, hold_seconds):
     print("=======================================================")
     print("SSE Load Test Results (asyncio)")
     print("=======================================================")
-    print(f"Tracker SSE ({vus} VUs):       {t_held} held ({t_pct}%)")
+    print(f"Tracker SSE ({vus} VUs):       {t_held} held ({t_pct}%) | {t_drop} early-drop")
     if notify_vus:
         print(f"Notify  SSE ({notify_vus} VUs):       {n_held} held ({n_pct}%)")
     print(f"Total time:  {elapsed:.0f}s")

@@ -6,9 +6,15 @@ JSON API эндпоинты KM_track.
 import asyncio
 import logging
 import json
+import time
 from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
+
+# SSE initial-snapshot cache: avoids per-connection build_event_results calls under high load.
+# Each event_id gets one snapshot rebuild per TTL; all concurrent connections share it.
+_sse_initial_cache: dict[int, tuple[str, float]] = {}  # event_id → (json_str, timestamp)
+_SSE_INITIAL_TTL = 3  # seconds
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
 from fastapi.responses import RedirectResponse, Response
@@ -648,20 +654,28 @@ async def sse_tracker(request: Request, event_id: int = Query(..., description="
     async def stream():
         try:
             yield {"comment": "connected"}
-            # Немедленный полный снимок для нового клиента (из кеша, <5ms если тёплый)
-            events = load_events_cached()
-            initial = await asyncio.get_event_loop().run_in_executor(
-                None, build_event_results, event_id, None, None, events
-            )
-            if initial:
-                yield {"data": json.dumps({
-                    'initial': True,
-                    'server_time_unix': initial.server_time_unix,
-                    'race_gun_unix_ms': initial.race_gun_unix_ms,
-                    'total_distance_km': initial.total_distance_km,
-                    'total_results': initial.total_results,
-                    'results': initial.results,
-                })}
+            # Initial snapshot — served from a short-TTL cache to absorb thundering herds.
+            # Without the cache, 2000 simultaneous connections each call build_event_results,
+            # flooding the 7-thread executor pool and delaying all connections by ~100s.
+            cached = _sse_initial_cache.get(event_id)
+            if cached and (time.time() - cached[1]) < _SSE_INITIAL_TTL:
+                yield {"data": cached[0]}
+            else:
+                events = load_events_cached()
+                initial = await asyncio.get_event_loop().run_in_executor(
+                    None, build_event_results, event_id, None, None, events
+                )
+                if initial:
+                    initial_json = json.dumps({
+                        'initial': True,
+                        'server_time_unix': initial.server_time_unix,
+                        'race_gun_unix_ms': initial.race_gun_unix_ms,
+                        'total_distance_km': initial.total_distance_km,
+                        'total_results': initial.total_results,
+                        'results': initial.results,
+                    }, default=str)
+                    _sse_initial_cache[event_id] = (initial_json, time.time())
+                    yield {"data": initial_json}
             while True:
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=25)

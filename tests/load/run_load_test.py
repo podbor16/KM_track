@@ -206,13 +206,20 @@ def run_level(level: dict, report_dir: Path, duration: str = DURATION, realistic
     )
     monitor_thread.start()
 
-    print(f"\n  Запуск Locust (HTTP) + sse_load.py (SSE) одновременно...")
-    locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
+    # Сначала поднимаем SSE-соединения, затем запускаем HTTP-нагрузку.
+    # SSE-скрипт спавнит 20 VU/с → для N VU нужно N/20 секунд.
+    # Это имитирует реальный Race Day: пользователи подключаются с утра,
+    # HTTP-нагрузка (обновление результатов) начинается после старта гонки.
+    sse_spawn_s = tracker_vus // 20 + 30  # запас 30с на подключение последних VU
+    print(f"\n  Прогрев SSE ({tracker_vus} VU, займёт ~{sse_spawn_s}с)...")
     with open(sse_stdout, "w", encoding="utf-8") as sse_log:
         sse_proc = subprocess.Popen(
             sse_cmd, env=env, cwd=REPO_ROOT,
             stdout=sse_log, stderr=subprocess.STDOUT,
         )
+    time.sleep(sse_spawn_s)
+    print(f"  Запуск Locust (HTTP) поверх установленных SSE-соединений...")
+    locust_proc = subprocess.Popen(locust_cmd, env=env, cwd=REPO_ROOT)
 
     locust_timeout = _duration_to_seconds(duration) + 60
     try:
