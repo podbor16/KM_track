@@ -46,10 +46,17 @@ def verify_session_cookie(token: str) -> str:
 
 
 def require_auth(km_session: str | None = Cookie(default=None)):
-    """FastAPI dependency: проверяет сессию, редиректит на /login если невалидна."""
+    """FastAPI dependency для страниц: редиректит на /login если невалидна."""
     if not km_session:
         return RedirectResponse(url="/login", status_code=302)
     try:
         return verify_session_cookie(km_session)
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
+
+
+def api_require_auth(km_session: str | None = Cookie(default=None)) -> str:
+    """FastAPI dependency для API: бросает 401 если сессия невалидна."""
+    if not km_session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return verify_session_cookie(km_session)

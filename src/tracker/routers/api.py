@@ -17,7 +17,7 @@ _sse_initial_cache: dict[int, tuple[str, float]] = {}  # event_id → (json_str,
 _SSE_INITIAL_TTL = 3  # seconds
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 
 from src.tracker.services.notification_hub import tracker_hub, notification_hub
@@ -28,7 +28,7 @@ from src.config.event_loader import (
 )
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
-from src.core.auth import require_auth
+from src.core.auth import require_auth, api_require_auth
 from src.monitoring.collector import MetricsCollector, hours_to_bucket_secs
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
@@ -588,11 +588,9 @@ async def get_race_stats(event_name: str = Query(None)):
 # ============================================================================
 
 @router.get("/api/datalens-tokens")
-async def datalens_tokens(user=Depends(require_auth)):
+async def datalens_tokens(user: str = Depends(api_require_auth)):
     """Свежие JWT-токены для DataLens embed. Вызывается клиентом каждые 50 минут."""
     from src.core.datalens import make_embed_token
-    if isinstance(user, RedirectResponse):
-        raise HTTPException(status_code=401, detail="Unauthorized")
     if not settings.DATALENS_KEY_SECRET:
         raise HTTPException(status_code=503, detail="DataLens not configured")
     result = []
@@ -787,12 +785,10 @@ def _get_metrics_collector() -> MetricsCollector:
 @router.get("/api/admin/metrics", tags=["Admin"])
 async def get_server_metrics(
     hours: int = Query(default=24, description="Диапазон: 1,6,24,168,720,2160,4320,8760"),
-    user=Depends(require_auth),
+    user: str = Depends(api_require_auth),
 ):
     """История метрик сервера с downsampling по диапазону."""
     import time
-    if isinstance(user, RedirectResponse):
-        return user
     allowed = {1, 6, 24, 168, 720, 2160, 4320, 8760}
     if hours not in allowed:
         hours = 24
@@ -818,11 +814,9 @@ async def get_server_metrics(
 @router.get("/api/admin/metrics/live", tags=["Admin"])
 async def get_server_metrics_live(
     request: Request,
-    user=Depends(require_auth),
+    user: str = Depends(api_require_auth),
 ):
     """SSE-стрим: новая точка метрик каждые 5 секунд."""
-    if isinstance(user, RedirectResponse):
-        return user
     collector = _get_metrics_collector()
     queue = collector.subscribe()
 

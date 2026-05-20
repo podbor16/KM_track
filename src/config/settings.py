@@ -62,7 +62,9 @@ CORS_ORIGINS = ["*"] if _cors_raw == "*" else [o.strip() for o in _cors_raw.spli
 # --- АВТОРИЗАЦИЯ ---
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set — add it to .env")
 TILDA_WEBHOOK_SECRET = os.getenv("TILDA_WEBHOOK_SECRET", "")
 
 # --- DataLens приватный embed ---
