@@ -79,3 +79,6 @@ reports/load/**/k6_L*.json
 
 # Deploy credentials (never commit)
 deploy/_vps_config.py
+
+# MCP config (contains DB credentials)
+.mcp.json

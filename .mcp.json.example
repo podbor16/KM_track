@@ -11,7 +11,7 @@
         "MYSQL_HOST": "127.0.0.1",
         "MYSQL_PORT": "13306",
         "MYSQL_USER": "km_analytic",
-        "MYSQL_PASS": "CneZbvlOS2H-BLsQ",
+        "MYSQL_PASS": "<password>",
         "MYSQL_DB": "krasmarafon",
         "ALLOW_INSERT_OPERATION": "true",
         "ALLOW_UPDATE_OPERATION": "true",
