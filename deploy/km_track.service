@@ -8,10 +8,13 @@ User=km
 Group=km
 WorkingDirectory=/opt/km_track
 EnvironmentFile=/opt/km_track/.env
-ExecStart=/opt/km_track/venv/bin/uvicorn app:app \
-    --host 127.0.0.1 \
-    --port 8000 \
+ExecStart=/opt/km_track/venv/bin/gunicorn app:app \
+    -k uvicorn.workers.UvicornWorker \
     --workers 3 \
+    --bind 127.0.0.1:8000 \
+    --max-requests 5000 \
+    --max-requests-jitter 500 \
+    --graceful-timeout 30 \
     --log-level info
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
