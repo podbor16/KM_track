@@ -8,8 +8,8 @@
       "command": "npx",
       "args": ["-y", "@benborla29/mcp-server-mysql"],
       "env": {
-        "MYSQL_HOST": "79.174.89.159",
-        "MYSQL_PORT": "16171",
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_PORT": "13306",
         "MYSQL_USER": "km_analytic",
         "MYSQL_PASS": "CneZbvlOS2H-BLsQ",
         "MYSQL_DB": "krasmarafon",
