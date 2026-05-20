@@ -3,8 +3,8 @@ Start SSH port-forward tunnel: localhost:13306 -> VPS:127.0.0.1:3306
 Run once before starting Claude Code to enable MySQL MCP access.
 Ctrl+C to stop.
 """
-import select
 import socketserver
+import threading
 import paramiko
 from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
@@ -13,7 +13,24 @@ REMOTE_HOST = "127.0.0.1"
 REMOTE_PORT = 3306
 
 
-def forward_tunnel(local_port, remote_host, remote_port, transport):
+def _pump(src, dst):
+    """Copy data from src to dst until EOF."""
+    try:
+        while True:
+            data = src.recv(65535)
+            if not data:
+                break
+            dst.sendall(data)
+    except Exception:
+        pass
+    finally:
+        try:
+            dst.close()
+        except Exception:
+            pass
+
+
+def make_handler(transport, remote_host, remote_port):
     class Handler(socketserver.BaseRequestHandler):
         def handle(self):
             try:
@@ -23,27 +40,24 @@ def forward_tunnel(local_port, remote_host, remote_port, transport):
                     self.request.getpeername(),
                 )
             except Exception as e:
-                print(f"Forwarding failed: {e}")
+                print(f"Channel open failed: {e}")
                 return
-            while True:
-                r, _, _ = select.select([self.request, chan], [], [])
-                if self.request in r:
-                    data = self.request.recv(1024)
-                    if not data:
-                        break
-                    chan.send(data)
-                if chan in r:
-                    data = chan.recv(1024)
-                    if not data:
-                        break
-                    self.request.send(data)
+
+            # Two threads: one per direction
+            t1 = threading.Thread(target=_pump, args=(self.request, chan), daemon=True)
+            t2 = threading.Thread(target=_pump, args=(chan, self.request), daemon=True)
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
             chan.close()
 
-    class ForwardServer(socketserver.ThreadingTCPServer):
-        daemon_threads = True
-        allow_reuse_address = True
+    return Handler
 
-    return ForwardServer(("127.0.0.1", local_port), Handler)
+
+class ForwardServer(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
 
 
 def main():
@@ -53,7 +67,8 @@ def main():
     client.connect(VPS_HOST, username=VPS_USER, password=VPS_PASSWORD, timeout=15)
     print(f"SSH connected. Forwarding localhost:{LOCAL_PORT} -> VPS:{REMOTE_PORT}")
 
-    server = forward_tunnel(LOCAL_PORT, REMOTE_HOST, REMOTE_PORT, client.get_transport())
+    handler = make_handler(client.get_transport(), REMOTE_HOST, REMOTE_PORT)
+    server = ForwardServer(("127.0.0.1", LOCAL_PORT), handler)
     print(f"Tunnel active on localhost:{LOCAL_PORT}. Press Ctrl+C to stop.")
     try:
         server.serve_forever()
