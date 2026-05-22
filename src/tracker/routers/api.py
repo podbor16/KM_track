@@ -29,7 +29,7 @@ from src.config.event_loader import (
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
 from src.core.auth import require_auth, api_require_auth
-from src.monitoring.collector import MetricsCollector, hours_to_bucket_secs
+
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
@@ -771,67 +771,3 @@ async def test_fetch_runners():
     except Exception as e:
         logger.error(f"test_fetch_runners error: {e}", exc_info=True)
         return {"success": False, "error": str(e), "timestamp": datetime.now().isoformat()}
-
-
-# ============================================================================
-# ADMIN: SERVER METRICS
-# ============================================================================
-
-def _get_metrics_collector() -> MetricsCollector:
-    import app as _app
-    return _app.metrics_collector
-
-
-@router.get("/api/admin/metrics", tags=["Admin"])
-async def get_server_metrics(
-    hours: int = Query(default=24, description="Диапазон: 1,6,24,168,720,2160,4320,8760"),
-    user: str = Depends(api_require_auth),
-):
-    """История метрик сервера с downsampling по диапазону."""
-    import time
-    allowed = {1, 6, 24, 168, 720, 2160, 4320, 8760}
-    if hours not in allowed:
-        hours = 24
-    bucket_secs = hours_to_bucket_secs(hours)
-    now = int(time.time())
-    since = now - hours * 3600
-    collector = _get_metrics_collector()
-    points = await asyncio.get_event_loop().run_in_executor(
-        None, collector.query, since, now, bucket_secs
-    )
-    return {
-        "points": points,
-        "meta": {
-            "from_ts": since,
-            "to_ts": now,
-            "bucket_secs": bucket_secs,
-            "hours": hours,
-            "uptime_secs": collector.get_uptime_secs(),
-        },
-    }
-
-
-@router.get("/api/admin/metrics/live", tags=["Admin"])
-async def get_server_metrics_live(
-    request: Request,
-    user: str = Depends(api_require_auth),
-):
-    """SSE-стрим: новая точка метрик каждые 5 секунд."""
-    collector = _get_metrics_collector()
-    queue = collector.subscribe()
-
-    async def stream():
-        try:
-            yield {"comment": "connected"}
-            while True:
-                try:
-                    point = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield {"data": json.dumps(point)}
-                except asyncio.TimeoutError:
-                    yield {"comment": "heartbeat"}
-                if await request.is_disconnected():
-                    break
-        finally:
-            collector.unsubscribe(queue)
-
-    return EventSourceResponse(stream())

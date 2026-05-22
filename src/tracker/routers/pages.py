@@ -263,13 +263,3 @@ async def business_analytics_page(
         "gender_breakdown": get_gender_breakdown(),
     })
 
-
-@router.get("/admin/server-metrics", response_class=HTMLResponse)
-async def server_metrics_page(
-    request: Request,
-    user=Depends(require_auth),
-):
-    """Дашборд реальной нагрузки на сервер."""
-    if isinstance(user, RedirectResponse):
-        return user
-    return templates.TemplateResponse("server-metrics.html", {"request": request})
