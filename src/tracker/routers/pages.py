@@ -27,7 +27,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Pages"])
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _get_deploy_version() -> str:
+    """Git short hash текущего коммита — меняется с каждым деплоем."""
+    import subprocess as _sp
+    import time as _t
+    try:
+        r = _sp.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=3, cwd=BASE_DIR,
+        )
+        v = r.stdout.strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return str(int(_t.time()))
+
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["v"] = _get_deploy_version()
 
 
 # ============================================================================
@@ -263,3 +283,13 @@ async def business_analytics_page(
         "gender_breakdown": get_gender_breakdown(),
     })
 
+
+@router.get("/admin/server-metrics", response_class=HTMLResponse)
+async def server_metrics_page(
+    request: Request,
+    user=Depends(require_auth),
+):
+    """Дашборд реальной нагрузки на сервер."""
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse("server-metrics.html", {"request": request})

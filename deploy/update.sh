@@ -13,6 +13,10 @@ git pull
 echo "=== Загрузка статических библиотек ==="
 venv/bin/python deploy/download_static_libs.py
 
+echo "=== Обновление nginx ==="
+cp deploy/nginx.conf /etc/nginx/sites-available/km_track
+nginx -t && systemctl reload nginx
+
 echo "=== Обновление зависимостей ==="
 venv/bin/pip install -r requirements.txt --quiet
 

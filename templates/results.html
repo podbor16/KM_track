@@ -10,10 +10,10 @@
 
     <title>Результаты забега</title>
 
-    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v=1">
-    <link rel="stylesheet" href="/static/css/navigation.css?v=2">
-    <link rel="stylesheet" href="/static/css/analytics.css?v=13">
-    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v=1">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/navigation.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/analytics.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
 
 </head>
 <body>
@@ -96,9 +96,9 @@
     </div>
 
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
-    <script src="/static/js/utils.js?v=4"></script>
-    <script src="/static/js/realtime.js?v=1"></script>
-    <script src="/static/js/analytics-results.js?v=20"></script>
+    <script src="/static/js/utils.js?v={{ v }}"></script>
+    <script src="/static/js/realtime.js?v={{ v }}"></script>
+    <script src="/static/js/analytics-results.js?v={{ v }}"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
     {% include 'krasmarafon_footer.html' %}
