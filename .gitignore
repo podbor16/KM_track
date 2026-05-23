@@ -82,3 +82,6 @@ deploy/_vps_config.py
 
 # MCP config (contains DB credentials)
 .mcp.json
+
+# Статические библиотеки (скачиваются deploy/download_static_libs.py)
+static/lib/

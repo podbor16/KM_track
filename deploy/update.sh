@@ -10,6 +10,9 @@ echo "=== Обновление кода ==="
 cd "$APP_DIR"
 git pull
 
+echo "=== Загрузка статических библиотек ==="
+venv/bin/python deploy/download_static_libs.py
+
 echo "=== Обновление зависимостей ==="
 venv/bin/pip install -r requirements.txt --quiet
 

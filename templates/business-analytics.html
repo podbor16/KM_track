@@ -212,6 +212,9 @@
             <div class="ba-section-title">Дашборды DataLens</div>
             <div class="ba-section-body">
                 {% if datalens_embeds %}
+                    <div id="datalens-vpn-notice" style="display:none;background:#2d2010;border:1px solid #7a5020;border-radius:6px;padding:12px 16px;margin-bottom:16px;color:#c8941a;font-size:13px;">
+                        ⚠️ Дашборды DataLens недоступны за пределами России и стран СНГ. При использовании VPN они не загрузятся — это ограничение Yandex Cloud.
+                    </div>
                     {% for embed in datalens_embeds %}
                     <iframe
                         id="dl-iframe-{{ loop.index0 }}"
@@ -219,6 +222,7 @@
                         class="datalens-fullscreen"
                         allowfullscreen
                         title="{{ embed.title or 'DataLens дашборд' }}"
+                        onload="checkDatalensLoad(this)"
                     ></iframe>
                     {% endfor %}
                 {% else %}
@@ -441,6 +445,34 @@
     </div>
 
     <script>
+        // Проверяем, загрузился ли DataLens iframe (кросс-origin: судим по размеру)
+        function checkDatalensLoad(iframe) {
+            try {
+                // Если contentDocument недоступен или пуст — datalens заблокирован
+                const doc = iframe.contentDocument || iframe.contentWindow.document;
+                if (!doc || doc.body.innerHTML.trim() === '') {
+                    document.getElementById('datalens-vpn-notice').style.display = 'block';
+                }
+            } catch {
+                // SecurityError = кросс-origin документ загрузился (DataLens работает)
+            }
+        }
+
+        // Резервный таймаут: если через 8 секунд iframe не загрузился — показываем предупреждение
+        setTimeout(function () {
+            const iframes = document.querySelectorAll('[id^="dl-iframe-"]');
+            iframes.forEach(function (f) {
+                try {
+                    const doc = f.contentDocument || f.contentWindow.document;
+                    if (!doc || doc.readyState !== 'complete' || doc.body.innerHTML.trim() === '') {
+                        document.getElementById('datalens-vpn-notice').style.display = 'block';
+                    }
+                } catch {
+                    // кросс-origin — DataLens работает, ничего не делаем
+                }
+            });
+        }, 8000);
+
         // Обновляем JWT-токены каждые 50 минут (TTL токена 60 мин)
         async function refreshDatalensTokens() {
             try {
