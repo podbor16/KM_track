@@ -186,6 +186,11 @@
             try {
                 const r = await fetch(`/api/admin/events/${ev.code}/yaml`);
                 const data = await r.json();
+                if (!r.ok) {
+                    btnEdit.textContent = 'Редактировать';
+                    alert('Ошибка: ' + (data.detail || r.status));
+                    return;
+                }
                 textarea.value = data.yaml;
                 editor.style.display = '';
                 btnEdit.textContent = 'Свернуть';
@@ -296,6 +301,11 @@
             try {
                 const r = await fetch(`/api/admin/presets/${name}/yaml`);
                 const data = await r.json();
+                if (!r.ok) {
+                    btnEdit.textContent = 'Редактировать';
+                    alert('Ошибка: ' + (data.detail || r.status));
+                    return;
+                }
                 textarea.value = data.yaml;
                 editor.style.display = '';
                 btnEdit.textContent = 'Свернуть';

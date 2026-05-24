@@ -44,6 +44,21 @@ def _systemctl(action: str, name: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _event_file(code: str) -> Optional[Path]:
+    """Находит YAML-файл события по code (имя файла может не совпадать с code)."""
+    exact = EVENTS_DIR / f"{code}.yaml"
+    if exact.exists():
+        return exact
+    for f in EVENTS_DIR.glob("*.yaml"):
+        try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("code") == code:
+                return f
+        except Exception:
+            pass
+    return None
+
+
 def _loader_for_event(event_code: str) -> Optional[str]:
     """Ищет config/loader/*.env с LOADER_CONFIG=.../events/{event_code}.yaml"""
     for f in LOADERS_DIR.glob("*.env"):
@@ -98,8 +113,8 @@ async def list_events(user: str = Depends(api_require_auth)) -> list[dict]:
 
 @router.get("/api/admin/events/{code}/yaml")
 async def get_event_yaml(code: str, user: str = Depends(api_require_auth)) -> dict:
-    path = EVENTS_DIR / f"{code}.yaml"
-    if not path.exists():
+    path = _event_file(code)
+    if not path:
         raise HTTPException(status_code=404, detail=f"Конфиг события '{code}' не найден")
     return {"yaml": path.read_text(encoding="utf-8")}
 
@@ -108,8 +123,8 @@ async def get_event_yaml(code: str, user: str = Depends(api_require_auth)) -> di
 async def save_event_yaml(
     code: str, body: YamlBody, user: str = Depends(api_require_auth)
 ) -> dict:
-    path = EVENTS_DIR / f"{code}.yaml"
-    if not path.exists():
+    path = _event_file(code)
+    if not path:
         raise HTTPException(status_code=404, detail=f"Конфиг события '{code}' не найден")
     try:
         yaml.safe_load(body.yaml)
@@ -138,9 +153,11 @@ async def activate_event(code: str, user: str = Depends(api_require_auth)) -> di
         _yaml.preserve_quotes = True
 
         for yaml_file in EVENTS_DIR.glob("*.yaml"):
-            event_code = yaml_file.stem
             with yaml_file.open("r", encoding="utf-8") as f:
                 data = _yaml.load(f)
+            if not isinstance(data, dict):
+                continue
+            event_code = data.get("code", yaml_file.stem)
             new_val = (event_code == code)
             if data.get("is_active") != new_val:
                 data["is_active"] = new_val
@@ -149,8 +166,10 @@ async def activate_event(code: str, user: str = Depends(api_require_auth)) -> di
     except ImportError:
         # Fallback: PyYAML (потеряет комментарии, но сработает)
         for yaml_file in EVENTS_DIR.glob("*.yaml"):
-            event_code = yaml_file.stem
             data = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            event_code = data.get("code", yaml_file.stem)
             data["is_active"] = (event_code == code)
             yaml_file.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
 
