@@ -1,0 +1,286 @@
+/* =========================================================
+   Admin Panel Styles
+   Depends on: km-design-tokens.css
+   ========================================================= */
+
+/* ------- Page layout ------- */
+
+.admin-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.admin-header h1 {
+    font-family: var(--km-font-brand);
+    font-size: 1.8rem;
+    color: var(--km-dark);
+    margin: 0;
+}
+
+.admin-logout {
+    font-size: 0.85rem;
+    color: var(--km-text-secondary);
+    text-decoration: none;
+}
+.admin-logout:hover { color: var(--km-primary); }
+
+/* ------- Tabs ------- */
+
+.admin-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--km-border-light);
+    margin-bottom: 24px;
+}
+
+.admin-tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    font-family: var(--km-font-ui);
+    font-size: 0.9rem;
+    color: var(--km-text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    border-radius: 4px 4px 0 0;
+    transition: color 0.15s, border-color 0.15s;
+}
+.admin-tab:hover { color: var(--km-primary); }
+.admin-tab--active {
+    color: var(--km-primary);
+    border-bottom-color: var(--km-primary);
+    font-weight: 600;
+}
+
+/* ------- Cards grid ------- */
+
+.admin-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.admin-card {
+    background: var(--km-bg-card);
+    border: 1px solid var(--km-border-light);
+    border-radius: var(--km-radius-card);
+    padding: 16px;
+    box-shadow: var(--km-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.admin-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.admin-card__title {
+    font-family: var(--km-font-brand);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--km-dark);
+}
+
+.admin-card__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ------- Badge ------- */
+
+.admin-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 50px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.admin-badge--active {
+    background: #d4edda;
+    color: #155724;
+}
+.admin-badge--inactive {
+    background: #f0f0f0;
+    color: var(--km-text-secondary);
+}
+
+/* ------- Buttons (km-btn) ------- */
+
+.km-btn {
+    display: inline-block;
+    padding: 7px 16px;
+    border-radius: var(--km-radius-btn);
+    border: 1px solid transparent;
+    font-family: var(--km-font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+    white-space: nowrap;
+}
+.km-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.km-btn--primary {
+    background: var(--km-primary);
+    color: #fff;
+    border-color: var(--km-primary);
+}
+.km-btn--primary:hover:not(:disabled) { background: #d4254f; border-color: #d4254f; }
+
+.km-btn--secondary {
+    background: transparent;
+    color: var(--km-dark);
+    border-color: var(--km-border-light);
+}
+.km-btn--secondary:hover:not(:disabled) { border-color: var(--km-primary); color: var(--km-primary); }
+
+/* ------- Editor ------- */
+
+.admin-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.admin-yaml-editor {
+    width: 100%;
+    min-height: 260px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    padding: 10px;
+    border: 1px solid var(--km-border-light);
+    border-radius: var(--km-radius-input);
+    resize: vertical;
+    background: #f8f8f8;
+    color: var(--km-dark);
+    box-sizing: border-box;
+    tab-size: 2;
+}
+.admin-yaml-editor:focus {
+    outline: none;
+    border-color: var(--km-primary);
+    background: #fff;
+}
+
+.admin-editor__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-editor__error {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    color: #856404;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ------- Loader table ------- */
+
+.admin-loader-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--km-bg-card);
+    border-radius: var(--km-radius-card);
+    overflow: hidden;
+    box-shadow: var(--km-shadow);
+}
+.admin-loader-table th {
+    background: var(--km-dark);
+    color: #fff;
+    font-family: var(--km-font-ui);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 14px;
+    text-align: left;
+}
+.admin-loader-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--km-border-light);
+    font-size: 0.875rem;
+    color: var(--km-text-body);
+    vertical-align: middle;
+}
+.admin-loader-table tr:last-child td { border-bottom: none; }
+.admin-loader-table td code {
+    font-size: 0.8rem;
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* ------- Misc ------- */
+
+.admin-loading {
+    color: var(--km-text-secondary);
+    font-size: 0.9rem;
+    padding: 12px 0;
+}
+
+.admin-error {
+    color: #721c24;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+}
+
+.admin-section-note {
+    background: #e8f4fd;
+    border-left: 3px solid #1e88e5;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: #1a5276;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+.admin-section-note code {
+    font-size: 0.8rem;
+    background: rgba(0,0,0,0.07);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* ------- Wide editor for events tab (full-width cards) ------- */
+
+#tab-events .admin-cards,
+#tab-presets .admin-cards {
+    grid-template-columns: 1fr;
+}
+
+#tab-events .admin-card,
+#tab-presets .admin-card {
+    max-width: 100%;
+}
+
+/* ------- Responsive ------- */
+
+@media (max-width: 600px) {
+    .admin-header h1 { font-size: 1.3rem; }
+    .admin-tab { padding: 8px 12px; font-size: 0.8rem; }
+    .admin-yaml-editor { min-height: 180px; font-size: 0.75rem; }
+}

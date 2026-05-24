@@ -284,6 +284,13 @@ async def business_analytics_page(
     })
 
 
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request, user=Depends(require_auth)):
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+
 @router.get("/admin/server-metrics", response_class=HTMLResponse)
 async def server_metrics_page(
     request: Request,

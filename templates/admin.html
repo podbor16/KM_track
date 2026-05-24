@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления — KM Track</title>
+    <link rel="icon" type="image/png" href="/static/images/krasmarafon-logo.png">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/navigation.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/admin.css?v={{ v }}">
+</head>
+<body>
+    {% include 'krasmarafon_header.html' %}
+    {% include 'header.html' %}
+
+    <div class="km-page admin-page">
+        <div class="admin-header">
+            <h1>Панель управления</h1>
+            <a href="/logout" class="admin-logout">Выйти</a>
+        </div>
+
+        <!-- Вкладки -->
+        <div class="admin-tabs">
+            <button class="admin-tab admin-tab--active" onclick="switchTab('events', this)">События</button>
+            <button class="admin-tab" onclick="switchTab('presets', this)">Пресеты Copernico</button>
+            <button class="admin-tab" onclick="switchTab('loader', this)">Загрузчик</button>
+        </div>
+
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: СОБЫТИЯ                                                 -->
+        <!-- ================================================================ -->
+        <div id="tab-events" class="admin-tab-content">
+            <div id="events-list" class="admin-cards">
+                <div class="admin-loading">Загрузка событий...</div>
+            </div>
+        </div>
+
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: ПРЕСЕТЫ COPERNICO                                       -->
+        <!-- ================================================================ -->
+        <div id="tab-presets" class="admin-tab-content" style="display:none">
+            <div id="presets-list" class="admin-cards">
+                <div class="admin-loading">Загрузка пресетов...</div>
+            </div>
+        </div>
+
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: ЗАГРУЗЧИК                                               -->
+        <!-- ================================================================ -->
+        <div id="tab-loader" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Управление сервисами <code>km_race_loader@{name}</code> на сервере.<br>
+                Для работы кнопок Start/Stop требуется настроенное правило sudoers на VPS.
+            </div>
+            <div id="loader-table-wrap">
+                <div class="admin-loading">Загрузка статуса...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ШАБЛОН КАРТОЧКИ СОБЫТИЯ (JS-клонирование) -->
+    <template id="tpl-event-card">
+        <div class="admin-card" data-code="">
+            <div class="admin-card__head">
+                <div class="admin-card__title"></div>
+                <span class="admin-badge"></span>
+            </div>
+            <div class="admin-card__actions">
+                <button class="km-btn km-btn--secondary admin-btn-edit">Редактировать</button>
+                <button class="km-btn km-btn--primary admin-btn-activate">Сделать активным</button>
+            </div>
+            <div class="admin-editor" style="display:none">
+                <div class="admin-editor__error" style="display:none"></div>
+                <textarea class="admin-yaml-editor" spellcheck="false"></textarea>
+                <div class="admin-editor__actions">
+                    <button class="km-btn km-btn--primary admin-btn-save">Сохранить</button>
+                    <button class="km-btn km-btn--secondary admin-btn-cancel">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ШАБЛОН КАРТОЧКИ ПРЕСЕТА -->
+    <template id="tpl-preset-card">
+        <div class="admin-card" data-name="">
+            <div class="admin-card__head">
+                <div class="admin-card__title"></div>
+            </div>
+            <div class="admin-card__actions">
+                <button class="km-btn km-btn--secondary admin-btn-edit">Редактировать</button>
+            </div>
+            <div class="admin-editor" style="display:none">
+                <div class="admin-editor__error" style="display:none"></div>
+                <textarea class="admin-yaml-editor" spellcheck="false"></textarea>
+                <div class="admin-editor__actions">
+                    <button class="km-btn km-btn--primary admin-btn-save">Сохранить</button>
+                    <button class="km-btn km-btn--secondary admin-btn-cancel">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    {% include 'krasmarafon_footer.html' %}
+
+    <script>
+    // ========================================================================
+    // Tab switching
+    // ========================================================================
+
+    const _tabLoaded = { events: false, presets: false, loader: false };
+
+    function switchTab(name, btn) {
+        document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
+        document.getElementById('tab-' + name).style.display = '';
+        btn.classList.add('admin-tab--active');
+        if (!_tabLoaded[name]) {
+            _tabLoaded[name] = true;
+            if (name === 'events') loadEvents();
+            if (name === 'presets') loadPresets();
+            if (name === 'loader') loadLoader();
+        }
+    }
+
+    // ========================================================================
+    // YAML textarea: Tab key → 2 spaces
+    // ========================================================================
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Tab' && e.target.classList.contains('admin-yaml-editor')) {
+            e.preventDefault();
+            const ta = e.target;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+            ta.selectionStart = ta.selectionEnd = start + 2;
+        }
+    });
+
+    // ========================================================================
+    // Events tab
+    // ========================================================================
+
+    async function loadEvents() {
+        const container = document.getElementById('events-list');
+        try {
+            const resp = await fetch('/api/admin/events');
+            if (!resp.ok) throw new Error(await resp.text());
+            const events = await resp.json();
+            container.innerHTML = '';
+            events.forEach(ev => container.appendChild(buildEventCard(ev)));
+        } catch(e) {
+            container.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        }
+    }
+
+    function buildEventCard(ev) {
+        const tpl = document.getElementById('tpl-event-card').content.cloneNode(true);
+        const card = tpl.querySelector('.admin-card');
+        card.dataset.code = ev.code;
+        card.querySelector('.admin-card__title').textContent = ev.name;
+
+        const badge = card.querySelector('.admin-badge');
+        badge.textContent = ev.is_active ? 'Активно' : 'Неактивно';
+        badge.classList.add(ev.is_active ? 'admin-badge--active' : 'admin-badge--inactive');
+
+        const btnEdit = card.querySelector('.admin-btn-edit');
+        const btnActivate = card.querySelector('.admin-btn-activate');
+        const editor = card.querySelector('.admin-editor');
+        const textarea = card.querySelector('.admin-yaml-editor');
+        const errBox = card.querySelector('.admin-editor__error');
+
+        if (ev.is_active) {
+            btnActivate.disabled = true;
+            btnActivate.title = 'Уже активно';
+        }
+
+        btnEdit.addEventListener('click', async () => {
+            if (editor.style.display !== 'none') {
+                editor.style.display = 'none';
+                btnEdit.textContent = 'Редактировать';
+                return;
+            }
+            btnEdit.textContent = 'Загрузка...';
+            try {
+                const r = await fetch(`/api/admin/events/${ev.code}/yaml`);
+                const data = await r.json();
+                textarea.value = data.yaml;
+                editor.style.display = '';
+                btnEdit.textContent = 'Свернуть';
+                errBox.style.display = 'none';
+            } catch(e) {
+                btnEdit.textContent = 'Редактировать';
+                alert('Ошибка загрузки YAML: ' + e.message);
+            }
+        });
+
+        card.querySelector('.admin-btn-cancel').addEventListener('click', () => {
+            editor.style.display = 'none';
+            btnEdit.textContent = 'Редактировать';
+        });
+
+        card.querySelector('.admin-btn-save').addEventListener('click', async () => {
+            const btnSave = card.querySelector('.admin-btn-save');
+            btnSave.disabled = true;
+            btnSave.textContent = 'Сохранение...';
+            errBox.style.display = 'none';
+            try {
+                const r = await fetch(`/api/admin/events/${ev.code}/yaml`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({yaml: textarea.value}),
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    errBox.textContent = data.detail || 'Ошибка сохранения';
+                    errBox.style.display = '';
+                } else {
+                    editor.style.display = 'none';
+                    btnEdit.textContent = 'Редактировать';
+                }
+            } catch(e) {
+                errBox.textContent = 'Ошибка сети: ' + e.message;
+                errBox.style.display = '';
+            } finally {
+                btnSave.disabled = false;
+                btnSave.textContent = 'Сохранить';
+            }
+        });
+
+        btnActivate.addEventListener('click', async () => {
+            if (!confirm(`Сделать "${ev.name}" активным событием? Загрузчик будет перезапущен.`)) return;
+            btnActivate.disabled = true;
+            btnActivate.textContent = 'Применение...';
+            try {
+                const r = await fetch(`/api/admin/events/${ev.code}/activate`, {method: 'POST'});
+                const data = await r.json();
+                if (r.ok) {
+                    const info = data.loader_started
+                        ? `✓ Активно. Загрузчик ${data.loader_name} запущен.`
+                        : `✓ Активно. Загрузчик не настроен — запустите вручную.`;
+                    alert(info);
+                    _tabLoaded.events = false;
+                    loadEvents();
+                } else {
+                    alert('Ошибка: ' + (data.detail || JSON.stringify(data)));
+                    btnActivate.disabled = false;
+                    btnActivate.textContent = 'Сделать активным';
+                }
+            } catch(e) {
+                alert('Ошибка сети: ' + e.message);
+                btnActivate.disabled = false;
+                btnActivate.textContent = 'Сделать активным';
+            }
+        });
+
+        return tpl;
+    }
+
+    // ========================================================================
+    // Presets tab
+    // ========================================================================
+
+    async function loadPresets() {
+        const container = document.getElementById('presets-list');
+        try {
+            const resp = await fetch('/api/admin/presets');
+            if (!resp.ok) throw new Error(await resp.text());
+            const names = await resp.json();
+            container.innerHTML = '';
+            names.forEach(name => container.appendChild(buildPresetCard(name)));
+        } catch(e) {
+            container.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        }
+    }
+
+    function buildPresetCard(name) {
+        const tpl = document.getElementById('tpl-preset-card').content.cloneNode(true);
+        const card = tpl.querySelector('.admin-card');
+        card.dataset.name = name;
+        card.querySelector('.admin-card__title').textContent = name;
+
+        const btnEdit = card.querySelector('.admin-btn-edit');
+        const editor = card.querySelector('.admin-editor');
+        const textarea = card.querySelector('.admin-yaml-editor');
+        const errBox = card.querySelector('.admin-editor__error');
+
+        btnEdit.addEventListener('click', async () => {
+            if (editor.style.display !== 'none') {
+                editor.style.display = 'none';
+                btnEdit.textContent = 'Редактировать';
+                return;
+            }
+            btnEdit.textContent = 'Загрузка...';
+            try {
+                const r = await fetch(`/api/admin/presets/${name}/yaml`);
+                const data = await r.json();
+                textarea.value = data.yaml;
+                editor.style.display = '';
+                btnEdit.textContent = 'Свернуть';
+                errBox.style.display = 'none';
+            } catch(e) {
+                btnEdit.textContent = 'Редактировать';
+                alert('Ошибка загрузки: ' + e.message);
+            }
+        });
+
+        card.querySelector('.admin-btn-cancel').addEventListener('click', () => {
+            editor.style.display = 'none';
+            btnEdit.textContent = 'Редактировать';
+        });
+
+        card.querySelector('.admin-btn-save').addEventListener('click', async () => {
+            const btnSave = card.querySelector('.admin-btn-save');
+            btnSave.disabled = true;
+            btnSave.textContent = 'Сохранение...';
+            errBox.style.display = 'none';
+            try {
+                const r = await fetch(`/api/admin/presets/${name}/yaml`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({yaml: textarea.value}),
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    errBox.textContent = data.detail || 'Ошибка';
+                    errBox.style.display = '';
+                } else {
+                    editor.style.display = 'none';
+                    btnEdit.textContent = 'Редактировать';
+                }
+            } catch(e) {
+                errBox.textContent = 'Ошибка сети: ' + e.message;
+                errBox.style.display = '';
+            } finally {
+                btnSave.disabled = false;
+                btnSave.textContent = 'Сохранить';
+            }
+        });
+
+        return tpl;
+    }
+
+    // ========================================================================
+    // Loader tab
+    // ========================================================================
+
+    async function loadLoader() {
+        const wrap = document.getElementById('loader-table-wrap');
+        try {
+            const resp = await fetch('/api/admin/loader');
+            if (!resp.ok) throw new Error(await resp.text());
+            const loaders = await resp.json();
+            wrap.innerHTML = '';
+            if (!loaders.length) {
+                wrap.innerHTML = '<div class="admin-loading">Нет конфигов загрузчика в config/loader/</div>';
+                return;
+            }
+            const table = document.createElement('table');
+            table.className = 'admin-loader-table';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Событие</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>`;
+            const tbody = table.querySelector('tbody');
+            loaders.forEach(l => tbody.appendChild(buildLoaderRow(l)));
+            wrap.appendChild(table);
+        } catch(e) {
+            wrap.innerHTML = `<div class="admin-error">Ошибка: ${e.message}</div>`;
+        }
+    }
+
+    function buildLoaderRow(l) {
+        const tr = document.createElement('tr');
+        const isActive = l.status === 'active';
+        tr.innerHTML = `
+            <td><code>${l.name}</code></td>
+            <td>${l.event_name || l.event_code || '—'}</td>
+            <td><span class="admin-badge ${isActive ? 'admin-badge--active' : 'admin-badge--inactive'}">${isActive ? 'active' : 'inactive'}</span></td>
+            <td>
+                <button class="km-btn km-btn--primary btn-start" ${isActive ? 'disabled' : ''}>Start</button>
+                <button class="km-btn km-btn--secondary btn-stop" ${!isActive ? 'disabled' : ''}>Stop</button>
+            </td>`;
+
+        tr.querySelector('.btn-start').addEventListener('click', async () => {
+            await loaderAction('start', l.name, tr);
+        });
+        tr.querySelector('.btn-stop').addEventListener('click', async () => {
+            await loaderAction('stop', l.name, tr);
+        });
+        return tr;
+    }
+
+    async function loaderAction(action, name, tr) {
+        const btnStart = tr.querySelector('.btn-start');
+        const btnStop = tr.querySelector('.btn-stop');
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        try {
+            const r = await fetch(`/api/admin/loader/${name}/${action}`, {method: 'POST'});
+            const data = await r.json();
+            if (data.output) console.log(`loader ${action} ${name}:`, data.output);
+        } catch(e) {
+            alert('Ошибка: ' + e.message);
+        }
+        // Перезагрузить статус
+        _tabLoaded.loader = false;
+        loadLoader();
+    }
+
+    // ========================================================================
+    // Инициализация — загружаем первую вкладку
+    // ========================================================================
+    _tabLoaded.events = true;
+    loadEvents();
+    </script>
+</body>
+</html>
