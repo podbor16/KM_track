@@ -252,12 +252,6 @@ async def business_analytics_page(
     if isinstance(user, RedirectResponse):
         return user
 
-    from src.analytics.db_business import (
-        get_event_summary,
-        get_participants_by_year,
-        get_top_cities,
-        get_gender_breakdown,
-    )
     from src.core.datalens import make_embed_token
 
     datalens_embeds = []
@@ -277,10 +271,6 @@ async def business_analytics_page(
     return templates.TemplateResponse("business-analytics.html", {
         "request": request,
         "datalens_embeds": datalens_embeds,
-        "event_summary": get_event_summary(),
-        "participants_by_year": get_participants_by_year(),
-        "top_cities": get_top_cities(),
-        "gender_breakdown": get_gender_breakdown(),
     })
 
 

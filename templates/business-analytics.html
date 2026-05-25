@@ -41,30 +41,6 @@
             color: #e84c8c;
         }
 
-        /* ---- Секции ---- */
-        .ba-section {
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            border-radius: 8px;
-            margin-bottom: 28px;
-            overflow: hidden;
-        }
-
-        .ba-section-title {
-            background: #222;
-            border-bottom: 2px solid #e84c8c;
-            padding: 14px 20px;
-            font-size: 16px;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: 0.3px;
-        }
-
-        .ba-section-body {
-            padding: 20px;
-        }
-
-        /* ---- DataLens iframe ---- */
         .datalens-fullscreen {
             width: 100%;
             height: calc(100vh - 160px);
@@ -78,9 +54,9 @@
         .datalens-empty {
             color: #666;
             font-size: 14px;
-            padding: 24px;
+            padding: 40px 24px;
             text-align: center;
-            line-height: 1.6;
+            line-height: 1.8;
         }
 
         .datalens-empty code {
@@ -92,106 +68,15 @@
             color: #aaa;
         }
 
-        /* ---- Таблицы ---- */
-        .ba-table-wrap {
-            overflow-x: auto;
-        }
-
-        .ba-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
-
-        .ba-table th {
-            background: #1e1e1e;
-            color: #e84c8c;
-            font-weight: 600;
-            padding: 10px 14px;
-            text-align: left;
-            border-bottom: 1px solid #3a3a3a;
-            white-space: nowrap;
-        }
-
-        .ba-table td {
-            color: #ccc;
-            padding: 9px 14px;
-            border-bottom: 1px solid #2f2f2f;
-        }
-
-        .ba-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .ba-table tr:hover td {
-            background: #2f2f2f;
-        }
-
-        .num-cell {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .badge-male   { background: rgba(74, 144, 226, 0.2); color: #4a90e2; }
-        .badge-female { background: rgba(232, 76, 140, 0.2); color: #e84c8c; }
-
-        /* ---- Динамика: простая таблица с баром ---- */
-        .bar-cell { white-space: nowrap; }
-
-        .bar-inner {
-            display: inline-block;
-            height: 10px;
-            background: #e84c8c;
-            border-radius: 2px;
-            vertical-align: middle;
-            margin-right: 8px;
-        }
-
-        /* ---- Cities top ---- */
-        .city-rank { color: #666; font-size: 12px; width: 30px; }
-
-        /* ---- Summary cards ---- */
-        .stat-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 14px;
-            margin-bottom: 20px;
-        }
-
-        .stat-card {
-            background: #1e1e1e;
-            border: 1px solid #3a3a3a;
+        .datalens-vpn-notice {
+            display: none;
+            background: #2d2010;
+            border: 1px solid #7a5020;
             border-radius: 6px;
-            padding: 14px 16px;
-            text-align: center;
-        }
-
-        .stat-card .val {
-            font-size: 28px;
-            font-weight: 700;
-            color: #fff;
-            line-height: 1;
-        }
-
-        .stat-card .lbl {
-            font-size: 12px;
-            color: #888;
-            margin-top: 4px;
-        }
-
-        .no-data {
-            color: #666;
-            font-size: 14px;
-            padding: 16px 0;
-            text-align: center;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            color: #c8941a;
+            font-size: 13px;
         }
     </style>
 </head>
@@ -205,250 +90,33 @@
             <a href="/logout" class="logout-btn">Выйти</a>
         </div>
 
-        <!-- ============================================================
-             СЕКЦИЯ 1: DataLens дашборды
-             ============================================================ -->
-        <div class="ba-section">
-            <div class="ba-section-title">Дашборды DataLens</div>
-            <div class="ba-section-body">
-                {% if datalens_embeds %}
-                    <div id="datalens-vpn-notice" style="display:none;background:#2d2010;border:1px solid #7a5020;border-radius:6px;padding:12px 16px;margin-bottom:16px;color:#c8941a;font-size:13px;">
-                        ⚠️ Дашборды DataLens недоступны за пределами России и стран СНГ. При использовании VPN они не загрузятся — это ограничение Yandex Cloud.
-                    </div>
-                    {% for embed in datalens_embeds %}
-                    <iframe
-                        id="dl-iframe-{{ loop.index0 }}"
-                        src="{{ embed.url }}"
-                        class="datalens-fullscreen"
-                        allowfullscreen
-                        title="{{ embed.title or 'DataLens дашборд' }}"
-                        onload="checkDatalensLoad(this)"
-                    ></iframe>
-                    {% endfor %}
-                {% else %}
-                    <div class="datalens-empty">
-                        Приватные embed-ключи DataLens не настроены.<br>
-                        Добавьте в <code>.env</code>:<br>
-                        <code>DATALENS_KEY_SECRET=&lt;секрет_ключа&gt;</code><br>
-                        <code>DATALENS_EMBEDS=[{"id":"embed_id","title":"Название"}]</code>
-                    </div>
-                {% endif %}
+        {% if datalens_embeds %}
+            <div id="datalens-vpn-notice" class="datalens-vpn-notice">
+                ⚠️ Дашборды DataLens недоступны за пределами России и стран СНГ. При использовании VPN они не загрузятся — это ограничение Yandex Cloud.
             </div>
-        </div>
-
-        <!-- ============================================================
-             СЕКЦИЯ 2: Сводная статистика по событиям
-             ============================================================ -->
-        <div class="ba-section">
-            <div class="ba-section-title">Статистика событий</div>
-            <div class="ba-section-body">
-                {% if event_summary %}
-                    <!-- Суммарные карточки -->
-                    {% set total_participants = event_summary | sum(attribute='total') %}
-                    {% set total_finished    = event_summary | sum(attribute='finished') %}
-                    {% set total_events      = event_summary | length %}
-                    <div class="stat-cards">
-                        <div class="stat-card">
-                            <div class="val">{{ total_events }}</div>
-                            <div class="lbl">Событий</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="val">{{ total_participants }}</div>
-                            <div class="lbl">Участников (всего)</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="val">{{ total_finished }}</div>
-                            <div class="lbl">Финишировали</div>
-                        </div>
-                        {% if total_participants > 0 %}
-                        <div class="stat-card">
-                            <div class="val">{{ ((total_finished / total_participants) * 100) | round(1) }}%</div>
-                            <div class="lbl">Доля финишировавших</div>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <div class="ba-table-wrap">
-                        <table class="ba-table">
-                            <thead>
-                                <tr>
-                                    <th>Событие</th>
-                                    <th>Год</th>
-                                    <th>Дистанция</th>
-                                    <th class="num-cell">Участников</th>
-                                    <th class="num-cell">Финишировали</th>
-                                    <th class="num-cell">DNF</th>
-                                    <th class="num-cell">DNS</th>
-                                    <th class="num-cell">% финиша</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for ev in event_summary %}
-                                <tr>
-                                    <td>{{ ev.event_name }}</td>
-                                    <td>{{ ev.event_year }}</td>
-                                    <td>{{ ev.event_distance }} км</td>
-                                    <td class="num-cell">{{ ev.total or 0 }}</td>
-                                    <td class="num-cell">{{ ev.finished or 0 }}</td>
-                                    <td class="num-cell">{{ ev.dnf or 0 }}</td>
-                                    <td class="num-cell">{{ ev.dns or 0 }}</td>
-                                    <td class="num-cell">
-                                        {% if ev.total and ev.total > 0 %}
-                                            {{ ((ev.finished or 0) / ev.total * 100) | round(1) }}%
-                                        {% else %}—{% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="no-data">Данные не найдены</div>
-                {% endif %}
+            {% for embed in datalens_embeds %}
+            <iframe
+                id="dl-iframe-{{ loop.index0 }}"
+                src="{{ embed.url }}"
+                class="datalens-fullscreen"
+                allowfullscreen
+                title="{{ embed.title or 'DataLens дашборд' }}"
+                onload="checkDatalensLoad(this)"
+            ></iframe>
+            {% endfor %}
+        {% else %}
+            <div class="datalens-empty">
+                Приватные embed-ключи DataLens не настроены.<br>
+                Добавьте в <code>.env</code>:<br>
+                <code>DATALENS_KEY_SECRET=&lt;секрет_ключа&gt;</code><br>
+                <code>DATALENS_EMBEDS=[{"id":"embed_id","title":"Название"}]</code>
             </div>
-        </div>
-
-        <!-- ============================================================
-             СЕКЦИЯ 3: Динамика участников по годам
-             ============================================================ -->
-        <div class="ba-section">
-            <div class="ba-section-title">Динамика участников по годам</div>
-            <div class="ba-section-body">
-                {% if participants_by_year %}
-                    {% set max_total = participants_by_year | map(attribute='total') | max %}
-                    <div class="ba-table-wrap">
-                        <table class="ba-table">
-                            <thead>
-                                <tr>
-                                    <th>Год</th>
-                                    <th>Событие</th>
-                                    <th>Дистанция</th>
-                                    <th class="num-cell">Участников</th>
-                                    <th class="num-cell">Финишировали</th>
-                                    <th>Визуализация</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in participants_by_year %}
-                                <tr>
-                                    <td>{{ row.year }}</td>
-                                    <td>{{ row.event_name }}</td>
-                                    <td>{{ row.distance }} км</td>
-                                    <td class="num-cell">{{ row.total or 0 }}</td>
-                                    <td class="num-cell">{{ row.finished or 0 }}</td>
-                                    <td class="bar-cell">
-                                        {% if max_total and max_total > 0 %}
-                                        <span class="bar-inner" style="width: {{ ((row.total or 0) / max_total * 160) | int }}px"></span>
-                                        <span style="font-size:12px;color:#888">{{ row.total or 0 }}</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="no-data">Данные не найдены</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- ============================================================
-             СЕКЦИЯ 4: Соотношение полов
-             ============================================================ -->
-        <div class="ba-section">
-            <div class="ba-section-title">Соотношение полов по событиям</div>
-            <div class="ba-section-body">
-                {% if gender_breakdown %}
-                    <div class="ba-table-wrap">
-                        <table class="ba-table">
-                            <thead>
-                                <tr>
-                                    <th>Событие</th>
-                                    <th>Год</th>
-                                    <th>Дистанция</th>
-                                    <th class="num-cell">Мужчины</th>
-                                    <th class="num-cell">Женщины</th>
-                                    <th>Доля жен.</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in gender_breakdown %}
-                                {% set male = row.male_count | default(0) | int %}
-                                {% set female = row.female_count | default(0) | int %}
-                                {% set total = male + female %}
-                                <tr>
-                                    <td>{{ row.event_name }}</td>
-                                    <td>{{ row.event_year }}</td>
-                                    <td>{{ row.event_distance }} км</td>
-                                    <td class="num-cell">
-                                        <span class="badge badge-male">{{ male }}</span>
-                                    </td>
-                                    <td class="num-cell">
-                                        <span class="badge badge-female">{{ female }}</span>
-                                    </td>
-                                    <td>
-                                        {% if total > 0 %}
-                                            <span class="bar-inner" style="width:{{ (female / total * 100) | int }}px;background:#e84c8c;height:8px"></span>
-                                            {{ (female / total * 100) | round(1) }}%
-                                        {% else %}—{% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="no-data">Данные не найдены</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- ============================================================
-             СЕКЦИЯ 5: География — топ городов
-             ============================================================ -->
-        <div class="ba-section">
-            <div class="ba-section-title">География участников (топ городов)</div>
-            <div class="ba-section-body">
-                {% if top_cities %}
-                    {% set max_city = top_cities[0].count %}
-                    <div class="ba-table-wrap">
-                        <table class="ba-table">
-                            <thead>
-                                <tr>
-                                    <th class="city-rank">#</th>
-                                    <th>Город</th>
-                                    <th>Участников</th>
-                                    <th style="width:200px">Визуализация</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for c in top_cities %}
-                                <tr>
-                                    <td class="city-rank num-cell">{{ loop.index }}</td>
-                                    <td>{{ c.city }}</td>
-                                    <td class="num-cell">{{ c.count }}</td>
-                                    <td class="bar-cell">
-                                        <span class="bar-inner" style="width:{{ ((c.count / max_city) * 180) | int }}px"></span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="no-data">Данные о городах не найдены</div>
-                {% endif %}
-            </div>
-        </div>
-
+        {% endif %}
     </div>
 
     <script>
-        // Проверяем, загрузился ли DataLens iframe (кросс-origin: судим по размеру)
         function checkDatalensLoad(iframe) {
             try {
-                // Если contentDocument недоступен или пуст — datalens заблокирован
                 const doc = iframe.contentDocument || iframe.contentWindow.document;
                 if (!doc || doc.body.innerHTML.trim() === '') {
                     document.getElementById('datalens-vpn-notice').style.display = 'block';
@@ -458,7 +126,6 @@
             }
         }
 
-        // Резервный таймаут: если через 8 секунд iframe не загрузился — показываем предупреждение
         setTimeout(function () {
             const iframes = document.querySelectorAll('[id^="dl-iframe-"]');
             iframes.forEach(function (f) {
@@ -468,12 +135,11 @@
                         document.getElementById('datalens-vpn-notice').style.display = 'block';
                     }
                 } catch {
-                    // кросс-origin — DataLens работает, ничего не делаем
+                    // кросс-origin — DataLens работает
                 }
             });
         }, 8000);
 
-        // Обновляем JWT-токены каждые 50 минут (TTL токена 60 мин)
         async function refreshDatalensTokens() {
             try {
                 const res = await fetch('/api/datalens-tokens');
