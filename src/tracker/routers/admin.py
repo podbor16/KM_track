@@ -110,12 +110,16 @@ class YamlBody(BaseModel):
 async def list_events(user: str = Depends(api_require_auth)) -> list[dict]:
     result = []
     for code, ev in settings.EVENTS.items():
-        tracked = ev.get_tracked()
+        db_event_ids = [
+            {"db_event_id": d.db_event_id, "distance": d.distance}
+            for d in ev.distances
+            if d.db_event_id is not None
+        ]
         result.append({
             "code": code,
             "name": ev.name,
             "is_active": ev.is_active,
-            "db_event_id": tracked.db_event_id if tracked else None,
+            "db_event_ids": db_event_ids,
         })
     return result
 
@@ -277,11 +281,12 @@ async def list_leads(
     event_id: Optional[int] = None,
     is_duplicate: Optional[bool] = None,
     is_name_suspicious: Optional[bool] = None,
+    search: Optional[str] = None,
     offset: int = 0,
     limit: int = Query(default=100, le=500),
     user: str = Depends(api_require_auth),
 ) -> dict:
-    """Постраничный список лидов с фильтрацией."""
+    """Постраничный список лидов с фильтрацией и поиском."""
     from src.analytics.db_results import get_leads_admin
 
     rows = await asyncio.get_event_loop().run_in_executor(
@@ -290,6 +295,7 @@ async def list_leads(
             event_id=event_id,
             is_duplicate=is_duplicate,
             is_name_suspicious=is_name_suspicious,
+            search=search,
             offset=offset,
             limit=limit,
         ),

@@ -879,7 +879,7 @@ async def export_startlist_csv(
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
-        fieldnames=['surname', 'name', 'birthday', 'sex', 'event_distance', 'category'],
+        fieldnames=['bib', 'chip', 'surname', 'name', 'birthday', 'sex', 'event_distance', 'category'],
         extrasaction='ignore',
         lineterminator='\n',
     )
@@ -888,6 +888,8 @@ async def export_startlist_csv(
         bday = r.get('birthday')
         bday_str = bday.isoformat()[:10] if hasattr(bday, 'isoformat') else (str(bday) if bday else '')
         writer.writerow({
+            'bib': '',
+            'chip': '',
             'surname': r.get('surname') or '',
             'name': r.get('name') or '',
             'birthday': bday_str,

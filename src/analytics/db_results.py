@@ -1184,7 +1184,8 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
 
 
 def get_leads_admin(
-    event_id=None, is_duplicate=None, is_name_suspicious=None, offset=0, limit=100
+    event_id=None, is_duplicate=None, is_name_suspicious=None,
+    search=None, offset=0, limit=100
 ) -> List[Dict[str, Any]]:
     """Лиды с фильтрами для admin. Без кеша."""
     conn = get_pooled_connection()
@@ -1203,6 +1204,10 @@ def get_leads_admin(
         if is_name_suspicious is not None:
             conds.append("is_name_suspicious = %s")
             params.append(1 if is_name_suspicious else 0)
+        if search:
+            like = "%" + search.replace("%", "\\%").replace("_", "\\_") + "%"
+            conds.append("(surname LIKE %s OR name LIKE %s OR email LIKE %s)")
+            params.extend([like, like, like])
         where = ("WHERE " + " AND ".join(conds)) if conds else ""
         cur.execute(
             f"SELECT * FROM leads {where} ORDER BY id DESC LIMIT %s OFFSET %s",
