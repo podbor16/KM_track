@@ -25,6 +25,7 @@
             <button class="admin-tab admin-tab--active" onclick="switchTab('events', this)">События</button>
             <button class="admin-tab" onclick="switchTab('presets', this)">Пресеты Copernico</button>
             <button class="admin-tab" onclick="switchTab('loader', this)">Загрузчик</button>
+            <button class="admin-tab" onclick="switchTab('leads', this)">Стартовый список</button>
         </div>
 
         <!-- ================================================================ -->
@@ -55,6 +56,49 @@
             </div>
             <div id="loader-table-wrap">
                 <div class="admin-loading">Загрузка статуса...</div>
+            </div>
+        </div>
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: СТАРТОВЫЙ СПИСОК                                        -->
+        <!-- ================================================================ -->
+        <div id="tab-leads" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Просмотр и редактирование заявок участников. Экспорт CSV — только записи без дубликатов, совместим с Copernico.
+            </div>
+
+            <!-- Фильтры и действия -->
+            <div class="admin-leads-toolbar">
+                <div class="admin-leads-filters">
+                    <select id="leads-event-select" class="admin-select" onchange="loadLeads(true)">
+                        <option value="">— выберите событие —</option>
+                    </select>
+                    <select id="leads-dup-filter" class="admin-select" onchange="loadLeads(true)">
+                        <option value="">Все заявки</option>
+                        <option value="false">Без дубликатов</option>
+                        <option value="true">Только дубликаты</option>
+                    </select>
+                    <label class="admin-checkbox-label">
+                        <input type="checkbox" id="leads-suspicious-filter" onchange="loadLeads(true)">
+                        Подозрит. имена
+                    </label>
+                </div>
+                <div class="admin-leads-actions">
+                    <button class="km-btn km-btn--secondary" onclick="loadLeads(true)">Обновить</button>
+                    <button class="km-btn km-btn--primary" id="leads-export-btn" onclick="exportLeadsCsv()" disabled>Экспорт CSV</button>
+                </div>
+            </div>
+
+            <!-- Таблица -->
+            <div class="admin-leads-table-wrap">
+                <div id="leads-table-wrap">
+                    <div class="admin-loading">Выберите событие для загрузки заявок</div>
+                </div>
+            </div>
+
+            <!-- Пагинация -->
+            <div class="admin-leads-pagination" id="leads-pagination" style="display:none">
+                <button class="km-btn km-btn--secondary" id="leads-more-btn" onclick="loadLeadsMore()">Показать ещё</button>
+                <span id="leads-count-info" class="admin-loading" style="display:inline"></span>
             </div>
         </div>
     </div>
@@ -108,7 +152,7 @@
     // Tab switching
     // ========================================================================
 
-    const _tabLoaded = { events: false, presets: false, loader: false };
+    const _tabLoaded = { events: false, presets: false, loader: false, leads: false };
 
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
@@ -120,6 +164,7 @@
             if (name === 'events') loadEvents();
             if (name === 'presets') loadPresets();
             if (name === 'loader') loadLoader();
+            if (name === 'leads') loadLeadsTab();
         }
     }
 
@@ -423,6 +468,261 @@
         // Перезагрузить статус
         _tabLoaded.loader = false;
         loadLoader();
+    }
+
+    // ========================================================================
+    // Leads tab
+    // ========================================================================
+
+    let _leadsOffset = 0;
+    const _leadsLimit = 50;
+    let _leadsData = [];
+
+    // Загружаем список событий в select при открытии вкладки
+    async function loadLeadsTab() {
+        const select = document.getElementById('leads-event-select');
+        try {
+            const r = await fetch('/api/admin/events');
+            if (!r.ok) return;
+            const events = await r.json();
+            events.forEach(ev => {
+                if (!ev.db_event_id) return;
+                const opt = document.createElement('option');
+                opt.value = ev.db_event_id;
+                opt.textContent = ev.name + (ev.is_active ? ' ✓' : '');
+                if (ev.is_active) opt.selected = true;
+                select.appendChild(opt);
+            });
+            // Если выбрано активное событие — сразу загружаем
+            if (select.value) loadLeads(true);
+        } catch(e) { /* silent */ }
+    }
+
+    async function loadLeads(reset) {
+        const eventId = document.getElementById('leads-event-select').value;
+        const wrap = document.getElementById('leads-table-wrap');
+
+        if (!eventId) {
+            wrap.innerHTML = '<div class="admin-loading">Выберите событие для загрузки заявок</div>';
+            document.getElementById('leads-export-btn').disabled = true;
+            return;
+        }
+        document.getElementById('leads-export-btn').disabled = false;
+
+        if (reset) { _leadsOffset = 0; _leadsData = []; }
+        if (reset) wrap.innerHTML = '<div class="admin-loading">Загрузка...</div>';
+
+        const dupFilter = document.getElementById('leads-dup-filter').value;
+        const suspFilter = document.getElementById('leads-suspicious-filter').checked;
+
+        let url = `/api/admin/leads?event_id=${eventId}&limit=${_leadsLimit}&offset=${_leadsOffset}`;
+        if (dupFilter !== '') url += `&is_duplicate=${dupFilter}`;
+        if (suspFilter) url += `&is_name_suspicious=true`;
+
+        try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error((await r.json()).detail || r.status);
+            const data = await r.json();
+
+            _leadsData = reset ? data.items : [..._leadsData, ...data.items];
+
+            renderLeadsTable(reset);
+
+            const pagination = document.getElementById('leads-pagination');
+            const moreBtn = document.getElementById('leads-more-btn');
+            const countInfo = document.getElementById('leads-count-info');
+            pagination.style.display = '';
+            moreBtn.disabled = data.count < _leadsLimit;
+            countInfo.textContent = `Показано: ${_leadsData.length}${data.count < _leadsLimit ? '' : '+'}`;
+        } catch(e) {
+            if (reset) wrap.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        }
+    }
+
+    function loadLeadsMore() {
+        _leadsOffset += _leadsLimit;
+        loadLeads(false);
+    }
+
+    function renderLeadsTable(reset) {
+        const wrap = document.getElementById('leads-table-wrap');
+        if (!_leadsData.length) {
+            wrap.innerHTML = '<div class="admin-loading">Нет заявок по выбранным фильтрам</div>';
+            return;
+        }
+        if (reset) {
+            const table = document.createElement('table');
+            table.className = 'admin-loader-table admin-leads-table';
+            table.innerHTML = `
+                <thead><tr>
+                    <th>ID</th><th>Фамилия</th><th>Имя</th>
+                    <th>Пол</th><th>Город</th><th>Дистанция</th>
+                    <th>Категория</th><th>Дата рожд.</th>
+                    <th>Дубликат</th><th>Статус</th><th>Действия</th>
+                </tr></thead>
+                <tbody id="leads-tbody"></tbody>`;
+            wrap.innerHTML = '';
+            wrap.appendChild(table);
+        }
+        const tbody = document.getElementById('leads-tbody');
+        const startIdx = reset ? 0 : tbody.rows.length;
+        for (let i = startIdx; i < _leadsData.length; i++) {
+            tbody.appendChild(buildLeadRow(_leadsData[i]));
+        }
+    }
+
+    function buildLeadRow(lead) {
+        const tr = document.createElement('tr');
+        tr.dataset.id = lead.id;
+        tr.innerHTML = `
+            <td></td>
+            <td class="leads-col-surname"></td>
+            <td class="leads-col-name"></td>
+            <td class="leads-col-sex"></td>
+            <td class="leads-col-city"></td>
+            <td class="leads-col-distance"></td>
+            <td class="leads-col-category"></td>
+            <td class="leads-col-birthday"></td>
+            <td class="leads-col-dup"><span class="admin-badge"></span></td>
+            <td class="leads-col-status"></td>
+            <td><button class="km-btn km-btn--secondary leads-btn-edit">Изменить</button></td>`;
+
+        tr.querySelector('td').textContent = lead.id;
+        tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
+        tr.querySelector('.leads-col-name').textContent = lead.name || '';
+        tr.querySelector('.leads-col-sex').textContent = lead.sex || '—';
+        tr.querySelector('.leads-col-city').textContent = lead.city || '—';
+        tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
+        tr.querySelector('.leads-col-category').textContent = lead.category || '—';
+        tr.querySelector('.leads-col-birthday').textContent = lead.birthday || '—';
+        const dupBadge = tr.querySelector('.leads-col-dup .admin-badge');
+        dupBadge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
+        dupBadge.textContent = lead.is_duplicate ? 'Дубль' : 'Ок';
+        tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
+
+        tr.querySelector('.leads-btn-edit').addEventListener('click', () => {
+            if (tr.dataset.editing === '1') cancelLeadEdit(tr, lead);
+            else startLeadEdit(tr, lead);
+        });
+        return tr;
+    }
+
+    function startLeadEdit(tr, lead) {
+        tr.dataset.editing = '1';
+        tr.querySelector('.leads-btn-edit').textContent = 'Отмена';
+
+        const mkInput = (val, w) => {
+            const inp = document.createElement('input');
+            inp.className = 'admin-leads-input';
+            inp.value = val ?? '';
+            if (w) inp.style.width = w;
+            return inp;
+        };
+
+        tr.querySelector('.leads-col-surname').replaceChildren(mkInput(lead.surname));
+        tr.querySelector('.leads-col-name').replaceChildren(mkInput(lead.name));
+        tr.querySelector('.leads-col-distance').replaceChildren(mkInput(lead.event_distance, '80px'));
+        tr.querySelector('.leads-col-status').replaceChildren(mkInput(lead.status, '80px'));
+
+        const dupCell = tr.querySelector('.leads-col-dup');
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = !!lead.is_duplicate;
+        lbl.appendChild(chk);
+        lbl.appendChild(document.createTextNode('Дубль'));
+        dupCell.replaceChildren(lbl);
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'km-btn km-btn--primary leads-btn-save';
+        saveBtn.textContent = 'Сохранить';
+        saveBtn.style.marginLeft = '4px';
+        saveBtn.addEventListener('click', () => saveLeadEdit(tr, lead));
+        tr.querySelector('td:last-child').appendChild(saveBtn);
+    }
+
+    function cancelLeadEdit(tr, lead) {
+        tr.dataset.editing = '0';
+        tr.querySelector('.leads-btn-edit').textContent = 'Изменить';
+
+        tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
+        tr.querySelector('.leads-col-name').textContent = lead.name || '';
+        tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
+        tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
+
+        const dupCell = tr.querySelector('.leads-col-dup');
+        dupCell.innerHTML = '';
+        const badge = document.createElement('span');
+        badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
+        badge.textContent = lead.is_duplicate ? 'Дубль' : 'Ок';
+        dupCell.appendChild(badge);
+
+        const saveBtn = tr.querySelector('.leads-btn-save');
+        if (saveBtn) saveBtn.remove();
+    }
+
+    async function saveLeadEdit(tr, lead) {
+        const saveBtn = tr.querySelector('.leads-btn-save');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Сохранение...';
+
+        const body = {
+            surname: tr.querySelector('.leads-col-surname input').value.trim() || null,
+            name:    tr.querySelector('.leads-col-name input').value.trim() || null,
+            event_distance: tr.querySelector('.leads-col-distance input').value.trim() || null,
+            is_duplicate:   tr.querySelector('.leads-col-dup input[type=checkbox]').checked ? 1 : 0,
+            status:  tr.querySelector('.leads-col-status input').value.trim() || null,
+        };
+
+        try {
+            const r = await fetch(`/api/admin/leads/${lead.id}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body),
+            });
+            const data = await r.json();
+            if (!r.ok) {
+                alert('Ошибка: ' + (data.detail || r.status));
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Сохранить';
+                return;
+            }
+            Object.assign(lead, data);
+            cancelLeadEdit(tr, lead);
+        } catch(e) {
+            alert('Ошибка сети: ' + e.message);
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Сохранить';
+        }
+    }
+
+    async function exportLeadsCsv() {
+        const eventId = document.getElementById('leads-event-select').value;
+        if (!eventId) return;
+        const btn = document.getElementById('leads-export-btn');
+        btn.disabled = true;
+        btn.textContent = 'Загрузка...';
+        try {
+            const r = await fetch(`/api/export/startlist/${eventId}`);
+            if (!r.ok) {
+                const data = await r.json().catch(() => ({}));
+                alert('Ошибка экспорта: ' + (data.detail || r.status));
+                return;
+            }
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `startlist_${eventId}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch(e) {
+            alert('Ошибка: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Экспорт CSV';
+        }
     }
 
     // ========================================================================

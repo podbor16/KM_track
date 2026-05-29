@@ -43,6 +43,14 @@ from .analytics import (
     RaceResultsResponse,
 )
 
+from .startlist import (
+    StartlistItem,
+    StartlistResponse,
+    LeadAdminItem,
+    LeadsAdminResponse,
+    LeadPatch,
+)
+
 __all__ = [
     # Runner models
     "Runner",
@@ -81,4 +89,11 @@ __all__ = [
     "RegisteredRunnerInfo",
     "RegisteredRunnersListResponse",
     "RaceResultsResponse",
+
+    # Startlist & Leads models
+    "StartlistItem",
+    "StartlistResponse",
+    "LeadAdminItem",
+    "LeadsAdminResponse",
+    "LeadPatch",
 ]

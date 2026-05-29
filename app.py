@@ -21,10 +21,16 @@ from src.config import settings
 from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
 from src.analytics.db_connection_optimized import initialize_connection_pool
+from src.monitoring.collector import MetricsCollector
+
 # Пути (нужны до lifespan)
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
+
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+metrics_collector = MetricsCollector(db_path=str(DATA_DIR / "server_metrics.db"))
 
 # Delta SSE: трекинг предыдущего состояния для вычисления дельты
 _tracker_prev_state: dict[int, dict] = {}  # event_id -> {runner_id -> runner_dict}
@@ -256,16 +262,24 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[Redis] notification subscriber error, reconnecting: {_e}")
                 await asyncio.sleep(1)
 
+    async def _metrics_flusher():
+        """Каждые 60с снимает bucket метрик и пишет в SQLite."""
+        while True:
+            await asyncio.sleep(60)
+            sse_count = tracker_hub.total_sse_count() + notification_hub.total_sse_count()
+            await metrics_collector.flush(sse_connections=sse_count)
+
     _sse_tasks = [
         asyncio.create_task(_tracker_broadcast()),
         asyncio.create_task(_redis_tracker_subscriber()),
         asyncio.create_task(_results_watcher()),
         asyncio.create_task(_startlist_watcher()),
         asyncio.create_task(_redis_notification_subscriber()),
+        asyncio.create_task(_metrics_flusher()),
     ]
     settings.logger.info(
         "[SSE] Background tasks started: tracker_broadcast, redis_tracker_subscriber, "
-        "results_watcher, startlist_watcher, redis_notification_subscriber"
+        "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher"
     )
 
     yield  # Приложение работает здесь
@@ -305,7 +319,7 @@ _perf_logger = logging.getLogger("km_track.perf")
 @app.middleware("http")
 async def log_request_duration(request: Request, call_next):
     # BaseHTTPMiddleware несовместим с SSE-стримингом — пропускаем без обработки
-    if request.url.path.startswith("/api/sse"):
+    if request.url.path.startswith("/api/sse") or request.url.path == "/api/admin/metrics/live":
         return await call_next(request)
     start = _time.time()
     response = await call_next(request)
@@ -315,6 +329,11 @@ async def log_request_duration(request: Request, call_next):
         _perf_logger.warning(f"SLOW {request.method} {request.url.path} {duration:.3f}s")
     else:
         _perf_logger.debug(f"{request.method} {request.url.path} {duration:.3f}s {response.status_code}")
+    metrics_collector.record(
+        ip=request.client.host if request.client else None,
+        duration_ms=duration * 1000,
+        status=response.status_code,
+    )
     return response
 
 # Подключение статических файлов

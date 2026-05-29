@@ -4,6 +4,8 @@ JSON API эндпоинты KM_track.
 """
 
 import asyncio
+import csv
+import io
 import logging
 import json
 import time
@@ -29,7 +31,7 @@ from src.config.event_loader import (
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
 from src.core.auth import require_auth, api_require_auth
-
+from src.monitoring.collector import MetricsCollector, hours_to_bucket_secs
 from src.tracker.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
@@ -771,3 +773,133 @@ async def test_fetch_runners():
     except Exception as e:
         logger.error(f"test_fetch_runners error: {e}", exc_info=True)
         return {"success": False, "error": str(e), "timestamp": datetime.now().isoformat()}
+
+
+# ============================================================================
+# ADMIN: SERVER METRICS
+# ============================================================================
+
+def _get_metrics_collector() -> MetricsCollector:
+    import app as _app
+    return _app.metrics_collector
+
+
+@router.get("/api/admin/metrics", tags=["Admin"])
+async def get_server_metrics(
+    hours: int = Query(default=24, description="Диапазон: 1,6,24,168,720,2160,4320,8760"),
+    user: str = Depends(api_require_auth),
+):
+    """История метрик сервера с downsampling по диапазону."""
+    import time
+    allowed = {1, 6, 24, 168, 720, 2160, 4320, 8760}
+    if hours not in allowed:
+        hours = 24
+    bucket_secs = hours_to_bucket_secs(hours)
+    now = int(time.time())
+    since = now - hours * 3600
+    collector = _get_metrics_collector()
+    points = await asyncio.get_event_loop().run_in_executor(
+        None, collector.query, since, now, bucket_secs
+    )
+    return {
+        "points": points,
+        "meta": {
+            "from_ts": since,
+            "to_ts": now,
+            "bucket_secs": bucket_secs,
+            "hours": hours,
+            "uptime_secs": collector.get_uptime_secs(),
+        },
+    }
+
+
+@router.get("/api/admin/metrics/live", tags=["Admin"])
+async def get_server_metrics_live(
+    request: Request,
+    user: str = Depends(api_require_auth),
+):
+    """SSE-стрим: новая точка метрик каждые 5 секунд."""
+    collector = _get_metrics_collector()
+    queue = collector.subscribe()
+
+    async def stream():
+        try:
+            yield {"comment": "connected"}
+            while True:
+                try:
+                    point = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield {"data": json.dumps(point)}
+                except asyncio.TimeoutError:
+                    yield {"comment": "heartbeat"}
+                if await request.is_disconnected():
+                    break
+        finally:
+            collector.unsubscribe(queue)
+
+
+# ============================================================================
+# СТАРТОВЫЙ СПИСОК
+# ============================================================================
+
+@router.get("/api/startlist/{event_id}")
+async def get_startlist(event_id: int = PathParam(..., description="ID события в БД")):
+    """Публичный стартовый список события. Кеш 60с."""
+    from src.analytics.db_results import get_leads_by_event
+    from src.tracker.models.startlist import StartlistItem, StartlistResponse
+
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None, get_leads_by_event, event_id, True
+    )
+    items = [
+        StartlistItem(
+            surname=r.get('surname') or '',
+            name=r.get('name') or '',
+            sex=r.get('sex'),
+            city=r.get('city'),
+            event_distance=str(r['event_distance']) if r.get('event_distance') is not None else None,
+            category=r.get('category'),
+        )
+        for r in rows
+    ]
+    return StartlistResponse(items=items, count=len(items)).model_dump()
+
+
+@router.get("/api/export/startlist/{event_id}")
+async def export_startlist_csv(
+    event_id: int = PathParam(..., description="ID события в БД"),
+    user: str = Depends(api_require_auth),
+):
+    """CSV-выгрузка стартового списка (is_duplicate=0). Требует авторизации."""
+    from fastapi.responses import StreamingResponse
+    from src.analytics.db_results import get_leads_by_event
+
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None, get_leads_by_event, event_id, False
+    )
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=['surname', 'name', 'birthday', 'sex', 'event_distance', 'category'],
+        extrasaction='ignore',
+        lineterminator='\n',
+    )
+    writer.writeheader()
+    for r in rows:
+        bday = r.get('birthday')
+        bday_str = bday.isoformat()[:10] if hasattr(bday, 'isoformat') else (str(bday) if bday else '')
+        writer.writerow({
+            'surname': r.get('surname') or '',
+            'name': r.get('name') or '',
+            'birthday': bday_str,
+            'sex': r.get('sex') or '',
+            'event_distance': str(r.get('event_distance') or ''),
+            'category': r.get('category') or '',
+        })
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="startlist_{event_id}.csv"'},
+    )
+
+    return EventSourceResponse(stream())

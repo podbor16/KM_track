@@ -277,10 +277,90 @@
     max-width: 100%;
 }
 
+/* ------- Leads tab ------- */
+
+.admin-leads-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.admin-leads-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.admin-select {
+    padding: 7px 10px;
+    border: 1px solid var(--km-border-light);
+    border-radius: var(--km-radius-input);
+    font-family: var(--km-font-ui);
+    font-size: 0.875rem;
+    color: var(--km-text-body);
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+}
+.admin-select:focus { border-color: var(--km-primary); }
+
+.admin-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.875rem;
+    color: var(--km-text-body);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.admin-leads-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-leads-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.admin-leads-table {
+    min-width: 860px;
+}
+
+.admin-leads-table td { vertical-align: middle; }
+
+.admin-leads-input {
+    width: 120px;
+    padding: 4px 8px;
+    border: 1px solid var(--km-border-light);
+    border-radius: var(--km-radius-input);
+    font-family: var(--km-font-ui);
+    font-size: 0.82rem;
+    color: var(--km-text-body);
+    background: #fff;
+}
+.admin-leads-input:focus {
+    outline: none;
+    border-color: var(--km-primary);
+}
+
+.admin-leads-pagination {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
 /* ------- Responsive ------- */
 
 @media (max-width: 600px) {
     .admin-header h1 { font-size: 1.3rem; }
     .admin-tab { padding: 8px 12px; font-size: 0.8rem; }
     .admin-yaml-editor { min-height: 180px; font-size: 0.75rem; }
+    .admin-leads-toolbar { flex-direction: column; align-items: flex-start; }
 }

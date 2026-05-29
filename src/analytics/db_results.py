@@ -1138,6 +1138,129 @@ def get_test_data_fallback() -> List[Dict[str, Any]]:
     ]
 
 
+# ============================================================
+# СТАРТОВЫЙ СПИСОК / LEADS API
+# ============================================================
+
+_startlist_cache: dict = {}
+_startlist_cache_ts: dict = {}
+STARTLIST_CACHE_TTL = 60  # секунд
+
+
+def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[Dict[str, Any]]:
+    """Лиды по event_id. Кеш 60с. include_duplicates=False → AND is_duplicate=0."""
+    key = (event_id, include_duplicates)
+    now = time.time()
+    if key in _startlist_cache and (now - _startlist_cache_ts.get(key, 0)) < STARTLIST_CACHE_TTL:
+        return _startlist_cache[key]
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        sql = "SELECT * FROM leads WHERE event_id = %s"
+        if not include_duplicates:
+            sql += " AND is_duplicate = 0"
+        sql += " ORDER BY surname ASC, name ASC"
+        cur.execute(sql, (event_id,))
+        rows = cur.fetchall()
+        cur.close()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+            result.append(d)
+        _startlist_cache[key] = result
+        _startlist_cache_ts[key] = time.time()
+        return result
+    except Exception as e:
+        logger.error(f"get_leads_by_event error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def get_leads_admin(
+    event_id=None, is_duplicate=None, is_name_suspicious=None, offset=0, limit=100
+) -> List[Dict[str, Any]]:
+    """Лиды с фильтрами для admin. Без кеша."""
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        conds: list = []
+        params: list = []
+        if event_id is not None:
+            conds.append("event_id = %s")
+            params.append(event_id)
+        if is_duplicate is not None:
+            conds.append("is_duplicate = %s")
+            params.append(1 if is_duplicate else 0)
+        if is_name_suspicious is not None:
+            conds.append("is_name_suspicious = %s")
+            params.append(1 if is_name_suspicious else 0)
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        cur.execute(
+            f"SELECT * FROM leads {where} ORDER BY id DESC LIMIT %s OFFSET %s",
+            params + [limit, offset],
+        )
+        rows = cur.fetchall()
+        cur.close()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+            result.append(d)
+        return result
+    except Exception as e:
+        logger.error(f"get_leads_admin error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Partial UPDATE leads по leads.id. Поля — только из whitelist."""
+    ALLOWED = {'surname', 'name', 'event_distance', 'is_duplicate', 'status'}
+    safe = {k: v for k, v in fields.items() if k in ALLOWED}
+    if not safe:
+        return None
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        set_clause = ", ".join(f"{col} = %s" for col in safe)
+        cur.execute(
+            f"UPDATE leads SET {set_clause} WHERE id = %s",
+            list(safe.values()) + [lead_id],
+        )
+        conn.commit()
+        cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        cur.close()
+        if not row:
+            return None
+        d = dict(row)
+        d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+        return d
+    except Exception as e:
+        logger.error(f"update_lead error: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def create_connection():
     """УСТАРЕВШАЯ функция — используйте get_pooled_connection()."""
     logger.warning("⚠️ create_connection() устаревшая, используйте get_pooled_connection()")
