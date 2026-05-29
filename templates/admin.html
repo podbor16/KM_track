@@ -490,6 +490,8 @@
     let _leadsOffset = 0;
     const _leadsLimit = 50;
     let _leadsData = [];
+    let _sortCol = null;
+    let _sortDir = 1;  // 1 = asc, -1 = desc
 
     function _fmtBirthday(bday) {
         if (!bday) return '—';
@@ -632,6 +634,48 @@
         loadLeads(false);
     }
 
+    const _SORT_COLS = [
+        {label:'ID', col:'id'}, {label:'Номер', col:null}, {label:'Чип', col:null},
+        {label:'Фамилия', col:'surname'}, {label:'Имя', col:'name'},
+        {label:'Пол', col:'sex'}, {label:'Город', col:'city'},
+        {label:'Дистанция', col:'event_distance'}, {label:'Категория', col:'category'},
+        {label:'Дата рожд.', col:'birthday'}, {label:'Email', col:'email'},
+        {label:'Телефон', col:'phone'}, {label:'Order ID', col:'order_id'},
+        {label:'Дубликат', col:'is_duplicate'}, {label:'Статус', col:'status'},
+        {label:'Действия', col:null},
+    ];
+
+    function _applySort() {
+        if (!_sortCol) return;
+        _leadsData.sort((a, b) => {
+            let av = a[_sortCol] ?? '';
+            let bv = b[_sortCol] ?? '';
+            if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * _sortDir;
+            return String(av).localeCompare(String(bv), 'ru') * _sortDir;
+        });
+    }
+
+    function _renderSortHeaders(thead) {
+        const tr = thead.querySelector('tr');
+        tr.innerHTML = '';
+        _SORT_COLS.forEach(({label, col}) => {
+            const th = document.createElement('th');
+            th.textContent = label;
+            if (col) {
+                th.dataset.col = col;
+                th.style.cursor = 'pointer';
+                th.title = 'Сортировать';
+                if (_sortCol === col) th.textContent += _sortDir === 1 ? ' ↑' : ' ↓';
+                th.addEventListener('click', () => {
+                    if (_sortCol === col) { _sortDir *= -1; } else { _sortCol = col; _sortDir = 1; }
+                    _applySort();
+                    renderLeadsTable(true);
+                });
+            }
+            tr.appendChild(th);
+        });
+    }
+
     function renderLeadsTable(reset) {
         const wrap = document.getElementById('leads-table-wrap');
         if (!_leadsData.length) {
@@ -641,21 +685,14 @@
         if (reset) {
             const table = document.createElement('table');
             table.className = 'admin-loader-table admin-leads-table';
-            table.innerHTML = `
-                <thead><tr>
-                    <th>ID</th><th>Номер</th><th>Чип</th>
-                    <th>Фамилия</th><th>Имя</th><th>Пол</th><th>Город</th>
-                    <th>Дистанция</th><th>Категория</th><th>Дата рожд.</th>
-                    <th>Email</th><th>Телефон</th><th>Order ID</th>
-                    <th>Дубликат</th><th>Статус</th><th>Действия</th>
-                </tr></thead>
-                <tbody id="leads-tbody"></tbody>`;
+            table.innerHTML = '<thead><tr></tr></thead><tbody id="leads-tbody"></tbody>';
+            _renderSortHeaders(table.querySelector('thead'));
             wrap.innerHTML = '';
             wrap.appendChild(table);
         }
         const tbody = document.getElementById('leads-tbody');
-        const startIdx = reset ? 0 : tbody.rows.length;
-        for (let i = startIdx; i < _leadsData.length; i++) {
+        if (reset) tbody.innerHTML = '';
+        for (let i = 0; i < _leadsData.length; i++) {
             tbody.appendChild(buildLeadRow(_leadsData[i]));
         }
     }

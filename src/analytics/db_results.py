@@ -1199,7 +1199,23 @@ def _leads_where(
     if event_distance is not None:
         conds.append("event_distance = %s"); params.append(event_distance)
     if is_duplicate is not None:
-        conds.append("is_duplicate = %s"); params.append(1 if is_duplicate else 0)
+        if is_duplicate:
+            # Показываем ВСЕ записи людей с дублями — по триплету (surname, name, birthday)
+            # в том же мероприятии/году
+            sub_conds = ["is_duplicate = 1", "surname IS NOT NULL", "name IS NOT NULL", "birthday IS NOT NULL"]
+            sub_params: list = []
+            if event_name is not None:
+                sub_conds.append("event_name = %s"); sub_params.append(event_name)
+            if event_year is not None:
+                sub_conds.append("event_year = %s"); sub_params.append(event_year)
+            sub_where = "WHERE " + " AND ".join(sub_conds)
+            conds.append(
+                f"(surname, name, birthday) IN "
+                f"(SELECT DISTINCT surname, name, birthday FROM leads {sub_where})"
+            )
+            params.extend(sub_params)
+        else:
+            conds.append("is_duplicate = %s"); params.append(0)
     if is_name_suspicious is not None:
         conds.append("is_name_suspicious = %s"); params.append(1 if is_name_suspicious else 0)
     if search:

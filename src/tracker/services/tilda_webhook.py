@@ -127,9 +127,13 @@ def transform_tilda_payload(body: dict) -> dict:
 
     surname = normalize_name(body.get("surname", ""))
     name = normalize_name(body.get("name", ""))
-    is_name_suspicious = int(
-        bool(surname and " " in surname) or bool(name and " " in name)
-    )
+
+    # Подозрительное имя: содержит не-кирилличные символы, пробелы, цифры, латиницу и т.п.
+    # Допустимо: кириллица и дефис (для составных имён типа Анна-Мария)
+    _CLEAN_NAME = re.compile(r'^[а-яёА-ЯЁ\-]+$')
+    def _suspicious(val):
+        return bool(val) and not _CLEAN_NAME.match(val.strip())
+    is_name_suspicious = int(_suspicious(surname) or _suspicious(name))
 
     products_str = (
         ", ".join(products_list)
