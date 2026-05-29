@@ -904,4 +904,52 @@ async def export_startlist_csv(
         headers={'Content-Disposition': f'attachment; filename="startlist_{event_id}.csv"'},
     )
 
+
+@router.get("/api/export/startlist")
+async def export_startlist_csv_by_name(
+    event_name: str = Query(...),
+    event_year: Optional[int] = None,
+    event_distance: Optional[str] = None,
+    user: str = Depends(api_require_auth),
+):
+    """CSV-экспорт по event_name/year/distance (is_duplicate=0)."""
+    from fastapi.responses import StreamingResponse
+    from src.analytics.db_results import get_leads_admin
+
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: get_leads_admin(
+            event_name=event_name, event_year=event_year,
+            event_distance=event_distance, is_duplicate=False, limit=10000,
+        ),
+    )
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=['bib', 'chip', 'surname', 'name', 'birthday', 'sex', 'event_distance', 'category'],
+        extrasaction='ignore', lineterminator='\n',
+    )
+    writer.writeheader()
+    for r in rows:
+        bday = r.get('birthday')
+        bday_str = bday.isoformat()[:10] if hasattr(bday, 'isoformat') else (str(bday) if bday else '')
+        writer.writerow({
+            'bib': '', 'chip': '',
+            'surname': r.get('surname') or '',
+            'name': r.get('name') or '',
+            'birthday': bday_str,
+            'sex': r.get('sex') or '',
+            'event_distance': str(r.get('event_distance') or ''),
+            'category': r.get('category') or '',
+        })
+    output.seek(0)
+    safe_name = event_name.replace(' ', '_')
+    fname = f"startlist_{safe_name}_{event_year or 'all'}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="{fname}"'},
+    )
+
+
     return EventSourceResponse(stream())

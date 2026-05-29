@@ -73,7 +73,8 @@ class LeadsAdminResponse(BaseModel):
     """Ответ GET /api/admin/leads."""
 
     items: List[LeadAdminItem]
-    count: int
+    count: int   # записей на этой странице
+    total: int   # всего записей с текущими фильтрами
     offset: int
     limit: int
 

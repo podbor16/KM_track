@@ -276,9 +276,26 @@ async def loader_stop(name: str, user: str = Depends(api_require_auth)) -> dict:
 # Leads API
 # ---------------------------------------------------------------------------
 
+@router.get("/api/admin/leads/meta")
+async def leads_meta(
+    event_name: Optional[str] = None,
+    event_year: Optional[int] = None,
+    user: str = Depends(api_require_auth),
+) -> dict:
+    """Distinct значения для каскадных фильтров."""
+    from src.analytics.db_results import get_leads_filter_options
+    return await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: get_leads_filter_options(event_name=event_name, event_year=event_year),
+    )
+
+
 @router.get("/api/admin/leads")
 async def list_leads(
     event_id: Optional[int] = None,
+    event_name: Optional[str] = None,
+    event_year: Optional[int] = None,
+    event_distance: Optional[str] = None,
     is_duplicate: Optional[bool] = None,
     is_name_suspicious: Optional[bool] = None,
     search: Optional[str] = None,
@@ -287,21 +304,19 @@ async def list_leads(
     user: str = Depends(api_require_auth),
 ) -> dict:
     """Постраничный список лидов с фильтрацией и поиском."""
-    from src.analytics.db_results import get_leads_admin
+    from src.analytics.db_results import get_leads_admin, count_leads_admin
 
-    rows = await asyncio.get_event_loop().run_in_executor(
-        None,
-        lambda: get_leads_admin(
-            event_id=event_id,
-            is_duplicate=is_duplicate,
-            is_name_suspicious=is_name_suspicious,
-            search=search,
-            offset=offset,
-            limit=limit,
-        ),
+    kw = dict(
+        event_id=event_id, event_name=event_name, event_year=event_year,
+        event_distance=event_distance, is_duplicate=is_duplicate,
+        is_name_suspicious=is_name_suspicious, search=search,
+    )
+    rows, total = await asyncio.gather(
+        asyncio.get_event_loop().run_in_executor(None, lambda: get_leads_admin(**kw, offset=offset, limit=limit)),
+        asyncio.get_event_loop().run_in_executor(None, lambda: count_leads_admin(**kw)),
     )
     items = [LeadAdminItem.model_validate(r) for r in rows]
-    return LeadsAdminResponse(items=items, count=len(items), offset=offset, limit=limit).model_dump()
+    return LeadsAdminResponse(items=items, count=len(items), total=total, offset=offset, limit=limit).model_dump()
 
 
 @router.patch("/api/admin/leads/{lead_id}")

@@ -367,15 +367,29 @@
 }
 
 .admin-leads-count {
-    font-size: 0.85rem;
-    color: var(--km-text-secondary);
-    font-family: var(--km-font-ui);
-    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 6px;
 }
 
-.admin-leads-count strong {
-    color: var(--km-dark);
+.admin-leads-count-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--km-primary);
+    color: #fff;
+    border-radius: 20px;
+    padding: 4px 16px;
+    font-size: 1rem;
     font-weight: 700;
+    font-family: var(--km-font-brand);
+    letter-spacing: 0.02em;
+}
+
+.admin-leads-count-sub {
+    font-size: 0.8rem;
+    color: var(--km-text-secondary);
+    font-family: var(--km-font-ui);
 }
 
 /* ------- Responsive ------- */

@@ -69,8 +69,14 @@
             <!-- Фильтры и действия -->
             <div class="admin-leads-toolbar">
                 <div class="admin-leads-filters">
-                    <select id="leads-event-select" class="admin-select" onchange="loadLeads(true)">
-                        <option value="">— выберите событие —</option>
+                    <select id="leads-event-name" class="admin-select" onchange="onLeadsEventChange()">
+                        <option value="">— мероприятие —</option>
+                    </select>
+                    <select id="leads-year-filter" class="admin-select" onchange="onLeadsYearChange()" disabled>
+                        <option value="">Все годы</option>
+                    </select>
+                    <select id="leads-distance-filter" class="admin-select" onchange="loadLeads(true)" disabled>
+                        <option value="">Все дистанции</option>
                     </select>
                     <select id="leads-dup-filter" class="admin-select" onchange="loadLeads(true)">
                         <option value="">Все заявки</option>
@@ -82,7 +88,7 @@
                         Подозрит. имена
                     </label>
                     <input type="search" id="leads-search" class="admin-select" placeholder="Поиск по фамилии / email"
-                           style="min-width:200px" onkeydown="if(event.key==='Enter')loadLeads(true)">
+                           style="min-width:180px" onkeydown="if(event.key==='Enter')loadLeads(true)">
                 </div>
                 <div class="admin-leads-actions">
                     <button class="km-btn km-btn--secondary" onclick="loadLeads(true)">Обновить</button>
@@ -91,7 +97,10 @@
             </div>
 
             <!-- Индикатор количества -->
-            <div id="leads-count-bar" class="admin-leads-count" style="display:none"></div>
+            <div id="leads-count-bar" class="admin-leads-count" style="display:none">
+                <span class="admin-leads-count-badge" id="leads-count-total"></span>
+                <span class="admin-leads-count-sub" id="leads-count-loaded"></span>
+            </div>
 
             <!-- Таблица -->
             <div id="leads-table-wrap">
@@ -481,7 +490,6 @@
     let _leadsOffset = 0;
     const _leadsLimit = 50;
     let _leadsData = [];
-    let _leadsTotal = 0;  // всего записей с текущими фильтрами
 
     function _fmtBirthday(bday) {
         if (!bday) return '—';
@@ -490,60 +498,106 @@
         return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
     }
 
-    // Загружаем список событий в select при открытии вкладки
+    // ---- Инициализация вкладки: загружаем список мероприятий из leads ----
     async function loadLeadsTab() {
-        const select = document.getElementById('leads-event-select');
-        let activeVal = '';
+        const sel = document.getElementById('leads-event-name');
         try {
-            const r = await fetch('/api/admin/events');
+            const r = await fetch('/api/admin/leads/meta');
             if (!r.ok) return;
-            const events = await r.json();
-            events.forEach(ev => {
-                if (!ev.db_event_ids || !ev.db_event_ids.length) return;
-                if (ev.db_event_ids.length === 1) {
-                    const opt = document.createElement('option');
-                    opt.value = ev.db_event_ids[0].db_event_id;
-                    opt.textContent = ev.name + (ev.is_active ? ' ✓' : '');
-                    if (ev.is_active) activeVal = opt.value;
-                    select.appendChild(opt);
-                } else {
-                    const grp = document.createElement('optgroup');
-                    grp.label = ev.name + (ev.is_active ? ' ✓' : '');
-                    ev.db_event_ids.forEach(d => {
-                        const opt = document.createElement('option');
-                        opt.value = d.db_event_id;
-                        opt.textContent = d.distance;
-                        if (ev.is_active && !activeVal) activeVal = opt.value;
-                        grp.appendChild(opt);
-                    });
-                    select.appendChild(grp);
-                }
+            const data = await r.json();
+            data.event_names.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                sel.appendChild(opt);
             });
-            if (activeVal) { select.value = activeVal; loadLeads(true); }
         } catch(e) { /* silent */ }
     }
 
+    // ---- Каскадные фильтры ----
+    async function onLeadsEventChange() {
+        const eventName = document.getElementById('leads-event-name').value;
+        const yearSel = document.getElementById('leads-year-filter');
+        const distSel = document.getElementById('leads-distance-filter');
+
+        yearSel.innerHTML = '<option value="">Все годы</option>';
+        distSel.innerHTML = '<option value="">Все дистанции</option>';
+        yearSel.disabled = !eventName;
+        distSel.disabled = true;
+
+        if (!eventName) {
+            loadLeads(true);
+            return;
+        }
+        try {
+            const r = await fetch(`/api/admin/leads/meta?event_name=${encodeURIComponent(eventName)}`);
+            const data = await r.json();
+            data.years.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y; opt.textContent = y;
+                yearSel.appendChild(opt);
+            });
+            // Автовыбор единственного года
+            if (data.years.length === 1) {
+                yearSel.value = data.years[0];
+                await _loadDistances();
+            }
+        } catch(e) { /* silent */ }
+        loadLeads(true);
+    }
+
+    async function onLeadsYearChange() {
+        await _loadDistances();
+        loadLeads(true);
+    }
+
+    async function _loadDistances() {
+        const eventName = document.getElementById('leads-event-name').value;
+        const year = document.getElementById('leads-year-filter').value;
+        const distSel = document.getElementById('leads-distance-filter');
+        distSel.innerHTML = '<option value="">Все дистанции</option>';
+        distSel.disabled = true;
+        if (!eventName) return;
+        try {
+            let url = `/api/admin/leads/meta?event_name=${encodeURIComponent(eventName)}`;
+            if (year) url += `&event_year=${year}`;
+            const r = await fetch(url);
+            const data = await r.json();
+            data.distances.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                distSel.appendChild(opt);
+            });
+            distSel.disabled = data.distances.length === 0;
+        } catch(e) { /* silent */ }
+    }
+
+    // ---- Загрузка заявок ----
     async function loadLeads(reset) {
-        const eventId = document.getElementById('leads-event-select').value;
+        const eventName = document.getElementById('leads-event-name').value;
         const wrap = document.getElementById('leads-table-wrap');
         const countBar = document.getElementById('leads-count-bar');
 
-        if (!eventId) {
-            wrap.innerHTML = '<div class="admin-loading">Выберите событие для загрузки заявок</div>';
+        if (!eventName) {
+            wrap.innerHTML = '<div class="admin-loading">Выберите мероприятие для загрузки заявок</div>';
             document.getElementById('leads-export-btn').disabled = true;
             countBar.style.display = 'none';
             return;
         }
         document.getElementById('leads-export-btn').disabled = false;
 
-        if (reset) { _leadsOffset = 0; _leadsData = []; _leadsTotal = 0; }
+        if (reset) { _leadsOffset = 0; _leadsData = []; }
         if (reset) wrap.innerHTML = '<div class="admin-loading">Загрузка...</div>';
 
+        const year = document.getElementById('leads-year-filter').value;
+        const dist = document.getElementById('leads-distance-filter').value;
         const dupFilter = document.getElementById('leads-dup-filter').value;
         const suspFilter = document.getElementById('leads-suspicious-filter').checked;
         const search = document.getElementById('leads-search').value.trim();
 
-        let url = `/api/admin/leads?event_id=${eventId}&limit=${_leadsLimit}&offset=${_leadsOffset}`;
+        let url = `/api/admin/leads?event_name=${encodeURIComponent(eventName)}&limit=${_leadsLimit}&offset=${_leadsOffset}`;
+        if (year) url += `&event_year=${year}`;
+        if (dist) url += `&event_distance=${encodeURIComponent(dist)}`;
         if (dupFilter !== '') url += `&is_duplicate=${dupFilter}`;
         if (suspFilter) url += `&is_name_suspicious=true`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
@@ -554,18 +608,19 @@
             const data = await r.json();
 
             _leadsData = reset ? data.items : [..._leadsData, ...data.items];
-            _leadsTotal += data.count;
 
             renderLeadsTable(reset);
 
-            // Индикатор количества
+            // Индикатор количества — точное число из data.total
             countBar.style.display = '';
-            const hasMore = data.count >= _leadsLimit;
-            countBar.innerHTML = `Показано: <strong>${_leadsData.length}</strong>${hasMore ? '+' : ''} заявок`;
+            document.getElementById('leads-count-total').textContent = `${data.total.toLocaleString('ru-RU')} заявок`;
+            const loaded = _leadsData.length;
+            document.getElementById('leads-count-loaded').textContent =
+                loaded < data.total ? `загружено: ${loaded}` : '';
 
             const pagination = document.getElementById('leads-pagination');
             const moreBtn = document.getElementById('leads-more-btn');
-            pagination.style.display = hasMore ? '' : 'none';
+            pagination.style.display = _leadsData.length < data.total ? '' : 'none';
             if (moreBtn) moreBtn.disabled = false;
         } catch(e) {
             if (reset) wrap.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
@@ -740,25 +795,30 @@
     }
 
     async function exportLeadsCsv() {
-        const eventId = document.getElementById('leads-event-select').value;
-        if (!eventId) return;
+        const eventName = document.getElementById('leads-event-name').value;
+        if (!eventName) return;
+        const year = document.getElementById('leads-year-filter').value;
+        const dist = document.getElementById('leads-distance-filter').value;
         const btn = document.getElementById('leads-export-btn');
         btn.disabled = true;
         btn.textContent = 'Загрузка...';
         try {
-            const r = await fetch(`/api/export/startlist/${eventId}`);
+            let url = `/api/export/startlist?event_name=${encodeURIComponent(eventName)}`;
+            if (year) url += `&event_year=${year}`;
+            if (dist) url += `&event_distance=${encodeURIComponent(dist)}`;
+            const r = await fetch(url);
             if (!r.ok) {
                 const data = await r.json().catch(() => ({}));
                 alert('Ошибка экспорта: ' + (data.detail || r.status));
                 return;
             }
             const blob = await r.blob();
-            const url = URL.createObjectURL(blob);
+            const dlUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `startlist_${eventId}.csv`;
+            a.href = dlUrl;
+            a.download = `startlist_${eventName}_${year || 'all'}.csv`;
             a.click();
-            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(dlUrl);
         } catch(e) {
             alert('Ошибка: ' + e.message);
         } finally {

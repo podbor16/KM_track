@@ -1183,8 +1183,65 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
             pass
 
 
+def _leads_where(
+    event_id=None, event_name=None, event_year=None, event_distance=None,
+    is_duplicate=None, is_name_suspicious=None, search=None
+):
+    """Строит WHERE + params для leads-запросов."""
+    conds: list = []
+    params: list = []
+    if event_id is not None:
+        conds.append("event_id = %s"); params.append(event_id)
+    if event_name is not None:
+        conds.append("event_name = %s"); params.append(event_name)
+    if event_year is not None:
+        conds.append("event_year = %s"); params.append(event_year)
+    if event_distance is not None:
+        conds.append("event_distance = %s"); params.append(event_distance)
+    if is_duplicate is not None:
+        conds.append("is_duplicate = %s"); params.append(1 if is_duplicate else 0)
+    if is_name_suspicious is not None:
+        conds.append("is_name_suspicious = %s"); params.append(1 if is_name_suspicious else 0)
+    if search:
+        like = "%" + search.replace("%", "\\%").replace("_", "\\_") + "%"
+        conds.append("(surname LIKE %s OR name LIKE %s OR email LIKE %s)")
+        params.extend([like, like, like])
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+    return where, params
+
+
+def count_leads_admin(
+    event_id=None, event_name=None, event_year=None, event_distance=None,
+    is_duplicate=None, is_name_suspicious=None, search=None
+) -> int:
+    """SELECT COUNT(*) с теми же фильтрами что get_leads_admin."""
+    conn = get_pooled_connection()
+    if not conn:
+        return 0
+    try:
+        where, params = _leads_where(
+            event_id=event_id, event_name=event_name, event_year=event_year,
+            event_distance=event_distance, is_duplicate=is_duplicate,
+            is_name_suspicious=is_name_suspicious, search=search,
+        )
+        cur = conn.cursor(buffered=True)
+        cur.execute(f"SELECT COUNT(*) FROM leads {where}", params)
+        row = cur.fetchone()
+        cur.close()
+        return int(row[0]) if row else 0
+    except Exception as e:
+        logger.error(f"count_leads_admin error: {e}")
+        return 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def get_leads_admin(
-    event_id=None, is_duplicate=None, is_name_suspicious=None,
+    event_id=None, event_name=None, event_year=None, event_distance=None,
+    is_duplicate=None, is_name_suspicious=None,
     search=None, offset=0, limit=100
 ) -> List[Dict[str, Any]]:
     """Лиды с фильтрами для admin. Без кеша."""
@@ -1192,23 +1249,12 @@ def get_leads_admin(
     if not conn:
         return []
     try:
+        where, params = _leads_where(
+            event_id=event_id, event_name=event_name, event_year=event_year,
+            event_distance=event_distance, is_duplicate=is_duplicate,
+            is_name_suspicious=is_name_suspicious, search=search,
+        )
         cur = conn.cursor(dictionary=True, buffered=True)
-        conds: list = []
-        params: list = []
-        if event_id is not None:
-            conds.append("event_id = %s")
-            params.append(event_id)
-        if is_duplicate is not None:
-            conds.append("is_duplicate = %s")
-            params.append(1 if is_duplicate else 0)
-        if is_name_suspicious is not None:
-            conds.append("is_name_suspicious = %s")
-            params.append(1 if is_name_suspicious else 0)
-        if search:
-            like = "%" + search.replace("%", "\\%").replace("_", "\\_") + "%"
-            conds.append("(surname LIKE %s OR name LIKE %s OR email LIKE %s)")
-            params.extend([like, like, like])
-        where = ("WHERE " + " AND ".join(conds)) if conds else ""
         cur.execute(
             f"SELECT * FROM leads {where} ORDER BY id DESC LIMIT %s OFFSET %s",
             params + [limit, offset],
@@ -1224,6 +1270,52 @@ def get_leads_admin(
     except Exception as e:
         logger.error(f"get_leads_admin error: {e}")
         return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def get_leads_filter_options(event_name: str = None, event_year: int = None) -> dict:
+    """Distinct значения для каскадных фильтров (event_names, years, distances)."""
+    conn = get_pooled_connection()
+    if not conn:
+        return {"event_names": [], "years": [], "distances": []}
+    try:
+        cur = conn.cursor(buffered=True)
+        cur.execute(
+            "SELECT DISTINCT event_name FROM leads "
+            "WHERE event_name IS NOT NULL ORDER BY event_name"
+        )
+        event_names = [r[0] for r in cur.fetchall()]
+
+        years: list = []
+        if event_name:
+            cur.execute(
+                "SELECT DISTINCT event_year FROM leads "
+                "WHERE event_name = %s AND event_year IS NOT NULL "
+                "ORDER BY event_year DESC",
+                (event_name,),
+            )
+            years = [r[0] for r in cur.fetchall()]
+
+        distances: list = []
+        if event_name:
+            q = "SELECT DISTINCT event_distance FROM leads WHERE event_name = %s AND event_distance IS NOT NULL"
+            p: list = [event_name]
+            if event_year:
+                q += " AND event_year = %s"
+                p.append(event_year)
+            q += " ORDER BY event_distance"
+            cur.execute(q, p)
+            distances = [r[0] for r in cur.fetchall()]
+
+        cur.close()
+        return {"event_names": event_names, "years": years, "distances": distances}
+    except Exception as e:
+        logger.error(f"get_leads_filter_options error: {e}")
+        return {"event_names": [], "years": [], "distances": []}
     finally:
         try:
             conn.close()
