@@ -497,7 +497,14 @@ function showError(message) {
 function exportStartListPdf() {
     if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
     const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
-    const rows = filteredRunners.map((r, i) => {
+
+    // Сортировка по фамилии, при совпадении — по имени
+    const sorted = [...filteredRunners].sort((a, b) => {
+        const s = (a.surname || '').localeCompare(b.surname || '', 'ru');
+        return s !== 0 ? s : (a.name || '').localeCompare(b.name || '', 'ru');
+    });
+
+    const rows = sorted.map((r, i) => {
         const bYear = r.birthday ? String(r.birthday).replace(/^(\d{4}).*/, '$1') : '—';
         return `<tr>
             <td>${i + 1}</td>
@@ -522,7 +529,7 @@ function exportStartListPdf() {
   @page{margin:15mm}
 </style></head><body>
 <h2>${title}</h2>
-<p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
+<p>${sorted.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
 <table><thead><tr>
   <th>№</th><th>Фамилия</th><th>Имя</th><th>Год рожд.</th>
   <th>Дистанция</th><th>Пол</th><th>Возрастная группа</th><th>Город</th>

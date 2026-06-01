@@ -100,6 +100,33 @@ h1 {
   margin-bottom: 12px;
 }
 
+/* ── Export PDF button ───────────────────────────── */
+.km-btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  background: var(--km-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--km-radius-btn, 50px);
+  font-family: var(--km-font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  box-shadow: 0 2px 8px rgba(238,45,98,.3);
+  align-self: flex-end;
+}
+.km-btn-export:hover {
+  background: #d4254f;
+  box-shadow: 0 4px 12px rgba(238,45,98,.4);
+  transform: translateY(-1px);
+}
+.km-btn-export:active { transform: translateY(0); }
+.km-btn-export svg { flex-shrink: 0; }
+
 /* ── Profile button ──────────────────────────────── */
 .detail-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .km-btn-profile {
