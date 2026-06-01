@@ -35,7 +35,7 @@ function populateYearSelector() {
     const sel = document.getElementById('yearStartSelector');
     if (!sel) return;
     const now = new Date().getFullYear();
-    for (let y = now; y >= 2020; y--) {
+    for (let y = now + 1; y >= 2020; y--) {
         const opt = document.createElement('option');
         opt.value = y;
         opt.textContent = y;

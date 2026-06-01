@@ -83,9 +83,9 @@ function updateEventThemeColor() {
 function populateYearSelector() {
     const yearSelector = document.getElementById('yearResultsSelector');
     const currentYear = new Date().getFullYear();
-    
-    // Добавляем годы от текущего до 2020
-    for (let year = currentYear; year >= 2020; year--) {
+
+    // +1 чтобы включать следующий год (предрегистрация на будущие события)
+    for (let year = currentYear + 1; year >= 2020; year--) {
         const option = document.createElement('option');
         option.value = year;
         option.textContent = year;
