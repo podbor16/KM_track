@@ -28,6 +28,7 @@ def _make_result(**kwargs):
         'client_id': 1,
         'category': 'М40',
         'time_clear_start': timedelta(hours=20, minutes=0, seconds=0),
+        'time_gun_start': timedelta(hours=20, minutes=0, seconds=0),
         'time_clear_kt1': None,
         'time_clear_kt2': None,
         'time_clear_kt3': None,
@@ -94,7 +95,7 @@ class TestBeforeFirstKT:
 
     def test_no_start_time_returns_default(self):
         """Нет времени старта → дефолтная скорость, дистанция 0."""
-        result = _make_result(time_clear_start=None)
+        result = _make_result(time_clear_start=None, time_gun_start=None)
         speed, dist, pace = calculate_live_position(result, CP_DISTS, RACE_DATE, CAT_SPEEDS)
         assert speed == pytest.approx(10.0, rel=0.05)
         assert dist == pytest.approx(0.0)
@@ -163,8 +164,8 @@ class TestAfterKT1:
 
         # speed = 2.5 km / 0.25 h = 10.0 km/h
         assert speed == pytest.approx(10.0, rel=0.05)
-        # dist = 2.5 + 10 * (1/60) ≈ 2.667
-        assert dist == pytest.approx(2.5 + 10.0 / 60, rel=0.05)
+        # сервер возвращает позицию AT checkpoint; JS-клиент экстраполирует дальше
+        assert dist == pytest.approx(2.5)
 
     def test_faster_runner_higher_speed(self):
         """Быстрый участник (КТ1 за 12 мин) имеет скорость > медленного (за 18 мин)."""
@@ -185,8 +186,8 @@ class TestAfterKT1:
         assert speed_slow == pytest.approx(8.33, rel=0.05)
         assert speed_fast > speed_slow
 
-    def test_distance_capped_at_finish(self):
-        """Дистанция не превышает финиш (5 км)."""
+    def test_distance_returns_kt_position(self):
+        """После КТ1 сервер возвращает позицию checkpoint; JS-клиент экстраполирует от неё."""
         result = _make_result(
             time_clear_start=timedelta(hours=20),
             time_clear_kt1=timedelta(minutes=15),
@@ -198,7 +199,7 @@ class TestAfterKT1:
             mock_dt.min = datetime.min
             _, dist, _ = calculate_live_position(result, CP_DISTS, RACE_DATE, CAT_SPEEDS)
 
-        assert dist == pytest.approx(CP_DISTS[-1])
+        assert dist == pytest.approx(CP_DISTS[1])  # kt1_dist = 2.5
 
     def test_pace_str_format(self):
         """Темп возвращается в формате 'мм:сс'."""
@@ -235,10 +236,10 @@ class TestAfterKT2:
             mock_dt.min = datetime.min
             speed, dist, _ = calculate_live_position(result, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
 
-        # speed = 7.0 / (42/60) = 10.0 км/ч
+        # speed = сегмент KT1→KT2: 4.0 km / (24/60 h) = 10.0 км/ч
         assert speed == pytest.approx(10.0, rel=0.05)
-        # dist = 7.0 + 10.0 * (1/60) ≈ 7.167
-        assert dist == pytest.approx(7.0 + 10.0 / 60, rel=0.05)
+        # сервер возвращает позицию AT checkpoint (kt2_dist = 7.0)
+        assert dist == pytest.approx(7.0)
 
     def test_kt1_ignored_when_kt2_present(self):
         """Если KT2 пройдена, скорость считается по интервалу KT1→KT2, а не кумулятивно от старта."""
@@ -259,8 +260,8 @@ class TestAfterKT2:
         # (не KT1-кумулятив 6.0, не KT2-кумулятив 10.0)
         assert speed == pytest.approx(20.0, rel=0.05)
 
-    def test_distance_capped_at_finish_after_kt2(self):
-        """Дистанция не превышает финиш даже после KT2."""
+    def test_distance_returns_kt2_position(self):
+        """После KT2 сервер возвращает позицию checkpoint KT2; JS-клиент экстраполирует от неё."""
         result = _make_result(
             time_clear_start=timedelta(hours=20),
             time_clear_kt1=timedelta(minutes=18),
@@ -273,7 +274,7 @@ class TestAfterKT2:
             mock_dt.min = datetime.min
             _, dist, _ = calculate_live_position(result, CP_DISTS_MULTI, RACE_DATE, CAT_SPEEDS)
 
-        assert dist == pytest.approx(CP_DISTS_MULTI[-1])
+        assert dist == pytest.approx(CP_DISTS_MULTI[2])  # kt2_dist = 7.0
 
     def test_kt2_not_used_if_not_in_checkpoint_distances(self):
         """Если checkpoint_distances не включает KT2 (len=2), KT2 игнорируется."""

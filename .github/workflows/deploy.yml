@@ -5,7 +5,25 @@ on:
     branches: [Map]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: "ci-test-secret-for-unit-tests"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest-cov
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --cov=src --cov-report=term-missing
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
