@@ -1248,3 +1248,50 @@ function getRaceStats() {
     const raceComplete = finishers > 0 && !allRunners.some(r => r.status === 'Running');
     return { finishers, raceComplete };
 }
+
+// Экспорт результатов в PDF через браузерный print
+function exportResultsPdf() {
+    if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
+    const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
+    const rows = filteredRunners.map((r, i) => {
+        const tGun   = formatTime(r.time_gun_finish)   || '—';
+        const tClean = formatTime(r.time_clear_finish) || '—';
+        const rankAbs  = r.rank_absolute  != null ? r.rank_absolute  : '—';
+        const rankSex  = r.rank_sex       != null ? r.rank_sex       : '—';
+        const rankCat  = r.rank_category  != null ? r.rank_category  : '—';
+        return `<tr>
+            <td>${i + 1}</td>
+            <td>${(r.surname||'')} ${(r.name||'')}</td>
+            <td>${r.distance||r.event_distance||'—'}</td>
+            <td>${r.category||'—'}</td>
+            <td>${tGun}</td>
+            <td>${tClean}</td>
+            <td>${rankAbs}</td>
+            <td>${rankSex}</td>
+            <td>${rankCat}</td>
+        </tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:10px;margin:16px}
+  h2{font-size:14px;margin:0 0 4px}
+  p{font-size:9px;color:#666;margin:0 0 10px}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #bbb;padding:3px 6px;text-align:left}
+  th{background:#222;color:#fff;font-size:9px;text-transform:uppercase;white-space:nowrap}
+  tr:nth-child(even){background:#f7f7f7}
+  @page{margin:15mm;size:landscape}
+</style></head><body>
+<h2>${title}</h2>
+<p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
+<table><thead><tr>
+  <th>№</th><th>Фамилия и Имя</th><th>Дистанция</th><th>Категория</th>
+  <th>Офиц. время</th><th>Чистое время</th>
+  <th>Место абс.</th><th>Место пол</th><th>Место кат.</th>
+</tr></thead><tbody>${rows}</tbody></table>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+}

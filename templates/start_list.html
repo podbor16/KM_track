@@ -38,6 +38,10 @@
                         <option value="snow7">Снежная семерка</option>
                     </select>
                 </div>
+                <div class="km-select-group">
+                    <label class="km-label" for="yearStartSelector">Год:</label>
+                    <select id="yearStartSelector" onchange="switchEvent()" class="km-select km-select--year"></select>
+                </div>
             </div>
         </div>
 
@@ -76,6 +80,9 @@
                     class="km-input"
                 >
             </div>
+            <button class="km-btn km-btn--secondary" onclick="exportStartListPdf()" title="Скачать PDF">
+                ⬇ PDF
+            </button>
         </div>
 
         <div id="loadingIndicator" class="km-loading" style="display: none;">Загрузка данных...</div>

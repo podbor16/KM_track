@@ -11,6 +11,7 @@ const eventColorMap = KMUtils.EVENT_COLORS;
 
 // Инициализация страницы — дефолт из активного забега
 document.addEventListener('DOMContentLoaded', async function() {
+    populateYearSelector();
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
         currentEvent = cfg.event || 'night_run';
@@ -19,6 +20,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         currentEvent = 'night_run';
     }
     document.getElementById('eventSelector').value = currentEvent;
+    const ySel = document.getElementById('yearStartSelector');
+    if (ySel) ySel.value = currentYear;
     updateEventCardBackground();
     updateEventThemeColor();
     updatePageTitle();
@@ -27,6 +30,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         startlist_updated: () => loadRunnersData(true)
     });
 });
+
+function populateYearSelector() {
+    const sel = document.getElementById('yearStartSelector');
+    if (!sel) return;
+    const now = new Date().getFullYear();
+    for (let y = now; y >= 2020; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        sel.appendChild(opt);
+    }
+    sel.value = now;
+}
 
 // Функция обновления фонового изображения карточки события
 function updateEventCardBackground() {
@@ -42,10 +58,12 @@ function updateEventThemeColor() {
     document.documentElement.style.setProperty('--primary-color', color);
 }
 
-// Функция для смены события
+// Функция для смены события или года
 async function switchEvent() {
     const eventSelector = document.getElementById('eventSelector');
     currentEvent = eventSelector.value;
+    const ySel = document.getElementById('yearStartSelector');
+    if (ySel) currentYear = parseInt(ySel.value) || currentYear;
 
     // Сохраняем выбор в localStorage
     localStorage.setItem('selectedEvent', currentEvent);
@@ -91,11 +109,8 @@ async function loadRunnersData(silent = false) {
     try {
         // Загружаем зарегистрированных участников из БД с фильтром по событию
         const eventName = eventNameMap[currentEvent] || 'Ночной забег';
-        console.log('Запрос к /api/registered-runners с событием:', eventName);
-        const data = await fetch(`/api/registered-runners?event_name=${encodeURIComponent(eventName)}`).then(response => {
-            console.log('Ответ от /api/registered-runners получен, статус:', response.status);
-            return response.json();
-        });
+        const url = `/api/registered-runners?event_name=${encodeURIComponent(eventName)}&event_year=${currentYear}`;
+        const data = await fetch(url).then(r => r.json());
 
         
         const raw = Array.isArray(data) ? data : (data.runners || data.data || []);
@@ -476,4 +491,45 @@ function showLoading(show) {
 function showError(message) {
     document.getElementById('errorIndicator').textContent = message;
     document.getElementById('errorIndicator').style.display = 'block';
+}
+
+// Экспорт в PDF через браузерный print
+function exportStartListPdf() {
+    if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
+    const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
+    const rows = filteredRunners.map((r, i) => {
+        const bYear = r.birthday ? String(r.birthday).replace(/^(\d{4}).*/, '$1') : '—';
+        return `<tr>
+            <td>${i + 1}</td>
+            <td>${r.surname || ''}</td>
+            <td>${r.name || ''}</td>
+            <td>${bYear}</td>
+            <td>${r.distance || r.event_distance || '—'}</td>
+            <td>${r.sex || '—'}</td>
+            <td>${r.category || '—'}</td>
+            <td>${r.city || '—'}</td>
+        </tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:10px;margin:16px}
+  h2{font-size:14px;margin:0 0 4px}
+  p{font-size:9px;color:#666;margin:0 0 10px}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #bbb;padding:3px 6px;text-align:left}
+  th{background:#222;color:#fff;font-size:9px;text-transform:uppercase}
+  tr:nth-child(even){background:#f7f7f7}
+  @page{margin:15mm}
+</style></head><body>
+<h2>${title}</h2>
+<p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
+<table><thead><tr>
+  <th>№</th><th>Фамилия</th><th>Имя</th><th>Год рожд.</th>
+  <th>Дистанция</th><th>Пол</th><th>Возрастная группа</th><th>Город</th>
+</tr></thead><tbody>${rows}</tbody></table>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
 }
