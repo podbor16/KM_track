@@ -1253,14 +1253,29 @@ function getRaceStats() {
 function exportResultsPdf() {
     if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
     const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
-    const rows = filteredRunners.map((r, i) => {
+
+    // Сортировка: финишёры по возрастанию официального времени, остальные в конце
+    const sorted = [...filteredRunners].sort((a, b) => {
+        const tA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
+        const tB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
+        const hasA = tA > 0;
+        const hasB = tB > 0;
+        if (hasA && hasB) return tA - tB;
+        if (hasA) return -1;
+        if (hasB) return 1;
+        return 0;
+    });
+
+    const rows = sorted.map((r, i) => {
         const tGun   = formatTime(r.time_gun_finish)   || '—';
         const tClean = formatTime(r.time_clear_finish) || '—';
-        const rankAbs  = r.rank_absolute  != null ? r.rank_absolute  : '—';
-        const rankSex  = r.rank_sex       != null ? r.rank_sex       : '—';
-        const rankCat  = r.rank_category  != null ? r.rank_category  : '—';
-        return `<tr>
-            <td>${i + 1}</td>
+        const rankAbs = r.rank_absolute != null ? r.rank_absolute : '—';
+        const rankSex = r.rank_sex      != null ? r.rank_sex      : '—';
+        const rankCat = r.rank_category != null ? r.rank_category : '—';
+        const noFinish = !r.time_gun_finish;
+        const rowStyle = noFinish ? ' style="color:#999"' : '';
+        return `<tr${rowStyle}>
+            <td>${noFinish ? '—' : i + 1}</td>
             <td>${(r.surname||'')} ${(r.name||'')}</td>
             <td>${r.distance||r.event_distance||'—'}</td>
             <td>${r.category||'—'}</td>
