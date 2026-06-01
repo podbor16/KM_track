@@ -311,9 +311,12 @@ async def list_leads(
         event_distance=event_distance, is_duplicate=is_duplicate,
         is_name_suspicious=is_name_suspicious, search=search,
     )
-    rows, total = await asyncio.gather(
-        asyncio.get_event_loop().run_in_executor(None, lambda: get_leads_admin(**kw, offset=offset, limit=limit)),
-        asyncio.get_event_loop().run_in_executor(None, lambda: count_leads_admin(**kw)),
+    # Последовательно — избегаем одновременного захвата двух соединений из пула
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: get_leads_admin(**kw, offset=offset, limit=limit)
+    )
+    total = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: count_leads_admin(**kw)
     )
     items = [LeadAdminItem.model_validate(r) for r in rows]
     return LeadsAdminResponse(items=items, count=len(items), total=total, offset=offset, limit=limit).model_dump()
@@ -337,3 +340,28 @@ async def patch_lead(
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Лид {lead_id} не найден")
     return LeadAdminItem.model_validate(updated).model_dump()
+
+
+# ---------------------------------------------------------------------------
+# DataLens embeds (для вкладки Аналитика в /admin)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/admin/datalens-embeds")
+async def admin_datalens_embeds(user: str = Depends(api_require_auth)) -> dict:
+    """Генерирует свежие JWT-токены для DataLens iframe."""
+    from src.core.datalens import make_embed_token
+
+    embeds = []
+    if settings.DATALENS_KEY_SECRET:
+        try:
+            for cfg in settings.DATALENS_EMBEDS:
+                token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
+                embed_type = cfg.get("type", "dash")
+                embeds.append({
+                    "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
+                    "title": cfg.get("title", ""),
+                })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"DataLens admin embed error: {e}")
+    return {"embeds": embeds}

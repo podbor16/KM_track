@@ -26,6 +26,7 @@
             <button class="admin-tab" onclick="switchTab('presets', this)">Пресеты Copernico</button>
             <button class="admin-tab" onclick="switchTab('loader', this)">Загрузчик</button>
             <button class="admin-tab" onclick="switchTab('leads', this)">Стартовый список</button>
+            <button class="admin-tab" onclick="switchTab('analytics', this)">Аналитика</button>
         </div>
 
         <!-- ================================================================ -->
@@ -112,6 +113,17 @@
                 <button class="km-btn km-btn--secondary" id="leads-more-btn" onclick="loadLeadsMore()">Показать ещё</button>
             </div>
         </div>
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: АНАЛИТИКА (DataLens)                                   -->
+        <!-- ================================================================ -->
+        <div id="tab-analytics" class="admin-tab-content" style="display:none">
+            <div id="analytics-vpn-notice" class="admin-section-note" style="display:none">
+                ⚠️ Дашборды DataLens недоступны за пределами России и СНГ. При использовании VPN они не загрузятся.
+            </div>
+            <div id="analytics-iframe-wrap">
+                <div class="admin-loading">Загрузка дашборда...</div>
+            </div>
+        </div>
     </div>
 
     <!-- ШАБЛОН КАРТОЧКИ СОБЫТИЯ (JS-клонирование) -->
@@ -163,7 +175,7 @@
     // Tab switching
     // ========================================================================
 
-    const _tabLoaded = { events: false, presets: false, loader: false, leads: false };
+    const _tabLoaded = { events: false, presets: false, loader: false, leads: false, analytics: false };
 
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
@@ -178,6 +190,7 @@
             if (name === 'presets') loadPresets();
             if (name === 'loader') loadLoader();
             if (name === 'leads') loadLeadsTab();
+            if (name === 'analytics') loadAnalyticsTab();
         }
     }
 
@@ -861,6 +874,65 @@
         } finally {
             btn.disabled = false;
             btn.textContent = 'Экспорт CSV';
+        }
+    }
+
+    // ========================================================================
+    // Analytics tab (DataLens)
+    // ========================================================================
+
+    let _analyticsRefreshTimer = null;
+
+    async function loadAnalyticsTab() {
+        const wrap = document.getElementById('analytics-iframe-wrap');
+        try {
+            const r = await fetch('/api/admin/datalens-embeds');
+            if (!r.ok) throw new Error(r.status);
+            const data = await r.json();
+            wrap.innerHTML = '';
+            if (!data.embeds || !data.embeds.length) {
+                wrap.innerHTML = '<div class="admin-section-note">DataLens embeds не настроены.<br>Добавьте <code>DATALENS_KEY_SECRET</code> и <code>DATALENS_EMBEDS</code> в <code>.env</code>.</div>';
+                return;
+            }
+            data.embeds.forEach((embed, i) => {
+                const iframe = document.createElement('iframe');
+                iframe.id = 'adm-dl-' + i;
+                iframe.src = embed.url;
+                iframe.title = embed.title || 'DataLens';
+                iframe.allowFullscreen = true;
+                iframe.style.cssText = 'width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;display:block;margin-bottom:16px';
+                iframe.onload = () => {
+                    try {
+                        const doc = iframe.contentDocument || iframe.contentWindow.document;
+                        if (!doc || doc.body.innerHTML.trim() === '')
+                            document.getElementById('analytics-vpn-notice').style.display = '';
+                    } catch { /* cross-origin = OK */ }
+                };
+                wrap.appendChild(iframe);
+            });
+            // Обновляем токены каждые 50 минут (JWT живёт 1 час)
+            _analyticsRefreshTimer = setInterval(async () => {
+                try {
+                    const rr = await fetch('/api/admin/datalens-embeds');
+                    if (!rr.ok) return;
+                    const dd = await rr.json();
+                    dd.embeds.forEach((e, i) => {
+                        const f = document.getElementById('adm-dl-' + i);
+                        if (f) f.src = e.url;
+                    });
+                } catch { /* silent */ }
+            }, 50 * 60 * 1000);
+            setTimeout(() => {
+                document.querySelectorAll('[id^="adm-dl-"]').forEach(f => {
+                    try {
+                        const doc = f.contentDocument || f.contentWindow.document;
+                        if (!doc || doc.readyState !== 'complete' || doc.body.innerHTML.trim() === '')
+                            document.getElementById('analytics-vpn-notice').style.display = '';
+                    } catch { /* cross-origin = OK */ }
+                });
+            }, 8000);
+        } catch(e) {
+            wrap.innerHTML = `<div class="admin-error">Ошибка загрузки DataLens: ${e.message}</div>`;
         }
     }
 
