@@ -161,13 +161,10 @@ async def start_list_page(request: Request):
     })
 
 
-@router.get("/analytics", response_class=HTMLResponse)
-async def analytics_page(request: Request):
-    """Legacy URL — перенаправляем на стартовый список."""
-    return templates.TemplateResponse("start_list.html", {
-        "request": request,
-        "event": settings.CURRENT_EVENT,
-    })
+@router.get("/analytics")
+async def analytics_page():
+    """Legacy URL — перенаправляем в админку."""
+    return RedirectResponse("/admin", status_code=302)
 
 
 @router.get("/results", response_class=HTMLResponse)
@@ -244,34 +241,10 @@ async def logout():
 # БИЗНЕС-АНАЛИТИКА (защищённая страница)
 # ============================================================================
 
-@router.get("/business-analytics", response_class=HTMLResponse)
-async def business_analytics_page(
-    request: Request,
-    user=Depends(require_auth),
-):
-    if isinstance(user, RedirectResponse):
-        return user
-
-    from src.core.datalens import make_embed_token
-
-    datalens_embeds = []
-    if settings.DATALENS_KEY_SECRET:
-        try:
-            for cfg in settings.DATALENS_EMBEDS:
-                token = make_embed_token(cfg["id"], settings.DATALENS_KEY_SECRET)
-                embed_type = cfg.get("type", "dash")
-                datalens_embeds.append({
-                    "url": f"https://datalens.ru/embeds/{embed_type}#dl_embed_token={token}",
-                    "title": cfg.get("title", ""),
-                })
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"DataLens embed token error: {e}")
-
-    return templates.TemplateResponse("business-analytics.html", {
-        "request": request,
-        "datalens_embeds": datalens_embeds,
-    })
+@router.get("/business-analytics")
+async def business_analytics_page():
+    """Бизнес-аналитика переехала в /admin → вкладка Аналитика."""
+    return RedirectResponse("/admin", status_code=302)
 
 
 @router.get("/admin", response_class=HTMLResponse)

@@ -182,8 +182,8 @@
         document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
         document.getElementById('tab-' + name).style.display = '';
         btn.classList.add('admin-tab--active');
-        // Широкий режим только для таблицы заявок
-        document.querySelector('.admin-page').classList.toggle('admin-page--wide', name === 'leads');
+        // Широкий режим для таблицы заявок и дашборда аналитики
+        document.querySelector('.admin-page').classList.toggle('admin-page--wide', name === 'leads' || name === 'analytics');
         if (!_tabLoaded[name]) {
             _tabLoaded[name] = true;
             if (name === 'events') loadEvents();
