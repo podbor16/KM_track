@@ -32,9 +32,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          timeout: 60s
+          timeout: 120s
           script: |
-            set -e
+            set -ex
 
             # Обновить код
             git config --global --add safe.directory /opt/km_track
@@ -52,7 +52,7 @@ jobs:
 
             # Перезапустить приложение
             systemctl restart km_track
-            sleep 5
+            sleep 25
 
             # Проверить что поднялось
             curl -sf http://localhost:8000/ -o /dev/null || (echo "HEALTH CHECK FAILED" && exit 1)

@@ -129,8 +129,15 @@ async def lifespan(app: FastAPI):
 
     worker_id = str(os.getpid())
     redis_client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
-    await redis_client.ping()
-    settings.logger.info(f"[Redis] Connected, worker_id={worker_id}")
+    try:
+        await redis_client.ping()
+        settings.logger.info(f"[Redis] Connected, worker_id={worker_id}")
+    except Exception as _redis_err:
+        if settings.DEBUG:
+            settings.logger.warning(f"[Redis] Not available (DEBUG mode) — SSE disabled: {_redis_err}")
+            redis_client = None
+        else:
+            raise
 
     # === SSE BACKGROUND TASKS ===
 
@@ -269,25 +276,29 @@ async def lifespan(app: FastAPI):
             sse_count = tracker_hub.total_sse_count() + notification_hub.total_sse_count()
             await metrics_collector.flush(sse_connections=sse_count)
 
-    _sse_tasks = [
-        asyncio.create_task(_tracker_broadcast()),
-        asyncio.create_task(_redis_tracker_subscriber()),
-        asyncio.create_task(_results_watcher()),
-        asyncio.create_task(_startlist_watcher()),
-        asyncio.create_task(_redis_notification_subscriber()),
-        asyncio.create_task(_metrics_flusher()),
-    ]
-    settings.logger.info(
-        "[SSE] Background tasks started: tracker_broadcast, redis_tracker_subscriber, "
-        "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher"
-    )
+    _sse_tasks = [asyncio.create_task(_metrics_flusher())]
+    if redis_client is not None:
+        _sse_tasks += [
+            asyncio.create_task(_tracker_broadcast()),
+            asyncio.create_task(_redis_tracker_subscriber()),
+            asyncio.create_task(_results_watcher()),
+            asyncio.create_task(_startlist_watcher()),
+            asyncio.create_task(_redis_notification_subscriber()),
+        ]
+        settings.logger.info(
+            "[SSE] Background tasks started: tracker_broadcast, redis_tracker_subscriber, "
+            "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher"
+        )
+    else:
+        settings.logger.warning("[SSE] Redis unavailable — SSE tasks skipped (DEBUG mode)")
 
     yield  # Приложение работает здесь
 
     # === SHUTDOWN ===
     for _t in _sse_tasks:
         _t.cancel()
-    await redis_client.aclose()
+    if redis_client is not None:
+        await redis_client.aclose()
     settings.logger.info("Shutting down...")
 
 
