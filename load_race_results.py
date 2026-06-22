@@ -791,16 +791,9 @@ class RaceLoader:
         updated_results = 0
         if results_batch:
             try:
-                self._bulk_upsert(
+                self._bulk_update_join(
                     'results',
-                    ['id', 'surname', 'name', 'birthday', 'sex', 'category', 'race_status',
-                     'time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish',
-                     'finish_pace_avg_gun', 'finish_pace_avg_clean',
-                     'time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4',
-                     'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7',
-                     'pace_avg_kt1', 'pace_avg_kt2', 'pace_avg_kt3', 'pace_avg_kt4',
-                     'pace_avg_kt5', 'pace_avg_kt6', 'pace_avg_kt7'],
-                    results_batch,
+                    ['id'],
                     ['surname', 'name', 'birthday', 'sex', 'category', 'race_status',
                      'time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish',
                      'finish_pace_avg_gun', 'finish_pace_avg_clean',
@@ -808,6 +801,7 @@ class RaceLoader:
                      'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7',
                      'pace_avg_kt1', 'pace_avg_kt2', 'pace_avg_kt3', 'pace_avg_kt4',
                      'pace_avg_kt5', 'pace_avg_kt6', 'pace_avg_kt7'],
+                    results_batch,
                 )
                 if self.connection:
                     self.connection.commit()
