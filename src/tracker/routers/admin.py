@@ -278,6 +278,54 @@ async def loader_stop(name: str, user: str = Depends(api_require_auth)) -> dict:
     return {"status": "ok" if ok else "error", "output": output}
 
 
+@router.post("/api/admin/loader/{name}/init")
+async def loader_init(name: str, user: str = Depends(api_require_auth)) -> dict:
+    """Запустить загрузчик в режиме --init (первичный INSERT участников из Copernico)."""
+    import sys
+
+    env_file = LOADERS_DIR / f"{name}.env"
+    if not env_file.exists():
+        raise HTTPException(status_code=404, detail=f"Конфиг загрузчика '{name}' не найден")
+
+    config_path, distance = None, None
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        if line.startswith("LOADER_CONFIG="):
+            config_path = line.split("=", 1)[1].strip()
+        elif line.startswith("LOADER_DISTANCE="):
+            distance = line.split("=", 1)[1].strip().strip('"')
+
+    if not config_path or not distance:
+        raise HTTPException(status_code=400, detail="Не найдены LOADER_CONFIG или LOADER_DISTANCE в .env файле")
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, str(BASE_DIR / "load_race_results.py"),
+            "--config", config_path,
+            "--distance", distance,
+            "--init",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(BASE_DIR),
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+        output = (stdout + stderr).decode("utf-8", errors="replace")
+
+        inserted = 0
+        for line in output.splitlines():
+            if "Вставлено:" in line:
+                try:
+                    inserted = int(line.split("Вставлено:")[1].split()[0])
+                except Exception:
+                    pass
+
+        success = proc.returncode == 0
+        return {"status": "ok" if success else "error", "inserted": inserted, "output": output[-3000:]}
+    except asyncio.TimeoutError:
+        return {"status": "error", "inserted": 0, "output": "Timeout: Copernico API не ответил за 3 минуты"}
+    except Exception as e:
+        return {"status": "error", "inserted": 0, "output": str(e)}
+
+
 # ---------------------------------------------------------------------------
 # Leads API
 # ---------------------------------------------------------------------------
