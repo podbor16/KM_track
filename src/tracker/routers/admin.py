@@ -72,14 +72,20 @@ def _loader_for_event(event_code: str) -> Optional[str]:
 
 
 def _loader_event_code(loader_name: str) -> Optional[str]:
-    """Извлекает event_code из config/loader/{loader_name}.env"""
+    """Извлекает event_code из config/loader/{loader_name}.env, читая поле code из YAML."""
     env_file = LOADERS_DIR / f"{loader_name}.env"
     if not env_file.exists():
         return None
     for line in env_file.read_text(encoding="utf-8").splitlines():
         if line.startswith("LOADER_CONFIG="):
-            path = line.split("=", 1)[1].strip()
-            return Path(path).stem
+            yaml_path = BASE_DIR / line.split("=", 1)[1].strip()
+            try:
+                data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and data.get("code"):
+                    return data["code"]
+            except Exception:
+                pass
+            return yaml_path.stem
     return None
 
 
