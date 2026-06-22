@@ -2,7 +2,7 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [Map]
+    branches: [main]
 
 jobs:
   test:
@@ -38,7 +38,7 @@ jobs:
 
             # Обновить код
             git config --global --add safe.directory /opt/km_track
-            git -C /opt/km_track pull origin Map
+            git -C /opt/km_track pull origin main
 
             # Применить nginx конфиг если изменился
             cp /opt/km_track/deploy/nginx.conf /etc/nginx/nginx.conf
