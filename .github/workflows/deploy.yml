@@ -39,6 +39,7 @@ jobs:
             # Обновить код
             git config --global --add safe.directory /opt/km_track
             git -C /opt/km_track fetch origin
+            git -C /opt/km_track stash
             git -C /opt/km_track checkout -B main origin/main
 
             # Применить nginx конфиг если изменился
