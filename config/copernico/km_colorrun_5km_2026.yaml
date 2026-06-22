@@ -1,0 +1,19 @@
+description: "Красочный забег 2026, 5км, 1 КТ (Разворот 2.5км, KT2 в Copernico)."
+
+fields:
+  bib: dorsal
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+time_fields:
+  gun_start:   "times.official_:::start:::"
+  gun_finish:  "times.official_:::finish:::"
+  chip_start:  null
+  chip_finish: null
+
+checkpoint_fields:
+  kt1: "times.official_KT2"   # разворот 2.5 км
