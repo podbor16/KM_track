@@ -28,7 +28,7 @@ distances:
       race_id: "--2026-97190"
       login: "podbor250718@gmail.com"
       preset: "km_colorrun_5km_2026"
-      event: "5 km"
+      event: "5km"
 
   - distance: "2 км"
     distance_km: 2.0
