@@ -1,0 +1,19 @@
+[Unit]
+Description=KM Tri Loader (%i)
+After=network.target km_track.service
+
+[Service]
+Type=simple
+User=km
+Group=km
+WorkingDirectory=/opt/km_track
+EnvironmentFile=/opt/km_track/.env
+ExecStart=/opt/km_track/deploy/run_tri_loader.sh %i
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=km_tri_loader_%i
+
+[Install]
+WantedBy=multi-user.target
