@@ -42,13 +42,19 @@ templates.env.globals["v"] = _get_deploy_version()
 # Public pages
 # ---------------------------------------------------------------------------
 
-@router.get("/tri", response_class=HTMLResponse)
-@router.get("/tri/", response_class=HTMLResponse)
+@router.get("/24h", response_class=HTMLResponse)
+@router.get("/24h/", response_class=HTMLResponse)
 async def tri_home(request: Request):
     return templates.TemplateResponse("tri_results.html", {
         "request": request,
         "event_id": TRI_EVENT_ID,
     })
+
+@router.get("/tri")
+@router.get("/tri/")
+async def tri_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/24h", status_code=301)
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +76,16 @@ async def tri_laps():
 # Admin page
 # ---------------------------------------------------------------------------
 
-@router.get("/tri/admin", response_class=HTMLResponse)
+@router.get("/24h/admin", response_class=HTMLResponse)
 async def tri_admin_page(request: Request, user=Depends(require_auth)):
     if isinstance(user, RedirectResponse):
         return user
     return templates.TemplateResponse("tri_admin.html", {"request": request})
+
+@router.get("/tri/admin")
+async def tri_admin_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/24h/admin", status_code=301)
 
 
 # ---------------------------------------------------------------------------
