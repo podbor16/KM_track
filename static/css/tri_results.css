@@ -135,6 +135,40 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-badge--personal { background: #f0f0f0; color: #555; }
 .tri-badge--relay    { background: #fff0ec; color: var(--tri-accent); }
 
+/* ---- Expandable rows ---- */
+.tri-row-main { cursor: pointer; }
+.tri-row-main:active td { background: #f5f5f5; }
+.tri-row-detail { display: none; }
+.tri-row-detail.open { display: table-row; }
+.tri-row-detail > td { padding: 0; border-bottom: 1px solid #e8e8e8; }
+
+.tri-detail-inner {
+    padding: 10px 12px 12px 42px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    background: #fafafa;
+}
+.tri-detail-item { display: flex; flex-direction: column; gap: 2px; }
+.tri-detail-label {
+    font-size: 10px; color: var(--tri-muted);
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.tri-detail-value { font-size: 13px; color: var(--tri-text); font-weight: 600; }
+
+.tri-chevron {
+    display: inline-block; font-size: 9px; color: #bbb;
+    transition: transform 0.15s; margin-left: 4px; vertical-align: middle;
+}
+.tri-row-main.open .tri-chevron { transform: rotate(180deg); }
+
+/* ---- Mobile: hide secondary columns ---- */
+@media (max-width: 640px) {
+    .col-desktop { display: none; }
+    .tri-table th, .tri-table td { padding: 9px 10px; font-size: 13px; }
+    .tri-table-wrap { border-radius: 0; box-shadow: none; }
+}
+
 /* ---- Splits ---- */
 .tri-splits { margin-top: 24px; }
 .tri-splits__title { font-size: 16px; font-weight: 800; color: var(--tri-text); margin-bottom: 14px; }

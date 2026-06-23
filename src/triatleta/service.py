@@ -48,6 +48,11 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                 COUNT(l.id) AS laps_completed,
                 ROUND(COUNT(l.id) * 4.040, 3) AS total_km,
                 COALESCE(MAX(l.cumulative_ms), 0) AS elapsed_ms,
+                COALESCE((
+                    SELECT l2.lap_ms FROM laps l2
+                    WHERE l2.participant_id = p.id
+                    ORDER BY l2.lap_number DESC LIMIT 1
+                ), 0) AS last_lap_ms,
                 CASE
                     WHEN MAX(l.cumulative_ms) > 0
                     THEN ROUND(COUNT(l.id) * 4.040 / (MAX(l.cumulative_ms) / 3600000.0), 2)
@@ -71,6 +76,7 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                 leader["laps_completed"], leader["elapsed_ms"],
             )
             row["elapsed_ms"] = int(row["elapsed_ms"])
+            row["last_lap_ms"] = int(row["last_lap_ms"])
             result.append(row)
         return result
     finally:

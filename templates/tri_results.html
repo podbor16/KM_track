@@ -60,9 +60,9 @@
                         <th>Зачёт</th>
                         <th>Кругов</th>
                         <th>Км</th>
-                        <th>Время</th>
-                        <th>Скорость</th>
-                        <th>Отставание</th>
+                        <th class="col-desktop">Время круга</th>
+                        <th class="col-desktop">Скорость</th>
+                        <th class="col-desktop">Отставание</th>
                     </tr>
                 </thead>
                 <tbody id="standings-body">
@@ -141,6 +141,22 @@
         } catch(e) { console.error('standings error', e); }
     }
 
+    function calculateGap(aLaps, aMs, leaderLaps, leaderMs) {
+        if (aLaps < leaderLaps) {
+            const diff = leaderLaps - aLaps;
+            if (diff === 1) return '−1 круг';
+            if (diff >= 2 && diff <= 4) return `−${diff} круга`;
+            return `−${diff} кругов`;
+        }
+        const deltaMs = aMs - leaderMs;
+        if (deltaMs <= 0) return '—';
+        const s = Math.floor(deltaMs / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        return `+${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
     function applyFilters() {
         const category = document.getElementById('filter-category').value;
         const gender   = document.getElementById('filter-gender').value;
@@ -152,6 +168,19 @@
             if (search   && !(r.surname || '').toLowerCase().includes(search)) return false;
             return true;
         });
+
+        // Пересчитываем место и отставание от лидера отфильтрованной выборки
+        if (rows.length > 0) {
+            const leader = rows[0];
+            rows = rows.map((r, i) => ({
+                ...r,
+                rank: i + 1,
+                gap: i === 0 ? '—' : calculateGap(
+                    r.laps_completed, r.elapsed_ms,
+                    leader.laps_completed, leader.elapsed_ms
+                ),
+            }));
+        }
 
         document.getElementById('results-count').textContent =
             rows.length ? `${rows.length} участн.` : '';
@@ -165,21 +194,57 @@
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map((r, i) => {
+        tbody.innerHTML = rows.map(r => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
             const badgeClass = r.category === 'relay' ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = r.category === 'relay' ? 'Эстафета' : 'Личный';
-            return `<tr>
-                <td class="tri-rank">${i + 1}</td>
-                <td class="tri-name">${r.surname} ${r.name}</td>
+            return `
+            <tr class="tri-row-main" onclick="toggleDetail(this)">
+                <td class="tri-rank">${r.rank}</td>
+                <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
-                <td style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</td>
-                <td class="tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
-                <td class="${gapClass}">${r.gap}</td>
+                <td class="col-desktop" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</td>
+                <td class="tri-speed col-desktop">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
+                <td class="${gapClass} col-desktop">${r.gap}</td>
+            </tr>
+            <tr class="tri-row-detail">
+                <td colspan="8">
+                    <div class="tri-detail-inner">
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Время круга</span>
+                            <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Скорость</span>
+                            <span class="tri-detail-value">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Пол</span>
+                            <span class="tri-detail-value">${r.gender || '—'}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Отставание</span>
+                            <span class="tri-detail-value ${gapClass}">${r.gap}</span>
+                        </div>
+                    </div>
+                </td>
             </tr>`;
         }).join('');
+    }
+
+    function toggleDetail(mainRow) {
+        const detailRow = mainRow.nextElementSibling;
+        const isOpen = mainRow.classList.contains('open');
+        document.querySelectorAll('.tri-row-main.open').forEach(row => {
+            row.classList.remove('open');
+            row.nextElementSibling.classList.remove('open');
+        });
+        if (!isOpen) {
+            mainRow.classList.add('open');
+            detailRow.classList.add('open');
+        }
     }
 
     async function loadLaps() {
