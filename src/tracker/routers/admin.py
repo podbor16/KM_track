@@ -254,6 +254,8 @@ async def loader_status(user: str = Depends(api_require_auth)) -> list[dict]:
     result = []
     for env_file in sorted(LOADERS_DIR.glob("*.env")):
         name = env_file.stem
+        if name.startswith("tri_"):  # tri loaders управляются через /tri/admin
+            continue
         event_code = _loader_event_code(name)
         event_name = settings.EVENTS.get(event_code, None)
         ok, _ = _systemctl("is-active", name)

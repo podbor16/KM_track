@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triatleta — Управление загрузчиком</title>
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <style>
+        .admin-card {
+            background: var(--tri-surface);
+            border: 1px solid var(--tri-border);
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 500px;
+            margin-top: 24px;
+        }
+        .admin-card__title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: var(--tri-accent);
+        }
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .badge--active  { background: rgba(63,185,80,0.2);  color: var(--tri-green); }
+        .badge--inactive { background: rgba(248,81,73,0.15); color: var(--tri-red); }
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            padding: 9px 20px;
+            border-radius: 6px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: default; }
+        .btn--start   { background: var(--tri-green); color: #000; }
+        .btn--stop    { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+        .btn--restart { background: var(--tri-accent); color: #000; }
+        .result-msg { margin-top: 12px; font-size: 13px; color: var(--tri-muted); }
+        .result-msg.ok  { color: var(--tri-green); }
+        .result-msg.err { color: var(--tri-red); }
+        .logout-btn {
+            padding: 7px 16px;
+            background: transparent;
+            border: 1px solid var(--tri-border);
+            border-radius: 4px;
+            color: var(--tri-muted);
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .logout-btn:hover { border-color: var(--tri-accent); color: var(--tri-accent); }
+    </style>
+</head>
+<body>
+    <div class="tri-header">
+        <div>
+            <div class="tri-header__title">🔧 Triatleta — Управление загрузчиком</div>
+            <div class="tri-header__meta"><a href="/tri" style="color:var(--tri-accent)">← Live результаты</a></div>
+        </div>
+        <a href="/logout" class="logout-btn">Выйти</a>
+    </div>
+
+    <div class="tri-container">
+        <div class="admin-card">
+            <div class="admin-card__title">Загрузчик: km_tri_loader@tri_24h</div>
+            <div class="status-row">
+                Статус:
+                <span class="badge badge--inactive" id="status-badge">загрузка...</span>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn--start"   id="btn-start"   onclick="loaderAction('start')">Start</button>
+                <button class="btn btn--stop"     id="btn-stop"    onclick="loaderAction('stop')">Stop</button>
+                <button class="btn btn--restart"  id="btn-restart" onclick="loaderAction('restart')">Restart</button>
+            </div>
+            <div class="result-msg" id="result-msg"></div>
+        </div>
+    </div>
+
+    <script>
+    async function loadStatus() {
+        try {
+            const r = await fetch('/api/tri/admin/loader');
+            const d = await r.json();
+            const badge = document.getElementById('status-badge');
+            const isActive = d.status === 'active';
+            badge.textContent = isActive ? 'active' : 'inactive';
+            badge.className = 'badge ' + (isActive ? 'badge--active' : 'badge--inactive');
+            document.getElementById('btn-start').disabled = isActive;
+            document.getElementById('btn-stop').disabled = !isActive;
+        } catch(e) {
+            document.getElementById('status-badge').textContent = 'ошибка';
+        }
+    }
+
+    async function loaderAction(action) {
+        const msg = document.getElementById('result-msg');
+        msg.textContent = 'Выполняется...';
+        msg.className = 'result-msg';
+        ['btn-start','btn-stop','btn-restart'].forEach(id => document.getElementById(id).disabled = true);
+        try {
+            const r = await fetch(`/api/tri/admin/loader/${action}`, {method: 'POST'});
+            const d = await r.json();
+            msg.textContent = d.status === 'ok' ? `✓ ${action} выполнен` : `✗ Ошибка: ${d.output || ''}`;
+            msg.className = 'result-msg ' + (d.status === 'ok' ? 'ok' : 'err');
+        } catch(e) {
+            msg.textContent = '✗ ' + e.message;
+            msg.className = 'result-msg err';
+        }
+        await loadStatus();
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 10000);
+    </script>
+</body>
+</html>
