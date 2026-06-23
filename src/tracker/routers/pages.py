@@ -251,6 +251,8 @@ async def business_analytics_page():
 async def admin_page(request: Request, user=Depends(require_auth)):
     if isinstance(user, RedirectResponse):
         return user
+    if "triatleta" in request.headers.get("host", ""):
+        return RedirectResponse("/tri/admin")
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
