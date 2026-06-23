@@ -93,3 +93,31 @@ async def tri_loader_stop(user: str = Depends(api_require_auth)):
 async def tri_loader_restart(user: str = Depends(api_require_auth)):
     ok, output = _tri_systemctl("restart")
     return {"status": "ok" if ok else "error", "output": output}
+
+
+# ---------------------------------------------------------------------------
+# Preset API
+# ---------------------------------------------------------------------------
+
+TRI_PRESET_PATH = BASE_DIR / "config" / "copernico" / "tri_24h_2026.yaml"
+
+
+@router.get("/api/tri/admin/preset")
+async def tri_get_preset(user: str = Depends(api_require_auth)):
+    if not TRI_PRESET_PATH.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Пресет не найден")
+    return {"yaml": TRI_PRESET_PATH.read_text(encoding="utf-8")}
+
+
+@router.put("/api/tri/admin/preset")
+async def tri_save_preset(body: dict, user: str = Depends(api_require_auth)):
+    import yaml as _yaml
+    from fastapi import HTTPException
+    content = body.get("yaml", "")
+    try:
+        _yaml.safe_load(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Невалидный YAML: {e}")
+    TRI_PRESET_PATH.write_text(content, encoding="utf-8")
+    return {"status": "ok"}
