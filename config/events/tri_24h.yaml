@@ -1,0 +1,13 @@
+name: "Triatleta 24h"
+code: "tri_24h_2026"
+year: 2026
+gun_time: "13:00:00"
+
+distances:
+  - distance: "24h"
+    db_event_id: 1
+    copernico:
+      race_id: "triatleta-sutochnaya-velogonka-24-chasa-2026"
+      login: "podbor250718@gmail.com"
+      preset: "tri_24h_2026"
+      event: "24h race"

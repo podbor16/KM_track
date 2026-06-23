@@ -1,0 +1,14 @@
+description: "Triatleta 24h 2026. 150 кругов по 4.04 км. КТ: 1kr..150kr."
+
+fields:
+  start_number: bib
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+lap_fields:
+  count: 150
+  pattern: "times.official_{n}kr"
