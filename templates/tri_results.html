@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Triatleta — Суточная велогонка 24ч</title>
     <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <style>
+        .tri-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .tri-filter-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .tri-label {
+            font-size: 13px;
+            color: var(--tri-muted);
+            white-space: nowrap;
+        }
+        .tri-select {
+            background: var(--tri-surface);
+            border: 1px solid var(--tri-border);
+            border-radius: 6px;
+            color: var(--tri-text);
+            padding: 6px 10px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .tri-search {
+            background: var(--tri-surface);
+            border: 1px solid var(--tri-border);
+            border-radius: 6px;
+            color: var(--tri-text);
+            padding: 6px 10px;
+            font-size: 13px;
+            width: 180px;
+        }
+        .tri-search::placeholder { color: var(--tri-muted); }
+        .tri-results-count {
+            font-size: 12px;
+            color: var(--tri-muted);
+            margin-left: auto;
+        }
+    </style>
 </head>
 <body>
     <div class="tri-header">
@@ -19,17 +62,41 @@
     </div>
 
     <div class="tri-container">
-        <div class="tri-tabs">
-            <button class="tri-tab active" onclick="switchTab('individual', this)">Личный зачёт</button>
-            <button class="tri-tab" onclick="switchTab('relay', this)">Командный зачёт</button>
+
+        <!-- Фильтры -->
+        <div class="tri-toolbar">
+            <div class="tri-filter-group">
+                <label class="tri-label">Зачёт:</label>
+                <select id="filter-category" class="tri-select" onchange="applyFilters()">
+                    <option value="">Все</option>
+                    <option value="individual">Личный</option>
+                    <option value="relay">Командный</option>
+                </select>
+            </div>
+            <div class="tri-filter-group">
+                <label class="tri-label">Пол:</label>
+                <select id="filter-gender" class="tri-select" onchange="applyFilters()">
+                    <option value="">Все</option>
+                    <option value="M">Мужчины</option>
+                    <option value="F">Женщины</option>
+                </select>
+            </div>
+            <div class="tri-filter-group">
+                <input type="search" id="filter-search" class="tri-search"
+                       placeholder="Поиск по фамилии"
+                       oninput="applyFilters()" onkeydown="if(event.key==='Enter')applyFilters()">
+            </div>
+            <span class="tri-results-count" id="results-count"></span>
         </div>
 
+        <!-- Таблица -->
         <div class="tri-table-wrap">
-            <table class="tri-table" id="standings-table">
+            <table class="tri-table">
                 <thead>
                     <tr>
                         <th class="tri-rank">#</th>
                         <th>Участник</th>
+                        <th>Зачёт</th>
                         <th>Кругов</th>
                         <th>Км</th>
                         <th>Время</th>
@@ -38,12 +105,13 @@
                     </tr>
                 </thead>
                 <tbody id="standings-body">
-                    <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                    <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                 </tbody>
             </table>
         </div>
         <div class="tri-refresh" id="refresh-label"></div>
 
+        <!-- Сплиты -->
         <div class="tri-splits">
             <div class="tri-splits__title">Сплиты по часам</div>
             <div class="tri-slider-wrap">
@@ -76,9 +144,10 @@
     <script>
     const GUN_UTC_MS = new Date('2026-06-25T13:00:00Z').getTime();
     const LAP_KM = 4.040;
+    let allStandings = [];
     let allLaps = [];
-    let currentCategory = 'individual';
 
+    // ---- Счётчик прошедшего времени ----
     function updateElapsed() {
         const now = Date.now();
         const diff = Math.max(0, now - GUN_UTC_MS);
@@ -100,27 +169,50 @@
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
     }
 
+    // ---- Загрузка всех standings ----
     async function loadStandings() {
         try {
-            const r = await fetch(`/api/tri/standings?category=${currentCategory}`);
+            const r = await fetch('/api/tri/standings');
             const data = await r.json();
-            renderStandings(data.standings || []);
+            allStandings = data.standings || [];
+            applyFilters();
             document.getElementById('refresh-label').textContent =
                 `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
         } catch(e) { console.error('standings error', e); }
     }
 
+    // ---- Фильтрация ----
+    function applyFilters() {
+        const category = document.getElementById('filter-category').value;
+        const gender   = document.getElementById('filter-gender').value;
+        const search   = document.getElementById('filter-search').value.trim().toLowerCase();
+
+        let rows = allStandings.filter(r => {
+            if (category && r.category !== category) return false;
+            if (gender   && r.gender !== gender)     return false;
+            if (search   && !(r.surname || '').toLowerCase().includes(search)) return false;
+            return true;
+        });
+
+        document.getElementById('results-count').textContent =
+            rows.length ? `${rows.length} участн.` : '';
+
+        renderStandings(rows);
+    }
+
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map(r => {
+        tbody.innerHTML = rows.map((r, i) => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
+            const categoryLabel = r.category === 'relay' ? 'Эстафета' : 'Личный';
             return `<tr>
-                <td class="tri-rank">${r.rank}</td>
+                <td class="tri-rank">${i + 1}</td>
                 <td>${r.surname} ${r.name}</td>
+                <td style="font-size:12px;color:var(--tri-muted)">${categoryLabel}</td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</td>
@@ -130,6 +222,7 @@
         }).join('');
     }
 
+    // ---- Лапы для сплитов ----
     async function loadLaps() {
         try {
             const r = await fetch('/api/tri/laps');
@@ -150,9 +243,9 @@
 
     function renderSplits() {
         const fromH = parseInt(document.getElementById('from-slider').value);
-        const toH = parseInt(document.getElementById('to-slider').value);
+        const toH   = parseInt(document.getElementById('to-slider').value);
         const fromMs = (fromH - 1) * 3600000;
-        const toMs = toH * 3600000;
+        const toMs   = toH * 3600000;
         const byParticipant = {};
         for (const lap of allLaps) {
             if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
@@ -161,7 +254,7 @@
                 byParticipant[key].count++;
             }
         }
-        const rows = Object.values(byParticipant).sort((a,b) => b.count - a.count);
+        const rows = Object.values(byParticipant).sort((a, b) => b.count - a.count);
         const tbody = document.getElementById('splits-body');
         if (!rows.length) {
             tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
@@ -172,13 +265,6 @@
             <td>${r.count}</td>
             <td>${(r.count * LAP_KM).toFixed(1)}</td>
         </tr>`).join('');
-    }
-
-    function switchTab(category, btn) {
-        currentCategory = category;
-        document.querySelectorAll('.tri-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        loadStandings();
     }
 
     loadStandings();
