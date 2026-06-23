@@ -4,92 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Triatleta — Суточная велогонка 24ч</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
-    <style>
-        .tri-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }
-        .tri-filter-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .tri-label {
-            font-size: 13px;
-            color: var(--tri-muted);
-            white-space: nowrap;
-        }
-        .tri-select {
-            background: var(--tri-surface);
-            border: 1px solid var(--tri-border);
-            border-radius: 6px;
-            color: var(--tri-text);
-            padding: 6px 10px;
-            font-size: 13px;
-            cursor: pointer;
-        }
-        .tri-search {
-            background: var(--tri-surface);
-            border: 1px solid var(--tri-border);
-            border-radius: 6px;
-            color: var(--tri-text);
-            padding: 6px 10px;
-            font-size: 13px;
-            width: 180px;
-        }
-        .tri-search::placeholder { color: var(--tri-muted); }
-        .tri-results-count {
-            font-size: 12px;
-            color: var(--tri-muted);
-            margin-left: auto;
-        }
-    </style>
 </head>
 <body>
     <div class="tri-header">
         <div>
-            <div class="tri-header__title">🚴 Triatleta — Суточная велогонка 24ч</div>
-            <div class="tri-header__meta">Старт: 25.06.2026 20:00 Красноярск &nbsp;|&nbsp; Круг: 4.04 км</div>
+            <div class="tri-header__eyebrow">Triatleta · 24 часа</div>
+            <div class="tri-header__title">Суточная велогонка<br>25–26 июня 2026</div>
+            <div class="tri-header__meta">Красноярск · Триатлон-центр · Круг: 4.04 км</div>
         </div>
-        <div>
-            <div class="tri-header__meta">Прошло</div>
+        <div class="tri-elapsed-wrap">
+            <div class="tri-elapsed-label">Прошло</div>
             <div class="tri-elapsed" id="elapsed">—</div>
         </div>
     </div>
 
+    <!-- Фильтры -->
+    <div class="tri-toolbar">
+        <div class="tri-filter-group">
+            <label class="tri-label">Зачёт:</label>
+            <select id="filter-category" class="tri-select" onchange="applyFilters()">
+                <option value="">Все</option>
+                <option value="individual">Личный</option>
+                <option value="relay">Командный</option>
+            </select>
+        </div>
+        <div class="tri-filter-group">
+            <label class="tri-label">Пол:</label>
+            <select id="filter-gender" class="tri-select" onchange="applyFilters()">
+                <option value="">Все</option>
+                <option value="M">Мужчины</option>
+                <option value="F">Женщины</option>
+            </select>
+        </div>
+        <div class="tri-filter-group">
+            <input type="search" id="filter-search" class="tri-search"
+                   placeholder="Поиск по фамилии"
+                   oninput="applyFilters()" onkeydown="if(event.key==='Enter')applyFilters()">
+        </div>
+        <span class="tri-results-count" id="results-count"></span>
+    </div>
+
     <div class="tri-container">
 
-        <!-- Фильтры -->
-        <div class="tri-toolbar">
-            <div class="tri-filter-group">
-                <label class="tri-label">Зачёт:</label>
-                <select id="filter-category" class="tri-select" onchange="applyFilters()">
-                    <option value="">Все</option>
-                    <option value="individual">Личный</option>
-                    <option value="relay">Командный</option>
-                </select>
-            </div>
-            <div class="tri-filter-group">
-                <label class="tri-label">Пол:</label>
-                <select id="filter-gender" class="tri-select" onchange="applyFilters()">
-                    <option value="">Все</option>
-                    <option value="M">Мужчины</option>
-                    <option value="F">Женщины</option>
-                </select>
-            </div>
-            <div class="tri-filter-group">
-                <input type="search" id="filter-search" class="tri-search"
-                       placeholder="Поиск по фамилии"
-                       oninput="applyFilters()" onkeydown="if(event.key==='Enter')applyFilters()">
-            </div>
-            <span class="tri-results-count" id="results-count"></span>
-        </div>
-
-        <!-- Таблица -->
+        <!-- Таблица результатов -->
         <div class="tri-table-wrap">
             <table class="tri-table">
                 <thead>
@@ -169,7 +130,6 @@
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
     }
 
-    // ---- Загрузка всех standings ----
     async function loadStandings() {
         try {
             const r = await fetch('/api/tri/standings');
@@ -181,7 +141,6 @@
         } catch(e) { console.error('standings error', e); }
     }
 
-    // ---- Фильтрация ----
     function applyFilters() {
         const category = document.getElementById('filter-category').value;
         const gender   = document.getElementById('filter-gender').value;
@@ -208,11 +167,12 @@
         }
         tbody.innerHTML = rows.map((r, i) => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
+            const badgeClass = r.category === 'relay' ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = r.category === 'relay' ? 'Эстафета' : 'Личный';
             return `<tr>
                 <td class="tri-rank">${i + 1}</td>
-                <td>${r.surname} ${r.name}</td>
-                <td style="font-size:12px;color:var(--tri-muted)">${categoryLabel}</td>
+                <td class="tri-name">${r.surname} ${r.name}</td>
+                <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</td>
@@ -222,7 +182,6 @@
         }).join('');
     }
 
-    // ---- Лапы для сплитов ----
     async function loadLaps() {
         try {
             const r = await fetch('/api/tri/laps');
@@ -261,7 +220,7 @@
             return;
         }
         tbody.innerHTML = rows.map(r => `<tr>
-            <td>${r.name}</td>
+            <td class="tri-name">${r.name}</td>
             <td>${r.count}</td>
             <td>${(r.count * LAP_KM).toFixed(1)}</td>
         </tr>`).join('');
