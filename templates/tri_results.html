@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triatleta — Суточная велогонка 24ч</title>
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+</head>
+<body>
+    <div class="tri-header">
+        <div>
+            <div class="tri-header__title">🚴 Triatleta — Суточная велогонка 24ч</div>
+            <div class="tri-header__meta">Старт: 25.06.2026 20:00 Красноярск &nbsp;|&nbsp; Круг: 4.04 км</div>
+        </div>
+        <div>
+            <div class="tri-header__meta">Прошло</div>
+            <div class="tri-elapsed" id="elapsed">—</div>
+        </div>
+    </div>
+
+    <div class="tri-container">
+        <div class="tri-tabs">
+            <button class="tri-tab active" onclick="switchTab('individual', this)">Личный зачёт</button>
+            <button class="tri-tab" onclick="switchTab('relay', this)">Командный зачёт</button>
+        </div>
+
+        <div class="tri-table-wrap">
+            <table class="tri-table" id="standings-table">
+                <thead>
+                    <tr>
+                        <th class="tri-rank">#</th>
+                        <th>Участник</th>
+                        <th>Кругов</th>
+                        <th>Км</th>
+                        <th>Время</th>
+                        <th>Скорость</th>
+                        <th>Отставание</th>
+                    </tr>
+                </thead>
+                <tbody id="standings-body">
+                    <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="tri-refresh" id="refresh-label"></div>
+
+        <div class="tri-splits">
+            <div class="tri-splits__title">Сплиты по часам</div>
+            <div class="tri-slider-wrap">
+                <label class="tri-slider-label">
+                    С часа: <span id="from-val">1</span>
+                    <input type="range" id="from-slider" min="1" max="24" value="1" oninput="onSlider()">
+                </label>
+                <label class="tri-slider-label">
+                    По час: <span id="to-val">24</span>
+                    <input type="range" id="to-slider" min="1" max="24" value="24" oninput="onSlider()">
+                </label>
+            </div>
+            <div class="tri-table-wrap">
+                <table class="tri-table">
+                    <thead>
+                        <tr>
+                            <th>Участник</th>
+                            <th>Кругов за период</th>
+                            <th>Км за период</th>
+                        </tr>
+                    </thead>
+                    <tbody id="splits-body">
+                        <tr><td colspan="3" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const GUN_UTC_MS = new Date('2026-06-25T13:00:00Z').getTime();
+    const LAP_KM = 4.040;
+    let allLaps = [];
+    let currentCategory = 'individual';
+
+    function updateElapsed() {
+        const now = Date.now();
+        const diff = Math.max(0, now - GUN_UTC_MS);
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        document.getElementById('elapsed').textContent =
+            `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    setInterval(updateElapsed, 1000);
+    updateElapsed();
+
+    function fmtMs(ms) {
+        if (!ms) return '—';
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    async function loadStandings() {
+        try {
+            const r = await fetch(`/api/tri/standings?category=${currentCategory}`);
+            const data = await r.json();
+            renderStandings(data.standings || []);
+            document.getElementById('refresh-label').textContent =
+                `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+        } catch(e) { console.error('standings error', e); }
+    }
+
+    function renderStandings(rows) {
+        const tbody = document.getElementById('standings-body');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
+            return `<tr>
+                <td class="tri-rank">${r.rank}</td>
+                <td>${r.surname} ${r.name}</td>
+                <td>${r.laps_completed}</td>
+                <td>${parseFloat(r.total_km).toFixed(1)}</td>
+                <td style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</td>
+                <td class="tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
+                <td class="${gapClass}">${r.gap}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadLaps() {
+        try {
+            const r = await fetch('/api/tri/laps');
+            const data = await r.json();
+            allLaps = data.laps || [];
+            renderSplits();
+        } catch(e) { console.error('laps error', e); }
+    }
+
+    function onSlider() {
+        const fromH = parseInt(document.getElementById('from-slider').value);
+        let toH = parseInt(document.getElementById('to-slider').value);
+        if (toH < fromH) { toH = fromH; document.getElementById('to-slider').value = fromH; }
+        document.getElementById('from-val').textContent = fromH;
+        document.getElementById('to-val').textContent = toH;
+        renderSplits();
+    }
+
+    function renderSplits() {
+        const fromH = parseInt(document.getElementById('from-slider').value);
+        const toH = parseInt(document.getElementById('to-slider').value);
+        const fromMs = (fromH - 1) * 3600000;
+        const toMs = toH * 3600000;
+        const byParticipant = {};
+        for (const lap of allLaps) {
+            if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
+                const key = lap.participant_id;
+                if (!byParticipant[key]) byParticipant[key] = { name: `${lap.surname} ${lap.name}`, count: 0 };
+                byParticipant[key].count++;
+            }
+        }
+        const rows = Object.values(byParticipant).sort((a,b) => b.count - a.count);
+        const tbody = document.getElementById('splits-body');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => `<tr>
+            <td>${r.name}</td>
+            <td>${r.count}</td>
+            <td>${(r.count * LAP_KM).toFixed(1)}</td>
+        </tr>`).join('');
+    }
+
+    function switchTab(category, btn) {
+        currentCategory = category;
+        document.querySelectorAll('.tri-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadStandings();
+    }
+
+    loadStandings();
+    loadLaps();
+    setInterval(() => { loadStandings(); loadLaps(); }, 30000);
+    </script>
+</body>
+</html>

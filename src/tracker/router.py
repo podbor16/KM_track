@@ -15,3 +15,6 @@ router.include_router(pages_router)
 router.include_router(api_router)
 router.include_router(admin_router)
 router.include_router(webhook_router)
+
+from src.triatleta.router import router as triatleta_router
+router.include_router(triatleta_router)

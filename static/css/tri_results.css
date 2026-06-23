@@ -1,0 +1,87 @@
+:root {
+    --tri-bg: #0d1117;
+    --tri-surface: #161b22;
+    --tri-border: #30363d;
+    --tri-accent: #f0883e;
+    --tri-text: #e6edf3;
+    --tri-muted: #8b949e;
+    --tri-green: #3fb950;
+    --tri-red: #f85149;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: var(--tri-bg);
+    color: var(--tri-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+}
+
+.tri-header {
+    background: var(--tri-surface);
+    border-bottom: 2px solid var(--tri-accent);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tri-header__title { font-size: 20px; font-weight: 700; }
+.tri-header__meta { font-size: 13px; color: var(--tri-muted); }
+.tri-elapsed { font-size: 22px; font-weight: 700; color: var(--tri-accent); font-variant-numeric: tabular-nums; }
+
+.tri-container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+.tri-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.tri-tab {
+    padding: 8px 20px;
+    border: 1px solid var(--tri-border);
+    border-radius: 6px;
+    background: none;
+    color: var(--tri-muted);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+.tri-tab.active { background: var(--tri-accent); color: #000; border-color: var(--tri-accent); }
+
+.tri-table-wrap { overflow-x: auto; }
+
+table.tri-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tri-table th {
+    background: var(--tri-surface);
+    color: var(--tri-accent);
+    font-weight: 600;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 2px solid var(--tri-border);
+    white-space: nowrap;
+}
+
+.tri-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--tri-border);
+    color: var(--tri-text);
+}
+
+.tri-table tr:hover td { background: rgba(255,255,255,0.03); }
+.tri-rank { font-weight: 700; width: 36px; }
+.tri-gap--behind { color: var(--tri-red); }
+.tri-gap--leader { color: var(--tri-green); font-weight: 700; }
+.tri-speed { font-variant-numeric: tabular-nums; }
+
+.tri-splits { margin-top: 32px; }
+.tri-splits__title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.tri-slider-wrap { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.tri-slider-label { font-size: 14px; color: var(--tri-muted); min-width: 160px; }
+input[type=range] { accent-color: var(--tri-accent); width: 160px; }
+
+.tri-refresh { font-size: 12px; color: var(--tri-muted); margin-top: 8px; }
