@@ -137,7 +137,7 @@ distances:
       race_id: "triatleta-sutochnaya-velogonka-24-chasa-2026"
       login: "podbor250718@gmail.com"
       preset: "tri_24h_2026"
-      event: "24h"     # уточнить название ивента в Copernico
+      event: "24h race"  # название ивента в Copernico
 ```
 
 ---
