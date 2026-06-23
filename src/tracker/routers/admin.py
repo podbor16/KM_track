@@ -218,7 +218,7 @@ async def activate_event(code: str, user: str = Depends(api_require_auth)) -> di
 
 @router.get("/api/admin/presets")
 async def list_presets(user: str = Depends(api_require_auth)) -> list[str]:
-    return sorted(f.stem for f in PRESETS_DIR.glob("*.yaml"))
+    return sorted(f.stem for f in PRESETS_DIR.glob("*.yaml") if not f.stem.startswith("tri_"))
 
 
 @router.get("/api/admin/presets/{name}/yaml")
