@@ -23,6 +23,20 @@ class YamlBody(BaseModel):
 router = APIRouter(tags=["Triatleta"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+def _get_deploy_version() -> str:
+    import subprocess as _sp, time as _t
+    try:
+        r = _sp.run(["git", "rev-parse", "--short", "HEAD"],
+                    capture_output=True, text=True, timeout=3, cwd=str(BASE_DIR))
+        v = r.stdout.strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return str(int(_t.time()))
+
+templates.env.globals["v"] = _get_deploy_version()
+
 
 # ---------------------------------------------------------------------------
 # Public pages
