@@ -59,8 +59,11 @@ def _load_config(config_path: str, distance: str) -> dict:
     raise ValueError(f"Дистанция '{distance}' не найдена в {config_path}")
 
 
+_GENDER_NORM = {"male": "M", "female": "F", "m": "M", "f": "F"}
+
+
 def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) -> Optional[int]:
-    start_number = p.get(field_map.get("start_number", "bib"))
+    start_number = p.get(field_map.get("start_number", "dorsal"))
     if start_number is None:
         return None
     cursor.execute(
@@ -70,19 +73,24 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
     row = cursor.fetchone()
     if row:
         return row[0]
+    raw_gender = p.get(field_map.get("gender", "gender"), "") or ""
+    gender = _GENDER_NORM.get(raw_gender.lower(), raw_gender)
+    team_name = (p.get(field_map.get("team_name", "team")) or
+                 p.get("club") or "")
     cursor.execute(
         """INSERT INTO participants
-           (event_id, start_number, surname, name, birthdate, gender, status, category)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+           (event_id, start_number, surname, name, birthdate, gender, status, category, team_name)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         (
             event_id,
             start_number,
             p.get(field_map.get("surname", "surname"), ""),
             p.get(field_map.get("name", "name"), ""),
             p.get(field_map.get("birthdate", "birthdate")),
-            p.get(field_map.get("gender", "gender"), ""),
+            gender,
             p.get(field_map.get("status", "status"), ""),
             p.get(field_map.get("category", "category"), ""),
+            team_name,
         ),
     )
     return cursor.lastrowid

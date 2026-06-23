@@ -1,14 +1,19 @@
-description: "Triatleta 24h 2026. 150 кругов по 4.04 км. КТ: 1kr..150kr."
+description: "Triatleta 24h 2026. До 150 кругов по 4.04 км. КТ: 1kr..Nkr."
+# Поля верифицированы 2026-06-23 через реальный API-ответ.
 
 fields:
-  start_number: bib
-  surname: surname
-  name: name
-  birthdate: birthdate
-  gender: gender
-  status: status
-  category: category
+  start_number: dorsal    # подтверждено: Copernico возвращает строку '1', '2', ...
+  surname: surname        # подтверждено
+  name: name              # подтверждено
+  birthdate: birthdate    # есть в объекте, значение null до гонки
+  gender: gender          # подтверждено: 'male'/'female' → нормализуется в M/F загрузчиком
+  status: status          # подтверждено: 'notstarted' / 'finished'
+  category: category      # подтверждено: пусто до гонки
+  team_name: team         # поле team (+ fallback club) для команды
 
 lap_fields:
   count: 150
+  # ВНИМАНИЕ: паттерн НЕ верифицирован — гонка ещё не началась.
+  # Предположение по аналогии с другими Copernico-событиями.
+  # Проверить после первых кругов: curl <url> | python -m json.tool | grep times
   pattern: "times.official_{n}kr"
