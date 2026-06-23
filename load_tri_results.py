@@ -108,6 +108,42 @@ def _process_laps(cursor, participant_id: int, event_id: int, runner: dict, lap_
     return inserted
 
 
+def _run_once(config_path: str) -> int:
+    dist_cfg = _load_config(config_path, "24h")
+    event_id = dist_cfg["db_event_id"]
+    cop = dist_cfg["copernico"]
+    race_id = cop["race_id"]
+    login = cop["login"]
+    preset = cop["preset"]
+    event = cop["event"]
+
+    with open(f"config/copernico/{preset}.yaml", encoding="utf-8") as f:
+        preset_cfg = yaml.safe_load(f)
+    field_map = preset_cfg.get("fields", {})
+    lap_fields = preset_cfg.get("lap_fields", {})
+    lap_count = lap_fields.get("count", 150)
+    lap_pattern = lap_fields.get("pattern", "times.official_{n}kr")
+
+    runners = _fetch_copernico(race_id, login, preset, event)
+    logger.info(f"✅ Получено {len(runners)} участников")
+
+    conn = _connect()
+    cursor = conn.cursor()
+    inserted_participants = 0
+    for runner in runners:
+        pid = _get_or_create_participant(cursor, event_id, runner, field_map)
+        if pid is not None:
+            inserted_participants += 1
+        if pid is None:
+            continue
+        _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    logger.info(f"Вставлено: {inserted_participants} участников")
+    return inserted_participants
+
+
 def run(config_path: str, interval: int):
     dist_cfg = _load_config(config_path, "24h")
     event_id = dist_cfg["db_event_id"]
@@ -155,5 +191,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument("--init", action="store_true", help="Однократная загрузка участников и выход")
     args = parser.parse_args()
-    run(args.config, args.interval)
+    if args.init:
+        _run_once(args.config)
+    else:
+        run(args.config, args.interval)

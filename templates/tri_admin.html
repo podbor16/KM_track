@@ -6,6 +6,7 @@
     <title>Triatleta — Управление</title>
     <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
     <style>
+        /* ---- Tabs ---- */
         .admin-tabs { display: flex; gap: 4px; margin: 24px 0 16px; }
         .admin-tab {
             padding: 8px 20px; border: 1px solid var(--tri-border); border-radius: 6px;
@@ -15,36 +16,66 @@
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
 
+        /* ---- Cards ---- */
         .admin-card {
             background: var(--tri-surface); border: 1px solid var(--tri-border);
-            border-radius: 8px; padding: 24px; max-width: 600px;
+            border-radius: 8px; padding: 20px; max-width: 700px; margin-bottom: 12px;
         }
-        .admin-card__title { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--tri-accent); }
-        .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
-        .badge--active   { background: rgba(63,185,80,0.2);  color: var(--tri-green); }
-        .badge--inactive { background: rgba(248,81,73,0.15); color: var(--tri-red); }
-        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-        .btn {
-            padding: 9px 20px; border-radius: 6px; border: none;
-            font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
-        }
-        .btn:disabled { opacity: 0.4; cursor: default; }
-        .btn--start   { background: var(--tri-green); color: #000; }
-        .btn--stop    { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
-        .btn--restart { background: var(--tri-accent); color: #000; }
-        .btn--save    { background: var(--tri-accent); color: #000; }
-        .result-msg { margin-top: 12px; font-size: 13px; color: var(--tri-muted); min-height: 20px; }
-        .result-msg.ok  { color: var(--tri-green); }
-        .result-msg.err { color: var(--tri-red); }
+        .admin-card__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .admin-card__title { font-size: 15px; font-weight: 700; color: var(--tri-accent); }
 
-        textarea.yaml-editor {
-            width: 100%; height: 260px; background: #0d1117; color: var(--tri-text);
+        /* ---- Badges ---- */
+        .admin-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+        .admin-badge--active   { background: rgba(63,185,80,0.2);  color: var(--tri-green); }
+        .admin-badge--inactive { background: rgba(248,81,73,0.15); color: var(--tri-red); }
+
+        /* ---- Buttons ---- */
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .adm-btn {
+            padding: 8px 18px; border-radius: 6px; border: none;
+            font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+        }
+        .adm-btn:disabled { opacity: 0.4; cursor: default; }
+        .adm-btn--start   { background: var(--tri-green); color: #000; }
+        .adm-btn--stop    { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+        .adm-btn--init    { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+        .adm-btn--edit    { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+        .adm-btn--save    { background: var(--tri-accent); color: #000; }
+        .adm-btn--cancel  { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+
+        /* ---- Loader table ---- */
+        .admin-loader-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .admin-loader-table th, .admin-loader-table td {
+            padding: 10px 14px; text-align: left;
+            border-bottom: 1px solid var(--tri-border);
+        }
+        .admin-loader-table th { color: var(--tri-muted); font-weight: 600; font-size: 12px; }
+        .admin-loader-table tbody tr:last-child td { border-bottom: none; }
+
+        /* ---- Preset editor ---- */
+        .admin-editor { margin-top: 14px; }
+        .admin-editor__error {
+            background: rgba(248,81,73,0.1); border: 1px solid var(--tri-red);
+            border-radius: 6px; padding: 10px 14px; margin-bottom: 10px;
+            font-size: 13px; color: var(--tri-red);
+        }
+        .admin-yaml-editor {
+            width: 100%; height: 280px; background: #0d1117; color: var(--tri-text);
             border: 1px solid var(--tri-border); border-radius: 6px; padding: 12px;
             font-family: "Courier New", monospace; font-size: 13px; line-height: 1.5;
-            resize: vertical;
+            resize: vertical; box-sizing: border-box;
         }
+        .admin-editor__actions { display: flex; gap: 8px; margin-top: 10px; }
 
+        /* ---- Misc ---- */
+        .init-result { font-size: 12px; }
+        .admin-loading { color: var(--tri-muted); font-size: 14px; padding: 12px 0; }
+        .admin-error { color: var(--tri-red); font-size: 14px; padding: 12px 0; }
+        .admin-section-note {
+            color: var(--tri-muted); font-size: 13px;
+            background: var(--tri-surface); border: 1px solid var(--tri-border);
+            border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; max-width: 700px;
+        }
         .logout-btn {
             padding: 7px 16px; background: transparent; border: 1px solid var(--tri-border);
             border-radius: 4px; color: var(--tri-muted); font-size: 13px; cursor: pointer; text-decoration: none;
@@ -69,29 +100,18 @@
 
         <!-- Загрузчик -->
         <div id="tab-loader" class="tab-pane active">
-            <div class="admin-card">
-                <div class="admin-card__title">km_tri_loader@tri_24h</div>
-                <div class="status-row">
-                    Статус: <span class="badge badge--inactive" id="status-badge">загрузка...</span>
-                </div>
-                <div class="btn-row">
-                    <button class="btn btn--start"   id="btn-start"   onclick="loaderAction('start')">Start</button>
-                    <button class="btn btn--stop"     id="btn-stop"    onclick="loaderAction('stop')">Stop</button>
-                    <button class="btn btn--restart"  id="btn-restart" onclick="loaderAction('restart')">Restart</button>
-                </div>
-                <div class="result-msg" id="loader-msg"></div>
+            <div class="admin-section-note">
+                Управление сервисом <code>km_tri_loader@tri_24h</code> на сервере.
+            </div>
+            <div id="loader-wrap">
+                <div class="admin-loading">Загрузка статуса...</div>
             </div>
         </div>
 
         <!-- Пресет -->
         <div id="tab-preset" class="tab-pane">
-            <div class="admin-card">
-                <div class="admin-card__title">tri_24h_2026.yaml</div>
-                <textarea class="yaml-editor" id="preset-yaml" spellcheck="false"></textarea>
-                <div class="btn-row" style="margin-top:12px">
-                    <button class="btn btn--save" onclick="savePreset()">Сохранить</button>
-                </div>
-                <div class="result-msg" id="preset-msg"></div>
+            <div id="preset-wrap">
+                <div class="admin-loading">Загрузка...</div>
             </div>
         </div>
     </div>
@@ -106,85 +126,206 @@
     }
 
     // ---- Загрузчик ----
-    async function loadStatus() {
+
+    let _loaderTimer = null;
+
+    async function loadLoader() {
+        const wrap = document.getElementById('loader-wrap');
         try {
             const r = await fetch('/api/tri/admin/loader');
-            const d = await r.json();
-            const isActive = d.status === 'active';
-            const badge = document.getElementById('status-badge');
-            badge.textContent = isActive ? 'active' : 'inactive';
-            badge.className = 'badge ' + (isActive ? 'badge--active' : 'badge--inactive');
-            document.getElementById('btn-start').disabled = isActive;
-            document.getElementById('btn-stop').disabled = !isActive;
+            if (!r.ok) throw new Error(await r.text());
+            const loaders = await r.json();
+            wrap.innerHTML = '';
+            if (!loaders.length) {
+                wrap.innerHTML = '<div class="admin-loading">Нет данных загрузчика</div>';
+                return;
+            }
+            const table = document.createElement('table');
+            table.className = 'admin-loader-table';
+            table.innerHTML = `
+                <thead><tr>
+                    <th>Имя</th><th>Статус</th><th>Действия</th>
+                </tr></thead>
+                <tbody></tbody>`;
+            loaders.forEach(l => table.querySelector('tbody').appendChild(buildLoaderRow(l)));
+            wrap.appendChild(table);
         } catch(e) {
-            document.getElementById('status-badge').textContent = 'ошибка';
+            wrap.innerHTML = `<div class="admin-error">Ошибка: ${e.message}</div>`;
         }
     }
 
-    async function loaderAction(action) {
-        const msg = document.getElementById('loader-msg');
-        msg.textContent = 'Выполняется...';
-        msg.className = 'result-msg';
-        ['btn-start','btn-stop','btn-restart'].forEach(id => document.getElementById(id).disabled = true);
+    function buildLoaderRow(l) {
+        const tr = document.createElement('tr');
+        const isActive = l.status === 'active';
+        tr.innerHTML = `
+            <td><code>${l.name}</code></td>
+            <td><span class="admin-badge ${isActive ? 'admin-badge--active' : 'admin-badge--inactive'}">${isActive ? 'active' : 'inactive'}</span></td>
+            <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <button class="adm-btn adm-btn--start btn-start" ${isActive ? 'disabled' : ''}>Start</button>
+                <button class="adm-btn adm-btn--stop btn-stop" ${!isActive ? 'disabled' : ''}>Stop</button>
+                <button class="adm-btn adm-btn--init btn-init" title="Первичная загрузка участников из Copernico">Инициализация</button>
+                <span class="init-result" style="display:none"></span>
+            </td>`;
+
+        tr.querySelector('.btn-start').addEventListener('click', () => loaderAction('start', tr));
+        tr.querySelector('.btn-stop').addEventListener('click', () => loaderAction('stop', tr));
+        tr.querySelector('.btn-init').addEventListener('click', () => loaderInit(tr));
+        return tr;
+    }
+
+    async function loaderAction(action, tr) {
+        const btnStart = tr.querySelector('.btn-start');
+        const btnStop = tr.querySelector('.btn-stop');
+        const btnInit = tr.querySelector('.btn-init');
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        btnInit.disabled = true;
         try {
             const r = await fetch(`/api/tri/admin/loader/${action}`, {method: 'POST'});
             const d = await r.json();
-            msg.textContent = d.status === 'ok' ? `✓ ${action} выполнен` : `✗ Ошибка: ${d.output || ''}`;
-            msg.className = 'result-msg ' + (d.status === 'ok' ? 'ok' : 'err');
+            if (d.output) console.log(`loader ${action}:`, d.output);
         } catch(e) {
-            msg.textContent = '✗ ' + e.message;
-            msg.className = 'result-msg err';
+            alert('Ошибка: ' + e.message);
         }
-        // Пауза перед проверкой статуса — сервис должен успеть запуститься
-        await new Promise(r => setTimeout(r, 2000));
-        await loadStatus();
+        await new Promise(r => setTimeout(r, 1500));
+        loadLoader();
     }
 
-    loadStatus();
-    setInterval(loadStatus, 10000);
+    async function loaderInit(tr) {
+        const btn = tr.querySelector('.btn-init');
+        const result = tr.querySelector('.init-result');
+        const btnStart = tr.querySelector('.btn-start');
+        const btnStop = tr.querySelector('.btn-stop');
+
+        btn.disabled = true;
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        btn.textContent = 'Загрузка...';
+        result.style.display = 'none';
+
+        try {
+            const r = await fetch('/api/tri/admin/loader/init', {method: 'POST'});
+            const d = await r.json();
+            result.style.display = 'inline';
+            if (d.status === 'ok') {
+                result.style.color = 'var(--tri-green)';
+                result.textContent = `✓ Вставлено: ${d.inserted}`;
+            } else {
+                result.style.color = 'var(--tri-red)';
+                result.textContent = '✗ Ошибка';
+                console.error('Init error:', d.output);
+            }
+        } catch(e) {
+            result.style.display = 'inline';
+            result.style.color = 'var(--tri-red)';
+            result.textContent = `✗ ${e.message}`;
+        }
+
+        btn.textContent = 'Инициализация';
+        btn.disabled = false;
+        loadLoader();
+    }
+
+    loadLoader();
+    setInterval(loadLoader, 10000);
 
     // ---- Пресет ----
+
+    let _presetLoaded = false;
+
     async function loadPreset() {
-        const ta = document.getElementById('preset-yaml');
-        ta.value = 'Загрузка...';
+        if (_presetLoaded) return;
+        _presetLoaded = true;
+
+        const wrap = document.getElementById('preset-wrap');
         try {
             const r = await fetch('/api/tri/admin/preset');
             const d = await r.json();
-            if (!r.ok) { ta.value = 'Ошибка: ' + (d.detail || r.status); return; }
-            ta.value = d.yaml;
-        } catch(e) {
-            ta.value = 'Ошибка: ' + e.message;
-        }
-    }
-
-    async function savePreset() {
-        const msg = document.getElementById('preset-msg');
-        const content = document.getElementById('preset-yaml').value;
-        msg.textContent = 'Сохранение...';
-        msg.className = 'result-msg';
-        try {
-            const r = await fetch('/api/tri/admin/preset', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({yaml: content}),
-            });
-            const d = await r.json();
-            if (r.ok) {
-                msg.textContent = '✓ Сохранено';
-                msg.className = 'result-msg ok';
-            } else {
-                msg.textContent = '✗ ' + (d.detail || 'Ошибка');
-                msg.className = 'result-msg err';
+            if (!r.ok) {
+                wrap.innerHTML = `<div class="admin-error">Ошибка: ${d.detail || r.status}</div>`;
+                return;
             }
+            wrap.innerHTML = '';
+            wrap.appendChild(buildPresetCard('tri_24h_2026', d.yaml));
         } catch(e) {
-            msg.textContent = '✗ ' + e.message;
-            msg.className = 'result-msg err';
+            wrap.innerHTML = `<div class="admin-error">Ошибка: ${e.message}</div>`;
         }
     }
 
-    // Tab в textarea → 2 пробела
-    document.getElementById('preset-yaml').addEventListener('keydown', e => {
-        if (e.key === 'Tab') {
+    function buildPresetCard(name, yamlContent) {
+        const card = document.createElement('div');
+        card.className = 'admin-card';
+        card.innerHTML = `
+            <div class="admin-card__head">
+                <div class="admin-card__title">${name}.yaml</div>
+                <button class="adm-btn adm-btn--edit btn-edit">Редактировать</button>
+            </div>
+            <div class="admin-editor" style="display:none">
+                <div class="admin-editor__error" style="display:none"></div>
+                <textarea class="admin-yaml-editor" spellcheck="false"></textarea>
+                <div class="admin-editor__actions">
+                    <button class="adm-btn adm-btn--save btn-save">Сохранить</button>
+                    <button class="adm-btn adm-btn--cancel btn-cancel">Отмена</button>
+                </div>
+            </div>`;
+
+        const btnEdit = card.querySelector('.btn-edit');
+        const editor = card.querySelector('.admin-editor');
+        const textarea = card.querySelector('.admin-yaml-editor');
+        const errBox = card.querySelector('.admin-editor__error');
+
+        textarea.value = yamlContent;
+
+        btnEdit.addEventListener('click', () => {
+            if (editor.style.display !== 'none') {
+                editor.style.display = 'none';
+                btnEdit.textContent = 'Редактировать';
+            } else {
+                editor.style.display = '';
+                btnEdit.textContent = 'Свернуть';
+                errBox.style.display = 'none';
+            }
+        });
+
+        card.querySelector('.btn-cancel').addEventListener('click', () => {
+            editor.style.display = 'none';
+            btnEdit.textContent = 'Редактировать';
+        });
+
+        card.querySelector('.btn-save').addEventListener('click', async () => {
+            const btnSave = card.querySelector('.btn-save');
+            btnSave.disabled = true;
+            btnSave.textContent = 'Сохранение...';
+            errBox.style.display = 'none';
+            try {
+                const r = await fetch('/api/tri/admin/preset', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({yaml: textarea.value}),
+                });
+                const d = await r.json();
+                if (r.ok) {
+                    editor.style.display = 'none';
+                    btnEdit.textContent = 'Редактировать';
+                } else {
+                    errBox.textContent = d.detail || 'Ошибка сохранения';
+                    errBox.style.display = '';
+                }
+            } catch(e) {
+                errBox.textContent = 'Ошибка сети: ' + e.message;
+                errBox.style.display = '';
+            } finally {
+                btnSave.disabled = false;
+                btnSave.textContent = 'Сохранить';
+            }
+        });
+
+        return card;
+    }
+
+    // Tab key в textarea → 2 пробела
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Tab' && e.target.classList.contains('admin-yaml-editor')) {
             e.preventDefault();
             const ta = e.target;
             const s = ta.selectionStart, en = ta.selectionEnd;
