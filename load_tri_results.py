@@ -59,7 +59,7 @@ def _load_config(config_path: str, distance: str) -> dict:
     raise ValueError(f"Дистанция '{distance}' не найдена в {config_path}")
 
 
-_GENDER_NORM = {"male": "M", "female": "F", "m": "M", "f": "F"}
+_GENDER_NORM = {"male": "Мужчина", "female": "Женщина", "m": "Мужчина", "f": "Женщина"}
 
 
 def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) -> Optional[int]:
