@@ -60,13 +60,14 @@
                         <th>Зачёт</th>
                         <th>Кругов</th>
                         <th>Км</th>
-                        <th class="col-desktop">Время круга</th>
-                        <th class="col-desktop">Скорость</th>
+                        <th class="col-desktop">Посл. круг</th>
+                        <th class="col-desktop">Скорость круга</th>
+                        <th class="col-desktop">Ср. скорость</th>
                         <th class="col-desktop">Отставание</th>
                     </tr>
                 </thead>
                 <tbody id="standings-body">
-                    <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                    <tr><td colspan="9" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -92,10 +93,11 @@
                             <th>Участник</th>
                             <th>Кругов за период</th>
                             <th>Км за период</th>
+                            <th>Ср. скорость</th>
                         </tr>
                     </thead>
                     <tbody id="splits-body">
-                        <tr><td colspan="3" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                        <tr><td colspan="4" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -128,6 +130,11 @@
         const m = Math.floor((s % 3600) / 60);
         const ss = s % 60;
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    function lapSpeed(lapMs) {
+        if (!lapMs) return '—';
+        return (LAP_KM / (lapMs / 3600000)).toFixed(1) + ' км/ч';
     }
 
     async function loadStandings() {
@@ -191,13 +198,16 @@
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
             const badgeClass = r.category === 'relay' ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = r.category === 'relay' ? 'Эстафета' : 'Личный';
+            const lastLapCell = r.laps_completed > 0
+                ? `<span style="color:var(--tri-muted);font-size:12px">№${r.laps_completed}&thinsp;·&thinsp;</span>${fmtMs(r.last_lap_ms)}`
+                : '—';
             return `
             <tr class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
@@ -205,19 +215,28 @@
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
-                <td class="col-desktop" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</td>
-                <td class="tri-speed col-desktop">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
+                <td class="col-desktop tri-speed" style="font-variant-numeric:tabular-nums">${lastLapCell}</td>
+                <td class="col-desktop tri-speed">${lapSpeed(r.last_lap_ms)}</td>
+                <td class="col-desktop tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
                 <td class="${gapClass} col-desktop">${r.gap}</td>
             </tr>
             <tr class="tri-row-detail">
-                <td colspan="8">
+                <td colspan="9">
                     <div class="tri-detail-inner">
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Последний круг</span>
+                            <span class="tri-detail-value">${r.laps_completed > 0 ? `№${r.laps_completed}` : '—'}</span>
+                        </div>
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Время круга</span>
                             <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</span>
                         </div>
                         <div class="tri-detail-item">
-                            <span class="tri-detail-label">Скорость</span>
+                            <span class="tri-detail-label">Скорость круга</span>
+                            <span class="tri-detail-value">${lapSpeed(r.last_lap_ms)}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Ср. скорость за гонку</span>
                             <span class="tri-detail-value">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</span>
                         </div>
                         <div class="tri-detail-item">
@@ -270,6 +289,7 @@
         const toH   = parseInt(document.getElementById('to-slider').value);
         const fromMs = (fromH - 1) * 3600000;
         const toMs   = toH * 3600000;
+        const durationH = toH - fromH + 1;
         const byParticipant = {};
         for (const lap of allLaps) {
             if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
@@ -281,14 +301,18 @@
         const rows = Object.values(byParticipant).sort((a, b) => b.count - a.count);
         const tbody = document.getElementById('splits-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map(r => `<tr>
-            <td class="tri-name">${r.name}</td>
-            <td>${r.count}</td>
-            <td>${(r.count * LAP_KM).toFixed(1)}</td>
-        </tr>`).join('');
+        tbody.innerHTML = rows.map(r => {
+            const speed = (r.count * LAP_KM / durationH).toFixed(1);
+            return `<tr>
+                <td class="tri-name">${r.name}</td>
+                <td>${r.count}</td>
+                <td>${(r.count * LAP_KM).toFixed(1)}</td>
+                <td class="tri-speed">${speed} км/ч</td>
+            </tr>`;
+        }).join('');
     }
 
     loadStandings();
