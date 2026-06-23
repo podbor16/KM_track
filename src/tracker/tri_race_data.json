@@ -1,0 +1,22 @@
+{
+  "source_url": "https://public-api.copernico.cloud/api/races/triatleta-sutochnaya-velogonka-24-chasa-2026/preset/podbor250718@gmail.com:::tri_24h_2026/24h%20race",
+  "count": 1,
+  "data": [
+    {
+      "gender": "male",
+      "name": "Игорь",
+      "surname": "Бурдин",
+      "dorsal": "1",
+      "chip": [
+        "1"
+      ],
+      "team": "",
+      "category": "",
+      "status": "notstarted",
+      "ordinal": 0,
+      "club": null,
+      "document": null,
+      "eventNames": null
+    }
+  ]
+}
