@@ -202,11 +202,29 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
+        // Лучший последний круг среди участников с кругами
+        const bestLapMs = Math.min(...rows
+            .filter(r => r.laps_completed > 0 && r.last_lap_ms > 0)
+            .map(r => r.last_lap_ms)) || 0;
+
         tbody.innerHTML = rows.map(r => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
+
+            // Отставание на последнем круге
+            let lapGap = '—', lapGapClass = 'tri-gap--leader';
+            if (r.laps_completed > 0 && r.last_lap_ms > 0 && bestLapMs > 0) {
+                const delta = r.last_lap_ms - bestLapMs;
+                if (delta <= 0) {
+                    lapGap = '—';
+                } else {
+                    lapGap = '+' + fmtMs(delta);
+                    lapGapClass = 'tri-gap--behind';
+                }
+            }
+
             return `
             <tr class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
@@ -233,16 +251,8 @@
                             <span class="tri-detail-value">${lapSpeed(r.last_lap_ms)}</span>
                         </div>
                         <div class="tri-detail-item">
-                            <span class="tri-detail-label">Ср. скорость за гонку</span>
-                            <span class="tri-detail-value">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</span>
-                        </div>
-                        <div class="tri-detail-item">
-                            <span class="tri-detail-label">Пол</span>
-                            <span class="tri-detail-value">${r.gender || '—'}</span>
-                        </div>
-                        <div class="tri-detail-item">
-                            <span class="tri-detail-label">Отставание</span>
-                            <span class="tri-detail-value ${gapClass}">${r.gap}</span>
+                            <span class="tri-detail-label">Отставание на круге</span>
+                            <span class="tri-detail-value ${lapGapClass}">${lapGap}</span>
                         </div>
                     </div>
                 </td>
