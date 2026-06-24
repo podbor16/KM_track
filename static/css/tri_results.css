@@ -142,6 +142,30 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-row-detail.open { display: table-row; }
 .tri-row-detail > td { padding: 0; border-bottom: 1px solid #e8e8e8; }
 
+.tri-detail-tabs {
+    display: flex;
+    gap: 0;
+    background: #fafafa;
+    padding: 8px 12px 0 42px;
+    border-bottom: 1px solid var(--tri-border);
+}
+.tri-detail-tab {
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Onest', Arial, sans-serif;
+    color: var(--tri-muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    margin-bottom: -1px;
+}
+.tri-detail-tab.active {
+    color: var(--tri-accent);
+    border-bottom-color: var(--tri-accent);
+}
+
 .tri-detail-inner {
     padding: 10px 12px 12px 42px;
     display: grid;

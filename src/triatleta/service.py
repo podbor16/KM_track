@@ -53,6 +53,12 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                     WHERE l2.participant_id = p.id
                     ORDER BY l2.lap_number DESC LIMIT 1
                 ), 0) AS last_lap_ms,
+                COALESCE(MIN(l.lap_ms), 0) AS best_lap_ms,
+                COALESCE((
+                    SELECT l3.lap_number FROM laps l3
+                    WHERE l3.participant_id = p.id
+                    ORDER BY l3.lap_ms ASC LIMIT 1
+                ), 0) AS best_lap_number,
                 CASE
                     WHEN MAX(l.cumulative_ms) > 0
                     THEN ROUND(COUNT(l.id) * 4.040 / (MAX(l.cumulative_ms) / 3600000.0), 2)

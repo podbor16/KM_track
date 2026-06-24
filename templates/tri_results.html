@@ -137,6 +137,25 @@
         return (LAP_KM / (lapMs / 3600000)).toFixed(1) + ' км/ч';
     }
 
+    function bestLapGap(lapMs, bestMs) {
+        if (!lapMs || !bestMs) return '—';
+        const delta = lapMs - bestMs;
+        if (delta <= 0) return '—';
+        return '+' + fmtMs(delta);
+    }
+
+    function bestLapGapClass(lapMs, bestMs) {
+        if (!lapMs || !bestMs || lapMs <= bestMs) return 'tri-gap--leader';
+        return 'tri-gap--behind';
+    }
+
+    function switchLapTab(btn, showId, hideId) {
+        btn.parentElement.querySelectorAll('.tri-detail-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(showId).style.display = '';
+        document.getElementById(hideId).style.display = 'none';
+    }
+
     async function loadStandings() {
         try {
             const r = await fetch('/api/tri/standings');
@@ -202,10 +221,15 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
-        // Лучший последний круг среди участников с кругами
+        // Лучший последний круг среди участников с кругами (для отставания на последнем круге)
         const bestLapMs = Math.min(...rows
             .filter(r => r.laps_completed > 0 && r.last_lap_ms > 0)
             .map(r => r.last_lap_ms)) || 0;
+
+        // Абсолютно лучший круг за всю гонку (для таба «Лучший круг»)
+        const bestOverallLapMs = Math.min(...rows
+            .filter(r => r.best_lap_ms > 0)
+            .map(r => r.best_lap_ms)) || 0;
 
         tbody.innerHTML = rows.map(r => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
@@ -237,7 +261,11 @@
             </tr>
             <tr class="tri-row-detail">
                 <td colspan="7">
-                    <div class="tri-detail-inner">
+                    <div class="tri-detail-tabs">
+                        <button class="tri-detail-tab active" onclick="switchLapTab(this, 'last-${r.id}', 'best-${r.id}')">Последний круг</button>
+                        <button class="tri-detail-tab" onclick="switchLapTab(this, 'best-${r.id}', 'last-${r.id}')">Лучший круг</button>
+                    </div>
+                    <div id="last-${r.id}" class="tri-detail-inner">
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Последний круг</span>
                             <span class="tri-detail-value">${r.laps_completed > 0 ? `№${r.laps_completed}` : '—'}</span>
@@ -253,6 +281,24 @@
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Отставание на круге</span>
                             <span class="tri-detail-value ${lapGapClass}">${lapGap}</span>
+                        </div>
+                    </div>
+                    <div id="best-${r.id}" class="tri-detail-inner" style="display:none">
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Лучший круг</span>
+                            <span class="tri-detail-value">${r.best_lap_number > 0 ? `№${r.best_lap_number}` : '—'}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Время круга</span>
+                            <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.best_lap_ms)}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Скорость круга</span>
+                            <span class="tri-detail-value">${lapSpeed(r.best_lap_ms)}</span>
+                        </div>
+                        <div class="tri-detail-item">
+                            <span class="tri-detail-label">Отставание на круге</span>
+                            <span class="tri-detail-value ${bestLapGapClass(r.best_lap_ms, bestOverallLapMs)}">${bestLapGap(r.best_lap_ms, bestOverallLapMs)}</span>
                         </div>
                     </div>
                 </td>
