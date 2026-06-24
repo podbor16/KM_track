@@ -260,32 +260,53 @@
     function renderChart() {
         if (!allLaps.length) return;
 
-        // Строим данные по каждому участнику
+        const WIN = 0.5; // окно 30 минут
+
+        // Группируем круги по участнику
         const byPid = {};
         for (const lap of allLaps) {
             if (!filteredPids.has(lap.participant_id)) continue;
             const pid = lap.participant_id;
             if (!byPid[pid]) byPid[pid] = { surname: lap.surname, name: lap.name, laps: [] };
-            byPid[pid].laps.push({ x: lap.cumulative_ms / 3600000, y: lap.lap_number * LAP_KM });
+            byPid[pid].laps.push(lap.cumulative_ms / 3600000); // часы от выстрела
         }
 
-        // Сортируем участников по фамилии для стабильных цветов
         const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
 
         const datasets = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
-            // Добавляем стартовую точку (0, 0)
-            const data = [{ x: 0, y: 0 }, ...p.laps.sort((a, b) => a.x - b.x)];
+
+            // Определяем максимальное время участника
+            const maxH = p.laps.length ? Math.max(...p.laps) : 0;
+
+            // Агрегируем по 30-минутным окнам
+            const data = [];
+            for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN + WIN; w += WIN) {
+                const from = w - WIN;
+                const to   = w;
+                const count = p.laps.filter(h => h > from && h <= to).length;
+                if (count > 0 || data.length > 0) {
+                    const speed = count * LAP_KM / WIN; // км/ч за это окно
+                    data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat(speed.toFixed(2)) });
+                }
+                if (to > maxH + WIN) break;
+            }
+
+            // Только последняя точка — крупный кружок
+            const radii     = data.map((_, j) => j === data.length - 1 ? 6 : 0);
+            const hoverRadii = data.map((_, j) => j === data.length - 1 ? 8 : 5);
+
             return {
                 label: `${p.surname} ${p.name}`,
                 data,
                 borderColor: color,
-                backgroundColor: color + '22',
+                backgroundColor: color,
                 borderWidth: 2,
                 pointStyle: 'circle',
-                pointRadius: 3,
-                pointHoverRadius: 6,
-                tension: 0.1,
+                pointRadius: radii,
+                pointHoverRadius: hoverRadii,
+                tension: 0.3,
+                spanGaps: true,
             };
         });
 
@@ -305,21 +326,24 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: { font: { family: 'Onest, Arial, sans-serif', size: 12 }, padding: 16, usePointStyle: true, pointStyleWidth: 16 }
+                            labels: {
+                                font: { family: 'Onest, Arial, sans-serif', size: 12 },
+                                padding: 16,
+                                usePointStyle: true,
+                                pointStyleWidth: 12,
+                            }
                         },
                         tooltip: {
                             callbacks: {
                                 title(items) {
                                     const h = items[0].parsed.x;
-                                    const gunMs = GUN_UTC_MS;
-                                    const ts = new Date(gunMs + h * 3600000);
-                                    return ts.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                                    const ts = new Date(GUN_UTC_MS + h * 3600000);
+                                    const from = new Date(GUN_UTC_MS + (h - WIN) * 3600000);
+                                    return `${from.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} – ${ts.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}`;
                                 },
                                 label(item) {
-                                    const km = item.parsed.y;
-                                    const h  = item.parsed.x;
-                                    const speed = h > 0 ? (km / h).toFixed(1) : '—';
-                                    return ` ${item.dataset.label}: ${km.toFixed(1)} км  •  ${speed} км/ч`;
+                                    const spd = item.parsed.y;
+                                    return ` ${item.dataset.label}: ${spd.toFixed(1)} км/ч`;
                                 }
                             }
                         }
@@ -329,11 +353,9 @@
                             type: 'linear',
                             min: 0,
                             max: 24,
-                            title: { display: false },
                             ticks: {
                                 stepSize: 1,
                                 callback(val) {
-                                    const gunDate = new Date(GUN_UTC_MS);
                                     const ts = new Date(GUN_UTC_MS + val * 3600000);
                                     return ts.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
                                 },
@@ -343,7 +365,7 @@
                             grid: { color: 'rgba(0,0,0,0.06)' }
                         },
                         y: {
-                            title: { display: true, text: 'Километры', font: { size: 12 } },
+                            title: { display: true, text: 'Скорость, км/ч (за 30 мин)', font: { size: 12 } },
                             min: 0,
                             ticks: { font: { size: 11 } },
                             grid: { color: 'rgba(0,0,0,0.06)' }
