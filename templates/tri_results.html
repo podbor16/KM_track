@@ -170,7 +170,7 @@
         let rows = allStandings.filter(r => {
             if (category === 'personal'  && r.category === 'Эстафета') return false;
             if (category === 'Эстафета'  && r.category !== 'Эстафета') return false;
-            if (gender   && r.gender !== gender)     return false;
+            if (gender   && r.gender !== gender && r.gender !== 'mixed') return false;
             if (search   && !(r.surname || '').toLowerCase().includes(search)) return false;
             return true;
         });
