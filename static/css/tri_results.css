@@ -197,6 +197,24 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 }
 
 /* ---- Chart tab ---- */
+.tri-chart-subtabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.tri-chart-subtab {
+    padding: 5px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Onest', Arial, sans-serif;
+    color: var(--tri-muted);
+    background: var(--tri-surface);
+    border: 1px solid var(--tri-border);
+    border-radius: 20px;
+    cursor: pointer;
+}
+.tri-chart-subtab.active { background: var(--tri-navy); color: #fff; border-color: var(--tri-navy); }
+
 .tri-chart-layout {
     display: flex;
     gap: 12px;
@@ -249,6 +267,7 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     position: relative;
 }
 @media (max-width: 640px) {
+    #tab-chart { margin: 0 -16px; padding: 0 16px; }
     .tri-chart-layout { flex-direction: column; }
     .tri-chart-sidebar {
         width: 100%; max-height: none;

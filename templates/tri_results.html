@@ -118,14 +118,21 @@
 
         <!-- Таб: График -->
         <div id="tab-chart" style="display:none">
+            <div class="tri-chart-subtabs">
+                <button class="tri-chart-subtab active" onclick="switchChartType('speed', this)">Скорость</button>
+                <button class="tri-chart-subtab" onclick="switchChartType('position', this)">Позиция</button>
+            </div>
             <div class="tri-chart-layout">
                 <div class="tri-chart-sidebar">
                     <div class="tri-chart-sidebar__hint">Выберите участников</div>
                     <div id="chart-legend-list"></div>
                 </div>
                 <div class="tri-chart-main">
-                    <div class="tri-chart-wrap">
+                    <div class="tri-chart-wrap" id="chart-speed-wrap">
                         <canvas id="tri-chart"></canvas>
+                    </div>
+                    <div class="tri-chart-wrap" id="chart-position-wrap" style="display:none">
+                        <canvas id="tri-chart-position"></canvas>
                     </div>
                 </div>
             </div>
@@ -143,12 +150,24 @@
     let filteredPids = new Set();
     let triChart = null;
     let selectedChartPids = new Set();
-    let chartDatasetPids = []; // pid в порядке датасетов (для tooltip filter)
+    let chartDatasetPids = [];
+    let triChartPosition = null;
+    let activeChartType = 'speed';
 
     const CHART_COLORS = [
         '#FF8562','#263146','#18A558','#DE0000','#4B7BE5',
         '#F5A623','#9B59B6','#1ABC9C','#E67E22','#2C3E50'
     ];
+
+    function switchChartType(type, btn) {
+        activeChartType = type;
+        document.querySelectorAll('.tri-chart-subtab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('chart-speed-wrap').style.display    = type === 'speed'    ? '' : 'none';
+        document.getElementById('chart-position-wrap').style.display = type === 'position' ? '' : 'none';
+        if (type === 'speed')    renderChart();
+        if (type === 'position') renderPositionChart();
+    }
 
     function toggleChartPid(pid) {
         if (selectedChartPids.has(pid)) {
@@ -266,7 +285,10 @@
         filteredPids = new Set(rows.map(r => r.id));
         renderStandings(rows);
         renderSplits();
-        if (document.getElementById('tab-chart').style.display !== 'none') renderChart();
+        if (document.getElementById('tab-chart').style.display !== 'none') {
+            if (activeChartType === 'speed') renderChart();
+            else renderPositionChart();
+        }
     }
 
     function switchPageTab(name, btn) {
@@ -279,7 +301,10 @@
         document.getElementById('filter-search').closest('.tri-filter-group').style.display =
             name === 'chart' ? 'none' : '';
         if (name === 'segments') renderSplits();
-        if (name === 'chart')    renderChart();
+        if (name === 'chart') {
+            if (activeChartType === 'speed') renderChart();
+            else renderPositionChart();
+        }
     }
 
     function renderChart() {
@@ -406,7 +431,7 @@
                         legend: { display: false },
                         tooltip: {
                             filter(item) {
-                                if (selectedChartPids.size === 0) return true;
+                                if (selectedChartPids.size === 0) return false;
                                 const pid = chartDatasetPids[item.datasetIndex];
                                 return selectedChartPids.has(pid);
                             },
@@ -456,6 +481,188 @@
         document.getElementById('chart-refresh-label').textContent =
             `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
     }
+
+    function renderPositionChart() {
+        if (!allLaps.length) return;
+
+        const WIN = 0.5;
+
+        // Строим по участнику: лапы (часы) для фильтрованных
+        const byPid = {};
+        for (const lap of allLaps) {
+            if (!filteredPids.has(lap.participant_id)) continue;
+            const pid = lap.participant_id;
+            if (!byPid[pid]) byPid[pid] = { pid, surname: lap.surname, name: lap.name, laps: [] };
+            byPid[pid].laps.push({ h: lap.cumulative_ms / 3600000, km: lap.lap_number * LAP_KM, ms: lap.cumulative_ms });
+        }
+
+        const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
+        chartDatasetPids = participants.map(p => p.pid);
+
+        // Обновляем боковой список (shared с speed chart)
+        const legendList = document.getElementById('chart-legend-list');
+        legendList.innerHTML = participants.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isActive = selectedChartPids.has(p.pid);
+            return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
+                         data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
+                <span class="tri-chart-legend-dot" style="background:${color}"></span>
+                <span>${p.surname} ${p.name}</span>
+            </div>`;
+        }).join('');
+
+        const hasSelection = selectedChartPids.size > 0;
+
+        // Определяем максимальный час гонки
+        const maxH = Math.max(...participants.flatMap(p => p.laps.map(l => l.h)));
+
+        // Для каждого окна считаем позиции всех участников
+        const windows = [];
+        for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN + WIN / 2; w += WIN) {
+            windows.push(parseFloat(w.toFixed(1)));
+        }
+
+        const datasets = participants.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isSelected = hasSelection && selectedChartPids.has(p.pid);
+
+            const data = windows.map(w => {
+                // Круги участника к моменту w
+                const completed = p.laps.filter(l => l.h <= w);
+                const lapCount = completed.length;
+                const lastMs = lapCount ? Math.max(...completed.map(l => l.ms)) : 0;
+                const totalKm = lapCount * LAP_KM;
+                const avgSpeed = lastMs > 0 ? (totalKm / (lastMs / 3600000)).toFixed(1) : 0;
+
+                // Ранг среди всех участников в этот момент
+                const allAtW = participants.map(pp => {
+                    const c = pp.laps.filter(l => l.h <= w);
+                    return { pid: pp.pid, laps: c.length, ms: c.length ? Math.max(...c.map(l => l.ms)) : 0 };
+                }).sort((a, b) => b.laps !== a.laps ? b.laps - a.laps : a.ms - b.ms);
+
+                const rank = allAtW.findIndex(r => r.pid === p.pid) + 1;
+                return { x: w, y: rank, totalKm: parseFloat(totalKm.toFixed(1)), avgSpeed };
+            });
+
+            let lineColor, lineWidth, endRadius;
+            if (!hasSelection)     { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
+            else if (isSelected)   { lineColor = color;     endRadius = 6; lineWidth = 2.5; }
+            else                   { lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1; }
+
+            const radii = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
+
+            return {
+                label: `${p.surname} ${p.name}`,
+                _color: color, _isSelected: isSelected,
+                data, borderColor: lineColor, backgroundColor: lineColor,
+                borderWidth: lineWidth, pointStyle: 'circle',
+                pointRadius: radii, pointHoverRadius: radii.map(r => r ? r + 2 : 4),
+                tension: 0.3, spanGaps: true,
+            };
+        });
+
+        const ctx = document.getElementById('tri-chart-position').getContext('2d');
+        const totalParticipants = participants.length;
+
+        // Плагин плашки
+        const labelPluginPos = {
+            id: 'lastLabelPos',
+            afterDatasetsDraw(chart) {
+                const c = chart.ctx;
+                chart.data.datasets.forEach((ds, i) => {
+                    if (!ds._isSelected) return;
+                    const meta = chart.getDatasetMeta(i);
+                    const pts = meta.data;
+                    if (!pts.length) return;
+                    const last = pts[pts.length - 1];
+                    const { x, y } = last.getProps(['x', 'y'], true);
+                    const text = ds.label.split(' ')[0];
+                    c.save();
+                    c.font = 'bold 11px Onest, Arial, sans-serif';
+                    const tw = c.measureText(text).width;
+                    const pw = tw + 12, ph = 18, px = x + 10, py = y - ph / 2;
+                    c.fillStyle = ds._color;
+                    c.beginPath();
+                    c.roundRect ? c.roundRect(px, py, pw, ph, 4) : c.rect(px, py, pw, ph);
+                    c.fill();
+                    c.fillStyle = '#fff';
+                    c.textAlign = 'left'; c.textBaseline = 'middle';
+                    c.fillText(text, px + 6, y);
+                    c.restore();
+                });
+            }
+        };
+
+        if (triChartPosition) {
+            triChartPosition.data.datasets = datasets;
+            triChartPosition.update('none');
+        } else {
+            triChartPosition = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                plugins: [labelPluginPos],
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            filter(item) {
+                                if (selectedChartPids.size === 0) return false;
+                                const pid = chartDatasetPids[item.datasetIndex];
+                                return selectedChartPids.has(pid);
+                            },
+                            itemSort(a, b) { return a.parsed.y - b.parsed.y; }, // 1-й сверху
+                            callbacks: {
+                                title(items) {
+                                    const h = items[0].parsed.x;
+                                    const ts   = new Date(GUN_UTC_MS + h * 3600000);
+                                    const from = new Date(GUN_UTC_MS + (h - WIN) * 3600000);
+                                    return `${from.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} – ${ts.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}`;
+                                },
+                                label(item) {
+                                    const rank = item.parsed.y;
+                                    const km   = item.raw.totalKm ?? 0;
+                                    const spd  = item.raw.avgSpeed ?? 0;
+                                    return ` #${rank} ${item.dataset.label}: ${km} км · ${spd} км/ч`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear', min: 0, max: 24,
+                            ticks: {
+                                stepSize: 1,
+                                callback(val) {
+                                    return new Date(GUN_UTC_MS + val * 3600000)
+                                        .toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                                },
+                                maxTicksLimit: 13, font: { size: 11 }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        },
+                        y: {
+                            reverse: true, // 1-е место сверху
+                            min: 1,
+                            max: totalParticipants,
+                            ticks: {
+                                stepSize: 1,
+                                callback(val) { return `${val}`; },
+                                font: { size: 11 }
+                            },
+                            title: { display: true, text: 'Место', font: { size: 12 } },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('chart-refresh-label').textContent =
+            `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+    }
+
 
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
@@ -585,7 +792,10 @@
             const data = await r.json();
             allLaps = data.laps || [];
             renderSplits();
-            if (document.getElementById('tab-chart').style.display !== 'none') renderChart();
+            if (document.getElementById('tab-chart').style.display !== 'none') {
+                if (activeChartType === 'speed') renderChart();
+                else renderPositionChart();
+            }
         } catch(e) { console.error('laps error', e); }
     }
 
