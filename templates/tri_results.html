@@ -740,9 +740,11 @@
                             reverse: true, // 1-е место сверху
                             min: 0.5,
                             max: totalParticipants + 0.5,
+                            afterBuildTicks(scale) {
+                                scale.ticks = Array.from({ length: totalParticipants }, (_, i) => ({ value: i + 1 }));
+                            },
                             ticks: {
-                                stepSize: 1,
-                                callback(val) { return `${val}`; },
+                                callback(val) { return Number.isInteger(val) ? `${val}` : null; },
                                 font: { size: 11 }
                             },
                             title: { display: true, text: 'Место', font: { size: 12 } },
