@@ -24,6 +24,13 @@
         </div>
     </div>
 
+    <!-- Табы страницы -->
+    <div class="tri-page-tabs">
+        <button class="tri-page-tab active" onclick="switchPageTab('distance', this)">Расстояние</button>
+        <button class="tri-page-tab" onclick="switchPageTab('segments', this)">Отрезки</button>
+        <button class="tri-page-tab" onclick="switchPageTab('chart', this)">График</button>
+    </div>
+
     <!-- Фильтры -->
     <div class="tri-toolbar">
         <div class="tri-filter-group">
@@ -48,13 +55,6 @@
                    oninput="applyFilters()" onkeydown="if(event.key==='Enter')applyFilters()">
         </div>
         <span class="tri-results-count" id="results-count"></span>
-    </div>
-
-    <!-- Табы страницы -->
-    <div class="tri-page-tabs">
-        <button class="tri-page-tab active" onclick="switchPageTab('distance', this)">Расстояние</button>
-        <button class="tri-page-tab" onclick="switchPageTab('segments', this)">Отрезки</button>
-        <button class="tri-page-tab" onclick="switchPageTab('chart', this)">График</button>
     </div>
 
     <div class="tri-container">
@@ -182,8 +182,29 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => {
             el.classList.toggle('active', selectedChartPids.has(+el.dataset.pid));
         });
-        if (activeChartType === 'position') renderPositionChart();
+        if (activeChartType === 'position') _updatePositionSelection();
         else renderChart();
+    }
+
+    // Быстрое обновление цветов позиционного чарта без пересчёта данных
+    function _updatePositionSelection() {
+        if (!triChartPosition) { renderPositionChart(); return; }
+        const hasSelection = selectedChartPids.size > 0;
+        triChartPosition.data.datasets.forEach((ds, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isSelected = hasSelection && selectedChartPids.has(chartDatasetPids[i]);
+            ds._isSelected = isSelected;
+            let lineColor, lineWidth, endRadius;
+            if (!hasSelection)     { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
+            else if (isSelected)   { lineColor = color;     endRadius = 6; lineWidth = 2.5; }
+            else                   { lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1; }
+            ds.borderColor = ds.backgroundColor = lineColor;
+            ds.borderWidth = lineWidth;
+            const n = ds.data.length;
+            ds.pointRadius      = ds.data.map((_, j) => j === n - 1 ? endRadius : 0);
+            ds.pointHoverRadius = ds.pointRadius.map(r => r ? r + 2 : 4);
+        });
+        triChartPosition.update('none');
     }
 
     // ---- Счётчик прошедшего времени ----
@@ -717,8 +738,8 @@
                         },
                         y: {
                             reverse: true, // 1-е место сверху
-                            min: 1,
-                            max: totalParticipants,
+                            min: 0.5,
+                            max: totalParticipants + 0.5,
                             ticks: {
                                 stepSize: 1,
                                 callback(val) { return `${val}`; },

@@ -18,6 +18,7 @@ body {
     color: var(--tri-text);
     font-family: 'Onest', Arial, sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 /* ---- Header ---- */
@@ -194,6 +195,9 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 @media (max-width: 640px) {
     .tri-table th, .tri-table td { padding: 9px 8px; font-size: 12px; }
     .tri-table-wrap { border-radius: 0; box-shadow: none; }
+    .tri-toolbar { padding: 8px 12px; gap: 6px; }
+    .tri-search { width: 120px; }
+    #tab-chart { padding: 0 8px; }
 }
 
 /* ---- Chart tab ---- */
