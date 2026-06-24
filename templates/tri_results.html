@@ -344,8 +344,10 @@
             name === 'chart' ? 'none' : '';
         if (name === 'segments') renderSplits();
         if (name === 'chart') {
-            if (activeChartType === 'speed') renderChart();
-            else renderPositionChart();
+            requestAnimationFrame(() => {
+                if (activeChartType === 'speed') renderChart();
+                else renderPositionChart();
+            });
         }
     }
 
@@ -984,6 +986,13 @@
     loadStandings();
     loadLaps();
     setInterval(() => { loadStandings(); loadLaps(); }, 30000);
+
+    // Принудительный ресайз чартов при смене ориентации / изменении окна
+    window.addEventListener('resize', () => {
+        if (document.getElementById('tab-chart').style.display === 'none') return;
+        if (activeChartType === 'speed' && triChart) triChart.resize();
+        if (activeChartType === 'position' && triChartPosition) triChartPosition.resize();
+    });
     </script>
 </body>
 </html>
