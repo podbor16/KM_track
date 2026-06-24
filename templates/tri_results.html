@@ -253,6 +253,9 @@
         document.getElementById('tab-distance').style.display = name === 'distance' ? '' : 'none';
         document.getElementById('tab-segments').style.display = name === 'segments' ? '' : 'none';
         document.getElementById('tab-chart').style.display    = name === 'chart'    ? '' : 'none';
+        // Поиск по фамилии скрываем на графике
+        document.getElementById('filter-search').closest('.tri-filter-group').style.display =
+            name === 'chart' ? 'none' : '';
         if (name === 'segments') renderSplits();
         if (name === 'chart')    renderChart();
     }
@@ -285,9 +288,10 @@
                 const from = w - WIN;
                 const to   = w;
                 const count = p.laps.filter(h => h > from && h <= to).length;
+                const totalLaps = p.laps.filter(h => h <= to).length;
                 if (count > 0 || data.length > 0) {
-                    const speed = count * LAP_KM / WIN; // км/ч за это окно
-                    data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat(speed.toFixed(2)) });
+                    const speed = count * LAP_KM / WIN;
+                    data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat(speed.toFixed(2)), totalKm: totalLaps * LAP_KM });
                 }
                 if (to > maxH + WIN) break;
             }
@@ -334,16 +338,18 @@
                             }
                         },
                         tooltip: {
+                            itemSort(a, b) { return b.parsed.y - a.parsed.y; },
                             callbacks: {
                                 title(items) {
                                     const h = items[0].parsed.x;
-                                    const ts = new Date(GUN_UTC_MS + h * 3600000);
+                                    const ts   = new Date(GUN_UTC_MS + h * 3600000);
                                     const from = new Date(GUN_UTC_MS + (h - WIN) * 3600000);
                                     return `${from.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} – ${ts.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}`;
                                 },
                                 label(item) {
                                     const spd = item.parsed.y;
-                                    return ` ${item.dataset.label}: ${spd.toFixed(1)} км/ч`;
+                                    const km  = item.raw.totalKm ?? 0;
+                                    return ` ${item.dataset.label}: ${spd.toFixed(1)} км/ч · ${km.toFixed(1)} км`;
                                 }
                             }
                         }
