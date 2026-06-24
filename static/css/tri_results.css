@@ -196,6 +196,19 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .tri-table-wrap { border-radius: 0; box-shadow: none; }
 }
 
+/* ---- Chart tab ---- */
+.tri-chart-wrap {
+    background: var(--tri-surface);
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    padding: 20px 16px 12px;
+    height: 420px;
+    position: relative;
+}
+@media (max-width: 640px) {
+    .tri-chart-wrap { height: 300px; border-radius: 0; box-shadow: none; padding: 12px 8px 8px; }
+}
+
 /* ---- Page tabs (Расстояние / Отрезки) ---- */
 .tri-page-tabs {
     display: flex;
