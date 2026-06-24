@@ -28,8 +28,8 @@
             <label class="tri-label">Зачёт:</label>
             <select id="filter-category" class="tri-select" onchange="applyFilters()">
                 <option value="">Все</option>
-                <option value="individual">Личный</option>
-                <option value="relay">Командный</option>
+                <option value="personal">Личный</option>
+                <option value="Эстафета">Эстафета</option>
             </select>
         </div>
         <div class="tri-filter-group">
@@ -168,7 +168,8 @@
         const search   = document.getElementById('filter-search').value.trim().toLowerCase();
 
         let rows = allStandings.filter(r => {
-            if (category && r.category !== category) return false;
+            if (category === 'personal'  && r.category === 'Эстафета') return false;
+            if (category === 'Эстафета'  && r.category !== 'Эстафета') return false;
             if (gender   && r.gender !== gender)     return false;
             if (search   && !(r.surname || '').toLowerCase().includes(search)) return false;
             return true;
@@ -201,8 +202,9 @@
         }
         tbody.innerHTML = rows.map(r => {
             const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
-            const badgeClass = r.category === 'relay' ? 'tri-badge--relay' : 'tri-badge--personal';
-            const categoryLabel = r.category === 'relay' ? 'Эстафета' : 'Личный';
+            const isRelay = r.category === 'Эстафета';
+            const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
+            const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
             return `
             <tr class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
