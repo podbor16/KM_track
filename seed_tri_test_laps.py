@@ -96,20 +96,21 @@ def _lap_time_ms(base_sec: float, lap_n: int, total_laps: int,
 
 
 def _generate_laps(cursor, pid: int, base_sec: float, fatigue: float,
-                   pattern: str, race_hours: float, rng: random.Random) -> int:
+                   pattern: str, race_hours: float, rng: random.Random,
+                   stop_early_h: float | None = None) -> int:
     race_ms = int(race_hours * 3600_000)
+    stop_ms = int(stop_early_h * 3600_000) if stop_early_h is not None else race_ms
     cumulative_ms = 0
     lap_n = 0
     inserted = 0
 
-    # Оценочное кол-во кругов (для расчёта progress)
     est_laps = int(race_ms / (base_sec * 1000))
 
     while True:
         lap_n += 1
         lap_ms = _lap_time_ms(base_sec, lap_n, est_laps, fatigue, pattern, rng)
         cumulative_ms += lap_ms
-        if cumulative_ms > race_ms:
+        if cumulative_ms > stop_ms:
             break
 
         cursor.execute(
@@ -132,6 +133,8 @@ def main():
                         help="Сколько часов гонки симулировать (default: 15)")
     parser.add_argument("--reset", action="store_true",
                         help="Удалить все круги события перед генерацией")
+    parser.add_argument("--pit-bib", type=int, default=None,
+                        help="Номер участника, у которого обрываются круги за 2 avg-круга до конца (питстоп)")
     args = parser.parse_args()
 
     print(f"Connecting to {args.host}:{args.port} → triatleta_24h")
@@ -155,9 +158,15 @@ def main():
             continue
 
         rng = random.Random(bib * 31337)
-        inserted = _generate_laps(cursor, pid, base_sec, fatigue, pattern, args.hours, rng)
+        stop_early_h = None
+        pit_note = ""
+        if args.pit_bib and bib == args.pit_bib:
+            # Обрываем круги за 2 avg-круга до конца → питстоп
+            stop_early_h = args.hours - (base_sec * 2) / 3600
+            pit_note = f"  ← PIT (стоп на {stop_early_h:.2f}ч)"
+        inserted = _generate_laps(cursor, pid, base_sec, fatigue, pattern, args.hours, rng, stop_early_h)
         avg_kmh = LAP_KM / (base_sec / 3600)
-        print(f"  #{bib:4d} (pid={pid}) — {inserted} кругов  ~{avg_kmh:.1f} км/ч  [{pattern}]")
+        print(f"  #{bib:4d} (pid={pid}) — {inserted} кругов  ~{avg_kmh:.1f} км/ч  [{pattern}]{pit_note}")
         total += inserted
 
     conn.commit()

@@ -145,6 +145,8 @@
     <script>
     const GUN_UTC_MS = new Date('2026-06-25T13:00:00Z').getTime();
     const LAP_KM = 4.040;
+    // ?test_race_h=15 — подменяет "текущее время гонки" для тестирования питстопов
+    const _testRaceH = parseFloat(new URLSearchParams(location.search).get('test_race_h') || '0');
     let allStandings = [];
     let allLaps = [];
     let filteredPids = new Set();
@@ -426,7 +428,7 @@
             }
             // Текущий питстоп (если идёт прямо сейчас)
             if (pitMap[pid]) {
-                const nowH = (Date.now() - GUN_UTC_MS) / 3600000;
+                const nowH = _testRaceH > 0 ? _testRaceH : (Date.now() - GUN_UTC_MS) / 3600000;
                 const lastLapH = lapsByPid.length ? lapsByPid[lapsByPid.length-1].cumulative_ms / 3600000 : 0;
                 pits.push({ startH: lastLapH + avgLapMs / 3600000, endH: nowH });
             }
@@ -753,7 +755,7 @@
             .reduce((best, r) => (!best || r.best_lap_ms < best.best_lap_ms) ? r : best, null);
         const bestOverallLapMs = bestLapLeader ? bestLapLeader.best_lap_ms : 0;
 
-        const nowRaceMs = Math.max(0, Date.now() - GUN_UTC_MS);
+        const nowRaceMs = _testRaceH > 0 ? _testRaceH * 3600000 : Math.max(0, Date.now() - GUN_UTC_MS);
         // Очищаем pitMap перед пересчётом
         for (const k in pitMap) delete pitMap[k];
 
