@@ -197,6 +197,10 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 }
 
 /* ---- Chart tab ---- */
+#tab-chart {
+    padding: 0 16px;
+}
+
 .tri-chart-subtabs {
     display: flex;
     gap: 6px;
@@ -267,7 +271,6 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     position: relative;
 }
 @media (max-width: 640px) {
-    #tab-chart { margin: 0 -16px; padding: 0 16px; }
     .tri-chart-layout { flex-direction: column; }
     .tri-chart-sidebar {
         width: 100%; max-height: none;

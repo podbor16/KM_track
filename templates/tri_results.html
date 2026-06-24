@@ -116,29 +116,29 @@
             </div>
         </div>
 
-        <!-- Таб: График -->
-        <div id="tab-chart" style="display:none">
-            <div class="tri-chart-subtabs">
-                <button class="tri-chart-subtab active" onclick="switchChartType('speed', this)">Скорость</button>
-                <button class="tri-chart-subtab" onclick="switchChartType('position', this)">Позиция</button>
-            </div>
-            <div class="tri-chart-layout">
-                <div class="tri-chart-sidebar">
-                    <div class="tri-chart-sidebar__hint">Выберите участников</div>
-                    <div id="chart-legend-list"></div>
-                </div>
-                <div class="tri-chart-main">
-                    <div class="tri-chart-wrap" id="chart-speed-wrap">
-                        <canvas id="tri-chart"></canvas>
-                    </div>
-                    <div class="tri-chart-wrap" id="chart-position-wrap" style="display:none">
-                        <canvas id="tri-chart-position"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="tri-refresh" id="chart-refresh-label"></div>
-        </div>
+    </div>
 
+    <!-- Таб: График (вне tri-container — full width) -->
+    <div id="tab-chart" style="display:none">
+        <div class="tri-chart-subtabs">
+            <button class="tri-chart-subtab active" onclick="switchChartType('speed', this)">Скорость</button>
+            <button class="tri-chart-subtab" onclick="switchChartType('position', this)">Позиция</button>
+        </div>
+        <div class="tri-chart-layout">
+            <div class="tri-chart-sidebar">
+                <div class="tri-chart-sidebar__hint">Выберите участников</div>
+                <div id="chart-legend-list"></div>
+            </div>
+            <div class="tri-chart-main">
+                <div class="tri-chart-wrap" id="chart-speed-wrap">
+                    <canvas id="tri-chart"></canvas>
+                </div>
+                <div class="tri-chart-wrap" id="chart-position-wrap" style="display:none">
+                    <canvas id="tri-chart-position"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="tri-refresh" id="chart-refresh-label"></div>
     </div>
 
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
@@ -180,7 +180,8 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => {
             el.classList.toggle('active', selectedChartPids.has(+el.dataset.pid));
         });
-        renderChart();
+        if (activeChartType === 'position') renderPositionChart();
+        else renderChart();
     }
 
     // ---- Счётчик прошедшего времени ----
