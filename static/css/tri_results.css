@@ -99,7 +99,7 @@ body {
     background: var(--tri-surface);
     border-radius: 10px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-    overflow: hidden;
+    overflow-x: auto;
 }
 table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-table th {
@@ -201,12 +201,6 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 .tri-refresh { font-size: 12px; color: var(--tri-muted); margin-top: 8px; }
 
-/* Splits table — fixed layout, no horizontal scroll on mobile */
-.tri-splits .tri-table { table-layout: fixed; width: 100%; }
-.tri-splits .tri-table th:first-child,
-.tri-splits .tri-table td:first-child { width: 40%; word-break: break-word; }
-.tri-splits .tri-table th:not(:first-child),
-.tri-splits .tri-table td:not(:first-child) { width: 20%; text-align: right; white-space: nowrap; }
 
 /* ---- Gap badges ---- */
 .tri-gap-badge {

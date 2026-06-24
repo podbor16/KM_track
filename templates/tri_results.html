@@ -90,14 +90,17 @@
                 <table class="tri-table">
                     <thead>
                         <tr>
+                            <th class="tri-rank">#</th>
                             <th>Участник</th>
+                            <th>Зачёт</th>
                             <th>Кругов</th>
                             <th>Км</th>
-                            <th>Ср. скорость</th>
+                            <th class="col-desktop">Ср. скорость</th>
+                            <th class="col-desktop">Отставание</th>
                         </tr>
                     </thead>
                     <tbody id="splits-body">
-                        <tr><td colspan="4" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                        <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -239,7 +242,7 @@
                     lapGapHtml = '—';
                 } else {
                     lapGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
-                        <span class="tri-lap-gap-hint">лучший: <a href="#p-${lastLapLeader.id}">${lastLapLeader.surname}</a>, ${fmtMs(lastLapLeader.last_lap_ms)}</span>`;
+                        <span class="tri-lap-gap-hint">лучший: ${lastLapLeader.surname}, ${fmtMs(lastLapLeader.last_lap_ms)}</span>`;
                 }
             }
 
@@ -251,7 +254,7 @@
                     bestGapHtml = '—';
                 } else {
                     bestGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
-                        <span class="tri-lap-gap-hint">лучший: <a href="#p-${bestLapLeader.id}">${bestLapLeader.surname}</a>, ${fmtMs(bestLapLeader.best_lap_ms)}</span>`;
+                        <span class="tri-lap-gap-hint">лучший: ${bestLapLeader.surname}, ${fmtMs(bestLapLeader.best_lap_ms)}</span>`;
                 }
             }
 
@@ -344,32 +347,61 @@
     }
 
     function renderSplits() {
-        const fromH = parseInt(document.getElementById('from-slider').value);
-        const toH   = parseInt(document.getElementById('to-slider').value);
+        const fromH  = parseInt(document.getElementById('from-slider').value);
+        const toH    = parseInt(document.getElementById('to-slider').value);
         const fromMs = (fromH - 1) * 3600000;
         const toMs   = toH * 3600000;
         const durationH = toH - fromH + 1;
+
+        // Индекс участников из standings для категории и зачёта
+        const standingsMap = {};
+        for (const s of allStandings) standingsMap[s.id] = s;
+
+        // Считаем круги в периоде по участнику
         const byParticipant = {};
         for (const lap of allLaps) {
             if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
-                const key = lap.participant_id;
-                if (!byParticipant[key]) byParticipant[key] = { name: `${lap.surname} ${lap.name}`, count: 0 };
-                byParticipant[key].count++;
+                const pid = lap.participant_id;
+                if (!byParticipant[pid]) {
+                    byParticipant[pid] = { pid, surname: lap.surname, name: lap.name, count: 0 };
+                }
+                byParticipant[pid].count++;
             }
         }
+
         const rows = Object.values(byParticipant).sort((a, b) => b.count - a.count);
         const tbody = document.getElementById('splits-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map(r => {
+
+        const leader = rows[0];
+        tbody.innerHTML = rows.map((r, i) => {
+            const s = standingsMap[r.pid] || {};
+            const isRelay = s.category === 'Эстафета';
+            const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
+            const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
             const speed = (r.count * LAP_KM / durationH).toFixed(1);
+            const km = (r.count * LAP_KM).toFixed(1);
+
+            let gapBadge;
+            if (i === 0) {
+                gapBadge = `<span class="tri-gap-badge tri-gap-badge--leader">Лидер</span>`;
+            } else {
+                const diff = leader.count - r.count;
+                const label = diff === 1 ? '−1 круг' : (diff <= 4 ? `−${diff} круга` : `−${diff} кругов`);
+                gapBadge = `<span class="tri-gap-badge tri-gap-badge--behind">${label}</span>`;
+            }
+
             return `<tr>
-                <td class="tri-name">${r.name}</td>
+                <td class="tri-rank">${i + 1}</td>
+                <td class="tri-name">${r.surname} ${r.name}</td>
+                <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.count}</td>
-                <td>${(r.count * LAP_KM).toFixed(1)}</td>
-                <td class="tri-speed">${speed} км/ч</td>
+                <td>${km}</td>
+                <td class="col-desktop tri-speed">${speed} км/ч</td>
+                <td class="col-desktop">${gapBadge}</td>
             </tr>`;
         }).join('');
     }
