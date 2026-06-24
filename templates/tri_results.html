@@ -118,8 +118,16 @@
 
         <!-- Таб: График -->
         <div id="tab-chart" style="display:none">
-            <div class="tri-chart-wrap">
-                <canvas id="tri-chart"></canvas>
+            <div class="tri-chart-layout">
+                <div class="tri-chart-sidebar">
+                    <div class="tri-chart-sidebar__hint">Выберите участников</div>
+                    <div id="chart-legend-list"></div>
+                </div>
+                <div class="tri-chart-main">
+                    <div class="tri-chart-wrap">
+                        <canvas id="tri-chart"></canvas>
+                    </div>
+                </div>
             </div>
             <div class="tri-refresh" id="chart-refresh-label"></div>
         </div>
@@ -134,11 +142,24 @@
     let allLaps = [];
     let filteredPids = new Set();
     let triChart = null;
+    let selectedChartPids = new Set();
 
     const CHART_COLORS = [
         '#FF8562','#263146','#18A558','#DE0000','#4B7BE5',
         '#F5A623','#9B59B6','#1ABC9C','#E67E22','#2C3E50'
     ];
+
+    function toggleChartPid(pid) {
+        if (selectedChartPids.has(pid)) {
+            selectedChartPids.delete(pid);
+        } else {
+            selectedChartPids.add(pid);
+        }
+        document.querySelectorAll('.tri-chart-legend-item').forEach(el => {
+            el.classList.toggle('active', selectedChartPids.has(+el.dataset.pid));
+        });
+        renderChart();
+    }
 
     // ---- Счётчик прошедшего времени ----
     function updateElapsed() {
@@ -270,42 +291,53 @@
         for (const lap of allLaps) {
             if (!filteredPids.has(lap.participant_id)) continue;
             const pid = lap.participant_id;
-            if (!byPid[pid]) byPid[pid] = { surname: lap.surname, name: lap.name, laps: [] };
+            if (!byPid[pid]) byPid[pid] = { pid, surname: lap.surname, name: lap.name, laps: [] };
             byPid[pid].laps.push(lap.cumulative_ms / 3600000); // часы от выстрела
         }
 
         const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
 
+        // Обновляем боковой список участников
+        const legendList = document.getElementById('chart-legend-list');
+        legendList.innerHTML = participants.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isActive = selectedChartPids.has(p.pid);
+            return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
+                         data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
+                <span class="tri-chart-legend-dot" style="background:${color}"></span>
+                <span>${p.surname} ${p.name}</span>
+            </div>`;
+        }).join('');
+
+        const hasSelection = selectedChartPids.size > 0;
+
         const datasets = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isSelected = !hasSelection || selectedChartPids.has(p.pid);
 
-            // Определяем максимальное время участника
             const maxH = p.laps.length ? Math.max(...p.laps) : 0;
-
-            // Агрегируем по 30-минутным окнам
             const data = [];
             for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN + WIN; w += WIN) {
-                const from = w - WIN;
-                const to   = w;
+                const from = w - WIN, to = w;
                 const count = p.laps.filter(h => h > from && h <= to).length;
                 const totalLaps = p.laps.filter(h => h <= to).length;
                 if (count > 0 || data.length > 0) {
-                    const speed = count * LAP_KM / WIN;
-                    data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat(speed.toFixed(2)), totalKm: totalLaps * LAP_KM });
+                    data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat((count * LAP_KM / WIN).toFixed(2)), totalKm: totalLaps * LAP_KM });
                 }
                 if (to > maxH + WIN) break;
             }
 
-            // Только последняя точка — крупный кружок
-            const radii     = data.map((_, j) => j === data.length - 1 ? 6 : 0);
+            const radii      = data.map((_, j) => j === data.length - 1 ? (isSelected ? 6 : 3) : 0);
             const hoverRadii = data.map((_, j) => j === data.length - 1 ? 8 : 5);
+            const lineColor  = isSelected ? color : color + '40';
+            const lineWidth  = isSelected ? 2.5 : 1;
 
             return {
                 label: `${p.surname} ${p.name}`,
                 data,
-                borderColor: color,
-                backgroundColor: color,
-                borderWidth: 2,
+                borderColor: lineColor,
+                backgroundColor: lineColor,
+                borderWidth: lineWidth,
                 pointStyle: 'circle',
                 pointRadius: radii,
                 pointHoverRadius: hoverRadii,
@@ -328,15 +360,7 @@
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                font: { family: 'Onest, Arial, sans-serif', size: 12 },
-                                padding: 16,
-                                usePointStyle: true,
-                                pointStyleWidth: 12,
-                            }
-                        },
+                        legend: { display: false },
                         tooltip: {
                             itemSort(a, b) { return b.parsed.y - a.parsed.y; },
                             callbacks: {
