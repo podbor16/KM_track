@@ -53,6 +53,8 @@ jobs:
 
             # Перезапустить приложение
             systemctl restart km_track
+            # Перезапустить загрузчик Triatleta если запущен
+            systemctl is-active --quiet km_tri_loader@tri_24h && systemctl restart km_tri_loader@tri_24h || true
             sleep 25
 
             # Проверить что поднялось
