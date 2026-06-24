@@ -186,12 +186,36 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 }
 .tri-row-main.open .tri-chevron { transform: rotate(180deg); }
 
-/* ---- Mobile: hide secondary columns ---- */
+/* Таблица — минимальная ширина для горизонтального скролла */
+.tri-table { min-width: 560px; }
+
+/* ---- Mobile ---- */
 @media (max-width: 640px) {
-    .col-desktop { display: none; }
-    .tri-table th, .tri-table td { padding: 9px 10px; font-size: 13px; }
+    .tri-table th, .tri-table td { padding: 9px 8px; font-size: 12px; }
     .tri-table-wrap { border-radius: 0; box-shadow: none; }
 }
+
+/* ---- Page tabs (Расстояние / Отрезки) ---- */
+.tri-page-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--tri-surface);
+    border-bottom: 2px solid var(--tri-border);
+    padding: 0 24px;
+}
+.tri-page-tab {
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Onest', Arial, sans-serif;
+    color: var(--tri-muted);
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+}
+.tri-page-tab.active { color: var(--tri-text); border-bottom-color: var(--tri-accent); }
 
 /* ---- Splits ---- */
 .tri-splits { margin-top: 24px; }

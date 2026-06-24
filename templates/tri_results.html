@@ -50,42 +50,16 @@
         <span class="tri-results-count" id="results-count"></span>
     </div>
 
+    <!-- Табы страницы -->
+    <div class="tri-page-tabs">
+        <button class="tri-page-tab active" onclick="switchPageTab('distance', this)">Расстояние</button>
+        <button class="tri-page-tab" onclick="switchPageTab('segments', this)">Отрезки</button>
+    </div>
+
     <div class="tri-container">
 
-        <!-- Таблица результатов -->
-        <div class="tri-table-wrap">
-            <table class="tri-table">
-                <thead>
-                    <tr>
-                        <th class="tri-rank">#</th>
-                        <th>Участник</th>
-                        <th>Зачёт</th>
-                        <th>Кругов</th>
-                        <th>Км</th>
-                        <th class="col-desktop">Ср. скорость</th>
-                        <th class="col-desktop">Отставание</th>
-                    </tr>
-                </thead>
-                <tbody id="standings-body">
-                    <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="tri-refresh" id="refresh-label"></div>
-
-        <!-- Сплиты -->
-        <div class="tri-splits">
-            <div class="tri-splits__title">Сплиты по часам</div>
-            <div class="tri-slider-wrap">
-                <label class="tri-slider-label">
-                    С часа: <span id="from-val">1</span>
-                    <input type="range" id="from-slider" min="1" max="24" value="1" oninput="onSlider()">
-                </label>
-                <label class="tri-slider-label">
-                    По час: <span id="to-val">24</span>
-                    <input type="range" id="to-slider" min="1" max="24" value="24" oninput="onSlider()">
-                </label>
-            </div>
+        <!-- Таб: Расстояние -->
+        <div id="tab-distance">
             <div class="tri-table-wrap">
                 <table class="tri-table">
                     <thead>
@@ -95,14 +69,49 @@
                             <th>Зачёт</th>
                             <th>Кругов</th>
                             <th>Км</th>
-                            <th class="col-desktop">Ср. скорость</th>
-                            <th class="col-desktop">Отставание</th>
+                            <th>Ср. скорость</th>
+                            <th>Отставание</th>
                         </tr>
                     </thead>
-                    <tbody id="splits-body">
-                        <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                    <tbody id="standings-body">
+                        <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <div class="tri-refresh" id="refresh-label"></div>
+        </div>
+
+        <!-- Таб: Отрезки -->
+        <div id="tab-segments" style="display:none">
+            <div class="tri-splits">
+                <div class="tri-slider-wrap">
+                    <label class="tri-slider-label">
+                        С часа: <span id="from-val">1</span>
+                        <input type="range" id="from-slider" min="1" max="24" value="1" oninput="onSlider()">
+                    </label>
+                    <label class="tri-slider-label">
+                        По час: <span id="to-val">24</span>
+                        <input type="range" id="to-slider" min="1" max="24" value="24" oninput="onSlider()">
+                    </label>
+                </div>
+                <div class="tri-table-wrap">
+                    <table class="tri-table">
+                        <thead>
+                            <tr>
+                                <th class="tri-rank">#</th>
+                                <th>Участник</th>
+                                <th>Зачёт</th>
+                                <th>Кругов</th>
+                                <th>Км</th>
+                                <th>Ср. скорость</th>
+                                <th>Отставание</th>
+                            </tr>
+                        </thead>
+                        <tbody id="splits-body">
+                            <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -112,6 +121,7 @@
     const LAP_KM = 4.040;
     let allStandings = [];
     let allLaps = [];
+    let filteredPids = new Set(); // ID участников после применения фильтров
 
     // ---- Счётчик прошедшего времени ----
     function updateElapsed() {
@@ -203,7 +213,17 @@
         document.getElementById('results-count').textContent =
             rows.length ? `${rows.length} участн.` : '';
 
+        filteredPids = new Set(rows.map(r => r.id));
         renderStandings(rows);
+        renderSplits();
+    }
+
+    function switchPageTab(name, btn) {
+        document.querySelectorAll('.tri-page-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-distance').style.display = name === 'distance' ? '' : 'none';
+        document.getElementById('tab-segments').style.display = name === 'segments' ? '' : 'none';
+        if (name === 'segments') renderSplits();
     }
 
     function renderStandings(rows) {
@@ -265,8 +285,8 @@
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
-                <td class="col-desktop tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
-                <td class="col-desktop">${gapBadge}</td>
+                <td class="tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
+                <td>${gapBadge}</td>
             </tr>
             <tr class="tri-row-detail">
                 <td colspan="7">
@@ -357,9 +377,10 @@
         const standingsMap = {};
         for (const s of allStandings) standingsMap[s.id] = s;
 
-        // Считаем круги в периоде по участнику
+        // Считаем круги в периоде по участнику (только отфильтрованные)
         const byParticipant = {};
         for (const lap of allLaps) {
+            if (!filteredPids.has(lap.participant_id)) continue;
             if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
                 const pid = lap.participant_id;
                 if (!byParticipant[pid]) {
@@ -400,8 +421,8 @@
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.count}</td>
                 <td>${km}</td>
-                <td class="col-desktop tri-speed">${speed} км/ч</td>
-                <td class="col-desktop">${gapBadge}</td>
+                <td class="tri-speed">${speed} км/ч</td>
+                <td>${gapBadge}</td>
             </tr>`;
         }).join('');
     }
