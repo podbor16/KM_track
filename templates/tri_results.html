@@ -313,7 +313,7 @@
 
         const datasets = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
-            const isSelected = !hasSelection || selectedChartPids.has(p.pid);
+            const isSelected = hasSelection && selectedChartPids.has(p.pid);
 
             const maxH = p.laps.length ? Math.max(...p.laps) : 0;
             const data = [];
@@ -327,13 +327,23 @@
                 if (to > maxH + WIN) break;
             }
 
-            const radii      = data.map((_, j) => j === data.length - 1 ? (isSelected ? 6 : 3) : 0);
-            const hoverRadii = data.map((_, j) => j === data.length - 1 ? 8 : 5);
-            const lineColor  = isSelected ? color : color + '40';
-            const lineWidth  = isSelected ? 2.5 : 1;
+            // По умолчанию: серый. Выбранный: цветной. Невыбранный при активной выборке: бледный серый
+            let lineColor, lineWidth, endRadius;
+            if (!hasSelection) {
+                lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5;
+            } else if (isSelected) {
+                lineColor = color;    endRadius = 6; lineWidth = 2.5;
+            } else {
+                lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1;
+            }
+
+            const radii      = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
+            const hoverRadii = data.map((_, j) => j === data.length - 1 ? endRadius + 2 : 4);
 
             return {
                 label: `${p.surname} ${p.name}`,
+                _color: color,
+                _isSelected: isSelected,
                 data,
                 borderColor: lineColor,
                 backgroundColor: lineColor,
@@ -348,6 +358,36 @@
 
         const ctx = document.getElementById('tri-chart').getContext('2d');
 
+        // Плагин: плашка с фамилией у последней точки выбранного участника
+        const labelPlugin = {
+            id: 'lastLabel',
+            afterDatasetsDraw(chart) {
+                const c = chart.ctx;
+                chart.data.datasets.forEach((ds, i) => {
+                    if (!ds._isSelected) return;
+                    const meta = chart.getDatasetMeta(i);
+                    const pts = meta.data;
+                    if (!pts.length) return;
+                    const last = pts[pts.length - 1];
+                    const { x, y } = last.getProps(['x', 'y'], true);
+                    const text = ds.label.split(' ')[0]; // фамилия
+                    c.save();
+                    c.font = 'bold 11px Onest, Arial, sans-serif';
+                    const tw = c.measureText(text).width;
+                    const pw = tw + 12, ph = 18, px = x + 10, py = y - ph / 2;
+                    c.fillStyle = ds._color;
+                    c.beginPath();
+                    c.roundRect ? c.roundRect(px, py, pw, ph, 4) : c.rect(px, py, pw, ph);
+                    c.fill();
+                    c.fillStyle = '#fff';
+                    c.textAlign = 'left';
+                    c.textBaseline = 'middle';
+                    c.fillText(text, px + 6, y);
+                    c.restore();
+                });
+            }
+        };
+
         if (triChart) {
             triChart.data.datasets = datasets;
             triChart.update('none');
@@ -355,6 +395,7 @@
             triChart = new Chart(ctx, {
                 type: 'line',
                 data: { datasets },
+                plugins: [labelPlugin],
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
