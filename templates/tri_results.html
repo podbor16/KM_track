@@ -259,7 +259,7 @@
             if (r.laps_completed > 0 && r.last_lap_ms > 0 && lastLapLeader) {
                 const delta = r.last_lap_ms - lastLapLeader.last_lap_ms;
                 if (delta <= 0) {
-                    lapGapHtml = '—';
+                    lapGapHtml = `<span class="tri-gap-badge tri-gap-badge--leader">Лидер</span>`;
                 } else {
                     lapGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
                         <span class="tri-lap-gap-hint">лучший: ${lastLapLeader.surname}, ${fmtMs(lastLapLeader.last_lap_ms)}</span>`;
@@ -271,7 +271,7 @@
             if (r.best_lap_ms > 0 && bestLapLeader) {
                 const delta = r.best_lap_ms - bestLapLeader.best_lap_ms;
                 if (delta <= 0) {
-                    bestGapHtml = '—';
+                    bestGapHtml = `<span class="tri-gap-badge tri-gap-badge--leader">Лидер</span>`;
                 } else {
                     bestGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
                         <span class="tri-lap-gap-hint">лучший: ${bestLapLeader.surname}, ${fmtMs(bestLapLeader.best_lap_ms)}</span>`;
