@@ -91,8 +91,8 @@
                     <thead>
                         <tr>
                             <th>Участник</th>
-                            <th>Кругов за период</th>
-                            <th>Км за период</th>
+                            <th>Кругов</th>
+                            <th>Км</th>
                             <th>Ср. скорость</th>
                         </tr>
                     </thead>
@@ -135,18 +135,6 @@
     function lapSpeed(lapMs) {
         if (!lapMs) return '—';
         return (LAP_KM / (lapMs / 3600000)).toFixed(1) + ' км/ч';
-    }
-
-    function bestLapGap(lapMs, bestMs) {
-        if (!lapMs || !bestMs) return '—';
-        const delta = lapMs - bestMs;
-        if (delta <= 0) return '—';
-        return '+' + fmtMs(delta);
-    }
-
-    function bestLapGapClass(lapMs, bestMs) {
-        if (!lapMs || !bestMs || lapMs <= bestMs) return 'tri-gap--leader';
-        return 'tri-gap--behind';
     }
 
     function switchLapTab(btn, showId, hideId) {
@@ -221,43 +209,61 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
-        // Лучший последний круг среди участников с кругами (для отставания на последнем круге)
-        const bestLapMs = Math.min(...rows
+        // Лидер по последнему кругу
+        const lastLapLeader = rows
             .filter(r => r.laps_completed > 0 && r.last_lap_ms > 0)
-            .map(r => r.last_lap_ms)) || 0;
+            .reduce((best, r) => (!best || r.last_lap_ms < best.last_lap_ms) ? r : best, null);
+        const bestLapMs = lastLapLeader ? lastLapLeader.last_lap_ms : 0;
 
-        // Абсолютно лучший круг за всю гонку (для таба «Лучший круг»)
-        const bestOverallLapMs = Math.min(...rows
+        // Лидер по лучшему кругу за всю гонку
+        const bestLapLeader = rows
             .filter(r => r.best_lap_ms > 0)
-            .map(r => r.best_lap_ms)) || 0;
+            .reduce((best, r) => (!best || r.best_lap_ms < best.best_lap_ms) ? r : best, null);
+        const bestOverallLapMs = bestLapLeader ? bestLapLeader.best_lap_ms : 0;
 
         tbody.innerHTML = rows.map(r => {
-            const gapClass = r.gap === '—' ? 'tri-gap--leader' : 'tri-gap--behind';
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
 
-            // Отставание на последнем круге
-            let lapGap = '—', lapGapClass = 'tri-gap--leader';
-            if (r.laps_completed > 0 && r.last_lap_ms > 0 && bestLapMs > 0) {
-                const delta = r.last_lap_ms - bestLapMs;
+            // Бейдж отставания в гонке
+            const gapBadge = r.gap === '—'
+                ? `<span class="tri-gap-badge tri-gap-badge--leader">Лидер</span>`
+                : `<span class="tri-gap-badge tri-gap-badge--behind">${r.gap}</span>`;
+
+            // Отставание на последнем круге + подсказка лидера
+            let lapGapHtml = '—';
+            if (r.laps_completed > 0 && r.last_lap_ms > 0 && lastLapLeader) {
+                const delta = r.last_lap_ms - lastLapLeader.last_lap_ms;
                 if (delta <= 0) {
-                    lapGap = '—';
+                    lapGapHtml = '—';
                 } else {
-                    lapGap = '+' + fmtMs(delta);
-                    lapGapClass = 'tri-gap--behind';
+                    lapGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
+                        <span class="tri-lap-gap-hint">лучший: <a href="#p-${lastLapLeader.id}">${lastLapLeader.surname}</a>, ${fmtMs(lastLapLeader.last_lap_ms)}</span>`;
+                }
+            }
+
+            // Отставание на лучшем круге + подсказка лидера
+            let bestGapHtml = '—';
+            if (r.best_lap_ms > 0 && bestLapLeader) {
+                const delta = r.best_lap_ms - bestLapLeader.best_lap_ms;
+                if (delta <= 0) {
+                    bestGapHtml = '—';
+                } else {
+                    bestGapHtml = `<span class="tri-gap--behind">+${fmtMs(delta)}</span>
+                        <span class="tri-lap-gap-hint">лучший: <a href="#p-${bestLapLeader.id}">${bestLapLeader.surname}</a>, ${fmtMs(bestLapLeader.best_lap_ms)}</span>`;
                 }
             }
 
             return `
-            <tr class="tri-row-main" onclick="toggleDetail(this)">
+            <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td class="col-desktop tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
-                <td class="${gapClass} col-desktop">${r.gap}</td>
+                <td class="col-desktop">${gapBadge}</td>
             </tr>
             <tr class="tri-row-detail">
                 <td colspan="7">
@@ -280,7 +286,7 @@
                         </div>
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Отставание на круге</span>
-                            <span class="tri-detail-value ${lapGapClass}">${lapGap}</span>
+                            <span class="tri-detail-value">${lapGapHtml}</span>
                         </div>
                     </div>
                     <div id="best-${r.id}" class="tri-detail-inner" style="display:none">
@@ -298,7 +304,7 @@
                         </div>
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Отставание на круге</span>
-                            <span class="tri-detail-value ${bestLapGapClass(r.best_lap_ms, bestOverallLapMs)}">${bestLapGap(r.best_lap_ms, bestOverallLapMs)}</span>
+                            <span class="tri-detail-value">${bestGapHtml}</span>
                         </div>
                     </div>
                 </td>

@@ -201,6 +201,40 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 .tri-refresh { font-size: 12px; color: var(--tri-muted); margin-top: 8px; }
 
+/* Splits table — fixed layout, no horizontal scroll on mobile */
+.tri-splits .tri-table { table-layout: fixed; width: 100%; }
+.tri-splits .tri-table th:first-child,
+.tri-splits .tri-table td:first-child { width: 40%; word-break: break-word; }
+.tri-splits .tri-table th:not(:first-child),
+.tri-splits .tri-table td:not(:first-child) { width: 20%; text-align: right; white-space: nowrap; }
+
+/* ---- Gap badges ---- */
+.tri-gap-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.tri-gap-badge--leader { background: rgba(24, 165, 88, 0.15); color: var(--tri-green); }
+.tri-gap-badge--behind { background: rgba(222, 0, 0, 0.10); color: var(--tri-red); }
+
+/* Lap gap leader hint in detail row */
+.tri-lap-gap-hint {
+    font-size: 11px;
+    color: var(--tri-muted);
+    font-weight: 400;
+    display: block;
+    margin-top: 3px;
+}
+.tri-lap-gap-hint a {
+    color: var(--tri-accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+.tri-lap-gap-hint a:hover { text-decoration: underline; }
+
 /* ---- Admin: tabs ---- */
 .admin-tabs { display: flex; gap: 4px; margin: 24px 0 16px; }
 .admin-tab {
