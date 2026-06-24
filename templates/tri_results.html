@@ -67,8 +67,8 @@
                             <th class="tri-rank">#</th>
                             <th>Участник</th>
                             <th>Зачёт</th>
-                            <th>Кругов</th>
                             <th>Км</th>
+                            <th>Кругов</th>
                             <th>Ср. скорость</th>
                             <th>Отставание</th>
                         </tr>
@@ -186,14 +186,25 @@
 
     function applyFilters() {
         const category = document.getElementById('filter-category').value;
-        const gender   = document.getElementById('filter-gender').value;
-        const search   = document.getElementById('filter-search').value.trim().toLowerCase();
+        const genderEl = document.getElementById('filter-gender');
+
+        // Когда выбрана «Эстафета» — сбрасываем и блокируем фильтр пола
+        if (category === 'Эстафета') {
+            genderEl.value = '';
+            genderEl.disabled = true;
+        } else {
+            genderEl.disabled = false;
+        }
+
+        const gender = genderEl.value;
+        const search = document.getElementById('filter-search').value.trim().toLowerCase();
 
         let rows = allStandings.filter(r => {
             if (category === 'personal'  && r.category === 'Эстафета') return false;
             if (category === 'Эстафета'  && r.category !== 'Эстафета') return false;
-            if (gender   && r.gender !== gender && r.gender !== 'mixed') return false;
-            if (search   && !(r.surname || '').toLowerCase().includes(search)) return false;
+            // При выборе пола эстафеты не показываем (gender='mixed' != 'Мужчина'/'Женщина')
+            if (gender && r.gender !== gender) return false;
+            if (search && !(r.surname || '').toLowerCase().includes(search)) return false;
             return true;
         });
 
@@ -283,8 +294,8 @@
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
-                <td>${r.laps_completed}</td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
+                <td>${r.laps_completed}</td>
                 <td class="tri-speed">${parseFloat(r.avg_speed_kmh).toFixed(1)} км/ч</td>
                 <td>${gapBadge}</td>
             </tr>
@@ -419,8 +430,8 @@
                 <td class="tri-rank">${i + 1}</td>
                 <td class="tri-name">${r.surname} ${r.name}</td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
-                <td>${r.count}</td>
                 <td>${km}</td>
+                <td>${r.count}</td>
                 <td class="tri-speed">${speed} км/ч</td>
                 <td>${gapBadge}</td>
             </tr>`;

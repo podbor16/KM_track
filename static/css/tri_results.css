@@ -90,6 +90,7 @@ body {
 }
 .tri-select:focus,
 .tri-search:focus { border-color: var(--tri-accent); }
+.tri-select:disabled { opacity: 0.4; cursor: not-allowed; }
 .tri-search { width: 180px; }
 .tri-search::placeholder { color: var(--tri-muted); }
 .tri-results-count { margin-left: auto; font-size: 12px; color: var(--tri-muted); }
