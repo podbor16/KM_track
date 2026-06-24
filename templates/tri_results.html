@@ -143,6 +143,7 @@
     let filteredPids = new Set();
     let triChart = null;
     let selectedChartPids = new Set();
+    let chartDatasetPids = []; // pid в порядке датасетов (для tooltip filter)
 
     const CHART_COLORS = [
         '#FF8562','#263146','#18A558','#DE0000','#4B7BE5',
@@ -310,6 +311,7 @@
         }).join('');
 
         const hasSelection = selectedChartPids.size > 0;
+        chartDatasetPids = participants.map(p => p.pid); // обновляем индекс
 
         const datasets = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
@@ -405,7 +407,8 @@
                         tooltip: {
                             filter(item) {
                                 if (selectedChartPids.size === 0) return true;
-                                return item.dataset._isSelected === true;
+                                const pid = chartDatasetPids[item.datasetIndex];
+                                return selectedChartPids.has(pid);
                             },
                             itemSort(a, b) { return b.parsed.y - a.parsed.y; },
                             callbacks: {
