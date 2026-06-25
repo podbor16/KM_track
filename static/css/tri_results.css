@@ -121,6 +121,7 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-table tbody tr:last-child td { border-bottom: none; }
 .tri-table tr:hover td { background: #fafafa; }
 .tri-rank { font-weight: 800; width: 36px; }
+.tri-bib  { color: var(--tri-muted); font-size: 13px; width: 48px; }
 .tri-name { font-weight: 600; }
 .tri-gap--behind { color: var(--tri-red); }
 .tri-gap--leader { color: var(--tri-green); font-weight: 700; }

@@ -65,7 +65,8 @@
                 <table class="tri-table">
                     <thead>
                         <tr>
-                            <th class="tri-rank">#</th>
+                            <th class="tri-rank">Место</th>
+                            <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Зачёт</th>
                             <th>Км</th>
@@ -75,7 +76,7 @@
                         </tr>
                     </thead>
                     <tbody id="standings-body">
-                        <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                        <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -99,7 +100,8 @@
                     <table class="tri-table">
                         <thead>
                             <tr>
-                                <th class="tri-rank">#</th>
+                                <th class="tri-rank">Место</th>
+                                <th class="tri-bib">Номер</th>
                                 <th>Участник</th>
                                 <th>Зачёт</th>
                                 <th>Км</th>
@@ -109,7 +111,7 @@
                             </tr>
                         </thead>
                         <tbody id="splits-body">
-                            <tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
+                            <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:16px">Ожидание данных...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -833,6 +835,7 @@
             return `
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
+                <td class="tri-bib">${r.start_number}</td>
                 <td class="tri-name">${r.surname} ${r.name}${pitBadge}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
@@ -841,7 +844,7 @@
                 <td>${gapBadge}</td>
             </tr>
             <tr class="tri-row-detail">
-                <td colspan="7">
+                <td colspan="8">
                     <div class="tri-detail-tabs">
                         <button class="tri-detail-tab active" onclick="switchLapTab(this, 'last-${r.id}', 'best-${r.id}')">Последний круг</button>
                         <button class="tri-detail-tab" onclick="switchLapTab(this, 'best-${r.id}', 'last-${r.id}')">Лучший круг</button>
@@ -940,7 +943,7 @@
             if (lap.cumulative_ms > fromMs && lap.cumulative_ms <= toMs) {
                 const pid = lap.participant_id;
                 if (!byParticipant[pid]) {
-                    byParticipant[pid] = { pid, surname: lap.surname, name: lap.name, count: 0 };
+                    byParticipant[pid] = { pid, surname: lap.surname, name: lap.name, start_number: lap.start_number, count: 0 };
                 }
                 byParticipant[pid].count++;
             }
@@ -973,6 +976,7 @@
 
             return `<tr>
                 <td class="tri-rank">${i + 1}</td>
+                <td class="tri-bib">${r.start_number ?? ''}</td>
                 <td class="tri-name">${r.surname} ${r.name}</td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${km}</td>
