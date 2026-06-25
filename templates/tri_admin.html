@@ -283,12 +283,24 @@
     function _fmtKm(km)    { return parseFloat(km).toFixed(2).replace('.', ','); }
     function _fmtSpeed(s)  { return parseFloat(s).toFixed(2).replace('.', ','); }
 
+    const CITIES = {
+        'Бурдин Игорь':       'Красноярск',
+        'Захаренков Илья':    'Красногорск',
+        'Умнов Михаил':       'Чебоксары',
+        'Подлесный Валерий':  'Красноярск',
+        'Ребенков Владимир':  'Салехард',
+        'Кондратюк Александр': 'Иркутск',
+        'Прокофьева Елена':   'Красноярск',
+    };
+
     function _entry(p, rank, leader, isRelay) {
         const teamName = p.team_name || p.surname;
         const members  = p.team_name ? `${p.surname} ${p.name}`.trim() : p.name;
+        const fullName = `${p.surname} ${p.name}`;
+        const city = !isRelay && CITIES[fullName] ? ` (${CITIES[fullName]})` : '';
         const displayName = isRelay
             ? `Команда «${teamName}». ${members}`
-            : `${p.surname} ${p.name}`;
+            : `${fullName}${city}`;
 
         const km = _fmtKm(p.total_km);
 
