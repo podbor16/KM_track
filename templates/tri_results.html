@@ -816,6 +816,10 @@
                             <span class="tri-detail-value">${r.laps_completed > 0 ? `№${r.laps_completed}` : '—'}</span>
                         </div>
                         <div class="tri-detail-item">
+                            <span class="tri-detail-label">Накопленное время</span>
+                            <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</span>
+                        </div>
+                        <div class="tri-detail-item">
                             <span class="tri-detail-label">Время круга</span>
                             <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</span>
                         </div>
@@ -849,6 +853,22 @@
                 </td>
             </tr>`;
         }).join('');
+
+        // Строка рекорда 2025 — показываем только в личном зачёте (не при фильтре Эстафета)
+        const catFilter = document.getElementById('filter-category').value;
+        if (catFilter !== 'Эстафета') {
+            const recRow = `<tr class="tri-row-record">
+                <td class="tri-rank" style="color:var(--tri-muted)">—</td>
+                <td class="tri-bib" style="color:var(--tri-muted)">6</td>
+                <td class="tri-name">👑 Рекорд 2025 · Артемьев Анатолий</td>
+                <td><span class="tri-badge tri-badge--personal">Личный</span></td>
+                <td>715.1</td>
+                <td style="color:var(--tri-muted)">177</td>
+                <td class="tri-speed" style="color:var(--tri-muted)">29.8 км/ч</td>
+                <td><span class="tri-record-badge">Рекорд</span></td>
+            </tr>`;
+            tbody.innerHTML = recRow + tbody.innerHTML;
+        }
 
         // Восстанавливаем открытые строки
         openIds.forEach(id => {
