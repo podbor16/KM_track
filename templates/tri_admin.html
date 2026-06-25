@@ -297,7 +297,7 @@
             const lapDiff = leader.laps_completed - p.laps_completed;
             const kmDiff  = parseFloat(leader.total_km) - parseFloat(p.total_km);
             if (lapDiff > 0) {
-                line2 = `🏁 ${km} км | Отставание: ~${Math.round(kmDiff)} км (-${lapDiff} ${_lapWord(lapDiff)})`;
+                line2 = `🏁 ${km} км | Отставание: -${lapDiff} ${_lapWord(lapDiff)}`;
             } else {
                 // одинаковое кол-во кругов — разница во времени
                 const secDiff = Math.round((p.elapsed_ms - leader.elapsed_ms) / 1000);
