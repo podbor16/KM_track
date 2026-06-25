@@ -25,6 +25,7 @@
         <div class="admin-tabs">
             <button class="admin-tab active" onclick="switchTab('loader', this)">Загрузчик</button>
             <button class="admin-tab" onclick="switchTab('preset', this)">Пресет Copernico</button>
+            <button class="admin-tab" onclick="switchTab('post', this)">📋 Пост</button>
         </div>
 
         <!-- Загрузчик -->
@@ -35,6 +36,22 @@
             <div id="loader-wrap">
                 <div class="admin-loading">Загрузка статуса...</div>
             </div>
+        </div>
+
+        <!-- Пост -->
+        <div id="tab-post" class="tab-pane">
+            <div class="admin-section-note">
+                Автогенерация текста для поста в соцсетях по текущим данным гонки.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                <button class="adm-btn adm-btn--start" onclick="generateAndShow()">Сгенерировать</button>
+                <button class="adm-btn adm-btn--edit" id="btn-copy" onclick="copyPost()" style="display:none">Копировать</button>
+                <span id="copy-ok" style="display:none;color:var(--tri-green);font-size:13px">✓ Скопировано!</span>
+            </div>
+            <textarea id="post-preview" readonly
+                style="width:100%;height:520px;font-family:monospace;font-size:13px;line-height:1.6;
+                       border:1px solid var(--tri-border);border-radius:8px;padding:14px;
+                       background:var(--tri-surface);color:var(--tri-text);resize:vertical;display:none"></textarea>
         </div>
 
         <!-- Пресет -->
@@ -248,6 +265,118 @@
         });
 
         return card;
+    }
+
+    // ---- Генератор поста ----
+
+    const GUN_UTC_MS = new Date('2026-06-25T13:00:00Z').getTime();
+
+    function _lapWord(n) {
+        const abs = Math.abs(n);
+        const mod10 = abs % 10, mod100 = abs % 100;
+        if (mod100 >= 11 && mod100 <= 14) return 'кругов';
+        if (mod10 === 1) return 'круг';
+        if (mod10 >= 2 && mod10 <= 4) return 'круга';
+        return 'кругов';
+    }
+
+    function _fmtKm(km)    { return parseFloat(km).toFixed(2).replace('.', ','); }
+    function _fmtSpeed(s)  { return parseFloat(s).toFixed(2).replace('.', ','); }
+
+    function _entry(p, rank, leader, isRelay) {
+        const displayName = isRelay
+            ? `Команда «${p.team_name || (p.surname + ' ' + p.name).trim()}» (№${p.start_number})`
+            : `${p.surname} ${p.name} (№${p.start_number})`;
+
+        const km = _fmtKm(p.total_km);
+
+        let line2;
+        if (rank === 1 || p.laps_completed === 0) {
+            line2 = `🏁 ${km} км | ⏱️ Ср. скорость: ${_fmtSpeed(p.avg_speed_kmh)} км/ч`;
+        } else {
+            const lapDiff = leader.laps_completed - p.laps_completed;
+            const kmDiff  = parseFloat(leader.total_km) - parseFloat(p.total_km);
+            if (lapDiff > 0) {
+                line2 = `🏁 ${km} км | Отставание: ~${Math.round(kmDiff)} км (-${lapDiff} ${_lapWord(lapDiff)})`;
+            } else {
+                // одинаковое кол-во кругов — разница во времени
+                const secDiff = Math.round((p.elapsed_ms - leader.elapsed_ms) / 1000);
+                const mm = Math.floor(secDiff / 60), ss = secDiff % 60;
+                line2 = `🏁 ${km} км | +${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')} (ср. скорость: ${_fmtSpeed(p.avg_speed_kmh)} км/ч)`;
+            }
+        }
+        return `${rank}. ${displayName}\n${line2}`;
+    }
+
+    async function generateAndShow() {
+        const ta  = document.getElementById('post-preview');
+        const btn = document.getElementById('btn-copy');
+        const ok  = document.getElementById('copy-ok');
+        ta.value = 'Загрузка...';
+        ta.style.display = '';
+        btn.style.display = 'none';
+        ok.style.display  = 'none';
+
+        try {
+            const r = await fetch('/api/tri/standings');
+            if (!r.ok) throw new Error(await r.text());
+            const { standings } = await r.json();
+
+            const elapsedMs = Math.max(0, Date.now() - GUN_UTC_MS);
+            const elapsedH  = Math.floor(elapsedMs / 3600000);
+
+            // Индивидуальные: абсолютный рейтинг (без эстафет), потом разбиваем по полу
+            const individual = standings.filter(p => p.category !== 'Эстафета');
+            const men   = individual.filter(p => p.gender === 'Мужчина');
+            const women = individual.filter(p => p.gender === 'Женщина');
+            const relays = standings.filter(p => p.category === 'Эстафета');
+
+            // Абсолютное место среди индивидуальных (для женщин)
+            const absRank = {};
+            individual.forEach((p, i) => { absRank[p.id] = i + 1; });
+
+            let text = `⚡️ ИТОГИ ${elapsedH} ЧАСОВ суточной велогонки 24 часа:\n`;
+
+            if (men.length) {
+                text += `\n\n🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:\n\n`;
+                text += men.map((p, i) => _entry(p, i + 1, men[0], false)).join('\n\n');
+            }
+
+            if (women.length) {
+                text += `\n\n\n🏆 ЖЕНСКИЙ ЗАЧЁТ:\n\n`;
+                text += women.map((p, i) => {
+                    const entry = _entry(p, i + 1, women[0], false);
+                    return entry + `\n(${absRank[p.id]} место в индивидуальном абсолюте)`;
+                }).join('\n\n');
+            }
+
+            if (relays.length) {
+                text += `\n\n\n🤝 ЭСТАФЕТЫ:\n\n`;
+                text += relays.map((p, i) => _entry(p, i + 1, relays[0], true)).join('\n\n');
+            }
+
+            if (!standings.length) text = 'Нет данных — участники ещё не загружены.';
+
+            ta.value = text;
+            btn.style.display = '';
+        } catch(e) {
+            ta.value = 'Ошибка: ' + e.message;
+        }
+    }
+
+    async function copyPost() {
+        const ta = document.getElementById('post-preview');
+        const ok = document.getElementById('copy-ok');
+        try {
+            await navigator.clipboard.writeText(ta.value);
+            ok.style.display = '';
+            setTimeout(() => { ok.style.display = 'none'; }, 2000);
+        } catch(e) {
+            ta.select();
+            document.execCommand('copy');
+            ok.style.display = '';
+            setTimeout(() => { ok.style.display = 'none'; }, 2000);
+        }
     }
 
     document.addEventListener('keydown', e => {
