@@ -157,9 +157,6 @@
     let chartDatasetPids = [];
     let triChartPosition = null;
     let activeChartType = 'speed';
-    // pid → { pitStartMs } для тикера питстопов
-    const pitMap = {};
-
     const CHART_COLORS = [
         '#FF8562','#263146','#18A558','#DE0000','#4B7BE5',
         '#F5A623','#9B59B6','#1ABC9C','#E67E22','#2C3E50'
@@ -222,22 +219,6 @@
     }
     setInterval(updateElapsed, 1000);
     updateElapsed();
-
-    function fmtPit(ms) {
-        if (!ms || ms <= 0) return '';
-        const s = Math.floor(ms / 1000);
-        const m = Math.floor(s / 60);
-        return `PIT · ${m}:${String(s % 60).padStart(2, '0')}`;
-    }
-
-    // Тикер — обновляем только текст питстоп-плашек раз в секунду
-    setInterval(() => {
-        const now = Date.now();
-        for (const [pid, info] of Object.entries(pitMap)) {
-            const el = document.getElementById(`pit-${pid}`);
-            if (el) el.textContent = fmtPit(now - info.pitStartMs);
-        }
-    }, 1000);
 
     function fmtMs(ms) {
         if (!ms) return '—';
@@ -439,15 +420,10 @@
             const radii      = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
             const hoverRadii = data.map((_, j) => j === data.length - 1 ? endRadius + 2 : 4);
 
-            const avgLapMs = p.laps.length
-                ? (Math.max(...p.laps) * 3600000) / p.laps.length
-                : 0;
-
             return {
                 label: `${p.surname} ${p.name}`,
                 _color: color,
                 _isSelected: isSelected,
-                _avgLapMs: avgLapMs,
                 data,
                 borderColor: lineColor,
                 backgroundColor: lineColor,
@@ -462,61 +438,16 @@
 
         const ctx = document.getElementById('tri-chart').getContext('2d');
 
-        // Находим питстопы в allLaps для выбранных участников
-        function findPitStops(pid, avgLapMs) {
-            const lapsByPid = allLaps
-                .filter(l => l.participant_id === pid)
-                .sort((a, b) => a.lap_number - b.lap_number);
-            const pits = [];
-            for (let i = 1; i < lapsByPid.length; i++) {
-                const gap = lapsByPid[i].cumulative_ms - lapsByPid[i-1].cumulative_ms;
-                if (gap > avgLapMs * 1.3) {
-                    pits.push({
-                        startH: (lapsByPid[i-1].cumulative_ms + avgLapMs) / 3600000,
-                        endH:   lapsByPid[i].cumulative_ms / 3600000,
-                    });
-                }
-            }
-            // Текущий питстоп (если идёт прямо сейчас)
-            if (pitMap[pid]) {
-                const nowH = _testRaceH > 0 ? _testRaceH : (Date.now() - GUN_UTC_MS) / 3600000;
-                const lastLapH = lapsByPid.length ? lapsByPid[lapsByPid.length-1].cumulative_ms / 3600000 : 0;
-                pits.push({ startH: lastLapH + avgLapMs / 3600000, endH: nowH });
-            }
-            return pits;
-        }
-
-        // Плагин: плашка с фамилией + вертикальные пунктиры питстопов
+        // Плагин: плашка с фамилией у последней точки выбранного участника
         const labelPlugin = {
             id: 'lastLabel',
             afterDatasetsDraw(chart) {
                 const c = chart.ctx;
-                const { top, bottom } = chart.chartArea;
                 chart.data.datasets.forEach((ds, i) => {
                     if (!ds._isSelected) return;
                     const meta = chart.getDatasetMeta(i);
                     const pts = meta.data;
                     if (!pts.length) return;
-
-                    // Питстоп-пунктиры
-                    const pid = chartDatasetPids[i];
-                    const avgLapMs = ds._avgLapMs;
-                    if (avgLapMs && pid) {
-                        const pits = findPitStops(pid, avgLapMs);
-                        pits.forEach(pit => {
-                            const xPx = chart.scales.x.getPixelForValue(pit.startH);
-                            c.save();
-                            c.strokeStyle = ds._color;
-                            c.lineWidth = 1.5;
-                            c.setLineDash([4, 4]);
-                            c.globalAlpha = 0.7;
-                            c.beginPath();
-                            c.moveTo(xPx, top);
-                            c.lineTo(xPx, bottom);
-                            c.stroke();
-                            c.restore();
-                        });
-                    }
 
                     // Плашка с фамилией
                     const last = pts[pts.length - 1];
@@ -808,26 +739,10 @@
             .reduce((best, r) => (!best || r.best_lap_ms < best.best_lap_ms) ? r : best, null);
         const bestOverallLapMs = bestLapLeader ? bestLapLeader.best_lap_ms : 0;
 
-        const nowRaceMs = _testRaceH > 0 ? _testRaceH * 3600000 : Math.max(0, Date.now() - GUN_UTC_MS);
-        // Очищаем pitMap перед пересчётом
-        for (const k in pitMap) delete pitMap[k];
-
         tbody.innerHTML = rows.map(r => {
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
-
-            // Питстоп: overdue > avg_lap_ms * 1.3
-            const avgLapMs = r.laps_completed > 0 ? r.elapsed_ms / r.laps_completed : 0;
-            const timeSinceLast = r.elapsed_ms > 0 ? nowRaceMs - r.elapsed_ms : 0;
-            const isPit = r.laps_completed > 0 && avgLapMs > 0 && timeSinceLast > avgLapMs * 1.3;
-            const pitDurationMs = isPit ? Math.max(0, timeSinceLast - avgLapMs) : 0;
-            if (isPit) {
-                pitMap[r.id] = { pitStartMs: Date.now() - pitDurationMs };
-            }
-            const pitBadge = isPit
-                ? `<span class="tri-pit-badge" id="pit-${r.id}">${fmtPit(pitDurationMs)}</span>`
-                : '';
 
             // Бейдж отставания в гонке
             const gapBadge = r.gap === '—'
@@ -862,7 +777,7 @@
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="tri-name">${r.surname} ${r.name}${pitBadge}<span class="tri-chevron">▼</span></td>
+                <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td>${r.laps_completed}</td>
