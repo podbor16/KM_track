@@ -340,15 +340,15 @@
             const absRank = {};
             individual.forEach((p, i) => { absRank[p.id] = i + 1; });
 
-            let text = `**⚡️ ИТОГИ ${elapsedLabel} суточной велогонки 24 часа:**\n`;
+            let text = `**Промежуточные результаты после ${elapsedLabel} из 24 часов суточной велогонки:**\n`;
 
             if (men.length) {
-                text += `\n**🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:**\n`;
+                text += `\n**🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:**\n\n`;
                 text += men.map((p, i) => _entry(p, i + 1, men[0], false)).join('\n\n');
             }
 
             if (women.length) {
-                text += `\n\n**🏆 ЖЕНСКИЙ ЗАЧЁТ:**\n`;
+                text += `\n\n**🏆 ЖЕНСКИЙ ЗАЧЁТ:**\n\n`;
                 text += women.map((p, i) => {
                     const entry = _entry(p, i + 1, women[0], false);
                     return entry + `\n(${absRank[p.id]} место в индивидуальном абсолюте)`;
@@ -356,7 +356,7 @@
             }
 
             if (relays.length) {
-                text += `\n\n**🤝 ЭСТАФЕТЫ:**\n`;
+                text += `\n\n**🤝 ЭСТАФЕТЫ:**\n\n`;
                 text += relays.map((p, i) => _entry(p, i + 1, relays[0], true)).join('\n\n');
             }
 
