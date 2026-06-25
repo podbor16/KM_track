@@ -100,10 +100,18 @@ def _process_laps(cursor, participant_id: int, event_id: int, runner: dict, lap_
     inserted = 0
     prev_ms = 0
     for n in range(1, lap_count + 1):
-        field = pattern.replace("{n}", str(n))
-        cumulative_ms = runner.get(field)
+        field_kr    = pattern.replace("{n}", str(n))          # times.official_Nkr
+        field_plain = f"times.official_{n}"                   # times.official_N (без kr)
+
+        if field_kr in runner:
+            cumulative_ms = runner[field_kr]
+        elif field_plain in runner:
+            cumulative_ms = runner[field_plain]
+        else:
+            break  # поле не существует вообще — дальше нет смысла
+
         if cumulative_ms is None:
-            break
+            break  # поле есть, но круг ещё не пройден
         lap_ms = cumulative_ms - prev_ms
         cursor.execute(
             """INSERT IGNORE INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
