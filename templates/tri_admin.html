@@ -322,8 +322,11 @@
             if (!r.ok) throw new Error(await r.text());
             const { standings } = await r.json();
 
-            const elapsedMs = Math.max(0, Date.now() - GUN_UTC_MS);
-            const elapsedH  = Math.floor(elapsedMs / 3600000);
+            const elapsedMs   = Math.max(0, Date.now() - GUN_UTC_MS);
+            const halfHours   = Math.floor(elapsedMs / 1800000); // округление вниз до 30 мин
+            const elapsedH    = Math.floor(halfHours / 2);
+            const elapsedMin  = (halfHours % 2) * 30;
+            const elapsedLabel = elapsedMin ? `${elapsedH} Ч ${elapsedMin} МИН` : `${elapsedH} Ч`;
 
             // Индивидуальные: абсолютный рейтинг (без эстафет), потом разбиваем по полу
             const individual = standings.filter(p => p.category !== 'Эстафета');
@@ -335,7 +338,7 @@
             const absRank = {};
             individual.forEach((p, i) => { absRank[p.id] = i + 1; });
 
-            let text = `**⚡️ ИТОГИ ${elapsedH} ЧАСОВ суточной велогонки 24 часа:**\n`;
+            let text = `**⚡️ ИТОГИ ${elapsedLabel} суточной велогонки 24 часа:**\n`;
 
             if (men.length) {
                 text += `\n**🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:**\n`;
