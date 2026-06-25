@@ -452,6 +452,10 @@
             };
         });
 
+        // Восстанавливаем canvas если placeholder был показан (canvas мог быть скрыт)
+        if (!triChart) {
+            document.getElementById('chart-speed-wrap').innerHTML = '<canvas id="tri-chart"></canvas>';
+        }
         const ctx = document.getElementById('tri-chart').getContext('2d');
 
         // Плагин: плашка с фамилией у последней точки выбранного участника
@@ -632,6 +636,9 @@
             };
         });
 
+        if (!triChartPosition) {
+            document.getElementById('chart-position-wrap').innerHTML = '<canvas id="tri-chart-position"></canvas>';
+        }
         const ctx = document.getElementById('tri-chart-position').getContext('2d');
         const totalParticipants = participants.length;
 
