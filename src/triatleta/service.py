@@ -68,7 +68,7 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
             LEFT JOIN laps l ON l.participant_id = p.id
             WHERE p.event_id = %s {cat_filter}
             GROUP BY p.id
-            ORDER BY laps_completed DESC, elapsed_ms ASC
+            ORDER BY laps_completed DESC, elapsed_ms ASC, p.start_number ASC
         """, params)
         rows = cursor.fetchall()
         if not rows:
