@@ -724,9 +724,15 @@
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
+
+        // Запоминаем открытые строки до перерисовки
+        const openIds = new Set(
+            [...tbody.querySelectorAll('.tri-row-main.open')]
+                .map(tr => tr.id.replace('p-', ''))
+        );
         // Лидер по последнему кругу
         const lastLapLeader = rows
             .filter(r => r.laps_completed > 0 && r.last_lap_ms > 0)
@@ -829,6 +835,15 @@
                 </td>
             </tr>`;
         }).join('');
+
+        // Восстанавливаем открытые строки
+        openIds.forEach(id => {
+            const mainRow = tbody.querySelector(`#p-${id}`);
+            if (mainRow) {
+                mainRow.classList.add('open');
+                mainRow.nextElementSibling?.classList.add('open');
+            }
+        });
     }
 
     function toggleDetail(mainRow) {
