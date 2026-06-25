@@ -356,8 +356,31 @@
         }
     }
 
+    // Показываем список участников из standings когда ещё нет кругов
+    function renderChartPlaceholder() {
+        const legendList = document.getElementById('chart-legend-list');
+        const filtered = allStandings.filter(p => filteredPids.has(p.id));
+        legendList.innerHTML = filtered.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            return `<div class="tri-chart-legend-item" style="opacity:0.45;cursor:default">
+                <span class="tri-chart-legend-dot" style="background:${color}"></span>
+                <span>${p.surname} ${p.name}</span>
+            </div>`;
+        }).join('');
+
+        const placeholder = `<div style="display:flex;align-items:center;justify-content:center;
+            height:100%;color:var(--tri-muted);font-size:14px;text-align:center;padding:24px">
+            Данные появятся<br>после старта гонки</div>`;
+        document.getElementById('chart-speed-wrap').innerHTML =
+            `<canvas id="tri-chart" style="display:none"></canvas>${placeholder}`;
+        document.getElementById('chart-position-wrap').innerHTML =
+            `<canvas id="tri-chart-position" style="display:none"></canvas>${placeholder}`;
+        triChart = null;
+        triChartPosition = null;
+    }
+
     function renderChart() {
-        if (!allLaps.length) return;
+        if (!allLaps.length) { renderChartPlaceholder(); return; }
 
         const WIN = 0.5; // окно 30 минут
 
@@ -584,7 +607,7 @@
     }
 
     function renderPositionChart() {
-        if (!allLaps.length) return;
+        if (!allLaps.length) { renderChartPlaceholder(); return; }
 
         const WIN = 0.5;
 
