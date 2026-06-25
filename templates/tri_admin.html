@@ -285,8 +285,8 @@
 
     function _entry(p, rank, leader, isRelay) {
         const displayName = isRelay
-            ? `Команда «${p.team_name || (p.surname + ' ' + p.name).trim()}» (№${p.start_number})`
-            : `${p.surname} ${p.name} (№${p.start_number})`;
+            ? `Команда «${p.team_name || (p.surname + ' ' + p.name).trim()}»`
+            : `${p.surname} ${p.name}`;
 
         const km = _fmtKm(p.total_km);
 
@@ -335,15 +335,15 @@
             const absRank = {};
             individual.forEach((p, i) => { absRank[p.id] = i + 1; });
 
-            let text = `⚡️ ИТОГИ ${elapsedH} ЧАСОВ суточной велогонки 24 часа:\n`;
+            let text = `**⚡️ ИТОГИ ${elapsedH} ЧАСОВ суточной велогонки 24 часа:**\n`;
 
             if (men.length) {
-                text += `\n\n🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:\n\n`;
+                text += `\n🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:\n\n`;
                 text += men.map((p, i) => _entry(p, i + 1, men[0], false)).join('\n\n');
             }
 
             if (women.length) {
-                text += `\n\n\n🏆 ЖЕНСКИЙ ЗАЧЁТ:\n\n`;
+                text += `\n\n🏆 ЖЕНСКИЙ ЗАЧЁТ:\n\n`;
                 text += women.map((p, i) => {
                     const entry = _entry(p, i + 1, women[0], false);
                     return entry + `\n(${absRank[p.id]} место в индивидуальном абсолюте)`;
@@ -351,7 +351,7 @@
             }
 
             if (relays.length) {
-                text += `\n\n\n🤝 ЭСТАФЕТЫ:\n\n`;
+                text += `\n\n🤝 ЭСТАФЕТЫ:\n\n`;
                 text += relays.map((p, i) => _entry(p, i + 1, relays[0], true)).join('\n\n');
             }
 
