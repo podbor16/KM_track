@@ -19,16 +19,16 @@
             <div class="tri-header__meta">Красноярск · Триатлон-центр · Круг: 4.04 км</div>
         </div>
         <div class="tri-elapsed-wrap">
-            <div class="tri-elapsed-label">Прошло</div>
+            <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
             <div class="tri-elapsed" id="elapsed">—</div>
         </div>
     </div>
 
     <!-- Табы страницы -->
     <div class="tri-page-tabs">
-        <button class="tri-page-tab active" onclick="switchPageTab('distance', this)">Расстояние</button>
-        <button class="tri-page-tab" onclick="switchPageTab('segments', this)">Отрезки</button>
-        <button class="tri-page-tab" onclick="switchPageTab('chart', this)">График</button>
+        <button class="tri-page-tab active" data-tab="distance" onclick="switchPageTab('distance', this)">Расстояние</button>
+        <button class="tri-page-tab" data-tab="segments" onclick="switchPageTab('segments', this)">Отрезки</button>
+        <button class="tri-page-tab" data-tab="chart" onclick="switchPageTab('chart', this)">График</button>
     </div>
 
     <!-- Фильтры -->
@@ -209,15 +209,16 @@
         triChartPosition.update('none');
     }
 
-    // ---- Счётчик прошедшего времени ----
+    // ---- Таймер: обратный отсчёт до старта / прошедшее время ----
     function updateElapsed() {
-        const now = Date.now();
-        const diff = Math.max(0, now - GUN_UTC_MS);
-        const h = Math.floor(diff / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        const s = Math.floor((diff % 60000) / 1000);
-        document.getElementById('elapsed').textContent =
-            `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const diff = Date.now() - GUN_UTC_MS;
+        const ms   = Math.abs(diff);
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        const str = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        document.getElementById('elapsed').textContent = str;
+        document.getElementById('elapsed-label').textContent = diff < 0 ? 'До старта' : 'Прошло';
     }
     setInterval(updateElapsed, 1000);
     updateElapsed();
@@ -289,6 +290,8 @@
     function applyFilters() {
         const category = document.getElementById('filter-category').value;
         const genderEl = document.getElementById('filter-gender');
+        localStorage.setItem('tri_filter_category', category);
+        localStorage.setItem('tri_filter_gender', genderEl.value);
 
         // Когда выбрана «Эстафета» — сбрасываем и блокируем фильтр пола
         if (category === 'Эстафета') {
@@ -341,9 +344,9 @@
         document.getElementById('tab-distance').style.display = name === 'distance' ? '' : 'none';
         document.getElementById('tab-segments').style.display = name === 'segments' ? '' : 'none';
         document.getElementById('tab-chart').style.display    = name === 'chart'    ? '' : 'none';
-        // Поиск по фамилии скрываем на графике
         document.getElementById('filter-search').closest('.tri-filter-group').style.display =
             name === 'chart' ? 'none' : '';
+        localStorage.setItem('tri_tab', name);
         if (name === 'segments') renderSplits();
         if (name === 'chart') {
             requestAnimationFrame(() => {
@@ -986,6 +989,22 @@
             </tr>`;
         }).join('');
     }
+
+    // ---- Восстановление состояния после обновления страницы ----
+    (function restoreState() {
+        // Фильтры
+        const savedCat    = localStorage.getItem('tri_filter_category');
+        const savedGender = localStorage.getItem('tri_filter_gender');
+        if (savedCat)    document.getElementById('filter-category').value = savedCat;
+        if (savedGender) document.getElementById('filter-gender').value   = savedGender;
+
+        // Таб
+        const savedTab = localStorage.getItem('tri_tab') || 'distance';
+        if (savedTab !== 'distance') {
+            const btn = document.querySelector(`.tri-page-tab[data-tab="${savedTab}"]`);
+            if (btn) switchPageTab(savedTab, btn);
+        }
+    })();
 
     loadStandings();
     loadLaps();
