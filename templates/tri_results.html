@@ -963,11 +963,12 @@
                 if (diff === 0) {
                     // Равное число кругов — показываем разницу во времени
                     const deltaMs = r.lastLapMs - leader.lastLapMs;
-                    const totalSec = Math.round(deltaMs / 1000);
-                    const hh = Math.floor(totalSec / 3600);
-                    const mm = Math.floor((totalSec % 3600) / 60);
-                    const ss = totalSec % 60;
-                    const label = `+${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+                    const absSec = Math.abs(Math.round(deltaMs / 1000));
+                    const hh = Math.floor(absSec / 3600);
+                    const mm = Math.floor((absSec % 3600) / 60);
+                    const ss = absSec % 60;
+                    const sign = deltaMs >= 0 ? '+' : '−';
+                    const label = `${sign}${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
                     gapBadge = `<span class="tri-gap-badge tri-gap-badge--behind">${label}</span>`;
                 } else {
                     const label = diff === 1 ? '−1 круг' : (diff <= 4 ? `−${diff} круга` : `−${diff} кругов`);
