@@ -284,8 +284,10 @@
     function _fmtSpeed(s)  { return parseFloat(s).toFixed(2).replace('.', ','); }
 
     function _entry(p, rank, leader, isRelay) {
+        const teamName = p.team_name || p.surname;
+        const members  = p.team_name ? `${p.surname} ${p.name}`.trim() : p.name;
         const displayName = isRelay
-            ? `Команда «${p.team_name || (p.surname + ' ' + p.name).trim()}»`
+            ? `Команда «${teamName}». ${members}`
             : `${p.surname} ${p.name}`;
 
         const km = _fmtKm(p.total_km);
