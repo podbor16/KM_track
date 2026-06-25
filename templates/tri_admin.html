@@ -323,9 +323,9 @@
             const { standings } = await r.json();
 
             const elapsedMs   = Math.max(0, Date.now() - GUN_UTC_MS);
-            const halfHours   = Math.floor(elapsedMs / 1800000); // округление вниз до 30 мин
-            const elapsedH    = Math.floor(halfHours / 2);
-            const elapsedMin  = (halfHours % 2) * 30;
+            const totalMin    = Math.floor(elapsedMs / 60000);
+            const elapsedH    = Math.floor(totalMin / 60);
+            const elapsedMin  = totalMin % 60;
             const elapsedLabel = elapsedMin ? `${elapsedH} Ч ${elapsedMin} МИН` : `${elapsedH} Ч`;
 
             // Индивидуальные: абсолютный рейтинг (без эстафет), потом разбиваем по полу

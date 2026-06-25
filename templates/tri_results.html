@@ -297,14 +297,28 @@
         // Пересчитываем место и отставание от лидера отфильтрованной выборки
         if (rows.length > 0) {
             const leader = rows[0];
-            rows = rows.map((r, i) => ({
-                ...r,
-                rank: i + 1,
-                gap: i === 0 ? '—' : calculateGap(
-                    r.laps_completed, r.elapsed_ms,
-                    leader.laps_completed, leader.elapsed_ms
-                ),
-            }));
+            // Пачечный ранг: участники в ±3 сек с одинаковым числом кругов → одно место
+            const ranked = [];
+            for (let i = 0; i < rows.length; i++) {
+                let rank;
+                if (i === 0) {
+                    rank = 1;
+                } else {
+                    const prev = ranked[i - 1];
+                    const sameLaps = rows[i].laps_completed === rows[i - 1].laps_completed;
+                    const inPack = sameLaps && Math.abs(rows[i].elapsed_ms - rows[i - 1].elapsed_ms) <= 3000;
+                    rank = inPack ? prev.rank : i + 1;
+                }
+                ranked.push({
+                    ...rows[i],
+                    rank,
+                    gap: i === 0 ? '—' : calculateGap(
+                        rows[i].laps_completed, rows[i].elapsed_ms,
+                        leader.laps_completed, leader.elapsed_ms
+                    ),
+                });
+            }
+            rows = ranked;
         }
 
         document.getElementById('results-count').textContent =
