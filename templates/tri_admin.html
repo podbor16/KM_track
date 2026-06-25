@@ -340,7 +340,7 @@
             const totalMin    = Math.floor(elapsedMs / 60000);
             const elapsedH    = Math.floor(totalMin / 60);
             const elapsedMin  = totalMin % 60;
-            const elapsedLabel = elapsedMin ? `${elapsedH} Ч ${elapsedMin} МИН` : `${elapsedH} Ч`;
+            const elapsedLabel = elapsedMin ? `${elapsedH} ч ${elapsedMin} мин` : `${elapsedH} ч`;
 
             // Индивидуальные: абсолютный рейтинг (без эстафет), потом разбиваем по полу
             const individual = standings.filter(p => p.category !== 'Эстафета');

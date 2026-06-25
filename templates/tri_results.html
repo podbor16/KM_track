@@ -935,7 +935,8 @@
 
         const rows = Object.values(byParticipant).sort((a, b) => {
             if (b.count !== a.count) return b.count - a.count;
-            // При равном кол-ве кругов — порядок как в standings
+            // При равном кол-ве кругов — кто завершил последний круг раньше, тот лидер периода
+            if (a.lastLapMs !== b.lastLapMs) return a.lastLapMs - b.lastLapMs;
             const rankA = standingsMap[a.pid]?.rank ?? 999;
             const rankB = standingsMap[b.pid]?.rank ?? 999;
             return rankA - rankB;
