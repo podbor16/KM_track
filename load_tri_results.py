@@ -43,7 +43,7 @@ def _fetch_copernico(race_id: str, login: str, preset: str, event: str) -> list:
     url = f"https://public-api.copernico.cloud/api/races/{race_id}/preset/{login}:::{encoded_preset}/{encoded_event}"
     logger.info(f"📡 Copernico: {url}")
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=90) as resp:
+    with urllib.request.urlopen(req, timeout=20) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     if isinstance(data, list):
         return data
