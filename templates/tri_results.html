@@ -81,6 +81,9 @@
                 </table>
             </div>
             <div class="tri-refresh" id="refresh-label"></div>
+            <div id="record-2025" class="tri-record-banner">
+                👑 Рекорд 2025: Артемьев Анатолий — 715.1 км · 177 кругов · 29.8 км/ч
+            </div>
         </div>
 
         <!-- Таб: Отрезки -->
@@ -853,22 +856,6 @@
                 </td>
             </tr>`;
         }).join('');
-
-        // Строка рекорда 2025 — показываем только в личном зачёте (не при фильтре Эстафета)
-        const catFilter = document.getElementById('filter-category').value;
-        if (catFilter !== 'Эстафета') {
-            const recRow = `<tr class="tri-row-record">
-                <td class="tri-rank" style="color:var(--tri-muted)">—</td>
-                <td class="tri-bib" style="color:var(--tri-muted)">6</td>
-                <td class="tri-name">👑 Рекорд 2025 · Артемьев Анатолий</td>
-                <td><span class="tri-badge tri-badge--personal">Личный</span></td>
-                <td>715.1</td>
-                <td style="color:var(--tri-muted)">177</td>
-                <td class="tri-speed" style="color:var(--tri-muted)">29.8 км/ч</td>
-                <td><span class="tri-record-badge">Рекорд</span></td>
-            </tr>`;
-            tbody.innerHTML = recRow + tbody.innerHTML;
-        }
 
         // Восстанавливаем открытые строки
         openIds.forEach(id => {
