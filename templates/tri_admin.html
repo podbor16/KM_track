@@ -348,28 +348,45 @@
             const women = individual.filter(p => p.gender === 'Женщина');
             const relays = standings.filter(p => p.category === 'Эстафета');
 
-            // Абсолютное место среди индивидуальных (для женщин)
+            // Пачечный ранг: ±3 сек с одинаковым числом кругов → одно место
+            function packRanks(arr) {
+                const ranks = [];
+                for (let i = 0; i < arr.length; i++) {
+                    if (i === 0) { ranks.push(1); continue; }
+                    const prev = arr[i - 1];
+                    const sameLaps = arr[i].laps_completed === prev.laps_completed;
+                    const inPack = sameLaps && Math.abs(arr[i].elapsed_ms - prev.elapsed_ms) <= 3000;
+                    ranks.push(inPack ? ranks[i - 1] : i + 1);
+                }
+                return ranks;
+            }
+
+            // Абсолютное место среди индивидуальных (для женщин) — с пачечным рангом
+            const indRanks = packRanks(individual);
             const absRank = {};
-            individual.forEach((p, i) => { absRank[p.id] = i + 1; });
+            individual.forEach((p, i) => { absRank[p.id] = indRanks[i]; });
 
             let text = `**Промежуточные результаты после ${elapsedLabel} из 24 часов суточной велогонки:**\n`;
 
             if (men.length) {
+                const menRanks = packRanks(men);
                 text += `\n**🏆 ИНДИВИДУАЛЬНЫЙ ЗАЧЕТ. МУЖЧИНЫ:**\n\n`;
-                text += men.map((p, i) => _entry(p, i + 1, men[0], false)).join('\n\n');
+                text += men.map((p, i) => _entry(p, menRanks[i], men[0], false)).join('\n\n');
             }
 
             if (women.length) {
+                const womenRanks = packRanks(women);
                 text += `\n\n**🏆 ЖЕНСКИЙ ЗАЧЁТ:**\n\n`;
                 text += women.map((p, i) => {
-                    const entry = _entry(p, i + 1, women[0], false);
+                    const entry = _entry(p, womenRanks[i], women[0], false);
                     return entry + `\n(${absRank[p.id]} место в индивидуальном абсолюте)`;
                 }).join('\n\n');
             }
 
             if (relays.length) {
+                const relayRanks = packRanks(relays);
                 text += `\n\n**🤝 ЭСТАФЕТЫ:**\n\n`;
-                text += relays.map((p, i) => _entry(p, i + 1, relays[0], true)).join('\n\n');
+                text += relays.map((p, i) => _entry(p, relayRanks[i], relays[0], true)).join('\n\n');
             }
 
             if (!standings.length) text = 'Нет данных — участники ещё не загружены.';
