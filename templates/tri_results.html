@@ -905,7 +905,13 @@
             }
         }
 
-        const rows = Object.values(byParticipant).sort((a, b) => b.count - a.count);
+        const rows = Object.values(byParticipant).sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            // При равном кол-ве кругов — порядок как в standings
+            const rankA = standingsMap[a.pid]?.rank ?? 999;
+            const rankB = standingsMap[b.pid]?.rank ?? 999;
+            return rankA - rankB;
+        });
         const tbody = document.getElementById('splits-body');
         if (!rows.length) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:16px">Нет кругов в выбранном диапазоне</td></tr>';
