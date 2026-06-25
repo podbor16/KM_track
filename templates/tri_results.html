@@ -414,14 +414,13 @@
 
             const maxH = p.laps.length ? Math.max(...p.laps) : 0;
             const data = [];
-            for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN + WIN; w += WIN) {
+            for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN; w += WIN) {
                 const from = w - WIN, to = w;
                 const count = p.laps.filter(h => h > from && h <= to).length;
                 const totalLaps = p.laps.filter(h => h <= to).length;
-                if (count > 0 || data.length > 0) {
+                if (count > 0) {
                     data.push({ x: parseFloat(w.toFixed(1)), y: parseFloat((count * LAP_KM / WIN).toFixed(2)), totalKm: totalLaps * LAP_KM });
                 }
-                if (to > maxH + WIN) break;
             }
 
             // По умолчанию: серый. Выбранный: цветной. Невыбранный при активной выборке: бледный серый
