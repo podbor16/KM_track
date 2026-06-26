@@ -529,16 +529,19 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     padding: 4px 2px;
 }
 
-/* Бейдж сошедшего участника */
+/* Бейдж досрочного финишёра */
 .tri-dnf-badge {
     display: inline-block;
-    padding: 1px 5px;
+    margin-top: 3px;
+    padding: 1px 6px;
     border-radius: 3px;
     font-size: 10px;
-    font-weight: 700;
-    background: rgba(100, 100, 100, 0.12);
-    color: #888;
+    font-weight: 600;
+    background: rgba(100, 100, 100, 0.10);
+    color: #999;
+    border: 1px solid rgba(100, 100, 100, 0.18);
     vertical-align: middle;
+    letter-spacing: 0.2px;
 }
 
 /* Relay team participant stats panel */

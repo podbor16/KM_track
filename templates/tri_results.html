@@ -146,7 +146,7 @@
                 <table class="tri-table tri-laps-table">
                     <thead>
                         <tr>
-                            <th class="tri-rank">#</th>
+                            <th class="tri-rank">Место</th>
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Кругов</th>
@@ -574,7 +574,7 @@
             const dnf = isDnf({ st });
             rank++;
             const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
-            const dnfBadge = dnf ? ' <span class="tri-dnf-tag">Финишировал</span>' : '';
+            const dnfBadge = dnf ? '<br><span class="tri-dnf-badge">Финишировал</span>' : '';
             const isOpen = openLapsRows.has(pid);
             const rowClass = `tri-laps-summary-row${dnf ? ' tri-laps-dnf' : ''}`;
 
@@ -1443,7 +1443,7 @@
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="tri-name">${isDnf ? '<span class="tri-dnf-badge">Финишировал</span> ' : ''}${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
+                <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span>${isDnf ? '<br><span class="tri-dnf-badge">Финишировал</span>' : ''}</td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td>${r.laps_completed}</td>
