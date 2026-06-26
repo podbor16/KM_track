@@ -778,7 +778,8 @@
         const bestBanner = document.getElementById('best-lap-banner');
         if (bestBanner && bestLapLeader) {
             const spd = (LAP_KM / (bestLapLeader.best_lap_ms / 3600000)).toFixed(1);
-            bestBanner.textContent = `⚡ Лучший круг: ${bestLapLeader.surname} ${bestLapLeader.name} — ${fmtMs(bestLapLeader.best_lap_ms)} · ${spd} км/ч`;
+            const lapNum = bestLapLeader.best_lap_number > 0 ? ` (круг №${bestLapLeader.best_lap_number})` : '';
+            bestBanner.textContent = `⚡ Лучший круг: ${bestLapLeader.surname} ${bestLapLeader.name}${lapNum} — ${fmtMs(bestLapLeader.best_lap_ms)} · ${spd} км/ч`;
             bestBanner.style.display = '';
         }
 
