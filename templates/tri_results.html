@@ -765,6 +765,9 @@
         if (document.getElementById('tab-chart').style.display !== 'none') {
             _renderActiveChart();
         }
+        if (document.getElementById('tab-laps').style.display !== 'none') {
+            renderLapsTable();
+        }
         _syncMobileChart();
     }
 
@@ -774,10 +777,12 @@
         document.getElementById('tab-distance').style.display = name === 'distance' ? '' : 'none';
         document.getElementById('tab-segments').style.display = name === 'segments' ? '' : 'none';
         document.getElementById('tab-chart').style.display    = name === 'chart'    ? '' : 'none';
+        document.getElementById('tab-laps').style.display     = name === 'laps'     ? '' : 'none';
         document.getElementById('filter-search').closest('.tri-filter-group').style.display =
             name === 'chart' ? 'none' : '';
         localStorage.setItem('tri_tab', name);
         if (name === 'segments') renderSplits();
+        if (name === 'laps') renderLapsTable();
         if (name === 'chart') {
             if (isMobile() && selectedChartPids.size === 0) {
                 allStandings
@@ -1517,6 +1522,10 @@
             allLaps = data.laps || [];
             updateSliderMax();
             renderSplits();
+            updateLapsSliderMax();
+            if (document.getElementById('tab-laps').style.display !== 'none') {
+                renderLapsTable();
+            }
             if (document.getElementById('tab-chart').style.display !== 'none') {
                 _renderActiveChart();
             }
@@ -1553,6 +1562,40 @@
         document.getElementById('from-val').textContent = fromH;
         document.getElementById('to-val').textContent = toH;
         renderSplits();
+    }
+
+    function updateLapsSliderMax() {
+        if (!allLaps.length) return;
+        const maxLap = Math.max(...allLaps.map(l => l.lap_number));
+        const fromEl = document.getElementById('laps-from-slider');
+        const toEl   = document.getElementById('laps-to-slider');
+        if (!fromEl || !toEl) return;
+        fromEl.max = maxLap;
+        toEl.max   = maxLap;
+        // Инициализируем to в максимум только при первой загрузке
+        if (parseInt(toEl.value) <= 1 || parseInt(toEl.value) > maxLap) {
+            toEl.value = maxLap;
+            lapsRangeTo = maxLap;
+            document.getElementById('laps-to-val').textContent = maxLap;
+        }
+        // Синхронизируем label
+        const from = parseInt(fromEl.value);
+        const to   = parseInt(toEl.value);
+        document.getElementById('laps-range-label').textContent = `Круги ${from} — ${to}`;
+    }
+
+    function onLapsSlider() {
+        const fromEl = document.getElementById('laps-from-slider');
+        const toEl   = document.getElementById('laps-to-slider');
+        let from = parseInt(fromEl.value);
+        let to   = parseInt(toEl.value);
+        if (to < from) { to = from; toEl.value = from; }
+        lapsRangeFrom = from;
+        lapsRangeTo   = to;
+        document.getElementById('laps-from-val').textContent = from;
+        document.getElementById('laps-to-val').textContent   = to;
+        document.getElementById('laps-range-label').textContent = `Круги ${from} — ${to}`;
+        renderLapsTable();
     }
 
     function renderSplits() {
