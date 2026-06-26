@@ -29,6 +29,7 @@
         <button class="tri-page-tab active" data-tab="distance" onclick="switchPageTab('distance', this)">Расстояние</button>
         <button class="tri-page-tab" data-tab="segments" onclick="switchPageTab('segments', this)">Отрезки</button>
         <button class="tri-page-tab" data-tab="chart" onclick="switchPageTab('chart', this)">График</button>
+        <button class="tri-page-tab" data-tab="laps" onclick="switchPageTab('laps', this)">Круги</button>
     </div>
 
     <!-- Фильтры -->
@@ -119,6 +120,46 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- Таб: Круги -->
+        <div id="tab-laps" style="display:none">
+            <div class="tri-laps-slider-wrap">
+                <div class="tri-laps-slider-header">
+                    <span class="tri-label">Диапазон кругов:</span>
+                    <span id="laps-range-label" class="tri-laps-range-label">Круги 1 — 1</span>
+                </div>
+                <div class="tri-laps-sliders">
+                    <label class="tri-slider-label">
+                        С круга: <span id="laps-from-val">1</span>
+                        <input type="range" id="laps-from-slider" min="1" max="1" value="1" oninput="onLapsSlider()">
+                    </label>
+                    <label class="tri-slider-label">
+                        По круг: <span id="laps-to-val">1</span>
+                        <input type="range" id="laps-to-slider" min="1" max="1" value="1" oninput="onLapsSlider()">
+                    </label>
+                </div>
+                <div id="laps-slider-meta" class="tri-laps-slider-meta"></div>
+            </div>
+            <div class="tri-table-wrap">
+                <table class="tri-table tri-laps-table">
+                    <thead>
+                        <tr>
+                            <th class="tri-rank">#</th>
+                            <th>Участник</th>
+                            <th>Кругов</th>
+                            <th class="tri-laps-th-best">Лучший ↑</th>
+                            <th>Худший</th>
+                            <th>Средний</th>
+                            <th>Разброс</th>
+                            <th style="width:28px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="laps-body">
+                        <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
