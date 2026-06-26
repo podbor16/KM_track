@@ -209,6 +209,12 @@
 
     function isMobile() { return window.innerWidth <= 640; }
 
+    // Динамический max по оси X: текущее время гонки + 1ч буфер, не более 24ч
+    function _chartXMax() {
+        const elapsed = (Date.now() - GUN_UTC_MS) / 3600000;
+        return Math.min(24, Math.max(Math.ceil(elapsed) + 1, 4));
+    }
+
     // Для эстафетных команд (gender==='mixed') показываем только название команды (surname)
     function _participantLabel(pid, surname, name) {
         return allStandings.find(r => r.id === pid)?.gender === 'mixed' ? surname : `${surname} ${name}`;
@@ -663,8 +669,10 @@
             }
         };
 
+        const xMax = _chartXMax();
         if (triChart) {
             triChart.data.datasets = datasets;
+            triChart.options.scales.x.max = xMax;
             triChart.update('none');
         } else {
             triChart = new Chart(ctx, {
@@ -701,7 +709,7 @@
                         x: {
                             type: 'linear',
                             min: 0,
-                            max: 24,
+                            max: xMax,
                             ticks: {
                                 stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
@@ -790,8 +798,10 @@
         }
         const ctx = document.getElementById('tri-chart-distance').getContext('2d');
 
+        const xMax = _chartXMax();
         if (triChartDistance) {
             triChartDistance.data.datasets = datasets;
+            triChartDistance.options.scales.x.max = xMax;
             triChartDistance.update('none');
         } else {
             triChartDistance = new Chart(ctx, {
@@ -825,7 +835,7 @@
                         x: {
                             type: 'linear',
                             min: 0,
-                            max: 24,
+                            max: xMax,
                             ticks: {
                                 stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
@@ -982,8 +992,10 @@
             }
         };
 
+        const xMax = _chartXMax();
         if (triChartPosition) {
             triChartPosition.data.datasets = datasets;
+            triChartPosition.options.scales.x.max = xMax;
             triChartPosition.update('none');
         } else {
             triChartPosition = new Chart(ctx, {
@@ -1018,7 +1030,7 @@
                     },
                     scales: {
                         x: {
-                            type: 'linear', min: 0, max: 24,
+                            type: 'linear', min: 0, max: xMax,
                             ticks: {
                                 stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
