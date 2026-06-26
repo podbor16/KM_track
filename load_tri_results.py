@@ -118,11 +118,12 @@ def _process_laps(cursor, participant_id: int, event_id: int, runner: dict, lap_
             break  # поле есть, но круг ещё не пройден / глюк хронометража
         lap_ms = cumulative_ms - prev_ms
         cursor.execute(
-            """INSERT IGNORE INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
-               VALUES (%s,%s,%s,%s,%s)""",
+            """INSERT INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
+               VALUES (%s,%s,%s,%s,%s)
+               ON DUPLICATE KEY UPDATE cumulative_ms=VALUES(cumulative_ms), lap_ms=VALUES(lap_ms)""",
             (participant_id, event_id, n, cumulative_ms, lap_ms),
         )
-        if cursor.rowcount > 0:
+        if cursor.rowcount == 1:  # 1=insert, 2=update, 0=no change
             inserted += 1
         prev_ms = cumulative_ms
     return inserted
