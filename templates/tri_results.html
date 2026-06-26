@@ -771,7 +771,7 @@
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
-            const isDnf = r.status && ['withdrawn', 'abandoned', 'dnf'].includes((r.status || '').toLowerCase());
+            const isDnf = r.status && ['withdrawn', 'abandoned', 'dnf', 'retired'].includes((r.status || '').toLowerCase());
 
             // Бейдж отставания в гонке
             const gapBadge = r.gap === '—'

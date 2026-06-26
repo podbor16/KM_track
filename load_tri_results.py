@@ -114,8 +114,8 @@ def _process_laps(cursor, participant_id: int, event_id: int, runner: dict, lap_
         else:
             break  # поле не существует вообще — дальше нет смысла
 
-        if cumulative_ms is None:
-            break  # поле есть, но круг ещё не пройден
+        if cumulative_ms is None or cumulative_ms == 0:
+            break  # поле есть, но круг ещё не пройден / глюк хронометража
         lap_ms = cumulative_ms - prev_ms
         cursor.execute(
             """INSERT IGNORE INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
@@ -157,7 +157,7 @@ def _run_once(config_path: str) -> int:
         if pid is None:
             continue
         runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
-        if runner_status not in ("withdrawn", "abandoned", "dnf"):
+        if runner_status not in ("withdrawn", "abandoned", "dnf", "retired"):
             _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
     conn.commit()
     cursor.close()
@@ -197,7 +197,7 @@ def run(config_path: str, interval: int):
                 if pid is None:
                     continue
                 runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
-                if runner_status in ("withdrawn", "abandoned", "dnf"):
+                if runner_status in ("withdrawn", "abandoned", "dnf", "retired"):
                     continue
                 total_inserted += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
             conn.commit()
