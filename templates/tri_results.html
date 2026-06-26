@@ -239,26 +239,37 @@
         const panel = document.getElementById('chart-mobile-info');
         if (!panel) return;
         if (!tooltip.dataPoints?.length || tooltip.opacity === 0) return;
-        const selected = tooltip.dataPoints.filter(dp =>
-            selectedChartPids.has(chartDatasetPids[dp.datasetIndex])
-        );
-        if (!selected.length) return;
-        const xVal = selected[0].parsed.x;
-        const rows = selected.map(dp => {
+        const cursorX = chart.scales.x?.getValueForPixel(tooltip.caretX);
+        if (cursorX == null) return;
+        const entries = [];
+        chart.data.datasets.forEach((ds, dsIdx) => {
+            const pid = chartDatasetPids[dsIdx];
+            if (!selectedChartPids.has(pid)) return;
+            let yVal = null;
+            for (let j = 0; j < ds.data.length; j++) {
+                if (ds.data[j].x <= cursorX) yVal = ds.data[j].y;
+                else break;
+            }
+            if (yVal === null) return;
+            entries.push({ ds, yVal });
+        });
+        if (!entries.length) return;
+        if (activeChartType === 'position') entries.sort((a, b) => a.yVal - b.yVal);
+        else entries.sort((a, b) => b.yVal - a.yVal);
+        const rows = entries.map(({ ds, yVal }) => {
             let val;
-            if (activeChartType === 'distance') val = dp.parsed.y.toFixed(1) + ' км';
-            else if (activeChartType === 'position') val = 'Место ' + Math.round(dp.parsed.y);
-            else val = dp.parsed.y.toFixed(1) + ' км/ч';
+            if (activeChartType === 'distance') val = yVal.toFixed(1) + ' км';
+            else if (activeChartType === 'position') val = 'Место ' + Math.round(yVal);
+            else val = yVal.toFixed(1) + ' км/ч';
             return `<div class="tri-chart-info-row">
-                <span class="tri-chart-info-dot" style="background:${dp.dataset._color}"></span>
-                <span class="tri-chart-info-name">${dp.dataset.label}</span>
+                <span class="tri-chart-info-dot" style="background:${ds._color}"></span>
+                <span class="tri-chart-info-name">${ds.label}</span>
                 <span class="tri-chart-info-val">${val}</span>
             </div>`;
         });
         panel.style.display = 'block';
-        panel.innerHTML = `<div class="tri-chart-info-time">${xVal.toFixed(1)} ч от старта</div>${rows.join('')}`;
+        panel.innerHTML = `<div class="tri-chart-info-time">${cursorX.toFixed(1)} ч от старта</div>${rows.join('')}`;
     }
-
     function _syncMobileChart() {
         if (!isMobile()) return;
         const badge = document.getElementById('chart-mobile-badge');
