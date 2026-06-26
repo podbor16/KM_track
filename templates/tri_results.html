@@ -238,11 +238,51 @@
         return (LAP_KM / (lapMs / 3600000)).toFixed(1) + ' км/ч';
     }
 
-    function switchLapTab(btn, showId, hideId) {
+    function switchLapTab(btn, showId) {
         btn.parentElement.querySelectorAll('.tri-detail-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        btn.closest('td').querySelectorAll('.tri-detail-inner').forEach(t => t.style.display = 'none');
         document.getElementById(showId).style.display = '';
-        document.getElementById(hideId).style.display = 'none';
+    }
+
+    const STAGE_BOUNDARY_MS = 12 * 3600 * 1000; // 12 часов — граница смен эстафеты
+
+    function relayStageHtml(r) {
+        const names = r.name.split(', ');
+        const pLaps = allLaps.filter(l => l.participant_id === r.id);
+        const s1 = pLaps.filter(l => l.cumulative_ms <= STAGE_BOUNDARY_MS);
+        const s2 = pLaps.filter(l => l.cumulative_ms > STAGE_BOUNDARY_MS);
+
+        const stageInfo = (laps, baseMs) => {
+            if (!laps.length) return null;
+            const count = laps.length;
+            const lapsMs = laps.map(l => l.lap_ms).filter(ms => ms > 0);
+            const bestMs = lapsMs.length ? Math.min(...lapsMs) : 0;
+            const elapsed = Math.max(...laps.map(l => l.cumulative_ms)) - baseMs;
+            const speed = elapsed > 0 ? (count * LAP_KM / (elapsed / 3600000)).toFixed(1) : '—';
+            return { count, km: (count * LAP_KM).toFixed(2), best: bestMs > 0 ? fmtMs(bestMs) : '—', speed };
+        };
+
+        const st1 = stageInfo(s1, 0);
+        const st2 = stageInfo(s2, STAGE_BOUNDARY_MS);
+
+        const block = (title, name, st) => {
+            const items = st ? `
+                <div class="tri-detail-item"><span class="tri-detail-label">Кругов</span><span class="tri-detail-value">${st.count}</span></div>
+                <div class="tri-detail-item"><span class="tri-detail-label">Расстояние</span><span class="tri-detail-value">${st.km} км</span></div>
+                <div class="tri-detail-item"><span class="tri-detail-label">Лучший круг</span><span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${st.best}</span></div>
+                <div class="tri-detail-item"><span class="tri-detail-label">Ср. скорость</span><span class="tri-detail-value">${st.speed} км/ч</span></div>`
+                : `<div class="tri-detail-item" style="grid-column:1/-1"><span class="tri-detail-label">Нет данных</span><span class="tri-detail-value">—</span></div>`;
+            return `<div class="tri-relay-block">
+                <div class="tri-relay-participant-name">${title} · ${name}</div>
+                ${items}
+            </div>`;
+        };
+
+        return `<div class="tri-relay-stages">
+            ${block('1-я смена', names[0] || '?', st1)}
+            ${block('2-я смена', names[1] || '?', st2)}
+        </div>`;
     }
 
     async function loadStandings() {
@@ -832,8 +872,9 @@
             <tr class="tri-row-detail">
                 <td colspan="8">
                     <div class="tri-detail-tabs">
-                        <button class="tri-detail-tab active" onclick="switchLapTab(this, 'last-${r.id}', 'best-${r.id}')">Последний круг</button>
-                        <button class="tri-detail-tab" onclick="switchLapTab(this, 'best-${r.id}', 'last-${r.id}')">Лучший круг</button>
+                        <button class="tri-detail-tab active" onclick="switchLapTab(this, 'last-${r.id}')">Последний круг</button>
+                        <button class="tri-detail-tab" onclick="switchLapTab(this, 'best-${r.id}')">Лучший круг</button>
+                        ${r.gender === 'mixed' ? `<button class="tri-detail-tab" onclick="switchLapTab(this, 'relay-${r.id}')">Участники</button>` : ''}
                     </div>
                     <div id="last-${r.id}" class="tri-detail-inner">
                         <div class="tri-detail-item">
@@ -875,6 +916,7 @@
                             <span class="tri-detail-value">${bestGapHtml}</span>
                         </div>
                     </div>
+                    ${r.gender === 'mixed' ? `<div id="relay-${r.id}" class="tri-detail-inner tri-relay-inner" style="display:none">${relayStageHtml(r)}</div>` : ''}
                 </td>
             </tr>`;
         }).join('');
