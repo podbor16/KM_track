@@ -202,9 +202,12 @@
         document.getElementById('chart-speed-wrap').style.display    = type === 'speed'    ? '' : 'none';
         document.getElementById('chart-distance-wrap').style.display = type === 'distance' ? '' : 'none';
         document.getElementById('chart-position-wrap').style.display = type === 'position' ? '' : 'none';
-        if (type === 'speed')    renderChart();
-        if (type === 'distance') renderDistanceChart();
-        if (type === 'position') renderPositionChart();
+        // requestAnimationFrame гарантирует что контейнер уже отрисован с правильными размерами
+        requestAnimationFrame(() => {
+            if (type === 'speed')    renderChart();
+            if (type === 'distance') renderDistanceChart();
+            if (type === 'position') renderPositionChart();
+        });
     }
 
     function isMobile() { return window.innerWidth <= 640; }
@@ -490,8 +493,7 @@
         renderStandings(rows);
         renderSplits();
         if (document.getElementById('tab-chart').style.display !== 'none') {
-            if (activeChartType === 'speed') renderChart();
-            else renderPositionChart();
+            _renderActiveChart();
         }
     }
 
@@ -557,6 +559,7 @@
 
     function renderChart() {
         if (!allLaps.length) { renderChartPlaceholder(); return; }
+        if (triChart?.width === 0) { triChart.destroy(); triChart = null; }
 
         const WIN = 0.5; // окно 30 минут
 
@@ -736,6 +739,7 @@
 
     function renderDistanceChart() {
         if (!allLaps.length) { renderChartPlaceholder(); return; }
+        if (triChartDistance?.width === 0) { triChartDistance.destroy(); triChartDistance = null; }
 
         const byPid = {};
         for (const lap of allLaps) {
@@ -862,6 +866,7 @@
 
     function renderPositionChart() {
         if (!allLaps.length) { renderChartPlaceholder(); return; }
+        if (triChartPosition?.width === 0) { triChartPosition.destroy(); triChartPosition = null; }
 
         const WIN = 0.5;
 
@@ -1237,8 +1242,7 @@
             updateSliderMax();
             renderSplits();
             if (document.getElementById('tab-chart').style.display !== 'none') {
-                if (activeChartType === 'speed') renderChart();
-                else renderPositionChart();
+                _renderActiveChart();
             }
         } catch(e) { console.error('laps error', e); }
     }
