@@ -147,6 +147,7 @@
                     <thead>
                         <tr>
                             <th class="tri-rank">#</th>
+                            <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Кругов</th>
                             <th class="tri-laps-th-best">Лучший ↑</th>
@@ -557,20 +558,21 @@
             const getKey = r => isFullRange && r.st.best_lap_ms > 0
                 ? r.st.best_lap_ms
                 : (r.agg.best || Infinity);
-            return getKey(a) - getKey(b);
+            const diff = getKey(a) - getKey(b);
+            if (diff !== 0) return diff;
+            return (a.st.rank || 999) - (b.st.rank || 999);
         });
 
         // Рендер
         let rank = 0;
         const body = document.getElementById('laps-body');
         if (!rows.length) {
-            body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных за выбранный диапазон</td></tr>';
+            body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных за выбранный диапазон</td></tr>';
             return;
         }
         body.innerHTML = rows.map(({ pid, agg, st }) => {
             const dnf = isDnf({ st });
-            if (!dnf) rank++;
-            const rankCell = dnf ? '—' : rank;
+            rank++;
             const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
             const dnfBadge = dnf ? ' <span class="tri-dnf-tag">Финишировал</span>' : '';
             const isOpen = openLapsRows.has(pid);
@@ -578,7 +580,8 @@
 
             const summaryRow = `
             <tr class="${rowClass}" onclick="toggleLapsRow(${pid})" style="cursor:pointer">
-                <td class="tri-rank">${rankCell}</td>
+                <td class="tri-rank">${rank}</td>
+                <td class="tri-bib">${esc(st.start_number)}</td>
                 <td><span class="tri-name">${nameLabel}</span>${dnfBadge}</td>
                 <td>${agg.laps.length}</td>
                 <td class="tri-laps-best">${agg.best ? fmtLapMs(agg.best) : '—'}</td>
@@ -609,7 +612,7 @@
 
             return summaryRow + `
             <tr class="tri-laps-detail-row">
-                <td colspan="8">
+                <td colspan="9">
                     <div class="tri-laps-detail-inner">
                         <table class="tri-laps-detail-table">
                             <thead>
