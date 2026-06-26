@@ -130,6 +130,14 @@
             <button class="tri-chart-subtab active" onclick="switchChartType('speed', this)">Скорость</button>
             <button class="tri-chart-subtab" onclick="switchChartType('position', this)">Позиция</button>
         </div>
+        <div class="tri-chart-mobile-bar">
+            <div class="tri-chart-mobile-trigger" onclick="openChartSheet()">
+                <span class="tri-chart-mobile-label">Участники</span>
+                <span class="tri-chart-mobile-badge" id="chart-mobile-badge">0</span>
+                <span class="tri-chart-mobile-hint">нажмите для выбора ›</span>
+            </div>
+            <div class="tri-chart-mobile-chips" id="chart-mobile-chips"></div>
+        </div>
         <div class="tri-chart-layout">
             <div class="tri-chart-sidebar">
                 <div class="tri-chart-sidebar__hint">Выберите участников</div>
@@ -149,6 +157,18 @@
             </div>
         </div>
         <div class="tri-refresh" id="chart-refresh-label"></div>
+        <div class="tri-chart-sheet-overlay" id="chart-sheet-overlay" onclick="closeChartSheet()"></div>
+        <div class="tri-chart-sheet" id="chart-sheet">
+            <div class="tri-chart-sheet-handle"></div>
+            <div class="tri-chart-sheet-header">
+                <span>Выбор участников</span>
+                <div class="tri-chart-sheet-header-actions">
+                    <button class="tri-chart-sheet-header-btn" onclick="selectAllChartPids()">Все</button>
+                    <button class="tri-chart-sheet-header-btn muted" onclick="clearAllChartPids()">Сбросить</button>
+                </div>
+            </div>
+            <div id="chart-sheet-list"></div>
+        </div>
     </div>
 
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
@@ -180,6 +200,55 @@
         if (type === 'position') renderPositionChart();
     }
 
+    function isMobile() { return window.innerWidth <= 640; }
+
+    function _syncMobileChart() {
+        if (!isMobile()) return;
+        const badge = document.getElementById('chart-mobile-badge');
+        if (badge) badge.textContent = selectedChartPids.size;
+
+        const chipsEl = document.getElementById('chart-mobile-chips');
+        if (chipsEl) {
+            chipsEl.innerHTML = [...selectedChartPids].map(pid => {
+                const idx = chartDatasetPids.indexOf(pid);
+                const color = idx >= 0 ? CHART_COLORS[idx % CHART_COLORS.length] : '#888';
+                const p = allStandings.find(r => r.id === pid);
+                const name = p ? p.surname : pid;
+                return `<div class="tri-chart-mobile-chip">
+                    <span class="tri-chart-mobile-chip-dot" style="background:${color}"></span>${name}</div>`;
+            }).join('');
+        }
+
+        document.querySelectorAll('.tri-chart-sheet-item').forEach(el => {
+            const pid = parseInt(el.dataset.pid);
+            el.querySelector('.tri-chart-sheet-check')?.classList.toggle('on', selectedChartPids.has(pid));
+        });
+    }
+
+    function openChartSheet() {
+        const list = document.getElementById('chart-sheet-list');
+        if (!list) return;
+        list.innerHTML = chartDatasetPids.map((pid, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const p = allStandings.find(r => r.id === pid);
+            if (!p) return '';
+            const isChecked = selectedChartPids.has(pid);
+            return `<div class="tri-chart-sheet-item" data-pid="${pid}" onclick="toggleChartPid(${pid})">
+                <span class="tri-chart-sheet-dot" style="background:${color}"></span>
+                <span class="tri-chart-sheet-name">${p.surname} ${p.name}</span>
+                <span class="tri-chart-sheet-km">${parseFloat(p.total_km).toFixed(1)} км</span>
+                <span class="tri-chart-sheet-check${isChecked ? ' on' : ''}">✓</span>
+            </div>`;
+        }).join('');
+        document.getElementById('chart-sheet')?.classList.add('open');
+        document.getElementById('chart-sheet-overlay')?.classList.add('open');
+    }
+
+    function closeChartSheet() {
+        document.getElementById('chart-sheet')?.classList.remove('open');
+        document.getElementById('chart-sheet-overlay')?.classList.remove('open');
+    }
+
     function toggleChartPid(pid) {
         if (selectedChartPids.has(pid)) {
             selectedChartPids.delete(pid);
@@ -191,6 +260,7 @@
         });
         if (activeChartType === 'position') _updatePositionSelection();
         else renderChart();
+        _syncMobileChart();
     }
 
     function selectAllChartPids() {
@@ -198,6 +268,7 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.add('active'));
         if (activeChartType === 'position') _updatePositionSelection();
         else renderChart();
+        _syncMobileChart();
     }
 
     function clearAllChartPids() {
@@ -205,6 +276,7 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.remove('active'));
         if (activeChartType === 'position') _updatePositionSelection();
         else renderChart();
+        _syncMobileChart();
     }
 
     // Быстрое обновление цветов позиционного чарта без пересчёта данных
@@ -216,9 +288,9 @@
             const isSelected = hasSelection && selectedChartPids.has(chartDatasetPids[i]);
             ds._isSelected = isSelected;
             let lineColor, lineWidth, endRadius;
-            if (!hasSelection)     { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
-            else if (isSelected)   { lineColor = color;     endRadius = 6; lineWidth = 2.5; }
-            else                   { lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1; }
+            if (!hasSelection)   { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
+            else if (isSelected) { lineColor = color; endRadius = 6; lineWidth = isMobile() ? 3 : 2.5; }
+            else                 { lineColor = isMobile() ? 'rgba(0,0,0,0.07)' : '#e0e0e0'; endRadius = 0; lineWidth = 1; }
             ds.borderColor = ds.backgroundColor = lineColor;
             ds.borderWidth = lineWidth;
             const n = ds.data.length;
@@ -413,6 +485,13 @@
         localStorage.setItem('tri_tab', name);
         if (name === 'segments') renderSplits();
         if (name === 'chart') {
+            if (isMobile() && selectedChartPids.size === 0 && allStandings.length > 0) {
+                allStandings
+                    .slice()
+                    .sort((a, b) => b.laps_completed - a.laps_completed)
+                    .slice(0, 3)
+                    .forEach(r => selectedChartPids.add(r.id));
+            }
             requestAnimationFrame(() => {
                 if (activeChartType === 'speed') renderChart();
                 else renderPositionChart();
@@ -489,14 +568,15 @@
                 }
             }
 
-            // По умолчанию: серый. Выбранный: цветной. Невыбранный при активной выборке: бледный серый
+            // По умолчанию: серый. Выбранный: цветной. Невыбранный при активной выборке: бледный серый (ещё бледнее на мобильном)
             let lineColor, lineWidth, endRadius;
             if (!hasSelection) {
                 lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5;
             } else if (isSelected) {
-                lineColor = color;    endRadius = 6; lineWidth = 2.5;
+                lineColor = color; endRadius = 6; lineWidth = isMobile() ? 3 : 2.5;
             } else {
-                lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1;
+                lineColor = isMobile() ? 'rgba(0,0,0,0.07)' : '#e0e0e0';
+                endRadius = 0; lineWidth = 1;
             }
 
             const radii      = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
@@ -613,6 +693,7 @@
                 }
             });
         }
+        _syncMobileChart();
 
         document.getElementById('chart-refresh-label').textContent =
             `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
@@ -693,11 +774,12 @@
             });
 
             let lineColor, lineWidth, endRadius;
-            if (!hasSelection)     { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
-            else if (isSelected)   { lineColor = color;     endRadius = 6; lineWidth = 2.5; }
-            else                   { lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1; }
+            if (!hasSelection)   { lineColor = '#c8c8c8'; endRadius = 3; lineWidth = 1.5; }
+            else if (isSelected) { lineColor = color; endRadius = 6; lineWidth = isMobile() ? 3 : 2.5; }
+            else                 { lineColor = isMobile() ? 'rgba(0,0,0,0.07)' : '#e0e0e0'; endRadius = 0; lineWidth = 1; }
 
             const radii = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
+
             const label = dnf ? `${p.surname} ${p.name} | Снялся с гонки` : `${p.surname} ${p.name}`;
 
             return {
@@ -809,6 +891,7 @@
                 }
             });
         }
+        _syncMobileChart();
 
         document.getElementById('chart-refresh-label').textContent =
             `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;

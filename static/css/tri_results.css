@@ -297,18 +297,139 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     height: 420px;
     position: relative;
 }
+/* Mobile chart elements — hidden on desktop */
+.tri-chart-mobile-bar { display: none; }
+.tri-chart-sheet-overlay { display: none; }
+.tri-chart-sheet { display: none; }
+
 @media (max-width: 640px) {
+    /* Скрыть десктопный сайдбар */
     .tri-chart-layout { flex-direction: column; }
-    .tri-chart-sidebar {
-        width: 100%; max-height: none;
-        padding: 8px;
-        border-radius: 0; box-shadow: none;
+    .tri-chart-sidebar { display: none; }
+    .tri-chart-wrap { height: 320px; border-radius: 0; box-shadow: none; padding: 10px 6px 6px; }
+
+    /* Trigger-bar с чипами */
+    .tri-chart-mobile-bar {
+        display: block;
+        background: #fafafa;
+        border-bottom: 1px solid var(--tri-border);
     }
-    .tri-chart-sidebar__hint { display: none; }
-    #chart-legend-list { display: flex; flex-wrap: wrap; gap: 4px; }
-    .tri-chart-legend-item { padding: 4px 8px; border-radius: 20px; background: #f0f0f0; font-size: 11px; }
-    .tri-chart-legend-item.active { background: var(--tri-navy); color: #fff; }
-    .tri-chart-wrap { height: 260px; border-radius: 0; box-shadow: none; padding: 10px 6px 6px; }
+    .tri-chart-mobile-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+    .tri-chart-mobile-label { font-size: 12px; font-weight: 700; color: var(--tri-navy); }
+    .tri-chart-mobile-badge {
+        background: var(--tri-accent);
+        color: #fff;
+        border-radius: 10px;
+        padding: 1px 7px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .tri-chart-mobile-hint { font-size: 11px; color: var(--tri-muted); margin-left: auto; }
+    .tri-chart-mobile-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 8px; }
+    .tri-chart-mobile-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background: var(--tri-navy);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+    }
+    .tri-chart-mobile-chip-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    /* Bottom sheet overlay */
+    .tri-chart-sheet-overlay {
+        display: block;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.35);
+        z-index: 100;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+    }
+    .tri-chart-sheet-overlay.open { opacity: 1; pointer-events: auto; }
+
+    /* Bottom sheet */
+    .tri-chart-sheet {
+        display: block;
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        background: #fff;
+        border-radius: 16px 16px 0 0;
+        z-index: 101;
+        max-height: 70vh;
+        overflow-y: auto;
+        transform: translateY(100%);
+        transition: transform 0.25s ease;
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    }
+    .tri-chart-sheet.open { transform: translateY(0); }
+    .tri-chart-sheet-handle {
+        width: 36px; height: 4px;
+        background: #ddd;
+        border-radius: 2px;
+        margin: 10px auto 8px;
+    }
+    .tri-chart-sheet-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px 10px;
+        border-bottom: 1px solid var(--tri-border);
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--tri-navy);
+    }
+    .tri-chart-sheet-header-actions { display: flex; gap: 12px; }
+    .tri-chart-sheet-header-btn {
+        font-size: 12px; font-weight: 700;
+        color: var(--tri-accent);
+        background: none; border: none;
+        cursor: pointer;
+        font-family: 'Onest', Arial, sans-serif;
+        padding: 0;
+    }
+    .tri-chart-sheet-header-btn.muted { color: var(--tri-muted); }
+    .tri-chart-sheet-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #f8f8f8;
+        cursor: pointer;
+    }
+    .tri-chart-sheet-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .tri-chart-sheet-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--tri-text); }
+    .tri-chart-sheet-km { font-size: 11px; color: var(--tri-muted); }
+    .tri-chart-sheet-check {
+        width: 20px; height: 20px;
+        border-radius: 6px;
+        border: 2px solid var(--tri-border);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: transparent;
+    }
+    .tri-chart-sheet-check.on {
+        background: var(--tri-navy);
+        border-color: var(--tri-navy);
+        color: #fff;
+    }
 }
 
 /* ---- Page tabs (Расстояние / Отрезки) ---- */
