@@ -301,8 +301,49 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-chart-mobile-bar { display: none; }
 .tri-chart-sheet-overlay { display: none; }
 .tri-chart-sheet { display: none; }
+.tri-chart-mobile-info { display: none; }
 /* На десктопе кнопка «Дистанция» скрыта */
 .tri-chart-subtab-distance { display: none; }
+
+/* Плашка с данными участников над графиком (мобайл) */
+.tri-chart-mobile-info {
+    background: rgba(22,22,22,0.90);
+    color: #fff;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 0 6px 6px;
+    font-size: 12px;
+    line-height: 1.65;
+    backdrop-filter: blur(4px);
+}
+.tri-chart-info-time {
+    color: rgba(255,255,255,0.55);
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+.tri-chart-info-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+.tri-chart-info-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.tri-chart-info-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tri-chart-info-val {
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 640px) {
     /* Скрыть десктопный сайдбар */

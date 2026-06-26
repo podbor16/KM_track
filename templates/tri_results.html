@@ -149,6 +149,7 @@
                 <div id="chart-legend-list"></div>
             </div>
             <div class="tri-chart-main">
+                <div class="tri-chart-mobile-info" id="chart-mobile-info" style="display:none"></div>
                 <div class="tri-chart-wrap" id="chart-speed-wrap">
                     <canvas id="tri-chart"></canvas>
                 </div>
@@ -223,6 +224,41 @@
         return allStandings.find(r => r.id === pid)?.gender === 'mixed' ? surname : `${surname} ${name}`;
     }
 
+    // Стабильный цвет участника: по позиции в алфавитном порядке среди filteredPids
+    function _getColorForPid(pid) {
+        const sorted = allStandings
+            .filter(r => filteredPids.has(r.id))
+            .sort((a, b) => a.surname.localeCompare(b.surname));
+        const idx = sorted.findIndex(r => r.id === pid);
+        return CHART_COLORS[(idx >= 0 ? idx : 0) % CHART_COLORS.length];
+    }
+
+    // Плашка над графиком на мобильном (используется как external tooltip)
+    function _mobileInfoExternal({ chart, tooltip }) {
+        if (!isMobile()) return;
+        const panel = document.getElementById('chart-mobile-info');
+        if (!panel) return;
+        if (!tooltip.dataPoints?.length || tooltip.opacity === 0) return;
+        const selected = tooltip.dataPoints.filter(dp =>
+            selectedChartPids.has(chartDatasetPids[dp.datasetIndex])
+        );
+        if (!selected.length) return;
+        const xVal = selected[0].parsed.x;
+        const rows = selected.map(dp => {
+            let val;
+            if (activeChartType === 'distance') val = dp.parsed.y.toFixed(1) + ' км';
+            else if (activeChartType === 'position') val = 'Место ' + Math.round(dp.parsed.y);
+            else val = dp.parsed.y.toFixed(1) + ' км/ч';
+            return `<div class="tri-chart-info-row">
+                <span class="tri-chart-info-dot" style="background:${dp.dataset._color}"></span>
+                <span class="tri-chart-info-name">${dp.dataset.label}</span>
+                <span class="tri-chart-info-val">${val}</span>
+            </div>`;
+        });
+        panel.style.display = 'block';
+        panel.innerHTML = `<div class="tri-chart-info-time">${xVal.toFixed(1)} ч от старта</div>${rows.join('')}`;
+    }
+
     function _syncMobileChart() {
         if (!isMobile()) return;
         const badge = document.getElementById('chart-mobile-badge');
@@ -231,13 +267,17 @@
         const chipsEl = document.getElementById('chart-mobile-chips');
         if (chipsEl) {
             chipsEl.innerHTML = [...selectedChartPids].map(pid => {
-                const idx = chartDatasetPids.indexOf(pid);
-                const color = idx >= 0 ? CHART_COLORS[idx % CHART_COLORS.length] : '#888';
+                const color = _getColorForPid(pid);
                 const p = allStandings.find(r => r.id === pid);
                 const name = p ? p.surname : pid;
                 return `<div class="tri-chart-mobile-chip">
                     <span class="tri-chart-mobile-chip-dot" style="background:${color}"></span>${name}</div>`;
             }).join('');
+        }
+
+        if (selectedChartPids.size === 0) {
+            const panel = document.getElementById('chart-mobile-info');
+            if (panel) panel.style.display = 'none';
         }
 
         document.querySelectorAll('.tri-chart-sheet-item').forEach(el => {
@@ -252,13 +292,13 @@
         const filtered = allStandings
             .filter(r => filteredPids.has(r.id))
             .sort((a, b) => a.surname.localeCompare(b.surname));
-        list.innerHTML = filtered.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        list.innerHTML = filtered.map(p => {
+            const color = _getColorForPid(p.id);
             const isChecked = selectedChartPids.has(p.id);
             return `<div class="tri-chart-sheet-item" data-pid="${p.id}" onclick="toggleChartPid(${p.id})">
                 <span class="tri-chart-sheet-dot" style="background:${color}"></span>
                 <span class="tri-chart-sheet-name">${p.gender === 'mixed' ? p.surname : `${p.surname} ${p.name}`}</span>
-                <span class="tri-chart-sheet-km">${parseFloat(p.total_km).toFixed(1)} км</span>
+                <span class="tri-chart-sheet-km">${(parseFloat(p.total_km) || 0).toFixed(1)} км</span>
                 <span class="tri-chart-sheet-check${isChecked ? ' on' : ''}">✓</span>
             </div>`;
         }).join('');
@@ -272,7 +312,7 @@
     }
 
     function _renderActiveChart() {
-        if (activeChartType === 'position') _updatePositionSelection();
+        if (activeChartType === 'position') renderPositionChart();
         else if (activeChartType === 'distance') renderDistanceChart();
         else renderChart();
     }
@@ -291,7 +331,7 @@
     }
 
     function selectAllChartPids() {
-        chartDatasetPids.forEach(pid => selectedChartPids.add(pid));
+        allStandings.filter(r => filteredPids.has(r.id)).forEach(r => selectedChartPids.add(r.id));
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.add('active'));
         _renderActiveChart();
         _syncMobileChart();
@@ -501,6 +541,7 @@
         if (document.getElementById('tab-chart').style.display !== 'none') {
             _renderActiveChart();
         }
+        _syncMobileChart();
     }
 
     function switchPageTab(name, btn) {
@@ -514,8 +555,9 @@
         localStorage.setItem('tri_tab', name);
         if (name === 'segments') renderSplits();
         if (name === 'chart') {
-            if (isMobile() && selectedChartPids.size === 0 && allStandings.length > 0) {
+            if (isMobile() && selectedChartPids.size === 0) {
                 allStandings
+                    .filter(r => filteredPids.has(r.id))
                     .slice()
                     .sort((a, b) => b.laps_completed - a.laps_completed)
                     .slice(0, 3)
@@ -558,9 +600,9 @@
             `<canvas id="tri-chart-distance" style="display:none"></canvas>${placeholder}`;
         document.getElementById('chart-position-wrap').innerHTML =
             `<canvas id="tri-chart-position" style="display:none"></canvas>${placeholder}`;
-        triChart = null;
-        triChartDistance = null;
-        triChartPosition = null;
+        if (triChart) { triChart.destroy(); triChart = null; }
+        if (triChartDistance) { triChartDistance.destroy(); triChartDistance = null; }
+        if (triChartPosition) { triChartPosition.destroy(); triChartPosition = null; }
     }
 
     function renderChart() {
@@ -582,8 +624,8 @@
 
         // Обновляем боковой список участников
         const legendList = document.getElementById('chart-legend-list');
-        legendList.innerHTML = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        legendList.innerHTML = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isActive = selectedChartPids.has(p.pid);
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
@@ -593,10 +635,10 @@
         }).join('');
 
         const hasSelection = selectedChartPids.size > 0;
-        chartDatasetPids = participants.map(p => p.pid); // обновляем индекс
+        chartDatasetPids = participants.map(p => p.pid);
 
-        const datasets = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        const datasets = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isSelected = hasSelection && selectedChartPids.has(p.pid);
 
             const maxH = p.laps.length ? Math.max(...p.laps) : 0;
@@ -696,6 +738,8 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            enabled: !isMobile(),
+                            external: _mobileInfoExternal,
                             filter(item) {
                                 if (selectedChartPids.size === 0) return false;
                                 const pid = chartDatasetPids[item.datasetIndex];
@@ -762,8 +806,8 @@
         chartDatasetPids = participants.map(p => p.pid);
 
         const legendList = document.getElementById('chart-legend-list');
-        legendList.innerHTML = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        legendList.innerHTML = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isActive = selectedChartPids.has(p.pid);
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
@@ -774,8 +818,8 @@
 
         const hasSelection = selectedChartPids.size > 0;
 
-        const datasets = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        const datasets = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isSelected = hasSelection && selectedChartPids.has(p.pid);
 
             let lineColor, lineWidth;
@@ -824,6 +868,8 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            enabled: !isMobile(),
+                            external: _mobileInfoExternal,
                             filter(item) {
                                 if (selectedChartPids.size === 0) return false;
                                 const pid = chartDatasetPids[item.datasetIndex];
@@ -885,6 +931,7 @@
         }
 
         const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
+        if (!participants.length) { renderChartPlaceholder(); return; }
         chartDatasetPids = participants.map(p => p.pid);
 
         // Статусы участников для определения DNF
@@ -895,8 +942,8 @@
 
         // Обновляем боковой список (shared с speed chart)
         const legendList = document.getElementById('chart-legend-list');
-        legendList.innerHTML = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        legendList.innerHTML = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isActive = selectedChartPids.has(p.pid);
             const dnfLabel = isDnfPid(p.pid) ? ' | Снялся с гонки' : '';
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
@@ -908,17 +955,15 @@
 
         const hasSelection = selectedChartPids.size > 0;
 
-        // Определяем максимальный час гонки
         const maxH = Math.max(...participants.flatMap(p => p.laps.map(l => l.h)));
 
-        // Для каждого окна считаем позиции всех участников
         const windows = [];
         for (let w = WIN; w <= Math.ceil(maxH / WIN) * WIN + WIN / 2; w += WIN) {
             windows.push(parseFloat(w.toFixed(1)));
         }
 
-        const datasets = participants.map((p, i) => {
-            const color = CHART_COLORS[i % CHART_COLORS.length];
+        const datasets = participants.map(p => {
+            const color = _getColorForPid(p.pid);
             const isSelected = hasSelection && selectedChartPids.has(p.pid);
             const dnf = isDnfPid(p.pid);
             const lastLapH = p.laps.length ? Math.max(...p.laps.map(l => l.h)) : 0;
@@ -1019,6 +1064,8 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            enabled: !isMobile(),
+                            external: _mobileInfoExternal,
                             filter(item) {
                                 if (selectedChartPids.size === 0) return false;
                                 const pid = chartDatasetPids[item.datasetIndex];
@@ -1389,7 +1436,8 @@
     // Принудительный ресайз чартов при смене ориентации / изменении окна
     window.addEventListener('resize', () => {
         if (document.getElementById('tab-chart').style.display === 'none') return;
-        if (activeChartType === 'speed' && triChart) triChart.resize();
+        if (activeChartType === 'speed'    && triChart)         triChart.resize();
+        if (activeChartType === 'distance' && triChartDistance) triChartDistance.resize();
         if (activeChartType === 'position' && triChartPosition) triChartPosition.resize();
     });
     </script>
