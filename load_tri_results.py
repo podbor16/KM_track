@@ -72,7 +72,11 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
     )
     row = cursor.fetchone()
     if row:
-        return row[0]
+        pid = row[0]
+        new_status = p.get(field_map.get("status", "status"), "") or ""
+        if new_status:
+            cursor.execute("UPDATE participants SET status=%s WHERE id=%s", (new_status, pid))
+        return pid
     raw_gender = p.get(field_map.get("gender", "gender"), "") or ""
     gender = _GENDER_NORM.get(raw_gender.lower(), raw_gender)
     team_name = (p.get(field_map.get("team_name", "team")) or
@@ -152,7 +156,9 @@ def _run_once(config_path: str) -> int:
             inserted_participants += 1
         if pid is None:
             continue
-        _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
+        runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
+        if runner_status not in ("withdrawn", "abandoned", "dnf"):
+            _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
     conn.commit()
     cursor.close()
     conn.close()
@@ -189,6 +195,9 @@ def run(config_path: str, interval: int):
             for runner in runners:
                 pid = _get_or_create_participant(cursor, event_id, runner, field_map)
                 if pid is None:
+                    continue
+                runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
+                if runner_status in ("withdrawn", "abandoned", "dnf"):
                     continue
                 total_inserted += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
             conn.commit()

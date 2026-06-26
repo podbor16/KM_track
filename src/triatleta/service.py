@@ -45,6 +45,7 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                 p.gender,
                 p.category,
                 p.team_name,
+                p.status,
                 COUNT(l.id) AS laps_completed,
                 ROUND(COUNT(l.id) * 4.040, 3) AS total_km,
                 COALESCE(MAX(l.cumulative_ms), 0) AS elapsed_ms,

@@ -340,6 +340,18 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     padding: 4px 2px;
 }
 
+/* Бейдж сошедшего участника */
+.tri-dnf-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(100, 100, 100, 0.12);
+    color: #888;
+    vertical-align: middle;
+}
+
 /* Lap gap leader hint in detail row */
 .tri-lap-gap-hint {
     font-size: 11px;

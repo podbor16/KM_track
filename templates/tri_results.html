@@ -84,6 +84,7 @@
             <div id="record-2025" class="tri-record-banner">
                 👑 Рекорд 2025: Артемьев Анатолий — 715.1 км · 177 кругов · 29.8 км/ч
             </div>
+            <div id="best-lap-banner" class="tri-record-banner" style="display:none"></div>
         </div>
 
         <!-- Таб: Отрезки -->
@@ -249,6 +250,7 @@
             const r = await fetch('/api/tri/standings');
             const data = await r.json();
             allStandings = data.standings || [];
+            updateSliderMax();
             applyFilters();
             document.getElementById('refresh-label').textContent =
                 `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
@@ -514,9 +516,7 @@
                             callbacks: {
                                 title(items) {
                                     const h = items[0].parsed.x;
-                                    const ts   = new Date(GUN_UTC_MS + h * 3600000);
-                                    const from = new Date(GUN_UTC_MS + (h - WIN) * 3600000);
-                                    return `${from.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} – ${ts.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}`;
+                                    return `${(h - WIN).toFixed(1)}–${h.toFixed(1)} ч от старта`;
                                 },
                                 label(item) {
                                     const spd = item.parsed.y;
@@ -533,10 +533,7 @@
                             max: 24,
                             ticks: {
                                 stepSize: 1,
-                                callback(val) {
-                                    const ts = new Date(GUN_UTC_MS + val * 3600000);
-                                    return ts.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                                },
+                                callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
                                 maxTicksLimit: 13,
                                 font: { size: 11 }
                             },
@@ -694,9 +691,7 @@
                             callbacks: {
                                 title(items) {
                                     const h = items[0].parsed.x;
-                                    const ts   = new Date(GUN_UTC_MS + h * 3600000);
-                                    const from = new Date(GUN_UTC_MS + (h - WIN) * 3600000);
-                                    return `${from.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})} – ${ts.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'})}`;
+                                    return `${(h - WIN).toFixed(1)}–${h.toFixed(1)} ч от старта`;
                                 },
                                 label(item) {
                                     const rank = item.parsed.y;
@@ -712,10 +707,7 @@
                             type: 'linear', min: 0, max: 24,
                             ticks: {
                                 stepSize: 1,
-                                callback(val) {
-                                    return new Date(GUN_UTC_MS + val * 3600000)
-                                        .toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                                },
+                                callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
                                 maxTicksLimit: 13, font: { size: 11 }
                             },
                             grid: { color: 'rgba(0,0,0,0.06)' }
@@ -768,10 +760,18 @@
             .reduce((best, r) => (!best || r.best_lap_ms < best.best_lap_ms) ? r : best, null);
         const bestOverallLapMs = bestLapLeader ? bestLapLeader.best_lap_ms : 0;
 
+        const bestBanner = document.getElementById('best-lap-banner');
+        if (bestBanner && bestLapLeader) {
+            const spd = (LAP_KM / (bestLapLeader.best_lap_ms / 3600000)).toFixed(1);
+            bestBanner.textContent = `⚡ Лучший круг: ${bestLapLeader.surname} ${bestLapLeader.name} — ${fmtMs(bestLapLeader.best_lap_ms)} · ${spd} км/ч`;
+            bestBanner.style.display = '';
+        }
+
         tbody.innerHTML = rows.map(r => {
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
+            const isDnf = r.status && ['withdrawn', 'abandoned', 'dnf'].includes((r.status || '').toLowerCase());
 
             // Бейдж отставания в гонке
             const gapBadge = r.gap === '—'
@@ -806,7 +806,7 @@
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
+                <td class="tri-name">${isDnf ? '<span class="tri-dnf-badge">Сошёл</span> ' : ''}${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td>${r.laps_completed}</td>
@@ -891,12 +891,36 @@
             const r = await fetch('/api/tri/laps');
             const data = await r.json();
             allLaps = data.laps || [];
+            updateSliderMax();
             renderSplits();
             if (document.getElementById('tab-chart').style.display !== 'none') {
                 if (activeChartType === 'speed') renderChart();
                 else renderPositionChart();
             }
         } catch(e) { console.error('laps error', e); }
+    }
+
+    function currentRaceH() {
+        if (_testRaceH > 0) return _testRaceH;
+        const elapsedMs = Date.now() - GUN_UTC_MS;
+        if (elapsedMs <= 0) return 1;
+        return Math.min(24, Math.max(1, Math.ceil(elapsedMs / 3600000)));
+    }
+
+    function updateSliderMax() {
+        const maxH = currentRaceH();
+        const toSlider   = document.getElementById('to-slider');
+        const fromSlider = document.getElementById('from-slider');
+        toSlider.max   = maxH;
+        fromSlider.max = maxH;
+        if (parseInt(toSlider.value) > maxH) {
+            toSlider.value = maxH;
+            document.getElementById('to-val').textContent = maxH;
+        }
+        if (parseInt(fromSlider.value) > maxH) {
+            fromSlider.value = maxH;
+            document.getElementById('from-val').textContent = maxH;
+        }
     }
 
     function onSlider() {
