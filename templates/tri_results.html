@@ -576,7 +576,7 @@
             const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
             const dnfBadge = dnf ? '<br><span class="tri-dnf-badge">Финишировал</span>' : '';
             const isOpen = openLapsRows.has(pid);
-            const rowClass = `tri-laps-summary-row${dnf ? ' tri-laps-dnf' : ''}`;
+            const rowClass = `tri-laps-summary-row`;
 
             const summaryRow = `
             <tr class="${rowClass}" onclick="toggleLapsRow(${pid})" style="cursor:pointer">
