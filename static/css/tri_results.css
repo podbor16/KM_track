@@ -301,12 +301,17 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-chart-mobile-bar { display: none; }
 .tri-chart-sheet-overlay { display: none; }
 .tri-chart-sheet { display: none; }
+/* На десктопе кнопка «Дистанция» скрыта */
+.tri-chart-subtab-distance { display: none; }
 
 @media (max-width: 640px) {
     /* Скрыть десктопный сайдбар */
     .tri-chart-layout { flex-direction: column; }
     .tri-chart-sidebar { display: none; }
     .tri-chart-wrap { height: 320px; border-radius: 0; box-shadow: none; padding: 10px 6px 6px; }
+    /* На мобильном: скрыть «Скорость», показать «Дистанция» */
+    .tri-chart-subtab-speed { display: none; }
+    .tri-chart-subtab-distance { display: inline-flex; }
 
     /* Trigger-bar с чипами */
     .tri-chart-mobile-bar {

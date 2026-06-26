@@ -127,8 +127,9 @@
     <!-- Таб: График (вне tri-container — full width) -->
     <div id="tab-chart" style="display:none">
         <div class="tri-chart-subtabs">
-            <button class="tri-chart-subtab active" onclick="switchChartType('speed', this)">Скорость</button>
-            <button class="tri-chart-subtab" onclick="switchChartType('position', this)">Позиция</button>
+            <button class="tri-chart-subtab tri-chart-subtab-speed active" data-type="speed" onclick="switchChartType('speed', this)">Скорость</button>
+            <button class="tri-chart-subtab tri-chart-subtab-distance" data-type="distance" onclick="switchChartType('distance', this)">Дистанция</button>
+            <button class="tri-chart-subtab" data-type="position" onclick="switchChartType('position', this)">Позиция</button>
         </div>
         <div class="tri-chart-mobile-bar">
             <div class="tri-chart-mobile-trigger" onclick="openChartSheet()">
@@ -150,6 +151,9 @@
             <div class="tri-chart-main">
                 <div class="tri-chart-wrap" id="chart-speed-wrap">
                     <canvas id="tri-chart"></canvas>
+                </div>
+                <div class="tri-chart-wrap" id="chart-distance-wrap" style="display:none">
+                    <canvas id="tri-chart-distance"></canvas>
                 </div>
                 <div class="tri-chart-wrap" id="chart-position-wrap" style="display:none">
                     <canvas id="tri-chart-position"></canvas>
@@ -181,6 +185,7 @@
     let allLaps = [];
     let filteredPids = new Set();
     let triChart = null;
+    let triChartDistance = null;
     let selectedChartPids = new Set();
     let chartDatasetPids = [];
     let triChartPosition = null;
@@ -195,8 +200,10 @@
         document.querySelectorAll('.tri-chart-subtab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('chart-speed-wrap').style.display    = type === 'speed'    ? '' : 'none';
+        document.getElementById('chart-distance-wrap').style.display = type === 'distance' ? '' : 'none';
         document.getElementById('chart-position-wrap').style.display = type === 'position' ? '' : 'none';
         if (type === 'speed')    renderChart();
+        if (type === 'distance') renderDistanceChart();
         if (type === 'position') renderPositionChart();
     }
 
@@ -249,6 +256,12 @@
         document.getElementById('chart-sheet-overlay')?.classList.remove('open');
     }
 
+    function _renderActiveChart() {
+        if (activeChartType === 'position') _updatePositionSelection();
+        else if (activeChartType === 'distance') renderDistanceChart();
+        else renderChart();
+    }
+
     function toggleChartPid(pid) {
         if (selectedChartPids.has(pid)) {
             selectedChartPids.delete(pid);
@@ -258,24 +271,21 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => {
             el.classList.toggle('active', selectedChartPids.has(+el.dataset.pid));
         });
-        if (activeChartType === 'position') _updatePositionSelection();
-        else renderChart();
+        _renderActiveChart();
         _syncMobileChart();
     }
 
     function selectAllChartPids() {
         chartDatasetPids.forEach(pid => selectedChartPids.add(pid));
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.add('active'));
-        if (activeChartType === 'position') _updatePositionSelection();
-        else renderChart();
+        _renderActiveChart();
         _syncMobileChart();
     }
 
     function clearAllChartPids() {
         selectedChartPids.clear();
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.remove('active'));
-        if (activeChartType === 'position') _updatePositionSelection();
-        else renderChart();
+        _renderActiveChart();
         _syncMobileChart();
     }
 
@@ -492,8 +502,17 @@
                     .slice(0, 3)
                     .forEach(r => selectedChartPids.add(r.id));
             }
+            if (isMobile() && activeChartType === 'speed') {
+                activeChartType = 'distance';
+                document.querySelectorAll('.tri-chart-subtab').forEach(b => {
+                    b.classList.toggle('active', b.dataset.type === 'distance');
+                });
+                document.getElementById('chart-speed-wrap').style.display    = 'none';
+                document.getElementById('chart-distance-wrap').style.display = '';
+            }
             requestAnimationFrame(() => {
                 if (activeChartType === 'speed') renderChart();
+                else if (activeChartType === 'distance') renderDistanceChart();
                 else renderPositionChart();
             });
         }
@@ -516,9 +535,12 @@
             Данные появятся<br>после старта гонки</div>`;
         document.getElementById('chart-speed-wrap').innerHTML =
             `<canvas id="tri-chart" style="display:none"></canvas>${placeholder}`;
+        document.getElementById('chart-distance-wrap').innerHTML =
+            `<canvas id="tri-chart-distance" style="display:none"></canvas>${placeholder}`;
         document.getElementById('chart-position-wrap').innerHTML =
             `<canvas id="tri-chart-position" style="display:none"></canvas>${placeholder}`;
         triChart = null;
+        triChartDistance = null;
         triChartPosition = null;
     }
 
@@ -685,6 +707,130 @@
                         },
                         y: {
                             title: { display: true, text: 'Скорость, км/ч (за 30 мин)', font: { size: 12 } },
+                            min: 0,
+                            ticks: { font: { size: 11 } },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        }
+                    }
+                }
+            });
+        }
+        _syncMobileChart();
+
+        document.getElementById('chart-refresh-label').textContent =
+            `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+    }
+
+    function renderDistanceChart() {
+        if (!allLaps.length) { renderChartPlaceholder(); return; }
+
+        const byPid = {};
+        for (const lap of allLaps) {
+            if (!filteredPids.has(lap.participant_id)) continue;
+            const pid = lap.participant_id;
+            if (!byPid[pid]) byPid[pid] = { pid, surname: lap.surname, name: lap.name, points: [{ x: 0, y: 0 }] };
+            byPid[pid].points.push({
+                x: parseFloat((lap.cumulative_ms / 3600000).toFixed(3)),
+                y: parseFloat((lap.lap_number * LAP_KM).toFixed(3))
+            });
+        }
+
+        const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
+        chartDatasetPids = participants.map(p => p.pid);
+
+        const legendList = document.getElementById('chart-legend-list');
+        legendList.innerHTML = participants.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isActive = selectedChartPids.has(p.pid);
+            return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
+                         data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
+                <span class="tri-chart-legend-dot" style="background:${color}"></span>
+                <span>${p.surname} ${p.name}</span>
+            </div>`;
+        }).join('');
+
+        const hasSelection = selectedChartPids.size > 0;
+
+        const datasets = participants.map((p, i) => {
+            const color = CHART_COLORS[i % CHART_COLORS.length];
+            const isSelected = hasSelection && selectedChartPids.has(p.pid);
+
+            let lineColor, lineWidth;
+            if (!hasSelection) {
+                lineColor = '#c8c8c8'; lineWidth = 1.5;
+            } else if (isSelected) {
+                lineColor = color; lineWidth = isMobile() ? 3 : 2.5;
+            } else {
+                lineColor = isMobile() ? 'rgba(0,0,0,0.07)' : '#e0e0e0';
+                lineWidth = 1;
+            }
+
+            return {
+                label: `${p.surname} ${p.name}`,
+                _color: color,
+                _isSelected: isSelected,
+                data: p.points,
+                borderColor: lineColor,
+                backgroundColor: lineColor,
+                borderWidth: lineWidth,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                tension: 0,
+                spanGaps: true,
+            };
+        });
+
+        if (!triChartDistance) {
+            document.getElementById('chart-distance-wrap').innerHTML = '<canvas id="tri-chart-distance"></canvas>';
+        }
+        const ctx = document.getElementById('tri-chart-distance').getContext('2d');
+
+        if (triChartDistance) {
+            triChartDistance.data.datasets = datasets;
+            triChartDistance.update('none');
+        } else {
+            triChartDistance = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            filter(item) {
+                                if (selectedChartPids.size === 0) return false;
+                                const pid = chartDatasetPids[item.datasetIndex];
+                                return selectedChartPids.has(pid);
+                            },
+                            itemSort(a, b) { return b.parsed.y - a.parsed.y; },
+                            callbacks: {
+                                title(items) {
+                                    const h = items[0].parsed.x;
+                                    return `${h.toFixed(1)} ч от старта`;
+                                },
+                                label(item) {
+                                    return ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} км`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 0,
+                            max: 24,
+                            ticks: {
+                                stepSize: 1,
+                                callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
+                                maxTicksLimit: 13,
+                                font: { size: 11 }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.06)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Дистанция, км', font: { size: 12 } },
                             min: 0,
                             ticks: { font: { size: 11 } },
                             grid: { color: 'rgba(0,0,0,0.06)' }
