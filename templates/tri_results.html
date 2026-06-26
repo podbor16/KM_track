@@ -562,7 +562,6 @@
             if (!dnf) rank++;
             const rankCell = dnf ? '—' : rank;
             const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
-            const genderTag = st.gender === 'mixed' ? 'Эст' : (st.gender === 'Мужчина' ? 'М' : 'Ж');
             const dnfBadge = dnf ? ' <span class="tri-dnf-tag">Финишировал</span>' : '';
             const isOpen = openLapsRows.has(pid);
             const rowClass = `tri-laps-summary-row${dnf ? ' tri-laps-dnf' : ''}`;
@@ -570,7 +569,7 @@
             const summaryRow = `
             <tr class="${rowClass}" onclick="toggleLapsRow(${pid})" style="cursor:pointer">
                 <td class="tri-rank">${rankCell}</td>
-                <td><span class="tri-name">${nameLabel}</span> <span class="tri-tag">${genderTag}</span>${dnfBadge}</td>
+                <td><span class="tri-name">${nameLabel}</span>${dnfBadge}</td>
                 <td>${agg.laps.length}</td>
                 <td class="tri-laps-best">${agg.best ? fmtLapMs(agg.best) : '—'}</td>
                 <td class="tri-laps-worst">${agg.worst ? fmtLapMs(agg.worst) : '—'}</td>
