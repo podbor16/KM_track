@@ -54,10 +54,13 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                     WHERE l2.participant_id = p.id
                     ORDER BY l2.lap_number DESC LIMIT 1
                 ), 0) AS last_lap_ms,
-                COALESCE(MIN(l.lap_ms), 0) AS best_lap_ms,
+                COALESCE((
+                    SELECT MIN(l3.lap_ms) FROM laps l3
+                    WHERE l3.participant_id = p.id AND l3.lap_ms > 0
+                ), 0) AS best_lap_ms,
                 COALESCE((
                     SELECT l3.lap_number FROM laps l3
-                    WHERE l3.participant_id = p.id
+                    WHERE l3.participant_id = p.id AND l3.lap_ms > 0
                     ORDER BY l3.lap_ms ASC LIMIT 1
                 ), 0) AS best_lap_number,
                 CASE
