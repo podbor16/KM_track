@@ -571,15 +571,22 @@
         const participants = Object.values(byPid).sort((a, b) => a.surname.localeCompare(b.surname));
         chartDatasetPids = participants.map(p => p.pid);
 
+        // Статусы участников для определения DNF
+        const DNF_ST = ['withdrawn', 'abandoned', 'dnf', 'retired'];
+        const statusMap = {};
+        for (const s of allStandings) statusMap[s.id] = (s.status || '').toLowerCase();
+        const isDnfPid = pid => DNF_ST.includes(statusMap[pid] || '');
+
         // Обновляем боковой список (shared с speed chart)
         const legendList = document.getElementById('chart-legend-list');
         legendList.innerHTML = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
             const isActive = selectedChartPids.has(p.pid);
+            const dnfLabel = isDnfPid(p.pid) ? ' | Снялся с гонки' : '';
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
                 <span class="tri-chart-legend-dot" style="background:${color}"></span>
-                <span>${p.surname} ${p.name}</span>
+                <span>${p.surname} ${p.name}${dnfLabel}</span>
             </div>`;
         }).join('');
 
@@ -597,8 +604,13 @@
         const datasets = participants.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
             const isSelected = hasSelection && selectedChartPids.has(p.pid);
+            const dnf = isDnfPid(p.pid);
+            const lastLapH = p.laps.length ? Math.max(...p.laps.map(l => l.h)) : 0;
 
-            const data = windows.map(w => {
+            // DNF-участники: окна только до их последнего круга
+            const activeWindows = dnf ? windows.filter(w => w <= lastLapH + WIN / 2) : windows;
+
+            const data = activeWindows.map(w => {
                 // Круги участника к моменту w
                 const completed = p.laps.filter(l => l.h <= w);
                 const lapCount = completed.length;
@@ -622,10 +634,11 @@
             else                   { lineColor = '#e0e0e0'; endRadius = 0; lineWidth = 1; }
 
             const radii = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
+            const label = dnf ? `${p.surname} ${p.name} | Снялся с гонки` : `${p.surname} ${p.name}`;
 
             return {
-                label: `${p.surname} ${p.name}`,
-                _color: color, _isSelected: isSelected,
+                label,
+                _color: color, _isSelected: isSelected, _isDnf: dnf,
                 data, borderColor: lineColor, backgroundColor: lineColor,
                 borderWidth: lineWidth, pointStyle: 'circle',
                 pointRadius: radii, pointHoverRadius: radii.map(r => r ? r + 2 : 4),
@@ -651,7 +664,9 @@
                     if (!pts.length) return;
                     const last = pts[pts.length - 1];
                     const { x, y } = last.getProps(['x', 'y'], true);
-                    const text = ds.label.split(' ')[0];
+                    const text = ds._isDnf
+                        ? ds.label.split(' ')[0] + ' | Снялся'
+                        : ds.label.split(' ')[0];
                     c.save();
                     c.font = 'bold 11px Onest, Arial, sans-serif';
                     const tw = c.measureText(text).width;
