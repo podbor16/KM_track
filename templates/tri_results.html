@@ -798,11 +798,20 @@
             return;
         }
 
-        // Запоминаем открытые строки до перерисовки
+        // Запоминаем открытые строки и активные вкладки до перерисовки
         const openIds = new Set(
             [...tbody.querySelectorAll('.tri-row-main.open')]
                 .map(tr => tr.id.replace('p-', ''))
         );
+        const activeTabMap = {};
+        tbody.querySelectorAll('.tri-row-main.open').forEach(tr => {
+            const id = tr.id.replace('p-', '');
+            const activeBtn = tr.nextElementSibling?.querySelector('.tri-detail-tab.active');
+            if (activeBtn) {
+                const m = activeBtn.getAttribute('onclick').match(/'([^']+)'/);
+                if (m) activeTabMap[id] = m[1];
+            }
+        });
         // Лидер по последнему кругу
         const lastLapLeader = rows
             .filter(r => r.laps_completed > 0 && r.last_lap_ms > 0)
@@ -921,12 +930,16 @@
             </tr>`;
         }).join('');
 
-        // Восстанавливаем открытые строки
+        // Восстанавливаем открытые строки и активные вкладки
         openIds.forEach(id => {
             const mainRow = tbody.querySelector(`#p-${id}`);
-            if (mainRow) {
-                mainRow.classList.add('open');
-                mainRow.nextElementSibling?.classList.add('open');
+            if (!mainRow) return;
+            mainRow.classList.add('open');
+            mainRow.nextElementSibling?.classList.add('open');
+            const showId = activeTabMap[id];
+            if (showId) {
+                const btn = mainRow.nextElementSibling?.querySelector(`.tri-detail-tab[onclick*="'${showId}'"]`);
+                if (btn) switchLapTab(btn, showId);
             }
         });
     }
