@@ -247,6 +247,28 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     letter-spacing: 0.5px;
     padding: 0 12px 8px;
 }
+.tri-chart-sidebar__actions {
+    display: flex;
+    gap: 4px;
+    padding: 0 12px 8px;
+}
+.tri-chart-select-btn {
+    flex: 1;
+    padding: 3px 0;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Onest', Arial, sans-serif;
+    color: var(--tri-muted);
+    background: none;
+    border: 1px solid var(--tri-border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+.tri-chart-select-btn:hover {
+    border-color: var(--tri-accent);
+    color: var(--tri-accent);
+}
+
 .tri-chart-legend-item {
     display: flex;
     align-items: center;

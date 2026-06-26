@@ -133,6 +133,10 @@
         <div class="tri-chart-layout">
             <div class="tri-chart-sidebar">
                 <div class="tri-chart-sidebar__hint">Выберите участников</div>
+                <div class="tri-chart-sidebar__actions">
+                    <button class="tri-chart-select-btn" onclick="selectAllChartPids()">Все</button>
+                    <button class="tri-chart-select-btn" onclick="clearAllChartPids()">Сбросить</button>
+                </div>
                 <div id="chart-legend-list"></div>
             </div>
             <div class="tri-chart-main">
@@ -185,6 +189,20 @@
         document.querySelectorAll('.tri-chart-legend-item').forEach(el => {
             el.classList.toggle('active', selectedChartPids.has(+el.dataset.pid));
         });
+        if (activeChartType === 'position') _updatePositionSelection();
+        else renderChart();
+    }
+
+    function selectAllChartPids() {
+        chartDatasetPids.forEach(pid => selectedChartPids.add(pid));
+        document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.add('active'));
+        if (activeChartType === 'position') _updatePositionSelection();
+        else renderChart();
+    }
+
+    function clearAllChartPids() {
+        selectedChartPids.clear();
+        document.querySelectorAll('.tri-chart-legend-item').forEach(el => el.classList.remove('active'));
         if (activeChartType === 'position') _updatePositionSelection();
         else renderChart();
     }
