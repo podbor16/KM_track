@@ -226,6 +226,10 @@
     let allStandings = [];
     let allLaps = [];
     let filteredPids = new Set();
+    // --- Вкладка «Круги» ---
+    let lapsRangeFrom = 1;
+    let lapsRangeTo = 1;
+    let openLapsRows = new Set();  // Set<participant_id>
     let triChart = null;
     let triChartDistance = null;
     let selectedChartPids = new Set();
@@ -443,6 +447,54 @@
     function lapSpeed(lapMs) {
         if (!lapMs) return '—';
         return (LAP_KM / (lapMs / 3600000)).toFixed(1) + ' км/ч';
+    }
+
+    // MM:SS для времён кругов (без часов если < 60 мин)
+    function fmtLapMs(ms) {
+        if (!ms) return '—';
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+        return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    // Знаковое отклонение от среднего в формате ±MM:SS
+    function fmtDeltaMs(deltaMs) {
+        const sign = deltaMs < 0 ? '−' : '+';
+        const abs = Math.abs(deltaMs);
+        const s = Math.floor(abs / 1000);
+        const m = Math.floor(s / 60);
+        const ss = s % 60;
+        return `${sign}${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    // Агрегат по участникам за диапазон кругов [from, to] включительно
+    // Возвращает Map<participant_id, { laps: [], best, worst, avg, spread }>
+    function aggregateForRange(from, to) {
+        const result = new Map();
+        for (const lap of allLaps) {
+            if (!filteredPids.has(lap.participant_id)) continue;
+            if (lap.lap_number < from || lap.lap_number > to) continue;
+            if (!result.has(lap.participant_id)) {
+                result.set(lap.participant_id, { laps: [], best: Infinity, worst: 0, sumMs: 0 });
+            }
+            const agg = result.get(lap.participant_id);
+            agg.laps.push(lap);
+            if (lap.lap_ms > 0 && lap.lap_ms < agg.best) agg.best = lap.lap_ms;
+            if (lap.lap_ms > agg.worst) agg.worst = lap.lap_ms;
+            agg.sumMs += lap.lap_ms;
+        }
+        // Финализируем: avg, spread
+        for (const [, agg] of result) {
+            const validLaps = agg.laps.filter(l => l.lap_ms > 0);
+            agg.best   = validLaps.length ? agg.best : 0;
+            agg.avg    = validLaps.length ? Math.round(agg.sumMs / validLaps.length) : 0;
+            agg.spread = agg.best && agg.worst ? agg.worst - agg.best : 0;
+            agg.laps.sort((a, b) => a.lap_number - b.lap_number);
+        }
+        return result;
     }
 
     function switchLapTab(btn, showId) {
