@@ -417,6 +417,7 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 .adm-btn--start  { background: var(--tri-green); color: #fff; }
 .adm-btn--stop   { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
 .adm-btn--init   { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
+.adm-btn--sync   { background: #fff8e1; border: 1px solid #f0c040; color: #7a5c00; font-weight: 600; }
 .adm-btn--edit   { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }
 .adm-btn--save   { background: var(--tri-accent); color: #000; }
 .adm-btn--cancel { background: var(--tri-surface); border: 1px solid var(--tri-border); color: var(--tri-text); }

@@ -100,33 +100,55 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
     return cursor.lastrowid
 
 
-def _process_laps(cursor, participant_id: int, event_id: int, runner: dict, lap_count: int, pattern: str) -> int:
-    inserted = 0
+def _load_existing_laps(cursor, event_id: int) -> dict:
+    """Загружает все круги события: {(participant_id, lap_number): (id, cumulative_ms)}"""
+    cursor.execute(
+        "SELECT id, participant_id, lap_number, cumulative_ms FROM laps WHERE event_id=%s",
+        (event_id,),
+    )
+    return {(r[1], r[2]): (r[0], r[3]) for r in cursor.fetchall()}
+
+
+def _process_laps(
+    cursor, participant_id: int, event_id: int, runner: dict,
+    lap_count: int, pattern: str, existing_laps: dict
+) -> int:
+    changed = 0
     prev_ms = 0
     for n in range(1, lap_count + 1):
-        field_kr    = pattern.replace("{n}", str(n))          # times.official_Nkr
-        field_plain = f"times.official_{n}"                   # times.official_N (без kr)
+        field_kr    = pattern.replace("{n}", str(n))
+        field_plain = f"times.official_{n}"
 
         if field_kr in runner:
             cumulative_ms = runner[field_kr]
         elif field_plain in runner:
             cumulative_ms = runner[field_plain]
         else:
-            break  # поле не существует вообще — дальше нет смысла
+            break
 
         if cumulative_ms is None or cumulative_ms == 0:
-            break  # поле есть, но круг ещё не пройден / глюк хронометража
+            break
         lap_ms = cumulative_ms - prev_ms
-        cursor.execute(
-            """INSERT INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
-               VALUES (%s,%s,%s,%s,%s)
-               ON DUPLICATE KEY UPDATE cumulative_ms=VALUES(cumulative_ms), lap_ms=VALUES(lap_ms)""",
-            (participant_id, event_id, n, cumulative_ms, lap_ms),
-        )
-        if cursor.rowcount == 1:  # 1=insert, 2=update, 0=no change
-            inserted += 1
+        key = (participant_id, n)
+        if key in existing_laps:
+            existing_id, existing_cum = existing_laps[key]
+            if existing_cum != cumulative_ms:
+                cursor.execute(
+                    "UPDATE laps SET cumulative_ms=%s, lap_ms=%s WHERE id=%s",
+                    (cumulative_ms, lap_ms, existing_id),
+                )
+                existing_laps[key] = (existing_id, cumulative_ms)
+                changed += 1
+        else:
+            cursor.execute(
+                """INSERT INTO laps (participant_id, event_id, lap_number, cumulative_ms, lap_ms)
+                   VALUES (%s,%s,%s,%s,%s)""",
+                (participant_id, event_id, n, cumulative_ms, lap_ms),
+            )
+            existing_laps[key] = (cursor.lastrowid, cumulative_ms)
+            changed += 1
         prev_ms = cumulative_ms
-    return inserted
+    return changed
 
 
 def _run_once(config_path: str) -> int:
@@ -150,7 +172,9 @@ def _run_once(config_path: str) -> int:
 
     conn = _connect()
     cursor = conn.cursor()
+    existing_laps = _load_existing_laps(cursor, event_id)
     inserted_participants = 0
+    total_changed = 0
     for runner in runners:
         pid = _get_or_create_participant(cursor, event_id, runner, field_map)
         if pid is not None:
@@ -159,11 +183,11 @@ def _run_once(config_path: str) -> int:
             continue
         runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
         if runner_status not in ("withdrawn", "abandoned", "dnf", "retired"):
-            _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
+            total_changed += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info(f"Вставлено: {inserted_participants} участников")
+    logger.info(f"Участников: {inserted_participants}, изменений кругов: {total_changed}")
     return inserted_participants
 
 
@@ -192,7 +216,8 @@ def run(config_path: str, interval: int):
 
             conn = _connect()
             cursor = conn.cursor()
-            total_inserted = 0
+            existing_laps = _load_existing_laps(cursor, event_id)
+            total_changed = 0
             for runner in runners:
                 pid = _get_or_create_participant(cursor, event_id, runner, field_map)
                 if pid is None:
@@ -200,14 +225,14 @@ def run(config_path: str, interval: int):
                 runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
                 if runner_status in ("withdrawn", "abandoned", "dnf", "retired"):
                     continue
-                total_inserted += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern)
+                total_changed += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
             conn.commit()
             cursor.close()
             conn.close()
-            if total_inserted:
-                logger.info(f"💾 Добавлено новых кругов: {total_inserted}")
+            if total_changed:
+                logger.info(f"💾 Изменений кругов: {total_changed}")
             else:
-                logger.debug("⏸ Новых кругов нет")
+                logger.debug("⏸ Новых изменений нет")
         except Exception as e:
             logger.error(f"❌ Ошибка цикла: {e}")
         time.sleep(interval)

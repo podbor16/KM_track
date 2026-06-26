@@ -108,12 +108,14 @@
                 <button class="adm-btn adm-btn--start btn-start" ${isActive ? 'disabled' : ''}>Start</button>
                 <button class="adm-btn adm-btn--stop btn-stop" ${!isActive ? 'disabled' : ''}>Stop</button>
                 <button class="adm-btn adm-btn--init btn-init" title="Первичная загрузка участников из Copernico">Инициализация</button>
+                <button class="adm-btn adm-btn--sync btn-sync" title="Принудительно перезаписать круги из Copernico (исправляет ошибки хронометража)">↻ Пересинхронизировать</button>
                 <span class="init-result" style="display:none"></span>
             </td>`;
 
         tr.querySelector('.btn-start').addEventListener('click', () => loaderAction('start', tr));
         tr.querySelector('.btn-stop').addEventListener('click', () => loaderAction('stop', tr));
         tr.querySelector('.btn-init').addEventListener('click', () => loaderInit(tr));
+        tr.querySelector('.btn-sync').addEventListener('click', () => loaderSync(tr));
         return tr;
     }
 
@@ -168,6 +170,33 @@
         btn.textContent = 'Инициализация';
         btn.disabled = false;
         loadLoader();
+    }
+
+    async function loaderSync(tr) {
+        const btn    = tr.querySelector('.btn-sync');
+        const result = tr.querySelector('.init-result');
+        btn.disabled = true;
+        btn.textContent = 'Синхронизация...';
+        result.style.display = 'none';
+        try {
+            const r = await fetch('/api/tri/admin/loader/init', {method: 'POST'});
+            const d = await r.json();
+            result.style.display = 'inline';
+            if (d.status === 'ok') {
+                result.style.color = 'var(--tri-green)';
+                result.textContent = '✓ Данные обновлены';
+            } else {
+                result.style.color = 'var(--tri-red)';
+                result.textContent = '✗ Ошибка';
+                console.error('Sync error:', d.output);
+            }
+        } catch(e) {
+            result.style.display = 'inline';
+            result.style.color = 'var(--tri-red)';
+            result.textContent = `✗ ${e.message}`;
+        }
+        btn.textContent = '↻ Пересинхронизировать';
+        btn.disabled = false;
     }
 
     loadLoader();
