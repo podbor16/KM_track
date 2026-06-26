@@ -507,6 +507,7 @@
     }
 
     function renderLapsTable() {
+        const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         if (document.getElementById('tab-laps').style.display === 'none') return;
         const from = lapsRangeFrom;
         const to   = lapsRangeTo;
@@ -560,7 +561,7 @@
             const dnf = isDnf({ st });
             if (!dnf) rank++;
             const rankCell = dnf ? '—' : rank;
-            const nameLabel = st.gender === 'mixed' ? st.surname : `${st.surname} ${st.name}`;
+            const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
             const genderTag = st.gender === 'mixed' ? 'Эст' : (st.gender === 'Мужчина' ? 'М' : 'Ж');
             const dnfBadge = dnf ? ' <span class="tri-dnf-tag">DNF</span>' : '';
             const isOpen = openLapsRows.has(pid);
