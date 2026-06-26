@@ -197,7 +197,7 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .tri-table th, .tri-table td { padding: 9px 8px; font-size: 12px; }
     .tri-table-wrap { border-radius: 0; box-shadow: none; }
     .tri-toolbar { padding: 8px 12px; gap: 6px; }
-    .tri-search { width: 120px; }
+    .tri-search { flex: 1; width: auto; min-width: 0; }
     #tab-chart { padding: 0 8px; }
 }
 

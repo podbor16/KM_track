@@ -249,12 +249,13 @@
     function openChartSheet() {
         const list = document.getElementById('chart-sheet-list');
         if (!list) return;
-        list.innerHTML = chartDatasetPids.map((pid, i) => {
+        const filtered = allStandings
+            .filter(r => filteredPids.has(r.id))
+            .sort((a, b) => a.surname.localeCompare(b.surname));
+        list.innerHTML = filtered.map((p, i) => {
             const color = CHART_COLORS[i % CHART_COLORS.length];
-            const p = allStandings.find(r => r.id === pid);
-            if (!p) return '';
-            const isChecked = selectedChartPids.has(pid);
-            return `<div class="tri-chart-sheet-item" data-pid="${pid}" onclick="toggleChartPid(${pid})">
+            const isChecked = selectedChartPids.has(p.id);
+            return `<div class="tri-chart-sheet-item" data-pid="${p.id}" onclick="toggleChartPid(${p.id})">
                 <span class="tri-chart-sheet-dot" style="background:${color}"></span>
                 <span class="tri-chart-sheet-name">${p.gender === 'mixed' ? p.surname : `${p.surname} ${p.name}`}</span>
                 <span class="tri-chart-sheet-km">${parseFloat(p.total_km).toFixed(1)} км</span>
@@ -490,6 +491,11 @@
             rows.length ? `${rows.length} участн.` : '';
 
         filteredPids = new Set(rows.map(r => r.id));
+        selectedChartPids = new Set([...selectedChartPids].filter(pid => filteredPids.has(pid)));
+        if (isMobile() && selectedChartPids.size === 0 && rows.length > 0) {
+            rows.slice().sort((a, b) => b.laps_completed - a.laps_completed)
+                .slice(0, 3).forEach(r => selectedChartPids.add(r.id));
+        }
         renderStandings(rows);
         renderSplits();
         if (document.getElementById('tab-chart').style.display !== 'none') {
@@ -644,6 +650,7 @@
         const labelPlugin = {
             id: 'lastLabel',
             afterDatasetsDraw(chart) {
+                if (isMobile()) return;
                 const c = chart.ctx;
                 chart.data.datasets.forEach((ds, i) => {
                     if (!ds._isSelected) return;
@@ -714,9 +721,8 @@
                             min: 0,
                             max: xMax,
                             ticks: {
-                                stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
-                                maxTicksLimit: 13,
+                                maxTicksLimit: 7,
                                 font: { size: 11 }
                             },
                             grid: { color: 'rgba(0,0,0,0.06)' }
@@ -841,9 +847,8 @@
                             min: 0,
                             max: xMax,
                             ticks: {
-                                stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
-                                maxTicksLimit: 13,
+                                maxTicksLimit: 7,
                                 font: { size: 11 }
                             },
                             grid: { color: 'rgba(0,0,0,0.06)' }
@@ -970,6 +975,7 @@
         const labelPluginPos = {
             id: 'lastLabelPos',
             afterDatasetsDraw(chart) {
+                if (isMobile()) return;
                 const c = chart.ctx;
                 chart.data.datasets.forEach((ds, i) => {
                     if (!ds._isSelected) return;
@@ -1037,9 +1043,8 @@
                         x: {
                             type: 'linear', min: 0, max: xMax,
                             ticks: {
-                                stepSize: 1,
                                 callback(val) { return val > 0 && Number.isInteger(val) ? `${val}ч` : ''; },
-                                maxTicksLimit: 13, font: { size: 11 }
+                                maxTicksLimit: 7, font: { size: 11 }
                             },
                             grid: { color: 'rgba(0,0,0,0.06)' }
                         },
