@@ -708,3 +708,84 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     align-self: flex-start;
 }
 .logout-btn:hover { border-color: var(--tri-accent); color: var(--tri-accent); }
+
+/* ===== Вкладка «Круги» ===== */
+.tri-laps-slider-wrap {
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--tri-border);
+    background: var(--tri-surface);
+}
+.tri-laps-slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.tri-laps-range-label {
+    font-weight: 700;
+    color: var(--tri-accent);
+    font-size: 13px;
+}
+.tri-laps-sliders {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+.tri-laps-slider-meta {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--tri-muted);
+}
+.tri-laps-table .tri-laps-th-best {
+    color: var(--tri-accent);
+}
+.tri-laps-best {
+    color: #27ae60;
+    font-weight: 700;
+}
+.tri-laps-worst {
+    color: var(--tri-accent);
+}
+.tri-laps-dnf {
+    opacity: 0.55;
+}
+.tri-laps-expand {
+    color: var(--tri-muted);
+    font-size: 10px;
+    cursor: pointer;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+.tri-laps-expand.open {
+    transform: rotate(90deg);
+    color: var(--tri-accent);
+}
+.tri-laps-detail-row td {
+    padding: 0;
+    background: var(--tri-bg);
+}
+.tri-laps-detail-inner {
+    padding: 0 12px 12px 32px;
+}
+.tri-laps-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.tri-laps-detail-table th {
+    padding: 5px 8px;
+    text-align: left;
+    font-size: 10px;
+    color: var(--tri-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--tri-border);
+}
+.tri-laps-detail-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--tri-border);
+    font-variant-numeric: tabular-nums;
+}
+.tri-laps-delta-pos { color: #27ae60; }
+.tri-laps-delta-neg { color: var(--tri-accent); }
+.tri-laps-star { color: #f39c12; }
