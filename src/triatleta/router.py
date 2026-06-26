@@ -160,6 +160,47 @@ async def tri_loader_init(user: str = Depends(api_require_auth)):
         return {"status": "error", "inserted": 0, "output": str(e)}
 
 
+@router.post("/api/tri/admin/loader/resync")
+async def tri_loader_resync(user: str = Depends(api_require_auth)):
+    """Удаляет все круги события и заново импортирует из Copernico."""
+    env_file = LOADERS_DIR / f"{TRI_LOADER_NAME}.env"
+    if not env_file.exists():
+        raise HTTPException(status_code=404, detail="Конфиг загрузчика не найден")
+
+    config_path = None
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        if line.startswith("LOADER_CONFIG="):
+            config_path = line.split("=", 1)[1].strip()
+
+    if not config_path:
+        raise HTTPException(status_code=400, detail="LOADER_CONFIG не найден в .env файле")
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, str(BASE_DIR / "load_tri_results.py"),
+            "--config", config_path,
+            "--resync",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(BASE_DIR),
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+        output = (stdout + stderr).decode("utf-8", errors="replace")
+        success = proc.returncode == 0
+        inserted = 0
+        for line in output.splitlines():
+            if "Вставлено кругов" in line:
+                try:
+                    inserted = int(''.join(filter(str.isdigit, line.split(":")[-1].split()[0])))
+                except Exception:
+                    pass
+        return {"status": "ok" if success else "error", "inserted": inserted, "output": output[-3000:]}
+    except asyncio.TimeoutError:
+        return {"status": "error", "inserted": 0, "output": "Timeout"}
+    except Exception as e:
+        return {"status": "error", "inserted": 0, "output": str(e)}
+
+
 # ---------------------------------------------------------------------------
 # Preset API
 # ---------------------------------------------------------------------------

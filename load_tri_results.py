@@ -238,13 +238,57 @@ def run(config_path: str, interval: int):
         time.sleep(interval)
 
 
+def resync(config_path: str) -> int:
+    """Полная пересинхронизация: удаляет все круги события и заново импортирует из Copernico."""
+    dist_cfg = _load_config(config_path, "24h")
+    event_id = dist_cfg["db_event_id"]
+    cop = dist_cfg["copernico"]
+
+    with open(f"config/copernico/{cop['preset']}.yaml", encoding="utf-8") as f:
+        preset_cfg = yaml.safe_load(f)
+    field_map   = preset_cfg.get("fields", {})
+    lap_fields  = preset_cfg.get("lap_fields", {})
+    lap_count   = lap_fields.get("count", 150)
+    lap_pattern = lap_fields.get("pattern", "times.official_{n}kr")
+
+    runners = _fetch_copernico(cop["race_id"], cop["login"], cop["preset"], cop["event"])
+    logger.info(f"✅ Получено {len(runners)} участников")
+
+    conn = _connect()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM laps WHERE event_id=%s", (event_id,))
+    deleted = cursor.rowcount
+    logger.info(f"🗑 Удалено старых кругов: {deleted}")
+
+    total_inserted = 0
+    for runner in runners:
+        pid = _get_or_create_participant(cursor, event_id, runner, field_map)
+        if pid is None:
+            continue
+        runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
+        if runner_status in ("withdrawn", "abandoned", "dnf", "retired"):
+            continue
+        existing_laps: dict = {}
+        total_inserted += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    logger.info(f"💾 Вставлено кругов заново: {total_inserted}")
+    return total_inserted
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--interval", type=int, default=30)
-    parser.add_argument("--init", action="store_true", help="Однократная загрузка участников и выход")
+    parser.add_argument("--init",   action="store_true", help="Однократная загрузка участников и выход")
+    parser.add_argument("--resync", action="store_true", help="Удалить все круги и перезагрузить из Copernico")
     args = parser.parse_args()
-    if args.init:
+    if args.resync:
+        resync(args.config)
+    elif args.init:
         _run_once(args.config)
     else:
         run(args.config, args.interval)

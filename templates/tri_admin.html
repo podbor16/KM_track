@@ -179,16 +179,16 @@
         btn.textContent = 'Синхронизация...';
         result.style.display = 'none';
         try {
-            const r = await fetch('/api/tri/admin/loader/init', {method: 'POST'});
+            const r = await fetch('/api/tri/admin/loader/resync', {method: 'POST'});
             const d = await r.json();
             result.style.display = 'inline';
             if (d.status === 'ok') {
                 result.style.color = 'var(--tri-green)';
-                result.textContent = '✓ Данные обновлены';
+                result.textContent = `✓ Вставлено кругов: ${d.inserted}`;
             } else {
                 result.style.color = 'var(--tri-red)';
                 result.textContent = '✗ Ошибка';
-                console.error('Sync error:', d.output);
+                console.error('Resync error:', d.output);
             }
         } catch(e) {
             result.style.display = 'inline';
