@@ -242,7 +242,13 @@
         btn.parentElement.querySelectorAll('.tri-detail-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         btn.closest('td').querySelectorAll('.tri-detail-inner').forEach(t => t.style.display = 'none');
-        document.getElementById(showId).style.display = '';
+        const panel = document.getElementById(showId);
+        if (showId.startsWith('relay-')) {
+            const pid = parseInt(showId.replace('relay-', ''));
+            const rowData = allStandings.find(r => r.id === pid);
+            if (rowData) panel.innerHTML = relayStageHtml(rowData);
+        }
+        panel.style.display = '';
     }
 
     const STAGE_BOUNDARY_MS = 12 * 3600 * 1000; // 12 часов — граница смен эстафеты
@@ -925,7 +931,7 @@
                             <span class="tri-detail-value">${bestGapHtml}</span>
                         </div>
                     </div>
-                    ${r.gender === 'mixed' ? `<div id="relay-${r.id}" class="tri-detail-inner tri-relay-inner" style="display:none">${relayStageHtml(r)}</div>` : ''}
+                    ${r.gender === 'mixed' ? `<div id="relay-${r.id}" class="tri-detail-inner tri-relay-inner" style="display:none"></div>` : ''}
                 </td>
             </tr>`;
         }).join('');
