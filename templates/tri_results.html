@@ -542,12 +542,16 @@
             if (!st) continue;
             rows.push({ pid, agg, st });
         }
-        const isDnf = r => r.st.status === 'retired' || r.st.laps_completed === 0;
+        const maxLap = parseInt(document.getElementById('laps-to-slider').max) || 0;
+        const isFullRange = lapsRangeFrom === 1 && lapsRangeTo >= maxLap;
+        const isDnf = r => r.st.status === 'finished' || r.st.laps_completed === 0;
         rows.sort((a, b) => {
             const aDnf = isDnf(a), bDnf = isDnf(b);
             if (aDnf !== bDnf) return aDnf ? 1 : -1;
-            if (!a.agg.best || !b.agg.best) return 0;
-            return a.agg.best - b.agg.best;
+            const getKey = r => isFullRange && r.st.best_lap_ms > 0
+                ? r.st.best_lap_ms
+                : (r.agg.best || Infinity);
+            return getKey(a) - getKey(b);
         });
 
         // Рендер
@@ -1163,7 +1167,7 @@
         chartDatasetPids = participants.map(p => p.pid);
 
         // Статусы участников для определения DNF
-        const DNF_ST = ['withdrawn', 'abandoned', 'dnf', 'retired'];
+        const DNF_ST = ['withdrawn', 'abandoned', 'dnf', 'retired', 'finished'];
         const statusMap = {};
         for (const s of allStandings) statusMap[s.id] = (s.status || '').toLowerCase();
         const isDnfPid = pid => DNF_ST.includes(statusMap[pid] || '');
@@ -1393,7 +1397,7 @@
             const isRelay = r.category === 'Эстафета';
             const badgeClass = isRelay ? 'tri-badge--relay' : 'tri-badge--personal';
             const categoryLabel = isRelay ? 'Эстафета' : 'Личный';
-            const isDnf = r.status && ['withdrawn', 'abandoned', 'dnf', 'retired'].includes((r.status || '').toLowerCase());
+            const isDnf = r.status && ['withdrawn', 'abandoned', 'dnf', 'retired', 'finished'].includes((r.status || '').toLowerCase());
 
             // Бейдж отставания в гонке
             const gapBadge = r.gap === '—'
