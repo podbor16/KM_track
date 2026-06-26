@@ -181,9 +181,7 @@ def _run_once(config_path: str) -> int:
             inserted_participants += 1
         if pid is None:
             continue
-        runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
-        if runner_status not in ("withdrawn", "abandoned", "dnf", "retired"):
-            total_changed += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
+        total_changed += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
     conn.commit()
     cursor.close()
     conn.close()
@@ -221,9 +219,6 @@ def run(config_path: str, interval: int):
             for runner in runners:
                 pid = _get_or_create_participant(cursor, event_id, runner, field_map)
                 if pid is None:
-                    continue
-                runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
-                if runner_status in ("withdrawn", "abandoned", "dnf", "retired"):
                     continue
                 total_changed += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)
             conn.commit()
@@ -265,9 +260,6 @@ def resync(config_path: str) -> int:
     for runner in runners:
         pid = _get_or_create_participant(cursor, event_id, runner, field_map)
         if pid is None:
-            continue
-        runner_status = (runner.get(field_map.get("status", "status")) or "").lower()
-        if runner_status in ("withdrawn", "abandoned", "dnf", "retired"):
             continue
         existing_laps: dict = {}
         total_inserted += _process_laps(cursor, pid, event_id, runner, lap_count, lap_pattern, existing_laps)

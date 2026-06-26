@@ -322,6 +322,8 @@
         'Прокофьева Елена':   'Красноярск',
     };
 
+    const DNF_STATUSES = ['withdrawn', 'abandoned', 'dnf', 'retired'];
+
     function _entry(p, rank, leader, isRelay) {
         const teamName = p.team_name || p.surname;
         const members  = p.team_name ? `${p.surname} ${p.name}`.trim() : p.name;
@@ -332,6 +334,11 @@
             : `${fullName}${city}`;
 
         const km = _fmtKm(p.total_km);
+        const isDnf = DNF_STATUSES.includes((p.status || '').toLowerCase());
+
+        if (isDnf) {
+            return `${rank}. ${displayName}\n🏁 ${km} км | Снялся с гонки`;
+        }
 
         let line2;
         if (rank === 1 || p.laps_completed === 0) {
