@@ -422,9 +422,15 @@
     }
 
     // ---- Таймер: обратный отсчёт до старта / прошедшее время ----
+    const RACE_DURATION_MS = 24 * 3600000;
     function updateElapsed() {
         const diff = Date.now() - GUN_UTC_MS;
-        const ms   = Math.abs(diff);
+        if (diff >= RACE_DURATION_MS) {
+            document.getElementById('elapsed').textContent = '24:00:00';
+            document.getElementById('elapsed-label').textContent = 'Финиш';
+            return;
+        }
+        const ms = Math.abs(diff);
         const h = Math.floor(ms / 3600000);
         const m = Math.floor((ms % 3600000) / 60000);
         const s = Math.floor((ms % 60000) / 1000);
