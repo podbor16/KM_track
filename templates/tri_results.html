@@ -563,7 +563,7 @@
             const rankCell = dnf ? '—' : rank;
             const nameLabel = st.gender === 'mixed' ? esc(st.surname) : `${esc(st.surname)} ${esc(st.name)}`;
             const genderTag = st.gender === 'mixed' ? 'Эст' : (st.gender === 'Мужчина' ? 'М' : 'Ж');
-            const dnfBadge = dnf ? ' <span class="tri-dnf-tag">DNF</span>' : '';
+            const dnfBadge = dnf ? ' <span class="tri-dnf-tag">Финишировал</span>' : '';
             const isOpen = openLapsRows.has(pid);
             const rowClass = `tri-laps-summary-row${dnf ? ' tri-laps-dnf' : ''}`;
 
@@ -1174,7 +1174,7 @@
         legendList.innerHTML = participants.map(p => {
             const color = _getColorForPid(p.pid);
             const isActive = selectedChartPids.has(p.pid);
-            const dnfLabel = isDnfPid(p.pid) ? ' | Снялся с гонки' : '';
+            const dnfLabel = isDnfPid(p.pid) ? ' | Финишировал' : '';
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
                 <span class="tri-chart-legend-dot" style="background:${color}"></span>
@@ -1226,7 +1226,7 @@
             const radii = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
 
             const label = dnf
-                ? `${_participantLabel(p.pid, p.surname, p.name)} | Снялся с гонки`
+                ? `${_participantLabel(p.pid, p.surname, p.name)} | Финишировал`
                 : _participantLabel(p.pid, p.surname, p.name);
 
             return {
@@ -1259,7 +1259,7 @@
                     const last = pts[pts.length - 1];
                     const { x, y } = last.getProps(['x', 'y'], true);
                     const text = ds._isDnf
-                        ? ds.label.split(' ')[0] + ' | Снялся'
+                        ? ds.label.split(' ')[0] + ' | Финишировал'
                         : ds.label.split(' ')[0];
                     c.save();
                     c.font = 'bold 11px Onest, Arial, sans-serif';
@@ -1429,7 +1429,7 @@
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="tri-name">${isDnf ? '<span class="tri-dnf-badge">Сошёл</span> ' : ''}${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
+                <td class="tri-name">${isDnf ? '<span class="tri-dnf-badge">Финишировал</span> ' : ''}${r.surname} ${r.name}<span class="tri-chevron">▼</span></td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
                 <td>${r.laps_completed}</td>
