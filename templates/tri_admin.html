@@ -299,7 +299,7 @@
         const fullName = `${p.surname} ${p.name}`;
         const city = !isRelay && CITIES[fullName] ? ` (${CITIES[fullName]})` : '';
         const displayName = isRelay
-            ? `Команда «${teamName}». ${members}`
+            ? `Команда ${teamName}. ${members}`
             : `${fullName}${city}`;
 
         const km = _fmtKm(p.total_km);
