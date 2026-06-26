@@ -209,6 +209,11 @@
 
     function isMobile() { return window.innerWidth <= 640; }
 
+    // Для эстафетных команд (gender==='mixed') показываем только название команды (surname)
+    function _participantLabel(pid, surname, name) {
+        return allStandings.find(r => r.id === pid)?.gender === 'mixed' ? surname : `${surname} ${name}`;
+    }
+
     function _syncMobileChart() {
         if (!isMobile()) return;
         const badge = document.getElementById('chart-mobile-badge');
@@ -242,7 +247,7 @@
             const isChecked = selectedChartPids.has(pid);
             return `<div class="tri-chart-sheet-item" data-pid="${pid}" onclick="toggleChartPid(${pid})">
                 <span class="tri-chart-sheet-dot" style="background:${color}"></span>
-                <span class="tri-chart-sheet-name">${p.surname} ${p.name}</span>
+                <span class="tri-chart-sheet-name">${p.gender === 'mixed' ? p.surname : `${p.surname} ${p.name}`}</span>
                 <span class="tri-chart-sheet-km">${parseFloat(p.total_km).toFixed(1)} км</span>
                 <span class="tri-chart-sheet-check${isChecked ? ' on' : ''}">✓</span>
             </div>`;
@@ -568,7 +573,7 @@
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
                 <span class="tri-chart-legend-dot" style="background:${color}"></span>
-                <span>${p.surname} ${p.name}</span>
+                <span>${_participantLabel(p.pid, p.surname, p.name)}</span>
             </div>`;
         }).join('');
 
@@ -605,7 +610,7 @@
             const hoverRadii = data.map((_, j) => j === data.length - 1 ? endRadius + 2 : 4);
 
             return {
-                label: `${p.surname} ${p.name}`,
+                label: _participantLabel(p.pid, p.surname, p.name),
                 _color: color,
                 _isSelected: isSelected,
                 data,
@@ -745,7 +750,7 @@
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
                 <span class="tri-chart-legend-dot" style="background:${color}"></span>
-                <span>${p.surname} ${p.name}</span>
+                <span>${_participantLabel(p.pid, p.surname, p.name)}</span>
             </div>`;
         }).join('');
 
@@ -766,7 +771,7 @@
             }
 
             return {
-                label: `${p.surname} ${p.name}`,
+                label: _participantLabel(p.pid, p.surname, p.name),
                 _color: color,
                 _isSelected: isSelected,
                 data: p.points,
@@ -877,7 +882,7 @@
             return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                          data-pid="${p.pid}" onclick="toggleChartPid(${p.pid})">
                 <span class="tri-chart-legend-dot" style="background:${color}"></span>
-                <span>${p.surname} ${p.name}${dnfLabel}</span>
+                <span>${_participantLabel(p.pid, p.surname, p.name)}${dnfLabel}</span>
             </div>`;
         }).join('');
 
@@ -926,7 +931,9 @@
 
             const radii = data.map((_, j) => j === data.length - 1 ? endRadius : 0);
 
-            const label = dnf ? `${p.surname} ${p.name} | Снялся с гонки` : `${p.surname} ${p.name}`;
+            const label = dnf
+                ? `${_participantLabel(p.pid, p.surname, p.name)} | Снялся с гонки`
+                : _participantLabel(p.pid, p.surname, p.name);
 
             return {
                 label,
