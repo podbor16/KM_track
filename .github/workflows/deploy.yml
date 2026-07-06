@@ -52,7 +52,7 @@ jobs:
             systemctl daemon-reload
 
             # Установить/обновить зависимости
-            python3 -m pip install -r /opt/km_track/requirements.txt --break-system-packages
+            /opt/km_track/venv/bin/pip install -r /opt/km_track/requirements.txt
 
             # Перезапустить приложение
             systemctl restart km_track
