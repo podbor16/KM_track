@@ -1,5 +1,5 @@
 from typing import Optional
-from src.triatleta.db import get_tri_connection
+from src.race_triatleta.db import get_tri_connection
 
 
 def calculate_gap(

@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from src.core.auth import require_auth, api_require_auth
-from src.triatleta.service import get_standings, get_all_laps
+from src.race_triatleta.service import get_standings, get_all_laps
 
 TRI_EVENT_ID = 1
 TRI_LOADER_NAME = "tri_24h"

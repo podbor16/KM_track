@@ -1,4 +1,4 @@
-from src.triatleta.service import calculate_gap
+from src.race_triatleta.service import calculate_gap
 
 
 def test_gap_leader_returns_dash():
