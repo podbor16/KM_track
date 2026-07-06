@@ -1,0 +1,239 @@
+"""
+Excel-парсер для данных Siberman 2025.
+
+Формат файла: Google Sheets → Скачать как .xlsx
+Ряд 1 или 2 — заголовки (зависит от листа).
+Времена: строка "Ч:ММ:СС", timedelta, float (доля суток) или пусто/DNF.
+
+Если заголовок в реальном файле отличается от CHECKPOINT_COL_MAP —
+добавь его в маппинг или измени нормализацию в _normalize_header().
+"""
+import datetime
+import io
+from dataclasses import dataclass, field
+from typing import Optional
+
+import openpyxl
+
+
+# ---------------------------------------------------------------------------
+# Маппинг: (нормализованный заголовок, порядковый индекс дубля) → (этап, seq)
+# ---------------------------------------------------------------------------
+CHECKPOINT_COL_MAP: dict[tuple[str, int], tuple[str, int]] = {
+    # Плавание
+    ("разворот", 0):           ("swim", 1),
+    ("1 круг", 0):             ("swim", 2),
+    ("разворот", 1):           ("swim", 3),
+    ("2 круг", 0):             ("swim", 4),
+    ("разворот", 2):           ("swim", 5),
+    ("3 круг", 0):             ("swim", 6),
+    ("4 круг", 0):             ("swim", 7),   # "4 круг / Финиш плавания"
+    # Вело день 1
+    ("3 км", 0):               ("bike_day1", 1),
+    ("10 км", 0):              ("bike_day1", 2),
+    ("72 км", 0):              ("bike_day1", 3),  # "72 км (разворот)"
+    ("135 км", 0):             ("bike_day1", 4),
+    ("142 км", 0):             ("bike_day1", 5),
+    ("финиш 145 км", 0):       ("bike_day1", 6),
+    # Вело день 2
+    ("51 км", 0):              ("bike_day2", 1),
+    ("82 км", 0):              ("bike_day2", 2),
+    ("119 км", 0):             ("bike_day2", 3),
+    ("160 км", 0):             ("bike_day2", 4),
+    ("190 км", 0):             ("bike_day2", 5),
+    ("203 км", 0):             ("bike_day2", 6),
+    ("265 км", 0):             ("bike_day2", 7),
+    ("финиш 276 км", 0):       ("bike_day2", 8),
+    # Бег
+    ("круг 1", 0):  ("run", 1),  ("круг 2", 0):  ("run", 2),
+    ("круг 3", 0):  ("run", 3),  ("круг 4", 0):  ("run", 4),
+    ("круг 5", 0):  ("run", 5),  ("круг 6", 0):  ("run", 6),
+    ("круг 7", 0):  ("run", 7),  ("круг 8", 0):  ("run", 8),
+    ("круг 9", 0):  ("run", 9),  ("круг 10", 0): ("run", 10),
+    ("круг 11", 0): ("run", 11), ("круг 12", 0): ("run", 12),
+}
+
+# Колонки с данными участника: нормализованный заголовок → поле в dict
+PARTICIPANT_COL_MAP: dict[str, str] = {
+    "формат":  "format",
+    "номер":   "bib",
+    "фамилия": "surname",
+    "имя":     "name",
+    "страна":  "country",
+    "город":   "city",
+    "пол":     "gender",   # М/Ж — добавить в Excel если отсутствует
+}
+
+# Специальные колонки
+HANDICAP_PREFIX = "стартовая минута"   # гандикап день 2
+T1_COL = "t1"
+T2_COL = "t2"
+
+
+@dataclass
+class ParseResult:
+    race_year: int
+    participants: list[dict] = field(default_factory=list)
+    # {bib: {(stage, seq): cumulative_s}}
+    checkpoint_times: dict[str, dict[tuple[str, int], Optional[int]]] = field(default_factory=dict)
+    # {bib: {zone: duration_s}}
+    transitions: dict[str, dict[str, Optional[int]]] = field(default_factory=dict)
+    # {bib: handicap_s}
+    handicaps: dict[str, Optional[int]] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+
+
+def parse_time_to_seconds(value) -> Optional[int]:
+    """Конвертировать время в секунды. None — пусто или DNF."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        v = value.strip()
+        if not v or v.upper() in ("DNF", "DNS", "DSQ", "ДНФ", "-", "—"):
+            return None
+        # Handle lowercase cyrillic DNF variants
+        if v.lower() in ("днф", "днс", "дсq"):
+            return None
+        parts = v.split(":")
+        try:
+            if len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + int(parts[1])
+        except ValueError:
+            return None
+        return None
+    if isinstance(value, datetime.timedelta):
+        return int(value.total_seconds())
+    if isinstance(value, datetime.time):
+        return value.hour * 3600 + value.minute * 60 + value.second
+    if isinstance(value, (int, float)):
+        return int(round(value * 86400))
+    return None
+
+
+def _normalize_header(h: str) -> str:
+    return str(h).strip().lower()
+
+
+def _build_col_index(headers: list[str]) -> dict[tuple[str, int], int]:
+    """Построить маппинг (normalized, occurrence) → col_index."""
+    counts: dict[str, int] = {}
+    result: dict[tuple[str, int], int] = {}
+    for idx, h in enumerate(headers):
+        n = _normalize_header(h)
+        occ = counts.get(n, 0)
+        counts[n] = occ + 1
+        result[(n, occ)] = idx
+    return result
+
+
+def _find_header_row(sheet) -> int:
+    """Вернуть индекс строки с заголовками (1-based). Ищет строку с 'Номер' или 'номер'."""
+    for i, row in enumerate(sheet.iter_rows(max_row=5, values_only=True), start=1):
+        for cell in row:
+            if cell and str(cell).strip().lower() in ("номер", "bib"):
+                return i
+    return 1  # fallback
+
+
+def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
+    """Разобрать Excel-файл формата 2025. Возвращает ParseResult."""
+    result = ParseResult(race_year=race_year)
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    sheet = wb.active
+
+    header_row_idx = _find_header_row(sheet)
+    raw_headers = [cell.value for cell in sheet[header_row_idx]]
+    headers = [str(h).strip() if h is not None else "" for h in raw_headers]
+    col_idx = _build_col_index(headers)
+
+    # Инвертированный маппинг col_index → (stage, seq) для чекпоинтов
+    cp_by_col: dict[int, tuple[str, int]] = {}
+    for (norm, occ), stage_seq in CHECKPOINT_COL_MAP.items():
+        for (n, o), ci in col_idx.items():
+            if o == occ and (n == norm or n.startswith(norm + " ") or n.startswith(norm + "/")):
+                cp_by_col[ci] = stage_seq
+                break
+
+    # Индексы колонок участника
+    part_col: dict[str, int] = {}
+    for norm_name, field_name in PARTICIPANT_COL_MAP.items():
+        for (n, _), ci in col_idx.items():
+            if n == norm_name:
+                part_col[field_name] = ci
+                break
+
+    # Индекс колонки гандикапа
+    handicap_col: Optional[int] = None
+    for (n, _), ci in col_idx.items():
+        if n.startswith(HANDICAP_PREFIX):
+            handicap_col = ci
+            break
+
+    # Индексы T1/T2
+    t1_col = col_idx.get(("t1", 0))
+    t2_col = col_idx.get(("t2", 0))
+
+    # Парсить строки данных
+    for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+        if not any(row):
+            continue
+
+        bib_col = part_col.get("bib")
+        bib_raw = row[bib_col] if bib_col is not None else None
+        if not bib_raw:
+            continue
+        bib = str(bib_raw).strip()
+
+        def _cell(f: str, default: str = "", _row=row) -> str:
+            ci = part_col.get(f)
+            return str(_row[ci] or default).strip() if ci is not None and ci < len(_row) else default
+
+        fmt_raw = _cell("format", "Лично")
+        fmt = "relay" if fmt_raw in ("Эстафета", "relay") else "individual"
+
+        gender_raw = _cell("gender", "М")
+        gender = "F" if gender_raw.upper() in ("Ж", "F", "FEMALE") else "M"
+
+        p = {
+            "race_year":    race_year,
+            "bib":          bib,
+            "surname":      _cell("surname"),
+            "name":         _cell("name"),
+            "gender":       gender,
+            "country":      _cell("country", "Россия"),
+            "city":         _cell("city"),
+            "format":       fmt,
+            "status":       "active",
+        }
+
+        # Проверить DNF: если одна из ячеек содержит "DNF"
+        for cell in row:
+            if cell and str(cell).strip().upper() in ("DNF", "ДНФ"):
+                p["status"] = "dnf"
+                break
+
+        result.participants.append(p)
+
+        # Чекпоинты
+        cp_times: dict[tuple[str, int], Optional[int]] = {}
+        for ci, stage_seq in cp_by_col.items():
+            if ci < len(row):
+                cp_times[stage_seq] = parse_time_to_seconds(row[ci])
+        result.checkpoint_times[bib] = cp_times
+
+        # Гандикап
+        if handicap_col is not None and handicap_col < len(row):
+            result.handicaps[bib] = parse_time_to_seconds(row[handicap_col])
+
+        # Транзитные зоны
+        tz: dict[str, Optional[int]] = {}
+        if t1_col is not None and t1_col < len(row):
+            tz["T1"] = parse_time_to_seconds(row[t1_col])
+        if t2_col is not None and t2_col < len(row):
+            tz["T2"] = parse_time_to_seconds(row[t2_col])
+        if tz:
+            result.transitions[bib] = tz
+
+    return result
