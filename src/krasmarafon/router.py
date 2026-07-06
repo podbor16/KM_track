@@ -18,3 +18,6 @@ router.include_router(webhook_router)
 
 from src.race_triatleta.router import router as triatleta_router
 router.include_router(triatleta_router)
+
+from src.siberman.router import router as siberman_router
+router.include_router(siberman_router)
