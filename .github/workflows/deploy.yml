@@ -51,6 +51,9 @@ jobs:
             cp /opt/km_track/deploy/km_track.service /etc/systemd/system/km_track.service
             systemctl daemon-reload
 
+            # Установить/обновить зависимости
+            pip install -r /opt/km_track/requirements.txt
+
             # Перезапустить приложение
             systemctl restart km_track
             # Перезапустить загрузчик Triatleta если запущен
