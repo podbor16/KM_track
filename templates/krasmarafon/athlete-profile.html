@@ -1,4 +1,4 @@
-<!-- legacy/templates/athlete-profile.html -->
+﻿<!-- legacy/templates/athlete-profile.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -17,8 +17,8 @@
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
-    {% include 'krasmarafon_header.html' %}
-    {% include 'header.html' %}
+    {% include 'krasmarafon/krasmarafon_header.html' %}
+    {% include 'krasmarafon/header.html' %}
 
     <div class="athlete-profile-container">
         <div class="back-button">
@@ -127,7 +127,7 @@
     </div>
 
     <!-- Включаем официальный футер Красмарафона -->
-    {% include 'krasmarafon_footer.html' %}
+    {% include 'krasmarafon/krasmarafon_footer.html' %}
 
     <script>
         let currentAthlete = null;
@@ -877,3 +877,4 @@
     </script>
 </body>
 </html>
+

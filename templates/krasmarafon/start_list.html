@@ -1,4 +1,4 @@
-<!-- legacy/templates/start_list.html -->
+﻿<!-- legacy/templates/start_list.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -15,8 +15,8 @@
 </head>
 <body>
     <!-- Включаем хэдер Красмарафона -->
-    {% include 'krasmarafon_header.html' %}
-    {% include 'header.html' %}
+    {% include 'krasmarafon/krasmarafon_header.html' %}
+    {% include 'krasmarafon/header.html' %}
 
     <div class="km-page">
         <h1 id="pageTitle">Стартовый список</h1>
@@ -121,6 +121,7 @@
     <script src="/static/js/analytics-start-list.js?v={{ v }}"></script>
 
     <!-- Включаем официальный футер Красмарафона -->
-    {% include 'krasmarafon_footer.html' %}
+    {% include 'krasmarafon/krasmarafon_footer.html' %}
 </body>
 </html>
+

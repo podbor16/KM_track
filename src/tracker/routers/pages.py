@@ -115,7 +115,7 @@ async def _tracker_response(
 ):
     """Рендер страницы трекера с динамическим event_config."""
     event_cfg = _build_event_config(event_id=event_id, event_code=event_code)
-    return templates.TemplateResponse("tracker.html", {
+    return templates.TemplateResponse("krasmarafon/tracker.html", {
         "request": request,
         "event_title": event_cfg["title"],
         "event_config": event_cfg,
@@ -155,7 +155,7 @@ async def tracker_event_page(request: Request, event: str):
 @router.get("/start_list", response_class=HTMLResponse)
 async def start_list_page(request: Request):
     """Стартовый список участников."""
-    return templates.TemplateResponse("start_list.html", {
+    return templates.TemplateResponse("krasmarafon/start_list.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
     })
@@ -170,7 +170,7 @@ async def analytics_page():
 @router.get("/results", response_class=HTMLResponse)
 async def results_page(request: Request):
     """Результаты забега."""
-    return templates.TemplateResponse("results.html", {
+    return templates.TemplateResponse("krasmarafon/results.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
     })
@@ -179,19 +179,19 @@ async def results_page(request: Request):
 @router.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request):
     """История: поиск по спортсмену и по забегу."""
-    return templates.TemplateResponse("history.html", {"request": request})
+    return templates.TemplateResponse("krasmarafon/history.html", {"request": request})
 
 
 @router.get("/athlete-profile", response_class=HTMLResponse)
 async def athlete_profile_page(request: Request):
     """Профиль спортсмена со всеми его результатами."""
-    return templates.TemplateResponse("athlete-profile.html", {"request": request})
+    return templates.TemplateResponse("krasmarafon/athlete-profile.html", {"request": request})
 
 
 @router.get("/race-analysis", response_class=HTMLResponse)
 async def race_analysis_page(request: Request):
     """Анализ забегов с выбором события и года."""
-    return templates.TemplateResponse("race-analysis.html", {"request": request})
+    return templates.TemplateResponse("krasmarafon/race-analysis.html", {"request": request})
 
 
 # ============================================================================
@@ -200,7 +200,7 @@ async def race_analysis_page(request: Request):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse("krasmarafon/login.html", {"request": request, "error": None})
 
 
 @router.post("/login")
@@ -224,7 +224,7 @@ async def login_submit(
         )
         return response
     return templates.TemplateResponse(
-        "login.html",
+        "krasmarafon/login.html",
         {"request": {}, "error": "Неверный логин или пароль"},
         status_code=401,
     )
@@ -253,7 +253,7 @@ async def admin_page(request: Request, user=Depends(require_auth)):
         return user
     if "triatleta" in request.headers.get("host", ""):
         return RedirectResponse("/24h/admin")
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse("krasmarafon/admin.html", {"request": request})
 
 
 @router.get("/admin/server-metrics", response_class=HTMLResponse)
@@ -264,4 +264,4 @@ async def server_metrics_page(
     """Дашборд реальной нагрузки на сервер."""
     if isinstance(user, RedirectResponse):
         return user
-    return templates.TemplateResponse("server-metrics.html", {"request": request})
+    return templates.TemplateResponse("krasmarafon/server-metrics.html", {"request": request})

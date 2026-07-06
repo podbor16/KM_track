@@ -45,7 +45,7 @@ templates.env.globals["v"] = _get_deploy_version()
 @router.get("/24h", response_class=HTMLResponse)
 @router.get("/24h/", response_class=HTMLResponse)
 async def tri_home(request: Request):
-    return templates.TemplateResponse("tri_results.html", {
+    return templates.TemplateResponse("race_triatleta/tri_results.html", {
         "request": request,
         "event_id": TRI_EVENT_ID,
     })
@@ -75,7 +75,7 @@ async def tri_laps():
 async def tri_admin_page(request: Request, user=Depends(require_auth)):
     if isinstance(user, RedirectResponse):
         return user
-    return templates.TemplateResponse("tri_admin.html", {"request": request})
+    return templates.TemplateResponse("race_triatleta/tri_admin.html", {"request": request})
 
 
 
