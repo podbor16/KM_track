@@ -129,7 +129,13 @@ async def _tracker_response(
 
 @router.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Главная страница — трекер текущего события."""
+    """Главная страница — domain-aware. Выбирает страницу по домену."""
+    domain = getattr(request.state, "domain", "krasmarafon")
+    if domain == "triatleta":
+        return templates.TemplateResponse("race_triatleta/index.html",
+                                          {"request": request, "v": _get_deploy_version()})
+    if domain == "siberman":
+        return templates.TemplateResponse("siberman/index.html", {"request": request})
     return await _tracker_response(request)
 
 
