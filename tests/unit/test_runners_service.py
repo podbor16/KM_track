@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.tracker.services.runners_service import calculate_live_position
+from src.krasmarafon.services.runners_service import calculate_live_position
 
 # Фиксированная дата гонки
 RACE_DATE = date(2026, 3, 29)
@@ -71,7 +71,7 @@ class TestBeforeFirstKT:
         result = _make_result(category='М40')
         # Через 10 минут после старта с 10 км/ч = 1.667 км
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=10)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -85,7 +85,7 @@ class TestBeforeFirstKT:
         Дистанция ограничена только финишем (total_distance)."""
         result = _make_result(category='М40')
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=22, minutes=0)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -104,7 +104,7 @@ class TestBeforeFirstKT:
         """Неизвестная категория → дефолт 10 км/ч."""
         result = _make_result(category='Ж99')
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=6)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -116,7 +116,7 @@ class TestBeforeFirstKT:
         """hist_speed подставляется вместо category_speeds на первом участке."""
         result = _make_result(category='М40')
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=10)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -130,7 +130,7 @@ class TestBeforeFirstKT:
         """hist_speed=0 → фолбэк на category_speeds."""
         result = _make_result(category='М40')
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=10)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -156,7 +156,7 @@ class TestAfterKT1:
             time_clear_start=timedelta(hours=20),
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=16)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -174,7 +174,7 @@ class TestAfterKT1:
         result_slow = _make_result(time_clear_start=base_start, time_clear_kt1=timedelta(minutes=18))
 
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=25)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -193,7 +193,7 @@ class TestAfterKT1:
             time_clear_kt1=timedelta(minutes=15),
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=22)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -208,7 +208,7 @@ class TestAfterKT1:
             time_clear_kt1=timedelta(minutes=15),  # 2.5 km / 0.25h = 10 km/h → 6:00
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=20)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -230,7 +230,7 @@ class TestAfterKT2:
             time_clear_kt2=timedelta(minutes=42),  # КТ2 на 7 км за 42 мин
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=43)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -250,7 +250,7 @@ class TestAfterKT2:
             time_clear_kt2=timedelta(minutes=42),  # интервал: 4 км за 12 мин = 20.0 км/ч
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=43)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -268,7 +268,7 @@ class TestAfterKT2:
             time_clear_kt2=timedelta(minutes=42),
         )
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=23)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min
@@ -285,7 +285,7 @@ class TestAfterKT2:
         )
         cp_dists_no_kt2 = [0.0, 5.0]  # нет KT2 в конфиге
         fixed_now = datetime.combine(RACE_DATE, datetime.min.time()) + timedelta(hours=20, minutes=16)
-        with patch('src.tracker.services.runners_service.datetime') as mock_dt:
+        with patch('src.krasmarafon.services.runners_service.datetime') as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.combine = datetime.combine
             mock_dt.min = datetime.min

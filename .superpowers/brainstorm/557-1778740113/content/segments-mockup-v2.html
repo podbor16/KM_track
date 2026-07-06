@@ -1,0 +1,143 @@
+<h2>Макет v2: цвета относительные (зелёный = быстрый, красный = медленный)</h2>
+<p class="subtitle">Для каждого участника свой градиент: самый быстрый отрезок = зелёный, самый медленный = красный.</p>
+
+<div class="split" style="gap:24px; align-items:flex-start">
+
+  <!-- Left: стабильный бегун (мало разброса) -->
+  <div class="mockup" style="flex:1">
+    <div class="mockup-header">Пример А — стабильный бегун (3:02–3:09)</div>
+    <div class="mockup-body" style="background:#0f1923; padding:16px">
+      <div style="font-size:10px; color:#888; margin-bottom:8px">Разброс темпа: 7 сек/км → цвета приглушённые</div>
+      <div style="display:flex; align-items:flex-end; gap:5px; height:80px">
+        <!-- 3:05 → ratio 0.43 → зеленовато-жёлтый -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#9ccc65; font-weight:bold">3:05</div>
+          <div style="background:#9ccc65; width:100%; height:50px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">Ст→<br>КТ1</div>
+        </div>
+        <!-- 3:02 → fastest → зелёный -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#4caf50; font-weight:bold">3:02</div>
+          <div style="background:#4caf50; width:100%; height:38px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ1→<br>КТ2</div>
+        </div>
+        <!-- 3:09 → slowest → красный -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#ef5350; font-weight:bold">3:09</div>
+          <div style="background:#ef5350; width:100%; height:74px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#ef5350; text-align:center; line-height:1.1; font-weight:bold">КТ2→<br>КТ3</div>
+        </div>
+        <!-- 3:05 → средний -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#9ccc65; font-weight:bold">3:05</div>
+          <div style="background:#9ccc65; width:100%; height:50px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ3→<br>КТ4</div>
+        </div>
+        <!-- 3:06 -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#aed581; font-weight:bold">3:06</div>
+          <div style="background:#aed581; width:100%; height:56px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ4→<br>КТ5</div>
+        </div>
+        <!-- 3:05 -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#9ccc65; font-weight:bold">3:05</div>
+          <div style="background:#9ccc65; width:100%; height:50px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ5→<br>КТ6</div>
+        </div>
+        <!-- 3:06 -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#aed581; font-weight:bold">3:06</div>
+          <div style="background:#aed581; width:100%; height:56px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ6→<br>Фин.</div>
+        </div>
+      </div>
+      <div style="font-size:9px; color:#555; margin-top:8px; border-top:1px solid #1e2a3e; padding-top:6px">
+        Мин: 3:02 (КТ1→КТ2) · Макс: 3:09 (КТ2→КТ3) · Разброс: 7 сек
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: неравномерный бегун (большой разброс) -->
+  <div class="mockup" style="flex:1">
+    <div class="mockup-header">Пример Б — неравномерный бегун (3:15–5:40)</div>
+    <div class="mockup-body" style="background:#0f1923; padding:16px">
+      <div style="font-size:10px; color:#888; margin-bottom:8px">Разброс темпа: 2:25 мин/км → цвета контрастные</div>
+      <div style="display:flex; align-items:flex-end; gap:5px; height:80px">
+        <!-- 3:20 → fast end -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#4caf50; font-weight:bold">3:20</div>
+          <div style="background:#4caf50; width:100%; height:22px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">Ст→<br>КТ1</div>
+        </div>
+        <!-- 3:15 → fastest -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#43a047; font-weight:bold">3:15</div>
+          <div style="background:#43a047; width:100%; height:14px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ1→<br>КТ2</div>
+        </div>
+        <!-- 3:45 → middle -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#ffd54f; font-weight:bold">3:45</div>
+          <div style="background:#ffd54f; width:100%; height:37px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ2→<br>КТ3</div>
+        </div>
+        <!-- 4:20 → orange -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#ff7043; font-weight:bold">4:20</div>
+          <div style="background:#ff7043; width:100%; height:55px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ3→<br>КТ4</div>
+        </div>
+        <!-- 4:55 → red-orange -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#f4511e; font-weight:bold">4:55</div>
+          <div style="background:#f4511e; width:100%; height:69px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#f4511e; text-align:center; line-height:1.1">КТ4→<br>КТ5</div>
+        </div>
+        <!-- 5:40 → slowest → red -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#ef5350; font-weight:bold">5:40</div>
+          <div style="background:#ef5350; width:100%; height:80px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#ef5350; text-align:center; line-height:1.1; font-weight:bold">КТ5→<br>КТ6</div>
+        </div>
+        <!-- 3:30 → recovery -->
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+          <div style="font-size:9px; color:#8bc34a; font-weight:bold">3:30</div>
+          <div style="background:#8bc34a; width:100%; height:28px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ6→<br>Фин.</div>
+        </div>
+      </div>
+      <div style="font-size:9px; color:#555; margin-top:8px; border-top:1px solid #1e2a3e; padding-top:6px">
+        Мин: 3:15 (КТ1→КТ2) · Макс: 5:40 (КТ5→КТ6) · Разброс: 2:25
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:20px">
+  <h3>Как это работает</h3>
+  <p class="subtitle" style="line-height:1.7">
+    <strong style="color:#eee">Высота бара</strong> = абсолютный темп (выше = медленнее).<br>
+    <strong style="color:#eee">Цвет</strong> = линейная интерполяция зелёный→красный по диапазону [min_pace, max_pace] этого участника.<br>
+    <strong style="color:#eee">У стабильного бегуна</strong> — все цвета похожи (зеленовато-жёлтые), разброс небольшой.<br>
+    <strong style="color:#eee">У неравномерного</strong> — контрастная картинка, проблемный отрезок сразу виден.
+  </p>
+</div>
+
+<div class="options" style="margin-top:12px">
+  <div class="option" data-choice="good" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>Выглядит хорошо</h3>
+      <p>Переходим к написанию спека</p>
+    </div>
+  </div>
+  <div class="option" data-choice="adjust" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content">
+      <h3>Нужно скорректировать</h3>
+      <p>Напишу в терминале что изменить</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,124 @@
+<h2>Дашборд «Клиентская база» — варианты компоновки</h2>
+<p class="subtitle">Выбери структуру, которая лучше отражает нужный фокус</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Обзор + Воронка лояльности</h3>
+      <p style="color:#888;font-size:13px;margin:6px 0 10px;">Фокус: кто бегает с нами, насколько они лояльны</p>
+      <div style="background:#111;border-radius:6px;padding:12px;font-size:12px;color:#aaa;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;text-align:center;">
+            <div style="color:#e84c8c;font-weight:700;">7 936</div>
+            <div style="color:#555;font-size:10px;">клиентов</div>
+          </div>
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;text-align:center;">
+            <div style="color:#4a90e2;font-weight:700;">30%</div>
+            <div style="color:#555;font-size:10px;">возвращаются</div>
+          </div>
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;text-align:center;">
+            <div style="color:#50fa7b;font-weight:700;">1 872 ₽</div>
+            <div style="color:#555;font-size:10px;">средний LTV</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;">
+            <div style="color:#666;font-size:10px;margin-bottom:4px;">ВОРОНКА ЛОЯЛЬНОСТИ</div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <div style="background:#e84c8c33;height:12px;border-radius:2px;width:100%;display:flex;align-items:center;padding:0 4px;"><span style="font-size:9px;color:#e84c8c;">1 раз — 61%</span></div>
+              <div style="background:#ff9800aa;height:12px;border-radius:2px;width:70%;display:flex;align-items:center;padding:0 4px;"><span style="font-size:9px;color:#ff9800;">2-4 раза — 24%</span></div>
+              <div style="background:#50fa7baa;height:12px;border-radius:2px;width:30%;display:flex;align-items:center;padding:0 4px;"><span style="font-size:9px;color:#50fa7b;">5+ раз — 6%</span></div>
+            </div>
+          </div>
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;">
+            <div style="color:#666;font-size:10px;margin-bottom:4px;">НОВЫЕ ПО ГОДАМ</div>
+            <div style="display:flex;align-items:flex-end;gap:3px;height:40px;">
+              <div style="background:#4a90e244;width:16px;height:20%;border-radius:2px 2px 0 0;"></div>
+              <div style="background:#4a90e266;width:16px;height:60%;border-radius:2px 2px 0 0;"></div>
+              <div style="background:#4a90e2;width:16px;height:100%;border-radius:2px 2px 0 0;"></div>
+              <div style="color:#555;font-size:9px;align-self:center;">→</div>
+            </div>
+          </div>
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;grid-column:span 2;">
+            <div style="color:#666;font-size:10px;margin-bottom:4px;">ПЕРЕХОДЫ МЕЖДУ ДИСТАНЦИЯМИ</div>
+            <div style="font-size:10px;color:#aaa;">500м/1км → 2км → 5км → 7км → 10км → 21км</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Acquisition + Retention по событиям</h3>
+      <p style="color:#888;font-size:13px;margin:6px 0 10px;">Фокус: какие мероприятия привлекают и удерживают</p>
+      <div style="background:#111;border-radius:6px;padding:12px;font-size:12px;color:#aaa;">
+        <div style="background:#1a1a1a;border-radius:4px;padding:8px;margin-bottom:6px;">
+          <div style="color:#666;font-size:10px;margin-bottom:6px;">НОВЫЕ vs ПОВТОРНЫЕ ПО СОБЫТИЮ (стacked bar)</div>
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div style="width:60px;font-size:9px;color:#888;">Жара 2025</div>
+              <div style="background:#4a90e2;height:10px;border-radius:2px 0 0 2px;width:55%;"></div>
+              <div style="background:#e84c8c;height:10px;border-radius:0 2px 2px 0;width:45%;"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div style="width:60px;font-size:9px;color:#888;">Весна 2025</div>
+              <div style="background:#4a90e2;height:10px;border-radius:2px 0 0 2px;width:70%;"></div>
+              <div style="background:#e84c8c;height:10px;border-radius:0 2px 2px 0;width:30%;"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div style="width:60px;font-size:9px;color:#888;">Х Трейл</div>
+              <div style="background:#4a90e2;height:10px;border-radius:2px 0 0 2px;width:25%;"></div>
+              <div style="background:#e84c8c;height:10px;border-radius:0 2px 2px 0;width:75%;"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:6px;font-size:9px;">
+            <span style="color:#4a90e2;">■ Новые</span><span style="color:#e84c8c;">■ Повторные</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;">
+            <div style="color:#666;font-size:10px;margin-bottom:4px;">LTV ПО СЕГМЕНТАМ</div>
+            <div style="font-size:10px;color:#aaa;line-height:1.8;">
+              1 раз: 1 165 ₽<br>
+              2-4 раза: 3 200 ₽<br>
+              5+ раз: 8 900 ₽
+            </div>
+          </div>
+          <div style="background:#1a1a1a;border-radius:4px;padding:8px;">
+            <div style="color:#666;font-size:10px;margin-bottom:4px;">COHORT RETENTION</div>
+            <div style="font-size:10px;color:#aaa;">Когорта 2024 → вернулись в 2025: X%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Полный дашборд — всё вместе</h3>
+      <p style="color:#888;font-size:13px;margin:6px 0 10px;">A + B + сегментация по городам и клубам, фильтры по году/событию</p>
+      <div style="background:#111;border-radius:6px;padding:12px;font-size:11px;color:#666;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#4a90e2;">KPI карточки</div>
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#e84c8c;">Воронка лояльности</div>
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#50fa7b;">Новые по годам</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#f1fa8c;">Новые vs Повторные по событию</div>
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#ff9800;">LTV по сегментам</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#aaa;">Переходы дистанций</div>
+          <div style="background:#1a1a1a;border-radius:3px;padding:6px;text-align:center;font-size:10px;color:#aaa;">Топ клубов / городов</div>
+        </div>
+        <div style="margin-top:8px;color:#555;font-size:10px;text-align:center;">Фильтры: год · мероприятие · дистанция</div>
+      </div>
+    </div>
+  </div>
+
+</div>

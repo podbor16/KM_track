@@ -1,0 +1,426 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', Arial, sans-serif; background: #f0f0f4; }
+
+.variants-row {
+  display: flex; gap: 24px; flex-wrap: wrap;
+  align-items: flex-start; margin-bottom: 32px;
+}
+.variant-wrap {
+  flex: 1; min-width: 280px; max-width: 340px;
+}
+.variant-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: #888; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════
+   VARIANT A — Hero Gradient Card
+═══════════════════════════════════════════════ */
+.card-a {
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+}
+.card-a__hero {
+  background: linear-gradient(135deg, #EE2D62 0%, #c4134a 100%);
+  padding: 20px 20px 24px;
+  position: relative;
+}
+.card-a__number {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  border: 2px solid rgba(255,255,255,0.5);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 900; color: white;
+  margin-bottom: 10px;
+}
+.card-a__name {
+  font-size: 18px; font-weight: 700; color: white; line-height: 1.2;
+  margin-bottom: 4px;
+}
+.card-a__cat {
+  font-size: 12px; color: rgba(255,255,255,0.75);
+}
+.card-a__status {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+  padding: 3px 10px; border-radius: 20px;
+}
+.card-a__body { padding: 16px 20px 20px; }
+.card-a__stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 14px;
+}
+.card-a__stat { }
+.card-a__stat-label {
+  font-size: 10px; color: #999; text-transform: uppercase;
+  letter-spacing: .5px; margin-bottom: 3px;
+}
+.card-a__stat-value {
+  font-size: 16px; font-weight: 700; color: #1a1a1a;
+}
+.card-a__stat-sub {
+  font-size: 11px; color: #888; margin-top: 1px;
+}
+.card-a__divider {
+  height: 1px; background: #f0f0f0; margin: 14px 0;
+}
+.card-a__row {
+  display: flex; justify-content: space-between;
+  align-items: center; font-size: 13px;
+  padding: 5px 0;
+}
+.card-a__row-label { color: #888; }
+.card-a__row-value { font-weight: 600; color: #1a1a1a; }
+.card-a__eta {
+  background: linear-gradient(90deg, #fff5f7, #fff);
+  border: 1px solid #ffd6e0;
+  border-radius: 10px; padding: 10px 14px;
+  margin-top: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-a__eta-label { font-size: 11px; color: #EE2D62; font-weight: 600; }
+.card-a__eta-value { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+
+
+/* ═══════════════════════════════════════════════
+   VARIANT B — Dark Sport Card
+═══════════════════════════════════════════════ */
+.card-b {
+  background: #1a1a1a;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.card-b__header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #2e2e2e;
+  display: flex; align-items: center; gap: 14px;
+}
+.card-b__badge {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: #EE2D62; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 900; color: white;
+}
+.card-b__info { flex: 1; }
+.card-b__name { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.2; }
+.card-b__meta { font-size: 11px; color: #777; margin-top: 3px; }
+.card-b__chip {
+  background: #2b2b2b; border: 1px solid #3a3a3a;
+  color: #EE2D62; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 12px;
+  letter-spacing: .5px; flex-shrink: 0;
+}
+.card-b__metrics {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #2e2e2e;
+}
+.card-b__metric {
+  padding: 14px 0 14px 18px;
+  border-right: 1px solid #2e2e2e;
+}
+.card-b__metric:last-child { border-right: none; }
+.card-b__metric-val {
+  font-size: 18px; font-weight: 800; color: #fff;
+  line-height: 1;
+}
+.card-b__metric-val span { font-size: 11px; font-weight: 500; color: #777; }
+.card-b__metric-label {
+  font-size: 10px; color: #666; text-transform: uppercase;
+  letter-spacing: .5px; margin-top: 4px;
+}
+.card-b__section { padding: 14px 18px; border-bottom: 1px solid #2e2e2e; }
+.card-b__section:last-child { border-bottom: none; }
+.card-b__section-title {
+  font-size: 10px; color: #555; text-transform: uppercase;
+  letter-spacing: .7px; margin-bottom: 10px; font-weight: 600;
+}
+.card-b__kt {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-b__kt-name { font-size: 13px; font-weight: 600; color: #ccc; }
+.card-b__kt-time { font-size: 15px; font-weight: 700; color: #fff; }
+.card-b__ranks {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.card-b__rank {
+  background: #252525; border-radius: 8px;
+  padding: 6px 10px; flex: 1; min-width: 70px;
+}
+.card-b__rank-val {
+  font-size: 13px; font-weight: 700; color: #fff;
+}
+.card-b__rank-label {
+  font-size: 9px; color: #666; text-transform: uppercase;
+  letter-spacing: .5px; margin-top: 2px;
+}
+.card-b__eta-row {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-b__eta-label { font-size: 11px; color: #777; }
+.card-b__eta-time { font-size: 16px; font-weight: 800; color: #EE2D62; }
+
+
+/* ═══════════════════════════════════════════════
+   VARIANT C — Clean Minimal Card
+═══════════════════════════════════════════════ */
+.card-c {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+  overflow: hidden;
+}
+.card-c__top {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px 14px;
+  border-bottom: 2px solid #EE2D62;
+}
+.card-c__circle {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: #EE2D62; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 900; color: white;
+  box-shadow: 0 2px 10px rgba(238,45,98,0.35);
+}
+.card-c__title { flex: 1; }
+.card-c__name { font-size: 16px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
+.card-c__sub { font-size: 12px; color: #888; margin-top: 3px; }
+.card-c__pill {
+  font-size: 11px; font-weight: 700; color: #EE2D62;
+  background: #fff0f4; border: 1px solid #ffd0dc;
+  padding: 4px 12px; border-radius: 20px; flex-shrink: 0;
+}
+.card-c__stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: 16px 18px; gap: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.card-c__stat { text-align: center; }
+.card-c__stat-val {
+  font-size: 17px; font-weight: 800; color: #1a1a1a;
+}
+.card-c__stat-lbl {
+  font-size: 10px; color: #aaa; text-transform: uppercase;
+  letter-spacing: .5px; margin-top: 2px;
+}
+.card-c__body { padding: 14px 18px 18px; }
+.card-c__kt-block {
+  background: #fafafa; border-radius: 10px;
+  padding: 11px 14px; margin-bottom: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-c__kt-label { font-size: 11px; color: #999; font-weight: 500; }
+.card-c__kt-name { font-size: 13px; font-weight: 700; color: #333; margin-top: 2px; }
+.card-c__kt-time { font-size: 17px; font-weight: 800; color: #1a1a1a; }
+.card-c__kt-pace { font-size: 11px; color: #888; margin-top: 2px; text-align: right; }
+.card-c__ranks-row {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.card-c__rank {
+  flex: 1; text-align: center; background: #f9f9f9;
+  border-radius: 8px; padding: 8px 4px;
+}
+.card-c__rank-val { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.card-c__rank-lbl { font-size: 9px; color: #bbb; text-transform: uppercase; margin-top: 2px; }
+.card-c__eta {
+  background: #EE2D62; border-radius: 10px;
+  padding: 11px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.card-c__eta-lbl { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 500; }
+.card-c__eta-val { font-size: 17px; font-weight: 800; color: #fff; }
+</style>
+
+<h2>Варианты редизайна панели участника</h2>
+<p class="subtitle">Данные одного и того же участника — «бегущий», прошёл КТ3</p>
+
+<div class="variants-row" style="margin-top:28px">
+
+  <!-- VARIANT A -->
+  <div class="variant-wrap">
+    <div class="variant-label">A — Hero Gradient</div>
+    <div class="card-a">
+      <div class="card-a__hero">
+        <div class="card-a__status">● Бежит</div>
+        <div class="card-a__number">9910</div>
+        <div class="card-a__name">Иванов Михаил</div>
+        <div class="card-a__cat">М35–39 · Старт 10:02:15</div>
+      </div>
+      <div class="card-a__body">
+        <div class="card-a__stats">
+          <div class="card-a__stat">
+            <div class="card-a__stat-label">Темп</div>
+            <div class="card-a__stat-value">5:12</div>
+            <div class="card-a__stat-sub">мин/км</div>
+          </div>
+          <div class="card-a__stat">
+            <div class="card-a__stat-label">Дистанция</div>
+            <div class="card-a__stat-value">14.5</div>
+            <div class="card-a__stat-sub">км из 21.1</div>
+          </div>
+        </div>
+        <div class="card-a__divider"></div>
+        <div class="card-a__row">
+          <span class="card-a__row-label">Последняя КТ</span>
+          <span class="card-a__row-value">КТ3 · 14.5 км</span>
+        </div>
+        <div class="card-a__row">
+          <span class="card-a__row-label">Время на КТ3</span>
+          <span class="card-a__row-value">1:15:34</span>
+        </div>
+        <div class="card-a__row">
+          <span class="card-a__row-label">Место (абсолют)</span>
+          <span class="card-a__row-value">47 / 312</span>
+        </div>
+        <div class="card-a__row">
+          <span class="card-a__row-label">Место (пол)</span>
+          <span class="card-a__row-value">38 / 248</span>
+        </div>
+        <div class="card-a__eta">
+          <div class="card-a__eta-label">⏱ Прогноз финиша</div>
+          <div class="card-a__eta-value">11:42:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT B -->
+  <div class="variant-wrap">
+    <div class="variant-label">B — Dark Sport</div>
+    <div class="card-b">
+      <div class="card-b__header">
+        <div class="card-b__badge">9910</div>
+        <div class="card-b__info">
+          <div class="card-b__name">Иванов Михаил</div>
+          <div class="card-b__meta">М35–39 · Старт 10:02:15</div>
+        </div>
+        <div class="card-b__chip">● Бежит</div>
+      </div>
+      <div class="card-b__metrics">
+        <div class="card-b__metric">
+          <div class="card-b__metric-val">5:12<span>/км</span></div>
+          <div class="card-b__metric-label">Темп</div>
+        </div>
+        <div class="card-b__metric">
+          <div class="card-b__metric-val">14.5<span>км</span></div>
+          <div class="card-b__metric-label">Позиция</div>
+        </div>
+        <div class="card-b__metric">
+          <div class="card-b__metric-val">47<span>/312</span></div>
+          <div class="card-b__metric-label">Место</div>
+        </div>
+      </div>
+      <div class="card-b__section">
+        <div class="card-b__section-title">Последняя КТ</div>
+        <div class="card-b__kt">
+          <div class="card-b__kt-name">КТ3 · 14.5 км</div>
+          <div class="card-b__kt-time">1:15:34</div>
+        </div>
+        <div class="card-b__ranks">
+          <div class="card-b__rank">
+            <div class="card-b__rank-val">47/312</div>
+            <div class="card-b__rank-label">Абсолют</div>
+          </div>
+          <div class="card-b__rank">
+            <div class="card-b__rank-val">38/248</div>
+            <div class="card-b__rank-label">Пол</div>
+          </div>
+          <div class="card-b__rank">
+            <div class="card-b__rank-val">12/67</div>
+            <div class="card-b__rank-label">Катег.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-b__section">
+        <div class="card-b__eta-row">
+          <div class="card-b__eta-label">Прогноз финиша</div>
+          <div class="card-b__eta-time">11:42:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT C -->
+  <div class="variant-wrap">
+    <div class="variant-label">C — Clean Minimal</div>
+    <div class="card-c">
+      <div class="card-c__top">
+        <div class="card-c__circle">9910</div>
+        <div class="card-c__title">
+          <div class="card-c__name">Иванов Михаил</div>
+          <div class="card-c__sub">М35–39 · Старт 10:02:15</div>
+        </div>
+        <div class="card-c__pill">Бежит</div>
+      </div>
+      <div class="card-c__stats-grid">
+        <div class="card-c__stat">
+          <div class="card-c__stat-val">5:12</div>
+          <div class="card-c__stat-lbl">Темп</div>
+        </div>
+        <div class="card-c__stat">
+          <div class="card-c__stat-val">14.5</div>
+          <div class="card-c__stat-lbl">км</div>
+        </div>
+        <div class="card-c__stat">
+          <div class="card-c__stat-val">47</div>
+          <div class="card-c__stat-lbl">Место</div>
+        </div>
+      </div>
+      <div class="card-c__body">
+        <div class="card-c__kt-block">
+          <div>
+            <div class="card-c__kt-label">Последняя КТ</div>
+            <div class="card-c__kt-name">КТ3 · 14.5 км</div>
+          </div>
+          <div style="text-align:right">
+            <div class="card-c__kt-time">1:15:34</div>
+            <div class="card-c__kt-pace">5:12 мин/км</div>
+          </div>
+        </div>
+        <div class="card-c__ranks-row">
+          <div class="card-c__rank">
+            <div class="card-c__rank-val">47/312</div>
+            <div class="card-c__rank-lbl">Абсолют</div>
+          </div>
+          <div class="card-c__rank">
+            <div class="card-c__rank-val">38/248</div>
+            <div class="card-c__rank-lbl">Пол</div>
+          </div>
+          <div class="card-c__rank">
+            <div class="card-c__rank-val">12/67</div>
+            <div class="card-c__rank-lbl">Катег.</div>
+          </div>
+        </div>
+        <div class="card-c__eta">
+          <div class="card-c__eta-lbl">Прогноз финиша</div>
+          <div class="card-c__eta-val">11:42:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top:8px">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Hero Gradient</h3><p>Градиентная шапка #EE2D62, статы в сетке, ETA-блок</p></div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Dark Sport</h3><p>Тёмный фон, три крупных метрики сверху, плашки рангов</p></div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Clean Minimal</h3><p>Белый, розовый акцент снизу карточки ETA, числа в 3 колонки</p></div>
+  </div>
+</div>

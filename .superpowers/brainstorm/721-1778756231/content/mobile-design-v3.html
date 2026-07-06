@@ -1,0 +1,351 @@
+<h2>Мобильный дизайн /results — v3</h2>
+<p class="subtitle">Темп с «мин/км» + места по категории. Выбери вариант.</p>
+
+<div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-top:16px; align-items:flex-start">
+
+  <!-- ВАРИАНТ A -->
+  <div style="flex:1; min-width:280px; max-width:360px">
+    <div class="option" data-choice="compact" onclick="toggleSelect(this)" style="padding:0; overflow:hidden; cursor:pointer">
+      <div style="padding:12px 16px; display:flex; align-items:center; gap:10px">
+        <div class="letter" style="flex-shrink:0">А</div>
+        <div class="content">
+          <h3 style="margin:0">Компактный</h3>
+          <p style="margin:0; font-size:12px">Таблица с 4 колонками: Участок · Время · Темп · Места</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#0a0e17; border:1px solid #1e2a3e; border-radius:12px; margin-top:8px; overflow:hidden; font-family:Arial,sans-serif; font-size:11px; color:#eee">
+
+      <div style="background:#12192a; padding:10px 12px; display:flex; align-items:center; gap:10px; border-bottom:2px solid #ee2d62">
+        <span style="font-size:20px; font-weight:700; color:#f0b429; min-width:30px; text-align:center">1</span>
+        <div style="flex:1">
+          <div style="font-size:14px; font-weight:700">Иванов Иван</div>
+          <div style="font-size:10px; color:#888; margin-top:1px">Оф: 1:32:14 · <strong style="color:#ccc">Чист: 1:31:47</strong></div>
+        </div>
+      </div>
+
+      <div style="background:#0f1923; padding:12px">
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px">
+          <div>
+            <div style="font-size:15px; font-weight:700">Иванов Иван</div>
+            <div style="font-size:9px; color:#666">21 км · М · 1990 г.р. · Финишировал</div>
+          </div>
+          <span style="color:#555; font-size:20px; line-height:1; padding-left:8px">×</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px">
+          <div style="background:#162030; border-left:3px solid #ee2d62; padding:8px 10px; border-radius:4px">
+            <div style="font-size:7px; color:#555; text-transform:uppercase; margin-bottom:4px">Официальные</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Место</span><strong>12</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Пол</span><strong>М #5</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Кат.</span><strong>#3</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Время</span><strong>1:32:14</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0"><span style="color:#777">Темп</span><strong>4:23 мин/км</strong></div>
+          </div>
+          <div style="background:#162030; border-left:3px solid #4a9eff; padding:8px 10px; border-radius:4px">
+            <div style="font-size:7px; color:#555; text-transform:uppercase; margin-bottom:4px">Чистые</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Место</span><strong>11</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Пол</span><strong>М #4</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Кат.</span><strong>#2</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#777">Время</span><strong>1:31:47</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0"><span style="color:#777">Темп</span><strong>4:21 мин/км</strong></div>
+          </div>
+        </div>
+
+        <!-- Бар-чарт: темп с «мин/км» -->
+        <div style="font-size:8px; color:#555; text-transform:uppercase; margin-bottom:5px; letter-spacing:0.5px">Темп по отрезкам →</div>
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch">
+          <div style="display:flex; align-items:flex-end; gap:5px; height:100px; min-width:360px; padding-bottom:0">
+
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">09:17<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">0–3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#4caf50; font-weight:bold; text-align:center; white-space:nowrap">06:59<br><span style="color:#555; font-weight:normal">2.3 км</span></div>
+              <div style="background:#4caf50; width:100%; height:20px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#4caf50; font-weight:bold; white-space:nowrap">3:02 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">3–5.3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#ef5350; font-weight:bold; text-align:center; white-space:nowrap">09:28<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#ef5350; width:100%; height:68px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#ef5350; font-weight:bold; white-space:nowrap">3:09 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">5.3–8.3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">07:06<br><span style="color:#555; font-weight:normal">2.3 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">8.3–10.6 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#aed581; font-weight:bold; text-align:center; white-space:nowrap">09:16<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#aed581; width:100%; height:50px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">10.6–13.6 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">08:55<br><span style="color:#555; font-weight:normal">2.9 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">13.6–16.5 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#aed581; font-weight:bold; text-align:center; white-space:nowrap">08:08<br><span style="color:#555; font-weight:normal">2.6 км</span></div>
+              <div style="background:#aed581; width:100%; height:50px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">16.5–19.1 км</div>
+            </div>
+
+          </div>
+        </div>
+        <div style="font-size:8px; color:#333; border-top:1px solid #1e2a3e; padding-top:4px; margin-top:4px">← свайп для всех отрезков · Зелёный = быстрый · Красный = медленный</div>
+
+        <!-- Таблица 4 колонки: Участок | Время | Темп | Места -->
+        <div style="font-size:9px; color:#e63946; text-transform:uppercase; margin:10px 0 5px; font-weight:700; letter-spacing:0.5px; border-bottom:1px solid #2a2a3e; padding-bottom:3px">Отрезки</div>
+        <table style="width:100%; font-size:10px; border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:3px 0; font-size:8px; color:#555; font-weight:600; border-bottom:1px solid #1e2a3e">Участок</th>
+              <th style="text-align:right; padding:3px 4px; font-size:8px; color:#555; font-weight:600; border-bottom:1px solid #1e2a3e">Время</th>
+              <th style="text-align:right; padding:3px 4px; font-size:8px; color:#555; font-weight:600; border-bottom:1px solid #1e2a3e">Темп</th>
+              <th style="text-align:right; padding:3px 0; font-size:8px; color:#555; font-weight:600; border-bottom:1px solid #1e2a3e">Абс · Пол · Кат</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #141e2e">
+              <td style="padding:4px 0; color:#aaa">0–3 км</td>
+              <td style="text-align:right; padding:4px 4px">09:17</td>
+              <td style="text-align:right; padding:4px 4px; color:#9ccc65; font-weight:600; white-space:nowrap">3:05 мин/км</td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">12 · М5 · К3</td>
+            </tr>
+            <tr style="border-bottom:1px solid #141e2e">
+              <td style="padding:4px 0; color:#aaa">3–5.3 км</td>
+              <td style="text-align:right; padding:4px 4px">06:59</td>
+              <td style="text-align:right; padding:4px 4px; color:#4caf50; font-weight:600; white-space:nowrap">3:02 мин/км <span style="font-size:8px">↓</span></td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">8 · М3 · К1</td>
+            </tr>
+            <tr style="border-bottom:1px solid #141e2e">
+              <td style="padding:4px 0; color:#aaa">5.3–8.3 км</td>
+              <td style="text-align:right; padding:4px 4px">09:28</td>
+              <td style="text-align:right; padding:4px 4px; color:#ef5350; font-weight:600; white-space:nowrap">3:09 мин/км <span style="font-size:8px">↑</span></td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">18 · М7 · К4</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0; color:#aaa">8.3–10.6 км</td>
+              <td style="text-align:right; padding:4px 4px">07:06</td>
+              <td style="text-align:right; padding:4px 4px; color:#9ccc65; font-weight:600; white-space:nowrap">3:05 мин/км <span style="font-size:8px">↓</span></td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">11 · М4 · К2</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="font-size:9px; color:#4a9eff; text-transform:uppercase; margin:10px 0 5px; font-weight:700; letter-spacing:0.5px; border-bottom:1px solid #2a2a3e; padding-bottom:3px">Сплиты от старта</div>
+        <table style="width:100%; font-size:10px; border-collapse:collapse">
+          <tbody>
+            <tr style="border-bottom:1px solid #141e2e">
+              <td style="padding:4px 0; color:#aaa">0–5.3 км</td>
+              <td style="text-align:right; padding:4px 4px">16:16</td>
+              <td style="text-align:right; padding:4px 4px; color:#9ccc65; font-weight:600; white-space:nowrap">3:04 мин/км</td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">9 · М3 · К1</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0; color:#aaa">0–21.1 км</td>
+              <td style="text-align:right; padding:4px 4px">1:31:47</td>
+              <td style="text-align:right; padding:4px 4px; color:#aed581; font-weight:600; white-space:nowrap">4:21 мин/км</td>
+              <td style="text-align:right; font-size:9px; color:#777; white-space:nowrap">12 · М5 · К3</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+
+      <div style="background:#12192a; padding:10px 12px; display:flex; align-items:center; gap:10px; border-top:1px solid #1e2a3e">
+        <span style="font-size:18px; font-weight:700; color:#9e9e9e; min-width:30px; text-align:center">2</span>
+        <div>
+          <div style="font-size:14px; font-weight:600">Петров Алексей</div>
+          <div style="font-size:10px; color:#888">Оф: 1:33:01 · <strong style="color:#ccc">Чист: 1:32:44</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ВАРИАНТ B -->
+  <div style="flex:1; min-width:280px; max-width:360px">
+    <div class="option" data-choice="row-cards" onclick="toggleSelect(this)" style="padding:0; overflow:hidden; cursor:pointer">
+      <div style="padding:12px 16px; display:flex; align-items:center; gap:10px">
+        <div class="letter" style="flex-shrink:0">Б</div>
+        <div class="content">
+          <h3 style="margin:0">Карточки отрезков</h3>
+          <p style="margin:0; font-size:12px">Каждый отрезок — строка-карточка с бейджем мест</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#0a0e17; border:1px solid #1e2a3e; border-radius:12px; margin-top:8px; overflow:hidden; font-family:Arial,sans-serif; font-size:11px; color:#eee">
+
+      <div style="background:#12192a; padding:10px 12px; display:flex; align-items:center; gap:10px; border-bottom:2px solid #ee2d62">
+        <span style="font-size:20px; font-weight:700; color:#f0b429; min-width:30px; text-align:center">1</span>
+        <div style="flex:1">
+          <div style="font-size:14px; font-weight:700">Иванов Иван</div>
+          <div style="font-size:10px; color:#888; margin-top:1px">Оф: 1:32:14 · <strong style="color:#ccc">Чист: 1:31:47</strong></div>
+        </div>
+      </div>
+
+      <div style="background:#0f1923; padding:12px">
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px">
+          <div>
+            <div style="font-size:15px; font-weight:700">Иванов Иван</div>
+            <div style="font-size:9px; color:#666">21 км · М · 1990 г.р.</div>
+          </div>
+          <span style="color:#555; font-size:20px; line-height:1; padding-left:8px">×</span>
+        </div>
+
+        <!-- 2 таблетки -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px">
+          <div style="background:#1e1018; border-top:3px solid #ee2d62; padding:8px 10px; border-radius:6px; text-align:center">
+            <div style="font-size:7px; color:#ee2d62; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px">Официальное</div>
+            <div style="font-size:18px; font-weight:700; color:#fff; line-height:1.1">1:32:14</div>
+            <div style="font-size:9px; color:#aaa; margin-top:3px">4:23 мин/км</div>
+            <div style="font-size:9px; color:#777; margin-top:2px">Место <strong style="color:#ddd">12</strong> · Пол <strong style="color:#ddd">М#5</strong> · Кат <strong style="color:#ddd">#3</strong></div>
+          </div>
+          <div style="background:#0e1825; border-top:3px solid #4a9eff; padding:8px 10px; border-radius:6px; text-align:center">
+            <div style="font-size:7px; color:#4a9eff; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px">Чистое</div>
+            <div style="font-size:18px; font-weight:700; color:#4a9eff; line-height:1.1">1:31:47</div>
+            <div style="font-size:9px; color:#aaa; margin-top:3px">4:21 мин/км</div>
+            <div style="font-size:9px; color:#777; margin-top:2px">Место <strong style="color:#ddd">11</strong> · Пол <strong style="color:#ddd">М#4</strong> · Кат <strong style="color:#ddd">#2</strong></div>
+          </div>
+        </div>
+
+        <!-- Бар-чарт: «мин/км» -->
+        <div style="font-size:8px; color:#555; text-transform:uppercase; margin-bottom:5px; letter-spacing:0.5px">Темп по отрезкам →</div>
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch">
+          <div style="display:flex; align-items:flex-end; gap:5px; height:100px; min-width:360px">
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">09:17<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">0–3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#4caf50; font-weight:bold; text-align:center; white-space:nowrap">06:59<br><span style="color:#555; font-weight:normal">2.3 км</span></div>
+              <div style="background:#4caf50; width:100%; height:20px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#4caf50; font-weight:bold; white-space:nowrap">3:02 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">3–5.3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#ef5350; font-weight:bold; text-align:center; white-space:nowrap">09:28<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#ef5350; width:100%; height:68px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#ef5350; font-weight:bold; white-space:nowrap">3:09 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">5.3–8.3 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">07:06<br><span style="color:#555; font-weight:normal">2.3 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">8.3–10.6 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#aed581; font-weight:bold; text-align:center; white-space:nowrap">09:16<br><span style="color:#555; font-weight:normal">3.0 км</span></div>
+              <div style="background:#aed581; width:100%; height:50px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">10.6–13.6 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#9ccc65; font-weight:bold; text-align:center; white-space:nowrap">08:55<br><span style="color:#555; font-weight:normal">2.9 км</span></div>
+              <div style="background:#9ccc65; width:100%; height:44px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">13.6–16.5 км</div>
+            </div>
+            <div style="flex:0 0 48px; display:flex; flex-direction:column; align-items:center; gap:2px">
+              <div style="font-size:8px; color:#aed581; font-weight:bold; text-align:center; white-space:nowrap">08:08<br><span style="color:#555; font-weight:normal">2.6 км</span></div>
+              <div style="background:#aed581; width:100%; height:50px; border-radius:3px 3px 0 0; flex-shrink:0"></div>
+              <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06 мин/км</div>
+              <div style="font-size:6px; color:#444; white-space:nowrap">16.5–19.1 км</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:8px; color:#333; border-top:1px solid #1e2a3e; padding-top:4px; margin-top:4px">← свайп · Зелёный = быстрый · Красный = медленный</div>
+
+        <!-- Отрезки — карточки -->
+        <div style="font-size:9px; color:#e63946; text-transform:uppercase; margin:10px 0 6px; font-weight:700; letter-spacing:0.5px; border-bottom:1px solid #2a2a3e; padding-bottom:3px">Отрезки</div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">0–3 км</span>
+              <span style="font-size:10px; font-weight:600">09:17</span>
+              <span style="font-size:10px; color:#9ccc65; font-weight:700; white-space:nowrap">3:05 мин/км</span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">12</strong> · Пол <strong style="color:#777">М#5</strong> · Кат <strong style="color:#777">#3</strong></div>
+          </div>
+
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">3–5.3 км</span>
+              <span style="font-size:10px; font-weight:600">06:59</span>
+              <span style="font-size:10px; color:#4caf50; font-weight:700; white-space:nowrap">3:02 мин/км <span style="font-size:8px">↓</span></span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">8</strong> · Пол <strong style="color:#777">М#3</strong> · Кат <strong style="color:#777">#1</strong></div>
+          </div>
+
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">5.3–8.3 км</span>
+              <span style="font-size:10px; font-weight:600">09:28</span>
+              <span style="font-size:10px; color:#ef5350; font-weight:700; white-space:nowrap">3:09 мин/км <span style="font-size:8px">↑</span></span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">18</strong> · Пол <strong style="color:#777">М#7</strong> · Кат <strong style="color:#777">#4</strong></div>
+          </div>
+
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">8.3–10.6 км</span>
+              <span style="font-size:10px; font-weight:600">07:06</span>
+              <span style="font-size:10px; color:#9ccc65; font-weight:700; white-space:nowrap">3:05 мин/км <span style="font-size:8px">↓</span></span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">11</strong> · Пол <strong style="color:#777">М#4</strong> · Кат <strong style="color:#777">#2</strong></div>
+          </div>
+
+        </div>
+
+        <!-- Сплиты — карточки -->
+        <div style="font-size:9px; color:#4a9eff; text-transform:uppercase; margin:10px 0 6px; font-weight:700; letter-spacing:0.5px; border-bottom:1px solid #2a2a3e; padding-bottom:3px">Сплиты от старта</div>
+        <div style="display:flex; flex-direction:column; gap:4px">
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">0–5.3 км</span>
+              <span style="font-size:10px; font-weight:600">16:16</span>
+              <span style="font-size:10px; color:#9ccc65; font-weight:700; white-space:nowrap">3:04 мин/км</span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">9</strong> · Пол <strong style="color:#777">М#3</strong> · Кат <strong style="color:#777">#1</strong></div>
+          </div>
+          <div style="background:#162030; border-radius:6px; padding:6px 10px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#bbb; font-size:10px">0–21.1 км</span>
+              <span style="font-size:10px; font-weight:600">1:31:47</span>
+              <span style="font-size:10px; color:#aed581; font-weight:700; white-space:nowrap">4:21 мин/км</span>
+            </div>
+            <div style="font-size:8px; color:#555; margin-top:3px">Абс <strong style="color:#777">12</strong> · Пол <strong style="color:#777">М#5</strong> · Кат <strong style="color:#777">#3</strong></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="background:#12192a; padding:10px 12px; display:flex; align-items:center; gap:10px; border-top:1px solid #1e2a3e">
+        <span style="font-size:18px; font-weight:700; color:#9e9e9e; min-width:30px; text-align:center">2</span>
+        <div>
+          <div style="font-size:14px; font-weight:600">Петров Алексей</div>
+          <div style="font-size:10px; color:#888">Оф: 1:33:01 · <strong style="color:#ccc">Чист: 1:32:44</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

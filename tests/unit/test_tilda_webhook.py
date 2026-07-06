@@ -1,5 +1,5 @@
 import pytest
-from src.tracker.services.tilda_webhook import (
+from src.krasmarafon.services.tilda_webhook import (
     decode_from_db_format,
     convert_birthday,
     normalize_name,

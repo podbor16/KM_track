@@ -1,0 +1,179 @@
+<h2>Раскладка виджетов на вкладке DataLens</h2>
+<p class="subtitle">Один канвас, 5 проверок. Как расположить Индикаторы и QL-таблицы?</p>
+
+<style>
+  .opt-block { border: 2px solid #333; border-radius: 12px; padding: 20px; margin-bottom: 28px; cursor: pointer; transition: border-color .2s, box-shadow .2s; }
+  .opt-block:hover { border-color: #ee2d62; box-shadow: 0 0 0 3px rgba(238,45,98,.15); }
+  .opt-block.selected { border-color: #ee2d62; box-shadow: 0 0 0 4px rgba(238,45,98,.25); }
+  .opt-label { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .opt-letter { background: #ee2d62; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .opt-title { font-size: 15px; font-weight: 700; color: #fff; }
+  .opt-desc { font-size: 12px; color: #aaa; margin-top: 2px; }
+
+  .dl { background: #1a1a2a; border-radius: 10px; padding: 14px; }
+  .dl-sel { display:flex;gap:8px;margin-bottom:12px; }
+  .dl-s { background:#252535;border:1px solid #444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ccc; }
+  .dl-s b { color:#fff; }
+  .w { background:#252535;border-radius:7px;padding:10px; }
+  .wt { font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px; }
+  .ind { font-size:30px;font-weight:700;line-height:1; }
+  .ind-sub { font-size:9px;color:#666;margin-top:3px; }
+  .red { color:#ee2d62; } .warn { color:#f5a623; } .ok { color:#27ae60; }
+  .ql-t { width:100%;border-collapse:collapse;font-size:10px; }
+  .ql-t th { background:#1a1a2a;color:#666;padding:5px 7px;text-align:left;font-size:9px;text-transform:uppercase;border-bottom:1px solid #333; }
+  .ql-t td { padding:4px 7px;border-bottom:1px solid #2a2a3a;color:#ccc; }
+  .ql-t tr:hover td { background:#2a2a3e; }
+  .err { color:#ff6b6b;font-weight:600; }
+  .wn { color:#ffa94d;font-weight:600; }
+  .sec { font-size:9px;font-weight:700;color:#ee2d62;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #333;padding-bottom:4px;margin-bottom:7px; }
+</style>
+
+<!-- ========== A: Индикаторы сверху + таблицы ниже ========== -->
+<div class="opt-block" data-choice="a" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">A</div>
+    <div>
+      <div class="opt-title">Ряд индикаторов → таблицы ниже</div>
+      <div class="opt-desc">5 индикаторов в верхней строке дают сводку. Ниже 5 QL-таблиц прокруткой. Стандартный dashboard-паттерн.</div>
+    </div>
+  </div>
+  <div class="dl">
+    <div class="dl-sel">
+      <div class="dl-s">Событие: <b>Весна 2026</b> ▾</div>
+      <div class="dl-s">Дистанция: <b>Все</b> ▾</div>
+    </div>
+    <!-- 5 indicators -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;">
+      <div class="w" style="text-align:center;"><div class="wt">Льготные катег.</div><div class="ind red">12</div><div class="ind-sub">несоответствий</div></div>
+      <div class="w" style="text-align:center;"><div class="wt">Промокоды</div><div class="ind warn">5</div><div class="ind-sub">на проверку</div></div>
+      <div class="w" style="text-align:center;"><div class="wt">Дубликаты</div><div class="ind red">3</div><div class="ind-sub">дублей</div></div>
+      <div class="w" style="text-align:center;"><div class="wt">Ошибки г.р.</div><div class="ind red">2</div><div class="ind-sub">некорректных</div></div>
+      <div class="w" style="text-align:center;"><div class="wt">Мин. возраст</div><div class="ind ok">0</div><div class="ind-sub">нарушений</div></div>
+    </div>
+    <!-- Table 1 -->
+    <div class="w" style="margin-bottom:8px;">
+      <div class="sec">Льготные категории</div>
+      <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Категория</th><th>Г.р.</th><th>Возраст</th><th>Статус</th></tr></thead>
+      <tbody><tr><td>Иванов Иван</td><td>5 км</td><td>Дети</td><td>1999</td><td>25 л.</td><td class="err">✗</td></tr>
+      <tr><td>Петрова Ольга</td><td>5 км</td><td>Пенсионер</td><td>1972</td><td>54 г.</td><td class="err">✗</td></tr></tbody></table>
+    </div>
+    <!-- Table 2 (compact) -->
+    <div class="w" style="margin-bottom:8px;">
+      <div class="sec">Промокоды (скидка 99)</div>
+      <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Промокод</th><th>В списке льготников</th><th>Email</th></tr></thead>
+      <tbody><tr><td>Сидоров А.</td><td>KM-ЛЬГОТА-2026</td><td class="wn">? Не найден</td><td>s@mail.ru</td></tr>
+      <tr><td>Козлов Д.</td><td>KM-ЛЬГОТА-2026</td><td class="ok">✓ Подтверждён</td><td>k@mail.ru</td></tr></tbody></table>
+    </div>
+    <div style="text-align:center;color:#444;font-size:10px;padding:4px;">↓ ещё 3 таблицы (Дубли · Ошибки г.р. · Мин. возраст)</div>
+  </div>
+</div>
+
+<!-- ========== B: Индикатор + таблица в строку ========== -->
+<div class="opt-block" data-choice="b" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">B</div>
+    <div>
+      <div class="opt-title">Каждая проверка — строка: индикатор слева + таблица справа</div>
+      <div class="opt-desc">5 строк. В каждой: узкий Индикатор (1/5 ширины) + широкая QL-таблица (4/5). Всё в одном взгляде.</div>
+    </div>
+  </div>
+  <div class="dl">
+    <div class="dl-sel">
+      <div class="dl-s">Событие: <b>Весна 2026</b> ▾</div>
+      <div class="dl-s">Дистанция: <b>Все</b> ▾</div>
+    </div>
+    <!-- Row 1 -->
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:8px;">
+      <div class="w" style="text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div class="wt">Льготные катег.</div>
+        <div class="ind red">12</div><div class="ind-sub">несоответствий</div>
+      </div>
+      <div class="w">
+        <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Категория</th><th>Г.р.</th><th>Возраст</th><th>Статус</th></tr></thead>
+        <tbody><tr><td>Иванов Иван</td><td>5 км</td><td>Дети</td><td>1999</td><td>25 л.</td><td class="err">✗</td></tr>
+        <tr><td>Петрова Ольга</td><td>5 км</td><td>Пенсионер</td><td>1972</td><td>54 г.</td><td class="err">✗</td></tr></tbody></table>
+      </div>
+    </div>
+    <!-- Row 2 -->
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:8px;">
+      <div class="w" style="text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div class="wt">Промокоды</div>
+        <div class="ind warn">5</div><div class="ind-sub">на проверку</div>
+      </div>
+      <div class="w">
+        <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Промокод</th><th>В списке льготников</th><th>Email</th></tr></thead>
+        <tbody><tr><td>Сидоров А.</td><td>KM-ЛЬГОТА-2026</td><td class="wn">? Не найден</td><td>s@mail.ru</td></tr>
+        <tr><td>Козлов Д.</td><td>KM-ЛЬГОТА-2026</td><td class="ok">✓</td><td>k@mail.ru</td></tr></tbody></table>
+      </div>
+    </div>
+    <!-- Row 3 -->
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:8px;">
+      <div class="w" style="text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div class="wt">Дубликаты</div>
+        <div class="ind red">3</div><div class="ind-sub">дублей</div>
+      </div>
+      <div class="w">
+        <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Email</th><th>Дистанция</th><th>Дата заявки 1</th><th>Дата заявки 2</th></tr></thead>
+        <tbody><tr><td>Носова М.</td><td>nosova@mail.ru</td><td>5 км</td><td>12.04.2026</td><td>13.04.2026</td></tr></tbody></table>
+      </div>
+    </div>
+    <!-- Row 4 -->
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;margin-bottom:8px;">
+      <div class="w" style="text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div class="wt">Ошибки г.р.</div>
+        <div class="ind red">2</div><div class="ind-sub">некорректных</div>
+      </div>
+      <div class="w">
+        <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Введённый г.р.</th><th>Проблема</th><th>Email</th></tr></thead>
+        <tbody><tr><td>Николаев К.</td><td>1020</td><td class="err">Год &lt; 1900</td><td>n@mail.ru</td></tr>
+        <tr><td>Семёнова Т.</td><td>0202</td><td class="err">Год &lt; 1900</td><td>s@mail.ru</td></tr></tbody></table>
+      </div>
+    </div>
+    <!-- Row 5 -->
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:8px;">
+      <div class="w" style="text-align:center;display:flex;flex-direction:column;justify-content:center;">
+        <div class="wt">Мин. возраст</div>
+        <div class="ind ok">0</div><div class="ind-sub">нарушений</div>
+      </div>
+      <div class="w">
+        <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Мин. возраст</th><th>Фактич. возраст</th><th>Статус</th></tr></thead>
+        <tbody><tr><td colspan="5" style="text-align:center;color:#444;padding:10px;">Нарушений не найдено ✓</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== C: Только QL-таблицы, без отдельных индикаторов ========== -->
+<div class="opt-block" data-choice="c" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">C</div>
+    <div>
+      <div class="opt-title">Только QL-таблицы с заголовком-счётчиком</div>
+      <div class="opt-desc">Индикаторы не нужны — число нарушений вынесено в заголовок таблицы через QL. Меньше виджетов, проще поддерживать.</div>
+    </div>
+  </div>
+  <div class="dl">
+    <div class="dl-sel">
+      <div class="dl-s">Событие: <b>Весна 2026</b> ▾</div>
+      <div class="dl-s">Дистанция: <b>Все</b> ▾</div>
+    </div>
+    <div class="w" style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+        <div class="sec" style="border:none;margin:0;padding:0;">Льготные категории — несоответствия возрасту</div>
+        <span style="background:#ee2d62;color:#fff;border-radius:10px;padding:2px 10px;font-size:10px;font-weight:700;">12 записей</span>
+      </div>
+      <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Категория</th><th>Г.р.</th><th>Возраст</th><th>Пол</th><th>Статус</th></tr></thead>
+      <tbody><tr><td>Иванов Иван</td><td>5 км</td><td>Дети</td><td>1999</td><td>25 л.</td><td>М</td><td class="err">✗</td></tr>
+      <tr><td>Петрова Ольга</td><td>5 км</td><td>Пенсионер</td><td>1972</td><td>54 г.</td><td>Ж</td><td class="err">✗</td></tr></tbody></table>
+    </div>
+    <div class="w" style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+        <div class="sec" style="border:none;margin:0;padding:0;">Именные промокоды (скидка 99) — проверка права</div>
+        <span style="background:#f5a623;color:#fff;border-radius:10px;padding:2px 10px;font-size:10px;font-weight:700;">5 записей</span>
+      </div>
+      <table class="ql-t"><thead><tr><th>Фамилия Имя</th><th>Промокод</th><th>В списке льготников</th><th>Email</th></tr></thead>
+      <tbody><tr><td>Сидоров А.</td><td>KM-ЛЬГОТА-2026</td><td class="wn">? Не найден</td><td>s@mail.ru</td></tr></tbody></table>
+    </div>
+    <div style="text-align:center;color:#444;font-size:10px;padding:4px;">↓ ещё 3 таблицы (Дубли · Ошибки г.р. · Мин. возраст)</div>
+  </div>
+</div>

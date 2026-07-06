@@ -1,0 +1,132 @@
+<h2>Как организовать таблицу сегментов?</h2>
+<p class="subtitle">7 КТ → ~15 строк (7 отрезков + 8 накопительных). Три варианта организации.</p>
+
+<div class="cards">
+
+  <!-- Option A: Two tabs -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#1a1a2e; border-radius:6px; font-family:monospace; font-size:12px; color:#ccc">
+      <div style="display:flex; gap:8px; margin-bottom:12px">
+        <div style="background:#e63946; color:white; padding:4px 12px; border-radius:4px; font-size:11px; font-weight:bold">ОТРЕЗКИ</div>
+        <div style="background:#333; color:#888; padding:4px 12px; border-radius:4px; font-size:11px">СПЛИТЫ</div>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px">
+        <tr style="color:#888; border-bottom:1px solid #333">
+          <td style="padding:3px 6px">Участок</td>
+          <td style="padding:3px 6px; text-align:right">Время</td>
+          <td style="padding:3px 6px; text-align:right">Темп</td>
+          <td style="padding:3px 6px; text-align:center">Абс.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e">
+          <td style="padding:3px 6px; color:#fff">Старт → КТ1</td>
+          <td style="padding:3px 6px; text-align:right">09:17</td>
+          <td style="padding:3px 6px; text-align:right">3:05</td>
+          <td style="padding:3px 6px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;padding:1px 5px;font-size:10px">1</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e">
+          <td style="padding:3px 6px; color:#fff">КТ1 → КТ2</td>
+          <td style="padding:3px 6px; text-align:right">06:59</td>
+          <td style="padding:3px 6px; text-align:right">3:02</td>
+          <td style="padding:3px 6px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;padding:1px 5px;font-size:10px">1</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e">
+          <td style="padding:3px 6px; color:#ccc">КТ2 → КТ3</td>
+          <td style="padding:3px 6px; text-align:right">09:28</td>
+          <td style="padding:3px 6px; text-align:right">3:09</td>
+          <td style="padding:3px 6px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;padding:1px 5px;font-size:10px">1</span></td>
+        </tr>
+        <tr style="color:#555">
+          <td style="padding:3px 6px" colspan="4">... ещё 5 строк</td>
+        </tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>A — Два таба: Отрезки / Сплиты</h3>
+      <p>По умолчанию открыты «Отрезки» (последовательные). Таб «Сплиты» — накопительные от старта. Каждый таб — 7–8 строк, чисто и компактно.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Two sections in one table -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#1a1a2e; border-radius:6px; font-family:monospace; font-size:12px; color:#ccc">
+      <table style="width:100%; border-collapse:collapse; font-size:11px">
+        <tr style="color:#e63946; background:#2a1a1a; font-weight:bold">
+          <td style="padding:4px 6px" colspan="4">▸ ОТРЕЗКИ (последовательные)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e">
+          <td style="padding:3px 6px; color:#fff">КТ1 → КТ2</td>
+          <td style="padding:3px 6px; text-align:right">06:59</td>
+          <td style="padding:3px 6px; text-align:right">3:02</td>
+          <td style="padding:3px 6px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;padding:1px 5px;font-size:10px">1</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e; color:#555">
+          <td style="padding:2px 6px" colspan="4">... КТ2→КТ3, КТ3→КТ4...</td>
+        </tr>
+        <tr style="color:#e63946; background:#2a1a1a; font-weight:bold">
+          <td style="padding:4px 6px" colspan="4">▸ СПЛИТЫ (от старта)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #2a2a3e">
+          <td style="padding:3px 6px; color:#fff">Старт → КТ1</td>
+          <td style="padding:3px 6px; text-align:right">09:17</td>
+          <td style="padding:3px 6px; text-align:right">3:05</td>
+          <td style="padding:3px 6px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;padding:1px 5px;font-size:10px">1</span></td>
+        </tr>
+        <tr style="color:#555">
+          <td style="padding:2px 6px" colspan="4">... Старт→КТ2, Старт→КТ3...</td>
+        </tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>B — Одна таблица, две секции</h3>
+      <p>Оба типа видны сразу. Разделены заголовком-разделителем. Прокрутка одна — не нужно переключаться. ~15 строк суммарно.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Visual bar + table -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#1a1a2e; border-radius:6px; font-size:11px; color:#ccc">
+      <div style="margin-bottom:10px; color:#e63946; font-weight:bold; font-size:10px; letter-spacing:1px">ТЕМП ПО ОТРЕЗКАМ (мин/км)</div>
+      <div style="display:flex; align-items:flex-end; gap:4px; height:50px; margin-bottom:6px">
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:38px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:05</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:32px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:02</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#ff9800; width:100%; height:50px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#e63946">3:09</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:38px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:05</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:38px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:06</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:36px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:05</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px">
+          <div style="background:#4caf50; width:100%; height:38px; border-radius:3px 3px 0 0"></div>
+          <div style="font-size:9px; color:#888">3:06</div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:9px; color:#555; border-top:1px solid #333; padding-top:4px">
+        <span>Ст→КТ1</span><span>КТ1→2</span><span style="color:#e63946">КТ2→3</span><span>КТ3→4</span><span>КТ4→5</span><span>КТ5→6</span><span>КТ6→Ф</span>
+      </div>
+      <div style="margin-top:8px; font-size:10px; color:#555">+ таблица с рангами ниже</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Мини-график + таблица</h3>
+      <p>Бар-чарт темпа по отрезкам (аномалии сразу видны) + компактная таблица под ним. Самый информативный, но требует больше работы по реализации.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Во всех вариантах убираются нелинейные пары (КТ1→КТ6 и т.п.). Кликни на вариант и дай знать.</p>

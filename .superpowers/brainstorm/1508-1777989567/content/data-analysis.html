@@ -1,0 +1,101 @@
+<h2>Анализ данных БД — все дашборды реализуемы</h2>
+<p class="subtitle">Таблицы leads + clients + results покрывают весь запрошенный функционал</p>
+
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+  <div style="background:#1a2a1a;border:1px solid #50fa7b44;border-radius:8px;padding:16px;text-align:center;">
+    <div style="font-size:26px;font-weight:700;color:#50fa7b;">12 748</div>
+    <div style="font-size:11px;color:#666;margin-top:3px;">регистраций</div>
+  </div>
+  <div style="background:#1a1a2a;border:1px solid #4a90e244;border-radius:8px;padding:16px;text-align:center;">
+    <div style="font-size:26px;font-weight:700;color:#4a90e2;">14.85M ₽</div>
+    <div style="font-size:11px;color:#666;margin-top:3px;">суммарная выручка</div>
+  </div>
+  <div style="background:#2a1a1a;border:1px solid #e84c8c44;border-radius:8px;padding:16px;text-align:center;">
+    <div style="font-size:26px;font-weight:700;color:#e84c8c;">7 936</div>
+    <div style="font-size:11px;color:#666;margin-top:3px;">уникальных клиентов</div>
+  </div>
+  <div style="background:#1a1a1a;border:1px solid #f1fa8c44;border-radius:8px;padding:16px;text-align:center;">
+    <div style="font-size:26px;font-weight:700;color:#f1fa8c;">1 165 ₽</div>
+    <div style="font-size:11px;color:#666;margin-top:3px;">средний чек</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+  <div style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;">
+    <div style="font-weight:700;color:#f1fa8c;margin-bottom:12px;">📦 Поле products — доп. товары</div>
+    <div style="font-size:12px;color:#aaa;line-height:1.9;">
+      Содержит полный состав заказа в текстовом виде:<br>
+      <span style="color:#50fa7b;">✓ Слот (основной продукт)</span><br>
+      <span style="color:#50fa7b;">✓ Баф +470р</span><br>
+      <span style="color:#50fa7b;">✓ Пояс для номера +470р</span><br>
+      <span style="color:#50fa7b;">✓ Гравировка на медали +470р</span><br>
+      <span style="color:#50fa7b;">✓ Футболка +1490р</span><br>
+      <span style="color:#50fa7b;">✓ Дополнительная краска +200р</span><br>
+      <span style="color:#50fa7b;">✓ Фонарик налобный +400р</span><br>
+      <span style="color:#888;">→ Нужно парсить для отдельной аналитики по доп. товарам</span>
+    </div>
+  </div>
+
+  <div style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;">
+    <div style="font-weight:700;color:#e84c8c;margin-bottom:12px;">👥 Сегментация клиентов (clients)</div>
+    <div style="font-size:12px;line-height:2;">
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:3px 0;">
+        <span style="color:#aaa;">Разовые (1 регистрация)</span>
+        <span style="color:#fff;font-weight:600;">4 830 (61%)</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:3px 0;">
+        <span style="color:#aaa;">Повторные (2+)</span>
+        <span style="color:#4a90e2;font-weight:600;">2 415 (30%)</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid #222;padding:3px 0;">
+        <span style="color:#aaa;">Лояльные (5+)</span>
+        <span style="color:#50fa7b;font-weight:600;">480 (6%)</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;">
+        <span style="color:#aaa;">Макс. LTV клиента</span>
+        <span style="color:#f1fa8c;font-weight:600;">20 325 ₽</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;margin-bottom:20px;">
+  <div style="font-weight:700;color:#4a90e2;margin-bottom:12px;">📊 ТОП событий по выручке (2025)</div>
+  <div style="font-size:12px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="width:120px;color:#888;">Жара 21.1 км</div>
+      <div style="flex:1;background:#222;border-radius:3px;height:14px;overflow:hidden;"><div style="width:100%;height:100%;background:#e84c8c;border-radius:3px;"></div></div>
+      <div style="width:70px;text-align:right;color:#e84c8c;font-weight:600;">2 736K ₽</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="width:120px;color:#888;">Жара 10 км</div>
+      <div style="flex:1;background:#222;border-radius:3px;height:14px;overflow:hidden;"><div style="width:57%;height:100%;background:#ff6b6b;border-radius:3px;"></div></div>
+      <div style="width:70px;text-align:right;color:#ff6b6b;font-weight:600;">1 565K ₽</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="width:120px;color:#888;">Весна 5 км</div>
+      <div style="flex:1;background:#222;border-radius:3px;height:14px;overflow:hidden;"><div style="width:41%;height:100%;background:#4a90e2;border-radius:3px;"></div></div>
+      <div style="width:70px;text-align:right;color:#4a90e2;font-weight:600;">1 111K ₽</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <div style="width:120px;color:#888;">Х Трейл 10 км</div>
+      <div style="flex:1;background:#222;border-radius:3px;height:14px;overflow:hidden;"><div style="width:40%;height:100%;background:#50fa7b;border-radius:3px;"></div></div>
+      <div style="width:70px;text-align:right;color:#50fa7b;font-weight:600;">1 105K ₽</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:120px;color:#888;">Ночной 5 км 2026</div>
+      <div style="flex:1;background:#222;border-radius:3px;height:14px;overflow:hidden;"><div style="width:37%;height:100%;background:#f1fa8c;border-radius:3px;"></div></div>
+      <div style="width:70px;text-align:right;color:#f1fa8c;font-weight:600;">1 526K ₽</div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#0a1f0a;border:2px solid #50fa7b;border-radius:8px;padding:16px;">
+  <div style="font-weight:700;color:#50fa7b;margin-bottom:8px;">✅ Вывод: маркетинг-дашборд НЕ заблокирован</div>
+  <div style="font-size:13px;color:#aaa;line-height:1.7;">
+    Все финансовые данные уже в БД через webhook Tilda → Nodul → leads.<br>
+    <strong style="color:#fff;">Доступно прямо сейчас:</strong> выручка, средний чек, динамика регистраций, льготники (promocode/discount), новые/повторные (is_new флаг), доп. товары (парсинг поля products).
+  </div>
+</div>

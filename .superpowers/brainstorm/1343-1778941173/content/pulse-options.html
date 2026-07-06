@@ -1,0 +1,238 @@
+<style>
+  .demo-section { margin-bottom: 36px; }
+  .demo-row { display: flex; gap: 48px; align-items: flex-end; flex-wrap: wrap; margin-top: 16px; }
+  .demo-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .demo-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+  .demo-tag { font-size: 10px; background: #f0f0f0; padding: 2px 7px; border-radius: 10px; color: #555; }
+
+  /* === Базовый маркер (52×52) === */
+  .m {
+    position: relative; width: 52px; height: 52px;
+  }
+  .m-circle {
+    position: absolute; top: 0; left: 0;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #EE2D62; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 13px;
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  /* Следы (bearing-based) */
+  .trail-1, .trail-2 {
+    position: absolute; border-radius: 50%;
+    border: 2px solid white;
+    transform: translate(-50%, -50%);
+  }
+  .trail-1 { width: 20px; height: 20px; background: #EE2D62; opacity: 0.55; top: 66px; left: 26px; }
+  .trail-2 { width: 13px; height: 13px; background: #EE2D62; opacity: 0.35; top: 84px; left: 26px; }
+
+  /* ======== ПУЛЬС A: box-shadow волна ======== */
+  @keyframes pulse-shadow {
+    0%   { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 0 rgba(238,45,98,.45); }
+    60%  { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 12px rgba(238,45,98,0); }
+    100% { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 0  rgba(238,45,98,0); }
+  }
+  .pulse-a .m-circle { animation: pulse-shadow 2.4s ease-out infinite; }
+  @keyframes trail-opacity-a {
+    0%,100% { opacity: 0.55; }
+    50%      { opacity: 0.85; }
+  }
+  @keyframes trail-opacity-a2 {
+    0%,100% { opacity: 0.35; }
+    50%      { opacity: 0.65; }
+  }
+  .pulse-a .trail-1 { animation: trail-opacity-a 2.4s ease-in-out infinite; }
+  .pulse-a .trail-2 { animation: trail-opacity-a2 2.4s ease-in-out infinite .3s; }
+
+  /* ======== ПУЛЬС B: scale breathe ======== */
+  @keyframes breathe {
+    0%,100% { transform: scale(1); }
+    50%      { transform: scale(1.12); }
+  }
+  @keyframes trail-breathe-1 {
+    0%,100% { transform: translate(-50%,-50%) scale(1);   opacity:.55; }
+    50%      { transform: translate(-50%,-50%) scale(1.18); opacity:.80; }
+  }
+  @keyframes trail-breathe-2 {
+    0%,100% { transform: translate(-50%,-50%) scale(1);   opacity:.35; }
+    50%      { transform: translate(-50%,-50%) scale(1.25); opacity:.60; }
+  }
+  .pulse-b .m-circle { animation: breathe 2.2s ease-in-out infinite; }
+  .pulse-b .trail-1  { animation: trail-breathe-1 2.2s ease-in-out infinite .15s; }
+  .pulse-b .trail-2  { animation: trail-breathe-2 2.2s ease-in-out infinite .3s; }
+
+  /* ======== ПУЛЬС C: ring expansion (ripple) ======== */
+  @keyframes ring-expand {
+    0%   { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 0 rgba(238,45,98,.5), 0 0 0 0 rgba(238,45,98,.25); }
+    40%  { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 8px rgba(238,45,98,.2), 0 0 0 16px rgba(238,45,98,.1); }
+    80%  { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 14px rgba(238,45,98,0), 0 0 0 26px rgba(238,45,98,0); }
+    100% { box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 0 rgba(238,45,98,0),   0 0 0 0 rgba(238,45,98,0); }
+  }
+  @keyframes trail-glow {
+    0%,100% { box-shadow: 0 0 0 0 rgba(238,45,98,0); opacity: .55; }
+    50%      { box-shadow: 0 0 6px 3px rgba(238,45,98,.35); opacity: .80; }
+  }
+  .pulse-c .m-circle { animation: ring-expand 2.8s ease-out infinite; }
+  .pulse-c .trail-1  { animation: trail-glow 2.8s ease-in-out infinite .2s; }
+  .pulse-c .trail-2  { animation: trail-glow 2.8s ease-in-out infinite .5s; }
+
+  /* ======== ВЫДЕЛЕНИЕ A: gold ring + glow ======== */
+  .sel-a .m-circle {
+    border: 3px solid #FFD700;
+    box-shadow: 0 0 0 3px rgba(255,215,0,.5), 0 2px 14px rgba(0,0,0,.4);
+    animation: pulse-shadow 2.4s ease-out infinite;
+  }
+  .sel-a .trail-1 { animation: trail-opacity-a 2.4s ease-in-out infinite; }
+  .sel-a .trail-2 { animation: trail-opacity-a2 2.4s ease-in-out infinite .3s; }
+
+  /* ======== ВЫДЕЛЕНИЕ B: scale up + pulsing halo ======== */
+  @keyframes sel-scale {
+    0%,100% { transform: scale(1.25); box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 0 rgba(238,45,98,.5); }
+    60%      { transform: scale(1.25); box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 14px rgba(238,45,98,0); }
+  }
+  .sel-b .m-circle {
+    border: 3px solid white;
+    animation: sel-scale 2s ease-out infinite;
+  }
+  .sel-b .trail-1 { animation: trail-breathe-1 2s ease-in-out infinite; }
+  .sel-b .trail-2 { animation: trail-breathe-2 2s ease-in-out infinite .2s; }
+
+  /* ======== ВЫДЕЛЕНИЕ C: outer ring marker (separate DOM elem) ======== */
+  .ring-outer {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    border: 3px solid #FFD700;
+    pointer-events: none;
+    animation: ring-pulse-c 1.8s ease-in-out infinite;
+  }
+  @keyframes ring-pulse-c {
+    0%,100% { opacity: 1;   transform: translate(-50%,-50%) scale(1); }
+    50%      { opacity: .55; transform: translate(-50%,-50%) scale(1.12); }
+  }
+  .sel-c .m-circle {
+    box-shadow: 0 2px 14px rgba(0,0,0,.4);
+  }
+  .sel-c .trail-1 { animation: trail-glow 1.8s ease-in-out infinite .2s; }
+  .sel-c .trail-2 { animation: trail-glow 1.8s ease-in-out infinite .5s; }
+
+  .divider { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+  .badge-new { background: #EE2D62; color: white; font-size: 9px; padding: 1px 5px; border-radius: 6px; vertical-align: middle; margin-left: 4px; }
+</style>
+
+<h2>Варианты пульса и выделения маркеров</h2>
+<p class="subtitle">Стрелки следа направлены вниз — бегун движется на юг (bearing ~180°)</p>
+
+<div class="demo-section">
+  <h3>Пульс бегущего маркера <small>(применяется ко всем running-маркерам)</small></h3>
+  <div class="demo-row">
+
+    <div class="demo-item">
+      <div class="m pulse-a" style="margin-bottom:40px">
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">A — Shadow wave</div>
+      <div class="demo-tag">Тихий, ненавязчивый</div>
+    </div>
+
+    <div class="demo-item">
+      <div class="m pulse-b" style="margin-bottom:40px">
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">B — Breathe (scale)</div>
+      <div class="demo-tag">Органично, «дышит»</div>
+    </div>
+
+    <div class="demo-item">
+      <div class="m pulse-c" style="margin-bottom:40px">
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">C — Double ripple</div>
+      <div class="demo-tag">Динамично, «волна»</div>
+    </div>
+
+  </div>
+</div>
+
+<hr class="divider">
+
+<div class="demo-section">
+  <h3>Выделение выбранного участника <small>(по клику на маркер)</small></h3>
+  <p class="subtitle" style="margin-bottom:16px">Базовый пульс остаётся. Добавляется дополнительный эффект выделения.</p>
+  <div class="demo-row">
+
+    <div class="demo-item">
+      <div class="m sel-a" style="margin-bottom:40px">
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">A — Gold ring + glow</div>
+      <div class="demo-tag">Золотой бордер + сияние</div>
+    </div>
+
+    <div class="demo-item">
+      <div class="m sel-b" style="margin-bottom:40px">
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">B — Scale up + halo</div>
+      <div class="demo-tag">Больше + пульс-ореол</div>
+    </div>
+
+    <div class="demo-item">
+      <div class="m sel-c" style="margin-bottom:40px; overflow: visible;">
+        <div class="ring-outer"></div>
+        <div class="trail-1"></div>
+        <div class="trail-2"></div>
+        <div class="m-circle">9910</div>
+      </div>
+      <div class="demo-label">C — Outer ring pulse</div>
+      <div class="demo-tag">Внешнее кольцо золотое</div>
+    </div>
+
+  </div>
+</div>
+
+<hr class="divider">
+<p class="subtitle">Пульс маркера и следа работают независимо — можно комбинировать любой пульс с любым выделением.</p>
+
+<div class="options" data-multiselect style="margin-top:24px">
+  <div class="option" data-choice="pulse-a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Пульс: Shadow wave</h3><p>box-shadow волна, след моргает по opacity</p></div>
+  </div>
+  <div class="option" data-choice="pulse-b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Пульс: Breathe</h3><p>лёгкое масштабирование, след растёт вместе</p></div>
+  </div>
+  <div class="option" data-choice="pulse-c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Пульс: Double ripple</h3><p>двойная волна расходится от центра</p></div>
+  </div>
+</div>
+
+<div class="options" data-multiselect style="margin-top:16px">
+  <div class="option" data-choice="sel-a" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content"><h3>Выделение: Gold ring</h3><p>золотой бордер 3px + glow-тень</p></div>
+  </div>
+  <div class="option" data-choice="sel-b" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content"><h3>Выделение: Scale + halo</h3><p>маркер 1.25× + пульсирующий ореол</p></div>
+  </div>
+  <div class="option" data-choice="sel-c" onclick="toggleSelect(this)">
+    <div class="letter">F</div>
+    <div class="content"><h3>Выделение: Outer ring</h3><p>отдельное золотое кольцо снаружи</p></div>
+  </div>
+</div>

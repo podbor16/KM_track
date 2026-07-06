@@ -1,0 +1,59 @@
+<h2>Что видно в строке участника (свёрнутая)?</h2>
+<p class="subtitle">Диапазон выбран: круги 10–25. Какие колонки показывать сразу?</p>
+
+<style>
+  .mock-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .mock-table th { background:#f0f0f0; padding:7px 10px; text-align:left; font-weight:600; font-size:11px; color:#555; border-bottom:2px solid #ddd; }
+  .mock-table td { padding:7px 10px; border-bottom:1px solid #eee; }
+  .mock-table tr:hover td { background:#fafafa; }
+  .rank { font-weight:700; color:#c0392b; width:32px; }
+  .name { font-weight:600; }
+  .tag { display:inline-block; background:#f0f0f0; border-radius:3px; padding:1px 6px; font-size:10px; color:#666; margin-left:4px;}
+  .expand-icon { color:#999; font-size:10px; cursor:pointer; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:12px;background:#fff;overflow:auto;">
+      <table class="mock-table">
+        <tr><th>№</th><th>Участник</th><th>Кругов</th><th>Лучший круг</th><th>Ср. круг</th><th></th></tr>
+        <tr><td class="rank">1</td><td class="name">Иванов И. <span class="tag">М</span></td><td>16</td><td>14:22</td><td>15:44</td><td class="expand-icon">▶</td></tr>
+        <tr><td class="rank">2</td><td class="name">Петрова А. <span class="tag">Ж</span></td><td>14</td><td>16:01</td><td>17:10</td><td class="expand-icon">▶</td></tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>A. Кругов + лучший + средний</h3>
+      <p>Минимум: сколько кругов в диапазоне, лучший и средний темп. Чисто и компактно.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:12px;background:#fff;overflow:auto;">
+      <table class="mock-table">
+        <tr><th>№</th><th>Участник</th><th>Кругов</th><th>Время периода</th><th>Лучший</th><th>Ср. круг</th><th>Ср. скорость</th><th></th></tr>
+        <tr><td class="rank">1</td><td class="name">Иванов И.</td><td>16</td><td>4:10:24</td><td>14:22</td><td>15:44</td><td>15.4 км/ч</td><td class="expand-icon">▶</td></tr>
+        <tr><td class="rank">2</td><td class="name">Петрова А.</td><td>14</td><td>4:00:40</td><td>16:01</td><td>17:10</td><td>14.1 км/ч</td><td class="expand-icon">▶</td></tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>B. + время периода и скорость</h3>
+      <p>Полная картина периода: сколько всего ехал в диапазоне, и средняя скорость за период.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:12px;background:#fff;overflow:auto;">
+      <table class="mock-table">
+        <tr><th>№</th><th>Участник</th><th>Кругов</th><th>Лучший</th><th>Худший</th><th>Ср. круг</th><th>Разброс</th><th></th></tr>
+        <tr><td class="rank">1</td><td class="name">Иванов И.</td><td>16</td><td>14:22</td><td>18:05</td><td>15:44</td><td>±1:22</td><td class="expand-icon">▶</td></tr>
+        <tr><td class="rank">2</td><td class="name">Петрова А.</td><td>14</td><td>16:01</td><td>19:30</td><td>17:10</td><td>±2:10</td><td class="expand-icon">▶</td></tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>C. Лучший + худший + разброс</h3>
+      <p>Акцент на стабильности: кто ехал ровно, кто «рвал и умирал». Разброс = макс−мин.</p>
+    </div>
+  </div>
+
+</div>

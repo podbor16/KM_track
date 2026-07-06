@@ -1,0 +1,211 @@
+<h2>Структура дашборда DataLens — «Подготовка стартовых»</h2>
+<p class="subtitle">Виджеты DataLens: Индикатор · Таблица (QL) · Селектор. Выбери структуру</p>
+
+<style>
+  .opt-block { border: 2px solid #333; border-radius: 12px; padding: 20px; margin-bottom: 28px; cursor: pointer; transition: border-color .2s, box-shadow .2s; }
+  .opt-block:hover { border-color: #ee2d62; box-shadow: 0 0 0 3px rgba(238,45,98,.15); }
+  .opt-block.selected { border-color: #ee2d62; box-shadow: 0 0 0 4px rgba(238,45,98,.25); }
+  .opt-label { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .opt-letter { background: #ee2d62; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .opt-title { font-size: 15px; font-weight: 700; color: #fff; }
+  .opt-desc { font-size: 12px; color: #aaa; margin-top: 2px; }
+
+  /* DataLens-style widget frame */
+  .dl-canvas { background: #1e1e2e; border-radius: 10px; padding: 14px; }
+  .dl-selector-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .dl-selector { background: #2a2a3e; border: 1px solid #444; border-radius: 6px; padding: 5px 12px; font-size: 11px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+  .dl-selector span { color: #fff; font-weight: 600; }
+  .dl-widget { background: #252535; border-radius: 8px; padding: 12px; }
+  .dl-widget-title { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+  .dl-indicator { font-size: 36px; font-weight: 700; line-height: 1; }
+  .dl-indicator-sub { font-size: 10px; color: #888; margin-top: 4px; }
+  .dl-ind-red { color: #ee2d62; }
+  .dl-ind-warn { color: #f5a623; }
+  .dl-ind-ok { color: #27ae60; }
+  .dl-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+  .dl-table th { background: #1a1a2a; color: #aaa; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; border-bottom: 1px solid #333; }
+  .dl-table td { padding: 5px 8px; border-bottom: 1px solid #2a2a3a; color: #ddd; }
+  .dl-table tr:hover td { background: #2a2a3e; }
+  .dl-err { color: #ff6b6b; font-weight: 600; }
+  .dl-warn { color: #ffa94d; font-weight: 600; }
+  .dl-ok { color: #51cf66; }
+  .dl-tab-bar { display: flex; gap: 0; margin-bottom: 0; }
+  .dl-tab { padding: 7px 14px; background: #2a2a3e; color: #888; font-size: 11px; font-weight: 600; cursor: default; border-radius: 6px 6px 0 0; border: 1px solid #333; border-bottom: none; }
+  .dl-tab.active { background: #ee2d62; color: #fff; border-color: #ee2d62; }
+  .dl-tab-count { background: rgba(255,255,255,.2); border-radius: 8px; padding: 1px 5px; font-size: 10px; margin-left: 4px; }
+  .dl-tab-count.warn { background: #f5a623; color: #fff; }
+  .dl-tab-count.err { background: rgba(255,107,107,.3); color: #ff6b6b; }
+  .dl-tab-count.ok { background: rgba(81,207,102,.2); color: #51cf66; }
+  .dl-section-label { font-size: 10px; font-weight: 700; color: #ee2d62; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px; }
+</style>
+
+<!-- ========== ВАРИАНТ A: ВКЛАДКИ В ДАШБОРДЕ ========== -->
+<div class="opt-block" data-choice="a" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">A</div>
+    <div>
+      <div class="opt-title">Один дашборд с вкладками DataLens</div>
+      <div class="opt-desc">DataLens поддерживает вкладки (Tabs) внутри дашборда. Каждая проверка — отдельная вкладка: Индикатор + Таблица QL</div>
+    </div>
+  </div>
+
+  <div class="dl-canvas">
+    <!-- Selectors -->
+    <div class="dl-selector-row">
+      <div class="dl-selector">Событие: <span>Весна 2026</span> ▾</div>
+      <div class="dl-selector">Дистанция: <span>Все</span> ▾</div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="dl-tab-bar">
+      <div class="dl-tab active">Льготные катег. <span class="dl-tab-count">12</span></div>
+      <div class="dl-tab">Промокоды <span class="dl-tab-count warn">5</span></div>
+      <div class="dl-tab">Дубликаты <span class="dl-tab-count err">3</span></div>
+      <div class="dl-tab">Ошибки г.р. <span class="dl-tab-count err">2</span></div>
+      <div class="dl-tab">Мин. возраст <span class="dl-tab-count ok">✓</span></div>
+    </div>
+
+    <!-- Active tab content -->
+    <div style="background:#252535;border-radius:0 8px 8px 8px;padding:14px;border:1px solid #333;">
+      <div style="display:grid;grid-template-columns:180px 1fr;gap:12px;align-items:start;">
+        <!-- Indicator -->
+        <div class="dl-widget">
+          <div class="dl-widget-title">Несоответствий</div>
+          <div class="dl-indicator dl-ind-red">12</div>
+          <div class="dl-indicator-sub">из 847 заявок</div>
+          <div style="margin-top:10px;font-size:10px;color:#aaa;border-top:1px solid #333;padding-top:8px;">
+            Дети: 4 · Пенсионеры: 6 · Студенты: 2
+          </div>
+        </div>
+        <!-- QL Table -->
+        <div class="dl-widget">
+          <div class="dl-widget-title">Таблица (QL-чарт) — участники с несоответствием категории</div>
+          <table class="dl-table">
+            <thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Категория в заявке</th><th>Год рожд.</th><th>Возраст</th><th>Пол</th><th>Статус</th></tr></thead>
+            <tbody>
+              <tr><td>Иванов Иван</td><td>5 км</td><td>Дети</td><td>1999</td><td>25 лет</td><td>М</td><td class="dl-err">✗ Не соответствует</td></tr>
+              <tr><td>Петрова Ольга</td><td>5 км</td><td>Пенсионер</td><td>1972</td><td>54 года</td><td>Ж</td><td class="dl-err">✗ Не соответствует</td></tr>
+              <tr><td>Смирнов А.</td><td>10 км</td><td>Студент</td><td>2000</td><td>26 лет</td><td>М</td><td class="dl-err">✗ Не соответствует</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== ВАРИАНТ B: ВСЕЁ НА ОДНОЙ СТРАНИЦЕ ========== -->
+<div class="opt-block" data-choice="b" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">B</div>
+    <div>
+      <div class="opt-title">Один дашборд без вкладок — всё на странице</div>
+      <div class="opt-desc">Ряд из 5 Индикаторов вверху, ниже — 5 Таблиц QL (каждая только с нарушителями). Прокрутка вниз.</div>
+    </div>
+  </div>
+
+  <div class="dl-canvas">
+    <div class="dl-selector-row">
+      <div class="dl-selector">Событие: <span>Весна 2026</span> ▾</div>
+      <div class="dl-selector">Дистанция: <span>Все</span> ▾</div>
+    </div>
+
+    <!-- 5 indicators -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">
+      <div class="dl-widget" style="text-align:center;">
+        <div class="dl-widget-title">Льготные катег.</div>
+        <div class="dl-indicator dl-ind-red">12</div>
+        <div class="dl-indicator-sub">несоответствий</div>
+      </div>
+      <div class="dl-widget" style="text-align:center;">
+        <div class="dl-widget-title">Промокоды</div>
+        <div class="dl-indicator dl-ind-warn">5</div>
+        <div class="dl-indicator-sub">на проверку</div>
+      </div>
+      <div class="dl-widget" style="text-align:center;">
+        <div class="dl-widget-title">Дубликаты</div>
+        <div class="dl-indicator dl-ind-red">3</div>
+        <div class="dl-indicator-sub">дублей</div>
+      </div>
+      <div class="dl-widget" style="text-align:center;">
+        <div class="dl-widget-title">Ошибки г.р.</div>
+        <div class="dl-indicator dl-ind-red">2</div>
+        <div class="dl-indicator-sub">некорректных</div>
+      </div>
+      <div class="dl-widget" style="text-align:center;">
+        <div class="dl-widget-title">Мин. возраст</div>
+        <div class="dl-indicator dl-ind-ok">0</div>
+        <div class="dl-indicator-sub">нарушений</div>
+      </div>
+    </div>
+
+    <!-- Table 1 -->
+    <div class="dl-widget" style="margin-bottom:8px;">
+      <div class="dl-section-label">Льготные категории — несоответствия</div>
+      <table class="dl-table">
+        <thead><tr><th>Фамилия Имя</th><th>Дистанция</th><th>Категория</th><th>Г. рожд.</th><th>Возраст</th><th>Статус</th></tr></thead>
+        <tbody>
+          <tr><td>Иванов Иван</td><td>5 км</td><td>Дети</td><td>1999</td><td>25 лет</td><td class="dl-err">✗</td></tr>
+          <tr><td>Петрова Ольга</td><td>5 км</td><td>Пенсионер</td><td>1972</td><td>54 года</td><td class="dl-err">✗</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Table 2 -->
+    <div class="dl-widget">
+      <div class="dl-section-label">Именные промокоды — проверка права на скидку</div>
+      <table class="dl-table">
+        <thead><tr><th>Фамилия Имя</th><th>Промокод</th><th>Email</th><th>В списке льготников</th></tr></thead>
+        <tbody>
+          <tr><td>Сидоров Артём</td><td>KM-ЛЬГОТА-2026</td><td>sidorov@...</td><td class="dl-warn">? Не найден</td></tr>
+          <tr><td>Козлов Дмитрий</td><td>KM-ЛЬГОТА-2026</td><td>kozlov@...</td><td class="dl-ok">✓ Подтверждён</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="text-align:center;color:#555;font-size:11px;padding:8px;">↓ ещё 3 таблицы ниже (Дубли, Ошибки г.р., Мин. возраст)</div>
+  </div>
+</div>
+
+<!-- ========== ВАРИАНТ C: 5 ОТДЕЛЬНЫХ ДАШБОРДОВ ========== -->
+<div class="opt-block" data-choice="c" onclick="toggleSelect(this)">
+  <div class="opt-label">
+    <div class="opt-letter">C</div>
+    <div>
+      <div class="opt-title">5 отдельных DataLens-дашбордов → 5 вкладок в приложении</div>
+      <div class="opt-desc">Каждая проверка — самостоятельный дашборд DataLens с embed. Вкладки переключаются в business-analytics.html. Максимальная гибкость в настройке каждой.</div>
+    </div>
+  </div>
+
+  <div class="dl-canvas">
+    <!-- App-level tabs (HTML) -->
+    <div style="display:flex;gap:2px;margin-bottom:12px;border-bottom:2px solid #ee2d62;padding-bottom:0;">
+      <div style="padding:8px 14px;background:#ee2d62;color:#fff;border-radius:6px 6px 0 0;font-size:11px;font-weight:700;">Льготные <span style="background:rgba(255,255,255,.25);border-radius:8px;padding:1px 5px;">12</span></div>
+      <div style="padding:8px 14px;background:#2a2a3e;color:#888;border-radius:6px 6px 0 0;font-size:11px;">Промокоды</div>
+      <div style="padding:8px 14px;background:#2a2a3e;color:#888;border-radius:6px 6px 0 0;font-size:11px;">Дубликаты</div>
+      <div style="padding:8px 14px;background:#2a2a3e;color:#888;border-radius:6px 6px 0 0;font-size:11px;">Ошибки г.р.</div>
+      <div style="padding:8px 14px;background:#2a2a3e;color:#888;border-radius:6px 6px 0 0;font-size:11px;">Мин. возраст</div>
+    </div>
+
+    <!-- Embedded DataLens dashboard frame -->
+    <div style="border:2px dashed #444;border-radius:8px;padding:16px;background:#1a1a2a;">
+      <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">DataLens Embed — дашборд «Льготные категории»</div>
+      <div style="display:grid;grid-template-columns:160px 1fr;gap:10px;">
+        <div class="dl-widget">
+          <div class="dl-widget-title">Несоответствий</div>
+          <div class="dl-indicator dl-ind-red">12</div>
+          <div class="dl-indicator-sub">Дети 4 · Пенс. 6 · Студ. 2</div>
+        </div>
+        <div class="dl-widget">
+          <div class="dl-widget-title">Список несоответствий</div>
+          <table class="dl-table">
+            <thead><tr><th>Фамилия Имя</th><th>Категория</th><th>Г.р.</th><th>Возраст</th><th>Статус</th></tr></thead>
+            <tbody>
+              <tr><td>Иванов Иван</td><td>Дети</td><td>1999</td><td>25 лет</td><td class="dl-err">✗</td></tr>
+              <tr><td>Петрова Ольга</td><td>Пенсионер</td><td>1972</td><td>54 года</td><td class="dl-err">✗</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

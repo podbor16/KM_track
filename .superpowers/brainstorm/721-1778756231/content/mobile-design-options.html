@@ -1,0 +1,266 @@
+<h2>Мобильный дизайн /results — два варианта</h2>
+<p class="subtitle">Viewport 390px. Нажми на вариант чтобы выбрать.</p>
+
+<div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-top:16px">
+
+  <!-- ВАРИАНТ A -->
+  <div class="card" data-choice="compact" onclick="toggleSelect(this)" style="max-width:200px; flex:1; min-width:180px">
+    <div class="card-image" style="padding:0; background:#111; border-radius:8px 8px 0 0; overflow:hidden">
+      <!-- Mock phone screen A -->
+      <div style="font-family:Arial,sans-serif; font-size:11px; color:#eee; line-height:1.4">
+
+        <!-- Карточка участника -->
+        <div style="background:#1a1a2e; padding:8px 10px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #2a2a3e">
+          <span style="font-size:18px; font-weight:700; color:#f0b429; min-width:28px; text-align:center">1</span>
+          <div>
+            <div style="font-size:13px; font-weight:600">Иванов Иван</div>
+            <div style="font-size:10px; color:#aaa">Оф: 1:32:14 · <strong>Чист: 1:31:47</strong></div>
+          </div>
+        </div>
+
+        <!-- Детальная панель — открыта -->
+        <div style="background:#0f1923; padding:10px">
+
+          <!-- Имя + закрыть -->
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+            <div>
+              <div style="font-size:13px; font-weight:700">Иванов Иван</div>
+              <div style="font-size:9px; color:#777">21 км · М · 1990 г.р. · Финишировал</div>
+            </div>
+            <span style="color:#666; font-size:16px">×</span>
+          </div>
+
+          <!-- Стат-блоки 2→1 колонка -->
+          <div style="background:#162030; border-left:3px solid #ee2d62; padding:8px; border-radius:4px; margin-bottom:6px">
+            <div style="font-size:8px; color:#666; text-transform:uppercase; margin-bottom:4px">Официальное</div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#888">Место</span><strong>12</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1e2a3e"><span style="color:#888">Время</span><strong>1:32:14</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size:10px; padding:2px 0"><span style="color:#888">Темп</span><strong>4:23 мин/км</strong></div>
+          </div>
+
+          <!-- Бар-чарт — горизонтальный скролл -->
+          <div style="font-size:8px; color:#666; text-transform:uppercase; margin:6px 0 4px; letter-spacing:0.5px">Темп по отрезкам</div>
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch">
+            <div style="display:flex; align-items:flex-end; gap:4px; height:90px; min-width:320px; padding-bottom:2px">
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#9ccc65; font-weight:bold">09:17</div>
+                <div style="background:#9ccc65; width:100%; height:44px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">0–3 км</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#4caf50; font-weight:bold">06:59</div>
+                <div style="background:#4caf50; width:100%; height:20px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#4caf50; font-weight:bold; white-space:nowrap">3:02</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">3–5.3</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#ef5350; font-weight:bold">09:28</div>
+                <div style="background:#ef5350; width:100%; height:68px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#ef5350; font-weight:bold; white-space:nowrap">3:09</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">5.3–8.3</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#9ccc65; font-weight:bold">07:06</div>
+                <div style="background:#9ccc65; width:100%; height:44px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">8.3–10.6</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#aed581; font-weight:bold">09:16</div>
+                <div style="background:#aed581; width:100%; height:50px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">10.6–13.6</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#9ccc65; font-weight:bold">08:55</div>
+                <div style="background:#9ccc65; width:100%; height:44px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold; white-space:nowrap">3:05</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">13.6–16.5</div>
+              </div>
+              <div style="flex:0 0 42px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:8px; color:#aed581; font-weight:bold">08:08</div>
+                <div style="background:#aed581; width:100%; height:50px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:7px; color:#aed581; font-weight:bold; white-space:nowrap">3:06</div>
+                <div style="font-size:6px; color:#555; white-space:nowrap">16.5–19.1</div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:7px; color:#444; border-top:1px solid #1e2a3e; padding-top:3px; margin-top:3px">← свайп чтобы увидеть все отрезки</div>
+
+          <!-- Таблица: только 3 колонки (Участок, Время, Темп) -->
+          <div style="font-size:8px; color:#e63946; text-transform:uppercase; margin:8px 0 4px; font-weight:700; letter-spacing:0.5px">Отрезки</div>
+          <table style="width:100%; font-size:9px; border-collapse:collapse">
+            <thead>
+              <tr style="color:#777; font-size:8px">
+                <th style="text-align:left; padding:2px 0; border-bottom:1px solid #1e2a3e; font-weight:600">Участок</th>
+                <th style="text-align:right; padding:2px 4px; border-bottom:1px solid #1e2a3e; font-weight:600">Время</th>
+                <th style="text-align:right; padding:2px 0; border-bottom:1px solid #1e2a3e; font-weight:600">Темп</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #1a2030">
+                <td style="padding:3px 0; color:#ccc">0–3 км</td>
+                <td style="text-align:right; padding:3px 4px; color:#eee">09:17</td>
+                <td style="text-align:right; color:#9ccc65">3:05</td>
+              </tr>
+              <tr style="border-bottom:1px solid #1a2030">
+                <td style="padding:3px 0; color:#ccc">3–5.3 км</td>
+                <td style="text-align:right; padding:3px 4px; color:#eee">06:59</td>
+                <td style="text-align:right; color:#4caf50">3:02 <span style="font-size:7px; color:#4caf50">↓1.1%</span></td>
+              </tr>
+              <tr>
+                <td style="padding:3px 0; color:#ccc">5.3–8.3 км</td>
+                <td style="text-align:right; padding:3px 4px; color:#eee">09:28</td>
+                <td style="text-align:right; color:#ef5350">3:09 <span style="font-size:7px; color:#ef5350">↑3.3%</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Следующие карточки -->
+        <div style="background:#1a1a2e; padding:8px 10px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #2a2a3e">
+          <span style="font-size:16px; font-weight:700; color:#aaa; min-width:28px; text-align:center">2</span>
+          <div>
+            <div style="font-size:13px; font-weight:600">Петров Алексей</div>
+            <div style="font-size:10px; color:#aaa">Оф: 1:33:01 · <strong>Чист: 1:32:44</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>А: Компактный</h3>
+      <p>Бар-чарт листается горизонтально (свайп). Таблицы с 3 колонками вместо 6 — скрываем ранги Абс/Пол/Кат. Чистые CSS-изменения, JS не трогаем.</p>
+    </div>
+  </div>
+
+  <!-- ВАРИАНТ B -->
+  <div class="card" data-choice="cards" onclick="toggleSelect(this)" style="max-width:200px; flex:1; min-width:180px">
+    <div class="card-image" style="padding:0; background:#111; border-radius:8px 8px 0 0; overflow:hidden">
+      <div style="font-family:Arial,sans-serif; font-size:11px; color:#eee; line-height:1.4">
+
+        <!-- Карточка участника -->
+        <div style="background:#1a1a2e; padding:8px 10px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #2a2a3e">
+          <span style="font-size:18px; font-weight:700; color:#f0b429; min-width:28px; text-align:center">1</span>
+          <div>
+            <div style="font-size:13px; font-weight:600">Иванов Иван</div>
+            <div style="font-size:10px; color:#aaa">Оф: 1:32:14 · <strong>Чист: 1:31:47</strong></div>
+          </div>
+        </div>
+
+        <div style="background:#0f1923; padding:10px">
+          <!-- Имя -->
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+            <div>
+              <div style="font-size:13px; font-weight:700">Иванов Иван</div>
+              <div style="font-size:9px; color:#777">21 км · М · 1990 г.р.</div>
+            </div>
+            <span style="color:#666; font-size:16px">×</span>
+          </div>
+
+          <!-- Стат-блоки: горизонтальные таблетки -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:8px">
+            <div style="background:#162030; border-radius:6px; padding:6px 8px; border-top:2px solid #ee2d62">
+              <div style="font-size:7px; color:#666; text-transform:uppercase">Офиц. время</div>
+              <div style="font-size:14px; font-weight:700; color:#fff">1:32:14</div>
+              <div style="font-size:8px; color:#aaa">Место: <strong style="color:#fff">12</strong></div>
+            </div>
+            <div style="background:#162030; border-radius:6px; padding:6px 8px; border-top:2px solid #4a9eff">
+              <div style="font-size:7px; color:#666; text-transform:uppercase">Чист. время</div>
+              <div style="font-size:14px; font-weight:700; color:#4a9eff">1:31:47</div>
+              <div style="font-size:8px; color:#aaa">Место: <strong style="color:#fff">11</strong></div>
+            </div>
+          </div>
+
+          <!-- Бар-чарт — тот же горизонт. скролл -->
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:6px">
+            <div style="display:flex; align-items:flex-end; gap:4px; height:80px; min-width:300px">
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold">09:17</div>
+                <div style="background:#9ccc65; width:100%; height:40px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#9ccc65; white-space:nowrap">3:05</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">0–3</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#4caf50; font-weight:bold">06:59</div>
+                <div style="background:#4caf50; width:100%; height:18px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#4caf50; white-space:nowrap">3:02</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">3–5.3</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#ef5350; font-weight:bold">09:28</div>
+                <div style="background:#ef5350; width:100%; height:60px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#ef5350; white-space:nowrap">3:09</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">5.3–8.3</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold">07:06</div>
+                <div style="background:#9ccc65; width:100%; height:40px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#9ccc65; white-space:nowrap">3:05</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">8.3–10.6</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#aed581; font-weight:bold">09:16</div>
+                <div style="background:#aed581; width:100%; height:46px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#aed581; white-space:nowrap">3:06</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">10.6–13.6</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#9ccc65; font-weight:bold">08:55</div>
+                <div style="background:#9ccc65; width:100%; height:40px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#9ccc65; white-space:nowrap">3:05</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">13.6–16.5</div>
+              </div>
+              <div style="flex:0 0 38px; display:flex; flex-direction:column; align-items:center; gap:1px">
+                <div style="font-size:7px; color:#aed581; font-weight:bold">08:08</div>
+                <div style="background:#aed581; width:100%; height:46px; border-radius:2px 2px 0 0"></div>
+                <div style="font-size:6px; color:#aed581; white-space:nowrap">3:06</div>
+                <div style="font-size:5px; color:#555; white-space:nowrap">16.5–19.1</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Отрезки как мини-карточки -->
+          <div style="font-size:8px; color:#e63946; text-transform:uppercase; margin:6px 0 4px; font-weight:700; letter-spacing:0.5px">Отрезки</div>
+          <div style="display:flex; flex-direction:column; gap:3px">
+            <div style="background:#162030; border-radius:5px; padding:5px 8px; display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#aaa; font-size:9px">0–3 км</span>
+              <span style="font-size:9px; font-weight:600">09:17</span>
+              <span style="font-size:9px; color:#9ccc65; font-weight:700">3:05</span>
+              <span style="font-size:7px; background:#1e3a1e; color:#9ccc65; padding:1px 4px; border-radius:3px">#12</span>
+            </div>
+            <div style="background:#162030; border-radius:5px; padding:5px 8px; display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#aaa; font-size:9px">3–5.3 км</span>
+              <span style="font-size:9px; font-weight:600">06:59</span>
+              <span style="font-size:9px; color:#4caf50; font-weight:700">3:02 ↓</span>
+              <span style="font-size:7px; background:#1e3a1e; color:#4caf50; padding:1px 4px; border-radius:3px">#8</span>
+            </div>
+            <div style="background:#162030; border-radius:5px; padding:5px 8px; display:flex; justify-content:space-between; align-items:center">
+              <span style="color:#aaa; font-size:9px">5.3–8.3 км</span>
+              <span style="font-size:9px; font-weight:600">09:28</span>
+              <span style="font-size:9px; color:#ef5350; font-weight:700">3:09 ↑</span>
+              <span style="font-size:7px; background:#3a1e1e; color:#ef5350; padding:1px 4px; border-radius:3px">#18</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#1a1a2e; padding:8px 10px; display:flex; align-items:center; gap:8px">
+          <span style="font-size:16px; font-weight:700; color:#aaa; min-width:28px; text-align:center">2</span>
+          <div>
+            <div style="font-size:13px; font-weight:600">Петров Алексей</div>
+            <div style="font-size:10px; color:#aaa">Оф: 1:33:01 · <strong>Чист: 1:32:44</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Б: Карточки отрезков</h3>
+      <p>Стат-блоки сверху как 2 таблетки (офиц/чист). Бар-чарт тот же скролл. Каждый отрезок — мини-карточка с рангом. Выглядит современнее.</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:12px; padding:10px; background:rgba(255,255,255,0.05); border-radius:8px; font-size:11px; color:#aaa">
+  <strong style="color:#eee">Общее для обоих:</strong> container padding ≤480px, event-card 160px вместо 280px, фильтры в сетку 2 колонки, убирается margin-top у container
+</div>

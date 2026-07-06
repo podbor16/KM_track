@@ -1,0 +1,166 @@
+<h2>Как сделать графики читаемыми на мобильном</h2>
+<p class="subtitle">Та же информация — три разных подхода к отображению. Выбери один или несколько.</p>
+
+<style>
+.phone-row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+.phone { width: 210px; border: 2px solid #ccc; border-radius: 22px; overflow: hidden; background: #eee; box-shadow: 0 4px 16px rgba(0,0,0,0.13); }
+.phone-screen { background: #fff; margin: 7px; border-radius: 16px; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; }
+.ph-tabs { display: flex; border-bottom: 2px solid #e8e8e8; }
+.ph-tab { flex:1; padding:7px 2px; text-align:center; font-size:10px; font-weight:700; color:#aaa; }
+.ph-tab.active { color:#263146; border-bottom:2px solid #FF8562; margin-bottom:-2px; }
+.ph-subtabs { display:flex; gap:5px; padding:6px 8px; background:#fff; }
+.ph-subtab { padding:4px 10px; border-radius:18px; font-size:10px; font-weight:700; border:1.5px solid #e0e0e0; color:#888; }
+.ph-subtab.active { background:#263146; color:#fff; border-color:#263146; }
+.chips-row { overflow-x:auto; white-space:nowrap; padding:5px 8px; background:#fafafa; border-bottom:1px solid #eee; display:flex; gap:4px; }
+.chip { display:inline-flex; align-items:center; gap:3px; padding:3px 8px; border-radius:14px; font-size:10px; font-weight:700; }
+.chip.on { background:#263146; color:#fff; }
+.chip.off { background:#f0f0f0; color:#aaa; }
+.chip-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.chart-area { background:#fff; padding:8px 6px 4px; }
+svg.chart { width:100%; display:block; }
+.ph-x { display:flex; justify-content:space-between; font-size:9px; color:#bbb; padding:2px 2px 6px; }
+
+/* Small multiples */
+.sm-row { display:flex; align-items:center; padding:4px 8px; border-bottom:1px solid #f5f5f5; gap:6px; }
+.sm-name { font-size:10px; font-weight:700; width:52px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sm-chart { flex:1; height:28px; }
+.sm-val { font-size:9px; color:#888; width:36px; text-align:right; flex-shrink:0; }
+.sm-sec-title { font-size:9px; color:#bbb; font-weight:700; text-transform:uppercase; padding:5px 8px 2px; }
+</style>
+
+<div class="cards" data-multiselect>
+
+  <!-- Option A: Auto-select top 3 + hide unselected -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расст.</div><div class="ph-tab">Отрезки</div><div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div><div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="chips-row">
+              <div class="chip on"><div class="chip-dot" style="background:#FF8562"></div>Умнов</div>
+              <div class="chip on"><div class="chip-dot" style="background:#263146"></div>Бурдин</div>
+              <div class="chip on"><div class="chip-dot" style="background:#18A558"></div>Захаренков</div>
+              <div class="chip off"><div class="chip-dot" style="background:#888"></div>Кондратюк</div>
+              <div class="chip off"><div class="chip-dot" style="background:#888"></div>Ребенков</div>
+            </div>
+            <div class="chart-area">
+              <svg class="chart" viewBox="0 0 194 130" preserveAspectRatio="none" height="130">
+                <line x1="0" y1="100" x2="194" y2="100" stroke="#f0f0f0" stroke-width="1"/>
+                <line x1="0" y1="70" x2="194" y2="70" stroke="#f0f0f0" stroke-width="1"/>
+                <line x1="0" y1="40" x2="194" y2="40" stroke="#f0f0f0" stroke-width="1"/>
+                <polyline points="0,95 25,62 50,72 75,48 100,65 125,42 150,38 175,52 194,44" fill="none" stroke="#FF8562" stroke-width="2.5" stroke-linejoin="round"/>
+                <polyline points="0,85 25,70 50,80 75,58 100,72 125,55 150,50 175,62 194,55" fill="none" stroke="#263146" stroke-width="2.5" stroke-linejoin="round"/>
+                <polyline points="0,105 25,78 50,88 75,68 100,80 125,65 150,62 175,74 194,66" fill="none" stroke="#18A558" stroke-width="2.5" stroke-linejoin="round"/>
+              </svg>
+              <div class="ph-x"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Топ-3 по умолчанию, остальные скрыты</h3>
+      <p>При открытии вкладки автоматически выбираются топ-3 лидера. Невыбранные участники полностью скрыты (не серые, а именно скрыты). Максимум 3 активных на мобильном.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Small multiples -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расст.</div><div class="ph-tab">Отрезки</div><div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div><div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="sm-sec-title">Скорость по 30 мин · км/ч</div>
+            <div class="sm-row">
+              <div class="sm-name">Умнов М.</div>
+              <svg class="sm-chart" viewBox="0 0 120 28" preserveAspectRatio="none"><polyline points="0,20 15,12 30,16 45,8 60,14 75,6 90,4 105,10 120,7" fill="none" stroke="#FF8562" stroke-width="2" stroke-linejoin="round"/></svg>
+              <div class="sm-val">40.1</div>
+            </div>
+            <div class="sm-row">
+              <div class="sm-name">Бурдин И.</div>
+              <svg class="sm-chart" viewBox="0 0 120 28" preserveAspectRatio="none"><polyline points="0,18 15,14 30,17 45,10 60,15 75,9 90,7 105,12 120,9" fill="none" stroke="#263146" stroke-width="2" stroke-linejoin="round"/></svg>
+              <div class="sm-val">38.5</div>
+            </div>
+            <div class="sm-row">
+              <div class="sm-name">Захаренков</div>
+              <svg class="sm-chart" viewBox="0 0 120 28" preserveAspectRatio="none"><polyline points="0,22 15,16 30,19 45,13 60,18 75,12 90,10 105,15 120,12" fill="none" stroke="#18A558" stroke-width="2" stroke-linejoin="round"/></svg>
+              <div class="sm-val">35.2</div>
+            </div>
+            <div class="sm-row">
+              <div class="sm-name">Кондратюк</div>
+              <svg class="sm-chart" viewBox="0 0 120 28" preserveAspectRatio="none"><polyline points="0,20 15,18 30,21 45,15 60,20 75,14 90,0 105,0 120,0" fill="none" stroke="#e06020" stroke-width="2" stroke-linejoin="round" stroke-dasharray="3,2"/></svg>
+              <div class="sm-val" style="color:#e06020">DNF</div>
+            </div>
+            <div class="sm-row">
+              <div class="sm-name">Подлесный</div>
+              <svg class="sm-chart" viewBox="0 0 120 28" preserveAspectRatio="none"><polyline points="0,21 15,17 30,20 45,14 60,19 75,13 90,12 105,16 120,13" fill="none" stroke="#8a4fff" stroke-width="2" stroke-linejoin="round"/></svg>
+              <div class="sm-val">32.8</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Мини-графики на каждого (small multiples)</h3>
+      <p>Каждый участник — отдельная строка со своим спарклайном и текущей скоростью. Нет пересечений, легко читать. Прокручивается вертикально. Нет сравнения «на одном поле».</p>
+    </div>
+  </div>
+
+  <!-- Option C: Stronger contrast + taller chart -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расст.</div><div class="ph-tab">Отрезки</div><div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div><div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="chips-row">
+              <div class="chip on"><div class="chip-dot" style="background:#FF8562"></div>Умнов</div>
+              <div class="chip on"><div class="chip-dot" style="background:#263146"></div>Бурдин</div>
+              <div class="chip off" style="opacity:0.35"><div class="chip-dot" style="background:#888"></div>Захар…</div>
+              <div class="chip off" style="opacity:0.35"><div class="chip-dot" style="background:#888"></div>Кондра…</div>
+            </div>
+            <div class="chart-area">
+              <!-- Unselected = ultra-light gray, selected = thick+colored -->
+              <svg class="chart" viewBox="0 0 194 155" preserveAspectRatio="none" height="155">
+                <line x1="0" y1="120" x2="194" y2="120" stroke="#f0f0f0" stroke-width="1"/>
+                <line x1="0" y1="88" x2="194" y2="88" stroke="#f0f0f0" stroke-width="1"/>
+                <line x1="0" y1="56" x2="194" y2="56" stroke="#f0f0f0" stroke-width="1"/>
+                <line x1="0" y1="24" x2="194" y2="24" stroke="#f0f0f0" stroke-width="1"/>
+                <!-- unselected: very faint -->
+                <polyline points="0,120 25,96 50,104 75,86 100,98 125,82 150,76 175,88 194,80" fill="none" stroke="#ddd" stroke-width="1"/>
+                <polyline points="0,128 25,102 50,112 75,92 100,106 125,90 150,85 175,96 194,88" fill="none" stroke="#ddd" stroke-width="1"/>
+                <polyline points="0,118 25,100 50,108 75,88 100,100 125,84 150,78 175,90 194,82" fill="none" stroke="#ddd" stroke-width="1"/>
+                <!-- selected: thick, colored -->
+                <polyline points="0,110 25,76 50,88 75,58 100,78 125,52 150,46 175,62 194,52" fill="none" stroke="#FF8562" stroke-width="3" stroke-linejoin="round"/>
+                <polyline points="0,105 25,84 50,95 75,68 100,86 125,64 150,58 175,72 194,62" fill="none" stroke="#263146" stroke-width="3" stroke-linejoin="round"/>
+              </svg>
+              <div class="ph-x"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Сильный контраст: выбранные жирно, остальные почти невидимы</h3>
+      <p>Невыбранные линии 90% прозрачные (едва видны как контекст), выбранные — толще и ярче. График выше (350px на мобильном). Фильтр работает как сейчас, но визуальный приоритет резкий.</p>
+    </div>
+  </div>
+
+</div>

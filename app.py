@@ -101,7 +101,7 @@ async def lifespan(app: FastAPI):
     async def _prewarm_cache():
         try:
             from src.analytics.db_connection_optimized import get_pooled_connection
-            from src.tracker.services.results_service import build_event_results
+            from src.krasmarafon.services.results_service import build_event_results
             # Загружаем все event_id которые реально есть в БД
             conn = get_pooled_connection()
             if not conn:
@@ -122,8 +122,8 @@ async def lifespan(app: FastAPI):
 
     # === REDIS ===
     import redis.asyncio as aioredis
-    from src.tracker.services.notification_hub import tracker_hub, notification_hub
-    from src.tracker.services.results_service import build_event_results
+    from src.krasmarafon.services.notification_hub import tracker_hub, notification_hub
+    from src.krasmarafon.services.results_service import build_event_results
     from src.config.event_loader import load_events_cached, get_active_event as _get_active
     from src.analytics.db_connection_optimized import get_pooled_connection
 
@@ -411,7 +411,7 @@ async def health_check():
 
 # --- РЕГИСТРАЦИЯ РОУТЕРОВ ---
 
-from src.tracker.router import router as tracker_router
+from src.krasmarafon.router import router as tracker_router
 
 app.include_router(tracker_router)
 

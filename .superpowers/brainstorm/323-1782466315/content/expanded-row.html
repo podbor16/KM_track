@@ -1,0 +1,66 @@
+<h2>Раскрытая строка — детализация по кругам</h2>
+<p class="subtitle">Участник раскрыт. Что видно по каждому кругу внутри диапазона?</p>
+
+<style>
+  .mock-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .mock-table th { background:#f0f0f0; padding:6px 10px; text-align:left; font-weight:600; font-size:11px; color:#555; border-bottom:2px solid #ddd; }
+  .mock-table td { padding:6px 10px; border-bottom:1px solid #eee; }
+  .rank { font-weight:700; color:#c0392b; }
+  .name { font-weight:600; }
+  .tag { display:inline-block; background:#f0f0f0; border-radius:3px; padding:1px 6px; font-size:10px; color:#666; margin-left:4px;}
+  .summary-row td { background:#fff7f7; font-weight:600; }
+  .detail-header { background:#f8f0f0 !important; font-size:11px; color:#c0392b; }
+  .detail-row td { background:#fafafa; font-size:12px; padding:4px 10px 4px 24px; }
+  .best { color:#27ae60; font-weight:700; }
+  .worst { color:#e74c3c; }
+  .bar-wrap { display:inline-block; vertical-align:middle; width:60px; height:8px; background:#eee; border-radius:4px; margin-left:6px; }
+  .bar { height:8px; border-radius:4px; background:#c0392b; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:12px;background:#fff;overflow:auto;">
+      <table class="mock-table">
+        <tr><th>№</th><th>Участник</th><th>Кругов</th><th>Лучший</th><th>Худший</th><th>Ср. круг</th><th>Разброс</th></tr>
+        <tr class="summary-row"><td class="rank">1</td><td class="name">Иванов И. <span class="tag">М</span> ▼</td><td>16</td><td class="best">14:22</td><td class="worst">18:05</td><td>15:44</td><td>±1:43</td></tr>
+        <tr class="detail-row"><td colspan="7">
+          <table style="width:100%;font-size:12px;border-collapse:collapse;">
+            <tr><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Круг</th><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Время</th><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Нарастающее</th></tr>
+            <tr><td style="padding:3px 8px;">10</td><td style="padding:3px 8px;" class="best">14:22 ★</td><td style="padding:3px 8px;">2:24:10</td></tr>
+            <tr><td style="padding:3px 8px;">11</td><td style="padding:3px 8px;">15:01</td><td style="padding:3px 8px;">2:39:11</td></tr>
+            <tr><td style="padding:3px 8px;">12</td><td style="padding:3px 8px;">16:18</td><td style="padding:3px 8px;">2:55:29</td></tr>
+            <tr><td style="padding:3px 8px;">13</td><td style="padding:3px 8px;" class="worst">18:05</td><td style="padding:3px 8px;">3:13:34</td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>A. Время круга + нарастающее время</h3>
+      <p>Просто: номер, время круга, cumulative. Лучший отмечен ★, худший цветом.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:12px;background:#fff;overflow:auto;">
+      <table class="mock-table">
+        <tr><th>№</th><th>Участник</th><th>Кругов</th><th>Лучший</th><th>Худший</th><th>Ср. круг</th><th>Разброс</th></tr>
+        <tr class="summary-row"><td class="rank">1</td><td class="name">Иванов И. ▼</td><td>16</td><td class="best">14:22</td><td class="worst">18:05</td><td>15:44</td><td>±1:43</td></tr>
+        <tr class="detail-row"><td colspan="7">
+          <table style="width:100%;font-size:12px;border-collapse:collapse;">
+            <tr><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Круг</th><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Время</th><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">Скорость</th><th style="padding:3px 8px;text-align:left;color:#999;font-size:11px;">±от среднего</th></tr>
+            <tr><td style="padding:3px 8px;">10</td><td style="padding:3px 8px;" class="best">14:22 ★</td><td style="padding:3px 8px;">16.9 км/ч</td><td style="padding:3px 8px;color:#27ae60;">−1:22</td></tr>
+            <tr><td style="padding:3px 8px;">11</td><td style="padding:3px 8px;">15:01</td><td style="padding:3px 8px;">16.1 км/ч</td><td style="padding:3px 8px;color:#27ae60;">−0:43</td></tr>
+            <tr><td style="padding:3px 8px;">12</td><td style="padding:3px 8px;">16:18</td><td style="padding:3px 8px;">14.9 км/ч</td><td style="padding:3px 8px;color:#e74c3c;">+0:34</td></tr>
+            <tr><td style="padding:3px 8px;">13</td><td style="padding:3px 8px;" class="worst">18:05</td><td style="padding:3px 8px;">13.4 км/ч</td><td style="padding:3px 8px;color:#e74c3c;">+2:21</td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </div>
+    <div class="card-body">
+      <h3>B. + скорость и отклонение от среднего</h3>
+      <p>Видно не только время, но и скорость и насколько круг лучше/хуже среднего в диапазоне.</p>
+    </div>
+  </div>
+
+</div>

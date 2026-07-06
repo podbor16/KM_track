@@ -1,0 +1,199 @@
+<h2>Комбо A+C + шторка</h2>
+<p class="subtitle">Два состояния: обычный вид (топ-3 авто, контраст) и открытая шторка выбора участников</p>
+
+<style>
+.phone-row { display:flex; gap:28px; justify-content:center; flex-wrap:wrap; align-items:flex-start; margin-top:8px; }
+.phone { width:220px; border:2px solid #ccc; border-radius:24px; overflow:hidden; background:#eee; box-shadow:0 4px 20px rgba(0,0,0,0.15); flex-shrink:0; }
+.phone-screen { background:#fff; margin:8px; border-radius:17px; overflow:hidden; font-family:'Segoe UI',Arial,sans-serif; font-size:12px; position:relative; min-height:420px; }
+
+.ph-tabs { display:flex; border-bottom:2px solid #e8e8e8; }
+.ph-tab { flex:1; padding:8px 2px; text-align:center; font-size:10px; font-weight:700; color:#aaa; }
+.ph-tab.active { color:#263146; border-bottom:2px solid #FF8562; margin-bottom:-2px; }
+
+.ph-subtabs { display:flex; gap:6px; padding:7px 10px; background:#fff; border-bottom:1px solid #f0f0f0; }
+.ph-subtab { padding:5px 12px; border-radius:18px; font-size:10px; font-weight:700; border:1.5px solid #e0e0e0; color:#888; }
+.ph-subtab.active { background:#263146; color:#fff; border-color:#263146; }
+
+/* Participant trigger button */
+.ptc-bar { display:flex; align-items:center; justify-content:space-between; padding:7px 10px; background:#fafafa; border-bottom:1px solid #eee; cursor:pointer; }
+.ptc-left { display:flex; align-items:center; gap:6px; }
+.ptc-label { font-size:11px; font-weight:700; color:#263146; }
+.ptc-badge { background:#FF8562; color:#fff; border-radius:10px; padding:1px 7px; font-size:10px; font-weight:700; }
+.ptc-hint { font-size:10px; color:#bbb; }
+.ptc-icon { font-size:14px; color:#bbb; }
+
+/* Selected chips strip (compact, read-only indicator) */
+.active-chips { display:flex; gap:4px; padding:5px 10px; background:#fff; flex-wrap:wrap; border-bottom:1px solid #f5f5f5; }
+.ach { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:12px; background:#263146; color:#fff; font-size:10px; font-weight:700; }
+.ach-dot { width:6px; height:6px; border-radius:50%; }
+
+/* Chart */
+.chart-area { padding:8px 6px 4px; background:#fff; }
+svg.chart { width:100%; display:block; }
+.ph-x { display:flex; justify-content:space-between; font-size:9px; color:#bbb; padding:2px 4px 4px; }
+
+/* Bottom sheet */
+.sheet-overlay { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.35); z-index:10; border-radius:17px; }
+.sheet { position:absolute; bottom:0; left:0; right:0; background:#fff; border-radius:14px 14px 0 0; z-index:11; padding:0 0 8px; box-shadow:0 -4px 24px rgba(0,0,0,0.18); }
+.sheet-handle { width:36px; height:4px; background:#ddd; border-radius:2px; margin:10px auto 8px; }
+.sheet-header { display:flex; align-items:center; justify-content:space-between; padding:0 12px 8px; border-bottom:1px solid #f0f0f0; }
+.sheet-title { font-size:12px; font-weight:800; color:#263146; }
+.sheet-actions { display:flex; gap:8px; }
+.sheet-btn { font-size:10px; font-weight:700; color:#FF8562; background:none; border:none; padding:0; cursor:pointer; }
+.sheet-item { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #f8f8f8; cursor:pointer; }
+.si-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.si-name { flex:1; font-size:11px; font-weight:600; color:#263146; }
+.si-check { width:18px; height:18px; border-radius:5px; border:2px solid #e0e0e0; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; }
+.si-check.on { background:#263146; border-color:#263146; color:#fff; }
+.si-km { font-size:10px; color:#aaa; margin-right:8px; }
+
+.state-label { text-align:center; font-size:11px; font-weight:700; color:#888; margin:8px 0 2px; text-transform:uppercase; letter-spacing:0.5px; }
+</style>
+
+<div class="phone-row">
+
+  <!-- State 1: Normal chart view -->
+  <div>
+    <div class="state-label">Обычный вид</div>
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="ph-tabs">
+          <div class="ph-tab">Расст.</div><div class="ph-tab">Отрезки</div><div class="ph-tab active">График</div>
+        </div>
+        <div class="ph-subtabs">
+          <div class="ph-subtab active">Скорость</div><div class="ph-subtab">Позиция</div>
+        </div>
+
+        <!-- Trigger button -->
+        <div class="ptc-bar">
+          <div class="ptc-left">
+            <span class="ptc-label">Участники</span>
+            <span class="ptc-badge">3</span>
+          </div>
+          <span class="ptc-hint">нажмите для выбора ›</span>
+        </div>
+
+        <!-- Active chips (compact) -->
+        <div class="active-chips">
+          <div class="ach"><div class="ach-dot" style="background:#FF8562"></div>Умнов</div>
+          <div class="ach"><div class="ach-dot" style="background:#263146"></div>Бурдин</div>
+          <div class="ach"><div class="ach-dot" style="background:#18A558"></div>Захаренков</div>
+        </div>
+
+        <!-- Chart: selected = thick+bright, unselected = ghost -->
+        <div class="chart-area">
+          <svg class="chart" viewBox="0 0 200 160" preserveAspectRatio="none" height="160">
+            <line x1="0" y1="130" x2="200" y2="130" stroke="#f5f5f5" stroke-width="1"/>
+            <line x1="0" y1="100" x2="200" y2="100" stroke="#f5f5f5" stroke-width="1"/>
+            <line x1="0" y1="70" x2="200" y2="70" stroke="#f5f5f5" stroke-width="1"/>
+            <line x1="0" y1="40" x2="200" y2="40" stroke="#f5f5f5" stroke-width="1"/>
+            <!-- Ghost lines: unselected participants, barely visible -->
+            <polyline points="0,130 25,110 50,118 75,105 100,115 125,100 150,95 175,108 200,100" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <polyline points="0,128 25,112 50,120 75,107 100,116 125,102 150,97 175,110 200,103" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <polyline points="0,125 25,115 50,122 75,109 100,118 125,104 150,99 175,112 200,105" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <polyline points="0,132 25,108 50,116 75,103 100,113 125,98 150,93 175,106 200,98" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <polyline points="0,129 25,111 50,119 75,106 100,114 125,101 150,96 175,109 200,101" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <polyline points="0,127 25,113 50,121 75,108 100,117 125,103 150,98 175,111 200,104" fill="none" stroke="#e8e8e8" stroke-width="1.2"/>
+            <!-- Selected: thick + colored -->
+            <polyline points="0,118 25,80 50,92 75,62 100,78 125,52 150,46 175,60 200,50" fill="none" stroke="#FF8562" stroke-width="3" stroke-linejoin="round"/>
+            <polyline points="0,110 25,88 50,100 75,72 100,86 125,62 150,57 175,70 200,61" fill="none" stroke="#263146" stroke-width="3" stroke-linejoin="round"/>
+            <polyline points="0,122 25,95 50,106 75,80 100,93 125,70 150,65 175,78 200,68" fill="none" stroke="#18A558" stroke-width="3" stroke-linejoin="round"/>
+          </svg>
+          <div class="ph-x"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- State 2: Bottom sheet open -->
+  <div>
+    <div class="state-label">Шторка открыта</div>
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="ph-tabs">
+          <div class="ph-tab">Расст.</div><div class="ph-tab">Отрезки</div><div class="ph-tab active">График</div>
+        </div>
+        <div class="ph-subtabs">
+          <div class="ph-subtab active">Скорость</div><div class="ph-subtab">Позиция</div>
+        </div>
+        <div class="ptc-bar">
+          <div class="ptc-left"><span class="ptc-label">Участники</span><span class="ptc-badge">3</span></div>
+          <span class="ptc-hint">нажмите для выбора ›</span>
+        </div>
+        <div class="active-chips">
+          <div class="ach"><div class="ach-dot" style="background:#FF8562"></div>Умнов</div>
+          <div class="ach"><div class="ach-dot" style="background:#263146"></div>Бурдин</div>
+          <div class="ach"><div class="ach-dot" style="background:#18A558"></div>Захаренков</div>
+        </div>
+        <div class="chart-area" style="opacity:0.3">
+          <svg class="chart" viewBox="0 0 200 80" preserveAspectRatio="none" height="80">
+            <polyline points="0,60 25,40 50,46 75,30 100,40 125,25 150,22 175,30 200,25" fill="none" stroke="#FF8562" stroke-width="2"/>
+            <polyline points="0,55 25,44 50,50 75,36 100,43 125,30 150,27 175,35 200,30" fill="none" stroke="#263146" stroke-width="2"/>
+            <polyline points="0,62 25,48 50,53 75,40 100,47 125,35 150,32 175,40 200,35" fill="none" stroke="#18A558" stroke-width="2"/>
+          </svg>
+        </div>
+
+        <!-- Overlay + Bottom sheet -->
+        <div class="sheet-overlay"></div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <span class="sheet-title">Выбор участников</span>
+            <div class="sheet-actions">
+              <span class="sheet-btn">Все</span>
+              <span class="sheet-btn" style="color:#888">Сбросить</span>
+            </div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#FF8562"></div>
+            <div class="si-name">Умнов Михаил</div>
+            <div class="si-km">172.2 км</div>
+            <div class="si-check on">✓</div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#263146"></div>
+            <div class="si-name">Бурдин Игорь</div>
+            <div class="si-km">168.4 км</div>
+            <div class="si-check on">✓</div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#18A558"></div>
+            <div class="si-name">Захаренков Илья</div>
+            <div class="si-km">160.1 км</div>
+            <div class="si-check on">✓</div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#4169e1"></div>
+            <div class="si-name">Подлесный Валерий</div>
+            <div class="si-km">155.6 км</div>
+            <div class="si-check"></div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#8a4fff"></div>
+            <div class="si-name">Ребенков Владимир</div>
+            <div class="si-km">148.3 км</div>
+            <div class="si-check"></div>
+          </div>
+          <div class="sheet-item">
+            <div class="si-dot" style="background:#e0a020"></div>
+            <div class="si-name">Прокофьева Елена</div>
+            <div class="si-km">140.0 км</div>
+            <div class="si-check"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="max-width:520px;margin:20px auto 0">
+  <h3>Как это работает</h3>
+  <ul style="font-size:13px;line-height:1.8;color:#555;margin:0;padding-left:18px">
+    <li><strong>При открытии вкладки</strong> — автоматически выбираются топ-3 по кругам</li>
+    <li><strong>Выбранные</strong> — толстые яркие линии; <strong>невыбранные</strong> — тонкие серые «призраки» (контекст)</li>
+    <li><strong>Строка «Участники (3)»</strong> с цветными чипами — открывает шторку снизу</li>
+    <li><strong>В шторке</strong> — список с чекбоксами, расстоянием и кнопками Все/Сбросить</li>
+    <li>На десктопе <strong>ничего не меняется</strong> — сайдбар остаётся как есть</li>
+  </ul>
+</div>

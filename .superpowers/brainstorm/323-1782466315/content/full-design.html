@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мокап: вкладка «Круги»</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; font-size: 14px; }
+
+  .page-header { background: #1a1a1a; color: #fff; padding: 12px 20px; font-size: 13px; display: flex; align-items: center; gap: 12px; }
+  .page-header strong { color: #c0392b; font-size: 16px; }
+
+  /* Page tabs */
+  .tri-page-tabs { background: #fff; border-bottom: 2px solid #e8e8e8; padding: 0 20px; display: flex; gap: 0; }
+  .tri-page-tab { padding: 12px 20px; border: none; background: none; cursor: pointer; font-size: 14px; font-weight: 500; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .15s; }
+  .tri-page-tab.active { color: #c0392b; border-bottom-color: #c0392b; }
+  .tri-page-tab.new { color: #2980b9; border-bottom-color: #2980b9; }
+
+  /* Filters bar */
+  .filters-bar { background: #fff; padding: 10px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; flex-wrap: wrap; }
+  .filter-chip { padding: 4px 12px; border-radius: 20px; border: 1px solid #ddd; background: #f9f9f9; font-size: 12px; cursor: pointer; color: #555; }
+  .filter-chip.active { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .filter-label { font-size: 12px; color: #999; }
+
+  /* Slider section */
+  .slider-section { background: #fff; padding: 14px 20px; border-bottom: 1px solid #eee; }
+  .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .slider-title { font-size: 12px; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .slider-range-label { font-size: 13px; font-weight: 700; color: #c0392b; }
+  .slider-wrap { position: relative; height: 32px; margin: 0 8px; }
+  .slider-track { position: absolute; top: 14px; left: 0; right: 0; height: 4px; background: #e8e8e8; border-radius: 2px; }
+  .slider-fill { position: absolute; top: 14px; left: 5%; width: 67%; height: 4px; background: #c0392b; border-radius: 2px; }
+  .slider-thumb { position: absolute; top: 6px; width: 20px; height: 20px; background: #c0392b; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .slider-thumb.left { left: calc(5% - 10px); }
+  .slider-thumb.right { left: calc(72% - 10px); }
+  .slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px; }
+  .slider-meta { font-size: 11px; color: #999; margin-top: 6px; text-align: center; }
+
+  /* Table */
+  .table-wrap { padding: 0 20px 20px; }
+  .laps-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .laps-table th { padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .4px; border-bottom: 2px solid #e8e8e8; background: #fafafa; }
+  .laps-table th.sort-active { color: #c0392b; }
+  .laps-table th.sort-active::after { content: ' ▲'; }
+  .laps-table td { padding: 9px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  .summary-row td { background: #fff; cursor: pointer; }
+  .summary-row:hover td { background: #fef9f9; }
+  .summary-row.open td { background: #fff7f7; }
+  .detail-wrap { background: #fafafa; border-bottom: 2px solid #f0f0f0; }
+  .detail-inner { padding: 0 10px 12px 40px; }
+  .detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .detail-table th { padding: 5px 8px; text-align: left; font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: .3px; border-bottom: 1px solid #eee; }
+  .detail-table td { padding: 5px 8px; border-bottom: 1px solid #f5f5f5; }
+  .rank-cell { font-weight: 800; color: #c0392b; width: 36px; font-size: 15px; }
+  .name-cell { font-weight: 600; }
+  .tag { display: inline-block; background: #f0f0f0; border-radius: 3px; padding: 1px 5px; font-size: 10px; color: #777; margin-left: 4px; }
+  .expand-btn { color: #bbb; font-size: 10px; user-select: none; }
+  .open .expand-btn { color: #c0392b; transform: rotate(90deg); display: inline-block; }
+  .best-val { color: #27ae60; font-weight: 700; }
+  .worst-val { color: #c0392b; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Delta */
+  .delta-pos { color: #27ae60; font-size: 11px; }
+  .delta-neg { color: #c0392b; font-size: 11px; }
+  .star { color: #f39c12; }
+
+  /* Lap bar (mini visual) */
+  .lap-bar-wrap { display: inline-block; width: 50px; height: 6px; background: #eee; border-radius: 3px; vertical-align: middle; margin-left: 6px; }
+  .lap-bar { height: 6px; border-radius: 3px; background: #c0392b; }
+
+  /* Annotation */
+  .annotation { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #856404; margin: 12px 20px 0; }
+  .annotation strong { color: #533f03; }
+
+  /* New badge */
+  .new-badge { display: inline-block; background: #2980b9; color: #fff; border-radius: 3px; font-size: 9px; padding: 1px 5px; vertical-align: middle; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <strong>TRIATLETA 24H</strong>
+  <span style="color:#aaa">live · обновляется автоматически</span>
+</div>
+
+<!-- Page tabs -->
+<div class="tri-page-tabs">
+  <button class="tri-page-tab">Расстояние</button>
+  <button class="tri-page-tab">Отрезки</button>
+  <button class="tri-page-tab">График</button>
+  <button class="tri-page-tab new active">Круги <span class="new-badge">NEW</span></button>
+</div>
+
+<!-- Filters (synced with other tabs) -->
+<div class="filters-bar">
+  <span class="filter-label">Зачёт:</span>
+  <button class="filter-chip active">Все</button>
+  <button class="filter-chip">Мужчины</button>
+  <button class="filter-chip">Женщины</button>
+  <button class="filter-chip">Эстафета</button>
+</div>
+
+<!-- Range slider -->
+<div class="slider-section">
+  <div class="slider-header">
+    <span class="slider-title">Диапазон кругов</span>
+    <span class="slider-range-label">Круги 10 — 25</span>
+  </div>
+  <div class="slider-wrap">
+    <div class="slider-track"></div>
+    <div class="slider-fill"></div>
+    <div class="slider-thumb left"></div>
+    <div class="slider-thumb right"></div>
+  </div>
+  <div class="slider-labels">
+    <span>Круг 1</span>
+    <span>Круг 178 (текущий)</span>
+  </div>
+  <div class="slider-meta">Показано 16 кругов · 64.6 км · период 3ч 58м</div>
+</div>
+
+<!-- Annotation explaining sort -->
+<div class="annotation">
+  <strong>Сортировка по лучшему кругу в диапазоне.</strong> Таблица показывает итоги периода кр. 10–25 — не общего зачёта.
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table class="laps-table">
+    <thead>
+      <tr>
+        <th style="width:36px">#</th>
+        <th>Участник</th>
+        <th>Кругов</th>
+        <th class="sort-active">Лучший ↑</th>
+        <th>Худший</th>
+        <th>Средний</th>
+        <th>Разброс</th>
+        <th style="width:30px"></th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- Row 1 — collapsed -->
+      <tr class="summary-row">
+        <td class="rank-cell">1</td>
+        <td class="name-cell">Иванов И. <span class="tag">М</span></td>
+        <td class="num">16</td>
+        <td class="best-val num">14:22</td>
+        <td class="worst-val num">18:05</td>
+        <td class="num">15:44</td>
+        <td class="num">±1:43</td>
+        <td><span class="expand-btn">▶</span></td>
+      </tr>
+
+      <!-- Row 2 — OPEN with detail -->
+      <tr class="summary-row open">
+        <td class="rank-cell">2</td>
+        <td class="name-cell">Сидоров В. <span class="tag">М</span></td>
+        <td class="num">15</td>
+        <td class="best-val num">14:55</td>
+        <td class="worst-val num">19:12</td>
+        <td class="num">16:10</td>
+        <td class="num">±2:09</td>
+        <td><span class="expand-btn open">▶</span></td>
+      </tr>
+      <tr class="detail-wrap">
+        <td colspan="8">
+          <div class="detail-inner">
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  <th>Круг</th>
+                  <th>Время</th>
+                  <th>Скорость</th>
+                  <th>±от среднего</th>
+                  <th>Нарастающее</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>10</td>
+                  <td class="num best-val">14:55 <span class="star">★</span></td>
+                  <td class="num">16.2 км/ч</td>
+                  <td class="delta-pos num">−1:15</td>
+                  <td class="num">2:29:30</td>
+                </tr>
+                <tr>
+                  <td>11</td>
+                  <td class="num">15:40</td>
+                  <td class="num">15.5 км/ч</td>
+                  <td class="delta-pos num">−0:30</td>
+                  <td class="num">2:45:10</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td class="num">16:22</td>
+                  <td class="num">14.8 км/ч</td>
+                  <td class="delta-neg num">+0:12</td>
+                  <td class="num">3:01:32</td>
+                </tr>
+                <tr>
+                  <td>13</td>
+                  <td class="num worst-val">19:12</td>
+                  <td class="num">12.6 км/ч</td>
+                  <td class="delta-neg num">+3:02</td>
+                  <td class="num">3:20:44</td>
+                </tr>
+                <tr style="color:#aaa;font-style:italic;">
+                  <td colspan="5" style="padding:4px 8px;font-size:11px;">…ещё 11 кругов</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Row 3 -->
+      <tr class="summary-row">
+        <td class="rank-cell">3</td>
+        <td class="name-cell">Петрова А. <span class="tag">Ж</span></td>
+        <td class="num">14</td>
+        <td class="best-val num">16:01</td>
+        <td class="worst-val num">20:45</td>
+        <td class="num">17:50</td>
+        <td class="num">±2:31</td>
+        <td><span class="expand-btn">▶</span></td>
+      </tr>
+
+      <!-- Row 4 — DNF -->
+      <tr class="summary-row" style="opacity:.55;">
+        <td class="rank-cell" style="color:#999">—</td>
+        <td class="name-cell" style="color:#999">Козлов Р. <span class="tag">М</span> <span style="background:#fee;color:#c0392b;border:1px solid #f5c6cb;border-radius:3px;padding:1px 5px;font-size:10px;">DNF</span></td>
+        <td class="num">3</td>
+        <td class="num" style="color:#999">17:44</td>
+        <td class="num" style="color:#999">22:10</td>
+        <td class="num" style="color:#999">19:30</td>
+        <td class="num" style="color:#999">±2:13</td>
+        <td><span class="expand-btn">▶</span></td>
+      </tr>
+
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

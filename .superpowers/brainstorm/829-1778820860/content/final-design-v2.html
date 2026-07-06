@@ -1,0 +1,242 @@
+<h2>Вкладка «Подготовка стартовых» — v2</h2>
+<p class="subtitle">Только нарушения · email в льготах · ID в дубликатах</p>
+
+<style>
+  .dl { background:#1a1a2a; border-radius:10px; padding:16px; cursor:pointer; border:2px solid #333; transition:border-color .2s,box-shadow .2s; }
+  .dl:hover, .dl.selected { border-color:#ee2d62; box-shadow:0 0 0 3px rgba(238,45,98,.2); }
+
+  .sel-row { display:flex; gap:8px; margin-bottom:16px; align-items:center; flex-wrap:wrap; }
+  .sel { background:#252535; border:1px solid #444; border-radius:5px; padding:5px 12px; font-size:11px; color:#ccc; }
+  .sel b { color:#fff; }
+  .sel-hint { font-size:9px; color:#444; }
+
+  .check-row { display:grid; grid-template-columns:150px 1fr; gap:10px; margin-bottom:12px; }
+
+  .ind-box { background:#252535; border-radius:7px; padding:14px 10px;
+    display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; }
+  .ind-label { font-size:9px; color:#666; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; line-height:1.4; }
+  .ind-num { font-size:34px; font-weight:700; line-height:1; }
+  .ind-sub { font-size:9px; color:#555; margin-top:5px; line-height:1.5; }
+  .ind-rules { font-size:8px; color:#3a3a4a; margin-top:8px; padding-top:7px;
+    border-top:1px solid #2a2a3a; line-height:1.8; text-align:left; width:100%; }
+
+  .tbl-box { background:#252535; border-radius:7px; padding:12px; }
+  .tbl-head-row { display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:8px; gap:8px; flex-wrap:wrap; }
+  .tbl-title { font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.4px; white-space:nowrap; }
+  .tbl-title.red   { color:#ee2d62; }
+  .tbl-title.warn  { color:#f5a623; }
+  .tbl-title.ok    { color:#27ae60; }
+  .sql-hint { font-size:9px; color:#3a3a4a; font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:340px; }
+
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  th { background:#1e1e2e; color:#555; padding:6px 8px; text-align:left;
+    font-size:10px; text-transform:uppercase; letter-spacing:.3px; border-bottom:1px solid #2a2a3a; white-space:nowrap; }
+  td { padding:5px 8px; border-bottom:1px solid #222; color:#ccc; vertical-align:middle; white-space:nowrap; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:#2a2a3e; }
+
+  .empty-row td { text-align:center; color:#333; font-style:italic; padding:14px 8px; }
+  .err  { color:#ff6b6b; font-weight:600; }
+  .wrn  { color:#ffa94d; font-weight:600; }
+  .ok-c { color:#51cf66; }
+  .mono { font-family:monospace; }
+  .note { font-size:9px; color:#333; margin-top:6px; font-style:italic; }
+
+  .red-num  { color:#ee2d62; }
+  .warn-num { color:#f5a623; }
+  .ok-num   { color:#27ae60; }
+</style>
+
+<div class="dl" data-choice="approved" onclick="toggleSelect(this)">
+
+  <!-- Selectors -->
+  <div class="sel-row">
+    <span style="font-size:10px;color:#555;">Фильтры:</span>
+    <div class="sel">Событие: <b>Ночной забег</b> ▾</div>
+    <div class="sel">Год: <b>2025</b> ▾</div>
+    <span class="sel-hint">← селекторы DataLens, применяются ко всем QL-чартам вкладки</span>
+  </div>
+
+  <!-- ① Льготные категории -->
+  <div class="check-row">
+    <div class="ind-box">
+      <div class="ind-label">Льготные<br>категории</div>
+      <div class="ind-num red-num">8</div>
+      <div class="ind-sub">несоответствий</div>
+      <div class="ind-rules">
+        Дети: возраст ≥ 18 лет<br>
+        Пенсионер М: &lt; 60 лет<br>
+        Пенсионер Ж: &lt; 55 лет<br>
+        Студент: не 18–22 года
+      </div>
+    </div>
+    <div class="tbl-box">
+      <div class="tbl-head-row">
+        <div class="tbl-title red">① Льготные категории — несоответствие возрасту</div>
+        <div class="sql-hint">WHERE category IN (...льготные...) AND age не соответствует</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Фамилия Имя</th><th>Email</th><th>Пол</th><th>Г.р.</th><th>Возраст</th>
+          <th>Дистанция</th><th>Категория в заявке</th><th>Несоответствие</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Иванов Иван</td><td>ivanov@mail.ru</td><td>М</td><td>1999</td><td>25</td>
+            <td>5 км</td><td>Дети младше 18 лет</td><td class="err">✗ Возраст ≥ 18</td>
+          </tr>
+          <tr>
+            <td>Петрова Ольга</td><td>petrova@ya.ru</td><td>Ж</td><td>1972</td><td>52</td>
+            <td>5 км</td><td>Пенсионеры</td><td class="err">✗ Ж &lt; 55 лет</td>
+          </tr>
+          <tr>
+            <td>Смирнов Иван</td><td>smirnov@ya.ru</td><td>М</td><td>2000</td><td>24</td>
+            <td>2 км</td><td>Участники 18-22 года</td><td class="err">✗ Возраст &gt; 22</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ② Именные промокоды -->
+  <div class="check-row">
+    <div class="ind-box">
+      <div class="ind-label">Именные<br>промокоды</div>
+      <div class="ind-num warn-num">23</div>
+      <div class="ind-sub">заявок с кодом *99</div>
+    </div>
+    <div class="tbl-box">
+      <div class="tbl-head-row">
+        <div class="tbl-title warn">② Именные промокоды (скидка 99) — список для сверки</div>
+        <div class="sql-hint">WHERE promocode LIKE '%99'</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Фамилия Имя</th><th>Email</th><th>Промокод</th>
+          <th>Дистанция</th><th>Г.р.</th><th>Дата заявки</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Сидоров Артём</td><td>sidorov@mail.ru</td><td class="wrn mono">BIKECORE99</td>
+            <td>5 км</td><td>1990</td><td>12.03.2025</td>
+          </tr>
+          <tr>
+            <td>Козлов Дмитрий</td><td>kozlov@gmail.com</td><td class="wrn mono">VIM99</td>
+            <td>10 км</td><td>1985</td><td>14.03.2025</td>
+          </tr>
+          <tr>
+            <td>Зызина Наталья</td><td>zyzina@yandex.ru</td><td class="wrn mono">ZYZINA99</td>
+            <td>5 км</td><td>1978</td><td>01.04.2025</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">Список для ручной сверки с авторизованным перечнем. Интеграция с Google Sheet — отдельная задача.</div>
+    </div>
+  </div>
+
+  <!-- ③ Дубликаты -->
+  <div class="check-row">
+    <div class="ind-box">
+      <div class="ind-label">Дубликаты<br>регистраций</div>
+      <div class="ind-num red-num">3</div>
+      <div class="ind-sub">повторных заявок</div>
+    </div>
+    <div class="tbl-box">
+      <div class="tbl-head-row">
+        <div class="tbl-title red">③ Дубликаты — повторные заявки</div>
+        <div class="sql-hint">WHERE is_duplicate = 1</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>ID заявки</th><th>Фамилия Имя</th><th>Email</th>
+          <th>Дистанция</th><th>Дата 1-й заявки</th><th>Дата дубля</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono" style="color:#4a9eff;">4821</td>
+            <td>Носова Мария</td><td>nosova@mail.ru</td>
+            <td>5 км</td><td>10.03.2025</td><td>11.03.2025</td>
+          </tr>
+          <tr>
+            <td class="mono" style="color:#4a9eff;">5103</td>
+            <td>Трофимов Павел</td><td>trofimov@mail.ru</td>
+            <td>2 км</td><td>15.03.2025</td><td>16.03.2025</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ④ Ошибки года рождения -->
+  <div class="check-row">
+    <div class="ind-box">
+      <div class="ind-label">Ошибки<br>года рождения</div>
+      <div class="ind-num red-num">2</div>
+      <div class="ind-sub">некорректных дат</div>
+      <div class="ind-rules">
+        Год &lt; 1900 → опечатка<br>
+        Год &gt; event_year → невозможно
+      </div>
+    </div>
+    <div class="tbl-box">
+      <div class="tbl-head-row">
+        <div class="tbl-title red">④ Некорректный год рождения</div>
+        <div class="sql-hint">WHERE YEAR(birthday) &lt; 1900 OR YEAR(birthday) &gt; event_year</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Фамилия Имя</th><th>Email</th><th>Введённый г.р.</th>
+          <th>Полная дата рожд.</th><th>Дистанция</th><th>Проблема</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Николаев Кирилл</td><td>n@mail.ru</td>
+            <td class="err mono">1020</td><td class="mono">1020-05-14</td>
+            <td>5 км</td><td class="err">Год &lt; 1900</td>
+          </tr>
+          <tr>
+            <td>Семёнова Татьяна</td><td>s@mail.ru</td>
+            <td class="err mono">0202</td><td class="mono">0202-11-03</td>
+            <td>10 км</td><td class="err">Год &lt; 1900</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ⑤ Минимальный возраст -->
+  <div class="check-row">
+    <div class="ind-box">
+      <div class="ind-label">Минимальный<br>возраст</div>
+      <div class="ind-num ok-num">0</div>
+      <div class="ind-sub">нарушений</div>
+      <div class="ind-rules">
+        2 км → от 7 лет<br>
+        С. ходьба → от 12 лет<br>
+        (Жара: от 7 лет)<br>
+        5 / 7 / 10 км → от 12 лет<br>
+        21.1 км → от 18 лет
+      </div>
+    </div>
+    <div class="tbl-box">
+      <div class="tbl-head-row">
+        <div class="tbl-title ok">⑤ Минимальный возраст по дистанции</div>
+        <div class="sql-hint">WHERE (event_year − YEAR(birthday)) &lt; min_age(distance, event_name)</div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Фамилия Имя</th><th>Email</th><th>Дистанция</th>
+          <th>Г.р.</th><th>Возраст</th><th>Мин. возраст</th><th>Нарушение</th>
+        </tr></thead>
+        <tbody>
+          <tr class="empty-row"><td colspan="7">Нарушений не найдено ✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:14px;">Кликни на макет чтобы одобрить, или опиши правки в терминале</p>

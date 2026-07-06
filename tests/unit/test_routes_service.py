@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.tracker.services.routes_service import RouteCalculator
+from src.krasmarafon.services.routes_service import RouteCalculator
 
 
 # Простой маршрут: 5 точек по прямой (широта 56.0..56.004, долгота 92.0)

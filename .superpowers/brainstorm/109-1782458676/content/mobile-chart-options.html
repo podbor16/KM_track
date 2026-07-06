@@ -1,0 +1,189 @@
+<h2>Мобильный вид вкладки «График»</h2>
+<p class="subtitle">Три подхода к компактной организации фильтра участников. Выбери один или несколько.</p>
+
+<style>
+.phone-row { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.phone { width: 220px; border: 2px solid #d0d0d0; border-radius: 24px; overflow: hidden; background: #f5f5f5; box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.phone-screen { background: #fff; margin: 8px; border-radius: 18px; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; }
+.ph-tabs { display: flex; border-bottom: 2px solid #e8e8e8; }
+.ph-tab { flex: 1; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; color: #888; }
+.ph-tab.active { color: #263146; border-bottom: 2px solid #FF8562; margin-bottom: -2px; }
+.ph-subtabs { display: flex; gap: 6px; padding: 8px; background: #fff; }
+.ph-subtab { padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; border: 1.5px solid #e0e0e0; color: #888; }
+.ph-subtab.active { background: #263146; color: #fff; border-color: #263146; }
+.ph-chart { background: #fff; height: 160px; display: flex; flex-direction: column; justify-content: flex-end; padding: 8px; border-top: 1px solid #f0f0f0; position: relative; }
+.ph-chart-lines { flex: 1; position: relative; overflow: hidden; }
+.ph-line { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; }
+.ph-y-label { position: absolute; left: 0; font-size: 9px; color: #bbb; }
+.ph-x-labels { display: flex; justify-content: space-between; font-size: 9px; color: #bbb; padding: 2px 0 0; }
+
+/* Option A — Collapsible */
+.opt-a-filter { background: #fafafa; border-bottom: 1px solid #e8e8e8; }
+.opt-a-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; cursor: pointer; }
+.opt-a-title { font-size: 11px; font-weight: 700; color: #263146; }
+.opt-a-meta { font-size: 10px; color: #FF8562; font-weight: 700; }
+.opt-a-arrow { font-size: 10px; color: #888; }
+.opt-a-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 8px; }
+.opt-a-chip { padding: 3px 8px; border-radius: 12px; font-size: 10px; background: #263146; color: #fff; font-weight: 600; }
+.opt-a-chip.off { background: #f0f0f0; color: #888; }
+.opt-a-actions { display: flex; gap: 4px; padding: 4px 8px 6px; }
+.opt-a-btn { flex: 1; padding: 3px; font-size: 10px; border: 1px solid #e0e0e0; border-radius: 4px; text-align: center; color: #888; background: #fff; }
+
+/* Option B — Horizontal scroll chips */
+.opt-b-scroll-wrap { overflow-x: auto; white-space: nowrap; padding: 7px 8px; background: #fafafa; border-bottom: 1px solid #e8e8e8; display: flex; gap: 5px; }
+.opt-b-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 16px; font-size: 10px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.opt-b-chip.ctrl { background: #263146; color: #fff; }
+.opt-b-chip.on { background: #263146; color: #fff; }
+.opt-b-chip.off { background: #f0f0f0; color: #888; }
+.opt-b-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* Option C — Floating filter button */
+.opt-c-wrap { position: relative; }
+.opt-c-fab { position: absolute; top: 8px; right: 8px; background: #263146; color: #fff; border-radius: 20px; padding: 5px 10px; font-size: 10px; font-weight: 700; display: flex; align-items: center; gap: 4px; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.opt-c-badge { background: #FF8562; color: #fff; border-radius: 10px; padding: 1px 5px; font-size: 9px; }
+.ph-chart-bg { background: linear-gradient(180deg, #fff 0%, #f9f9f9 100%); }
+
+/* SVG chart lines */
+svg.mini-chart { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+.option-label { text-align: center; margin-top: 8px; font-weight: 700; font-size: 13px; }
+.option-sub { text-align: center; font-size: 11px; color: #888; margin-top: 2px; margin-bottom: 8px; }
+</style>
+
+<div class="cards" data-multiselect>
+
+  <!-- Option A: Collapsible -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расстояние</div>
+              <div class="ph-tab">Отрезки</div>
+              <div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div>
+              <div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="opt-a-filter">
+              <div class="opt-a-header">
+                <span class="opt-a-title">Участники</span>
+                <span class="opt-a-meta">3 выбрано</span>
+                <span class="opt-a-arrow">▲</span>
+              </div>
+              <div class="opt-a-actions">
+                <div class="opt-a-btn">Все</div>
+                <div class="opt-a-btn">Сбросить</div>
+              </div>
+              <div class="opt-a-chips">
+                <div class="opt-a-chip">Умнов</div>
+                <div class="opt-a-chip">Бурдин</div>
+                <div class="opt-a-chip">Захарен...</div>
+                <div class="opt-a-chip off">Кондра...</div>
+                <div class="opt-a-chip off">Ребенков</div>
+                <div class="opt-a-chip off">Прокоф...</div>
+              </div>
+            </div>
+            <div class="ph-chart ph-chart-bg">
+              <div class="ph-chart-lines">
+                <svg class="mini-chart" viewBox="0 0 200 110" preserveAspectRatio="none">
+                  <polyline points="0,80 20,50 40,60 60,40 80,55 100,35 120,45 140,30 160,50 180,40 200,35" fill="none" stroke="#FF8562" stroke-width="2"/>
+                  <polyline points="0,70 20,55 40,65 60,50 80,60 100,45 120,55 140,40 160,60 180,50 200,45" fill="none" stroke="#263146" stroke-width="2"/>
+                  <polyline points="0,90 20,65 40,75 60,60 80,70 100,55 120,65 140,50 160,70 180,60 200,55" fill="none" stroke="#18A558" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="ph-x-labels"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Сворачиваемый блок</h3>
+      <p>Фильтр разворачивается/сворачивается по тапу. Можно держать свёрнутым — тогда виден только счётчик «3 выбрано». График всегда под фильтром.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Horizontal scroll -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расстояние</div>
+              <div class="ph-tab">Отрезки</div>
+              <div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div>
+              <div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="opt-b-scroll-wrap">
+              <div class="opt-b-chip ctrl">Все</div>
+              <div class="opt-b-chip ctrl">✕</div>
+              <div class="opt-b-chip on"><div class="opt-b-dot" style="background:#FF8562"></div>Умнов</div>
+              <div class="opt-b-chip on"><div class="opt-b-dot" style="background:#263146"></div>Бурдин</div>
+              <div class="opt-b-chip off"><div class="opt-b-dot" style="background:#18A558"></div>Захар…</div>
+              <div class="opt-b-chip off"><div class="opt-b-dot" style="background:#4169e1"></div>Кондра…</div>
+            </div>
+            <div class="ph-chart ph-chart-bg" style="height:180px">
+              <div class="ph-chart-lines">
+                <svg class="mini-chart" viewBox="0 0 200 130" preserveAspectRatio="none">
+                  <polyline points="0,100 20,65 40,75 60,50 80,65 100,45 120,55 140,35 160,55 180,45 200,40" fill="none" stroke="#FF8562" stroke-width="2"/>
+                  <polyline points="0,90 20,70 40,80 60,60 80,75 100,55 120,65 140,45 160,65 180,55 200,50" fill="none" stroke="#263146" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="ph-x-labels"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Горизонтальная прокрутка</h3>
+      <p>Один ряд чипов со свайпом влево/вправо. Максимально компактно — график начинается сразу. Для выбора нужно свайпать, чтобы найти участника.</p>
+    </div>
+  </div>
+
+  <!-- Option C: FAB + bottom sheet -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone-row">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="ph-tabs">
+              <div class="ph-tab">Расстояние</div>
+              <div class="ph-tab">Отрезки</div>
+              <div class="ph-tab active">График</div>
+            </div>
+            <div class="ph-subtabs">
+              <div class="ph-subtab active">Скорость</div>
+              <div class="ph-subtab">Позиция</div>
+            </div>
+            <div class="opt-c-wrap">
+              <div class="opt-c-fab">⚙ Участники <span class="opt-c-badge">3</span></div>
+              <div class="ph-chart ph-chart-bg" style="height:210px">
+                <div class="ph-chart-lines">
+                  <svg class="mini-chart" viewBox="0 0 200 160" preserveAspectRatio="none">
+                    <polyline points="0,120 20,85 40,95 60,65 80,80 100,55 120,70 140,45 160,65 180,55 200,50" fill="none" stroke="#FF8562" stroke-width="2"/>
+                    <polyline points="0,110 20,90 40,100 60,75 80,90 100,70 120,80 140,60 160,80 180,70 200,65" fill="none" stroke="#263146" stroke-width="2"/>
+                    <polyline points="0,130 20,100 40,110 60,90 80,100 100,80 120,95 140,70 160,90 180,80 200,75" fill="none" stroke="#18A558" stroke-width="2"/>
+                  </svg>
+                </div>
+                <div class="ph-x-labels"><span>4ч</span><span>8ч</span><span>12ч</span><span>16ч</span><span>20ч</span><span>24ч</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Кнопка + шторка снизу</h3>
+      <p>Кнопка «Участники (3)» над графиком открывает шторку снизу (bottom sheet). График занимает максимум места. Требует дополнительный тап для выбора.</p>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,219 @@
+<h2>Содержимое каждой вкладки</h2>
+<p class="subtitle">Три варианта вкладки «Результат» — главная вкладка. Темп и Отрезки одинаковы во всех вариантах.</p>
+
+<style>
+  .phone {
+    width: 230px;
+    border: 2px solid #444;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #0d1117;
+    font-size: 11px;
+    color: #ccc;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    flex-shrink: 0;
+  }
+  .phone-bar {
+    background: #1a1f2e;
+    padding: 6px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #2a2a3e;
+  }
+  .phone-bar-close { color: #666; font-size: 14px; }
+  .phone-meta { padding: 4px 12px 6px; font-size: 9px; color: #888; border-bottom: 1px solid #1e2535; }
+  .phone-tabs {
+    display: flex;
+    border-bottom: 1px solid #1e2535;
+    background: #111827;
+  }
+  .phone-tab {
+    flex: 1;
+    text-align: center;
+    padding: 7px 4px;
+    font-size: 10px;
+    color: #666;
+    border-bottom: 2px solid transparent;
+  }
+  .phone-tab.active { color: #EE2D62; border-bottom-color: #EE2D62; font-weight: 600; }
+  .phone-content { padding: 10px 12px; }
+
+  /* Вариант A — таблица строк */
+  .res-table-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1e2535; font-size: 10px; }
+  .res-table-label { color: #888; }
+  .res-table-val { font-weight: 600; color: #fff; }
+  .res-table-val--gun { color: #EE2D62; }
+  .res-table-val--net { color: #4a9eff; }
+  .res-divider { text-align: center; font-size: 8px; color: #444; padding: 4px 0; border-top: 1px solid #1e2535; border-bottom: 1px solid #1e2535; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Вариант B — два блока вертикально */
+  .res-block { background: #111827; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .res-block--gun { border-left: 3px solid #EE2D62; }
+  .res-block--net { border-left: 3px solid #4a9eff; }
+  .res-block-label { font-size: 8px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
+  .res-block-time { font-size: 22px; font-weight: 700; line-height: 1; }
+  .res-block-time--gun { color: #EE2D62; }
+  .res-block-time--net { color: #4a9eff; }
+  .res-block-meta { font-size: 9px; color: #666; margin-top: 3px; }
+
+  /* Вариант C — переключатель */
+  .res-toggle { display: flex; background: #111827; border-radius: 6px; padding: 2px; margin-bottom: 8px; }
+  .res-toggle-btn { flex: 1; text-align: center; padding: 5px; font-size: 10px; border-radius: 4px; color: #888; }
+  .res-toggle-btn.active { background: #EE2D62; color: #fff; font-weight: 600; }
+  .res-big-time { font-size: 30px; font-weight: 700; color: #EE2D62; text-align: center; line-height: 1; }
+  .res-big-pace { font-size: 12px; color: #888; text-align: center; margin-top: 3px; }
+  .res-ranks { display: flex; gap: 6px; margin-top: 10px; }
+  .res-rank-item { flex: 1; background: #111827; border-radius: 6px; padding: 5px; text-align: center; }
+  .res-rank-label { font-size: 7px; color: #666; text-transform: uppercase; }
+  .res-rank-val { font-size: 13px; font-weight: 700; color: #EE2D62; }
+
+  /* Общая часть: вкладки Темп и Отрезки */
+  .chart-bars { display: flex; gap: 3px; align-items: flex-end; height: 45px; margin: 6px 0; }
+  .chart-bar { flex: 1; border-radius: 2px 2px 0 0; }
+  .chart-labels { display: flex; gap: 3px; font-size: 7px; color: #555; }
+  .chart-label { flex: 1; text-align: center; }
+  .seg-card { background: #162030; border-radius: 4px; padding: 5px 8px; margin-bottom: 3px; display: grid; grid-template-columns: 1fr auto auto; font-size: 9px; gap: 4px; }
+  .seg-name { color: #aaa; }
+  .seg-time { font-weight: 600; color: #fff; text-align: right; }
+  .seg-pace { color: #4a9eff; text-align: right; }
+
+  .phones-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .phone-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border-radius: 12px;
+    padding: 10px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .phone-wrap:hover { border-color: #333; }
+  .phone-wrap.selected { border-color: #EE2D62; }
+  .phone-label { font-size: 12px; font-weight: 600; color: #eee; }
+  .phone-desc { font-size: 10px; color: #888; text-align: center; max-width: 200px; line-height: 1.4; }
+</style>
+
+<div class="phones-row">
+
+  <!-- Вариант A — строки label/value -->
+  <div class="phone-wrap" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="phone">
+      <div class="phone-bar">
+        <span>Петров Алексей</span>
+        <span class="phone-bar-close">×</span>
+      </div>
+      <div class="phone-meta">5 км · М · 1990 г.р. · Финишировал</div>
+      <div class="phone-tabs">
+        <div class="phone-tab active">Результат</div>
+        <div class="phone-tab">Темп</div>
+        <div class="phone-tab">Отрезки</div>
+      </div>
+      <div class="phone-content">
+        <div class="res-divider">Официальное</div>
+        <div class="res-table-row"><span class="res-table-label">Время</span><span class="res-table-val res-table-val--gun">00:25:31</span></div>
+        <div class="res-table-row"><span class="res-table-label">Темп</span><span class="res-table-val res-table-val--gun">5:06 мин/км</span></div>
+        <div class="res-table-row"><span class="res-table-label">Место общ.</span><span class="res-table-val">#1</span></div>
+        <div class="res-table-row"><span class="res-table-label">Пол</span><span class="res-table-val">М#1</span></div>
+        <div class="res-table-row"><span class="res-table-label">Кат.</span><span class="res-table-val">М30–34 #1</span></div>
+        <div class="res-divider">Чистое</div>
+        <div class="res-table-row"><span class="res-table-label">Время</span><span class="res-table-val res-table-val--net">00:25:07</span></div>
+        <div class="res-table-row"><span class="res-table-label">Темп</span><span class="res-table-val res-table-val--net">5:01 мин/км</span></div>
+        <div class="res-table-row"><span class="res-table-label">Место общ.</span><span class="res-table-val">#1</span></div>
+        <div class="res-table-row"><span class="res-table-label">Пол</span><span class="res-table-val">М#1</span></div>
+      </div>
+    </div>
+    <div class="phone-label">A — Список строк</div>
+    <div class="phone-desc">Все данные как label: value. Официальное и Чистое разделены заголовком.</div>
+  </div>
+
+  <!-- Вариант B — два блока вертикально -->
+  <div class="phone-wrap" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="phone">
+      <div class="phone-bar">
+        <span>Петров Алексей</span>
+        <span class="phone-bar-close">×</span>
+      </div>
+      <div class="phone-meta">5 км · М · 1990 г.р. · Финишировал</div>
+      <div class="phone-tabs">
+        <div class="phone-tab active">Результат</div>
+        <div class="phone-tab">Темп</div>
+        <div class="phone-tab">Отрезки</div>
+      </div>
+      <div class="phone-content">
+        <div class="res-block res-block--gun">
+          <div class="res-block-label">Официальное</div>
+          <div class="res-block-time res-block-time--gun">00:25:31</div>
+          <div class="res-block-meta">5:06 мин/км · #1 · М#1 · Кат#1</div>
+        </div>
+        <div class="res-block res-block--net">
+          <div class="res-block-label">Чистое</div>
+          <div class="res-block-time res-block-time--net">00:25:07</div>
+          <div class="res-block-meta">5:01 мин/км · #1 · М#1 · Кат#1</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">B — Два блока</div>
+    <div class="phone-desc">Официальное и Чистое — отдельные карточки с цветовой полосой. Компактно, всё видно сразу.</div>
+  </div>
+
+  <!-- Вариант C — переключатель -->
+  <div class="phone-wrap" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="phone">
+      <div class="phone-bar">
+        <span>Петров Алексей</span>
+        <span class="phone-bar-close">×</span>
+      </div>
+      <div class="phone-meta">5 км · М · 1990 г.р. · Финишировал</div>
+      <div class="phone-tabs">
+        <div class="phone-tab active">Результат</div>
+        <div class="phone-tab">Темп</div>
+        <div class="phone-tab">Отрезки</div>
+      </div>
+      <div class="phone-content">
+        <div class="res-toggle">
+          <div class="res-toggle-btn active">Официальное</div>
+          <div class="res-toggle-btn">Чистое</div>
+        </div>
+        <div class="res-big-time">00:25:31</div>
+        <div class="res-big-pace">5:06 мин/км</div>
+        <div class="res-ranks">
+          <div class="res-rank-item">
+            <div class="res-rank-label">Общее</div>
+            <div class="res-rank-val">#1</div>
+          </div>
+          <div class="res-rank-item">
+            <div class="res-rank-label">Пол</div>
+            <div class="res-rank-val">М#1</div>
+          </div>
+          <div class="res-rank-item">
+            <div class="res-rank-label">Кат.</div>
+            <div class="res-rank-val">#1</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">C — Переключатель</div>
+    <div class="phone-desc">Кнопки «Официальное / Чистое». Большое время, крупные ранги. Переключаешь — данные меняются.</div>
+  </div>
+
+</div>
+
+<div style="margin-top: 24px; padding: 12px 16px; background: #111827; border-radius: 8px; font-size: 11px; color: #888; max-width: 600px; margin-left: auto; margin-right: auto;">
+  <strong style="color: #eee;">Вкладка «Темп»</strong> — во всех вариантах одинакова: бар-чарт на полную ширину, каждый бар растягивается <code>flex: 1</code> вместо фиксированных 52px.<br><br>
+  <strong style="color: #eee;">Вкладка «Отрезки»</strong> — карточки-строки (как уже реализовано), плюс сплиты.
+</div>

@@ -1,0 +1,119 @@
+<h2>Компоновка вкладки «Подготовка стартовых»</h2>
+<p class="subtitle">Выбери подходящий вариант расположения 5 проверок</p>
+
+<div class="cards">
+
+  <!-- Option A: Аккордеон -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#f8f8f8;font-size:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin-bottom:6px;">
+        <span>🔴 <strong>Льготные категории</strong></span>
+        <span style="background:#ee2d62;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;">12 ошибок</span>
+        <span style="color:#aaa">▼</span>
+      </div>
+      <div style="background:#fff9fa;border:1px solid #fcc;border-radius:0 0 6px 6px;padding:8px 12px;margin-top:-6px;margin-bottom:6px;font-size:11px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;color:#555;">
+          <span>Иванов Иван</span><span>Дети</span><span style="color:#ee2d62">25 лет ✗</span>
+          <span>Петрова Ольга</span><span>Пенсионер</span><span style="color:#ee2d62">54 года ✗</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin-bottom:6px;">
+        <span>🟡 <strong>Промокоды</strong></span>
+        <span style="background:#f5a623;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;">5 проверить</span>
+        <span style="color:#aaa">▶</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin-bottom:6px;">
+        <span>🔴 <strong>Дубликаты</strong></span>
+        <span style="background:#ee2d62;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;">3 ошибки</span>
+        <span style="color:#aaa">▶</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin-bottom:6px;">
+        <span>🔴 <strong>Год рождения</strong></span>
+        <span style="background:#ee2d62;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;">2 ошибки</span>
+        <span style="color:#aaa">▶</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 14px;">
+        <span>🟢 <strong>Мин. возраст</strong></span>
+        <span style="background:#27ae60;color:#fff;border-radius:12px;padding:2px 8px;font-size:11px;">OK</span>
+        <span style="color:#aaa">▶</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Аккордеон</h3>
+      <p>Каждая проверка — строка с счётчиком, разворачивается в таблицу нарушений. Компактно, всё видно сразу.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Карточки-блоки -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#f8f8f8;font-size:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div style="background:#fff5f7;border:1px solid #fcc;border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Льготные категории</div>
+          <div style="font-size:24px;font-weight:700;color:#ee2d62;">12</div>
+          <div style="font-size:10px;color:#888;">несоответствий</div>
+          <div style="margin-top:6px;font-size:10px;color:#555;border-top:1px solid #eee;padding-top:4px;">Иванов Иван · 25 лет · Дети ✗</div>
+          <div style="font-size:10px;color:#555;">Петрова Ольга · 54 · Пенсионер ✗</div>
+        </div>
+        <div style="background:#fffbf0;border:1px solid #ffe0a0;border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Промокоды</div>
+          <div style="font-size:24px;font-weight:700;color:#f5a623;">5</div>
+          <div style="font-size:10px;color:#888;">требуют проверки</div>
+          <div style="margin-top:6px;font-size:10px;color:#555;border-top:1px solid #eee;padding-top:4px;">Сидоров А. · KM-2026 ·?</div>
+          <div style="font-size:10px;color:#555;">Козлов Д. · KM-2026 · ?</div>
+        </div>
+        <div style="background:#fff5f7;border:1px solid #fcc;border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Дубликаты</div>
+          <div style="font-size:24px;font-weight:700;color:#ee2d62;">3</div>
+          <div style="font-size:10px;color:#888;">дублирования</div>
+          <div style="margin-top:6px;font-size:10px;color:#555;border-top:1px solid #eee;padding-top:4px;">Носова М. · 5 км × 2</div>
+        </div>
+        <div style="background:#f5fff8;border:1px solid #b8f0cb;border-radius:8px;padding:10px;">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Мин. возраст</div>
+          <div style="font-size:24px;font-weight:700;color:#27ae60;">0</div>
+          <div style="font-size:10px;color:#888;">нарушений</div>
+        </div>
+      </div>
+      <div style="background:#fff5f7;border:1px solid #fcc;border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;">Ошибки года рождения</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:24px;font-weight:700;color:#ee2d62;">2</div>
+          <div style="font-size:10px;color:#555;">Николаев · г.р. 1020 &nbsp; Семёнова · г.р. 0202</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Карточки-блоки</h3>
+      <p>Каждая проверка — самостоятельный блок с большим числом нарушений и кратким списком. Dashboard-стиль.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Единая таблица с табами -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#f8f8f8;font-size:12px;">
+      <div style="display:flex;gap:0;margin-bottom:10px;border-bottom:2px solid #ee2d62;">
+        <div style="padding:6px 12px;background:#ee2d62;color:#fff;border-radius:6px 6px 0 0;font-size:11px;font-weight:600;">Льготы <span style="background:rgba(255,255,255,0.3);border-radius:8px;padding:0 5px;">12</span></div>
+        <div style="padding:6px 12px;color:#888;font-size:11px;">Промокоды <span style="background:#fee;border-radius:8px;padding:0 5px;color:#ee2d62;">5</span></div>
+        <div style="padding:6px 12px;color:#888;font-size:11px;">Дубли <span style="background:#fee;border-radius:8px;padding:0 5px;color:#ee2d62;">3</span></div>
+        <div style="padding:6px 12px;color:#888;font-size:11px;">Г.р. <span style="background:#fee;border-radius:8px;padding:0 5px;color:#ee2d62;">2</span></div>
+        <div style="padding:6px 12px;color:#888;font-size:11px;">Возраст ✓</div>
+      </div>
+      <div style="background:#fff;border-radius:6px;overflow:hidden;font-size:11px;">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;background:#ee2d62;color:#fff;padding:6px 10px;font-weight:600;gap:8px;">
+          <span>Участник</span><span>Категория</span><span>Возраст</span><span>Статус</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:6px 10px;border-bottom:1px solid #f0f0f0;gap:8px;">
+          <span>Иванов Иван</span><span>Дети</span><span>25 лет</span><span style="color:#ee2d62;">✗ Несоответствие</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:6px 10px;background:#fafafa;gap:8px;">
+          <span>Петрова Ольга</span><span>Пенсионер</span><span>54 года</span><span style="color:#ee2d62;">✗ Несоответствие</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Табы + таблица</h3>
+      <p>Одна таблица, переключение между типами проверок через табы. Экономит место, унифицированный вид.</p>
+    </div>
+  </div>
+
+</div>

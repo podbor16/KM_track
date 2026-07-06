@@ -1,0 +1,153 @@
+<h2>Макет: новая панель сегментов</h2>
+<p class="subtitle">Бар-чарт темпа (цвет по абсолютному значению) + таблица отрезков + сплиты. Кликни для выбора.</p>
+
+<div class="cards">
+  <div class="card" data-choice="approve" onclick="toggleSelect(this)" style="max-width:620px">
+    <div class="card-image" style="padding:0; background:#1a1a2e; border-radius:6px; overflow:hidden">
+
+      <!-- Header -->
+      <div style="padding:10px 16px; background:#16213e; border-bottom:1px solid #2a2a3e; display:flex; align-items:center; justify-content:space-between">
+        <span style="color:#e63946; font-weight:bold; font-size:12px; letter-spacing:0.5px">ТЕМП ПО ОТРЕЗКАМ</span>
+        <span style="color:#888; font-size:10px">7 отрезков</span>
+      </div>
+
+      <!-- Bar chart -->
+      <div style="padding:16px 16px 8px; background:#0f1923">
+        <div style="display:flex; align-items:flex-end; gap:5px; height:80px; position:relative">
+          <!-- Baseline label -->
+          <div style="position:absolute; left:0; right:0; bottom:20px; border-top:1px dashed #333; pointer-events:none"></div>
+
+          <!-- Bar 1: Старт→КТ1, 3:05 — green -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#4caf50; font-weight:bold">3:05</div>
+            <div style="background:#4caf50; width:100%; height:42px; border-radius:3px 3px 0 0; opacity:0.85"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">Ст→<br>КТ1</div>
+          </div>
+          <!-- Bar 2: КТ1→КТ2, 3:02 — green bright -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#66bb6a; font-weight:bold">3:02</div>
+            <div style="background:#66bb6a; width:100%; height:36px; border-radius:3px 3px 0 0; opacity:0.9"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ1→<br>КТ2</div>
+          </div>
+          <!-- Bar 3: КТ2→КТ3, 3:09 — yellow (anomaly) -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#ffd54f; font-weight:bold">3:09</div>
+            <div style="background:#ffd54f; width:100%; height:56px; border-radius:3px 3px 0 0; opacity:0.9"></div>
+            <div style="font-size:8px; color:#ffd54f; text-align:center; line-height:1.1; font-weight:bold">КТ2→<br>КТ3</div>
+          </div>
+          <!-- Bar 4: КТ3→КТ4, 3:05 — green -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#4caf50; font-weight:bold">3:05</div>
+            <div style="background:#4caf50; width:100%; height:42px; border-radius:3px 3px 0 0; opacity:0.85"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ3→<br>КТ4</div>
+          </div>
+          <!-- Bar 5: КТ4→КТ5, 3:06 — green -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#4caf50; font-weight:bold">3:06</div>
+            <div style="background:#4caf50; width:100%; height:44px; border-radius:3px 3px 0 0; opacity:0.85"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ4→<br>КТ5</div>
+          </div>
+          <!-- Bar 6: КТ5→КТ6, 3:05 — green -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#4caf50; font-weight:bold">3:05</div>
+            <div style="background:#4caf50; width:100%; height:42px; border-radius:3px 3px 0 0; opacity:0.85"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ5→<br>КТ6</div>
+          </div>
+          <!-- Bar 7: КТ6→Финиш, 3:06 — green -->
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px">
+            <div style="font-size:9px; color:#4caf50; font-weight:bold">3:06</div>
+            <div style="background:#4caf50; width:100%; height:44px; border-radius:3px 3px 0 0; opacity:0.85"></div>
+            <div style="font-size:8px; color:#666; text-align:center; line-height:1.1">КТ6→<br>Фин.</div>
+          </div>
+        </div>
+        <!-- Color legend -->
+        <div style="display:flex; gap:12px; margin-top:8px; font-size:9px; color:#666">
+          <span><span style="color:#66bb6a">■</span> &lt;3:30</span>
+          <span><span style="color:#ffd54f">■</span> 3:30–4:30</span>
+          <span><span style="color:#ff7043">■</span> &gt;4:30</span>
+        </div>
+      </div>
+
+      <!-- Section 1: Consecutive segments -->
+      <div style="padding:0 0 0 0">
+        <div style="padding:6px 16px; background:#16213e; border-top:1px solid #2a2a3e; border-bottom:1px solid #2a2a3e">
+          <span style="color:#e63946; font-size:10px; font-weight:bold; letter-spacing:0.5px; text-transform:uppercase">Отрезки</span>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; color:#ccc">
+          <tr style="color:#666; font-size:10px; border-bottom:1px solid #2a2a3e">
+            <td style="padding:4px 16px">Участок</td>
+            <td style="padding:4px 8px; text-align:right">Время</td>
+            <td style="padding:4px 8px; text-align:right">Темп</td>
+            <td style="padding:4px 8px; text-align:center">Абс.</td>
+            <td style="padding:4px 8px; text-align:center">Пол</td>
+            <td style="padding:4px 8px; text-align:center">Кат.</td>
+          </tr>
+          <tr style="border-bottom:1px solid #1e1e30">
+            <td style="padding:4px 16px; color:#eee">Старт → КТ1</td>
+            <td style="padding:4px 8px; text-align:right; font-variant-numeric:tabular-nums">09:17</td>
+            <td style="padding:4px 8px; text-align:right; color:#4caf50">3:05</td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+          </tr>
+          <tr style="border-bottom:1px solid #1e1e30">
+            <td style="padding:4px 16px; color:#eee">КТ1 → КТ2</td>
+            <td style="padding:4px 8px; text-align:right">06:59</td>
+            <td style="padding:4px 8px; text-align:right; color:#66bb6a">3:02</td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+          </tr>
+          <tr style="border-bottom:1px solid #1e1e30; background:#1e1412">
+            <td style="padding:4px 16px; color:#ffd54f">КТ2 → КТ3</td>
+            <td style="padding:4px 8px; text-align:right">09:28</td>
+            <td style="padding:4px 8px; text-align:right; color:#ffd54f">3:09 ↑1.6%</td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+          </tr>
+          <tr style="color:#555; font-size:10px">
+            <td style="padding:3px 16px" colspan="6">... КТ3→КТ4, КТ4→КТ5, КТ5→КТ6, КТ6→Финиш</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Section 2: Cumulative splits -->
+      <div>
+        <div style="padding:6px 16px; background:#16213e; border-top:1px solid #2a2a3e; border-bottom:1px solid #2a2a3e; margin-top:4px">
+          <span style="color:#4a9eff; font-size:10px; font-weight:bold; letter-spacing:0.5px; text-transform:uppercase">Сплиты от старта</span>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; color:#ccc">
+          <tr style="border-bottom:1px solid #1e1e30">
+            <td style="padding:4px 16px; color:#eee">Старт → КТ1</td>
+            <td style="padding:4px 8px; text-align:right">09:17</td>
+            <td style="padding:4px 8px; text-align:right; color:#4caf50">3:05</td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+          </tr>
+          <tr style="border-bottom:1px solid #1e1e30">
+            <td style="padding:4px 16px; color:#eee">Старт → КТ2</td>
+            <td style="padding:4px 8px; text-align:right">16:17</td>
+            <td style="padding:4px 8px; text-align:right; color:#4caf50">3:04</td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+            <td style="padding:4px 8px; text-align:center"><span style="background:#e6b800;color:#000;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold">1</span></td>
+          </tr>
+          <tr style="color:#555; font-size:10px">
+            <td style="padding:3px 16px" colspan="6">... Старт→КТ3, ..., Старт→Финиш</td>
+          </tr>
+        </table>
+      </div>
+
+    </div>
+    <div class="card-body">
+      <h3>Выглядит нормально? Кликни для подтверждения</h3>
+      <p>Бар-чарт: зелёный (&lt;3:30), жёлтый (3:30–4:30), красный (&gt;4:30). Высота бара = абсолютный темп (выше = медленнее). Таблица разбита на два раздела: «Отрезки» и «Сплиты от старта».</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:8px">
+  <p class="subtitle">Если хочешь изменить пороги цветов, структуру колонок или что-то ещё — напиши в терминале.</p>
+</div>

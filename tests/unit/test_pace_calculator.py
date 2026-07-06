@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.tracker.services.pace_calculator import (
+from src.krasmarafon.services.pace_calculator import (
     parse_pace_to_kmh,
     parse_distance,
 )

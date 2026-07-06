@@ -1,0 +1,91 @@
+<h2>Структура дашбордов бизнес-аналитики</h2>
+<p class="subtitle">4 тематических раздела — каждый со своим набором чартов и фильтрами</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+
+  <div style="background: #1a2a1a; border: 2px solid #50fa7b; border-radius: 10px; padding: 20px;">
+    <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
+      <div style="width:36px;height:36px;background:#50fa7b22;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🏅</div>
+      <div>
+        <div style="font-weight:700;color:#50fa7b;font-size:15px;">Дашборд судьи</div>
+        <div style="font-size:12px;color:#666;">Результаты мероприятий</div>
+      </div>
+    </div>
+    <ul style="margin:0;padding-left:18px;color:#aaa;font-size:13px;line-height:2;">
+      <li>Итоговая таблица результатов</li>
+      <li>Разбивка по полу / возрастным категориям</li>
+      <li>Финиш / DNF / DNS по мероприятию</li>
+      <li>Средний темп по категориям</li>
+      <li>Прохождение КТ (воронка дропаутов)</li>
+    </ul>
+    <div style="margin-top:12px;padding:8px;background:#ffffff0a;border-radius:6px;font-size:12px;color:#50fa7b88;">
+      ✅ Данные: таблица results в текущей БД
+    </div>
+  </div>
+
+  <div style="background: #1a1a2e; border: 2px solid #4a90e2; border-radius: 10px; padding: 20px;">
+    <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
+      <div style="width:36px;height:36px;background:#4a90e222;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">📈</div>
+      <div>
+        <div style="font-weight:700;color:#4a90e2;font-size:15px;">Маркетинг</div>
+        <div style="font-size:12px;color:#666;">Регистрации, выручка, клиенты</div>
+      </div>
+    </div>
+    <ul style="margin:0;padding-left:18px;color:#aaa;font-size:13px;line-height:2;">
+      <li>Выручка за период / по мероприятию</li>
+      <li>Средний чек на участника</li>
+      <li>Динамика регистраций по времени</li>
+      <li>Льготники / полная цена</li>
+      <li>Выручка: слоты vs доп. товары</li>
+    </ul>
+    <div style="margin-top:12px;padding:8px;background:#ffffff0a;border-radius:6px;font-size:12px;color:#e84c8c;">
+      ⚠️ Данные: нужна таблица регистраций/платежей
+    </div>
+  </div>
+
+  <div style="background: #2a1a1a; border: 2px solid #e84c8c; border-radius: 10px; padding: 20px;">
+    <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
+      <div style="width:36px;height:36px;background:#e84c8c22;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">🗺️</div>
+      <div>
+        <div style="font-weight:700;color:#e84c8c;font-size:15px;">Геоаналитика</div>
+        <div style="font-size:12px;color:#666;">Откуда приезжают участники</div>
+      </div>
+    </div>
+    <ul style="margin:0;padding-left:18px;color:#aaa;font-size:13px;line-height:2;">
+      <li>Карта участников по регионам/городам</li>
+      <li>Топ городов (динамика по годам)</li>
+      <li>Доля местных vs иногородних</li>
+      <li>Новые города (впервые участвуют)</li>
+    </ul>
+    <div style="margin-top:12px;padding:8px;background:#ffffff0a;border-radius:6px;font-size:12px;color:#50fa7b88;">
+      ✅ Данные: поле city в таблице заявок
+    </div>
+  </div>
+
+  <div style="background: #1a1a1a; border: 2px solid #f1fa8c; border-radius: 10px; padding: 20px;">
+    <div style="display:flex; align-items:center; gap: 10px; margin-bottom: 14px;">
+      <div style="width:36px;height:36px;background:#f1fa8c22;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div>
+      <div>
+        <div style="font-weight:700;color:#f1fa8c;font-size:15px;">Клиентская база</div>
+        <div style="font-size:12px;color:#666;">Новые и повторные участники</div>
+      </div>
+    </div>
+    <ul style="margin:0;padding-left:18px;color:#aaa;font-size:13px;line-height:2;">
+      <li>Новые участники (по году, мероприятию)</li>
+      <li>Повторные участники (retention)</li>
+      <li>LTV клиента по годам</li>
+      <li>Переход между дистанциями</li>
+    </ul>
+    <div style="margin-top:12px;padding:8px;background:#ffffff0a;border-radius:6px;font-size:12px;color:#f1fa8c88;">
+      ⚡ Данные: client_id в results — частично готово
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 20px; background: #2a1a00; border: 1px solid #ff9800; border-radius: 8px; padding: 16px;">
+  <div style="font-weight:700;color:#ff9800;margin-bottom:8px;">⚠️ Пробел в данных: финансовая информация</div>
+  <div style="font-size:13px;color:#aaa;line-height:1.7;">
+    Текущая БД содержит только <strong style="color:#fff">результаты забегов</strong>. Для маркетинг-дашборда (выручка, средний чек, льготники) нужна таблица <strong style="color:#ff9800">регистраций/платежей</strong> — из системы регистрации участников (например, Copernico, SportSoft, или 1С). Нужно обсудить откуда берутся эти данные.
+  </div>
+</div>

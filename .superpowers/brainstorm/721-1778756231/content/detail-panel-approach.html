@@ -1,0 +1,272 @@
+<h2>Как организовать детальную панель на мобильном?</h2>
+<p class="subtitle">Это главный источник переполнения. Выбери подход — от него зависит всё остальное.</p>
+
+<style>
+  .phone {
+    width: 220px;
+    border: 2px solid #444;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #0d1117;
+    font-size: 11px;
+    color: #ccc;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    flex-shrink: 0;
+  }
+  .phone-bar {
+    background: #1a1f2e;
+    padding: 6px 10px;
+    font-size: 9px;
+    color: #888;
+    border-bottom: 1px solid #2a2a3e;
+  }
+  .phone-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #1e2535;
+    gap: 6px;
+  }
+  .phone-rank { font-size: 14px; font-weight: 700; color: #EE2D62; width: 24px; text-align: center; }
+  .phone-name { font-size: 12px; font-weight: 600; flex: 1; color: #eee; }
+  .phone-time { font-size: 10px; color: #aaa; }
+  .phone-detail { background: #111827; border-top: 2px solid #EE2D62; }
+
+  /* Option A */
+  .opt-a-header { padding: 8px 10px; border-bottom: 1px solid #222; }
+  .opt-a-name { font-size: 12px; font-weight: 700; color: #fff; }
+  .opt-a-meta { font-size: 9px; color: #888; margin-top: 2px; }
+  .opt-a-tablets { display: flex; gap: 6px; padding: 8px 10px; }
+  .opt-a-tab { flex: 1; background: #1a1f2e; border-radius: 6px; padding: 6px; text-align: center; }
+  .opt-a-tab--gun { border-top: 2px solid #EE2D62; }
+  .opt-a-tab--net { border-top: 2px solid #4a9eff; }
+  .opt-a-tab-label { font-size: 8px; text-transform: uppercase; color: #888; }
+  .opt-a-tab-time { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .opt-a-tab-pace { font-size: 8px; color: #888; }
+  .opt-a-tab-ranks { font-size: 7px; color: #666; margin-top: 2px; }
+  .opt-a-chart { margin: 0 10px 8px; background: #1a1f2e; border-radius: 6px; padding: 6px; }
+  .opt-a-chart-label { font-size: 8px; color: #888; margin-bottom: 4px; }
+  .opt-a-bars { display: flex; gap: 3px; align-items: flex-end; height: 40px; overflow-x: auto; padding-bottom: 2px; }
+  .opt-a-bar { width: 28px; flex-shrink: 0; border-radius: 2px 2px 0 0; }
+  .opt-a-segs { margin: 0 10px 8px; }
+  .opt-a-seg { background: #162030; border-radius: 4px; padding: 4px 6px; margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; }
+  .opt-a-seg-name { font-size: 9px; color: #aaa; }
+  .opt-a-seg-val { font-size: 9px; font-weight: 600; color: #fff; }
+
+  /* Option B */
+  .opt-b-header { padding: 8px 10px; border-bottom: 1px solid #222; }
+  .opt-b-name { font-size: 12px; font-weight: 700; color: #fff; }
+  .opt-b-meta { font-size: 9px; color: #888; margin-top: 2px; }
+  .opt-b-tabs { display: flex; border-bottom: 1px solid #222; }
+  .opt-b-tab { flex: 1; text-align: center; padding: 6px 4px; font-size: 9px; color: #888; border-bottom: 2px solid transparent; }
+  .opt-b-tab.active { color: #EE2D62; border-bottom-color: #EE2D62; }
+  .opt-b-content { padding: 8px 10px; }
+  .opt-b-stat-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #1e2535; font-size: 10px; }
+  .opt-b-stat-label { color: #888; }
+  .opt-b-stat-val { font-weight: 600; color: #fff; }
+  .opt-b-big { font-size: 20px; font-weight: 700; color: #EE2D62; text-align: center; padding: 6px 0; }
+  .opt-b-pace { font-size: 11px; color: #888; text-align: center; }
+
+  /* Option C */
+  .opt-c-header { padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; }
+  .opt-c-name { font-size: 12px; font-weight: 700; color: #fff; }
+  .opt-c-times { display: flex; gap: 4px; padding: 8px 10px; }
+  .opt-c-time-block { flex: 1; text-align: center; }
+  .opt-c-time-label { font-size: 7px; color: #888; text-transform: uppercase; }
+  .opt-c-time-val { font-size: 16px; font-weight: 700; }
+  .opt-c-time-val--gun { color: #EE2D62; }
+  .opt-c-time-val--net { color: #4a9eff; }
+  .opt-c-time-pace { font-size: 8px; color: #888; }
+  .opt-c-time-ranks { font-size: 8px; color: #666; }
+  .opt-c-divider { border: none; border-top: 1px solid #1e2535; margin: 0 10px; }
+  .opt-c-section { padding: 5px 10px; }
+  .opt-c-section-title { font-size: 8px; text-transform: uppercase; color: #666; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .opt-c-bars { display: flex; gap: 2px; align-items: flex-end; height: 35px; }
+  .opt-c-bar { flex: 1; border-radius: 1px 1px 0 0; }
+  .opt-c-bar-label { font-size: 7px; color: #666; text-align: center; margin-top: 1px; }
+  .opt-c-seg { background: #162030; border-radius: 3px; padding: 3px 6px; margin-bottom: 2px; display: flex; justify-content: space-between; font-size: 9px; }
+
+  .phones-wrap {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .phone-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    border-radius: 12px;
+    padding: 12px;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .phone-option:hover { border-color: #444; }
+  .phone-option.selected { border-color: #EE2D62; }
+  .phone-option-label { font-size: 13px; font-weight: 600; color: #eee; }
+  .phone-option-desc { font-size: 11px; color: #888; text-align: center; max-width: 220px; line-height: 1.4; }
+</style>
+
+<div class="phones-wrap">
+
+  <!-- Option A -->
+  <div class="phone-option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="phone">
+      <div class="phone-bar">Результаты · 5 км</div>
+      <div class="phone-row">
+        <div class="phone-rank">1</div>
+        <div>
+          <div class="phone-name">Петров Алексей</div>
+          <div class="phone-time">Оф: 00:25:31 · Чист: 00:25:07</div>
+        </div>
+      </div>
+      <!-- Detail panel open -->
+      <div class="phone-detail">
+        <div class="opt-a-header">
+          <div class="opt-a-name">Петров Алексей</div>
+          <div class="opt-a-meta">5 км · М · 1990 г.р. · Финишировал</div>
+        </div>
+        <div class="opt-a-tablets">
+          <div class="opt-a-tab opt-a-tab--gun">
+            <div class="opt-a-tab-label">Официальное</div>
+            <div class="opt-a-tab-time">00:25:31</div>
+            <div class="opt-a-tab-pace">5:06 мин/км</div>
+            <div class="opt-a-tab-ranks">М#1 · #1 · Кат#1</div>
+          </div>
+          <div class="opt-a-tab opt-a-tab--net">
+            <div class="opt-a-tab-label">Чистое</div>
+            <div class="opt-a-tab-time" style="color:#4a9eff">00:25:07</div>
+            <div class="opt-a-tab-pace">5:01 мин/км</div>
+            <div class="opt-a-tab-ranks">М#1 · #1 · Кат#1</div>
+          </div>
+        </div>
+        <div class="opt-a-chart">
+          <div class="opt-a-chart-label">Темп по отрезкам (листать →)</div>
+          <div class="opt-a-bars">
+            <div class="opt-a-bar" style="background:#4CAF50;height:28px"></div>
+            <div class="opt-a-bar" style="background:#8BC34A;height:22px"></div>
+            <div class="opt-a-bar" style="background:#FF9800;height:35px"></div>
+            <div class="opt-a-bar" style="background:#f44336;height:40px"></div>
+            <div class="opt-a-bar" style="background:#FF9800;height:30px"></div>
+            <div class="opt-a-bar" style="background:#4CAF50;height:20px"></div>
+          </div>
+        </div>
+        <div class="opt-a-segs">
+          <div class="opt-a-seg"><span class="opt-a-seg-name">Старт → КТ1</span><span class="opt-a-seg-val">13:01</span></div>
+          <div class="opt-a-seg"><span class="opt-a-seg-name">КТ1 → Финиш</span><span class="opt-a-seg-val">12:30</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-option-label">A — Скролл вниз</div>
+    <div class="phone-option-desc">Всё в одной колонке, панель разворачивается под строкой. Пролистываешь вниз чтобы увидеть чарт и отрезки.</div>
+  </div>
+
+  <!-- Option B -->
+  <div class="phone-option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="phone">
+      <div class="phone-bar">Результаты · 5 км</div>
+      <div class="phone-row">
+        <div class="phone-rank">1</div>
+        <div>
+          <div class="phone-name">Петров Алексей</div>
+          <div class="phone-time">Оф: 00:25:31 · Чист: 00:25:07</div>
+        </div>
+      </div>
+      <!-- Detail panel with tabs -->
+      <div class="phone-detail">
+        <div class="opt-b-header">
+          <div class="opt-b-name">Петров Алексей</div>
+          <div style="font-size:9px;color:#888;margin-top:2px">5 км · М · 1990 г.р.</div>
+        </div>
+        <div class="opt-b-tabs">
+          <div class="opt-b-tab active">Результат</div>
+          <div class="opt-b-tab">Темп</div>
+          <div class="opt-b-tab">Отрезки</div>
+        </div>
+        <div class="opt-b-content">
+          <div class="opt-b-big">00:25:31</div>
+          <div class="opt-b-pace">5:06 мин/км</div>
+          <div style="margin-top:8px">
+            <div class="opt-b-stat-row"><span class="opt-b-stat-label">Место общее</span><span class="opt-b-stat-val">#1</span></div>
+            <div class="opt-b-stat-row"><span class="opt-b-stat-label">Место по полу</span><span class="opt-b-stat-val">М#1</span></div>
+            <div class="opt-b-stat-row"><span class="opt-b-stat-label">Место в кат.</span><span class="opt-b-stat-val">Кат#1</span></div>
+            <div class="opt-b-stat-row"><span class="opt-b-stat-label">Чистое время</span><span class="opt-b-stat-val" style="color:#4a9eff">00:25:07</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-option-label">B — Вкладки</div>
+    <div class="phone-option-desc">Детальная панель разделена на 3 вкладки: Результат · Темп · Отрезки. Каждый раздел — отдельный экран, не переполняется.</div>
+  </div>
+
+  <!-- Option C -->
+  <div class="phone-option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="phone">
+      <div class="phone-bar">Результаты · 5 км</div>
+      <div class="phone-row">
+        <div class="phone-rank">1</div>
+        <div>
+          <div class="phone-name">Петров Алексей</div>
+          <div class="phone-time">Оф: 00:25:31 · Чист: 00:25:07</div>
+        </div>
+      </div>
+      <!-- Detail panel full redesign -->
+      <div class="phone-detail">
+        <div class="opt-c-header">
+          <div>
+            <div class="opt-c-name">Петров Алексей</div>
+            <div style="font-size:9px;color:#888">5 км · М · 1990 г.р.</div>
+          </div>
+          <div style="color:#666;font-size:14px">×</div>
+        </div>
+        <div class="opt-c-times">
+          <div class="opt-c-time-block">
+            <div class="opt-c-time-label" style="color:#EE2D62">● Официальное</div>
+            <div class="opt-c-time-val opt-c-time-val--gun">25:31</div>
+            <div class="opt-c-time-pace">5:06 / км</div>
+            <div class="opt-c-time-ranks">#1 · М#1 · Кат#1</div>
+          </div>
+          <div style="width:1px;background:#1e2535;margin:4px 0"></div>
+          <div class="opt-c-time-block">
+            <div class="opt-c-time-label" style="color:#4a9eff">● Чистое</div>
+            <div class="opt-c-time-val opt-c-time-val--net">25:07</div>
+            <div class="opt-c-time-pace">5:01 / км</div>
+            <div class="opt-c-time-ranks">#1 · М#1 · Кат#1</div>
+          </div>
+        </div>
+        <hr class="opt-c-divider">
+        <div class="opt-c-section">
+          <div class="opt-c-section-title">Темп по отрезкам</div>
+          <div style="display:flex;gap:2px;align-items:flex-end;height:30px">
+            <div style="flex:1;background:#4CAF50;height:20px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#8BC34A;height:16px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#FF9800;height:26px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#f44336;height:30px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#FF9800;height:22px;border-radius:1px 1px 0 0"></div>
+          </div>
+          <div style="display:flex;gap:2px;font-size:6px;color:#666;margin-top:1px">
+            <div style="flex:1;text-align:center">0–2.5</div>
+            <div style="flex:1;text-align:center">2.5–5</div>
+            <div style="flex:1;text-align:center">5–7.5</div>
+            <div style="flex:1;text-align:center">7.5–10</div>
+            <div style="flex:1;text-align:center">10–F</div>
+          </div>
+        </div>
+        <div class="opt-c-section">
+          <div class="opt-c-section-title">Отрезки</div>
+          <div class="opt-c-seg"><span style="color:#aaa">Старт → КТ1</span><span style="color:#fff">13:01</span></div>
+          <div class="opt-c-seg"><span style="color:#aaa">КТ1 → Финиш</span><span style="color:#fff">12:30</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-option-label">C — Всё входит</div>
+    <div class="phone-option-desc">Полный редизайн: времена рядом через разделитель, чарт растягивается на всю ширину (без фиксированных px), отрезки компактно.</div>
+  </div>
+
+</div>
