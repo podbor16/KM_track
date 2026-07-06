@@ -347,6 +347,17 @@ async def log_request_duration(request: Request, call_next):
     )
     return response
 
+@app.middleware("http")
+async def domain_middleware(request: Request, call_next):
+    host = request.headers.get("host", "").lower().split(":")[0]
+    if "triatleta" in host:
+        request.state.domain = "triatleta"
+    elif "siberman" in host:
+        request.state.domain = "siberman"
+    else:
+        request.state.domain = "krasmarafon"
+    return await call_next(request)
+
 # Подключение статических файлов
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
