@@ -1,0 +1,33 @@
+name: Issue SSL cert for live.siberman515.com
+
+on:
+  workflow_dispatch:
+
+jobs:
+  certbot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run certbot on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          timeout: 120s
+          script: |
+            set -ex
+
+            # Убедиться что /var/lib/letsencrypt существует (нужен для webroot)
+            mkdir -p /var/lib/letsencrypt
+
+            # Получить сертификат через webroot (nginx уже обслуживает /.well-known/acme-challenge/)
+            certbot certonly \
+              --webroot \
+              --webroot-path /var/lib/letsencrypt \
+              -d live.siberman515.com \
+              --non-interactive \
+              --agree-tos \
+              -m podborstudy@gmail.com
+
+            echo "=== Cert issued OK ==="
+            ls -la /etc/letsencrypt/live/live.siberman515.com/
