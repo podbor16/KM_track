@@ -17,3 +17,4 @@ sse-starlette>=1.6
 redis[hiredis]>=5.0
 gunicorn>=21.2
 ruamel.yaml>=0.18
+openpyxl>=3.1
