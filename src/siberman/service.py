@@ -141,7 +141,10 @@ def build_preview(result: ParseResult) -> dict:
                 "gender":   p["gender"],
                 "format":   p["format"],
                 "status":   p["status"],
-                "cp_count": len(result.checkpoint_times.get(p["bib"], {})),
+                "cp_count": sum(
+                    1 for v in result.checkpoint_times.get(p["bib"], {}).values()
+                    if v is not None
+                ),
             }
             for p in result.participants
         ],
