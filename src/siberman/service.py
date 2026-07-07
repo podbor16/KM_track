@@ -138,7 +138,7 @@ def build_preview(result: ParseResult) -> dict:
             {
                 "bib":      p["bib"],
                 "name":     f"{p['surname']} {p['name']}",
-                "gender":   "—" if p["format"] == "relay" else p["gender"],
+                "gender":   {"M": "М", "F": "Ж", "E": "Э"}.get(p["gender"], p["gender"]),
                 "format":   p["format"],
                 "status":   p["status"],
                 "cp_count": sum(

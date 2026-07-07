@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS participants (
   bib                 VARCHAR(10) NOT NULL,
   surname             VARCHAR(100) NOT NULL,
   name                VARCHAR(100) NOT NULL,
-  gender              ENUM('M','F') NOT NULL,
+  gender              ENUM('M','F','E') NOT NULL,
   country             VARCHAR(100) NOT NULL DEFAULT 'Россия',
   city                VARCHAR(100) NOT NULL DEFAULT '',
   format              ENUM('individual','relay') NOT NULL DEFAULT 'individual',

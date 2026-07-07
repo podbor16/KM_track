@@ -29,6 +29,9 @@ jobs:
             # Seed checkpoints
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/002_seed_checkpoints_2025.sql
 
+            # Apply gender ENUM migration
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/003_alter_gender_enum.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"
