@@ -1,5 +1,7 @@
 import os
+import pickle
 import logging
+import tempfile
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -17,11 +19,35 @@ log = logging.getLogger(__name__)
 
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 
+# Путь к временным файлам (общий для всех воркеров gunicorn)
+_PENDING_DIR = Path(tempfile.gettempdir()) / "siberman_pending"
+_PENDING_DIR.mkdir(exist_ok=True)
+
+
+def _pending_path(race_year: int) -> Path:
+    return _PENDING_DIR / f"pending_{race_year}.pkl"
+
+
+def _save_pending(race_year: int, parsed) -> None:
+    with open(_pending_path(race_year), "wb") as f:
+        pickle.dump(parsed, f)
+
+
+def _load_pending(race_year: int):
+    p = _pending_path(race_year)
+    if not p.exists():
+        return None
+    with open(p, "rb") as f:
+        return pickle.load(f)
+
+
+def _clear_pending(race_year: int) -> None:
+    _pending_path(race_year).unlink(missing_ok=True)
+
 
 def _is_authed(request: Request) -> bool:
-    """Проверить токен из заголовка X-Admin-Token."""
     if not ADMIN_TOKEN:
-        return True  # токен не задан → открыто (для dev)
+        return True
     return request.headers.get("X-Admin-Token", "") == ADMIN_TOKEN
 
 
@@ -72,7 +98,7 @@ async def upload_excel(request: Request, file: UploadFile = File(...),
         log.error(f"Parse error: {e}")
         raise HTTPException(status_code=422, detail=f"Ошибка парсинга: {e}")
     preview = build_preview(parsed)
-    _pending[race_year] = parsed
+    _save_pending(race_year, parsed)
     return JSONResponse(preview)
 
 
@@ -80,15 +106,11 @@ async def upload_excel(request: Request, file: UploadFile = File(...),
 async def apply_data(request: Request, race_year: int = 2025):
     if not _is_authed(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
-    parsed = _pending.get(race_year)
+    parsed = _load_pending(race_year)
     if parsed is None:
         raise HTTPException(status_code=400, detail="Нет загруженных данных. Сначала загрузите файл.")
     summary = apply_to_db(parsed)
     if not summary.get("ok"):
         raise HTTPException(status_code=500, detail=summary.get("error", "Ошибка БД"))
-    del _pending[race_year]
+    _clear_pending(race_year)
     return JSONResponse(summary)
-
-
-# in-process кэш превью (подходит для одного судьи)
-_pending: dict[int, object] = {}
