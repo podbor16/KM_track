@@ -479,7 +479,7 @@ function renderStage(stage) {
 
     const rows = individual.filter(r => r[cfg.timeKey] != null || r.status === 'dnf');
     const relayMembers = _fmt !== 'individual'
-        ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage))
+        ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => ({...m, _bib: t.bib, _team: t.team_name})))
         : [];
 
     if (rows.length === 0 && relayMembers.length === 0) {
@@ -523,8 +523,11 @@ function renderStage(stage) {
                 : fmtPace(m.run_pace);
             html += `<tr>
                 <td><span class="badge badge-e">Э</span></td>
-                <td class="bib-cell muted">—</td>
-                <td class="name-main">${m.surname} ${m.name}</td>
+                <td class="bib-cell">${m._bib}</td>
+                <td>
+                    <span class="name-main">${m.surname} ${m.name}</span>
+                    <br><span class="name-city">${m._team}</span>
+                </td>
                 <td><span class="badge badge-e">Э</span></td>
                 <td class="r time-cell">${fmtTime(t)}</td>
                 <td class="r muted">${meta}</td>
