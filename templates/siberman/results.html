@@ -420,10 +420,16 @@ function buildStats(individual, relay, stageKey) {
     const dsqCount = individual.filter(r => r.status === 'dsq').length;
     const dnsCount = individual.filter(r => r.status === 'dns').length;
     const total = individual.length + relay.length;
-    let html = `<div class="stats">
-        <div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Участников</div></div>
-        <div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
-    if (relay.length > 0 && stageKey === null) html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>`;
+    const relayOnly = individual.length === 0 && relay.length > 0;
+    let html = `<div class="stats">`;
+    if (relayOnly) {
+        html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Команд</div></div>`;
+        html += `<div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
+    } else {
+        html += `<div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Участников</div></div>`;
+        html += `<div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
+        if (relay.length > 0 && stageKey === null) html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>`;
+    }
     if (live > 0)     html += `<div class="stat"><div class="stat-val">${live}</div><div class="stat-lbl">В гонке</div></div>`;
     if (dnfCount > 0) html += `<div class="stat" style="border-color:rgba(190,10,33,.3)"><div class="stat-val" style="color:var(--red)">${dnfCount}</div><div class="stat-lbl">DNF</div></div>`;
     if (dsqCount > 0) html += `<div class="stat"><div class="stat-val" style="color:#a78bfa">${dsqCount}</div><div class="stat-lbl">DSQ</div></div>`;
