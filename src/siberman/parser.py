@@ -185,9 +185,8 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             handicap_col = ci
             break
 
-    # Индексы T1/T2
+    # Индекс T1
     t1_col = col_idx.get(("t1", 0))
-    t2_col = col_idx.get(("t2", 0))
 
     # Парсить строки данных
     for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
@@ -207,53 +206,75 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
         fmt_raw = _cell("format", "Лично")
         fmt = "relay" if fmt_raw in ("Эстафета", "relay") else "individual"
 
-        gender_raw = _cell("gender", "")
-        _g = gender_raw.strip().upper()
-        if _g in ("Ж", "F", "FEMALE"):
-            gender = "F"
-        elif _g in ("Э", "E", "RELAY") or (_g == "" and fmt == "relay"):
-            gender = "E"
-        else:
-            gender = "M"
-
-        p = {
-            "race_year":    race_year,
-            "bib":          bib,
-            "surname":      _cell("surname"),
-            "name":         _cell("name"),
-            "gender":       gender,
-            "country":      _cell("country", "Россия"),
-            "city":         _cell("city"),
-            "format":       fmt,
-            "status":       "active",
-        }
-
-        # Проверить DNF: если одна из ячеек содержит "DNF"
-        for cell in row:
-            if cell and str(cell).strip().upper() in ("DNF", "ДНФ"):
-                p["status"] = "dnf"
-                break
-
-        result.participants.append(p)
-
-        # Чекпоинты
+        # Чекпоинты — общие для строки
         cp_times: dict[tuple[str, int], Optional[int]] = {}
         for ci, stage_seq in cp_by_col.items():
             if ci < len(row):
                 cp_times[stage_seq] = parse_time_to_seconds(row[ci])
-        result.checkpoint_times[bib] = cp_times
 
-        # Гандикап
-        if handicap_col is not None and handicap_col < len(row):
-            result.handicaps[bib] = parse_time_to_seconds(row[handicap_col])
+        if fmt == "relay":
+            # Фамилия = название команды, Имя/Страна/Город = участники swim/bike/run
+            team_name = _cell("surname")
+            members_raw = [_cell("name"), _cell("country"), _cell("city")]
+            relay_stages = ["swim", "bike", "run"]
 
-        # Транзитные зоны
-        tz: dict[str, Optional[int]] = {}
-        if t1_col is not None and t1_col < len(row):
-            tz["T1"] = parse_time_to_seconds(row[t1_col])
-        if t2_col is not None and t2_col < len(row):
-            tz["T2"] = parse_time_to_seconds(row[t2_col])
-        if tz:
-            result.transitions[bib] = tz
+            def _split_name(full: str) -> tuple[str, str]:
+                parts = full.strip().split(None, 1)
+                return (parts[0], parts[1]) if len(parts) >= 2 else (full.strip(), "")
+
+            base = {
+                "race_year": race_year, "bib": bib, "format": "relay",
+                "relay_team_name": team_name, "gender": "E",
+                "country": "", "city": "", "status": "active",
+            }
+            for rs, full_name in zip(relay_stages, members_raw):
+                sn, nm = _split_name(full_name)
+                result.participants.append({
+                    **base,
+                    "surname": sn, "name": nm, "relay_stage": rs,
+                    "_cp_key": f"{bib}:{rs}",
+                })
+
+            # Разбить чекпоинты по этапу участника
+            result.checkpoint_times[f"{bib}:swim"] = {
+                k: v for k, v in cp_times.items() if k[0] == "swim"
+            }
+            result.checkpoint_times[f"{bib}:bike"] = {
+                k: v for k, v in cp_times.items() if k[0] in ("bike_day1", "bike_day2")
+            }
+            result.checkpoint_times[f"{bib}:run"] = {
+                k: v for k, v in cp_times.items() if k[0] == "run"
+            }
+
+            # Гандикап — относится к участнику bike
+            if handicap_col is not None and handicap_col < len(row):
+                result.handicaps[f"{bib}:bike"] = parse_time_to_seconds(row[handicap_col])
+
+        else:
+            gender_raw = _cell("gender", "")
+            _g = gender_raw.strip().upper()
+            gender = "F" if _g in ("Ж", "F", "FEMALE") else "M"
+
+            has_dnf = any(
+                cell and str(cell).strip().upper() in ("DNF", "ДНФ") for cell in row
+            )
+            result.participants.append({
+                "race_year": race_year, "bib": bib,
+                "surname":   _cell("surname"), "name": _cell("name"),
+                "gender":    gender,
+                "country":   _cell("country", "Россия"), "city": _cell("city"),
+                "format":    "individual",
+                "status":    "dnf" if has_dnf else "active",
+                "_cp_key":   bib,
+            })
+            result.checkpoint_times[bib] = cp_times
+
+            if handicap_col is not None and handicap_col < len(row):
+                result.handicaps[bib] = parse_time_to_seconds(row[handicap_col])
+
+            if t1_col is not None and t1_col < len(row):
+                t1 = parse_time_to_seconds(row[t1_col])
+                if t1 is not None:
+                    result.transitions[bib] = {"T1": t1}
 
     return result

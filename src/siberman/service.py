@@ -142,8 +142,9 @@ def build_preview(result: ParseResult) -> dict:
                 "format":   p["format"],
                 "status":   p["status"],
                 "cp_count": sum(
-                    1 for v in result.checkpoint_times.get(p["bib"], {}).values()
-                    if v is not None
+                    1 for v in result.checkpoint_times.get(
+                        p.get("_cp_key", p["bib"]), {}
+                    ).values() if v is not None
                 ),
             }
             for p in result.participants
@@ -181,7 +182,9 @@ def apply_to_db(result: ParseResult) -> dict:
             bib_to_pid[p["bib"]] = pid
             inserted_parts += 1
 
-            handicap = result.handicaps.get(p["bib"])
+            cp_key = p.get("_cp_key", p["bib"])
+
+            handicap = result.handicaps.get(cp_key)
             if handicap is not None:
                 cur = conn.cursor()
                 cur.execute(
@@ -189,7 +192,7 @@ def apply_to_db(result: ParseResult) -> dict:
                     (handicap, pid),
                 )
 
-            cp_times = result.checkpoint_times.get(p["bib"], {})
+            cp_times = result.checkpoint_times.get(cp_key, {})
             for (stage, seq), cumulative_s in cp_times.items():
                 cp_id = cp_id_map.get((stage, seq))
                 if cp_id is None:
@@ -204,7 +207,7 @@ def apply_to_db(result: ParseResult) -> dict:
                 upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, split_s)
                 inserted_times += 1
 
-            for zone, dur in result.transitions.get(p["bib"], {}).items():
+            for zone, dur in result.transitions.get(cp_key, {}).items():
                 upsert_transition(conn, pid, zone, dur)
 
         # --- Вычислить тоталы и ранги ---
@@ -212,7 +215,7 @@ def apply_to_db(result: ParseResult) -> dict:
         pid_meta:   dict[int, dict] = {}
         for p in result.participants:
             pid = bib_to_pid[p["bib"]]
-            cp_times = result.checkpoint_times.get(p["bib"], {})
+            cp_times = result.checkpoint_times.get(p.get("_cp_key", p["bib"]), {})
             st = compute_stage_totals(cp_times)
             pid_totals[pid] = {**st, "overall": compute_overall(st)}
             pid_meta[pid]   = {"gender": p["gender"], "format": p["format"]}
