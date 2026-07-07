@@ -89,6 +89,41 @@ def upsert_transition(conn, participant_id: int, zone: str, duration_s: Optional
     )
 
 
+def upsert_stage_total(
+    conn, participant_id: int, stage: str,
+    total_s: Optional[int], rank_stage: Optional[int], rank_gender: Optional[int],
+    avg_pace_s: Optional[int], avg_speed_kmh: Optional[float],
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO stage_totals
+           (participant_id, stage, total_s, rank_stage, rank_gender, avg_pace_s, avg_speed_kmh)
+           VALUES (%s,%s,%s,%s,%s,%s,%s)
+           ON DUPLICATE KEY UPDATE
+             total_s=VALUES(total_s), rank_stage=VALUES(rank_stage),
+             rank_gender=VALUES(rank_gender), avg_pace_s=VALUES(avg_pace_s),
+             avg_speed_kmh=VALUES(avg_speed_kmh)""",
+        (participant_id, stage, total_s, rank_stage, rank_gender, avg_pace_s, avg_speed_kmh),
+    )
+
+
+def upsert_overall_result(
+    conn, participant_id: int,
+    total_s: Optional[int], rank_overall: Optional[int],
+    rank_gender: Optional[int], rank_relay: Optional[int],
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO overall_results
+           (participant_id, total_s, rank_overall, rank_gender, rank_relay)
+           VALUES (%s,%s,%s,%s,%s)
+           ON DUPLICATE KEY UPDATE
+             total_s=VALUES(total_s), rank_overall=VALUES(rank_overall),
+             rank_gender=VALUES(rank_gender), rank_relay=VALUES(rank_relay)""",
+        (participant_id, total_s, rank_overall, rank_gender, rank_relay),
+    )
+
+
 def get_participants_with_stage_totals(conn, race_year: int,
                                         gender: Optional[str] = None,
                                         fmt: Optional[str] = None) -> list[dict]:
