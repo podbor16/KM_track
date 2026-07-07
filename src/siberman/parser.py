@@ -207,11 +207,11 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
         fmt_raw = _cell("format", "Лично")
         fmt = "relay" if fmt_raw in ("Эстафета", "relay") else "individual"
 
-        gender_raw = _cell("gender", "М")
+        gender_raw = _cell("gender", "")
         _g = gender_raw.strip().upper()
         if _g in ("Ж", "F", "FEMALE"):
             gender = "F"
-        elif _g in ("Э", "E", "RELAY"):
+        elif _g in ("Э", "E", "RELAY") or (_g == "" and fmt == "relay"):
             gender = "E"
         else:
             gender = "M"
