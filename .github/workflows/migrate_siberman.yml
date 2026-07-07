@@ -33,5 +33,5 @@ jobs:
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"
             echo "=== Checkpoints by segment ==="
-            mysql -u root siberman -e "SELECT segment, COUNT(*) as cnt FROM checkpoints GROUP BY segment ORDER BY segment;"
+            mysql -u root siberman -e "SELECT stage, COUNT(*) as cnt FROM checkpoints GROUP BY stage ORDER BY stage;"
             echo "=== Migration OK ==="
