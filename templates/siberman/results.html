@@ -378,15 +378,58 @@ function genderBadge(g) {
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';
     return '<span class="badge badge-e">Э</span>';
 }
-function statusBadge(r, timeKey) {
+/* stageKey: null = Финал, иначе 'swim'|'bike1'|'bike2'|'run' */
+const STAGE_ORD = { swim: 0, bike1: 1, bike2: 2, run: 3 };
+function getDnfStage(r) {
+    // Этап, на котором произошёл DNF = первый этап без финишного времени
+    if (r.swim_s  == null) return 'swim';
+    if (r.bike1_s == null) return 'bike1';
+    if (r.bike2_s == null) return 'bike2';
+    return 'run';
+}
+function statusBadge(r, stageKey) {
     const s = r.status;
-    if (s === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     if (s === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (s === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
-    const hasTime = timeKey ? r[timeKey] != null : r.overall_s != null;
+    if (s === 'dnf') {
+        if (stageKey === null) return '<span class="badge badge-dnf">DNF</span>'; // Финал
+        const dnfStage = getDnfStage(r);
+        const diff = STAGE_ORD[stageKey] - STAGE_ORD[dnfStage];
+        if (diff < 0)  return '<span class="badge badge-fin">Финишировал</span>';
+        if (diff === 0) return '<span class="badge badge-dnf">DNF</span>';
+        return '<span class="badge badge-dns">Не стартовал</span>';
+    }
+    // active
+    const hasTime = stageKey ? r[stageKey + '_s'] != null : r.overall_s != null;
     return hasTime
         ? '<span class="badge badge-fin">Финишировал</span>'
         : '<span class="badge badge-live">В гонке</span>';
+}
+function relayMemberStatusBadge(m) {
+    if (m.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
+    if (m.status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
+    if (m.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
+    return '<span class="badge badge-fin">Финишировал</span>';
+}
+function buildStats(individual, relay, stageKey) {
+    const finInd = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] != null : r.overall_s != null)).length;
+    const finRel = relay.filter(t => t.overall_s != null).length;
+    const finished = finInd + finRel;
+    const live     = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] == null : r.overall_s == null)).length;
+    const dnfCount = individual.filter(r => r.status === 'dnf').length;
+    const dsqCount = individual.filter(r => r.status === 'dsq').length;
+    const dnsCount = individual.filter(r => r.status === 'dns').length;
+    const total = individual.length + relay.length;
+    let html = `<div class="stats">
+        <div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Участников</div></div>
+        <div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
+    if (relay.length > 0 && stageKey === null) html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>`;
+    if (live > 0)     html += `<div class="stat"><div class="stat-val">${live}</div><div class="stat-lbl">В гонке</div></div>`;
+    if (dnfCount > 0) html += `<div class="stat" style="border-color:rgba(190,10,33,.3)"><div class="stat-val" style="color:var(--red)">${dnfCount}</div><div class="stat-lbl">DNF</div></div>`;
+    if (dsqCount > 0) html += `<div class="stat"><div class="stat-val" style="color:#a78bfa">${dsqCount}</div><div class="stat-lbl">DSQ</div></div>`;
+    if (dnsCount > 0) html += `<div class="stat"><div class="stat-val">${dnsCount}</div><div class="stat-lbl">Не стартовали</div></div>`;
+    html += `</div>`;
+    return html;
 }
 function rankClass(rank) {
     if (rank === 1) return 'rank-1';
@@ -410,15 +453,7 @@ function renderOverall() {
     const { individual, relay } = getFiltered();
     let html = '';
 
-    // Stats
-    const finished = individual.filter(r => r.overall_s != null).length;
-    const dnfCount = individual.filter(r => r.overall_s == null).length;
-    html += `<div class="stats">
-        <div class="stat"><div class="stat-val">${individual.length + relay.length}</div><div class="stat-lbl">Участников</div></div>
-        <div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>
-        ${relay.length > 0 ? `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>` : ''}
-        ${dnfCount > 0 ? `<div class="stat"><div class="stat-val">${dnfCount}</div><div class="stat-lbl">DNF</div></div>` : ''}
-    </div>`;
+    html += buildStats(individual, relay, null);
 
     // Individual table
     if (_fmt !== 'relay' && individual.length > 0) {
@@ -476,7 +511,7 @@ function renderOverall() {
                     : m.relay_stage === 'bike' ? (m.bike1_s != null && m.bike2_s != null ? m.bike1_s + m.bike2_s
                         : m.bike2_s ?? m.bike1_s)
                     : m.run_s;
-                const stageMeta = m.relay_stage === 'swim' ? fmtPace(m.swim_pace)
+                const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
                     : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
                     : fmtPace(m.run_pace);
                 html += `<div class="relay-member">
@@ -484,6 +519,7 @@ function renderOverall() {
                     <span class="relay-member-name">${m.surname} ${m.name}</span>
                     <span class="relay-member-time">${fmtTime(stageTime)}</span>
                     <span class="relay-member-meta">${stageMeta}</span>
+                    <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
                 </div>`;
             });
             html += `</div></div>`;
@@ -527,7 +563,8 @@ function renderStage(stage) {
         return;
     }
 
-    let html = `<div class="table-wrap"><table>
+    let html = buildStats(individual, relay, stage);
+    html += `<div class="table-wrap"><table>
     <thead><tr>
         <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
         <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Статус</th>
@@ -547,7 +584,7 @@ function renderStage(stage) {
             <td>${genderBadge(r.gender)}</td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
-            <td>${statusBadge(r, cfg.timeKey)}</td>
+            <td>${statusBadge(r, stage)}</td>
         </tr>`;
     });
 
