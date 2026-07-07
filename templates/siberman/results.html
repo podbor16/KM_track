@@ -522,7 +522,7 @@ function renderStage(stage) {
                 : stage === 'bike2' ? fmtSpeed(m.bike2_speed)
                 : fmtPace(m.run_pace);
             html += `<tr>
-                <td><span class="badge badge-e">Э</span></td>
+                <td class="muted">—</td>
                 <td class="bib-cell">${m._bib}</td>
                 <td>
                     <span class="name-main">${m.surname} ${m.name}</span>
