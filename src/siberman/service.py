@@ -173,16 +173,16 @@ def apply_to_db(result: ParseResult) -> dict:
 
         clear_race_year(conn, result.race_year)
 
-        bib_to_pid: dict[str, int] = {}
+        # cp_key → participant_id (уникальный ключ для relay: "{bib}:{stage}", для personal: bib)
+        cp_key_to_pid: dict[str, int] = {}
         inserted_parts = 0
         inserted_times = 0
 
         for p in result.participants:
             pid = upsert_participant(conn, p)
-            bib_to_pid[p["bib"]] = pid
-            inserted_parts += 1
-
             cp_key = p.get("_cp_key", p["bib"])
+            cp_key_to_pid[cp_key] = pid
+            inserted_parts += 1
 
             handicap = result.handicaps.get(cp_key)
             if handicap is not None:
@@ -214,11 +214,33 @@ def apply_to_db(result: ParseResult) -> dict:
         pid_totals: dict[int, dict] = {}
         pid_meta:   dict[int, dict] = {}
         for p in result.participants:
-            pid = bib_to_pid[p["bib"]]
-            cp_times = result.checkpoint_times.get(p.get("_cp_key", p["bib"]), {})
+            cp_key = p.get("_cp_key", p["bib"])
+            pid = cp_key_to_pid[cp_key]
+            cp_times = result.checkpoint_times.get(cp_key, {})
             st = compute_stage_totals(cp_times)
             pid_totals[pid] = {**st, "overall": compute_overall(st)}
-            pid_meta[pid]   = {"gender": p["gender"], "format": p["format"]}
+            pid_meta[pid]   = {"gender": p["gender"], "format": p["format"],
+                               "relay_stage": p.get("relay_stage", "none")}
+
+        # Для relay bike-члена: bike_day1 = bike1_abs_finish - swim_total команды
+        relay_by_bib: dict[str, dict[str, int]] = {}
+        for p in result.participants:
+            if p["format"] == "relay":
+                bib = p["bib"]
+                rs  = p.get("relay_stage", "none")
+                if bib not in relay_by_bib:
+                    relay_by_bib[bib] = {}
+                relay_by_bib[bib][rs] = cp_key_to_pid[p.get("_cp_key", bib)]
+
+        for bib, stage_pids in relay_by_bib.items():
+            swim_pid = stage_pids.get("swim")
+            bike_pid = stage_pids.get("bike")
+            if swim_pid and bike_pid:
+                swim_total = pid_totals.get(swim_pid, {}).get("swim")
+                bike_cp = result.checkpoint_times.get(f"{bib}:bike", {})
+                bike1_abs = _last_cp(bike_cp, "bike_day1")
+                if bike1_abs is not None and swim_total is not None:
+                    pid_totals[bike_pid]["bike_day1"] = bike1_abs - swim_total
 
         indiv  = [pid for pid, m in pid_meta.items() if m["format"] == "individual"]
         male   = [pid for pid in indiv if pid_meta[pid]["gender"] == "M"]
@@ -240,6 +262,19 @@ def apply_to_db(result: ParseResult) -> dict:
                     avg_pace_s=pace,
                     avg_speed_kmh=speed,
                 )
+
+        # Сохранить stage_totals для relay (без ранжирования)
+        relay_pids = [pid for pid, m in pid_meta.items() if m["format"] == "relay"]
+        for pid in relay_pids:
+            for stage in ("swim", "bike_day1", "bike_day2", "run"):
+                total_s = pid_totals[pid].get(stage)
+                if total_s is not None:
+                    pace, speed = compute_metrics(stage, total_s)
+                    upsert_stage_total(
+                        conn, pid, stage, total_s,
+                        rank_stage=None, rank_gender=None,
+                        avg_pace_s=pace, avg_speed_kmh=speed,
+                    )
 
         o_ranks = rank_by({pid: pid_totals[pid]["overall"] for pid in indiv})
         go_ranks = {

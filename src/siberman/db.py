@@ -147,6 +147,90 @@ def get_participants_with_stage_totals(conn, race_year: int,
     return cur.fetchall()
 
 
+def get_results_for_year(conn, race_year: int) -> dict:
+    """Вернуть все результаты за год для публичной страницы."""
+    cur = conn.cursor(dictionary=True)
+
+    # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
+    cur.execute("""
+        SELECT
+            p.bib, p.surname, p.name, p.gender, p.city, p.status,
+            o.total_s   AS overall_s,
+            o.rank_overall, o.rank_gender AS overall_rank_g,
+            sw.total_s  AS swim_s,  sw.rank_stage AS swim_rank,
+            sw.rank_gender AS swim_rank_g, sw.avg_pace_s AS swim_pace,
+            b1.total_s  AS bike1_s, b1.rank_stage AS bike1_rank,
+            b1.rank_gender AS bike1_rank_g, b1.avg_speed_kmh AS bike1_speed,
+            b2.total_s  AS bike2_s, b2.rank_stage AS bike2_rank,
+            b2.rank_gender AS bike2_rank_g, b2.avg_speed_kmh AS bike2_speed,
+            ru.total_s  AS run_s,   ru.rank_stage AS run_rank,
+            ru.rank_gender AS run_rank_g, ru.avg_pace_s AS run_pace
+        FROM participants p
+        LEFT JOIN overall_results o  ON o.participant_id=p.id
+        LEFT JOIN stage_totals sw ON sw.participant_id=p.id AND sw.stage='swim'
+        LEFT JOIN stage_totals b1 ON b1.participant_id=p.id AND b1.stage='bike_day1'
+        LEFT JOIN stage_totals b2 ON b2.participant_id=p.id AND b2.stage='bike_day2'
+        LEFT JOIN stage_totals ru ON ru.participant_id=p.id AND ru.stage='run'
+        WHERE p.race_year=%s AND p.format='individual'
+        ORDER BY (o.total_s IS NULL), o.total_s, p.bib
+    """, (race_year,))
+    individual = cur.fetchall()
+
+    # Эстафетные члены (все трое)
+    cur.execute("""
+        SELECT
+            p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.status,
+            sw.total_s AS swim_s,  sw.avg_pace_s AS swim_pace,
+            b1.total_s AS bike1_s, b1.avg_speed_kmh AS bike1_speed,
+            b2.total_s AS bike2_s, b2.avg_speed_kmh AS bike2_speed,
+            ru.total_s AS run_s,   ru.avg_pace_s AS run_pace
+        FROM participants p
+        LEFT JOIN stage_totals sw ON sw.participant_id=p.id AND sw.stage='swim'
+        LEFT JOIN stage_totals b1 ON b1.participant_id=p.id AND b1.stage='bike_day1'
+        LEFT JOIN stage_totals b2 ON b2.participant_id=p.id AND b2.stage='bike_day2'
+        LEFT JOIN stage_totals ru ON ru.participant_id=p.id AND ru.stage='run'
+        WHERE p.race_year=%s AND p.format='relay'
+        ORDER BY p.bib, p.relay_stage
+    """, (race_year,))
+    relay_rows = cur.fetchall()
+
+    # Группировка эстафет по bib
+    relay_teams: dict[str, dict] = {}
+    for row in relay_rows:
+        bib = row["bib"]
+        if bib not in relay_teams:
+            relay_teams[bib] = {
+                "bib": bib,
+                "team_name": row["relay_team_name"] or "",
+                "members": [],
+            }
+        relay_teams[bib]["members"].append({
+            "relay_stage": row["relay_stage"],
+            "surname": row["surname"],
+            "name": row["name"],
+            "status": row["status"],
+            "swim_s":   row["swim_s"],  "swim_pace":   row["swim_pace"],
+            "bike1_s":  row["bike1_s"], "bike1_speed": row["bike1_speed"],
+            "bike2_s":  row["bike2_s"], "bike2_speed": row["bike2_speed"],
+            "run_s":    row["run_s"],   "run_pace":    row["run_pace"],
+        })
+
+    # Вычислить общее время эстафеты (сумма swim+bike1+bike2+run без None)
+    relay_list = []
+    for team in relay_teams.values():
+        times = []
+        for m in team["members"]:
+            for key in ("swim_s", "bike1_s", "bike2_s", "run_s"):
+                v = m.get(key)
+                if v is not None:
+                    times.append(v)
+        team["overall_s"] = sum(times) if times else None
+        relay_list.append(team)
+    relay_list.sort(key=lambda t: (t["overall_s"] is None, t["overall_s"] or 0, t["bib"]))
+
+    return {"individual": individual, "relay": relay_list}
+
+
 def get_checkpoint_times_for_year(conn, race_year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute(
