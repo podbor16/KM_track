@@ -1,157 +1,341 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Siberman 515 — Результаты 2025</title>
+    <title>Siberman Ultra Triathlon — Результаты 2025</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* ── Brand tokens ── */
         :root {
-            --bg:       #0d1117;
-            --bg2:      #161b22;
-            --bg3:      #21262d;
-            --border:   #30363d;
-            --text:     #e6edf3;
-            --muted:    #8b949e;
-            --accent:   #e85d04;
-            --accent2:  #f48c06;
-            --dnf:      #444c56;
-            --radius:   8px;
+            --navy:   #003D62;
+            --red:    #BE0A21;
+            --blue:   #6AABD7;
+            --white:  #FFFFFF;
+            --radius: 8px;
         }
 
-        body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; }
+        /* ── Dark theme (default) ── */
+        [data-theme="dark"] {
+            --bg:       #071622;
+            --bg2:      #0c2035;
+            --bg3:      #112840;
+            --border:   rgba(106,171,215,.18);
+            --text:     #e4eef6;
+            --muted:    #7aaabf;
+            --accent:   var(--blue);
+            --accent2:  var(--red);
+            --tab-act:  var(--bg);
+            --rank-col: var(--blue);
+            --logo-main:#FFFFFF;
+            --logo-sub: var(--blue);
+            --header-bg:var(--bg2);
+            --dnf-op:   .45;
+            --stat-val: var(--blue);
+        }
 
-        /* Header */
-        .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 20px; display: flex; align-items: center; gap: 16px; }
-        .logo { font-size: 22px; font-weight: 900; letter-spacing: -1px; color: #fff; white-space: nowrap; }
-        .logo span { color: var(--accent); }
-        .logo-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
+        /* ── Light theme ── */
+        [data-theme="light"] {
+            --bg:       #f0f5f9;
+            --bg2:      #FFFFFF;
+            --bg3:      #e4eef6;
+            --border:   #b8d5e8;
+            --text:     var(--navy);
+            --muted:    #4f7f9b;
+            --accent:   var(--navy);
+            --accent2:  var(--red);
+            --tab-act:  var(--bg);
+            --rank-col: var(--navy);
+            --logo-main:var(--navy);
+            --logo-sub: var(--red);
+            --header-bg:var(--white);
+            --dnf-op:   .4;
+            --stat-val: var(--red);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: background .2s, color .2s;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--header-bg);
+            border-bottom: 3px solid var(--red);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .logo-block { display: flex; flex-direction: column; gap: 1px; }
+        .logo-name {
+            font-size: 22px; font-weight: 900; letter-spacing: 3px;
+            text-transform: uppercase; color: var(--logo-main);
+            line-height: 1;
+        }
+        .logo-name .m { color: var(--red); }
+        .logo-tagline {
+            font-size: 9px; font-weight: 700; letter-spacing: 2.5px;
+            text-transform: uppercase; color: var(--logo-sub);
+        }
+        .logo-dist {
+            font-size: 9px; font-weight: 600; letter-spacing: 1.5px;
+            color: var(--muted); margin-top: 1px;
+        }
         .header-spacer { flex: 1; }
-        .year-select { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius); font-size: 13px; cursor: pointer; }
+        .header-controls { display: flex; align-items: center; gap: 10px; }
+        .year-select {
+            background: var(--bg3); border: 1px solid var(--border);
+            color: var(--text); padding: 6px 10px; border-radius: var(--radius);
+            font-size: 13px; cursor: pointer;
+        }
+        .theme-btn {
+            background: var(--bg3); border: 1px solid var(--border);
+            color: var(--text); width: 34px; height: 34px; border-radius: var(--radius);
+            cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+            transition: background .15s;
+        }
+        .theme-btn:hover { background: var(--border); }
 
-        /* Tabs */
-        .tabs { display: flex; gap: 2px; padding: 16px 20px 0; background: var(--bg2); border-bottom: 1px solid var(--border); overflow-x: auto; }
-        .tab { padding: 8px 16px; border-radius: var(--radius) var(--radius) 0 0; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--muted); border: 1px solid transparent; border-bottom: none; white-space: nowrap; transition: color .15s, background .15s; }
+        /* ── Tabs ── */
+        .tabs-bar {
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            display: flex;
+            gap: 0;
+            overflow-x: auto;
+        }
+        .tab {
+            padding: 12px 18px;
+            font-size: 13px; font-weight: 700;
+            letter-spacing: .3px;
+            cursor: pointer;
+            color: var(--muted);
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: color .15s, border-color .15s;
+            text-transform: uppercase;
+        }
         .tab:hover { color: var(--text); }
-        .tab.active { background: var(--bg); color: var(--accent); border-color: var(--border); margin-bottom: -1px; }
+        .tab.active { color: var(--red); border-bottom-color: var(--red); }
+        .tab .tab-dist { font-size: 10px; font-weight: 400; opacity: .7; margin-left: 4px; }
 
-        /* Filters */
-        .filters { display: flex; align-items: center; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
-        .filter-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+        /* ── Filters ── */
+        .filters {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px; flex-wrap: wrap;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg2);
+        }
+        .filter-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
         .filter-group { display: flex; gap: 4px; }
-        .filter-btn { padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+        .filter-btn {
+            padding: 4px 12px; border-radius: 20px;
+            border: 1px solid var(--border); background: transparent;
+            color: var(--muted); font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
+        }
         .filter-btn:hover { color: var(--text); border-color: var(--text); }
-        .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .filter-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
 
-        /* Content */
-        .content { padding: 0 20px 40px; }
+        /* ── Content ── */
+        .content { padding: 16px 20px 48px; }
 
-        /* Stats row */
-        .stats { display: flex; gap: 16px; padding: 16px 0; flex-wrap: wrap; }
-        .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
-        .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
-        .stat-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+        /* ── Stats ── */
+        .stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 16px;
+        }
+        .stat-val { font-size: 20px; font-weight: 800; color: var(--stat-val); }
+        .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
-        /* Table */
-        .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; }
-        thead th { padding: 8px 10px; text-align: left; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        /* ── Table ── */
+        .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; background: var(--bg2); }
+        thead th {
+            padding: 9px 10px; text-align: left;
+            font-size: 10px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .6px; font-weight: 700;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg3);
+            white-space: nowrap;
+        }
         thead th.r { text-align: right; }
         tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
-        tbody tr:hover { background: var(--bg2); }
-        tbody tr.dnf { opacity: .55; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--bg3); }
+        tbody tr.dnf { opacity: var(--dnf-op); }
         td { padding: 9px 10px; white-space: nowrap; }
         td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
-        .rank { font-size: 13px; font-weight: 700; color: var(--accent); min-width: 32px; display: inline-block; }
-        .rank-sub { font-size: 11px; color: var(--muted); }
-        .bib { font-weight: 700; color: var(--muted); }
-        .name { font-weight: 600; }
-        .city { color: var(--muted); font-size: 12px; }
-        .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-        .badge-m { background: rgba(56,139,253,.15); color: #58a6ff; }
-        .badge-f { background: rgba(248,81,73,.15); color: #f85149; }
-        .badge-e { background: rgba(232,93,4,.15); color: var(--accent); }
+        /* Top-3 highlight */
+        tbody tr.rank-1 { background: rgba(190,10,33,.07); }
+        tbody tr.rank-2 { background: rgba(106,171,215,.06); }
+        tbody tr.rank-3 { background: rgba(106,171,215,.04); }
+        tbody tr.rank-1:hover, tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
+
+        .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
+        .rank-1 .rank-num { color: var(--red); }
+        .rank-sub { font-size: 10px; color: var(--muted); display: block; }
+        .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; }
+        .name-main { font-weight: 600; }
+        .name-city { font-size: 11px; color: var(--muted); }
+        .badge {
+            display: inline-block; padding: 1px 7px; border-radius: 10px;
+            font-size: 10px; font-weight: 700; letter-spacing: .3px;
+        }
+        .badge-m { background: rgba(0,61,98,.15); color: var(--navy); }
+        [data-theme="dark"] .badge-m { background: rgba(106,171,215,.15); color: var(--blue); }
+        .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
+        .badge-e { background: rgba(106,171,215,.15); color: var(--blue); }
+        [data-theme="dark"] .badge-e { color: var(--blue); }
         .badge-dnf { background: var(--bg3); color: var(--muted); }
-        .time { font-variant-numeric: tabular-nums; }
+        .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .muted { color: var(--muted); }
 
-        /* Section header */
-        .section-hdr { padding: 20px 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+        /* Stage icon dots in overall table */
+        .stage-icon { font-size: 10px; color: var(--muted); white-space: nowrap; }
 
-        /* Relay table */
-        .relay-team { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
-        .relay-team-header { padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
-        .relay-team-name { font-weight: 700; font-size: 14px; }
-        .relay-team-time { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
-        .relay-members { padding: 0 0 8px; }
-        .relay-member { display: flex; gap: 12px; padding: 6px 14px; align-items: center; border-top: 1px solid var(--border); }
-        .relay-stage-badge { width: 60px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
-        .relay-member-name { flex: 1; font-size: 13px; }
-        .relay-member-time { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text); }
-        .relay-member-meta { font-size: 11px; color: var(--muted); }
+        /* ── Section header ── */
+        .section-hdr {
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+            color: var(--muted); padding: 20px 0 8px;
+            border-bottom: 1px solid var(--border); margin-bottom: 12px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .section-hdr::after { content: ''; flex: 1; height: 1px; background: var(--border); display: block; }
 
-        /* Empty state */
-        .empty { padding: 40px; text-align: center; color: var(--muted); }
-        .loading { padding: 60px; text-align: center; color: var(--muted); font-size: 16px; }
+        /* ── Relay cards ── */
+        .relay-grid { display: flex; flex-direction: column; gap: 8px; }
+        .relay-card {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden;
+        }
+        .relay-card-hdr {
+            padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+            border-bottom: 1px solid var(--border); background: var(--bg3);
+        }
+        .relay-pos { font-size: 14px; font-weight: 800; color: var(--red); min-width: 24px; }
+        .relay-bib { font-size: 12px; font-weight: 700; color: var(--muted); }
+        .relay-name { font-weight: 700; font-size: 14px; flex: 1; }
+        .relay-total { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+        .relay-members { display: table; width: 100%; }
+        .relay-member { display: table-row; }
+        .relay-member > span {
+            display: table-cell; padding: 7px 14px;
+            border-bottom: 1px solid var(--border); vertical-align: middle;
+        }
+        .relay-member:last-child > span { border-bottom: none; }
+        .relay-stage-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--blue); width: 70px; }
+        .relay-member-name { font-size: 13px; font-weight: 500; }
+        .relay-member-time { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+        .relay-member-meta { font-size: 11px; color: var(--muted); text-align: right; width: 100px; }
+
+        /* ── Empty / loading ── */
+        .empty, .loading {
+            padding: 60px 20px; text-align: center;
+            color: var(--muted); font-size: 15px;
+        }
+        .loading::before { content: ''; display: block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         @media (max-width: 640px) {
-            .header { padding: 12px 14px; }
-            .tabs { padding: 12px 14px 0; }
-            .filters { padding: 10px 14px; gap: 8px; }
-            .content { padding: 0 14px 32px; }
-            td, thead th { padding: 7px 6px; font-size: 12px; }
+            .header { padding: 10px 14px; }
+            .logo-name { font-size: 18px; }
+            .tabs-bar { padding: 0 14px; }
+            .tab { padding: 10px 12px; font-size: 12px; }
+            .filters { padding: 8px 14px; }
+            .content { padding: 12px 14px 32px; }
+            td, thead th { padding: 7px 7px; font-size: 12px; }
+            .relay-card-hdr { padding: 8px 10px; }
+            .relay-member > span { padding: 6px 10px; }
         }
     </style>
 </head>
 <body>
 
+<!-- ── Header ── -->
 <div class="header">
-    <div>
-        <div class="logo">SIBER<span>MAN</span></div>
-        <div class="logo-sub">515 · Ультратриатлон · Сибирь</div>
+    <div class="logo-block">
+        <div class="logo-name">SIBER<span class="m">M</span>AN</div>
+        <div class="logo-tagline">Ultra Triathlon</div>
+        <div class="logo-dist">10 KM SWIM · 421 KM BIKE · 84 KM RUN</div>
     </div>
     <div class="header-spacer"></div>
-    <select class="year-select" id="yearSelect" onchange="loadYear(this.value)">
-        <option value="2025">2025</option>
-    </select>
+    <div class="header-controls">
+        <select class="year-select" id="yearSelect" onchange="loadYear(this.value)">
+            <option value="2025">2025</option>
+        </select>
+        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+    </div>
 </div>
 
-<div class="tabs" id="tabs">
+<!-- ── Tabs ── -->
+<div class="tabs-bar" id="tabs">
     <div class="tab active" data-tab="overall">Финал</div>
-    <div class="tab" data-tab="swim">Плавание</div>
-    <div class="tab" data-tab="bike1">Вело День 1</div>
-    <div class="tab" data-tab="bike2">Вело День 2</div>
-    <div class="tab" data-tab="run">Бег</div>
+    <div class="tab" data-tab="swim">Плавание <span class="tab-dist">10 км</span></div>
+    <div class="tab" data-tab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
+    <div class="tab" data-tab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
+    <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
 </div>
 
-<div class="filters" id="filters">
+<!-- ── Filters ── -->
+<div class="filters">
     <span class="filter-label">Формат:</span>
     <div class="filter-group" id="fmtGroup">
         <button class="filter-btn active" data-fmt="all">Все</button>
         <button class="filter-btn" data-fmt="individual">Личный</button>
         <button class="filter-btn" data-fmt="relay">Эстафета</button>
     </div>
-    <span class="filter-label">Пол:</span>
+    <span class="filter-label" id="genderLabel">Пол:</span>
     <div class="filter-group" id="genderGroup">
         <button class="filter-btn active" data-gender="all">Все</button>
-        <button class="filter-btn" data-gender="M">Муж</button>
-        <button class="filter-btn" data-gender="F">Жен</button>
+        <button class="filter-btn" data-gender="M">Мужчины</button>
+        <button class="filter-btn" data-gender="F">Женщины</button>
     </div>
 </div>
 
+<!-- ── Content ── -->
 <div class="content">
-    <div class="loading" id="loading">Загрузка результатов…</div>
+    <div class="loading" id="loading"></div>
     <div id="app" style="display:none"></div>
 </div>
 
 <script>
+/* ──────────────── State ──────────────── */
 let _data = null;
 let _tab = 'overall';
 let _fmt = 'all';
 let _gender = 'all';
 
+/* ──────────────── Theme ──────────────── */
+(function initTheme() {
+    const saved = localStorage.getItem('siberman-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+})();
+
+function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    document.getElementById('themeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('siberman-theme', next);
+}
+
+/* ──────────────── Formatters ──────────────── */
 function fmtTime(s) {
     if (s == null) return '—';
     const h = Math.floor(s / 3600);
@@ -172,31 +356,36 @@ function genderBadge(g) {
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';
     return '<span class="badge badge-e">Э</span>';
 }
+function rankClass(rank) {
+    if (rank === 1) return 'rank-1';
+    if (rank === 2) return 'rank-2';
+    if (rank === 3) return 'rank-3';
+    return '';
+}
 
+/* ──────────────── Filter helpers ──────────────── */
 function getFiltered() {
     if (!_data) return { individual: [], relay: [] };
     let ind = _data.individual;
     if (_fmt === 'relay') ind = [];
     else if (_gender !== 'all') ind = ind.filter(r => r.gender === _gender);
-
-    let rel = _data.relay;
-    if (_fmt === 'individual') rel = [];
-
+    const rel = _fmt === 'individual' ? [] : _data.relay;
     return { individual: ind, relay: rel };
 }
 
+/* ──────────────── Render: Overall ──────────────── */
 function renderOverall() {
     const { individual, relay } = getFiltered();
     let html = '';
 
     // Stats
     const finished = individual.filter(r => r.overall_s != null).length;
-    const dnf = individual.filter(r => r.overall_s == null && r.status !== 'dns').length;
+    const dnfCount = individual.filter(r => r.overall_s == null).length;
     html += `<div class="stats">
-        <div class="stat"><div class="stat-val">${individual.length}</div><div class="stat-lbl">Личников</div></div>
-        <div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>
+        <div class="stat"><div class="stat-val">${individual.length + relay.length}</div><div class="stat-lbl">Участников</div></div>
         <div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>
-        ${dnf > 0 ? `<div class="stat"><div class="stat-val">${dnf}</div><div class="stat-lbl">DNF</div></div>` : ''}
+        ${relay.length > 0 ? `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>` : ''}
+        ${dnfCount > 0 ? `<div class="stat"><div class="stat-val">${dnfCount}</div><div class="stat-lbl">DNF</div></div>` : ''}
     </div>`;
 
     // Individual table
@@ -204,21 +393,31 @@ function renderOverall() {
         html += `<div class="table-wrap"><table>
         <thead><tr>
             <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-            <th class="r">Плавание</th><th class="r">Вело 1</th><th class="r">Вело 2</th><th class="r">Бег</th>
+            <th class="r">🏊 Плав.</th>
+            <th class="r">🚴 Вело 1</th>
+            <th class="r">🚴 Вело 2</th>
+            <th class="r">🏃 Бег</th>
             <th class="r">Итого</th>
         </tr></thead><tbody>`;
         individual.forEach(r => {
             const isDnf = r.overall_s == null;
-            html += `<tr class="${isDnf ? 'dnf' : ''}">
-                <td><span class="rank">${isDnf ? '' : r.rank_overall ?? '—'}</span>${r.rank_gender != null && !isDnf ? `<br><span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}</td>
-                <td class="bib">${r.bib}</td>
-                <td><span class="name">${r.surname} ${r.name}</span>${r.city ? `<br><span class="city">${r.city}</span>` : ''}</td>
+            const rc = isDnf ? '' : rankClass(r.rank_overall);
+            html += `<tr class="${rc}${isDnf ? ' dnf' : ''}">
+                <td>
+                    <span class="rank-num">${isDnf ? '—' : (r.rank_overall ?? '—')}</span>
+                    ${!isDnf && r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
+                </td>
+                <td class="bib-cell">${r.bib}</td>
+                <td>
+                    <span class="name-main">${r.surname} ${r.name}</span>
+                    ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
+                </td>
                 <td>${genderBadge(r.gender)}</td>
-                <td class="r time">${fmtTime(r.swim_s)}</td>
-                <td class="r time">${fmtTime(r.bike1_s)}</td>
-                <td class="r time">${fmtTime(r.bike2_s)}</td>
-                <td class="r time">${fmtTime(r.run_s)}</td>
-                <td class="r time" style="font-weight:700;color:${isDnf ? 'var(--muted)' : 'var(--text)'}">
+                <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
+                <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
+                <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
+                <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
+                <td class="r time-cell" style="font-weight:800">
                     ${isDnf ? '<span class="badge badge-dnf">DNF</span>' : fmtTime(r.overall_s)}
                 </td>
             </tr>`;
@@ -226,29 +425,30 @@ function renderOverall() {
         html += '</tbody></table></div>';
     }
 
-    // Relay teams
+    // Relay cards
     if (_fmt !== 'individual' && relay.length > 0) {
-        html += `<div class="section-hdr">Эстафетные команды</div>`;
+        if (_fmt !== 'relay') html += `<div class="section-hdr">Эстафетные команды</div>`;
         const STAGE_LABELS = { swim: 'Плавание', bike: 'Велосипед', run: 'Бег' };
+        html += '<div class="relay-grid">';
         relay.forEach((team, idx) => {
-            const pos = idx + 1;
-            html += `<div class="relay-team">
-                <div class="relay-team-header">
-                    <span class="rank">${pos}</span>
-                    <span class="bib">${team.bib}</span>
-                    <span class="relay-team-name">${team.team_name}</span>
-                    <span class="relay-team-time">${fmtTime(team.overall_s)}</span>
+            html += `<div class="relay-card">
+                <div class="relay-card-hdr">
+                    <span class="relay-pos">${idx + 1}</span>
+                    <span class="relay-bib">${team.bib}</span>
+                    <span class="relay-name">${team.team_name}</span>
+                    <span class="relay-total">${fmtTime(team.overall_s)}</span>
                 </div>
                 <div class="relay-members">`;
             team.members.forEach(m => {
-                const stageTime = m.relay_stage === 'swim' ? m.swim_s :
-                                  m.relay_stage === 'bike' ? (m.bike1_s != null || m.bike2_s != null ? (m.bike1_s ?? 0) + (m.bike2_s ?? 0) : null) :
-                                  m.run_s;
-                const stageMeta = m.relay_stage === 'swim' ? fmtPace(m.swim_pace) :
-                                  m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed) :
-                                  fmtPace(m.run_pace);
+                const stageTime = m.relay_stage === 'swim' ? m.swim_s
+                    : m.relay_stage === 'bike' ? (m.bike1_s != null && m.bike2_s != null ? m.bike1_s + m.bike2_s
+                        : m.bike2_s ?? m.bike1_s)
+                    : m.run_s;
+                const stageMeta = m.relay_stage === 'swim' ? fmtPace(m.swim_pace)
+                    : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
+                    : fmtPace(m.run_pace);
                 html += `<div class="relay-member">
-                    <span class="relay-stage-badge">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
+                    <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
                     <span class="relay-member-name">${m.surname} ${m.name}</span>
                     <span class="relay-member-time">${fmtTime(stageTime)}</span>
                     <span class="relay-member-meta">${stageMeta}</span>
@@ -256,106 +456,116 @@ function renderOverall() {
             });
             html += `</div></div>`;
         });
+        html += '</div>';
     }
 
-    if (individual.length === 0 && relay.length === 0) {
-        html += `<div class="empty">Нет данных для выбранного фильтра</div>`;
-    }
+    if (individual.length === 0 && relay.length === 0)
+        html += '<div class="empty">Нет данных для выбранного фильтра</div>';
 
     document.getElementById('app').innerHTML = html;
 }
 
-function renderStage(stage) {
-    const { individual, relay } = getFiltered();
-    const stageInfo = {
-        swim:  { key: 's', rankKey: 'swim_rank', rankGKey: 'swim_rank_g', metaKey: 'swim_pace', metaFn: fmtPace,  metaLbl: 'Темп',      distLbl: '10 км',  timeKey: 'swim_s'  },
-        bike1: { key: 's', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaKey: 'bike1_speed', metaFn: fmtSpeed, metaLbl: 'Скорость', distLbl: '145 км', timeKey: 'bike1_s' },
-        bike2: { key: 's', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaKey: 'bike2_speed', metaFn: fmtSpeed, metaLbl: 'Скорость', distLbl: '276 км', timeKey: 'bike2_s' },
-        run:   { key: 's', rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaKey: 'run_pace',   metaFn: fmtPace,  metaLbl: 'Темп',      distLbl: '84 км',  timeKey: 'run_s'   },
-    }[stage];
+/* ──────────────── Render: Stage ──────────────── */
+const STAGE_CFG = {
+    swim:  { timeKey: 'swim_s',  rankKey: 'swim_rank',  rankGKey: 'swim_rank_g',  metaKey: 'swim_pace',   metaFn: fmtPace,  metaLbl: 'Темп',      relayStage: 'swim' },
+    bike1: { timeKey: 'bike1_s', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaKey: 'bike1_speed', metaFn: fmtSpeed, metaLbl: 'Скорость',  relayStage: 'bike' },
+    bike2: { timeKey: 'bike2_s', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaKey: 'bike2_speed', metaFn: fmtSpeed, metaLbl: 'Скорость',  relayStage: 'bike' },
+    run:   { timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaKey: 'run_pace',    metaFn: fmtPace,  metaLbl: 'Темп',      relayStage: 'run'  },
+};
 
-    // Отфильтровать тех, у кого нет данных этапа и нет DNF
-    const rows = individual.filter(r => r[stageInfo.timeKey] != null || r.status === 'dnf');
-    // Эстафетные члены для этого этапа
-    let relayStageKey = { swim: 'swim', bike1: 'bike', bike2: 'bike', run: 'run' }[stage];
+function renderStage(stage) {
+    const cfg = STAGE_CFG[stage];
+    const { individual, relay } = getFiltered();
+
+    const rows = individual.filter(r => r[cfg.timeKey] != null || r.status === 'dnf');
     const relayMembers = _fmt !== 'individual'
-        ? relay.flatMap(t => t.members.filter(m => m.relay_stage === relayStageKey))
+        ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage))
         : [];
+
+    if (rows.length === 0 && relayMembers.length === 0) {
+        document.getElementById('app').innerHTML = '<div class="empty">Нет данных</div>';
+        return;
+    }
 
     let html = `<div class="table-wrap"><table>
     <thead><tr>
-        <th>Место</th><th>№</th><th>Участник</th><th>Пол/Тип</th>
-        <th class="r">Время</th><th class="r">${stageInfo.metaLbl}</th>
+        <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th>
     </tr></thead><tbody>`;
 
     rows.forEach(r => {
-        const t = r[stageInfo.timeKey];
+        const t = r[cfg.timeKey];
         const isDnf = t == null;
-        html += `<tr class="${isDnf ? 'dnf' : ''}">
-            <td><span class="rank">${isDnf ? '' : r[stageInfo.rankKey] ?? '—'}</span>${!isDnf && r[stageInfo.rankGKey] != null ? `<br><span class="rank-sub">${genderBadge(r.gender)}${r[stageInfo.rankGKey]}</span>` : ''}</td>
-            <td class="bib">${r.bib}</td>
-            <td class="name">${r.surname} ${r.name}</td>
+        const rc = isDnf ? '' : rankClass(r[cfg.rankKey]);
+        html += `<tr class="${rc}${isDnf ? ' dnf' : ''}">
+            <td>
+                <span class="rank-num">${isDnf ? '—' : (r[cfg.rankKey] ?? '—')}</span>
+                ${!isDnf && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
+            </td>
+            <td class="bib-cell">${r.bib}</td>
+            <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
-            <td class="r time">${isDnf ? '<span class="badge badge-dnf">DNF</span>' : fmtTime(t)}</td>
-            <td class="r muted">${isDnf ? '—' : stageInfo.metaFn(r[stageInfo.metaKey])}</td>
+            <td class="r time-cell">${isDnf ? '<span class="badge badge-dnf">DNF</span>' : fmtTime(t)}</td>
+            <td class="r muted">${isDnf ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
         </tr>`;
     });
 
-    // Relay members for this stage
     if (relayMembers.length > 0) {
-        html += `<tr><td colspan="6" style="padding:4px 10px;background:var(--bg2);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Эстафеты</td></tr>`;
+        html += `<tr><td colspan="6" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
         relayMembers.forEach(m => {
-            const t = m.relay_stage === 'swim' ? m.swim_s :
-                      stage === 'bike1' ? m.bike1_s : stage === 'bike2' ? m.bike2_s : m.run_s;
-            const meta = m.relay_stage === 'swim' ? fmtPace(m.swim_pace) :
-                         stage === 'bike1' ? fmtSpeed(m.bike1_speed) : stage === 'bike2' ? fmtSpeed(m.bike2_speed) : fmtPace(m.run_pace);
+            const t = stage === 'swim' ? m.swim_s
+                : stage === 'bike1' ? m.bike1_s
+                : stage === 'bike2' ? m.bike2_s
+                : m.run_s;
+            const meta = stage === 'swim' ? fmtPace(m.swim_pace)
+                : stage === 'bike1' ? fmtSpeed(m.bike1_speed)
+                : stage === 'bike2' ? fmtSpeed(m.bike2_speed)
+                : fmtPace(m.run_pace);
             html += `<tr>
                 <td><span class="badge badge-e">Э</span></td>
-                <td class="bib muted">—</td>
-                <td class="name">${m.surname} ${m.name}</td>
+                <td class="bib-cell muted">—</td>
+                <td class="name-main">${m.surname} ${m.name}</td>
                 <td><span class="badge badge-e">Э</span></td>
-                <td class="r time">${fmtTime(t)}</td>
+                <td class="r time-cell">${fmtTime(t)}</td>
                 <td class="r muted">${meta}</td>
             </tr>`;
         });
     }
 
     html += '</tbody></table></div>';
-
-    if (rows.length === 0 && relayMembers.length === 0) {
-        html = '<div class="empty">Нет данных для выбранного фильтра</div>';
-    }
-
     document.getElementById('app').innerHTML = html;
 }
 
+/* ──────────────── Main render ──────────────── */
 function render() {
     if (!_data) return;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = '';
-
-    // Управление видимостью фильтра пола (не нужен при фильтре Эстафета)
+    // Скрыть фильтр пола при выборе Эстафеты
     const genderGroup = document.getElementById('genderGroup');
-    genderGroup.style.display = _fmt === 'relay' ? 'none' : '';
-
+    const genderLabel = document.getElementById('genderLabel');
+    const hideGender = _fmt === 'relay';
+    genderGroup.style.display = hideGender ? 'none' : '';
+    genderLabel.style.display = hideGender ? 'none' : '';
     if (_tab === 'overall') renderOverall();
     else renderStage(_tab);
 }
 
+/* ──────────────── Data loading ──────────────── */
 async function loadYear(year) {
     document.getElementById('loading').style.display = '';
     document.getElementById('app').style.display = 'none';
     try {
         const resp = await fetch(`/api/siberman/results?year=${year}`);
-        if (!resp.ok) throw new Error(resp.statusText);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         _data = await resp.json();
         render();
     } catch(e) {
-        document.getElementById('loading').textContent = 'Ошибка загрузки данных: ' + e.message;
+        document.getElementById('loading').textContent = 'Ошибка загрузки: ' + e.message;
     }
 }
 
-// Tab switching
+/* ──────────────── Event listeners ──────────────── */
 document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -365,7 +575,6 @@ document.querySelectorAll('.tab').forEach(t => {
     });
 });
 
-// Format filter
 document.querySelectorAll('[data-fmt]').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('[data-fmt]').forEach(x => x.classList.remove('active'));
@@ -380,7 +589,6 @@ document.querySelectorAll('[data-fmt]').forEach(btn => {
     });
 });
 
-// Gender filter
 document.querySelectorAll('[data-gender]').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('[data-gender]').forEach(x => x.classList.remove('active'));
@@ -390,7 +598,6 @@ document.querySelectorAll('[data-gender]').forEach(btn => {
     });
 });
 
-// Initial load
 loadYear(2025);
 </script>
 </body>
