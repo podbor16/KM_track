@@ -196,7 +196,11 @@
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
         .badge-e { background: rgba(106,171,215,.15); color: var(--blue); }
         [data-theme="dark"] .badge-e { color: var(--blue); }
-        .badge-dnf { background: var(--bg3); color: var(--muted); }
+        .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
+        .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
+        .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
+        .badge-fin  { background: rgba(34,197,94,.12);   color: #22c55e; }
+        .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .muted { color: var(--muted); }
 
@@ -356,6 +360,16 @@ function genderBadge(g) {
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';
     return '<span class="badge badge-e">Э</span>';
 }
+function statusBadge(r, timeKey) {
+    const s = r.status;
+    if (s === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
+    if (s === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
+    if (s === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
+    const hasTime = timeKey ? r[timeKey] != null : r.overall_s != null;
+    return hasTime
+        ? '<span class="badge badge-fin">Финишировал</span>'
+        : '<span class="badge badge-live">В гонке</span>';
+}
 function rankClass(rank) {
     if (rank === 1) return 'rank-1';
     if (rank === 2) return 'rank-2';
@@ -398,14 +412,15 @@ function renderOverall() {
             <th class="r">🚴 Вело 2</th>
             <th class="r">🏃 Бег</th>
             <th class="r">Итого</th>
+            <th>Статус</th>
         </tr></thead><tbody>`;
         individual.forEach(r => {
-            const isDnf = r.overall_s == null;
-            const rc = isDnf ? '' : rankClass(r.rank_overall);
-            html += `<tr class="${rc}${isDnf ? ' dnf' : ''}">
+            const notFinished = r.overall_s == null || r.status !== 'active';
+            const rc = notFinished ? '' : rankClass(r.rank_overall);
+            html += `<tr class="${rc}${notFinished ? ' dnf' : ''}">
                 <td>
-                    <span class="rank-num">${isDnf ? '—' : (r.rank_overall ?? '—')}</span>
-                    ${!isDnf && r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
+                    <span class="rank-num">${r.rank_overall ?? '—'}</span>
+                    ${r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
                 </td>
                 <td class="bib-cell">${r.bib}</td>
                 <td>
@@ -417,9 +432,8 @@ function renderOverall() {
                 <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
                 <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
                 <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
-                <td class="r time-cell" style="font-weight:800">
-                    ${isDnf ? '<span class="badge badge-dnf">DNF</span>' : fmtTime(r.overall_s)}
-                </td>
+                <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
+                <td>${statusBadge(r, null)}</td>
             </tr>`;
         });
         html += '</tbody></table></div>';
@@ -477,7 +491,7 @@ function renderStage(stage) {
     const cfg = STAGE_CFG[stage];
     const { individual, relay } = getFiltered();
 
-    const rows = individual.filter(r => r[cfg.timeKey] != null || r.status === 'dnf');
+    const rows = individual; // показываем всех участников, статус объясняет ситуацию
     const relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => ({...m, _bib: t.bib, _team: t.team_name})))
         : [];
@@ -490,23 +504,24 @@ function renderStage(stage) {
     let html = `<div class="table-wrap"><table>
     <thead><tr>
         <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Статус</th>
     </tr></thead><tbody>`;
 
     rows.forEach(r => {
         const t = r[cfg.timeKey];
-        const isDnf = t == null;
-        const rc = isDnf ? '' : rankClass(r[cfg.rankKey]);
-        html += `<tr class="${rc}${isDnf ? ' dnf' : ''}">
+        const noTime = t == null;
+        const rc = noTime ? '' : rankClass(r[cfg.rankKey]);
+        html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}">
             <td>
-                <span class="rank-num">${isDnf ? '—' : (r[cfg.rankKey] ?? '—')}</span>
-                ${!isDnf && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
+                <span class="rank-num">${noTime ? '—' : (r[cfg.rankKey] ?? '—')}</span>
+                ${!noTime && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
             </td>
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
-            <td class="r time-cell">${isDnf ? '<span class="badge badge-dnf">DNF</span>' : fmtTime(t)}</td>
-            <td class="r muted">${isDnf ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            <td>${statusBadge(r, cfg.timeKey)}</td>
         </tr>`;
     });
 
