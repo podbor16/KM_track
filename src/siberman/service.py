@@ -220,7 +220,8 @@ def apply_to_db(result: ParseResult) -> dict:
             st = compute_stage_totals(cp_times)
             pid_totals[pid] = {**st, "overall": compute_overall(st)}
             pid_meta[pid]   = {"gender": p["gender"], "format": p["format"],
-                               "relay_stage": p.get("relay_stage", "none")}
+                               "relay_stage": p.get("relay_stage", "none"),
+                               "status": p.get("status", "active")}
 
         # Для relay bike-члена: bike_day1 = bike1_abs_finish - swim_total команды
         relay_by_bib: dict[str, dict[str, int]] = {}
@@ -242,7 +243,9 @@ def apply_to_db(result: ParseResult) -> dict:
                 if bike1_abs is not None and swim_total is not None:
                     pid_totals[bike_pid]["bike_day1"] = bike1_abs - swim_total
 
-        indiv  = [pid for pid, m in pid_meta.items() if m["format"] == "individual"]
+        indiv_all = [pid for pid, m in pid_meta.items() if m["format"] == "individual"]
+        # Ранги только для активных финишёров; DNF/DNS/DSQ → rank=None
+        indiv  = [pid for pid in indiv_all if pid_meta[pid].get("status") == "active"]
         male   = [pid for pid in indiv if pid_meta[pid]["gender"] == "M"]
         female = [pid for pid in indiv if pid_meta[pid]["gender"] == "F"]
 
@@ -252,13 +255,13 @@ def apply_to_db(result: ParseResult) -> dict:
                 **rank_by({pid: pid_totals[pid][stage] for pid in male}),
                 **rank_by({pid: pid_totals[pid][stage] for pid in female}),
             }
-            for pid in indiv:
+            for pid in indiv_all:
                 total_s = pid_totals[pid][stage]
                 pace, speed = compute_metrics(stage, total_s)
                 upsert_stage_total(
                     conn, pid, stage, total_s,
-                    rank_stage=s_ranks[pid],
-                    rank_gender=g_ranks.get(pid),
+                    rank_stage=s_ranks.get(pid),   # None для DNF
+                    rank_gender=g_ranks.get(pid),  # None для DNF
                     avg_pace_s=pace,
                     avg_speed_kmh=speed,
                 )
@@ -281,12 +284,12 @@ def apply_to_db(result: ParseResult) -> dict:
             **rank_by({pid: pid_totals[pid]["overall"] for pid in male}),
             **rank_by({pid: pid_totals[pid]["overall"] for pid in female}),
         }
-        for pid in indiv:
+        for pid in indiv_all:
             upsert_overall_result(
                 conn, pid,
                 total_s=pid_totals[pid]["overall"],
-                rank_overall=o_ranks[pid],
-                rank_gender=go_ranks.get(pid),
+                rank_overall=o_ranks.get(pid),   # None для DNF
+                rank_gender=go_ranks.get(pid),   # None для DNF
                 rank_relay=None,
             )
 

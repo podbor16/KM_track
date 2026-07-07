@@ -351,6 +351,24 @@ function fmtPace(s) {
     if (s == null) return '—';
     return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} /км`;
 }
+function fmtPace100m(secPerKm) {
+    if (secPerKm == null) return '—';
+    const s = Math.round(secPerKm / 10);
+    return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} /100м`;
+}
+const STATUS_ORDER = { active: 0, dnf: 1, dsq: 2, dns: 3 };
+function sortByStatus(rows, timeKey) {
+    return [...rows].sort((a, b) => {
+        const sa = STATUS_ORDER[a.status] ?? 4, sb = STATUS_ORDER[b.status] ?? 4;
+        if (sa !== sb) return sa - sb;
+        if (a.status !== 'active') return 0;
+        const ta = a[timeKey], tb = b[timeKey];
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return ta - tb;
+    });
+}
 function fmtSpeed(v) {
     if (v == null) return '—';
     return `${Number(v).toFixed(1)} км/ч`;
@@ -414,7 +432,7 @@ function renderOverall() {
             <th class="r">Итого</th>
             <th>Статус</th>
         </tr></thead><tbody>`;
-        individual.forEach(r => {
+        sortByStatus(individual, 'overall_s').forEach(r => {
             const notFinished = r.overall_s == null || r.status !== 'active';
             const rc = notFinished ? '' : rankClass(r.rank_overall);
             html += `<tr class="${rc}${notFinished ? ' dnf' : ''}">
@@ -481,20 +499,28 @@ function renderOverall() {
 
 /* ──────────────── Render: Stage ──────────────── */
 const STAGE_CFG = {
-    swim:  { timeKey: 'swim_s',  rankKey: 'swim_rank',  rankGKey: 'swim_rank_g',  metaKey: 'swim_pace',   metaFn: fmtPace,  metaLbl: 'Темп',      relayStage: 'swim' },
-    bike1: { timeKey: 'bike1_s', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaKey: 'bike1_speed', metaFn: fmtSpeed, metaLbl: 'Скорость',  relayStage: 'bike' },
-    bike2: { timeKey: 'bike2_s', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaKey: 'bike2_speed', metaFn: fmtSpeed, metaLbl: 'Скорость',  relayStage: 'bike' },
-    run:   { timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaKey: 'run_pace',    metaFn: fmtPace,  metaLbl: 'Темп',      relayStage: 'run'  },
+    swim:  { timeKey: 'swim_s',  rankKey: 'swim_rank',  rankGKey: 'swim_rank_g',  metaKey: 'swim_pace',   metaFn: fmtPace100m, metaLbl: 'Темп',     relayStage: 'swim' },
+    bike1: { timeKey: 'bike1_s', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaKey: 'bike1_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
+    bike2: { timeKey: 'bike2_s', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaKey: 'bike2_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
+    run:   { timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaKey: 'run_pace',    metaFn: fmtPace,     metaLbl: 'Темп',     relayStage: 'run'  },
 };
 
 function renderStage(stage) {
     const cfg = STAGE_CFG[stage];
     const { individual, relay } = getFiltered();
 
-    const rows = individual; // показываем всех участников, статус объясняет ситуацию
-    const relayMembers = _fmt !== 'individual'
+    const rows = sortByStatus(individual, cfg.timeKey);
+    let relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => ({...m, _bib: t.bib, _team: t.team_name})))
         : [];
+    // Сортировать эстафеты по времени этапа
+    relayMembers = relayMembers.sort((a, b) => {
+        const ta = a[cfg.timeKey], tb = b[cfg.timeKey];
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return ta - tb;
+    });
 
     if (rows.length === 0 && relayMembers.length === 0) {
         document.getElementById('app').innerHTML = '<div class="empty">Нет данных</div>';
@@ -526,18 +552,16 @@ function renderStage(stage) {
     });
 
     if (relayMembers.length > 0) {
-        html += `<tr><td colspan="6" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
+        html += `<tr><td colspan="7" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
+        let relayRank = 1;
         relayMembers.forEach(m => {
-            const t = stage === 'swim' ? m.swim_s
-                : stage === 'bike1' ? m.bike1_s
-                : stage === 'bike2' ? m.bike2_s
-                : m.run_s;
-            const meta = stage === 'swim' ? fmtPace(m.swim_pace)
-                : stage === 'bike1' ? fmtSpeed(m.bike1_speed)
-                : stage === 'bike2' ? fmtSpeed(m.bike2_speed)
-                : fmtPace(m.run_pace);
+            const t = m[cfg.timeKey];
+            const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
+            const hasTime = t != null;
+            const rankDisplay = hasTime ? relayRank : '—';
+            if (hasTime) relayRank++;
             html += `<tr>
-                <td class="muted">—</td>
+                <td><span class="rank-num">${rankDisplay}</span></td>
                 <td class="bib-cell">${m._bib}</td>
                 <td>
                     <span class="name-main">${m.surname} ${m.name}</span>
@@ -545,7 +569,8 @@ function renderStage(stage) {
                 </td>
                 <td><span class="badge badge-e">Э</span></td>
                 <td class="r time-cell">${fmtTime(t)}</td>
-                <td class="r muted">${meta}</td>
+                <td class="r muted">${hasTime ? meta : '—'}</td>
+                <td>${hasTime ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>'}</td>
             </tr>`;
         });
     }
