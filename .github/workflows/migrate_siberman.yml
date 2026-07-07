@@ -1,0 +1,37 @@
+name: Migrate Siberman DB (one-time)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run migrations via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          timeout: 60s
+          script: |
+            set -ex
+
+            # Create siberman DB (root via unix socket)
+            mysql -u root -e "CREATE DATABASE IF NOT EXISTS siberman CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+            # Grant km_analytic access
+            mysql -u root -e "GRANT ALL PRIVILEGES ON siberman.* TO 'km_analytic'@'localhost'; FLUSH PRIVILEGES;"
+
+            # Apply schema migration
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/001_init.sql
+
+            # Seed checkpoints
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/002_seed_checkpoints_2025.sql
+
+            # Verify
+            echo "=== Tables ==="
+            mysql -u root siberman -e "SHOW TABLES;"
+            echo "=== Checkpoints by segment ==="
+            mysql -u root siberman -e "SELECT segment, COUNT(*) as cnt FROM checkpoints GROUP BY segment ORDER BY segment;"
+            echo "=== Migration OK ==="
