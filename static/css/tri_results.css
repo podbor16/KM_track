@@ -214,6 +214,19 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
         font-size: 13px;
         flex-shrink: 0;
     }
+
+    /* Mobile chart subtabs */
+    .tri-chart-subtabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        padding: 8px 12px;
+    }
+    .tri-chart-subtabs::-webkit-scrollbar { display: none; }
+    .tri-chart-subtab {
+        flex-shrink: 0;
+    }
 }
 
 /* ---- Chart tab ---- */
