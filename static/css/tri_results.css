@@ -18,7 +18,8 @@ body {
     color: var(--tri-text);
     font-family: 'Onest', Arial, sans-serif;
     min-height: 100vh;
-    overflow-x: hidden;
+    overflow-x: hidden; /* fallback for pre-Safari 16 / iOS 15 */
+    overflow-x: clip;
 }
 
 /* ---- Header ---- */
@@ -199,6 +200,33 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .tri-toolbar { padding: 8px 12px; gap: 6px; }
     .tri-search { flex: 1; width: auto; min-width: 0; }
     #tab-chart { padding: 0 8px; }
+
+    /* Mobile page tabs */
+    .tri-page-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: 0 12px;
+    }
+    .tri-page-tabs::-webkit-scrollbar { display: none; }
+    .tri-page-tab {
+        padding: 9px 14px;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    /* Mobile chart subtabs */
+    .tri-chart-subtabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        padding: 8px 12px;
+    }
+    .tri-chart-subtabs::-webkit-scrollbar { display: none; }
+    .tri-chart-subtab {
+        flex-shrink: 0;
+    }
 }
 
 /* ---- Chart tab ---- */
