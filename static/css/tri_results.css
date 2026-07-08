@@ -18,6 +18,7 @@ body {
     color: var(--tri-text);
     font-family: 'Onest', Arial, sans-serif;
     min-height: 100vh;
+    overflow-x: hidden; /* fallback for pre-Safari 16 / iOS 15 */
     overflow-x: clip;
 }
 
