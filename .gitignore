@@ -85,3 +85,4 @@ deploy/_vps_config.py
 
 # Статические библиотеки (скачиваются deploy/download_static_libs.py)
 static/lib/
+.worktrees/
