@@ -208,6 +208,45 @@ function computeStageGaps(rows, dbStage) {
     return gaps;
 }
 
+// Отставание НА КАЖДОЙ отдельной КТ (не только на финише этапа) — лидер
+// в конкретной точке может отличаться от итогового лидера этапа (у кого-то
+// неровный темп). Точное совпадение seq (не valueAtOrBefore — та функция
+// для "гэпа относительно финальной позиции", здесь сравниваем СТРОГО одну
+// и ту же КТ). Возвращает {seq: {key: gap_s}}, gap_s===0 у лидера точки.
+function computeCheckpointGaps(rows, dbStage, maxSeq) {
+    const bySeq = {};
+    for (let seq = 1; seq <= maxSeq; seq++) {
+        const vals = rows
+            .map(r => ({ key: r.key, value: r.cp?.[dbStage]?.[seq] }))
+            .filter(r => r.value != null);
+        if (vals.length === 0) continue;
+        const min = Math.min(...vals.map(v => v.value));
+        bySeq[seq] = {};
+        vals.forEach(v => { bySeq[seq][v.key] = v.value - min; });
+    }
+    return bySeq;
+}
+
+// Место НА КАЖДОЙ отдельной КТ (та же идея, что и computeCheckpointGaps, но
+// ранг вместо gap, с учётом ничьих). rows — уже нужный пул (абсолют/по
+// формату/по полу — фильтрация до вызова, не внутри функции).
+function computeCheckpointRanks(rows, dbStage, maxSeq) {
+    const bySeq = {};
+    for (let seq = 1; seq <= maxSeq; seq++) {
+        const vals = rows
+            .map(r => ({ key: r.key, value: r.cp?.[dbStage]?.[seq] }))
+            .filter(r => r.value != null)
+            .sort((a, b) => a.value - b.value);
+        if (vals.length === 0) continue;
+        const ranks = {};
+        vals.forEach((r, i) => {
+            ranks[r.key] = (i > 0 && r.value === vals[i - 1].value) ? ranks[vals[i - 1].key] : i + 1;
+        });
+        bySeq[seq] = ranks;
+    }
+    return bySeq;
+}
+
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —
 // только среди тех, кто реально дошёл до последней КТ этапа (та же логика
 // финиша, что и в computeStageGaps), с учётом ничьих (как rank_by в

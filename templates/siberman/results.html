@@ -416,12 +416,12 @@ function renderOverall() {
                     ? `<span class="muted" style="font-size:.85em">${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}</span>`
                     : '—';
             }
-            html += `<tr class="${rc}${notFinished ? ' dnf' : ''}">
+            html += `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="location.href='${participantLink(r.bib)}'">
                 <td>
                     <span class="rank-num">${r[mainOverallRank] ?? '—'}</span>
                     ${_gender === 'all' && r.overall_rank_g != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.overall_rank_g}</span>` : ''}
                 </td>
-                <td class="bib-cell"><a href="${participantLink(r.bib)}" style="color:inherit;text-decoration:none">${r.bib}</a></td>
+                <td class="bib-cell">${r.bib}</td>
                 <td>
                     <span class="name-main">${r.surname} ${r.name}</span>
                     ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
@@ -446,14 +446,12 @@ function renderOverall() {
         html += '<div class="relay-grid">';
         relay.forEach((team, idx) => {
             html += `<div class="relay-card">
-                <a href="${participantLink(team.bib)}" style="color:inherit;text-decoration:none;display:contents">
-                <div class="relay-card-hdr">
+                <div class="relay-card-hdr" style="cursor:pointer" onclick="location.href='${participantLink(team.bib)}'">
                     <span class="relay-pos">${idx + 1}</span>
                     <span class="relay-bib">${team.bib}</span>
                     <span class="relay-name">${team.team_name}</span>
                     <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
                 </div>
-                </a>
                 <div class="relay-members">`;
             team.members.forEach(m => {
                 const stageTime = m.relay_stage === 'swim' ? m.swim_s
@@ -575,12 +573,12 @@ function renderStage(stage) {
         const timeCell = !pos ? '—'
             : finishedStage ? fmtTime(t)
             : `<span class="muted" style="font-weight:400">${CHECKPOINT_LABELS[dbStage][pos.seq]}</span><br>${fmtTime(pos.value)}`;
-        html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}">
+        html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="location.href='${participantLink(r.bib)}'">
             <td>
                 <span class="rank-num">${noTime ? '—' : (r[mainRankKey] ?? '—')}</span>
                 ${!noTime && _gender === 'all' && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
             </td>
-            <td class="bib-cell"><a href="${participantLink(r.bib)}" style="color:inherit;text-decoration:none">${r.bib}</a></td>
+            <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
             <td class="r time-cell">${timeCell}</td>
@@ -605,9 +603,9 @@ function renderStage(stage) {
             const timeCell = !pos ? '—'
                 : finished ? fmtTime(t)
                 : `<span class="muted" style="font-weight:400">${CHECKPOINT_LABELS[dbStage][pos.seq]}</span><br>${fmtTime(pos.value)}`;
-            html += `<tr>
+            html += `<tr style="cursor:pointer" onclick="location.href='${participantLink(m._bib)}'">
                 <td><span class="rank-num">${rankDisplay}</span></td>
-                <td class="bib-cell"><a href="${participantLink(m._bib)}" style="color:inherit;text-decoration:none">${m._bib}</a></td>
+                <td class="bib-cell">${m._bib}</td>
                 <td>
                     <span class="name-main">${m.surname} ${m.name}</span>
                     <br><span class="name-city">${m._team}</span>

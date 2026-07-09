@@ -78,6 +78,8 @@
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .muted { color: var(--muted); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
+        .rank-num { font-weight: 800; }
+        .rank-sub { font-size: 10px; color: var(--muted); display: block; }
 
         /* ── Card ── */
         .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
@@ -178,11 +180,11 @@ function withStageStatus(r, dbStage) {
 function buildStageGapPool(data, dbStage, relayStage) {
     const indiv = data.individual
         .map(r => withStageStatus(r, dbStage))
-        .map(r => ({ key: r.bib, cp: r.cp, status: r.status }));
+        .map(r => ({ key: r.bib, cp: r.cp, status: r.status, gender: r.gender, isRelay: false }));
     const relayMembers = data.relay.flatMap(t => t.members
         .filter(m => m.relay_stage === relayStage)
         .map(m => withStageStatus({ ...m, _bib: t.bib }, dbStage)))
-        .map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status }));
+        .map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status, gender: m.gender, isRelay: true }));
     return [...indiv, ...relayMembers];
 }
 
@@ -193,21 +195,53 @@ function buildOverallGapPool(data) {
     ];
 }
 
-function stageBody(dbStage, r) {
+function stageBody(dbStage, r, gapPool, myKey) {
     const maxSeq = STAGE_MAX_SEQ[dbStage];
+    const cpGaps = computeCheckpointGaps(gapPool, dbStage, maxSeq);
+
+    // Место на КТ: абсолют (весь пул), по формату (личники ОТДЕЛЬНО от
+    // эстафетчиков), по полу (только среди личников — у эстафетной команды
+    // нет единого пола, поэтому для строк-эстафетчиков места по полу нет).
+    const isRelayRow = !!r.relay_stage;
+    const absRanks = computeCheckpointRanks(gapPool, dbStage, maxSeq);
+    const formatPool = gapPool.filter(x => x.isRelay === isRelayRow);
+    const formatRanks = computeCheckpointRanks(formatPool, dbStage, maxSeq);
+    let genderRanks = {};
+    if (!isRelayRow) {
+        const genderPool = gapPool.filter(x => !x.isRelay && x.gender === r.gender);
+        genderRanks = computeCheckpointRanks(genderPool, dbStage, maxSeq);
+    }
+
     let rows = '';
     for (let seq = 1; seq <= maxSeq; seq++) {
         const cum = r.cp?.[dbStage]?.[seq];
         const split = r.splits?.[dbStage]?.[seq];
         const pending = cum == null;
+        const gap = cpGaps[seq]?.[myKey];
+        const gapCell = pending || gap == null ? '—'
+            : gap === 0 ? '<span class="badge badge-fin">Лидер</span>'
+            : fmtGap(gap);
+
+        let placeCell = '—';
+        if (!pending) {
+            const absR = absRanks[seq]?.[myKey];
+            const fmtR = formatRanks[seq]?.[myKey];
+            const genR = !isRelayRow ? genderRanks[seq]?.[myKey] : null;
+            placeCell = `<span class="rank-num" style="font-size:12px">${absR ?? '—'}</span>`
+                + (fmtR != null ? `<span class="rank-sub">${isRelayRow ? 'Э' : 'Л'} ${fmtR}</span>` : '')
+                + (genR != null ? `<span class="rank-sub">${genderBadge(r.gender)}${genR}</span>` : '');
+        }
+
         rows += `<tr class="${pending ? 'pending' : ''}">
             <td>${CHECKPOINT_LABELS[dbStage][seq]}</td>
             <td class="r time-cell">${split != null ? fmtTime(split) : '—'}</td>
             <td class="r time-cell">${cum != null ? fmtTime(cum) : '—'}</td>
+            <td class="r">${placeCell}</td>
+            <td class="r">${gapCell}</td>
         </tr>`;
     }
     return `<table class="cp-table">
-        <thead><tr><th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Общее время</th></tr></thead>
+        <thead><tr><th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Общее время</th><th class="r">Место</th><th class="r">Отставание</th></tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
 }
@@ -249,7 +283,33 @@ function stageSection(cfg, r, gapPool) {
             ${timeInfo}
             ${badge}
         </summary>
-        ${stageBody(cfg.dbStage, r)}
+        ${stageBody(cfg.dbStage, r, gapPool, key)}
+    </details>`;
+}
+
+// "Велоэтап (общ.)" — сумма вело день 1 + день 2, без своей ранжировки/КТ
+// (это агрегат для удобства чтения, не отдельный этап гонки с местом).
+function combinedBikeSection(b1, b2) {
+    if (b1 == null && b2 == null) return '';
+    const bothKnown = b1 != null && b2 != null;
+    const total = bothKnown ? b1 + b2 : null;
+    const avgSpeed = bothKnown ? (145 + 276) / (total / 3600) : null;
+    return `<details class="stage">
+        <summary>
+            <span class="stage-title">Велоэтап (общ.)</span>
+            <span class="stage-dist">421 км</span>
+            <span class="stage-spacer"></span>
+            ${total != null ? `<span class="stage-time">${fmtTime(total)}</span>` : ''}
+        </summary>
+        <table class="cp-table">
+            <thead><tr><th>Этап</th><th class="r">Время</th></tr></thead>
+            <tbody>
+                <tr><td>Вело День 1 (145 км)</td><td class="r time-cell">${fmtTime(b1)}</td></tr>
+                <tr><td>Вело День 2 (276 км)</td><td class="r time-cell">${fmtTime(b2)}</td></tr>
+                <tr><td style="font-weight:700">Итого (421 км)</td><td class="r time-cell" style="font-weight:700">${fmtTime(total)}</td></tr>
+                ${avgSpeed != null ? `<tr><td>Средняя скорость</td><td class="r time-cell">${fmtSpeed(avgSpeed)}</td></tr>` : ''}
+            </tbody>
+        </table>
     </details>`;
 }
 
@@ -293,7 +353,9 @@ function renderIndividual(data, r) {
             ${r.city ? `<div class="p-city">${r.city}</div>` : ''}
         </div>
         <div class="stats-row">${overallStat}</div>
-        ${STAGES.map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+        ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+        ${combinedBikeSection(r.bike1_s, r.bike2_s)}
+        ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
     </div>`;
     document.getElementById('app').innerHTML = html;
 }
@@ -322,6 +384,7 @@ function renderTeam(data, team) {
                 <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
             </div>
             ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+            ${m.relay_stage === 'bike' ? combinedBikeSection(m.bike1_s, m.bike2_s) : ''}
         </div>`;
     }).join('');
 
