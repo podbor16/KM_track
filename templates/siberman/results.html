@@ -394,6 +394,7 @@ function renderOverall() {
             <th class="r">🚴 Вело 2</th>
             <th class="r">🏃 Бег</th>
             <th class="r">Итого</th>
+            <th>Последняя КТ</th>
             <th class="r">Отставание</th>
             <th>Статус</th>
         </tr></thead><tbody>`;
@@ -404,18 +405,14 @@ function renderOverall() {
         sortByStatus(individual, 'overall_s').forEach(r => {
             const notFinished = r.overall_s == null || r.status !== 'active';
             const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
-            // Ещё не финишировал ВСЮ гонку — вместо пустого "Итого" показываем,
-            // на каком этапе/КТ участник сейчас (последняя отсечка в Финале).
-            let overallCell;
-            if (r.overall_s != null) {
-                overallCell = `<span style="font-weight:800">${fmtTime(r.overall_s)}</span>`;
-            } else {
-                const cur = currentStage(r);
-                const pos = cur ? lastReached(r.cp, cur) : null;
-                overallCell = pos
-                    ? `<span class="muted" style="font-size:.85em">${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}</span>`
-                    : '—';
-            }
+            // Последняя пройденная КТ (этап + отсечка) — отдельная колонка,
+            // и для финишировавших (последняя КТ = финиш бега), и для тех,
+            // кто ещё в гонке.
+            const cur = currentStage(r);
+            const pos = cur ? lastReached(r.cp, cur) : null;
+            const lastCpCell = pos
+                ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}`
+                : '—';
             html += `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
                 <td>
                     <span class="rank-num">${r[mainOverallRank] ?? '—'}</span>
@@ -431,7 +428,8 @@ function renderOverall() {
                 <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
                 <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
                 <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
-                <td class="r time-cell">${overallCell}</td>
+                <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
+                <td class="muted">${lastCpCell}</td>
                 <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
                 <td>${statusBadge(r, null)}</td>
             </tr>`;
@@ -546,13 +544,13 @@ function renderStage(stage) {
     const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
 
     const showStart = stage === 'bike2';
-    const colCount = showStart ? 9 : 8;
+    const colCount = showStart ? 10 : 9;
 
     let html = buildStats(individual, relay, stage);
     html += `<div class="table-wrap"><table>
     <thead><tr>
         <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-        <th class="r">Время</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -565,14 +563,10 @@ function renderStage(stage) {
         const t = r[cfg.timeKey];
         const noTime = t == null;
         const rc = noTime ? '' : rankClass(r[mainRankKey]);
-        // Не дошёл до финиша этапа — показываем последнюю пройденную КТ с
-        // её меткой (не просто голое время, иначе непонятно, к какой точке
-        // дистанции оно относится).
+        // Последняя пройденная КТ — отдельная колонка (и для финишировавших
+        // тоже, показывает финишную отсечку).
         const pos = lastReached(r.cp, dbStage);
-        const finishedStage = !!pos && pos.seq === maxSeq;
-        const timeCell = !pos ? '—'
-            : finishedStage ? fmtTime(t)
-            : `<span class="muted" style="font-weight:400">${CHECKPOINT_LABELS[dbStage][pos.seq]}</span><br>${fmtTime(pos.value)}`;
+        const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
         html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
             <td>
                 <span class="rank-num">${noTime ? '—' : (r[mainRankKey] ?? '—')}</span>
@@ -581,7 +575,8 @@ function renderStage(stage) {
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
-            <td class="r time-cell">${timeCell}</td>
+            <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[r.bib])}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
@@ -600,9 +595,7 @@ function renderStage(stage) {
             const finished = !!pos && pos.seq === maxSeq;
             const rankDisplay = finished ? relayRank : '—';
             if (finished) relayRank++;
-            const timeCell = !pos ? '—'
-                : finished ? fmtTime(t)
-                : `<span class="muted" style="font-weight:400">${CHECKPOINT_LABELS[dbStage][pos.seq]}</span><br>${fmtTime(pos.value)}`;
+            const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
             html += `<tr style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
                 <td><span class="rank-num">${rankDisplay}</span></td>
                 <td class="bib-cell">${m._bib}</td>
@@ -611,7 +604,8 @@ function renderStage(stage) {
                     <br><span class="name-city">${m._team}</span>
                 </td>
                 <td>${genderBadge(m.gender)}</td>
-                <td class="r time-cell">${timeCell}</td>
+                <td class="r time-cell">${fmtTime(t)}</td>
+                <td class="muted">${lastCpCell}</td>
                 <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
                 <td class="r muted">${hasTime ? meta : '—'}</td>
                 ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
