@@ -86,9 +86,9 @@ def main(SRC: str, DST: str):
         return f"{m['surname']} {m['name']}".strip() if m else ""
 
     def _gender_ru(m: Optional[dict]) -> str:
-        if not m or not m.get("member_gender"):
+        if not m:
             return ""
-        return {"M": "М", "F": "Ж"}.get(m["member_gender"], "")
+        return {"M": "М", "F": "Ж"}.get(m.get("gender"), "")
 
     for bib, members in relay_by_bib.items():
         any_member = next(iter(members.values()))

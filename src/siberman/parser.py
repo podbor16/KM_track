@@ -245,7 +245,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
 
             base = {
                 "race_year": race_year, "bib": bib, "format": "relay",
-                "relay_team_name": team_name, "gender": "E",
+                "relay_team_name": team_name,
                 "country": team_country, "city": team_city, "status": "active",
             }
             for rs, full_name, gender_raw in zip(relay_stages, members_raw, members_gender_raw):
@@ -253,7 +253,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 result.participants.append({
                     **base,
                     "surname": sn, "name": nm, "relay_stage": rs,
-                    "member_gender": _normalize_gender(gender_raw),
+                    "gender": _normalize_gender(gender_raw) or "M",
                     "_cp_key": f"{bib}:{rs}",
                 })
 
@@ -281,7 +281,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             result.participants.append({
                 "race_year": race_year, "bib": bib,
                 "surname":   _cell("surname"), "name": _cell("name"),
-                "gender":    gender, "member_gender": gender,
+                "gender":    gender,
                 "country":   _cell("country", "Россия"), "city": _cell("city"),
                 "format":    "individual",
                 "status":    "dnf" if has_dnf else "active",

@@ -89,25 +89,24 @@ def test_relay_uses_dedicated_team_and_member_columns():
     assert swim["name"] == "Иван"
     assert swim["country"] == "Россия"
     assert swim["city"] == "Абакан"
-    assert swim["gender"] == "E"
-    assert swim["member_gender"] == "M"
+    assert swim["gender"] == "M"
 
     bike = by_stage["bike"]
     assert bike["surname"] == "Петрова"
     assert bike["name"] == "Анна"
     assert bike["country"] == "Россия"
     assert bike["city"] == "Абакан"
-    assert bike["member_gender"] == "F"
+    assert bike["gender"] == "F"
 
     run = by_stage["run"]
     assert run["surname"] == "Сидоров"
     assert run["name"] == "Семён"
-    assert run["member_gender"] == "M"
+    assert run["gender"] == "M"
 
 
-def test_relay_member_gender_blank_when_column_missing():
+def test_relay_member_gender_defaults_to_male_when_column_missing():
     headers = ["Формат", "Номер", "Название команды", "Пловец", "Велосипедист", "Бегун", "3 км"]
     row = ["Эстафета", "502", "Тест", "Иванов Иван", "Петров Пётр", "Сидоров Семён", "0:05:00"]
     data = _build_workbook(headers, row)
     result = parse_excel(data, 2026)
-    assert all(p["member_gender"] is None for p in result.participants)
+    assert all(p["gender"] == "M" for p in result.participants)
