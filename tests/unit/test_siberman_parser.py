@@ -173,6 +173,29 @@ def test_classify_time_cell_implausibly_large_value_is_error():
     assert err is not None
 
 
+def test_classify_time_cell_comma_as_decimal_seconds_excel_quirk():
+    # Реальный кейс: судья ввёл "0:35,01" (0ч 35мин 01с), но Excel (RU-локаль)
+    # ещё до сохранения сам распознал это как время формата М:СС,сс —
+    # 0 минут 35.01 секунды. Наш код получает уже готовое число (float,
+    # доля суток) — 35.01/86400 — а не строку с запятой.
+    seconds, err = _classify_time_cell(35.01 / 86400)
+    assert seconds is None
+    assert err is not None
+    assert "меньше минуты" in err
+
+
+def test_classify_time_cell_plausible_minimum_boundary_ok():
+    seconds, err = _classify_time_cell("0:01:00")
+    assert seconds == 60
+    assert err is None
+
+
+def test_classify_time_cell_implausibly_small_value_is_error():
+    seconds, err = _classify_time_cell("0:00:35")
+    assert seconds is None
+    assert err is not None
+
+
 BASIC_HEADERS = ["Формат", "Номер", "Фамилия", "Имя", "Пол", "1,3 км"]
 
 
