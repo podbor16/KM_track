@@ -291,6 +291,7 @@
     <div class="tab" data-tab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
     <div class="tab" data-tab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
     <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
+    <div class="tab" data-tab="startlist">Старт Вело-2</div>
 </div>
 
 <!-- ── Filters ── -->
@@ -630,6 +631,49 @@ function renderStage(stage) {
     document.getElementById('app').innerHTML = html;
 }
 
+/* ──────────────── Render: Стартовый лист вело-2 ──────────────── */
+function renderStartlist() {
+    const { individual, relay } = getFiltered();
+
+    let riders = [];
+    if (_fmt !== 'relay') {
+        riders = riders.concat(individual
+            .filter(r => r.bike2_start_s != null)
+            .map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, city: r.city, gender: r.gender, start_s: r.bike2_start_s })));
+    }
+    if (_fmt !== 'individual') {
+        relay.forEach(team => {
+            team.members.filter(m => m.relay_stage === 'bike' && m.bike2_start_s != null).forEach(m => {
+                riders.push({ bib: team.bib, name: `${m.surname} ${m.name}`, city: team.team_name, gender: m.gender, start_s: m.bike2_start_s });
+            });
+        });
+    }
+    riders.sort((a, b) => a.start_s - b.start_s);
+
+    if (riders.length === 0) {
+        document.getElementById('app').innerHTML = '<div class="empty">Стартовый лист вело-2 появится после финиша лидеров вело-1</div>';
+        return;
+    }
+
+    let html = `<div class="section-hdr">Расчётный старт вело-2 (по рангу вело-1, топ-5 — интервал 3 мин, далее 1 мин)</div>`;
+    html += `<div class="table-wrap"><table>
+    <thead><tr><th>Ранг</th><th>№</th><th>Участник</th><th>Пол</th><th class="r">Старт вело-2</th></tr></thead><tbody>`;
+    riders.forEach((r, i) => {
+        html += `<tr>
+            <td><span class="rank-num">${i + 1}</span></td>
+            <td class="bib-cell">${r.bib}</td>
+            <td>
+                <span class="name-main">${r.name}</span>
+                ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
+            </td>
+            <td>${genderBadge(r.gender)}</td>
+            <td class="r time-cell">${fmtTime(r.start_s)}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('app').innerHTML = html;
+}
+
 /* ──────────────── Main render ──────────────── */
 function render() {
     if (!_data) return;
@@ -642,6 +686,7 @@ function render() {
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
     if (_tab === 'overall') renderOverall();
+    else if (_tab === 'startlist') renderStartlist();
     else renderStage(_tab);
 }
 

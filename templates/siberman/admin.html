@@ -71,7 +71,7 @@
         </div>
 
         <div class="card" id="starts-card" style="display:none">
-            <h2>Расчётный старт вело-2 (по рангу вело-1)</h2>
+            <h2>Расчётный старт вело-2 (предпросмотр загружаемого файла)</h2>
             <table>
                 <thead>
                     <tr><th>Номер</th><th>Участник</th><th>Старт</th></tr>
@@ -82,6 +82,19 @@
 
         <div class="card" id="apply-card" style="display:none">
             <button class="btn btn-success" id="btn-apply">Применить в БД</button>
+        </div>
+
+        <div class="card">
+            <h2>Текущий стартовый лист вело-2 (сохранённые данные)</h2>
+            <label>Год</label>
+            <input type="number" id="startlist-year" value="2025" min="2020" max="2030" style="width:120px">
+            <button class="btn btn-primary" id="btn-startlist" style="margin-top:8px">Показать</button>
+            <table style="margin-top:16px">
+                <thead>
+                    <tr><th>Ранг</th><th>Номер</th><th>Участник</th><th>Старт</th></tr>
+                </thead>
+                <tbody id="current-starts-body"></tbody>
+            </table>
         </div>
     </div>
 
@@ -158,6 +171,40 @@
         } finally {
             $('btn-apply').textContent = 'Применить в БД';
             $('btn-apply').className = 'btn btn-success';
+        }
+    });
+
+    $('btn-startlist').addEventListener('click', async () => {
+        const year = $('startlist-year').value;
+        const tbody = $('current-starts-body');
+        tbody.innerHTML = '<tr><td colspan="4">Загрузка…</td></tr>';
+        hideMsg();
+        try {
+            const r = await fetch(`/api/siberman/results?year=${year}`);
+            const data = await r.json();
+            if (!r.ok) { showErr(data.detail || 'Ошибка'); return; }
+            let riders = (data.individual || [])
+                .filter(p => p.bike2_start_s != null)
+                .map(p => ({ bib: p.bib, name: `${p.surname} ${p.name}`, start_s: p.bike2_start_s }));
+            (data.relay || []).forEach(team => {
+                (team.members || []).filter(m => m.relay_stage === 'bike' && m.bike2_start_s != null)
+                    .forEach(m => riders.push({ bib: team.bib, name: `${m.surname} ${m.name} (${team.team_name})`, start_s: m.bike2_start_s }));
+            });
+            riders.sort((a, b) => a.start_s - b.start_s);
+            tbody.innerHTML = '';
+            if (riders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4">Нет данных за этот год</td></tr>';
+                return;
+            }
+            riders.forEach((rr, i) => {
+                const h = Math.floor(rr.start_s / 3600), m = Math.floor((rr.start_s % 3600) / 60), s = rr.start_s % 60;
+                const time = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${i + 1}</td><td>${rr.bib}</td><td>${rr.name}</td><td>${time}</td>`;
+                tbody.appendChild(tr);
+            });
+        } catch(e) {
+            showErr('Сетевая ошибка: ' + e.message);
         }
     });
     </script>
