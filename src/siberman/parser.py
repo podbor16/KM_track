@@ -69,10 +69,13 @@ PARTICIPANT_COL_MAP: dict[str, str] = {
     "город":   "city",
     "пол":     "gender",   # М/Ж — добавить в Excel если отсутствует
     # Только для строк формата "Эстафета" — страна/город выше используются как общие для команды
-    "название команды": "relay_team_name",
-    "пловец":            "relay_swim_name",
-    "велосипедист":      "relay_bike_name",
-    "бегун":              "relay_run_name",
+    "название команды":     "relay_team_name",
+    "пловец":               "relay_swim_name",
+    "велосипедист":         "relay_bike_name",
+    "бегун":                "relay_run_name",
+    "пол пловца":           "relay_swim_gender",
+    "пол велосипедиста":    "relay_bike_gender",
+    "пол бегуна":           "relay_run_gender",
 }
 
 # Специальные колонки
@@ -125,6 +128,15 @@ def parse_time_to_seconds(value) -> Optional[int]:
 
 def _normalize_header(h: str) -> str:
     return str(h).strip().lower()
+
+
+def _normalize_gender(raw: str) -> Optional[str]:
+    g = raw.strip().upper()
+    if g in ("Ж", "F", "FEMALE"):
+        return "F"
+    if g in ("М", "M", "MALE"):
+        return "M"
+    return None
 
 
 def _build_col_index(headers: list[str]) -> dict[tuple[str, int], int]:
@@ -222,6 +234,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             # Страна/Город — общие на команду (не теряются, в отличие от старой схемы).
             team_name = _cell("relay_team_name")
             members_raw = [_cell("relay_swim_name"), _cell("relay_bike_name"), _cell("relay_run_name")]
+            members_gender_raw = [_cell("relay_swim_gender"), _cell("relay_bike_gender"), _cell("relay_run_gender")]
             team_country = _cell("country", "Россия")
             team_city = _cell("city")
             relay_stages = ["swim", "bike", "run"]
@@ -235,11 +248,12 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 "relay_team_name": team_name, "gender": "E",
                 "country": team_country, "city": team_city, "status": "active",
             }
-            for rs, full_name in zip(relay_stages, members_raw):
+            for rs, full_name, gender_raw in zip(relay_stages, members_raw, members_gender_raw):
                 sn, nm = _split_name(full_name)
                 result.participants.append({
                     **base,
                     "surname": sn, "name": nm, "relay_stage": rs,
+                    "member_gender": _normalize_gender(gender_raw),
                     "_cp_key": f"{bib}:{rs}",
                 })
 
@@ -259,9 +273,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 result.handicaps[f"{bib}:bike"] = parse_time_to_seconds(row[handicap_col])
 
         else:
-            gender_raw = _cell("gender", "")
-            _g = gender_raw.strip().upper()
-            gender = "F" if _g in ("Ж", "F", "FEMALE") else "M"
+            gender = _normalize_gender(_cell("gender", "")) or "M"
 
             has_dnf = any(
                 cell and str(cell).strip().upper() in ("DNF", "ДНФ") for cell in row
@@ -269,7 +281,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             result.participants.append({
                 "race_year": race_year, "bib": bib,
                 "surname":   _cell("surname"), "name": _cell("name"),
-                "gender":    gender,
+                "gender":    gender, "member_gender": gender,
                 "country":   _cell("country", "Россия"), "city": _cell("city"),
                 "format":    "individual",
                 "status":    "dnf" if has_dnf else "active",

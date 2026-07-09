@@ -44,16 +44,17 @@ def upsert_participant(conn, p: dict) -> int:
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO participants
-           (race_year, bib, surname, name, gender, country, city,
+           (race_year, bib, surname, name, gender, member_gender, country, city,
             format, relay_team_name, relay_stage, status, dnf_stage, bike_day2_handicap_s)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
            ON DUPLICATE KEY UPDATE
              surname=VALUES(surname), name=VALUES(name), gender=VALUES(gender),
+             member_gender=VALUES(member_gender),
              country=VALUES(country), city=VALUES(city), format=VALUES(format),
              relay_team_name=VALUES(relay_team_name), relay_stage=VALUES(relay_stage),
              status=VALUES(status), dnf_stage=VALUES(dnf_stage),
              bike_day2_handicap_s=VALUES(bike_day2_handicap_s)""",
-        (p["race_year"], p["bib"], p["surname"], p["name"], p["gender"],
+        (p["race_year"], p["bib"], p["surname"], p["name"], p["gender"], p.get("member_gender"),
          p.get("country", "Россия"), p.get("city", ""),
          p.get("format", "individual"), p.get("relay_team_name"),
          p.get("relay_stage", "none"), p.get("status", "active"),
