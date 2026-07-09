@@ -380,6 +380,7 @@ function renderOverall() {
         ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(teamGapRow),
     ]);
+    const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
     let html = '';
 
     html += buildStats(individual, relay, null);
@@ -401,7 +402,6 @@ function renderOverall() {
         // Поле гендерного места в API называется overall_rank_g (см. db.py:
         // "o.rank_gender AS overall_rank_g"), а не rank_gender.
         const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'overall_rank_g';
-        const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
         sortByStatus(individual, 'overall_s').forEach(r => {
             const notFinished = r.overall_s == null || r.status !== 'active';
             const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
@@ -443,11 +443,19 @@ function renderOverall() {
         const STAGE_LABELS = { swim: 'Плавание', bike: 'Велосипед', run: 'Бег' };
         html += '<div class="relay-grid">';
         relay.forEach((team, idx) => {
+            // Последняя КТ команды — по её "виртуальному участнику" (см.
+            // teamGapRow: cp собран из cp тех членов команды, кто отвечает
+            // за swim/bike_day1+bike_day2/run) — тот же принцип, что и
+            // "текущий этап" личника.
+            const teamRow = teamGapRow(team);
+            const teamCur = currentStage(teamRow);
+            const teamPos = teamCur ? lastReached(teamRow.cp, teamCur) : null;
+            const teamLastCp = teamPos ? `${STAGE_LABEL_RU[teamCur]}, ${CHECKPOINT_LABELS[teamCur][teamPos.seq]}` : '—';
             html += `<div class="relay-card">
                 <div class="relay-card-hdr" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
                     <span class="relay-pos">${idx + 1}</span>
                     <span class="relay-bib">${team.bib}</span>
-                    <span class="relay-name">${team.team_name}</span>
+                    <span class="relay-name">${team.team_name}<br><span class="muted" style="font-size:11px;font-weight:400">${teamLastCp}</span></span>
                     <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
                 </div>
                 <div class="relay-members">`;
