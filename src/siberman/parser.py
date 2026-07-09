@@ -134,12 +134,28 @@ def parse_time_to_seconds(value) -> Optional[int]:
     return None
 
 
+# Время КТ (elapsed или astronomical) физически не может выходить за сутки
+# с запасом — более крупные значения почти всегда означают опечатку
+# разделителя (напр. "1.30" вместо "1:30:00" Excel читает как число 1.3 и
+# получает round(1.3*86400)=112320с — без этой проверки такая ошибка
+# проходит молча).
+MAX_PLAUSIBLE_TIME_S = 25 * 3600
+
+
 def _classify_time_cell(value) -> tuple[Optional[int], Optional[str]]:
     """Как parse_time_to_seconds, но также возвращает причину, если None
-    означает "не удалось распознать" (а не легитимно пустое/DNF)."""
+    означает "не удалось распознать" (а не легитимно пустое/DNF), а также
+    отлавливает неправдоподобно большие значения (опечатка разделителя)."""
     seconds = parse_time_to_seconds(value)
-    if seconds is not None or value is None:
+    if seconds is not None:
+        if seconds < 0 or seconds > MAX_PLAUSIBLE_TIME_S:
+            return None, (
+                f"неправдоподобное время «{value}» → {seconds} с "
+                f"(проверьте разделитель — должен быть Ч:ММ:СС через двоеточие, не точку)"
+            )
         return seconds, None
+    if value is None:
+        return None, None
     if isinstance(value, str):
         v = value.strip()
         if not v or v.upper() in ("DNF", "DNS", "DSQ", "ДНФ", "-", "—") or v.lower() in ("днф", "днс", "дсq"):

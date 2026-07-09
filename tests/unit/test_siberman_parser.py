@@ -143,6 +143,36 @@ def test_classify_time_cell_garbage_returns_error():
     assert "вчера в обед" in err
 
 
+def test_classify_time_cell_period_instead_of_colon_two_dots_is_text_error():
+    # "1.23.45" не парсится как число (2 точки) — Excel хранит как текст,
+    # split(":") даёт 1 часть → уже ловится как нераспознанное время.
+    seconds, err = _classify_time_cell("1.23.45")
+    assert seconds is None
+    assert err is not None
+
+
+def test_classify_time_cell_period_instead_of_colon_one_dot_excel_float():
+    # "1.30" (одна точка) Excel читает как число 1.3 — round(1.3*86400)=112320с.
+    # Без явной проверки правдоподобности это тихо проходит как "верное" время.
+    seconds, err = _classify_time_cell(1.3)
+    assert seconds is None
+    assert err is not None
+    assert "разделитель" in err
+
+
+def test_classify_time_cell_plausible_boundary_ok():
+    # Ровно 25ч — ещё в пределах допустимого
+    seconds, err = _classify_time_cell("25:00:00")
+    assert seconds == 25 * 3600
+    assert err is None
+
+
+def test_classify_time_cell_implausibly_large_value_is_error():
+    seconds, err = _classify_time_cell("30:00:00")
+    assert seconds is None
+    assert err is not None
+
+
 BASIC_HEADERS = ["Формат", "Номер", "Фамилия", "Имя", "Пол", "1,3 км"]
 
 
