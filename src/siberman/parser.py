@@ -68,6 +68,11 @@ PARTICIPANT_COL_MAP: dict[str, str] = {
     "страна":  "country",
     "город":   "city",
     "пол":     "gender",   # М/Ж — добавить в Excel если отсутствует
+    # Только для строк формата "Эстафета" — страна/город выше используются как общие для команды
+    "название команды": "relay_team_name",
+    "пловец":            "relay_swim_name",
+    "велосипедист":      "relay_bike_name",
+    "бегун":              "relay_run_name",
 }
 
 # Специальные колонки
@@ -213,9 +218,12 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 cp_times[stage_seq] = parse_time_to_seconds(row[ci])
 
         if fmt == "relay":
-            # Фамилия = название команды, Имя/Страна/Город = участники swim/bike/run
-            team_name = _cell("surname")
-            members_raw = [_cell("name"), _cell("country"), _cell("city")]
+            # Название команды + ФИО участников swim/bike/run — отдельные колонки.
+            # Страна/Город — общие на команду (не теряются, в отличие от старой схемы).
+            team_name = _cell("relay_team_name")
+            members_raw = [_cell("relay_swim_name"), _cell("relay_bike_name"), _cell("relay_run_name")]
+            team_country = _cell("country", "Россия")
+            team_city = _cell("city")
             relay_stages = ["swim", "bike", "run"]
 
             def _split_name(full: str) -> tuple[str, str]:
@@ -225,7 +233,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             base = {
                 "race_year": race_year, "bib": bib, "format": "relay",
                 "relay_team_name": team_name, "gender": "E",
-                "country": "", "city": "", "status": "active",
+                "country": team_country, "city": team_city, "status": "active",
             }
             for rs, full_name in zip(relay_stages, members_raw):
                 sn, nm = _split_name(full_name)

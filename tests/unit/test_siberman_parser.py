@@ -1,6 +1,9 @@
 import datetime
+import io
+
+import openpyxl
 import pytest
-from src.siberman.parser import parse_time_to_seconds, _normalize_header, _build_col_index
+from src.siberman.parser import parse_time_to_seconds, _normalize_header, _build_col_index, parse_excel
 
 
 def test_parse_time_hmmss_string():
@@ -49,3 +52,51 @@ def test_build_col_index_handles_duplicates():
     assert idx[("разворот", 0)] == 1
     assert idx[("разворот", 1)] == 3
     assert idx[("разворот", 2)] == 5
+
+
+def _build_workbook(headers: list[str], row: list) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(headers)
+    ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+RELAY_HEADERS = [
+    "Формат", "Номер", "Название команды", "Страна", "Город",
+    "Пловец", "Велосипедист", "Бегун", "3 км", "1,3 км",
+]
+
+
+def test_relay_uses_dedicated_team_and_member_columns():
+    row = [
+        "Эстафета", "501", "Скорость Сибири", "Россия", "Абакан",
+        "Иванов Иван", "Петров Пётр", "Сидоров Семён", "0:05:00", "0:10:00",
+    ]
+    data = _build_workbook(RELAY_HEADERS, row)
+    result = parse_excel(data, 2026)
+
+    by_stage = {p["relay_stage"]: p for p in result.participants}
+    assert set(by_stage) == {"swim", "bike", "run"}
+
+    swim = by_stage["swim"]
+    assert swim["relay_team_name"] == "Скорость Сибири"
+    assert swim["surname"] == "Иванов"
+    assert swim["name"] == "Иван"
+    assert swim["country"] == "Россия"
+    assert swim["city"] == "Абакан"
+
+    bike = by_stage["bike"]
+    assert bike["surname"] == "Петров"
+    assert bike["name"] == "Пётр"
+    assert bike["country"] == "Россия"
+    assert bike["city"] == "Абакан"
+
+    run = by_stage["run"]
+    assert run["surname"] == "Сидоров"
+    assert run["name"] == "Семён"
+
+    assert result.checkpoint_times["501:bike"][("bike_day1", 1)] == 300
+    assert result.checkpoint_times["501:swim"][("swim", 1)] == 600

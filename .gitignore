@@ -86,3 +86,9 @@ deploy/_vps_config.py
 # Статические библиотеки (скачиваются deploy/download_static_libs.py)
 static/lib/
 .worktrees/
+
+# Реальные данные участников (ПДн) — не в git, только шаблоны/скрипты
+docs/siberman/2025_import_ready.xlsx
+docs/siberman/migrated_2025.xlsx
+docs/siberman/_verify_out.txt
+docs/siberman/~$*.xlsx
