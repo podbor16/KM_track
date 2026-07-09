@@ -609,14 +609,16 @@ function renderOverall() {
             <th class="r">Отставание</th>
             <th>Статус</th>
         </tr></thead><tbody>`;
-        const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'rank_gender';
+        // Поле гендерного места в API называется overall_rank_g (см. db.py:
+        // "o.rank_gender AS overall_rank_g"), а не rank_gender.
+        const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'overall_rank_g';
         sortByStatus(individual, 'overall_s').forEach(r => {
             const notFinished = r.overall_s == null || r.status !== 'active';
             const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
             html += `<tr class="${rc}${notFinished ? ' dnf' : ''}">
                 <td>
                     <span class="rank-num">${r[mainOverallRank] ?? '—'}</span>
-                    ${_gender === 'all' && r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
+                    ${_gender === 'all' && r.overall_rank_g != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.overall_rank_g}</span>` : ''}
                 </td>
                 <td class="bib-cell">${r.bib}</td>
                 <td>
