@@ -141,6 +141,27 @@ const CHECKPOINT_LABELS = {
     ),
 };
 
+// Кумулятивная дистанция (км) на каждой КТ — для темпа/скорости на сплите
+// между соседними КТ (страница участника).
+const CHECKPOINT_DIST_KM = {
+    swim: { 1: 1.3, 2: 2.6, 3: 3.9, 4: 5.2, 5: 6.5, 6: 7.8, 7: 10 },
+    bike_day1: { 1: 3, 2: 10, 3: 72, 4: 135, 5: 142, 6: 145 },
+    bike_day2: { 1: 51, 2: 82, 3: 119, 4: 160, 5: 190, 6: 203, 7: 265, 8: 276 },
+    run: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, (i + 1) * 7])),
+};
+
+// Темп/скорость на СПЛИТЕ (между соседними КТ) — единицы зависят от этапа:
+// плавание — темп на 100м, вело — скорость км/ч, бег — темп на 1 км.
+function splitPaceLabel(dbStage, seq, splitS) {
+    if (splitS == null) return '—';
+    const distTable = CHECKPOINT_DIST_KM[dbStage];
+    const distKm = distTable[seq] - (distTable[seq - 1] ?? 0);
+    if (!(distKm > 0)) return '—';
+    if (dbStage === 'swim') return fmtPace100m(splitS / distKm);
+    if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(distKm / (splitS / 3600));
+    return fmtPace(Math.round(splitS / distKm));
+}
+
 // "N/4 кругов" для плавания, "N/12 кругов" для бега, null для вело (там нет
 // понятия "круг").
 function lapLabel(stage, seq) {

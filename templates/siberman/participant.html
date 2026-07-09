@@ -222,28 +222,39 @@ function stageBody(dbStage, r, gapPool, myKey) {
             : gap === 0 ? '<span class="badge badge-fin">Лидер</span>'
             : fmtGap(gap);
 
-        let placeCell = '—';
-        if (!pending) {
-            const absR = absRanks[seq]?.[myKey];
-            const fmtR = formatRanks[seq]?.[myKey];
-            const genR = !isRelayRow ? genderRanks[seq]?.[myKey] : null;
-            placeCell = `<span class="rank-num" style="font-size:12px">${absR ?? '—'}</span>`
-                + (fmtR != null ? `<span class="rank-sub">${isRelayRow ? 'Э' : 'Л'} ${fmtR}</span>` : '')
-                + (genR != null ? `<span class="rank-sub">${genderBadge(r.gender)}${genR}</span>` : '');
-        }
+        const absR = !pending ? (absRanks[seq]?.[myKey] ?? '—') : '—';
+        const fmtR = !pending ? (formatRanks[seq]?.[myKey] ?? '—') : '—';
+        const genR = !pending && !isRelayRow ? (genderRanks[seq]?.[myKey] ?? '—') : '—';
+        // КТ bike_day1 seq=1: split_s в БД = cumulative_s самой КТ (нет seq=0,
+        // от которого вычесть), а cumulative_s bike_day1 считается от старта
+        // ГОНКИ (единый таймер со swim), не от старта вело — значит "сплит"
+        // на первой точке содержит время всего плавания впридачу. Вычитаем
+        // его только для расчёта темпа/скорости, саму колонку "Сплит" не
+        // трогаем (устоявшееся поведение "последней отсечки" на других вкладках).
+        const swimRef = r.swim_s ?? r._teamSwimS ?? null;
+        const paceSplit = (dbStage === 'bike_day1' && seq === 1 && split != null && swimRef != null)
+            ? split - swimRef
+            : split;
+        const paceCell = paceSplit != null ? splitPaceLabel(dbStage, seq, paceSplit) : '—';
 
         rows += `<tr class="${pending ? 'pending' : ''}">
             <td>${CHECKPOINT_LABELS[dbStage][seq]}</td>
             <td class="r time-cell">${split != null ? fmtTime(split) : '—'}</td>
+            <td class="r muted">${paceCell}</td>
             <td class="r time-cell">${cum != null ? fmtTime(cum) : '—'}</td>
-            <td class="r">${placeCell}</td>
+            <td class="r">${absR}</td>
+            <td class="r">${fmtR}</td>
+            <td class="r">${isRelayRow ? '—' : genR}</td>
             <td class="r">${gapCell}</td>
         </tr>`;
     }
-    return `<table class="cp-table">
-        <thead><tr><th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Общее время</th><th class="r">Место</th><th class="r">Отставание</th></tr></thead>
+    return `<div style="overflow-x:auto"><table class="cp-table">
+        <thead><tr>
+            <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
+            <th class="r">Место</th><th class="r">Формат</th><th class="r">Пол</th><th class="r">Отставание</th>
+        </tr></thead>
         <tbody>${rows}</tbody>
-    </table>`;
+    </table></div>`;
 }
 
 function stageSection(cfg, r, gapPool) {
@@ -372,6 +383,8 @@ function renderTeam(data, team) {
         run:  STAGES.filter(s => s.relayStage === 'run'),
     };
 
+    const teamSwimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+
     const membersHtml = team.members.map(m => {
         const cfgs = memberStages[m.relay_stage] ?? [];
         return `
@@ -383,7 +396,7 @@ function renderTeam(data, team) {
                 </div>
                 <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
             </div>
-            ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+            ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib, _teamSwimS: teamSwimS }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
             ${m.relay_stage === 'bike' ? combinedBikeSection(m.bike1_s, m.bike2_s) : ''}
         </div>`;
     }).join('');
