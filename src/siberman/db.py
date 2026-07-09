@@ -147,14 +147,33 @@ def get_participants_with_stage_totals(conn, race_year: int,
     return cur.fetchall()
 
 
+def get_checkpoint_times_for_year(conn, race_year: int) -> dict[int, dict[str, dict[int, int]]]:
+    """participant_id -> stage -> seq -> cumulative_s (для расчёта отставаний на клиенте)."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT ct.participant_id, c.stage, c.seq, ct.cumulative_s
+        FROM checkpoint_times ct
+        JOIN checkpoints c ON c.id = ct.checkpoint_id
+        JOIN participants p ON p.id = ct.participant_id
+        WHERE p.race_year=%s
+    """, (race_year,))
+    out: dict[int, dict[str, dict[int, int]]] = {}
+    for row in cur.fetchall():
+        if row["cumulative_s"] is None:
+            continue
+        out.setdefault(row["participant_id"], {}).setdefault(row["stage"], {})[row["seq"]] = row["cumulative_s"]
+    return out
+
+
 def get_results_for_year(conn, race_year: int) -> dict:
     """Вернуть все результаты за год для публичной страницы."""
     cur = conn.cursor(dictionary=True)
+    cp_by_pid = get_checkpoint_times_for_year(conn, race_year)
 
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
         SELECT
-            p.bib, p.surname, p.name, p.gender, p.city, p.status,
+            p.id, p.bib, p.surname, p.name, p.gender, p.city, p.status,
             p.bike_day2_handicap_s AS bike2_start_s,
             o.total_s   AS overall_s,
             o.rank_overall, o.rank_gender AS overall_rank_g,
@@ -176,11 +195,13 @@ def get_results_for_year(conn, race_year: int) -> dict:
         ORDER BY (o.total_s IS NULL), o.total_s, p.bib
     """, (race_year,))
     individual = cur.fetchall()
+    for p in individual:
+        p["cp"] = cp_by_pid.get(p.pop("id"), {})
 
     # Эстафетные члены (все трое)
     cur.execute("""
         SELECT
-            p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status,
+            p.id, p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status,
             p.bike_day2_handicap_s AS bike2_start_s,
             sw.total_s AS swim_s,  sw.avg_pace_s AS swim_pace,
             b1.total_s AS bike1_s, b1.avg_speed_kmh AS bike1_speed,
@@ -213,6 +234,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
             "gender": row["gender"],
             "status": row["status"],
             "bike2_start_s": row["bike2_start_s"],
+            "cp": cp_by_pid.get(row["id"], {}),
             "swim_s":   row["swim_s"],  "swim_pace":   row["swim_pace"],
             "bike1_s":  row["bike1_s"], "bike1_speed": row["bike1_speed"],
             "bike2_s":  row["bike2_s"], "bike2_speed": row["bike2_speed"],

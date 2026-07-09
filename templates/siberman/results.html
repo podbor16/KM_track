@@ -453,9 +453,135 @@ function getFiltered() {
     return { individual: ind, relay: rel };
 }
 
+/* ──────────────── Gap (отставание от лидера) ──────────────── */
+const STAGE_MAX_SEQ = { swim: 7, bike_day1: 6, bike_day2: 8, run: 12 };
+const STAGE_ORDER = ['swim', 'bike_day1', 'bike_day2', 'run'];
+const TAB_TO_DB_STAGE = { swim: 'swim', bike1: 'bike_day1', bike2: 'bike_day2', run: 'run' };
+
+function lastReached(cp, stage) {
+    // {seq, value} последней непустой КТ этапа для участника, либо null
+    if (!cp || !cp[stage]) return null;
+    for (let seq = STAGE_MAX_SEQ[stage]; seq >= 1; seq--) {
+        const v = cp[stage][seq];
+        if (v != null) return { seq, value: v };
+    }
+    return null;
+}
+
+function valueAtOrBefore(cp, stage, seq) {
+    if (!cp || !cp[stage]) return null;
+    for (let s = seq; s >= 1; s--) {
+        const v = cp[stage][s];
+        if (v != null) return v;
+    }
+    return null;
+}
+
+function fmtGap(gapS) {
+    if (gapS == null || gapS <= 0) return '';
+    const h = Math.floor(gapS / 3600), m = Math.floor((gapS % 3600) / 60), s = gapS % 60;
+    return h > 0
+        ? `+${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+        : `+${m}:${String(s).padStart(2,'0')}`;
+}
+
+// rows: [{key, cp, status?}] — вычисляет {key: gap_s} относительно лидера
+// пула (rows уже должны быть отфильтрованы по нужному разрезу: формат/пол/
+// роль). Лидер выбирается ТОЛЬКО среди активных (status==='active' или не
+// задан) — иначе сошедший рано DNF всегда "выигрывал" бы по наименьшему
+// сырому времени, хотя прошёл меньше дистанции. Gap при этом считается для
+// всех, включая DNF — от той же КТ, которую они последней прошли.
+function computeStageGaps(rows, dbStage) {
+    const withPos = rows
+        .map(r => ({ key: r.key, cp: r.cp, status: r.status ?? 'active', pos: lastReached(r.cp, dbStage) }))
+        .filter(r => r.pos);
+    if (withPos.length === 0) return {};
+    const candidates = withPos.filter(r => r.status === 'active');
+    if (candidates.length === 0) return {};
+    const leader = candidates.reduce((a, b) => (a.pos.value <= b.pos.value ? a : b));
+    const gaps = {};
+    withPos.forEach(r => {
+        if (r.key === leader.key) { gaps[r.key] = 0; return; }
+        const leaderVal = valueAtOrBefore(leader.cp, dbStage, r.pos.seq);
+        if (leaderVal != null) gaps[r.key] = r.pos.value - leaderVal;
+    });
+    return gaps;
+}
+
+// rows: [{key, cp, swim_s, bike1_s, bike2_s, run_s}] — то же самое, но в
+// "глобальном" времени гонки (не в рамках одного этапа). Глобальное время
+// на конкретной (stage, seq) = сумма ПОЛНЫХ итогов уже пройденных этапов
+// + значение cp[stage][seq] (для swim/bike_day1 оно уже elapsed от старта
+// гонки, для bike_day2/run — elapsed от старта СВОЕГО этапа, поэтому и
+// нужно прибавлять итоги предыдущих этапов).
+function globalProgress(row, stage, seq) {
+    const v = row.cp?.[stage]?.[seq];
+    if (v == null) return null;
+    if (stage === 'swim' || stage === 'bike_day1') return v;
+    if (stage === 'bike_day2') return (row.swim_s ?? 0) + (row.bike1_s ?? 0) + v;
+    return (row.swim_s ?? 0) + (row.bike1_s ?? 0) + (row.bike2_s ?? 0) + v; // run
+}
+
+function currentStage(row) {
+    // Последний этап (в порядке гонки), по которому есть хоть какие-то данные
+    for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
+        if (lastReached(row.cp, STAGE_ORDER[i])) return STAGE_ORDER[i];
+    }
+    return null;
+}
+
+function computeOverallGaps(rows) {
+    const withPos = rows.map(r => {
+        const stage = currentStage(r);
+        if (!stage) return null;
+        const pos = lastReached(r.cp, stage);
+        const value = globalProgress(r, stage, pos.seq);
+        return value == null ? null : { key: r.key, cp: r.cp, row: r, status: r.status ?? 'active', stage, seq: pos.seq, value };
+    }).filter(Boolean);
+    if (withPos.length === 0) return {};
+    // Лидер — только среди активных (тот же reson, что и в computeStageGaps:
+    // DNF/сошедший рано иначе "выигрывал" бы по наименьшему сырому времени).
+    const candidates = withPos.filter(r => r.status === 'active');
+    if (candidates.length === 0) return {};
+    const leader = candidates.reduce((a, b) => (a.value <= b.value ? a : b));
+    const gaps = {};
+    withPos.forEach(r => {
+        if (r.key === leader.key) { gaps[r.key] = 0; return; }
+        const leaderValAtStage = globalProgress(leader.row, r.stage, r.seq);
+        if (leaderValAtStage != null) gaps[r.key] = r.value - leaderValAtStage;
+    });
+    return gaps;
+}
+
+// Собрать "виртуального участника" эстафетной команды для computeOverallGaps —
+// swim/bike/run у неё разбросаны по трём разным членам команды.
+function teamGapRow(team) {
+    const bySwim = team.members.find(m => m.relay_stage === 'swim');
+    const byBike = team.members.find(m => m.relay_stage === 'bike');
+    const byRun  = team.members.find(m => m.relay_stage === 'run');
+    return {
+        key: team.bib,
+        cp: {
+            swim: bySwim?.cp?.swim,
+            bike_day1: byBike?.cp?.bike_day1,
+            bike_day2: byBike?.cp?.bike_day2,
+            run: byRun?.cp?.run,
+        },
+        swim_s: bySwim?.swim_s, bike1_s: byBike?.bike1_s,
+        bike2_s: byBike?.bike2_s, run_s: byRun?.run_s,
+        // Команда считается активной, пока хотя бы её текущий "рабочий" член
+        // не сошёл — упрощение: DNF любого члена трактуем как DNF команды.
+        status: team.members.some(m => m.status === 'dnf') ? 'dnf' : 'active',
+    };
+}
+
 /* ──────────────── Render: Overall ──────────────── */
 function renderOverall() {
     const { individual, relay } = getFiltered();
+    const overallGaps = computeOverallGaps([
+        ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
+        ...relay.map(teamGapRow),
+    ]);
     let html = '';
 
     html += buildStats(individual, relay, null);
@@ -470,6 +596,7 @@ function renderOverall() {
             <th class="r">🚴 Вело 2</th>
             <th class="r">🏃 Бег</th>
             <th class="r">Итого</th>
+            <th class="r">Отставание</th>
             <th>Статус</th>
         </tr></thead><tbody>`;
         sortByStatus(individual, 'overall_s').forEach(r => {
@@ -491,6 +618,7 @@ function renderOverall() {
                 <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
                 <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
                 <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
+                <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
                 <td>${statusBadge(r, null)}</td>
             </tr>`;
         });
@@ -508,7 +636,7 @@ function renderOverall() {
                     <span class="relay-pos">${idx + 1}</span>
                     <span class="relay-bib">${team.bib}</span>
                     <span class="relay-name">${team.team_name}</span>
-                    <span class="relay-total">${fmtTime(team.overall_s)}</span>
+                    <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
                 </div>
                 <div class="relay-members">`;
             team.members.forEach(m => {
@@ -571,14 +699,22 @@ function renderStage(stage) {
         return;
     }
 
+    // Отставание — общий пул личников этой роли + эстафетчиков той же роли,
+    // т.к. они соревнуются на этапе вместе (как и старт вело-2 в задаче 2).
+    const gapPool = [
+        ...rows.map(r => ({ key: r.bib, cp: r.cp, status: r.status })),
+        ...relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status })),
+    ];
+    const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
+
     const showStart = stage === 'bike2';
-    const colCount = showStart ? 8 : 7;
+    const colCount = showStart ? 9 : 8;
 
     let html = buildStats(individual, relay, stage);
     html += `<div class="table-wrap"><table>
     <thead><tr>
         <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -596,6 +732,7 @@ function renderStage(stage) {
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
             <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="r muted">${fmtGap(gaps[r.bib])}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
@@ -620,6 +757,7 @@ function renderStage(stage) {
                 </td>
                 <td>${genderBadge(m.gender)}</td>
                 <td class="r time-cell">${fmtTime(t)}</td>
+                <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
                 <td class="r muted">${hasTime ? meta : '—'}</td>
                 ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
                 <td>${hasTime ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>'}</td>
