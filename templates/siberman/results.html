@@ -687,16 +687,41 @@ const STAGE_CFG = {
 
 function renderStage(stage) {
     const cfg = STAGE_CFG[stage];
+    const dbStage = TAB_TO_DB_STAGE[stage];
+    const maxSeq = STAGE_MAX_SEQ[dbStage];
     const { individual, relay } = getFiltered();
 
-    const rows = sortByStatus(individual, cfg.timeKey);
+    // "Тихий" DNF на ЭТОМ этапе: participant.status==='active' в БД (в файле
+    // не было явной пометки DNF/ДНФ), но последняя пройденная КТ этапа —
+    // не финишная. Подменяем status на 'dnf' ТОЛЬКО в локальной копии для
+    // этой вкладки (не мутируя общие данные _data — на других вкладках/в
+    // Финале участник мог этот этап пройти полностью раньше). После подмены
+    // остальная логика (сортировка, бейдж статуса) отрабатывает как для
+    // обычного DNF — включая getDnfStage/statusBadge, которые уже умеют
+    // корректно показывать "Финишировал"/DNF/"Не стартовал" по этапам.
+    const withStageStatus = r => {
+        const pos = lastReached(r.cp, dbStage);
+        const silentDnf = r.status === 'active' && pos && pos.seq !== maxSeq;
+        return silentDnf ? { ...r, status: 'dnf' } : r;
+    };
+
+    const rows = sortByStatus(individual.map(withStageStatus), cfg.timeKey);
     let relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members
             .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
-            .map(m => ({...m, _bib: t.bib, _team: t.team_name})))
+            .map(m => withStageStatus({...m, _bib: t.bib, _team: t.team_name})))
         : [];
-    // Сортировать эстафеты по времени этапа
+    // Сортировать эстафеты: сначала реально финишировавшие этап (по времени),
+    // затем "тихие" DNF (есть частичное время, но не дошли до финиша), затем
+    // те, кто ещё не начал (нет данных вовсе).
     relayMembers = relayMembers.sort((a, b) => {
+        const catOf = m => {
+            const pos = lastReached(m.cp, dbStage);
+            if (!pos) return 2;
+            return pos.seq === maxSeq ? 0 : 1;
+        };
+        const catA = catOf(a), catB = catOf(b);
+        if (catA !== catB) return catA - catB;
         const ta = a[cfg.timeKey], tb = b[cfg.timeKey];
         if (ta == null && tb == null) return 0;
         if (ta == null) return 1;
@@ -760,8 +785,10 @@ function renderStage(stage) {
             const t = m[cfg.timeKey];
             const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
             const hasTime = t != null;
-            const rankDisplay = hasTime ? relayRank : '—';
-            if (hasTime) relayRank++;
+            const pos = lastReached(m.cp, dbStage);
+            const finished = !!pos && pos.seq === maxSeq;
+            const rankDisplay = finished ? relayRank : '—';
+            if (finished) relayRank++;
             html += `<tr>
                 <td><span class="rank-num">${rankDisplay}</span></td>
                 <td class="bib-cell">${m._bib}</td>
@@ -774,7 +801,7 @@ function renderStage(stage) {
                 <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
                 <td class="r muted">${hasTime ? meta : '—'}</td>
                 ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-                <td>${hasTime ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>'}</td>
+                <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
             </tr>`;
         });
     }
