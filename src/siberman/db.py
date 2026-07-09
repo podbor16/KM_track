@@ -255,16 +255,3 @@ def get_results_for_year(conn, race_year: int) -> dict:
     relay_list.sort(key=lambda t: (t["overall_s"] is None, t["overall_s"] or 0, t["bib"]))
 
     return {"individual": individual, "relay": relay_list}
-
-
-def get_checkpoint_times_for_year(conn, race_year: int) -> list[dict]:
-    cur = conn.cursor(dictionary=True)
-    cur.execute(
-        "SELECT ct.participant_id, ct.checkpoint_id, ct.cumulative_s, ct.split_s, "
-        "c.stage, c.seq, c.label, c.distance_km "
-        "FROM checkpoint_times ct "
-        "JOIN checkpoints c ON c.id=ct.checkpoint_id "
-        "WHERE c.race_year=%s ORDER BY ct.participant_id, c.stage, c.seq",
-        (race_year,)
-    )
-    return cur.fetchall()
