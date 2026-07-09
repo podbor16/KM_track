@@ -3,6 +3,7 @@ from src.siberman.parser import ParseResult
 from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
+    _finished_stage,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
@@ -153,3 +154,19 @@ def test_convert_bike_times_dnf_excluded_from_ranking():
 
     assert "1" not in starts
     assert starts["2"] == BIKE_DAY2_BASE_START_S
+
+
+def test_finished_stage_true_when_last_seq_present():
+    cp = {("run", 12): 30000, ("run", 8): 20000}
+    assert _finished_stage(cp, "run") is True
+
+
+def test_finished_stage_false_partial_no_dnf_marker():
+    # Сошёл на середине бега, но без явной пометки DNF в файле — только
+    # промежуточные КТ присутствуют, финишной (seq=12) нет.
+    cp = {("run", 8): 20000, ("run", 9): 22000}
+    assert _finished_stage(cp, "run") is False
+
+
+def test_finished_stage_false_no_data():
+    assert _finished_stage({}, "swim") is False

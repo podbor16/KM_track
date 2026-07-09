@@ -487,16 +487,20 @@ function fmtGap(gapS) {
 
 // rows: [{key, cp, status?}] — вычисляет {key: gap_s} относительно лидера
 // пула (rows уже должны быть отфильтрованы по нужному разрезу: формат/пол/
-// роль). Лидер выбирается ТОЛЬКО среди активных (status==='active' или не
-// задан) — иначе сошедший рано DNF всегда "выигрывал" бы по наименьшему
-// сырому времени, хотя прошёл меньше дистанции. Gap при этом считается для
-// всех, включая DNF — от той же КТ, которую они последней прошли.
+// роль). Лидером может быть только тот, кто реально ДОШЁЛ до последней КТ
+// этапа (pos.seq === maxSeq) — иначе сошедший на середине (без явной пометки
+// DNF в файле — status всё ещё 'active') всегда "выигрывал" бы по наименьшему
+// сырому времени, хотя прошёл меньше дистанции. Статус тоже проверяем — чтобы
+// явно дисквалифицированный/DNF не мог стать лидером, даже дойдя до финиша.
+// Gap при этом считается для всех, включая недошедших — от той же КТ,
+// которую они последней прошли.
 function computeStageGaps(rows, dbStage) {
+    const maxSeq = STAGE_MAX_SEQ[dbStage];
     const withPos = rows
         .map(r => ({ key: r.key, cp: r.cp, status: r.status ?? 'active', pos: lastReached(r.cp, dbStage) }))
         .filter(r => r.pos);
     if (withPos.length === 0) return {};
-    const candidates = withPos.filter(r => r.status === 'active');
+    const candidates = withPos.filter(r => r.status === 'active' && r.pos.seq === maxSeq);
     if (candidates.length === 0) return {};
     const leader = candidates.reduce((a, b) => (a.pos.value <= b.pos.value ? a : b));
     const gaps = {};
@@ -539,9 +543,11 @@ function computeOverallGaps(rows) {
         return value == null ? null : { key: r.key, cp: r.cp, row: r, status: r.status ?? 'active', stage, seq: pos.seq, value };
     }).filter(Boolean);
     if (withPos.length === 0) return {};
-    // Лидер — только среди активных (тот же reson, что и в computeStageGaps:
-    // DNF/сошедший рано иначе "выигрывал" бы по наименьшему сырому времени).
-    const candidates = withPos.filter(r => r.status === 'active');
+    // Лидер — только среди тех, кто реально финишировал ВСЮ гонку (дошёл до
+    // последней КТ бега), тот же резон, что и в computeStageGaps: иначе
+    // сошедший рано (без явной пометки DNF) "выигрывал" бы по наименьшему
+    // сырому времени.
+    const candidates = withPos.filter(r => r.status === 'active' && r.stage === 'run' && r.seq === STAGE_MAX_SEQ.run);
     if (candidates.length === 0) return {};
     const leader = candidates.reduce((a, b) => (a.value <= b.value ? a : b));
     const gaps = {};
@@ -603,13 +609,14 @@ function renderOverall() {
             <th class="r">Отставание</th>
             <th>Статус</th>
         </tr></thead><tbody>`;
+        const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'rank_gender';
         sortByStatus(individual, 'overall_s').forEach(r => {
             const notFinished = r.overall_s == null || r.status !== 'active';
-            const rc = notFinished ? '' : rankClass(r.rank_overall);
+            const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
             html += `<tr class="${rc}${notFinished ? ' dnf' : ''}">
                 <td>
-                    <span class="rank-num">${r.rank_overall ?? '—'}</span>
-                    ${r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
+                    <span class="rank-num">${r[mainOverallRank] ?? '—'}</span>
+                    ${_gender === 'all' && r.rank_gender != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.rank_gender}</span>` : ''}
                 </td>
                 <td class="bib-cell">${r.bib}</td>
                 <td>
@@ -722,14 +729,18 @@ function renderStage(stage) {
         <th>Статус</th>
     </tr></thead><tbody>`;
 
+    // При активном фильтре по полу "Место" должно быть местом ВНУТРИ этого
+    // пола (пересчитанным, не абсолютным) — иначе абсолютный ранг (17, 20...)
+    // выглядит так, будто места "не пересчитались" под фильтр.
+    const mainRankKey = _gender === 'all' ? cfg.rankKey : cfg.rankGKey;
     rows.forEach(r => {
         const t = r[cfg.timeKey];
         const noTime = t == null;
-        const rc = noTime ? '' : rankClass(r[cfg.rankKey]);
+        const rc = noTime ? '' : rankClass(r[mainRankKey]);
         html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}">
             <td>
-                <span class="rank-num">${noTime ? '—' : (r[cfg.rankKey] ?? '—')}</span>
-                ${!noTime && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
+                <span class="rank-num">${noTime ? '—' : (r[mainRankKey] ?? '—')}</span>
+                ${!noTime && _gender === 'all' && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
             </td>
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>

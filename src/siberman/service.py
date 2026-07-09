@@ -93,6 +93,11 @@ def compute_stage_totals(cp_times: dict) -> dict[str, Optional[int]]:
     return {"swim": swim, "bike_day1": bike1, "bike_day2": bike2, "run": run}
 
 
+def _finished_stage(cp_times: dict, stage: str) -> bool:
+    """Дошёл ли участник до ПОСЛЕДНЕЙ КТ этапа (а не просто до какой-то)."""
+    return cp_times.get((stage, STAGE_MAX_SEQ[stage])) is not None
+
+
 def compute_overall(stage_totals: dict[str, Optional[int]]) -> Optional[int]:
     """Общее чистое время = сумма всех этапов (None если хоть один этап DNF)."""
     vals = [stage_totals.get(s) for s in ("swim", "bike_day1", "bike_day2", "run")]
@@ -306,6 +311,7 @@ def apply_to_db(result: ParseResult) -> dict:
         # --- Вычислить тоталы и ранги ---
         pid_totals: dict[int, dict] = {}
         pid_meta:   dict[int, dict] = {}
+        pid_cp_times: dict[int, dict] = {}
         for p in result.participants:
             cp_key = p.get("_cp_key", p["bib"])
             pid = cp_key_to_pid[cp_key]
@@ -315,6 +321,7 @@ def apply_to_db(result: ParseResult) -> dict:
             pid_meta[pid]   = {"gender": p["gender"], "format": p["format"],
                                "relay_stage": p.get("relay_stage", "none"),
                                "status": p.get("status", "active")}
+            pid_cp_times[pid] = cp_times
 
         # Для relay bike-члена: bike_day1 = bike1_abs_finish - swim_total команды
         relay_by_bib: dict[str, dict[str, int]] = {}
@@ -343,10 +350,17 @@ def apply_to_db(result: ParseResult) -> dict:
         female = [pid for pid in indiv if pid_meta[pid]["gender"] == "F"]
 
         for stage in ("swim", "bike_day1", "bike_day2", "run"):
-            s_ranks = rank_by({pid: pid_totals[pid][stage] for pid in indiv})
+            # Место присваивается только тем, кто реально ДОШЁЛ до финиша
+            # этапа (последняя КТ этапа не None) — иначе сошедший на середине
+            # (без явной пометки DNF в файле) попадал бы в зачёт со своим
+            # неполным (и потому заниженным) временем и мог "занять" 1 место.
+            finishers = [pid for pid in indiv if _finished_stage(pid_cp_times[pid], stage)]
+            finishers_m = [pid for pid in finishers if pid in male]
+            finishers_f = [pid for pid in finishers if pid in female]
+            s_ranks = rank_by({pid: pid_totals[pid][stage] for pid in finishers})
             g_ranks = {
-                **rank_by({pid: pid_totals[pid][stage] for pid in male}),
-                **rank_by({pid: pid_totals[pid][stage] for pid in female}),
+                **rank_by({pid: pid_totals[pid][stage] for pid in finishers_m}),
+                **rank_by({pid: pid_totals[pid][stage] for pid in finishers_f}),
             }
             for pid in indiv_all:
                 total_s = pid_totals[pid][stage]
@@ -372,10 +386,18 @@ def apply_to_db(result: ParseResult) -> dict:
                         avg_pace_s=pace, avg_speed_kmh=speed,
                     )
 
-        o_ranks = rank_by({pid: pid_totals[pid]["overall"] for pid in indiv})
+        # Место в абсолютном зачёте — только тем, кто реально финишировал
+        # ВСЕ 4 этапа (та же причина, что и для места по этапам).
+        race_finishers = [
+            pid for pid in indiv
+            if all(_finished_stage(pid_cp_times[pid], s) for s in ("swim", "bike_day1", "bike_day2", "run"))
+        ]
+        race_finishers_m = [pid for pid in race_finishers if pid in male]
+        race_finishers_f = [pid for pid in race_finishers if pid in female]
+        o_ranks = rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers})
         go_ranks = {
-            **rank_by({pid: pid_totals[pid]["overall"] for pid in male}),
-            **rank_by({pid: pid_totals[pid]["overall"] for pid in female}),
+            **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_m}),
+            **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_f}),
         }
         for pid in indiv_all:
             upsert_overall_result(
