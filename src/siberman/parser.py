@@ -134,6 +134,20 @@ def parse_time_to_seconds(value) -> Optional[int]:
     return None
 
 
+def _classify_time_cell(value) -> tuple[Optional[int], Optional[str]]:
+    """Как parse_time_to_seconds, но также возвращает причину, если None
+    означает "не удалось распознать" (а не легитимно пустое/DNF)."""
+    seconds = parse_time_to_seconds(value)
+    if seconds is not None or value is None:
+        return seconds, None
+    if isinstance(value, str):
+        v = value.strip()
+        if not v or v.upper() in ("DNF", "DNS", "DSQ", "ДНФ", "-", "—") or v.lower() in ("днф", "днс", "дсq"):
+            return None, None
+        return None, f"не удалось распознать время «{value}» (ожидался формат Ч:ММ:СС)"
+    return None, f"неожиданный тип значения времени: {value!r}"
+
+
 def _normalize_header(h: str) -> str:
     return str(h).strip().lower()
 
@@ -206,14 +220,18 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
     # Индекс T1
     t1_col = col_idx.get(("t1", 0))
 
-    # Парсить строки данных
-    for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+    # Парсить строки данных. Не values_only, чтобы иметь адрес ячейки (для errors).
+    for row_cells in sheet.iter_rows(min_row=header_row_idx + 1):
+        row = [c.value for c in row_cells]
         if not any(row):
             continue
 
         bib_col = part_col.get("bib")
         bib_raw = row[bib_col] if bib_col is not None else None
         if not bib_raw:
+            first_ci = next((i for i, v in enumerate(row) if v not in (None, "")), 0)
+            coord = row_cells[first_ci].coordinate
+            result.errors.append(f"{coord}: в строке есть данные, но не заполнен номер участника — строка пропущена")
             continue
         bib = str(bib_raw).strip()
 
@@ -224,11 +242,25 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
         fmt_raw = _cell("format", "Лично")
         fmt = "relay" if fmt_raw in ("Эстафета", "relay") else "individual"
 
+        def _check_gender(field: str, role_label: str) -> None:
+            raw = _cell(field)
+            if raw and _normalize_gender(raw) is None:
+                ci = part_col.get(field)
+                coord = row_cells[ci].coordinate if ci is not None else f"строка {row_cells[0].row}"
+                result.errors.append(
+                    f"{coord} (участник {bib}, «{role_label}»): пол «{raw}» не распознан, использовано значение по умолчанию «М»"
+                )
+
         # Чекпоинты — общие для строки
         cp_times: dict[tuple[str, int], Optional[int]] = {}
         for ci, stage_seq in cp_by_col.items():
             if ci < len(row):
-                cp_times[stage_seq] = parse_time_to_seconds(row[ci])
+                seconds, err = _classify_time_cell(row[ci])
+                cp_times[stage_seq] = seconds
+                if err:
+                    coord = row_cells[ci].coordinate
+                    label = headers[ci] if ci < len(headers) else f"колонка {ci + 1}"
+                    result.errors.append(f"{coord} (участник {bib}, «{label}»): {err}")
 
         if fmt == "relay":
             # Название команды + ФИО участников swim/bike/run — отдельные колонки.
@@ -249,8 +281,11 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 "relay_team_name": team_name,
                 "country": team_country, "city": team_city, "status": "active",
             }
+            relay_gender_fields = {"swim": "relay_swim_gender", "bike": "relay_bike_gender", "run": "relay_run_gender"}
+            relay_role_labels = {"swim": "пол пловца", "bike": "пол велосипедиста", "run": "пол бегуна"}
             for rs, full_name, gender_raw in zip(relay_stages, members_raw, members_gender_raw):
                 sn, nm = _split_name(full_name)
+                _check_gender(relay_gender_fields[rs], relay_role_labels[rs])
                 result.participants.append({
                     **base,
                     "surname": sn, "name": nm, "relay_stage": rs,
@@ -270,6 +305,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             }
 
         else:
+            _check_gender("gender", "пол")
             gender = _normalize_gender(_cell("gender", "")) or "M"
 
             has_dnf = any(

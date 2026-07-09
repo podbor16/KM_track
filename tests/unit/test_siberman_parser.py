@@ -3,7 +3,9 @@ import io
 
 import openpyxl
 import pytest
-from src.siberman.parser import parse_time_to_seconds, _normalize_header, _build_col_index, parse_excel
+from src.siberman.parser import (
+    parse_time_to_seconds, _normalize_header, _build_col_index, parse_excel, _classify_time_cell,
+)
 
 
 def test_parse_time_hmmss_string():
@@ -110,3 +112,73 @@ def test_relay_member_gender_defaults_to_male_when_column_missing():
     data = _build_workbook(headers, row)
     result = parse_excel(data, 2026)
     assert all(p["gender"] == "M" for p in result.participants)
+
+
+# ---------------------------------------------------------------------------
+# Валидация с указанием ячеек (задача 3)
+# ---------------------------------------------------------------------------
+
+def test_classify_time_cell_valid_returns_no_error():
+    seconds, err = _classify_time_cell("1:00:00")
+    assert seconds == 3600
+    assert err is None
+
+
+def test_classify_time_cell_dnf_returns_no_error():
+    seconds, err = _classify_time_cell("DNF")
+    assert seconds is None
+    assert err is None
+
+
+def test_classify_time_cell_empty_returns_no_error():
+    seconds, err = _classify_time_cell(None)
+    assert seconds is None
+    assert err is None
+
+
+def test_classify_time_cell_garbage_returns_error():
+    seconds, err = _classify_time_cell("вчера в обед")
+    assert seconds is None
+    assert err is not None
+    assert "вчера в обед" in err
+
+
+BASIC_HEADERS = ["Формат", "Номер", "Фамилия", "Имя", "Пол", "1,3 км"]
+
+
+def test_malformed_checkpoint_reports_cell_coordinate():
+    row = ["Лично", "1", "Иванов", "Иван", "М", "неверное время"]
+    data = _build_workbook(BASIC_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert len(result.errors) == 1
+    assert "F2" in result.errors[0]
+    assert "1,3 км" in result.errors[0]
+    assert "участник 1" in result.errors[0]
+    # Значение всё равно None, но участник не теряется
+    assert result.checkpoint_times["1"][("swim", 1)] is None
+
+
+def test_legitimate_dnf_checkpoint_produces_no_error():
+    row = ["Лично", "1", "Иванов", "Иван", "М", "DNF"]
+    data = _build_workbook(BASIC_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert result.errors == []
+
+
+def test_missing_bib_with_data_reports_error_and_skips_row():
+    row = ["Лично", None, "Иванов", "Иван", "М", "0:10:00"]
+    data = _build_workbook(BASIC_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert len(result.errors) == 1
+    assert "не заполнен номер участника" in result.errors[0]
+    assert result.participants == []
+
+
+def test_invalid_gender_reports_error_with_coordinate_and_defaults_to_male():
+    row = ["Лично", "1", "Иванов", "Иван", "Мужской", "0:10:00"]
+    data = _build_workbook(BASIC_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert len(result.errors) == 1
+    assert "E2" in result.errors[0]
+    assert "Мужской" in result.errors[0]
+    assert result.participants[0]["gender"] == "M"

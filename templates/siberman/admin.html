@@ -56,6 +56,11 @@
             <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
         </div>
 
+        <div class="card" id="errors-card" style="display:none">
+            <h2>⚠ Ошибки и предупреждения в файле</h2>
+            <ul id="errors-list" style="margin:0;padding-left:20px;font-size:13px;color:#c0392b;line-height:1.6"></ul>
+        </div>
+
         <div class="card" id="preview">
             <h2>2. Проверить данные</h2>
             <p id="preview-summary" style="font-size:14px;color:#555;margin-bottom:16px"></p>
@@ -121,6 +126,18 @@
             $('preview-summary').textContent =
                 `Найдено участников: ${data.participant_count}. Год: ${data.race_year}.` +
                 (data.errors.length ? ` Предупреждения: ${data.errors.length}` : '');
+            const errorsList = $('errors-list');
+            errorsList.innerHTML = '';
+            if (data.errors.length) {
+                data.errors.forEach(msg => {
+                    const li = document.createElement('li');
+                    li.textContent = msg;
+                    errorsList.appendChild(li);
+                });
+                $('errors-card').style.display = 'block';
+            } else {
+                $('errors-card').style.display = 'none';
+            }
             const tbody = $('preview-body');
             tbody.innerHTML = '';
             for (const p of data.participants) {
