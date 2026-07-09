@@ -179,7 +179,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     # Эстафетные члены (все трое)
     cur.execute("""
         SELECT
-            p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.status,
+            p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status,
             sw.total_s AS swim_s,  sw.avg_pace_s AS swim_pace,
             b1.total_s AS bike1_s, b1.avg_speed_kmh AS bike1_speed,
             b2.total_s AS bike2_s, b2.avg_speed_kmh AS bike2_speed,
@@ -208,6 +208,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
             "relay_stage": row["relay_stage"],
             "surname": row["surname"],
             "name": row["name"],
+            "gender": row["gender"],
             "status": row["status"],
             "swim_s":   row["swim_s"],  "swim_pace":   row["swim_pace"],
             "bike1_s":  row["bike1_s"], "bike1_speed": row["bike1_speed"],

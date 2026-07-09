@@ -194,8 +194,6 @@
         .badge-m { background: rgba(0,61,98,.15); color: var(--navy); }
         [data-theme="dark"] .badge-m { background: rgba(106,171,215,.15); color: var(--blue); }
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
-        .badge-e { background: rgba(106,171,215,.15); color: var(--blue); }
-        [data-theme="dark"] .badge-e { color: var(--blue); }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
@@ -376,7 +374,7 @@ function fmtSpeed(v) {
 function genderBadge(g) {
     if (g === 'M') return '<span class="badge badge-m">М</span>';
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';
-    return '<span class="badge badge-e">Э</span>';
+    return '';
 }
 /* stageKey: null = Финал, иначе 'swim'|'bike1'|'bike2'|'run' */
 const STAGE_ORD = { swim: 0, bike1: 1, bike2: 2, run: 3 };
@@ -522,7 +520,7 @@ function renderOverall() {
                     : fmtPace(m.run_pace);
                 html += `<div class="relay-member">
                     <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
-                    <span class="relay-member-name">${m.surname} ${m.name}</span>
+                    <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
                     <span class="relay-member-time">${fmtTime(stageTime)}</span>
                     <span class="relay-member-meta">${stageMeta}</span>
                     <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
@@ -610,7 +608,7 @@ function renderStage(stage) {
                     <span class="name-main">${m.surname} ${m.name}</span>
                     <br><span class="name-city">${m._team}</span>
                 </td>
-                <td><span class="badge badge-e">Э</span></td>
+                <td>${genderBadge(m.gender)}</td>
                 <td class="r time-cell">${fmtTime(t)}</td>
                 <td class="r muted">${hasTime ? meta : '—'}</td>
                 <td>${hasTime ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>'}</td>
