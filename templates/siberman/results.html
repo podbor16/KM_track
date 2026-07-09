@@ -518,11 +518,14 @@ function renderOverall() {
                 const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
                     : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
                     : fmtPace(m.run_pace);
+                const startBadge = m.relay_stage === 'bike' && m.bike2_start_s != null
+                    ? `<span class="relay-member-meta">старт вело-2: ${fmtTime(m.bike2_start_s)}</span>` : '';
                 html += `<div class="relay-member">
                     <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
                     <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
                     <span class="relay-member-time">${fmtTime(stageTime)}</span>
                     <span class="relay-member-meta">${stageMeta}</span>
+                    ${startBadge}
                     <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
                 </div>`;
             });
@@ -567,11 +570,16 @@ function renderStage(stage) {
         return;
     }
 
+    const showStart = stage === 'bike2';
+    const colCount = showStart ? 8 : 7;
+
     let html = buildStats(individual, relay, stage);
     html += `<div class="table-wrap"><table>
     <thead><tr>
         <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Статус</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th>
+        ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
+        <th>Статус</th>
     </tr></thead><tbody>`;
 
     rows.forEach(r => {
@@ -588,12 +596,13 @@ function renderStage(stage) {
             <td>${genderBadge(r.gender)}</td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
         </tr>`;
     });
 
     if (relayMembers.length > 0) {
-        html += `<tr><td colspan="7" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
+        html += `<tr><td colspan="${colCount}" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
         let relayRank = 1;
         relayMembers.forEach(m => {
             const t = m[cfg.timeKey];
@@ -611,6 +620,7 @@ function renderStage(stage) {
                 <td>${genderBadge(m.gender)}</td>
                 <td class="r time-cell">${fmtTime(t)}</td>
                 <td class="r muted">${hasTime ? meta : '—'}</td>
+                ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
                 <td>${hasTime ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>'}</td>
             </tr>`;
         });

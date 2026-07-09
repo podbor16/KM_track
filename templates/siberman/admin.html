@@ -49,6 +49,8 @@
             <h2>1. Загрузить файл Excel</h2>
             <label>Год гонки</label>
             <input type="number" id="race-year" value="2025" min="2020" max="2030" style="width:120px">
+            <label>Время старта гонки (день 1, плавание, по красноярскому времени)</label>
+            <input type="time" id="race-start" value="08:00" step="1" style="width:120px" required>
             <label>Файл (.xlsx)</label>
             <input type="file" id="file-input" accept=".xlsx,.xls">
             <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
@@ -66,9 +68,20 @@
                 </thead>
                 <tbody id="preview-body"></tbody>
             </table>
-            <div style="margin-top:20px">
-                <button class="btn btn-success" id="btn-apply">Применить в БД</button>
-            </div>
+        </div>
+
+        <div class="card" id="starts-card" style="display:none">
+            <h2>Расчётный старт вело-2 (по рангу вело-1)</h2>
+            <table>
+                <thead>
+                    <tr><th>Номер</th><th>Участник</th><th>Старт</th></tr>
+                </thead>
+                <tbody id="starts-body"></tbody>
+            </table>
+        </div>
+
+        <div class="card" id="apply-card" style="display:none">
+            <button class="btn btn-success" id="btn-apply">Применить в БД</button>
         </div>
     </div>
 
@@ -81,13 +94,15 @@
     $('btn-upload').addEventListener('click', async () => {
         const file = $('file-input').files[0];
         if (!file) { showErr('Выберите файл'); return; }
+        const raceStart = $('race-start').value;
+        if (!raceStart) { showErr('Укажите время старта гонки (день 1)'); return; }
         const year = $('race-year').value;
         const fd = new FormData();
         fd.append('file', file);
         $('btn-upload').textContent = 'Загружаю…';
         hideMsg();
         try {
-            const r = await fetch(`/api/siberman/admin/upload?race_year=${year}`, { method:'POST', body:fd });
+            const r = await fetch(`/api/siberman/admin/upload?race_year=${year}&race_start=${raceStart}`, { method:'POST', body:fd });
             const data = await r.json();
             if (!r.ok) { showErr(data.detail || 'Ошибка'); return; }
             $('preview-summary').textContent =
@@ -106,7 +121,16 @@
                     <td>${p.cp_count}</td>`;
                 tbody.appendChild(tr);
             }
+            const startsBody = $('starts-body');
+            startsBody.innerHTML = '';
+            for (const s of (data.bike_day2_starts || [])) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${s.bib}</td><td>${s.name}</td><td>${s.start}</td>`;
+                startsBody.appendChild(tr);
+            }
             $('preview').style.display = 'block';
+            $('starts-card').style.display = 'block';
+            $('apply-card').style.display = 'block';
             showOk('Файл успешно разобран. Проверьте данные и нажмите «Применить».');
         } catch(e) {
             showErr('Сетевая ошибка: ' + e.message);
@@ -127,6 +151,8 @@
             if (!r.ok) { showErr(data.detail || 'Ошибка БД'); return; }
             showOk(`Сохранено: ${data.participants} участников, ${data.checkpoint_times} чекпоинтов.`);
             $('preview').style.display = 'none';
+            $('starts-card').style.display = 'none';
+            $('apply-card').style.display = 'none';
         } catch(e) {
             showErr('Сетевая ошибка: ' + e.message);
         } finally {

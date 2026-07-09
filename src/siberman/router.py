@@ -8,7 +8,9 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
 from src.siberman.parser import parse_excel
-from src.siberman.service import build_preview, apply_to_db
+from src.siberman.service import (
+    build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
+)
 from src.siberman.db import get_siberman_connection, get_results_for_year
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -51,6 +53,19 @@ def _is_authed(request: Request) -> bool:
     return request.headers.get("X-Admin-Token", "") == ADMIN_TOKEN
 
 
+def _parse_race_start(raw: str) -> int:
+    """'HH:MM' или 'HH:MM:SS' → секунды от полуночи. Вело-ввод HH:MM здесь
+    ВСЕГДА часы:минуты (не минуты:секунды, в отличие от parse_time_to_seconds)."""
+    parts = raw.strip().split(":")
+    if len(parts) == 2:
+        h, m, s = parts[0], parts[1], "0"
+    elif len(parts) == 3:
+        h, m, s = parts
+    else:
+        raise ValueError(f"Неверный формат времени старта: {raw!r}")
+    return int(h) * 3600 + int(m) * 60 + int(s)
+
+
 @router.get("/siberman/results", response_class=HTMLResponse)
 async def results_page(request: Request):
     return templates.TemplateResponse(
@@ -88,16 +103,28 @@ async def admin_page(request: Request):
 
 @router.post("/api/siberman/admin/upload")
 async def upload_excel(request: Request, file: UploadFile = File(...),
-                        race_year: int = 2025):
+                        race_year: int = 2025, race_start: str = ""):
     if not _is_authed(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
+    if not race_start:
+        raise HTTPException(status_code=422, detail="Укажите время старта гонки (день 1)")
+    try:
+        race_start_s = _parse_race_start(race_start)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     data = await file.read()
     try:
         parsed = parse_excel(data, race_year)
     except Exception as e:
         log.error(f"Parse error: {e}")
         raise HTTPException(status_code=422, detail=f"Ошибка парсинга: {e}")
+
+    bike_day2_starts = convert_bike_times_to_elapsed(parsed, race_start_s)
+    parsed.handicaps = bike_day2_starts  # {rider_key: start_day2_s} → apply_to_db пишет в bike_day2_handicap_s
+
     preview = build_preview(parsed)
+    preview["bike_day2_starts"] = build_bike_day2_starts(parsed, bike_day2_starts)
     _save_pending(race_year, parsed)
     return JSONResponse(preview)
 

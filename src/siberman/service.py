@@ -26,6 +26,7 @@ STAGE_MAX_SEQ: dict[str, int] = {
     "swim": 7, "bike_day1": 6, "bike_day2": 8, "run": 12,
 }
 BIKE_STAGES = {"bike_day1", "bike_day2"}
+BIKE_DAY2_BASE_START_S = 8 * 3600  # 08:00:00 (Красноярск) — старт лидера по рангу вело-1
 
 
 def format_seconds(s: Optional[int]) -> str:
@@ -80,8 +81,8 @@ def compute_stage_totals(cp_times: dict) -> dict[str, Optional[int]]:
     swim     — последний чекпоинт плавания (накоп. с нуля).
     bike_day1 — последний cp bike_day1 (накоп. от старта гонки) минус swim:
                 включает T1, т.к. отдельной колонки T1 нет.
-    bike_day2 — последний cp bike_day2 (уже чистое время, гандикап вычтен
-                организатором / парсером перед записью в БД).
+    bike_day2 — последний cp bike_day2 (уже elapsed относительно
+                расчётного старта участника — см. convert_bike_times_to_elapsed).
     run       — последний cp run (накоп. от старта 3-го дня).
     """
     swim = _last_cp(cp_times, "swim")
@@ -98,6 +99,74 @@ def compute_overall(stage_totals: dict[str, Optional[int]]) -> Optional[int]:
     if any(v is None for v in vals):
         return None
     return sum(vals)  # type: ignore[arg-type]
+
+
+def convert_bike_times_to_elapsed(result: ParseResult, race_start_s: int) -> dict[str, int]:
+    """
+    Переводит RAW астрономическое время вело (секунды от полуночи, как
+    внесли судьи) в elapsed, мутируя result.checkpoint_times in place.
+    Плавание и бег не трогает — они уже elapsed.
+
+    1. bike_day1 → elapsed относительно race_start_s (старт дня 1, задаётся
+       в админке при загрузке) — одинаково для personal и relay.
+    2. Считает bike_day1 total (включая T1) для каждого "райдера"
+       (personal bib ИЛИ relay "{bib}:bike") = последний cp bike_day1 минус
+       swim_total (для relay swim_total — из записи "{bib}:swim" команды).
+    3. Ранжирует всех райдеров по bike_day1 total одним общим зачётом
+       (без разделения по полу/формату) через rank_by().
+    4. Вычисляет расчётный старт вело-2 по рангу:
+         ранг 1-5: BIKE_DAY2_BASE_START_S + (ранг-1)*180
+         ранг 6+:  BIKE_DAY2_BASE_START_S + 4*180 + (ранг-5)*60
+       (см. knowledge/decisions/2026-07-09-siberman-live-v2-tasks.md)
+    5. bike_day2 → elapsed относительно ИНДИВИДУАЛЬНОГО старта райдера.
+
+    Райдеры без вычисленного bike_day1 total (DNF/DNS на вело-1) не
+    попадают в ранжирование и не получают старт вело-2.
+
+    Возвращает {rider_key: start_day2_s} — используется для отображения
+    расчётного старта в админке и на публичной странице результатов.
+    """
+    for cp_times in result.checkpoint_times.values():
+        for key in list(cp_times.keys()):
+            if key[0] == "bike_day1" and cp_times[key] is not None:
+                cp_times[key] = (cp_times[key] - race_start_s) % 86400
+
+    rider_bike1_total: dict[str, int] = {}
+    for p in result.participants:
+        if p["format"] == "individual":
+            rider_key = p["bib"]
+            swim_cp = bike_cp = result.checkpoint_times.get(rider_key, {})
+        elif p["format"] == "relay" and p.get("relay_stage") == "bike":
+            rider_key = f"{p['bib']}:bike"
+            swim_cp = result.checkpoint_times.get(f"{p['bib']}:swim", {})
+            bike_cp = result.checkpoint_times.get(rider_key, {})
+        else:
+            continue
+
+        swim_total = _last_cp(swim_cp, "swim")
+        bike1_abs = _last_cp(bike_cp, "bike_day1")
+        if swim_total is not None and bike1_abs is not None:
+            rider_bike1_total[rider_key] = bike1_abs - swim_total
+
+    ranks = rank_by(rider_bike1_total)
+
+    def _start_offset(rank: int) -> int:
+        if rank <= 5:
+            return (rank - 1) * 180
+        return 4 * 180 + (rank - 5) * 60
+
+    start_day2: dict[str, int] = {
+        rider_key: BIKE_DAY2_BASE_START_S + _start_offset(rank)
+        for rider_key, rank in ranks.items() if rank is not None
+    }
+
+    for rider_key, start_s in start_day2.items():
+        cp_times = result.checkpoint_times.get(rider_key, {})
+        for key in list(cp_times.keys()):
+            if key[0] == "bike_day2" and cp_times[key] is not None:
+                cp_times[key] = (cp_times[key] - start_s) % 86400
+
+    return start_day2
 
 
 def compute_metrics(stage: str, total_s: Optional[int]) -> tuple[Optional[int], Optional[float]]:
@@ -151,6 +220,30 @@ def build_preview(result: ParseResult) -> dict:
         ],
         "errors": result.errors,
     }
+
+
+def build_bike_day2_starts(result: ParseResult, starts: dict[str, int]) -> list[dict]:
+    """Список расчётных стартов вело-2 для отображения (админка + результаты),
+    отсортирован по времени старта."""
+    rows = []
+    for p in result.participants:
+        if p["format"] == "individual":
+            rider_key = p["bib"]
+            label = f"{p['surname']} {p['name']}"
+        elif p["format"] == "relay" and p.get("relay_stage") == "bike":
+            rider_key = f"{p['bib']}:bike"
+            label = p["relay_team_name"]
+        else:
+            continue
+        start_s = starts.get(rider_key)
+        if start_s is None:
+            continue
+        rows.append({
+            "bib": p["bib"], "name": label,
+            "start_s": start_s, "start": format_seconds(start_s),
+        })
+    rows.sort(key=lambda r: r["start_s"])
+    return rows
 
 
 def apply_to_db(result: ParseResult) -> dict:

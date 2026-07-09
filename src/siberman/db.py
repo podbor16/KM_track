@@ -155,6 +155,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     cur.execute("""
         SELECT
             p.bib, p.surname, p.name, p.gender, p.city, p.status,
+            p.bike_day2_handicap_s AS bike2_start_s,
             o.total_s   AS overall_s,
             o.rank_overall, o.rank_gender AS overall_rank_g,
             sw.total_s  AS swim_s,  sw.rank_stage AS swim_rank,
@@ -180,6 +181,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     cur.execute("""
         SELECT
             p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status,
+            p.bike_day2_handicap_s AS bike2_start_s,
             sw.total_s AS swim_s,  sw.avg_pace_s AS swim_pace,
             b1.total_s AS bike1_s, b1.avg_speed_kmh AS bike1_speed,
             b2.total_s AS bike2_s, b2.avg_speed_kmh AS bike2_speed,
@@ -210,6 +212,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
             "name": row["name"],
             "gender": row["gender"],
             "status": row["status"],
+            "bike2_start_s": row["bike2_start_s"],
             "swim_s":   row["swim_s"],  "swim_pace":   row["swim_pace"],
             "bike1_s":  row["bike1_s"], "bike1_speed": row["bike1_speed"],
             "bike2_s":  row["bike2_s"], "bike2_speed": row["bike2_speed"],

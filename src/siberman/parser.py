@@ -1,9 +1,15 @@
 """
-Excel-парсер для данных Siberman 2025.
+Excel-парсер для данных Siberman.
 
 Формат файла: Google Sheets → Скачать как .xlsx
 Ряд 1 или 2 — заголовки (зависит от листа).
 Времена: строка "Ч:ММ:СС", timedelta, float (доля суток) или пусто/DNF.
+
+Парсер НЕ различает elapsed и астрономическое время — это просто число
+секунд, конвертированное как есть. Для вело (bike_day1/bike_day2) судьи
+вносят астрономическое время; перевод в elapsed и расчёт старта вело-2
+происходят отдельным шагом в service.py:convert_bike_times_to_elapsed(),
+не здесь.
 
 Если заголовок в реальном файле отличается от CHECKPOINT_COL_MAP —
 добавь его в маппинг или измени нормализацию в _normalize_header().
@@ -79,7 +85,6 @@ PARTICIPANT_COL_MAP: dict[str, str] = {
 }
 
 # Специальные колонки
-HANDICAP_PREFIX = "стартовая минута"   # гандикап день 2
 T1_COL = "t1"
 T2_COL = "t2"
 
@@ -88,11 +93,14 @@ T2_COL = "t2"
 class ParseResult:
     race_year: int
     participants: list[dict] = field(default_factory=list)
-    # {bib: {(stage, seq): cumulative_s}}
+    # {bib: {(stage, seq): cumulative_s}} — для bike_day1/bike_day2 хранит
+    # RAW астрономическое время (секунды от полуночи) до конвертации через
+    # service.py:convert_bike_times_to_elapsed()
     checkpoint_times: dict[str, dict[tuple[str, int], Optional[int]]] = field(default_factory=dict)
     # {bib: {zone: duration_s}}
     transitions: dict[str, dict[str, Optional[int]]] = field(default_factory=dict)
-    # {bib: handicap_s}
+    # {bib_or_relay_bike_key: start_day2_s} — заполняется НЕ парсером, а
+    # convert_bike_times_to_elapsed() в service.py (расчётный старт вело-2)
     handicaps: dict[str, Optional[int]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -195,13 +203,6 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 part_col[field_name] = ci
                 break
 
-    # Индекс колонки гандикапа
-    handicap_col: Optional[int] = None
-    for (n, _), ci in col_idx.items():
-        if n.startswith(HANDICAP_PREFIX):
-            handicap_col = ci
-            break
-
     # Индекс T1
     t1_col = col_idx.get(("t1", 0))
 
@@ -268,10 +269,6 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 k: v for k, v in cp_times.items() if k[0] == "run"
             }
 
-            # Гандикап — относится к участнику bike
-            if handicap_col is not None and handicap_col < len(row):
-                result.handicaps[f"{bib}:bike"] = parse_time_to_seconds(row[handicap_col])
-
         else:
             gender = _normalize_gender(_cell("gender", "")) or "M"
 
@@ -288,9 +285,6 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 "_cp_key":   bib,
             })
             result.checkpoint_times[bib] = cp_times
-
-            if handicap_col is not None and handicap_col < len(row):
-                result.handicaps[bib] = parse_time_to_seconds(row[handicap_col])
 
             if t1_col is not None and t1_col < len(row):
                 t1 = parse_time_to_seconds(row[t1_col])
