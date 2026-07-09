@@ -25,8 +25,16 @@ import openpyxl
 from src.siberman.parser import (
     parse_excel, parse_time_to_seconds, _normalize_header, _build_col_index, _find_header_row,
 )
+from src.siberman.service import BIKE_DAY2_BASE_START_S
 
 RACE_START_S = 8 * 3600  # 08:00:00 — старт дня 1 (плавание)
+
+
+def _start_offset_for_rank(rank: int) -> int:
+    """Та же формула, что и service.convert_bike_times_to_elapsed."""
+    if rank <= 5:
+        return (rank - 1) * 180
+    return 4 * 180 + (rank - 5) * 60
 
 STAGE_SEQ_COUNT = {"swim": 7, "bike_day1": 6, "bike_day2": 8, "run": 12}
 
@@ -211,7 +219,13 @@ def main(SRC: str, DST: str):
         run_base += random.randint(2000, 2400)
         run_times.append(run_base)
 
-    test_bike2_start_s = 8 * 3600 + 6 * 60  # 8:06:00 — условный расчётный старт
+    # Намеренно самый медленный на вело-1 → займёт последний ранг среди всех
+    # райдеров (реальные + тестовый) → должен стартовать вело-2 последним.
+    # Это значение ДОЛЖНО совпадать с тем, что реально посчитает
+    # convert_bike_times_to_elapsed() — иначе его bike_day2 CP окажутся
+    # "раньше" собственного старта после конвертации.
+    test_rank = len(result.handicaps) + 1  # len(handicaps) = реальных райдеров 2025 года
+    test_bike2_start_s = BIKE_DAY2_BASE_START_S + _start_offset_for_rank(test_rank)
 
     ws.cell(row=row_i, column=1, value="Лично")
     ws.cell(row=row_i, column=2, value=9999)
