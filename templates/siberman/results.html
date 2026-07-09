@@ -577,7 +577,11 @@ function teamGapRow(team) {
 
 /* ──────────────── Render: Overall ──────────────── */
 function renderOverall() {
-    const { individual, relay } = getFiltered();
+    const filtered = getFiltered();
+    const individual = filtered.individual;
+    // Эстафетная команда не имеет единого пола — при выбранном фильтре
+    // пола команды в Финале не показываем вовсе (не "какого-то одного пола").
+    const relay = _gender === 'all' ? filtered.relay : [];
     const overallGaps = computeOverallGaps([
         ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(teamGapRow),
@@ -647,14 +651,11 @@ function renderOverall() {
                 const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
                     : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
                     : fmtPace(m.run_pace);
-                const startBadge = m.relay_stage === 'bike' && m.bike2_start_s != null
-                    ? `<span class="relay-member-meta">старт вело-2: ${fmtTime(m.bike2_start_s)}</span>` : '';
                 html += `<div class="relay-member">
                     <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
                     <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
                     <span class="relay-member-time">${fmtTime(stageTime)}</span>
                     <span class="relay-member-meta">${stageMeta}</span>
-                    ${startBadge}
                     <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
                 </div>`;
             });
@@ -683,7 +684,9 @@ function renderStage(stage) {
 
     const rows = sortByStatus(individual, cfg.timeKey);
     let relayMembers = _fmt !== 'individual'
-        ? relay.flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => ({...m, _bib: t.bib, _team: t.team_name})))
+        ? relay.flatMap(t => t.members
+            .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
+            .map(m => ({...m, _bib: t.bib, _team: t.team_name})))
         : [];
     // Сортировать эстафеты по времени этапа
     relayMembers = relayMembers.sort((a, b) => {
