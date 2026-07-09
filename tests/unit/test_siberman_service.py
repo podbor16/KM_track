@@ -3,7 +3,7 @@ from src.siberman.parser import ParseResult
 from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
-    _finished_stage,
+    _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
@@ -170,3 +170,13 @@ def test_finished_stage_false_partial_no_dnf_marker():
 
 def test_finished_stage_false_no_data():
     assert _finished_stage({}, "swim") is False
+
+
+def test_swim_lap_seqs_covers_exactly_four_laps_ending_at_max_seq():
+    assert sorted(SWIM_LAP_SEQS.values()) == [1, 2, 3, 4]
+    assert max(SWIM_LAP_SEQS) == STAGE_MAX_SEQ["swim"]
+
+
+def test_swim_lap_seqs_excludes_turn_checkpoints():
+    # seq 1,3,5 — развороты на середине круга, не входят в счётчик кругов
+    assert set(SWIM_LAP_SEQS) == {2, 4, 6, 7}

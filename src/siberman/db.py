@@ -147,28 +147,38 @@ def get_participants_with_stage_totals(conn, race_year: int,
     return cur.fetchall()
 
 
-def get_checkpoint_times_for_year(conn, race_year: int) -> dict[int, dict[str, dict[int, int]]]:
-    """participant_id -> stage -> seq -> cumulative_s (для расчёта отставаний на клиенте)."""
+def get_checkpoint_times_for_year(
+    conn, race_year: int
+) -> tuple[dict[int, dict[str, dict[int, int]]], dict[int, dict[str, dict[int, int]]]]:
+    """(cumulative, splits): participant_id -> stage -> seq -> секунды.
+
+    Сплиты (время МЕЖДУ соседними КТ) нужны для страницы участника (задача
+    5) — не задействуются в существующей gap-логике на results.html, чтобы
+    не менять форму уже используемого дерева `cp` (там ожидается голое
+    число cumulative_s, не вложенный объект).
+    """
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT ct.participant_id, c.stage, c.seq, ct.cumulative_s
+        SELECT ct.participant_id, c.stage, c.seq, ct.cumulative_s, ct.split_s
         FROM checkpoint_times ct
         JOIN checkpoints c ON c.id = ct.checkpoint_id
         JOIN participants p ON p.id = ct.participant_id
         WHERE p.race_year=%s
     """, (race_year,))
-    out: dict[int, dict[str, dict[int, int]]] = {}
+    cumulative: dict[int, dict[str, dict[int, int]]] = {}
+    splits: dict[int, dict[str, dict[int, int]]] = {}
     for row in cur.fetchall():
-        if row["cumulative_s"] is None:
-            continue
-        out.setdefault(row["participant_id"], {}).setdefault(row["stage"], {})[row["seq"]] = row["cumulative_s"]
-    return out
+        if row["cumulative_s"] is not None:
+            cumulative.setdefault(row["participant_id"], {}).setdefault(row["stage"], {})[row["seq"]] = row["cumulative_s"]
+        if row["split_s"] is not None:
+            splits.setdefault(row["participant_id"], {}).setdefault(row["stage"], {})[row["seq"]] = row["split_s"]
+    return cumulative, splits
 
 
 def get_results_for_year(conn, race_year: int) -> dict:
     """Вернуть все результаты за год для публичной страницы."""
     cur = conn.cursor(dictionary=True)
-    cp_by_pid = get_checkpoint_times_for_year(conn, race_year)
+    cp_by_pid, split_by_pid = get_checkpoint_times_for_year(conn, race_year)
 
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
@@ -196,7 +206,9 @@ def get_results_for_year(conn, race_year: int) -> dict:
     """, (race_year,))
     individual = cur.fetchall()
     for p in individual:
-        p["cp"] = cp_by_pid.get(p.pop("id"), {})
+        pid = p.pop("id")
+        p["cp"] = cp_by_pid.get(pid, {})
+        p["splits"] = split_by_pid.get(pid, {})
 
     # Эстафетные члены (все трое)
     cur.execute("""
@@ -235,6 +247,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
             "status": row["status"],
             "bike2_start_s": row["bike2_start_s"],
             "cp": cp_by_pid.get(row["id"], {}),
+            "splits": split_by_pid.get(row["id"], {}),
             "swim_s":   row["swim_s"],  "swim_pace":   row["swim_pace"],
             "bike1_s":  row["bike1_s"], "bike1_speed": row["bike1_speed"],
             "bike2_s":  row["bike2_s"], "bike2_speed": row["bike2_speed"],

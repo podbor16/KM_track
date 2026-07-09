@@ -69,7 +69,7 @@ def _build_workbook(headers: list[str], row: list) -> bytes:
 RELAY_HEADERS = [
     "Формат", "Номер", "Название команды", "Страна", "Город",
     "Пловец", "Пол пловца", "Велосипедист", "Пол велосипедиста",
-    "Бегун", "Пол бегуна", "3 км", "1,3 км",
+    "Бегун", "Пол бегуна", "3 км", "Плавание: разворот 1 (1,3 км)",
 ]
 
 
@@ -196,7 +196,7 @@ def test_classify_time_cell_implausibly_small_value_is_error():
     assert err is not None
 
 
-BASIC_HEADERS = ["Формат", "Номер", "Фамилия", "Имя", "Пол", "1,3 км"]
+BASIC_HEADERS = ["Формат", "Номер", "Фамилия", "Имя", "Пол", "Плавание: разворот 1 (1,3 км)"]
 
 
 def test_malformed_checkpoint_reports_cell_coordinate():
@@ -205,7 +205,7 @@ def test_malformed_checkpoint_reports_cell_coordinate():
     result = parse_excel(data, 2026)
     assert len(result.errors) == 1
     assert "F2" in result.errors[0]
-    assert "1,3 км" in result.errors[0]
+    assert "разворот 1" in result.errors[0].lower()
     assert "участник 1" in result.errors[0]
     # Значение всё равно None, но участник не теряется
     assert result.checkpoint_times["1"][("swim", 1)] is None
@@ -216,6 +216,41 @@ def test_legitimate_dnf_checkpoint_produces_no_error():
     data = _build_workbook(BASIC_HEADERS, row)
     result = parse_excel(data, 2026)
     assert result.errors == []
+
+
+# ---------------------------------------------------------------------------
+# Круги плавания vs круги бега (задача 5) — заголовки "N круг(а)" повторяются
+# в обеих секциях, "плавания" в тексте должен предотвращать коллизию
+# occurrence-индекса в _build_col_index.
+# ---------------------------------------------------------------------------
+
+SWIM_RUN_LAP_HEADERS = [
+    "Формат", "Номер", "Фамилия", "Имя", "Пол",
+    "Плавание: разворот 1 (1,3 км)", "Плавание: 1 круг (2,6 км)",
+    "Плавание: разворот 2 (3,9 км)", "Плавание: 2 круга (5,2 км)",
+    "Плавание: разворот 3 (6,5 км)", "Плавание: 3 круга (7,8 км)",
+    "Финиш 10 км (плавание, 4 круг)",
+    "1 круг (7 км)", "2 круга (14 км)", "3 круга (21 км)",
+]
+
+
+def test_swim_and_run_lap_headers_do_not_collide():
+    row = [
+        "Лично", "1", "Иванов", "Иван", "М",
+        "0:20:00", "0:40:00", "1:00:00", "1:20:00", "1:40:00", "2:00:00", "2:20:00",
+        "3:00:00", "3:40:00", "4:20:00",
+    ]
+    data = _build_workbook(SWIM_RUN_LAP_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert result.errors == []
+    cp = result.checkpoint_times["1"]
+    assert cp[("swim", 1)] == 20 * 60
+    assert cp[("swim", 2)] == 40 * 60
+    assert cp[("swim", 6)] == 2 * 3600
+    assert cp[("swim", 7)] == 2 * 3600 + 20 * 60
+    assert cp[("run", 1)] == 3 * 3600
+    assert cp[("run", 2)] == 3 * 3600 + 40 * 60
+    assert cp[("run", 3)] == 4 * 3600 + 20 * 60
 
 
 def test_missing_bib_with_data_reports_error_and_skips_row():

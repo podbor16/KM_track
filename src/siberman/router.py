@@ -73,6 +73,16 @@ async def results_page(request: Request):
     )
 
 
+@router.get("/siberman/participant/{bib}", response_class=HTMLResponse)
+async def participant_page(request: Request, bib: str, year: int = 2025):
+    """Страница участника — данные подгружаются на клиенте из уже
+    существующего /api/siberman/results (тот же пул данных, что и у
+    /siberman/results), bib ищется среди individual/relay в JS."""
+    return templates.TemplateResponse(
+        "siberman/participant.html", {"request": request, "bib": bib, "year": year}
+    )
+
+
 @router.get("/api/siberman/results")
 async def api_results(year: int = 2025):
     conn = get_siberman_connection()
