@@ -229,16 +229,18 @@ function computeStageGaps(rows, dbStage) {
     return gaps;
 }
 
-// Отставание НА КАЖДОЙ отдельной КТ (не только на финише этапа) — лидер
-// в конкретной точке может отличаться от итогового лидера этапа (у кого-то
-// неровный темп). Точное совпадение seq (не valueAtOrBefore — та функция
-// для "гэпа относительно финальной позиции", здесь сравниваем СТРОГО одну
-// и ту же КТ). Возвращает {seq: {key: gap_s}}, gap_s===0 у лидера точки.
-function computeCheckpointGaps(rows, dbStage, maxSeq) {
+// Общий генератор для "gap на каждой КТ" / "место на каждой КТ" — принимает
+// valueFn(row, seq), извлекающий сравниваемое значение per-checkpoint.
+// "На этапе" (computeCheckpointGaps/Ranks) — valueFn берёт сырой cp[stage][seq]
+// (сравнение ТОЛЬКО внутри этого этапа). "В гонке" (computeGlobalCheckpointGaps/Ranks)
+// — valueFn = globalProgress(row, stage, seq) (сумма прошлых полных этапов +
+// прогресс на текущем — тот, кто медленнее прошёл прошлый этап, будет позади
+// по гонке, даже если на ЭТОМ этапе он быстрее всех).
+function _checkpointGapsByValueFn(rows, valueFn, maxSeq) {
     const bySeq = {};
     for (let seq = 1; seq <= maxSeq; seq++) {
         const vals = rows
-            .map(r => ({ key: r.key, value: r.cp?.[dbStage]?.[seq] }))
+            .map(r => ({ key: r.key, value: valueFn(r, seq) }))
             .filter(r => r.value != null);
         if (vals.length === 0) continue;
         const min = Math.min(...vals.map(v => v.value));
@@ -247,15 +249,11 @@ function computeCheckpointGaps(rows, dbStage, maxSeq) {
     }
     return bySeq;
 }
-
-// Место НА КАЖДОЙ отдельной КТ (та же идея, что и computeCheckpointGaps, но
-// ранг вместо gap, с учётом ничьих). rows — уже нужный пул (абсолют/по
-// формату/по полу — фильтрация до вызова, не внутри функции).
-function computeCheckpointRanks(rows, dbStage, maxSeq) {
+function _checkpointRanksByValueFn(rows, valueFn, maxSeq) {
     const bySeq = {};
     for (let seq = 1; seq <= maxSeq; seq++) {
         const vals = rows
-            .map(r => ({ key: r.key, value: r.cp?.[dbStage]?.[seq] }))
+            .map(r => ({ key: r.key, value: valueFn(r, seq) }))
             .filter(r => r.value != null)
             .sort((a, b) => a.value - b.value);
         if (vals.length === 0) continue;
@@ -266,6 +264,28 @@ function computeCheckpointRanks(rows, dbStage, maxSeq) {
         bySeq[seq] = ranks;
     }
     return bySeq;
+}
+
+// Отставание/место НА КАЖДОЙ отдельной КТ, "на этапе" — сравнение только
+// внутри текущего этапа (не учитывает результаты прошлых этапов). Точное
+// совпадение seq (не valueAtOrBefore — та функция для "гэпа относительно
+// финальной позиции"). gap===0 у лидера точки.
+function computeCheckpointGaps(rows, dbStage, maxSeq) {
+    return _checkpointGapsByValueFn(rows, (r, seq) => r.cp?.[dbStage]?.[seq], maxSeq);
+}
+function computeCheckpointRanks(rows, dbStage, maxSeq) {
+    return _checkpointRanksByValueFn(rows, (r, seq) => r.cp?.[dbStage]?.[seq], maxSeq);
+}
+
+// То же самое, но "в гонке" — сравнение по СОВОКУПНОМУ времени гонки на
+// момент этой КТ (globalProgress: прошлые полные этапы + прогресс на
+// текущем). rows должны нести swim_s/bike1_s/bike2_s/run_s (как в
+// buildOverallGapPool), не просто cp.
+function computeGlobalCheckpointGaps(rows, dbStage, maxSeq) {
+    return _checkpointGapsByValueFn(rows, (r, seq) => globalProgress(r, dbStage, seq), maxSeq);
+}
+function computeGlobalCheckpointRanks(rows, dbStage, maxSeq) {
+    return _checkpointRanksByValueFn(rows, (r, seq) => globalProgress(r, dbStage, seq), maxSeq);
 }
 
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —

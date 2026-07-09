@@ -95,6 +95,15 @@
         .stat-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
         .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
+        .mode-toggle { display: flex; gap: 6px; padding: 0 18px 14px; }
+        .mode-btn {
+            padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+            background: transparent; color: var(--muted); font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
+        }
+        .mode-btn:hover { color: var(--text); border-color: var(--text); }
+        .mode-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
+
         /* ── Accordion (нативные details/summary) ── */
         details.stage { border-top: 1px solid var(--border); }
         details.stage summary {
@@ -130,6 +139,7 @@
             .logo-name { font-size: 18px; }
             .content { padding: 14px; }
             .card-hdr, .stats-row { padding: 12px 14px; }
+            .mode-toggle { padding: 0 14px 12px; }
             details.stage summary { padding: 10px 14px; }
             .cp-table th, .cp-table td { padding: 6px 10px; }
         }
@@ -190,26 +200,51 @@ function buildStageGapPool(data, dbStage, relayStage) {
 
 function buildOverallGapPool(data) {
     return [
-        ...data.individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
-        ...data.relay.map(teamGapRow),
+        ...data.individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, gender: r.gender, isRelay: false })),
+        ...data.relay.map(t => ({ ...teamGapRow(t), gender: null, isRelay: true })),
     ];
 }
 
-function stageBody(dbStage, r, gapPool, myKey) {
+/* ──────────────── Переключатель "На этапе" / "В гонке" ──────────────── */
+// "На этапе" — место/отставание на КТ считаются только внутри текущего
+// этапа (кто быстрее прошёл именно этот отрезок). "В гонке" — по
+// совокупному времени гонки на момент этой КТ (прошлые полные этапы +
+// прогресс на текущем) — так видно, как менялась позиция в общем зачёте,
+// а не только на отдельном этапе.
+let _mode = 'stage';
+let _rerender = null;
+
+function modeToggle() {
+    return `<div class="mode-toggle">
+        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">На этапе</button>
+        <button class="mode-btn ${_mode === 'race' ? 'active' : ''}" onclick="_mode='race'; _rerender();">В гонке</button>
+    </div>`;
+}
+
+function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     const maxSeq = STAGE_MAX_SEQ[dbStage];
-    const cpGaps = computeCheckpointGaps(gapPool, dbStage, maxSeq);
+    const isRace = _mode === 'race';
+    // "На этапе" — пул/ключ/функции по этапу (как раньше). "В гонке" — тот
+    // же пул, что и в сводной статистике (личники + эстафетные команды как
+    // единое целое), функции сравнивают по совокупному времени гонки
+    // (globalProgress), не по сырому cp этапа.
+    const pool = isRace ? overallGapPool : gapPool;
+    const key = isRace ? raceKey : myKey;
+    const gapsFn = isRace ? computeGlobalCheckpointGaps : computeCheckpointGaps;
+    const ranksFn = isRace ? computeGlobalCheckpointRanks : computeCheckpointRanks;
+    const cpGaps = gapsFn(pool, dbStage, maxSeq);
 
     // Место на КТ: абсолют (весь пул), по формату (личники ОТДЕЛЬНО от
     // эстафетчиков), по полу (только среди личников — у эстафетной команды
     // нет единого пола, поэтому для строк-эстафетчиков места по полу нет).
     const isRelayRow = !!r.relay_stage;
-    const absRanks = computeCheckpointRanks(gapPool, dbStage, maxSeq);
-    const formatPool = gapPool.filter(x => x.isRelay === isRelayRow);
-    const formatRanks = computeCheckpointRanks(formatPool, dbStage, maxSeq);
+    const absRanks = ranksFn(pool, dbStage, maxSeq);
+    const formatPool = pool.filter(x => x.isRelay === isRelayRow);
+    const formatRanks = ranksFn(formatPool, dbStage, maxSeq);
     let genderRanks = {};
     if (!isRelayRow) {
-        const genderPool = gapPool.filter(x => !x.isRelay && x.gender === r.gender);
-        genderRanks = computeCheckpointRanks(genderPool, dbStage, maxSeq);
+        const genderPool = pool.filter(x => !x.isRelay && x.gender === r.gender);
+        genderRanks = ranksFn(genderPool, dbStage, maxSeq);
     }
 
     let rows = '';
@@ -217,14 +252,14 @@ function stageBody(dbStage, r, gapPool, myKey) {
         const cum = r.cp?.[dbStage]?.[seq];
         const split = r.splits?.[dbStage]?.[seq];
         const pending = cum == null;
-        const gap = cpGaps[seq]?.[myKey];
+        const gap = cpGaps[seq]?.[key];
         const gapCell = pending || gap == null ? '—'
             : gap === 0 ? '<span class="badge badge-fin">Лидер</span>'
             : fmtGap(gap);
 
-        const absR = !pending ? (absRanks[seq]?.[myKey] ?? '—') : '—';
-        const fmtR = !pending ? (formatRanks[seq]?.[myKey] ?? '—') : '—';
-        const genR = !pending && !isRelayRow ? (genderRanks[seq]?.[myKey] ?? '—') : '—';
+        const absR = !pending ? (absRanks[seq]?.[key] ?? '—') : '—';
+        const fmtR = !pending ? (formatRanks[seq]?.[key] ?? '—') : '—';
+        const genR = !pending && !isRelayRow ? (genderRanks[seq]?.[key] ?? '—') : '—';
         // КТ bike_day1 seq=1: split_s в БД = cumulative_s самой КТ (нет seq=0,
         // от которого вычесть), а cumulative_s bike_day1 считается от старта
         // ГОНКИ (единый таймер со swim), не от старта вело — значит "сплит"
@@ -248,21 +283,24 @@ function stageBody(dbStage, r, gapPool, myKey) {
             <td class="r">${gapCell}</td>
         </tr>`;
     }
+    const placeLbl = isRace ? 'Место (в гонке)' : 'Место (на этапе)';
+    const gapLbl = isRace ? 'Отставание (в гонке)' : 'Отставание (на этапе)';
     return `<div style="overflow-x:auto"><table class="cp-table">
         <thead><tr>
             <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
-            <th class="r">Место</th><th class="r">Формат</th><th class="r">Пол</th><th class="r">Отставание</th>
+            <th class="r">${placeLbl}</th><th class="r">Формат</th><th class="r">Пол</th><th class="r">${gapLbl}</th>
         </tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
 }
 
-function stageSection(cfg, r, gapPool) {
+function stageSection(cfg, r, gapPool, overallGapPool) {
     const pos = lastReached(r.cp, cfg.dbStage);
     const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
     const rStatus = withStageStatus(r, cfg.dbStage);
     const gaps = computeStageGaps(gapPool, cfg.dbStage);
     const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;
+    const raceKey = r._bib ?? r.bib;
     const gap = fmtGap(gaps[key]);
     const lap = pos ? lapLabel(cfg.dbStage, pos.seq) : null;
     const isCurrent = pos && !finished;
@@ -294,7 +332,7 @@ function stageSection(cfg, r, gapPool) {
             ${timeInfo}
             ${badge}
         </summary>
-        ${stageBody(cfg.dbStage, r, gapPool, key)}
+        ${stageBody(cfg.dbStage, r, gapPool, key, overallGapPool, raceKey)}
     </details>`;
 }
 
@@ -364,9 +402,10 @@ function renderIndividual(data, r) {
             ${r.city ? `<div class="p-city">${r.city}</div>` : ''}
         </div>
         <div class="stats-row">${overallStat}</div>
-        ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+        ${modeToggle()}
+        ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
         ${combinedBikeSection(r.bike1_s, r.bike2_s)}
-        ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+        ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
     </div>`;
     document.getElementById('app').innerHTML = html;
 }
@@ -396,7 +435,7 @@ function renderTeam(data, team) {
                 </div>
                 <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
             </div>
-            ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib, _teamSwimS: teamSwimS }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage))).join('')}
+            ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib, _teamSwimS: teamSwimS }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
             ${m.relay_stage === 'bike' ? combinedBikeSection(m.bike1_s, m.bike2_s) : ''}
         </div>`;
     }).join('');
@@ -413,6 +452,7 @@ function renderTeam(data, team) {
             <div class="stat"><div class="stat-val">${fmtTime(team.overall_s)}</div><div class="stat-lbl">Итого команды</div></div>
             ${gap ? `<div class="stat"><div class="stat-val">${gap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
         </div>
+        ${modeToggle()}
     </div>
     ${membersHtml}`;
     document.getElementById('app').innerHTML = html;
@@ -432,9 +472,15 @@ async function load() {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('app').style.display = '';
 
-        if (person) renderIndividual(data, person);
-        else if (team) renderTeam(data, team);
-        else document.getElementById('app').innerHTML = '<div class="empty">Участник не найден</div>';
+        if (person) {
+            _rerender = () => renderIndividual(data, person);
+            _rerender();
+        } else if (team) {
+            _rerender = () => renderTeam(data, team);
+            _rerender();
+        } else {
+            document.getElementById('app').innerHTML = '<div class="empty">Участник не найден</div>';
+        }
     } catch (e) {
         document.getElementById('loading').textContent = 'Ошибка загрузки: ' + e.message;
     }
