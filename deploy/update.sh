@@ -5,10 +5,12 @@
 set -euo pipefail
 
 APP_DIR="/opt/km_track"
+APP_USER="km"
 
 echo "=== Обновление кода ==="
 cd "$APP_DIR"
 git pull
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 echo "=== Загрузка статических библиотек ==="
 venv/bin/python deploy/download_static_libs.py

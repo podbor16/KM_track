@@ -41,6 +41,7 @@ jobs:
             git -C /opt/km_track fetch origin
             git -C /opt/km_track stash
             git -C /opt/km_track checkout -B main origin/main
+            chown -R km:km /opt/km_track
 
             # Применить nginx конфиг если изменился
             cp /opt/km_track/deploy/nginx.conf /etc/nginx/nginx.conf
