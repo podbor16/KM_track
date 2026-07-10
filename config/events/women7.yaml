@@ -11,15 +11,19 @@ description: "Женская семерка | Дистанция: 7 км"
 distances:
   - distance: "7 км"
     distance_km: 7.0
-    db_event_id: null         # ← заполнить перед стартом
+    db_event_id: 110         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
+    checkpoint_distances: [0, 1.75, 5.25, 7.0]
+    checkpoints:
+      - {name: "Старт",                    distance_km: 0.0,  lat: 56.0258580, lon: 92.9401780}
+      - {name: "КТ1 (Разворот, круг 1)",   distance_km: 1.75, lat: 56.0173830, lon: 92.9215870}
+      - {name: "КТ2 (Разворот, круг 2)",   distance_km: 5.25, lat: 56.0174730, lon: 92.9220370}
+      - {name: "Финиш",                    distance_km: 7.0,  lat: 56.0256500, lon: 92.9401830}
     gpx_file: "static/map/2026/girlseven.gpx"            # ← заполнить перед стартом
-    event_date: null          # ← заполнить перед стартом
+    event_date: "2026-07-12"           # ← заполнить перед стартом
     route:
-      laps: 1
+      laps: 2
       total_km: 7.0
     copernico:
       race_id: null           # ← заполнить перед стартом
@@ -29,7 +33,7 @@ distances:
 
   - distance: "2 км"
     distance_km: 2.0
-    db_event_id: null
+    db_event_id: 111
     tracked: false
     has_start_list: true
     checkpoint_distances: []
