@@ -3,8 +3,8 @@ display_name: "Женская семерка"
 year: 2026
 code: "girlseven"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: 56.0258580             # ← заполнить перед стартом
-start_lon: 92.9401780             # ← заполнить перед стартом
+start_lat: 56.025856             # ← заполнить перед стартом
+start_lon: 92.940173             # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
 description: "Женская семерка | Дистанция: 7 км"
 
@@ -16,10 +16,10 @@ distances:
     has_start_list: true
     checkpoint_distances: [0, 1.75, 5.25, 7.0]
     checkpoints:
-      - {name: "Старт",                    distance_km: 0.0,  lat: 56.0258580, lon: 92.9401780}
-      - {name: "КТ1 (Разворот, круг 1)",   distance_km: 1.75, lat: 56.0173830, lon: 92.9215870}
-      - {name: "КТ2 (Разворот, круг 2)",   distance_km: 5.25, lat: 56.0174730, lon: 92.9220370}
-      - {name: "Финиш",                    distance_km: 7.0,  lat: 56.0256500, lon: 92.9401830}
+      - {name: "Старт",                    distance_km: 0.0,  lat: 56.025856,  lon: 92.940173}
+      - {name: "КТ1 (Разворот, круг 1)",   distance_km: 1.75, lat: 56.017401,  lon: 92.921462}
+      - {name: "КТ2 (Разворот, круг 2)",   distance_km: 5.25, lat: 56.017354,  lon: 92.921471}
+      - {name: "Финиш",                    distance_km: 7.0,  lat: 56.025856,  lon: 92.940173}
     gpx_file: "static/map/2026/girlseven.gpx"            # ← заполнить перед стартом
     event_date: "2026-07-12"           # ← заполнить перед стартом
     route:
