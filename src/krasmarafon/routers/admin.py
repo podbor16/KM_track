@@ -63,10 +63,17 @@ def _event_file(code: str) -> Optional[Path]:
 
 
 def _loader_for_event(event_code: str) -> Optional[str]:
-    """Ищет config/loader/*.env с LOADER_CONFIG=.../events/{event_code}.yaml"""
+    """Ищет config/loader/*.env, чей LOADER_CONFIG указывает на YAML с данным code."""
     for f in LOADERS_DIR.glob("*.env"):
         for line in f.read_text(encoding="utf-8").splitlines():
-            if line.startswith("LOADER_CONFIG=") and f"/{event_code}.yaml" in line:
+            if not line.startswith("LOADER_CONFIG="):
+                continue
+            yaml_path = BASE_DIR / line.split("=", 1)[1].strip()
+            try:
+                data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("code", yaml_path.stem) == event_code:
                 return f.stem
     return None
 
