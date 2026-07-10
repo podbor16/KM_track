@@ -120,10 +120,30 @@ def get_event_by_db_id(
     return None, None
 
 
+_ACTIVE_EVENT_OVERRIDE_FILE = Path(__file__).parent.parent.parent / "config" / "active_event.local"
+
+
+def get_active_event_override() -> Optional[str]:
+    """Код события, активированного через /admin. Файл не в git — переживает деплой."""
+    try:
+        code = _ACTIVE_EVENT_OVERRIDE_FILE.read_text(encoding="utf-8").strip()
+        return code or None
+    except FileNotFoundError:
+        return None
+
+
+def set_active_event_override(code: str) -> None:
+    """Сохраняет активное событие вне git, чтобы деплой (git checkout) его не затирал."""
+    _ACTIVE_EVENT_OVERRIDE_FILE.write_text(code, encoding="utf-8")
+
+
 def get_active_event(
     events: dict[str, "EventConfig"],
 ) -> Optional["EventConfig"]:
-    """Найти единственное активное событие (is_active=true в YAML)."""
+    """Найти активное событие: приоритет — оверрайд из /admin, иначе is_active=true в YAML."""
+    override = get_active_event_override()
+    if override and override in events:
+        return events[override]
     return next((e for e in events.values() if e.is_active), None)
 
 

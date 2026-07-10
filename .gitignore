@@ -92,3 +92,7 @@ docs/siberman/2025_import_ready.xlsx
 docs/siberman/migrated_2025.xlsx
 docs/siberman/_verify_out.txt
 docs/siberman/~$*.xlsx
+
+# Активное событие, переключаемое из /admin — runtime-состояние, не код.
+# Не в git, чтобы деплой (git checkout) не затирал переключение на сервере.
+config/active_event.local

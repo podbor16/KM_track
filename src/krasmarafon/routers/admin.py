@@ -19,6 +19,7 @@ from src.config.event_loader import (
     get_active_event,
     invalidate_events_cache,
     load_events_cached,
+    set_active_event_override,
 )
 from src.core.auth import api_require_auth
 
@@ -131,7 +132,7 @@ async def list_events(user: str = Depends(api_require_auth)) -> list[dict]:
         result.append({
             "code": code,
             "name": ev.name,
-            "is_active": ev.is_active,
+            "is_active": (code == settings.CURRENT_EVENT),
             "db_event_ids": db_event_ids,
         })
     return result
@@ -172,33 +173,9 @@ async def activate_event(code: str, user: str = Depends(api_require_auth)) -> di
     if old_loader:
         _systemctl("stop", old_loader)
 
-    # Переключить is_active в YAML через ruamel.yaml
-    try:
-        from ruamel.yaml import YAML
-        _yaml = YAML()
-        _yaml.preserve_quotes = True
-
-        for yaml_file in EVENTS_DIR.glob("*.yaml"):
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = _yaml.load(f)
-            if not isinstance(data, dict):
-                continue
-            event_code = data.get("code", yaml_file.stem)
-            new_val = (event_code == code)
-            if data.get("is_active") != new_val:
-                data["is_active"] = new_val
-                with yaml_file.open("w", encoding="utf-8") as f:
-                    _yaml.dump(data, f)
-    except ImportError:
-        # Fallback: PyYAML (потеряет комментарии, но сработает)
-        for yaml_file in EVENTS_DIR.glob("*.yaml"):
-            data = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                continue
-            event_code = data.get("code", yaml_file.stem)
-            data["is_active"] = (event_code == code)
-            yaml_file.write_text(yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-
+    # Активное событие хранится вне git (config/active_event.local), а не в самих
+    # YAML — иначе очередной деплой (git checkout) затирал бы переключение из /admin.
+    set_active_event_override(code)
     _reload_settings()
 
     # Запустить новый загрузчик
