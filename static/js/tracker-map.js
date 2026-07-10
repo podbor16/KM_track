@@ -498,6 +498,7 @@ function showRunnerPanel(runner) {
     panel.classList.remove('runner-panel--hidden');
     activeRunnerId = String(runner.id);
     updateSelectedList();
+    drawCheckpointMarkers();
 
     // Elevate selected marker
     const marker = runnerMarkers[activeRunnerId];
@@ -516,6 +517,7 @@ function hideRunnerPanel() {
     document.getElementById('runner-panel').classList.add('runner-panel--hidden');
     activeRunnerId = null;
     updateSelectedList();
+    drawCheckpointMarkers();
 }
 
 function createRunnerMarker(runner) {
@@ -696,17 +698,49 @@ function centerMap() {
     }
 }
 
+// Группирует КТ, стоящие физически в одной точке (несколько кругов через один разворот) —
+// например 1.75 км и 5.25 км на женской семёрке. thresholdDeg ~ 0.001° ≈ 100 м.
+function groupNearbyCheckpoints(checkpoints, thresholdDeg = 0.001) {
+    const groups = [];
+    checkpoints.forEach(cp => {
+        const group = groups.find(g =>
+            Math.abs(g[0].lat - cp.lat) < thresholdDeg && Math.abs(g[0].lon - cp.lon) < thresholdDeg
+        );
+        if (group) group.push(cp); else groups.push([cp]);
+    });
+    return groups;
+}
+
+// Из группы КТ в одной точке выбирает актуальную для выбранного участника:
+// первую ещё не пройденную, либо последнюю, если все пройдены. Без выбранного
+// участника — первую по дистанции (состояние по умолчанию).
+function pickVisibleCheckpoint(group, runner) {
+    if (group.length === 1 || !runner) return group[0];
+    for (const cp of group) {
+        const ktCode = `kt${eventCheckpoints.indexOf(cp)}`;
+        const data = runner.checkpoints?.[ktCode];
+        if (!data || !data.time) return cp;
+    }
+    return group[group.length - 1];
+}
+
 function drawCheckpointMarkers() {
     checkpointMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
     checkpointMarkers = [];
     if (!eventCheckpoints || !eventCheckpoints.length) return;
 
     const totalDist = eventDistance || 5.0;
+    const timingCPs = eventCheckpoints.filter(cp =>
+        cp.lat && cp.lon && cp.distance_km > 0 && cp.distance_km < totalDist
+    );
 
-    eventCheckpoints.forEach(cp => {
-        if (!cp.lat || !cp.lon) return;
-        if (cp.distance_km <= 0 || cp.distance_km >= totalDist) return;
+    const activeRunner = activeRunnerId ? allRunners.find(r => String(r.id) === activeRunnerId) : null;
+    const visibleTiming = groupNearbyCheckpoints(timingCPs)
+        .map(group => pickVisibleCheckpoint(group, activeRunner));
 
+    const decorative = (eventDecorativeCheckpoints || []).filter(cp => cp.lat && cp.lon);
+
+    [...visibleTiming, ...decorative].forEach(cp => {
         const label = cp.distance_km % 1 === 0 ? String(cp.distance_km | 0) : String(cp.distance_km);
 
         const icon = L.divIcon({

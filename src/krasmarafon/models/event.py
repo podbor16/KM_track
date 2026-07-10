@@ -54,6 +54,7 @@ class DistanceInfo(BaseModel):
     route_type: str = Field("loop", description="Тип маршрута (shuttle/loop)")
     laps: int = Field(1, description="Количество кругов (1 для некруговых)")
     checkpoints: List[CheckpointInfo] = Field(default_factory=list, description="Контрольные точки с координатами")
+    decorative_checkpoints: List[CheckpointInfo] = Field(default_factory=list, description="Маркеры на карте без хронометража")
 
 
 class CurrentEventResponse(BaseModel):

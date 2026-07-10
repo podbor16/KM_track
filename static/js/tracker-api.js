@@ -39,6 +39,7 @@ let topFinishersGender = 'all'; // 'all' | 'Мужчина' | 'Женщина'
 let _analyticsResults  = [];    // кэш последних results для перерисовки топа
 let _lastAnalyticsRefresh = 0;  // throttle: не чаще раза в 10 сек
 let eventCheckpoints = [];  // [{name, distance_km, lat, lon}, ...] — из /api/current-event
+let eventDecorativeCheckpoints = [];  // маркеры на карте без хронометража (напр. ближний разворот)
 let activeRunnerId = null;  // id участника, чья панель сейчас открыта
 
 let serverTimeUnix = Date.now();
@@ -296,6 +297,7 @@ async function init() {
             CONFIG.CURRENT_DISTANCE = defaultDist.distance || '';
             CONFIG.LAPS = defaultDist.laps ?? 1;
             eventCheckpoints = defaultDist.checkpoints || [];
+            eventDecorativeCheckpoints = defaultDist.decorative_checkpoints || [];
         } else {
             // Fallback: одиночное событие без массива distances
             if (cfg.gpx_file) CONFIG.GPX_FILE = '/' + cfg.gpx_file;
@@ -358,7 +360,8 @@ function renderDistanceSwitcher(distances, activeDist) {
                 data-route-type="${d.route_type || 'loop'}"
                 data-label="${d.distance}"
                 data-laps="${d.laps ?? 1}"
-                data-checkpoints="${encodeURIComponent(JSON.stringify(d.checkpoints || []))}">
+                data-checkpoints="${encodeURIComponent(JSON.stringify(d.checkpoints || []))}"
+                data-decorative="${encodeURIComponent(JSON.stringify(d.decorative_checkpoints || []))}">
             ${d.distance}
         </button>
     `).join('');
@@ -373,19 +376,21 @@ function renderDistanceSwitcher(distances, activeDist) {
             const label = btn.dataset.label || '';
             const laps = parseInt(btn.dataset.laps) || 1;
             const checkpoints = JSON.parse(decodeURIComponent(btn.dataset.checkpoints || '%5B%5D'));
+            const decorative = JSON.parse(decodeURIComponent(btn.dataset.decorative || '%5B%5D'));
             container.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            switchDistance(eventId, gpx, routeType, label, laps, checkpoints);
+            switchDistance(eventId, gpx, routeType, label, laps, checkpoints, decorative);
         });
     });
 }
 
-async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, checkpoints = []) {
+async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, checkpoints = [], decorativeCheckpoints = []) {
     CONFIG.EVENT_ID = eventId;
     CONFIG.GPX_FILE = gpxFile;
     CONFIG.LAPS = laps;
     if (label) CONFIG.CURRENT_DISTANCE = label;
     eventCheckpoints = checkpoints;
+    eventDecorativeCheckpoints = decorativeCheckpoints;
     updateEventTitle();
 
     // Сбросить выбранных участников — они принадлежат другой дистанции
@@ -739,6 +744,7 @@ function startAutoUpdate() {
                     if (activeRunner) {
                         const content = document.getElementById('runner-panel-content');
                         if (content) content.innerHTML = buildPopupContent(activeRunner);
+                        drawCheckpointMarkers();
                     }
                 }
             }

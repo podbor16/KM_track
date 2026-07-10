@@ -77,6 +77,10 @@ async def get_current_event() -> CurrentEventResponse:
                 CheckpointInfo(name=cp.name, distance_km=cp.distance_km, lat=cp.lat, lon=cp.lon)
                 for cp in d.checkpoints
             ],
+            decorative_checkpoints=[
+                CheckpointInfo(name=cp.name, distance_km=cp.distance_km, lat=cp.lat, lon=cp.lon)
+                for cp in d.decorative_checkpoints
+            ],
         )
         for d in tracked_distances
     ]

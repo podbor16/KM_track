@@ -44,6 +44,7 @@ class DistanceConfig(BaseModel):
     has_start_list: bool = False
     checkpoint_distances: list[float] = []
     checkpoints: list[CheckpointCoord] = []
+    decorative_checkpoints: list[CheckpointCoord] = []  # маркеры на карте без хронометража (kt1/kt2 и т.п.)
     gpx_file: Optional[str] = None
     event_date: Optional[str] = None
     route: RouteConfig = RouteConfig()

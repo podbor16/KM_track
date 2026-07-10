@@ -20,6 +20,8 @@ distances:
       - {name: "КТ1 (Разворот, круг 1)",   distance_km: 1.75, lat: 56.017401,  lon: 92.921462}
       - {name: "КТ2 (Разворот, круг 2)",   distance_km: 5.25, lat: 56.017354,  lon: 92.921471}
       - {name: "Финиш",                    distance_km: 7.0,  lat: 56.025856,  lon: 92.940173}
+    decorative_checkpoints:
+      - {name: "Ближний разворот",         distance_km: 3.5,  lat: 56.02528,   lon: 92.94015}
     gpx_file: "static/map/2026/girlseven.gpx"            # ← заполнить перед стартом
     event_date: "2026-07-12"           # ← заполнить перед стартом
     route:
