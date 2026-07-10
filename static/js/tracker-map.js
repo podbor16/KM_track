@@ -724,6 +724,22 @@ function pickVisibleCheckpoint(group, runner) {
     return group[group.length - 1];
 }
 
+// Декоративная точка (без хронометража) показывается только после того, как
+// участник прошёл ближайшую предыдущую КТ с хронометражем. Например 3.5 км
+// (ближний разворот) на женской семёрке появляется только после КТ1 (1.75 км).
+// Без выбранного участника — скрыта (не с чем сверять прогресс).
+function isDecorativeCheckpointVisible(cp, runner) {
+    if (!runner) return false;
+    const priorTiming = eventCheckpoints
+        .filter(t => t.distance_km < cp.distance_km)
+        .sort((a, b) => b.distance_km - a.distance_km)[0];
+    if (!priorTiming) return true;
+    const idx = eventCheckpoints.indexOf(priorTiming);
+    if (idx === 0) return true;  // предыдущая точка — старт, всегда пройден
+    const data = runner.checkpoints?.[`kt${idx}`];
+    return !!(data && data.time);
+}
+
 function drawCheckpointMarkers() {
     checkpointMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
     checkpointMarkers = [];
@@ -738,7 +754,8 @@ function drawCheckpointMarkers() {
     const visibleTiming = groupNearbyCheckpoints(timingCPs)
         .map(group => pickVisibleCheckpoint(group, activeRunner));
 
-    const decorative = (eventDecorativeCheckpoints || []).filter(cp => cp.lat && cp.lon);
+    const decorative = (eventDecorativeCheckpoints || [])
+        .filter(cp => cp.lat && cp.lon && isDecorativeCheckpointVisible(cp, activeRunner));
 
     [...visibleTiming, ...decorative].forEach(cp => {
         const label = cp.distance_km % 1 === 0 ? String(cp.distance_km | 0) : String(cp.distance_km);
