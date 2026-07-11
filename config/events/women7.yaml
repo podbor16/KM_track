@@ -3,15 +3,15 @@ display_name: "Женская семерка"
 year: 2026
 code: "girlseven"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: 56.025856             # ← заполнить перед стартом
-start_lon: 92.940173             # ← заполнить перед стартом
-gun_time: null                # ← заполнить перед стартом
+start_lat: 56.025856
+start_lon: 92.940173
+gun_time: "10:00:00"          # старт 2026-07-12 10:00 Красноярск (UTC+7)
 description: "Женская семерка | Дистанция: 7 км"
 
 distances:
   - distance: "7 км"
     distance_km: 7.0
-    db_event_id: 110         # ← заполнить перед стартом
+    db_event_id: 110
     tracked: true
     has_start_list: true
     checkpoint_distances: [0, 1.75, 5.25, 7.0]
@@ -22,16 +22,16 @@ distances:
       - {name: "Финиш",                    distance_km: 7.0,  lat: 56.025856,  lon: 92.940173}
     decorative_checkpoints:
       - {name: "Ближний разворот",         distance_km: 3.5,  lat: 56.02528,   lon: 92.94015}
-    gpx_file: "static/map/2026/girlseven.gpx"            # ← заполнить перед стартом
-    event_date: "2026-07-12"           # ← заполнить перед стартом
+    gpx_file: "static/map/2026/girlseven.gpx"
+    event_date: "2026-07-12"
     route:
       laps: 2
       total_km: 7.0
     copernico:
-      race_id: null           # ← заполнить перед стартом
+      race_id: "--2026-85930"
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
-      event: "7 км"
+      preset: "km_girlseven_2026"
+      event: "7km"
 
   - distance: "2 км"
     distance_km: 2.0

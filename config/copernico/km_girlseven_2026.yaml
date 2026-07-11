@@ -1,0 +1,20 @@
+description: "Женская семёрка 2026, 7км, 2 КТ (Разворот 1.75км x2 круга)."
+
+fields:
+  bib: dorsal
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+time_fields:
+  gun_start:   "times.official_:::start:::"
+  gun_finish:  "times.official_:::finish:::"
+  chip_start:  null
+  chip_finish: null
+
+checkpoint_fields:
+  kt1: "times.official_razv1"   # разворот, 1.75 км, круг 1
+  kt2: "times.official_razv2"   # разворот, 5.25 км, круг 2
