@@ -191,9 +191,10 @@ async function loadRunnersData(silent = false) {
         }
         
         // Заполняем фильтры
+        populateGenderFilter(allRunners);
         populateAgeGroups(allRunners);
         populateDistances(allRunners);
-        
+
         applyFilters();
         if (!silent) {
             showLoading(false);
@@ -293,6 +294,40 @@ function convertRaceStatus(raceStatus) {
     return 'notstarted';
 }
 
+
+// Заполняем опции пола — только те, что реально встречаются у участников
+// (напр. на "Женской семёрке" мужчин нет вообще, не показываем такой вариант)
+function populateGenderFilter(runners) {
+    const genderSelect = document.getElementById('genderFilter');
+    const savedValue = genderSelect.value;
+
+    const genders = new Set();
+    runners.forEach(runner => {
+        if (runner.gender) genders.add(runner.gender);
+    });
+
+    genderSelect.innerHTML = '';
+
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'Все';
+    genderSelect.appendChild(allOption);
+
+    // Женщина раньше Мужчины — соответствует порядку в остальном UI
+    const order = { 'Женщина': 0, 'Мужчина': 1 };
+    Array.from(genders).sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99)).forEach(gender => {
+        const option = document.createElement('option');
+        option.value = gender;
+        option.textContent = gender;
+        genderSelect.appendChild(option);
+    });
+
+    if (savedValue && Array.from(genderSelect.options).some(opt => opt.value === savedValue)) {
+        genderSelect.value = savedValue;
+    } else {
+        genderSelect.value = '';
+    }
+}
 
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
@@ -483,6 +518,7 @@ function applyFilters() {
     console.log(`Результат фильтрации: ${filteredRunners.length} из ${allRunners.length} участников`);
     
     // Заполняем фильтры со ВСЕМИ данными (чтобы опции не исчезали)
+    populateGenderFilter(allRunners);
     populateAgeGroups(allRunners);
     populateDistances(allRunners);
     
