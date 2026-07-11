@@ -406,13 +406,11 @@ function populateDistances(runners) {
     
     // Очищаем текущие опции
     distanceSelect.innerHTML = '';
-    
-    // Добавляем опцию "Все" первой
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = 'Все';
-    distanceSelect.appendChild(allOption);
-    
+
+    // "Все" не даём выбрать: rank_absolute/rank_sex/rank_category считаются
+    // отдельно на каждую дистанцию (event_id) — при смешении дистанций места
+    // задваиваются и теряют смысл. Дистанция должна быть выбрана всегда.
+
     // Сортируем дистанции по возрастанию
     const sortedDistances = Array.from(distances).sort((a, b) => {
         // Извлекаем числовое значение для сортировки
@@ -424,17 +422,19 @@ function populateDistances(runners) {
         // Если числа одинаковые, сортируем по строке
         return a.localeCompare(b, 'ru');
     });
-    
+
     sortedDistances.forEach(distance => {
         const option = document.createElement('option');
         option.value = distance;
         option.textContent = distance;
         distanceSelect.appendChild(option);
     });
-    
-    // Восстанавливаем сохраненное значение
-    if (savedValue) {
+
+    // Восстанавливаем сохранённое значение, иначе — первая дистанция по умолчанию
+    if (savedValue && sortedDistances.includes(savedValue)) {
         distanceSelect.value = savedValue;
+    } else if (sortedDistances.length > 0) {
+        distanceSelect.value = sortedDistances[0];
     }
 }
 
@@ -505,6 +505,19 @@ function applyFilters() {
 const formatTime = KMUtils.formatTime.bind(KMUtils);
 const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 
+// Место должно пересчитываться под активные фильтры пол/возрастная группа —
+// сервер уже присылает все три варианта (rank_absolute/rank_sex/rank_category),
+// каждый посчитан отдельно на дистанцию (event_id). Возрастная группа в этой
+// системе уже включает пол ("женщины до 49 лет"), поэтому при активном
+// фильтре по группе rank_category достаточен сам по себе.
+function getActiveRankField() {
+    const genderFilter = document.getElementById('genderFilter').value;
+    const ageGroupFilter = document.getElementById('ageGroupFilter').value;
+    if (ageGroupFilter !== '') return 'rank_category';
+    if (genderFilter !== '') return 'rank_sex';
+    return 'rank_absolute';
+}
+
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
 function _sortArray(arr) {
     if (!sortState.column) return arr;
@@ -512,10 +525,12 @@ function _sortArray(arr) {
     return [...arr].sort((a, b) => {
         let valA, valB;
         switch (sortState.column) {
-            case 'rank':
-                valA = a.rank_absolute || 9999;
-                valB = b.rank_absolute || 9999;
+            case 'rank': {
+                const rankField = getActiveRankField();
+                valA = a[rankField] || 9999;
+                valB = b[rankField] || 9999;
                 break;
+            }
             case 'bib':
                 valA = parseInt(a.start_number) || 9999;
                 valB = parseInt(b.start_number) || 9999;
@@ -563,11 +578,13 @@ function renderResultsTable(runners) {
     const tbody = document.getElementById('resultsTableBody');
     tbody.innerHTML = '';
 
+    const rankField = getActiveRankField();
+
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
         row.className = 'km-tr';
 
-        const rankAbs = runner.rank_absolute;
+        const rankAbs = runner[rankField];
         let rankDisplay;
         if (rankAbs === 1) rankDisplay = `<span class="km-rank-medal km-rank-medal--1">1</span>`;
         else if (rankAbs === 2) rankDisplay = `<span class="km-rank-medal km-rank-medal--2">2</span>`;
