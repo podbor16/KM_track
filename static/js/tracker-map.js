@@ -158,7 +158,7 @@ function makeStartFlagHtml(label) {
 
 function buildMarkerIcon(runner) {
     const runnerId = String(runner.id);
-    const color = getStatusColor(runner.status, runner.lap ?? 0);
+    const color = getStatusColor(runner.status, getVisualLap(runner));
     const fontSize = String(runner.start_number).length >= 3 ? '11px' : '13px';
 
     const anim = runnerAnimations[runnerId];
@@ -243,7 +243,7 @@ function buildPopupContent(runner) {
     const isFinished = status === 'finished' || status === 'финишировал' || status.startsWith('finish');
 
     // Circle badge — same color as map marker
-    const circleColor = getStatusColor(runner.status, runner.lap ?? 0);
+    const circleColor = getStatusColor(runner.status, getVisualLap(runner));
     const numLen = String(runner.start_number).length;
     const numFontSize = numLen >= 4 ? '10px' : numLen >= 3 ? '11px' : '13px';
 
@@ -554,7 +554,7 @@ function updateRunnerMarkerPosition(runner) {
     } else {
         anim.status = 'running';
         const newSpeed = runner.speed > 0 ? runner.speed : 10.0;
-        anim.color  = getStatusColor(runner.status, runner.lap ?? 0);
+        anim.color  = getStatusColor(runner.status, getVisualLap(runner));
 
         // --- плавная коррекция позиции (lerp) при изменении данных ---
         const nowMs = Date.now();

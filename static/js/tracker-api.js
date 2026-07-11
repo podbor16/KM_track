@@ -99,6 +99,20 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
+// Визуальный круг по непрерывной оценке дистанции (runner.current_distance), а не по
+// runner.lap из БД. runner.lap меняется только когда приходит фактическое время КТ — на
+// женской семёрке круг 2 физически начинается на ближнем развороте (3.5 км), где нет
+// точки хронометража, поэтому runner.lap там ещё "1" вплоть до КТ2 на 5.25 км. Маршрут
+// при этом считается равными кругами (total_km / laps), так что деление по дистанции
+// корректно отражает, на каком круге участник находится визуально.
+function getVisualLap(runner) {
+    if (!CONFIG.LAPS || CONFIG.LAPS <= 1 || !eventDistance) return runner.lap ?? 1;
+    const lapLen = eventDistance / CONFIG.LAPS;
+    if (lapLen <= 0) return runner.lap ?? 1;
+    const dist = runner.current_distance ?? 0;
+    return Math.min(CONFIG.LAPS, Math.floor(dist / lapLen) + 1);
+}
+
 function getStatusColor(status, lap = 0) {
     const s = (status || '').toLowerCase();
     if (s.includes('finish'))  return STATUS_COLORS.finished;
