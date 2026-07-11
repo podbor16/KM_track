@@ -285,7 +285,7 @@ function convertRaceStatus(raceStatus) {
     const lowerStatus = raceStatus.toLowerCase();
     
     if (lowerStatus.includes('finish')) return 'finished';
-    if (lowerStatus.includes('not start') || lowerStatus === 'not started') return 'notstarted';
+    if (lowerStatus.includes('notstarted') || lowerStatus.includes('not start')) return 'notstarted';
     if (lowerStatus.includes('running') || lowerStatus.includes('started')) return 'running';
     if (lowerStatus.includes('withdraw')) return 'disqualified';
     if (lowerStatus.includes('disqualif')) return 'disqualified';

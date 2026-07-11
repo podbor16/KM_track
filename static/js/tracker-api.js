@@ -102,6 +102,7 @@ function getStatusText(status) {
 function getStatusColor(status, lap = 0) {
     const s = (status || '').toLowerCase();
     if (s.includes('finish'))  return STATUS_COLORS.finished;
+    if (s.includes('notstarted')) return STATUS_COLORS.notstarted;
     if (s.includes('running') || s.includes('started')) {
         if (lap > 0 && CONFIG.LAPS > 1) return LAP_COLORS[(lap - 1) % LAP_COLORS.length];
         return STATUS_COLORS.running;
