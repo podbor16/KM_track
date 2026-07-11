@@ -214,6 +214,18 @@ def convert_gender(gender: Optional[str]) -> str:
         return "Женщина"
 
 
+_BIRTHDATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def normalize_birthdate(bd: Optional[str]) -> str:
+    """Валидирует дату рождения из Copernico. Невалидные значения (пусто,
+    '0000-00-00' и т.п.) заменяются на заглушку — иначе MySQL в strict mode
+    отклоняет всю строку целиком, а executemany() роняет из-за неё весь батч."""
+    if not bd or not _BIRTHDATE_RE.match(str(bd)) or str(bd).startswith('0000'):
+        return '1900-01-01'
+    return bd
+
+
 def normalize_time(t: Optional[str]) -> Optional[str]:
     """Приводит строку времени HH:MM:SS к формату с ведущими нулями (02:05:36)"""
     if t is None:
@@ -479,7 +491,7 @@ class RaceLoader:
                 dorsal = runner.get('dorsal')
                 surname = (runner.get('surname') or '').strip()
                 name = (runner.get('name') or '').strip()
-                birthdate = runner.get('birthdate') or '1900-01-01'
+                birthdate = normalize_birthdate(runner.get('birthdate'))
 
                 if not dorsal or not surname or not name:
                     continue
@@ -665,7 +677,7 @@ class RaceLoader:
             # === РЕЗУЛЬТАТЫ ===
             surname = (runner.get('surname') or '').strip()
             name = (runner.get('name') or '').strip()
-            birthdate = runner.get('birthdate')
+            birthdate = normalize_birthdate(runner.get('birthdate'))
             sex = convert_gender(runner.get('gender'))
             # Категория берётся из Copernico как есть
             category = (runner.get('category') or '').strip() or 'Unknown'
