@@ -26,10 +26,20 @@ load_dotenv(project_root / ".env")
 
 import yaml
 import json
+import gzip
 import xml.etree.ElementTree as ET
 import mysql.connector
 import urllib.request
 import urllib.error
+
+
+def _read_response_text(response) -> str:
+    """Читает тело ответа, прозрачно распаковывая gzip (Copernico иногда
+    сжимает большие ответы, не всегда честно указывая Content-Encoding)."""
+    raw = response.read()
+    if raw[:2] == b"\x1f\x8b":  # gzip magic bytes
+        raw = gzip.decompress(raw)
+    return raw.decode("utf-8")
 
 
 def connect_db():
@@ -214,7 +224,7 @@ def check_api(cfg, dist_cfg, server_url):
     def get(path):
         try:
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as r:
-                return r.status, r.read().decode("utf-8")
+                return r.status, _read_response_text(r)
         except urllib.error.URLError:
             return None, None
 
@@ -318,7 +328,7 @@ def check_preset_fields(dist_cfg):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "KM_track/1.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            body = json.loads(r.read().decode("utf-8"))
+            body = json.loads(_read_response_text(r))
     except urllib.error.HTTPError as e:
         fail("G", "Поля API", f"HTTP {e.code} при fetch из Copernico")
         return
@@ -371,7 +381,7 @@ def inspect_preset(dist_cfg):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "KM_track/1.0"})
         with urllib.request.urlopen(req, timeout=10) as r:
-            body = json.loads(r.read().decode("utf-8"))
+            body = json.loads(_read_response_text(r))
     except urllib.error.HTTPError as e:
         print(f"FAIL: HTTP {e.code}")
         sys.exit(1)
