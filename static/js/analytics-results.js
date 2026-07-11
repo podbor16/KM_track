@@ -299,74 +299,65 @@ function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
     const genderFilter = document.getElementById('genderFilter').value; // Получаем выбранный пол
     const savedValue = ageGroupSelect.value;
-    const ageGroups = new Set();
-    
+
+    // Категория → множество полов, которым она реально встречается у участников.
+    // Формат строки category не унифицирован между событиями ("Ж 49" / "женщины
+    // до 49 лет" / "Мужчины 30-39"), поэтому определяем пол категории по факту
+    // (runner.gender уже нормализован одинаково везде), а не парсингом строки.
+    const categoryGenders = new Map();
     runners.forEach(runner => {
-        // Для результатов используем 'category'
-        if (runner.category) {
-            ageGroups.add(runner.category);
-        } else if (runner.age_group) {
-            ageGroups.add(runner.age_group);
-        } else if (runner['Возрастная категория']) {
-            ageGroups.add(runner['Возрастная категория']);
-        }
+        const cat = runner.category || runner.age_group || runner['Возрастная категория'];
+        if (!cat) return;
+        if (!categoryGenders.has(cat)) categoryGenders.set(cat, new Set());
+        if (runner.gender) categoryGenders.get(cat).add(runner.gender);
     });
-    
+
     // Очищаем текущие опции
     ageGroupSelect.innerHTML = '';
-    
+
     // Добавляем опцию "Все" первой
     const allOption = document.createElement('option');
     allOption.value = '';
     allOption.textContent = 'Все';
     ageGroupSelect.appendChild(allOption);
-    
+
     // Фильтруем группы по выбранному полу
-    let filteredGroups = Array.from(ageGroups);
-    
-    if (genderFilter === 'Мужчина') {
-        // Показываем только мужские группы
-        filteredGroups = filteredGroups.filter(group => group.startsWith('мужчины'));
-    } else if (genderFilter === 'Женщина') {
-        // Показываем только женские группы
-        filteredGroups = filteredGroups.filter(group => group.startsWith('женщины'));
+    let filteredGroups = Array.from(categoryGenders.keys());
+
+    if (genderFilter) {
+        filteredGroups = filteredGroups.filter(group => categoryGenders.get(group).has(genderFilter));
     }
     
+    // Порядок возраста по числовому диапазону в названии — не завязан на суффикс
+    // "лет"/"года" или префикс "до", поэтому одинаково работает и для "Ж 49",
+    // и для "женщины до 49 лет".
+    const AGE_ORDER_RULES = [
+        [1, /49/],
+        [2, /50-?\s*59/],
+        [3, /60-?\s*64/],
+        [4, /65-?\s*69/],
+        [5, /70-?\s*74/],
+        [6, /75|80\+|65\s*лет\s*и\s*старше/],
+    ];
+    const ageGroupOrder = cat => {
+        for (const [order, re] of AGE_ORDER_RULES) {
+            if (re.test(cat)) return order;
+        }
+        return 99;
+    };
+
     // Сортируем группы в правильном порядке
     const sortedGroups = filteredGroups.sort((a, b) => {
         // Если пол не выбран - женские группы в начало, потом мужские
         if (!genderFilter) {
-            const aIsFemale = a.startsWith('женщины');
-            const bIsFemale = b.startsWith('женщины');
-            
+            const aIsFemale = categoryGenders.get(a).has('Женщина');
+            const bIsFemale = categoryGenders.get(b).has('Женщина');
+
             if (aIsFemale && !bIsFemale) return -1;
             if (!aIsFemale && bIsFemale) return 1;
         }
-        
-        // Определяем порядок возрастов для правильной сортировки
-        const ageOrder = {
-            'до 49 лет': 1,
-            '50-59 лет': 2,
-            '60-64 года': 3,
-            '65-69 лет': 4,
-            '70-74 года': 5,
-            '75 лет и старше': 6,
-            '65 лет и старше': 6  // для женщин после 65
-        };
-        
-        // Извлекаем возрастной диапазон из названия группы
-        let aAgeKey = '';
-        let bAgeKey = '';
-        
-        for (let key in ageOrder) {
-            if (a.includes(key)) aAgeKey = key;
-            if (b.includes(key)) bAgeKey = key;
-        }
-        
-        const aOrder = ageOrder[aAgeKey] || 99;
-        const bOrder = ageOrder[bAgeKey] || 99;
-        
-        return aOrder - bOrder;
+
+        return ageGroupOrder(a) - ageGroupOrder(b);
     });
     
     sortedGroups.forEach(group => {
