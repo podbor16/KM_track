@@ -495,13 +495,21 @@ class RaceLoader:
                     'Not started'
                 ))
 
-                if len(batch) >= BATCH_SIZE or idx == len(runners):
+                if len(batch) >= BATCH_SIZE:
                     count = self._bulk_insert(batch)
                     self.inserted_count += count
                     batch = []
 
                     elapsed = time.time() - start_time
                     self.logger.info(f"   ⏱️ {idx}/{len(runners)} участников ({elapsed:.1f}с)")
+
+            # Финальный флаш остатка батча. Нельзя полагаться на "idx == len(runners)"
+            # внутри цикла — если последние записи в API невалидны (пропускаются через
+            # continue), эта проверка никогда не выполнится и хвост батча потеряется.
+            if batch:
+                count = self._bulk_insert(batch)
+                self.inserted_count += count
+                batch = []
 
             elapsed = time.time() - start_time
             self.logger.info(f"\n✅ INIT завершена")

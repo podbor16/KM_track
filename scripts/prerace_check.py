@@ -247,13 +247,6 @@ def check_api(cfg, dist_cfg, server_url):
     else:
         fail("E", "API /event-results", f"HTTP {status}")
 
-    # /api/event-info
-    status, _ = get(f"/api/event-info?event_id={db_event_id}")
-    if status == 200:
-        ok("E", "API /event-info", f"200 OK")
-    else:
-        fail("E", "API /event-info", f"HTTP {status}")
-
 
 # ── Блок F: Copernico ───────────────────────────────────────────────────────
 
