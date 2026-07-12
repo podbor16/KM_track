@@ -60,7 +60,7 @@ def _build_delta_payload(result, event_id: int) -> str:
         'total_distance_km': result.total_distance_km if is_initial else None,
         'total_results': result.total_results,
         'results': delta,
-    })
+    }, default=str)
 
 
 # Инициализация приложения
