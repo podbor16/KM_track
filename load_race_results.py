@@ -750,6 +750,15 @@ class RaceLoader:
             # === РЕЗУЛЬТАТЫ ===
             surname = (runner.get('surname') or '').strip()
             name = (runner.get('name') or '').strip()
+
+            # Copernico иногда отдаёт две записи с одним и тем же dorsal одновременно
+            # (плейсхолдер "Dorsal sin datos" + реальный участник, пока организатор
+            # правит номера). Пустые surname/name — не обновляем, иначе плейсхолдер
+            # затирает уже сохранённые настоящие данные под этим номером.
+            if not surname or not name:
+                self.logger.warning(f"⚠️ Пропущено обновление №{dorsal}: пустые surname/name в этой записи Copernico")
+                continue
+
             birthdate = normalize_birthdate(runner.get('birthdate'))
             sex = convert_gender(runner.get('gender'))
             # Категория берётся из Copernico как есть
