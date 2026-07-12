@@ -527,6 +527,23 @@ class RaceLoader:
         if assigned_sweepers:
             next_sweeper_number = max(next_sweeper_number, max(assigned_sweepers.values()) + 1)
 
+        # "Осиротевшие" номера: реальный (не синтетический) start_number в БД,
+        # которого нет в текущей выгрузке Copernico — обычно бибы переназначили
+        # (человек уже есть под новым номером) либо участника сняли. Не удаляем
+        # автоматически — только подсвечиваем в отдельной метке лога, чтобы
+        # /admin показал это во всплывающем окне и решение принял человек.
+        current_numeric = {str(d) for d in numeric_dorsals}
+        orphaned = [
+            row for row in existing_rows
+            if row['start_number'] is not None
+            and row['start_number'] < SWEEPER_NUMBER_OFFSET
+            and str(row['start_number']) not in current_numeric
+        ]
+        if orphaned:
+            self.logger.warning(f"⚠️ ОСИРОТЕВШИЕ_НОМЕРА: {len(orphaned)}")
+            for row in orphaned:
+                self.logger.warning(f"   ОСИРОТЕВШИЙ: №{row['start_number']} {row['surname']} {row['name']}")
+
         batch = []
         start_time = time.time()
 

@@ -297,19 +297,27 @@ async def loader_init(name: str, user: str = Depends(api_require_auth)) -> dict:
         output = (stdout + stderr).decode("utf-8", errors="replace")
 
         inserted = 0
+        orphaned = []
         for line in output.splitlines():
             if "Вставлено:" in line:
                 try:
                     inserted = int(line.split("Вставлено:")[1].split()[0])
                 except Exception:
                     pass
+            if "ОСИРОТЕВШИЙ:" in line:
+                orphaned.append(line.split("ОСИРОТЕВШИЙ:")[1].strip())
 
         success = proc.returncode == 0
-        return {"status": "ok" if success else "error", "inserted": inserted, "output": output[-3000:]}
+        return {
+            "status": "ok" if success else "error",
+            "inserted": inserted,
+            "orphaned": orphaned,
+            "output": output[-3000:],
+        }
     except asyncio.TimeoutError:
-        return {"status": "error", "inserted": 0, "output": "Timeout: Copernico API не ответил за 3 минуты"}
+        return {"status": "error", "inserted": 0, "orphaned": [], "output": "Timeout: Copernico API не ответил за 3 минуты"}
     except Exception as e:
-        return {"status": "error", "inserted": 0, "output": str(e)}
+        return {"status": "error", "inserted": 0, "orphaned": [], "output": str(e)}
 
 
 # ---------------------------------------------------------------------------

@@ -512,11 +512,16 @@
         try {
             const r = await fetch(`/api/admin/loader/${name}/init`, {method: 'POST'});
             const data = await r.json();
+            const orphanedBlock = (data.orphaned && data.orphaned.length)
+                ? `\n\n⚠️ Осиротевшие номера (есть в БД, нет в текущей выгрузке Copernico — ` +
+                  `биб мог быть переназначен другому участнику, либо участника сняли; ` +
+                  `не удалены автоматически):\n` + data.orphaned.map(o => `  ${o}`).join('\n')
+                : '';
             if (data.status === 'ok') {
-                alert(`✓ Инициализация "${name}" завершена.\nВставлено: ${data.inserted}`);
+                alert(`✓ Инициализация "${name}" завершена.\nВставлено: ${data.inserted}${orphanedBlock}`);
             } else {
                 console.error('Init error:', data.output);
-                alert(`✗ Ошибка инициализации "${name}":\n\n${data.output || 'нет деталей'}`);
+                alert(`✗ Ошибка инициализации "${name}":\n\n${data.output || 'нет деталей'}${orphanedBlock}`);
             }
         } catch(e) {
             alert(`✗ Ошибка сети при инициализации "${name}": ${e.message}`);
