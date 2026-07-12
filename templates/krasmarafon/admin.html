@@ -469,7 +469,6 @@
                 <button class="km-btn km-btn--primary btn-start" ${isActive ? 'disabled' : ''}>Start</button>
                 <button class="km-btn km-btn--secondary btn-stop" ${!isActive ? 'disabled' : ''}>Stop</button>
                 <button class="km-btn km-btn--secondary btn-init" title="Первичная загрузка участников из Copernico">Инициализация</button>
-                <span class="init-result" style="font-size:12px;display:none"></span>
             </td>`;
 
         tr.querySelector('.btn-start').addEventListener('click', async () => {
@@ -502,7 +501,6 @@
 
     async function loaderInit(name, tr) {
         const btn = tr.querySelector('.btn-init');
-        const result = tr.querySelector('.init-result');
         const btnStart = tr.querySelector('.btn-start');
         const btnStop = tr.querySelector('.btn-stop');
 
@@ -510,24 +508,18 @@
         btnStart.disabled = true;
         btnStop.disabled = true;
         btn.textContent = 'Загрузка...';
-        result.style.display = 'none';
 
         try {
             const r = await fetch(`/api/admin/loader/${name}/init`, {method: 'POST'});
             const data = await r.json();
-            result.style.display = 'inline';
             if (data.status === 'ok') {
-                result.style.color = 'var(--km-color-success, #4caf50)';
-                result.textContent = `✓ Вставлено: ${data.inserted}`;
+                alert(`✓ Инициализация "${name}" завершена.\nВставлено: ${data.inserted}`);
             } else {
-                result.style.color = 'var(--km-color-error, #e84c8c)';
-                result.textContent = `✗ Ошибка`;
                 console.error('Init error:', data.output);
+                alert(`✗ Ошибка инициализации "${name}":\n\n${data.output || 'нет деталей'}`);
             }
         } catch(e) {
-            result.style.display = 'inline';
-            result.style.color = 'var(--km-color-error, #e84c8c)';
-            result.textContent = `✗ ${e.message}`;
+            alert(`✗ Ошибка сети при инициализации "${name}": ${e.message}`);
         }
 
         btn.textContent = 'Инициализация';
