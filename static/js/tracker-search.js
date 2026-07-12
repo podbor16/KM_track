@@ -109,9 +109,15 @@ function searchRunners() {
         return;
     }
 
+    // Поиск по номеру — сортируем по возрастанию номера, поиск по фамилии — по алфавиту
+    const isNumericQuery = /^\d+$/.test(searchText);
+
     const results = allRunners.filter(runner =>
         runner.full_name.toLowerCase().includes(searchText) ||
         String(runner.start_number).includes(searchText)
+    ).sort((a, b) => isNumericQuery
+        ? a.start_number - b.start_number
+        : a.full_name.localeCompare(b.full_name, 'ru')
     ).slice(0, 15);
 
     if (results.length === 0) {
