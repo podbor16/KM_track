@@ -297,6 +297,7 @@ class RaceLoader:
         self.connection = None
         self.cursor = None
         self.existing_results: Dict[str, Dict] = {}
+        self.existing_results_by_name: Dict[Tuple[str, str], Dict] = {}
         self.inserted_count = 0
         self.updated_results_count = 0
         self.updated_segments_count = 0
@@ -474,6 +475,10 @@ class RaceLoader:
                 (self.event_id,)
             )
             self.existing_results = {}
+            # Участники с синтетическим start_number (замыкающие и т.п. — см.
+            # SWEEPER_NUMBER_OFFSET в init_mode) не имеют числового dorsal в
+            # Copernico, поэтому в continuous_mode сопоставляются по имени.
+            self.existing_results_by_name = {}
             for row in self.cursor.fetchall():
                 row_dict = dict(row)
                 for field in ['time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish']:
@@ -485,6 +490,8 @@ class RaceLoader:
                 if row_dict.get('start_number') is not None:
                     dorsal = str(row_dict['start_number'])
                     self.existing_results[dorsal] = row_dict
+                    if row_dict['start_number'] >= SWEEPER_NUMBER_OFFSET:
+                        self.existing_results_by_name[(row_dict['surname'], row_dict['name'])] = row_dict
                 else:
                     self.logger.warning(f"⚠️ Пропущен участник {row_dict['surname']} {row_dict['name']} из-за отсутствия start_number")
             self.logger.info(f"✅ Кэш загружен: {len(self.existing_results)} результатов")
@@ -738,16 +745,7 @@ class RaceLoader:
         kt_f = self._kt_fields
 
         for runner in runners:
-            dorsal = str(runner.get('dorsal'))
-
-            if dorsal not in self.existing_results:
-                self.logger.warning(f"⚠️ Участник с номером {dorsal} не найден в кэше (возможно, нет start_number в БД)")
-                continue
-
-            existing = self.existing_results[dorsal]
-            result_id = existing['id']
-
-            # === РЕЗУЛЬТАТЫ ===
+            raw_dorsal = runner.get('dorsal')
             surname = (runner.get('surname') or '').strip()
             name = (runner.get('name') or '').strip()
 
@@ -756,8 +754,23 @@ class RaceLoader:
             # правит номера). Пустые surname/name — не обновляем, иначе плейсхолдер
             # затирает уже сохранённые настоящие данные под этим номером.
             if not surname or not name:
-                self.logger.warning(f"⚠️ Пропущено обновление №{dorsal}: пустые surname/name в этой записи Copernico")
+                self.logger.warning(f"⚠️ Пропущено обновление №{raw_dorsal}: пустые surname/name в этой записи Copernico")
                 continue
+
+            if is_valid_dorsal(raw_dorsal):
+                dorsal = str(raw_dorsal)
+                existing = self.existing_results.get(dorsal)
+            else:
+                # Замыкающий и т.п. — числового dorsal нет, сопоставляем по имени
+                # с синтетическим номером, назначенным в init_mode.
+                dorsal = str(raw_dorsal)
+                existing = self.existing_results_by_name.get((surname, name))
+
+            if existing is None:
+                self.logger.warning(f"⚠️ Участник с номером {dorsal} не найден в кэше (возможно, нет start_number в БД)")
+                continue
+
+            result_id = existing['id']
 
             birthdate = normalize_birthdate(runner.get('birthdate'))
             sex = convert_gender(runner.get('gender'))
