@@ -649,13 +649,33 @@ async def fetch_race_data_now():
 # SSE ENDPOINTS
 # ============================================================================
 
+_TRACKER_DELTA_KEYS = (
+    'last_kt_unix_ms', 'race_status', 'status',
+    'rank_absolute', 'rank_sex', 'rank_category', 'time_gun_finish',
+    'current_distance',
+)
+
+
+def _tracker_runner_changed(prev: dict, curr: dict) -> bool:
+    return (any(prev.get(k) != curr.get(k) for k in _TRACKER_DELTA_KEYS) or
+            prev.get('checkpoints') != curr.get('checkpoints'))
+
+
 @router.get("/api/sse/tracker", tags=["SSE"])
 async def sse_tracker(request: Request, event_id: int = Query(..., description="ID события")):
-    """SSE поток трекера. Первое сообщение — полный снимок, далее — дельта изменений."""
+    """SSE поток трекера. Первое сообщение — полный снимок, далее — дельта изменений.
+
+    Диф считается ЗДЕСЬ, на каждое подключение отдельно (не на сервере глобально
+    на event_id) — иначе поздно подключившийся клиент навсегда теряет изменение
+    поля, если оно уже попало в общую "базу сравнения" до его подключения.
+    В Redis/tracker_hub гоняется полный снапшот (см. app.py: _build_full_payload).
+    """
     from src.krasmarafon.services.results_service import build_event_results
     queue = await tracker_hub.subscribe(event_id)
+    prev_state: dict = {}
 
     async def stream():
+        nonlocal prev_state
         try:
             yield {"comment": "connected"}
             # Initial snapshot — served from a short-TTL cache to absorb thundering herds.
@@ -663,27 +683,48 @@ async def sse_tracker(request: Request, event_id: int = Query(..., description="
             # flooding the 7-thread executor pool and delaying all connections by ~100s.
             cached = _sse_initial_cache.get(event_id)
             if cached and (time.time() - cached[1]) < _SSE_INITIAL_TTL:
-                yield {"data": cached[0]}
+                initial_json = cached[0]
+                initial_runners = json.loads(initial_json).get('results', [])
             else:
                 events = load_events_cached()
                 initial = await asyncio.get_event_loop().run_in_executor(
                     None, build_event_results, event_id, None, None, events
                 )
+                initial_json = None
+                initial_runners = []
                 if initial:
+                    initial_runners = initial.results
                     initial_json = json.dumps({
                         'initial': True,
                         'server_time_unix': initial.server_time_unix,
                         'race_gun_unix_ms': initial.race_gun_unix_ms,
                         'total_distance_km': initial.total_distance_km,
                         'total_results': initial.total_results,
-                        'results': initial.results,
+                        'results': initial_runners,
                     }, default=str)
                     _sse_initial_cache[event_id] = (initial_json, time.time())
-                    yield {"data": initial_json}
+            if initial_json:
+                yield {"data": initial_json}
+                prev_state = {r['id']: r for r in initial_runners}
+
             while True:
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=25)
-                    yield {"data": data}
+                    raw = await asyncio.wait_for(queue.get(), timeout=25)
+                    full = json.loads(raw)
+                    curr_runners = full.get('results', [])
+                    delta = [r for r in curr_runners if _tracker_runner_changed(prev_state.get(r['id'], {}), r)]
+                    prev_state = {r['id']: r for r in curr_runners}
+                    if delta:
+                        yield {"data": json.dumps({
+                            'initial': False,
+                            'server_time_unix': full.get('server_time_unix'),
+                            'race_gun_unix_ms': None,
+                            'total_distance_km': None,
+                            'total_results': full.get('total_results'),
+                            'results': delta,
+                        })}
+                    else:
+                        yield {"comment": "heartbeat"}
                 except asyncio.TimeoutError:
                     yield {"comment": "heartbeat"}
                 if await request.is_disconnected():
