@@ -109,12 +109,14 @@ function searchRunners() {
         return;
     }
 
-    // Поиск по номеру — сортируем по возрастанию номера, поиск по фамилии — по алфавиту
+    // Поиск по номеру — сортируем по возрастанию номера, поиск по фамилии — по алфавиту.
+    // Текстовый запрос матчится только по фамилии с начала строки (как на странице
+    // результатов) — иначе "по" находит "Полину" через middle-of-word совпадение с именем.
     const isNumericQuery = /^\d+$/.test(searchText);
 
-    const results = allRunners.filter(runner =>
-        runner.full_name.toLowerCase().includes(searchText) ||
-        String(runner.start_number).includes(searchText)
+    const results = allRunners.filter(runner => isNumericQuery
+        ? String(runner.start_number).includes(searchText)
+        : runner.surname.toLowerCase().startsWith(searchText)
     ).sort((a, b) => isNumericQuery
         ? a.start_number - b.start_number
         : a.full_name.localeCompare(b.full_name, 'ru')
