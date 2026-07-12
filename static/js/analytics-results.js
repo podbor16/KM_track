@@ -481,12 +481,20 @@ function applyFilters() {
     
     console.log('Применение фильтров:', { genderFilter, ageGroupFilter, distanceFilter, surnameSearch, totalRunners: allRunners.length });
     
+    // Числовой запрос — поиск по стартовому номеру, иначе — по фамилии с начала строки
+    const isNumericSearch = /^\d+$/.test(surnameSearch);
+
     filteredRunners = allRunners.filter(runner => {
-        // Фильтр по фамилии - поиск с начала фамилии
         if (surnameSearch !== '') {
-            const runnerSurname = (runner.surname || '').toLowerCase();
-            if (!runnerSurname.startsWith(surnameSearch)) {
-                return false;
+            if (isNumericSearch) {
+                if (!String(runner.start_number).includes(surnameSearch)) {
+                    return false;
+                }
+            } else {
+                const runnerSurname = (runner.surname || '').toLowerCase();
+                if (!runnerSurname.startsWith(surnameSearch)) {
+                    return false;
+                }
             }
         }
         
