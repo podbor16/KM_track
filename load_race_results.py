@@ -218,11 +218,10 @@ _BIRTHDATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 def is_valid_dorsal(dorsal) -> bool:
-    """dorsal должен быть реальным числовым номером участника. Copernico иногда
-    присылает нечисловые плейсхолдеры (напр. 'Зам' — участник на замену без
-    присвоенного номера), которые проходят проверку "значение не пустое", но
-    номером не являются — при вставке в int-колонку MySQL молча превращает их
-    в 0, и такой участник задваивается при каждом повторном --init."""
+    """True, если dorsal — реальный числовой номер. Copernico иногда присылает
+    нечисловые значения (напр. 'Зам' — замыкающий без назначенного номера);
+    такой участник не исключается, но в БД сохраняется под start_number=0
+    (см. использование в init_mode: stored_number)."""
     if not dorsal:
         return False
     try:
@@ -517,14 +516,21 @@ class RaceLoader:
                 name = (runner.get('name') or '').strip()
                 birthdate = normalize_birthdate(runner.get('birthdate'))
 
-                if not is_valid_dorsal(dorsal) or not surname or not name:
+                if not dorsal or not surname or not name:
                     continue
-                if str(dorsal) in existing_numbers:
+
+                # Дедуп по факту сохранённому в БД: нечисловой dorsal (напр. "Зам" —
+                # замыкающий без назначенного номера) MySQL коэрсит в 0 при вставке
+                # в int-колонку start_number. Нормализуем явно тем же образом и
+                # сверяем с existing_numbers — иначе такой участник задваивается
+                # при каждом повторном --init (сравнение "Зам" с "0" не совпадёт).
+                stored_number = str(dorsal) if is_valid_dorsal(dorsal) else '0'
+                if stored_number in existing_numbers:
                     continue
 
                 batch.append((
                     self.event_id,
-                    str(dorsal),
+                    stored_number,
                     surname,
                     name,
                     birthdate,
@@ -691,8 +697,6 @@ class RaceLoader:
         kt_f = self._kt_fields
 
         for runner in runners:
-            if not is_valid_dorsal(runner.get('dorsal')):
-                continue
             dorsal = str(runner.get('dorsal'))
 
             if dorsal not in self.existing_results:
