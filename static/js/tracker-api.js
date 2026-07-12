@@ -99,8 +99,21 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-// Визуальный круг по непрерывной оценке дистанции (runner.current_distance), а не по
-// runner.lap из БД. runner.lap меняется только когда приходит фактическое время КТ — на
+// Позиция участника, доанимированная на клиенте от последней КТ (та же формула,
+// что двигает маркер в animateRunnerFrame). Сервер намеренно не меняет
+// runner.current_distance между КТ — он всегда возвращает позицию РОВНО на
+// последней КТ, а доанимацию до следующей делает клиент через anim.baseDist +
+// speed × elapsed. Для цвета круга нужна именно эта, а не сырая серверная величина.
+function getAnimatedDistance(runner) {
+    const anim = runnerAnimations[String(runner.id)];
+    if (!anim || anim.status !== 'running') return runner.current_distance ?? 0;
+    const elapsedH = (Date.now() - (anim.baseTimeMs || Date.now())) / 3_600_000;
+    const totalDistKm = eventDistance || 5.0;
+    return Math.min(totalDistKm, Math.max(anim.baseDist || 0, (anim.baseDist || 0) + (anim.speed || 10) * elapsedH));
+}
+
+// Визуальный круг по непрерывной (доанимированной) дистанции, а не по runner.lap
+// из БД. runner.lap меняется только когда приходит фактическое время КТ — на
 // женской семёрке круг 2 физически начинается на ближнем развороте (3.5 км), где нет
 // точки хронометража, поэтому runner.lap там ещё "1" вплоть до КТ2 на 5.25 км. Маршрут
 // при этом считается равными кругами (total_km / laps), так что деление по дистанции
@@ -109,8 +122,7 @@ function getVisualLap(runner) {
     if (!CONFIG.LAPS || CONFIG.LAPS <= 1 || !eventDistance) return runner.lap ?? 1;
     const lapLen = eventDistance / CONFIG.LAPS;
     if (lapLen <= 0) return runner.lap ?? 1;
-    const dist = runner.current_distance ?? 0;
-    return Math.min(CONFIG.LAPS, Math.floor(dist / lapLen) + 1);
+    return Math.min(CONFIG.LAPS, Math.floor(getAnimatedDistance(runner) / lapLen) + 1);
 }
 
 function getStatusColor(status, lap = 0) {

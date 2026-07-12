@@ -310,16 +310,21 @@ function buildPopupContent(runner) {
                 </div>
             </div>`;
 
-        // Ранги — всегда показываем для финишировавших
-        const fmtR = v => v ? `#${v}` : '—';
+        // Ранги — всегда показываем для финишировавших, с учётом числа стартовавших
+        const started = allRunners.filter(r => r.status !== 'Not started');
+        const nStartedAll = started.length;
+        const nStartedSex = started.filter(r => r.sex === runner.sex).length;
+        const nStartedCat = started.filter(r => r.category === runner.category).length;
+
+        const fmtR = (v, n) => v ? `${v}/${n}` : '—';
         const sexPrefix = runner.sex === 'Мужчина' ? 'М' : runner.sex === 'Женщина' ? 'Ж' : '';
-        const rankSexStr = runner.rank_sex ? `${sexPrefix} #${runner.rank_sex}` : '—';
+        const rankSexStr = runner.rank_sex ? `${sexPrefix} ${runner.rank_sex}/${nStartedSex}` : '—';
 
         const ranksHTML = `
             <div class="card-c__ranks-col">
                 <div class="card-c__ranks-row">
                     <div class="card-c__rank">
-                        <div class="card-c__rank-val">${fmtR(runner.rank_absolute)}</div>
+                        <div class="card-c__rank-val">${fmtR(runner.rank_absolute, nStartedAll)}</div>
                         <div class="card-c__rank-lbl">Место абс.</div>
                     </div>
                     <div class="card-c__rank">
@@ -327,22 +332,29 @@ function buildPopupContent(runner) {
                         <div class="card-c__rank-lbl">По полу</div>
                     </div>
                     <div class="card-c__rank">
-                        <div class="card-c__rank-val">${fmtR(runner.rank_category)}</div>
+                        <div class="card-c__rank-val">${fmtR(runner.rank_category, nStartedCat)}</div>
                         <div class="card-c__rank-lbl">По кат.</div>
                     </div>
                 </div>
             </div>`;
 
-        // КТ-время если есть
-        const kt1 = runner.checkpoints?.kt1;
-        const kt1Time = kt1?.time ? parseDuration(kt1.time) : null;
-        const kt1Pace = kt1?.pace ? parseDuration(kt1.pace) : null;
-        const ktHTML = kt1Time ? `
-            <div class="card-c__kt-row">
-                <span class="card-c__kt-label">КТ 1</span>
-                <span class="card-c__kt-val">${escHtml(kt1Time)}</span>
-                ${kt1Pace ? `<span class="card-c__kt-pace">${escHtml(kt1Pace)} мин/км</span>` : ''}
-            </div>` : '';
+        // КТ-времена — все контрольные точки с данными (кроме старт/финиш), с дистанцией
+        const ktHTML = (eventCheckpoints || [])
+            .map((cp, i) => {
+                if (i === 0 || i === eventCheckpoints.length - 1) return null; // старт/финиш — отдельные поля выше
+                const kt = runner.checkpoints?.[`kt${i}`];
+                const time = kt?.time ? parseDuration(kt.time) : null;
+                if (!time) return null;
+                const pace = kt?.pace ? parseDuration(kt.pace) : null;
+                return `
+                    <div class="card-c__kt-row">
+                        <span class="card-c__kt-label">КТ${i} (${cp.distance_km} км)</span>
+                        <span class="card-c__kt-val">${escHtml(time)}</span>
+                        ${pace ? `<span class="card-c__kt-pace">${escHtml(pace)} мин/км</span>` : ''}
+                    </div>`;
+            })
+            .filter(Boolean)
+            .join('');
 
         return `<div class="card-c">${topHTML}${statsHTML}${ranksHTML}${ktHTML}</div>`;
     }
