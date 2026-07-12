@@ -37,6 +37,7 @@ _tracker_prev_state: dict[int, dict] = {}  # event_id -> {runner_id -> runner_di
 _DELTA_KEYS = (
     'last_kt_unix_ms', 'race_status', 'status',
     'rank_absolute', 'rank_sex', 'rank_category', 'time_gun_finish',
+    'current_distance',
 )
 
 
