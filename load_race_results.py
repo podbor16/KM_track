@@ -217,6 +217,20 @@ def convert_gender(gender: Optional[str]) -> str:
 _BIRTHDATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
+def is_valid_dorsal(dorsal) -> bool:
+    """dorsal должен быть реальным числовым номером участника. Copernico иногда
+    присылает нечисловые плейсхолдеры (напр. 'Зам' — участник на замену без
+    присвоенного номера), которые проходят проверку "значение не пустое", но
+    номером не являются — при вставке в int-колонку MySQL молча превращает их
+    в 0, и такой участник задваивается при каждом повторном --init."""
+    if not dorsal:
+        return False
+    try:
+        return int(dorsal) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def normalize_birthdate(bd: Optional[str]) -> str:
     """Валидирует дату рождения из Copernico. Невалидные значения (пусто,
     '0000-00-00' и т.п.) заменяются на заглушку — иначе MySQL в strict mode
@@ -503,7 +517,7 @@ class RaceLoader:
                 name = (runner.get('name') or '').strip()
                 birthdate = normalize_birthdate(runner.get('birthdate'))
 
-                if not dorsal or not surname or not name:
+                if not is_valid_dorsal(dorsal) or not surname or not name:
                     continue
                 if str(dorsal) in existing_numbers:
                     continue
@@ -677,6 +691,8 @@ class RaceLoader:
         kt_f = self._kt_fields
 
         for runner in runners:
+            if not is_valid_dorsal(runner.get('dorsal')):
+                continue
             dorsal = str(runner.get('dorsal'))
 
             if dorsal not in self.existing_results:
