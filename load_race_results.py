@@ -483,6 +483,16 @@ class RaceLoader:
         self.logger.info("="*70)
         self.logger.info(f"Загрузка {len(runners)} участников в БД...")
 
+        # Защита от дублей при повторном --init: в results нет UNIQUE(event_id,
+        # start_number), поэтому INSERT IGNORE не спасает — не вставляем
+        # участников, чей start_number уже есть в БД для этого события.
+        self.cursor.execute(
+            "SELECT start_number FROM results WHERE event_id = %s", (self.event_id,)
+        )
+        existing_numbers = {str(row[0]) for row in self.cursor.fetchall()}
+        if existing_numbers:
+            self.logger.info(f"ℹ️ Уже в БД: {len(existing_numbers)} участников — будут пропущены, добавятся только новые")
+
         batch = []
         start_time = time.time()
 
@@ -494,6 +504,8 @@ class RaceLoader:
                 birthdate = normalize_birthdate(runner.get('birthdate'))
 
                 if not dorsal or not surname or not name:
+                    continue
+                if str(dorsal) in existing_numbers:
                     continue
 
                 batch.append((
