@@ -50,6 +50,12 @@ LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 UPDATE_INTERVAL = int(os.getenv("CONTINUOUS_UPDATE_INTERVAL", "5"))
 BATCH_SIZE = 1000
 
+# Синтетические start_number для участников без числового dorsal (напр. "Зам" —
+# замыкающий, судья/сопровождающий в хвосте забега): максимальный реальный номер
+# + этот сдвиг, дальше +1 на каждого следующего. Гарантированно не пересекается
+# с реальными бибами (те в этих забегах не превышают пары тысяч).
+SWEEPER_NUMBER_OFFSET = 1000
+
 LOG_DIR.mkdir(exist_ok=True)
 
 
@@ -500,11 +506,26 @@ class RaceLoader:
         # start_number), поэтому INSERT IGNORE не спасает — не вставляем
         # участников, чей start_number уже есть в БД для этого события.
         self.cursor.execute(
-            "SELECT start_number FROM results WHERE event_id = %s", (self.event_id,)
+            "SELECT start_number, surname, name FROM results WHERE event_id = %s", (self.event_id,)
         )
-        existing_numbers = {str(row['start_number']) for row in self.cursor.fetchall()}
+        existing_rows = self.cursor.fetchall()
+        existing_numbers = {str(row['start_number']) for row in existing_rows}
         if existing_numbers:
             self.logger.info(f"ℹ️ Уже в БД: {len(existing_numbers)} участников — будут пропущены, добавятся только новые")
+
+        # Участники без числового dorsal (замыкающие и т.п.) получают синтетический
+        # start_number. Дедуп между запусками — по (surname, name): уже назначенные
+        # ранее (start_number >= SWEEPER_NUMBER_OFFSET) переиспользуются, а не
+        # плодятся заново при каждом повторном --init.
+        numeric_dorsals = [int(r.get('dorsal')) for r in runners if is_valid_dorsal(r.get('dorsal'))]
+        next_sweeper_number = (max(numeric_dorsals) if numeric_dorsals else 0) + SWEEPER_NUMBER_OFFSET
+        assigned_sweepers = {
+            (row['surname'], row['name']): row['start_number']
+            for row in existing_rows
+            if row['start_number'] and row['start_number'] >= SWEEPER_NUMBER_OFFSET
+        }
+        if assigned_sweepers:
+            next_sweeper_number = max(next_sweeper_number, max(assigned_sweepers.values()) + 1)
 
         batch = []
         start_time = time.time()
@@ -519,14 +540,17 @@ class RaceLoader:
                 if not dorsal or not surname or not name:
                     continue
 
-                # Дедуп по факту сохранённому в БД: нечисловой dorsal (напр. "Зам" —
-                # замыкающий без назначенного номера) MySQL коэрсит в 0 при вставке
-                # в int-колонку start_number. Нормализуем явно тем же образом и
-                # сверяем с existing_numbers — иначе такой участник задваивается
-                # при каждом повторном --init (сравнение "Зам" с "0" не совпадёт).
-                stored_number = str(dorsal) if is_valid_dorsal(dorsal) else '0'
-                if stored_number in existing_numbers:
-                    continue
+                if is_valid_dorsal(dorsal):
+                    stored_number = str(dorsal)
+                    if stored_number in existing_numbers:
+                        continue
+                else:
+                    key = (surname, name)
+                    if key in assigned_sweepers:
+                        continue
+                    stored_number = str(next_sweeper_number)
+                    assigned_sweepers[key] = next_sweeper_number
+                    next_sweeper_number += 1
 
                 batch.append((
                     self.event_id,
