@@ -489,7 +489,7 @@ class RaceLoader:
         self.cursor.execute(
             "SELECT start_number FROM results WHERE event_id = %s", (self.event_id,)
         )
-        existing_numbers = {str(row[0]) for row in self.cursor.fetchall()}
+        existing_numbers = {str(row['start_number']) for row in self.cursor.fetchall()}
         if existing_numbers:
             self.logger.info(f"ℹ️ Уже в БД: {len(existing_numbers)} участников — будут пропущены, добавятся только новые")
 
