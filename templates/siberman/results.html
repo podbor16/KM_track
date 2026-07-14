@@ -194,6 +194,7 @@
         .badge-m { background: rgba(0,61,98,.15); color: var(--navy); }
         [data-theme="dark"] .badge-m { background: rgba(106,171,215,.15); color: var(--blue); }
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
+        .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; vertical-align: middle; }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
@@ -370,6 +371,130 @@ function getFiltered() {
 }
 
 /* ──────────────── Render: Overall ──────────────── */
+const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
+
+// Заголовок двух колонок места — порядок и подписи меняются местами в
+// зависимости от фильтра пола: без фильтра сначала абсолют, с фильтром —
+// сначала пересчитанное место внутри пола (см. п.1 задачи).
+function rankHeaderCells() {
+    return _gender === 'all'
+        ? '<th>Место</th><th>По полу</th>'
+        : '<th>По полу</th><th>Абсолют</th>';
+}
+function rankBodyCells(rankAbs, rankGender, gender, rc) {
+    const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
+    const g = rankGender != null ? `<span class="rank-num ${rc}">${genderBadge(gender)}${rankGender}</span>` : '<span class="muted">—</span>';
+    return _gender === 'all' ? `<td>${a}</td><td>${g}</td>` : `<td>${g}</td><td>${a}</td>`;
+}
+
+function buildIndividualOverallRow(r, overallGaps) {
+    const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'overall_rank_g';
+    const notFinished = r.overall_s == null || r.status !== 'active';
+    const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
+    // Последняя пройденная КТ (этап + отсечка) — отдельная колонка, и для
+    // финишировавших (последняя КТ = финиш бега), и для тех, кто ещё в гонке.
+    const cur = currentStage(r);
+    const pos = cur ? lastReached(r.cp, cur) : null;
+    const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
+    return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+        ${rankBodyCells(r.rank_overall, r.overall_rank_g, r.gender, rc)}
+        <td class="bib-cell">${r.bib}</td>
+        <td>
+            <span class="name-main">${r.surname} ${r.name}</span>
+            ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
+        </td>
+        <td>${genderBadge(r.gender)}</td>
+        <td class="muted">Индивидуальный</td>
+        <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
+        <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
+        <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
+        <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
+        <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
+        <td class="muted">${lastCpCell}</td>
+        <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
+        <td>${statusBadge(r, null)}</td>
+    </tr>`;
+}
+
+function buildRelayOverallCard(team, pos, overallGaps) {
+    const STAGE_LABELS = { swim: 'Плавание', bike: 'Велосипед', run: 'Бег' };
+    // Последняя КТ команды — по её "виртуальному участнику" (см. teamGapRow:
+    // cp собран из cp тех членов команды, кто отвечает за
+    // swim/bike_day1+bike_day2/run) — тот же принцип, что и "текущий этап" личника.
+    const teamRow = teamGapRow(team);
+    const teamCur = currentStage(teamRow);
+    const teamPos = teamCur ? lastReached(teamRow.cp, teamCur) : null;
+    const teamLastCp = teamPos ? `${STAGE_LABEL_RU[teamCur]}, ${CHECKPOINT_LABELS[teamCur][teamPos.seq]}` : '—';
+    let html = `<div class="relay-card">
+        <div class="relay-card-hdr" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
+            <span class="relay-pos">${pos}</span>
+            <span class="relay-bib">${team.bib}</span>
+            <span class="relay-name">${team.team_name} <span class="badge badge-relay">Эстафета</span><br><span class="muted" style="font-size:11px;font-weight:400">${teamLastCp}</span></span>
+            <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
+        </div>
+        <div class="relay-members">`;
+    team.members.forEach(m => {
+        const stageTime = m.relay_stage === 'swim' ? m.swim_s
+            : m.relay_stage === 'bike' ? (m.bike1_s != null && m.bike2_s != null ? m.bike1_s + m.bike2_s
+                : m.bike2_s ?? m.bike1_s)
+            : m.run_s;
+        const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
+            : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
+            : fmtPace(m.run_pace);
+        html += `<div class="relay-member">
+            <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
+            <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
+            <span class="relay-member-time">${fmtTime(stageTime)}</span>
+            <span class="relay-member-meta">${stageMeta}</span>
+            <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
+        </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+}
+
+// Объединяет личников и эстафету в порядок отображения: финишировавшие обоих
+// типов перемежаются по времени (единый список по месту), затем не
+// финишировавшие личники (свой порядок sortByStatus), затем команды без
+// результатов — в конце. Возвращает массив {type, entry}.
+function buildMergedOverallEntries(individual, relay) {
+    const indSorted = sortByStatus(individual, 'overall_s');
+    if (_fmt !== 'all') {
+        // Только один тип виден — смешивать нечего.
+        return [
+            ...indSorted.map(r => ({ type: 'individual', entry: r })),
+            ...relay.map(t => ({ type: 'relay', entry: t })),
+        ];
+    }
+    const indFinished = indSorted.filter(r => r.overall_s != null && r.status === 'active');
+    const indRest = indSorted.filter(r => !(r.overall_s != null && r.status === 'active'));
+    const relFinished = relay.filter(t => t.overall_s != null).sort((a, b) => a.overall_s - b.overall_s);
+    const relRest = relay.filter(t => t.overall_s == null);
+
+    const interleaved = [
+        ...indFinished.map(r => ({ type: 'individual', entry: r })),
+        ...relFinished.map(t => ({ type: 'relay', entry: t })),
+    ].sort((a, b) => a.entry.overall_s - b.entry.overall_s);
+
+    return [
+        ...interleaved,
+        ...indRest.map(r => ({ type: 'individual', entry: r })),
+        ...relRest.map(t => ({ type: 'relay', entry: t })),
+    ];
+}
+
+const OVERALL_TABLE_HEAD = () => `<thead><tr>
+    ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th><th>Формат</th>
+    <th class="r">🏊 Плав.</th>
+    <th class="r">🚴 Вело 1</th>
+    <th class="r">🚴 Вело 2</th>
+    <th class="r">🏃 Бег</th>
+    <th class="r">Итого</th>
+    <th>Последняя КТ</th>
+    <th class="r">Отставание</th>
+    <th>Статус</th>
+</tr></thead>`;
+
 function renderOverall() {
     const filtered = getFiltered();
     const individual = filtered.individual;
@@ -380,108 +505,36 @@ function renderOverall() {
         ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(teamGapRow),
     ]);
-    const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
-    let html = '';
+    let html = buildStats(individual, relay, null);
 
-    html += buildStats(individual, relay, null);
-
-    // Individual table
-    if (_fmt !== 'relay' && individual.length > 0) {
-        html += `<div class="table-wrap"><table>
-        <thead><tr>
-            <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-            <th class="r">🏊 Плав.</th>
-            <th class="r">🚴 Вело 1</th>
-            <th class="r">🚴 Вело 2</th>
-            <th class="r">🏃 Бег</th>
-            <th class="r">Итого</th>
-            <th>Последняя КТ</th>
-            <th class="r">Отставание</th>
-            <th>Статус</th>
-        </tr></thead><tbody>`;
-        // Поле гендерного места в API называется overall_rank_g (см. db.py:
-        // "o.rank_gender AS overall_rank_g"), а не rank_gender.
-        const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'overall_rank_g';
-        sortByStatus(individual, 'overall_s').forEach(r => {
-            const notFinished = r.overall_s == null || r.status !== 'active';
-            const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
-            // Последняя пройденная КТ (этап + отсечка) — отдельная колонка,
-            // и для финишировавших (последняя КТ = финиш бега), и для тех,
-            // кто ещё в гонке.
-            const cur = currentStage(r);
-            const pos = cur ? lastReached(r.cp, cur) : null;
-            const lastCpCell = pos
-                ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}`
-                : '—';
-            html += `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-                <td>
-                    <span class="rank-num">${r[mainOverallRank] ?? '—'}</span>
-                    ${_gender === 'all' && r.overall_rank_g != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r.overall_rank_g}</span>` : ''}
-                </td>
-                <td class="bib-cell">${r.bib}</td>
-                <td>
-                    <span class="name-main">${r.surname} ${r.name}</span>
-                    ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
-                </td>
-                <td>${genderBadge(r.gender)}</td>
-                <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
-                <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
-                <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
-                <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
-                <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
-                <td class="muted">${lastCpCell}</td>
-                <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
-                <td>${statusBadge(r, null)}</td>
-            </tr>`;
-        });
-        html += '</tbody></table></div>';
-    }
-
-    // Relay cards
-    if (_fmt !== 'individual' && relay.length > 0) {
-        if (_fmt !== 'relay') html += `<div class="section-hdr">Эстафетные команды</div>`;
-        const STAGE_LABELS = { swim: 'Плавание', bike: 'Велосипед', run: 'Бег' };
-        html += '<div class="relay-grid">';
-        relay.forEach((team, idx) => {
-            // Последняя КТ команды — по её "виртуальному участнику" (см.
-            // teamGapRow: cp собран из cp тех членов команды, кто отвечает
-            // за swim/bike_day1+bike_day2/run) — тот же принцип, что и
-            // "текущий этап" личника.
-            const teamRow = teamGapRow(team);
-            const teamCur = currentStage(teamRow);
-            const teamPos = teamCur ? lastReached(teamRow.cp, teamCur) : null;
-            const teamLastCp = teamPos ? `${STAGE_LABEL_RU[teamCur]}, ${CHECKPOINT_LABELS[teamCur][teamPos.seq]}` : '—';
-            html += `<div class="relay-card">
-                <div class="relay-card-hdr" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
-                    <span class="relay-pos">${idx + 1}</span>
-                    <span class="relay-bib">${team.bib}</span>
-                    <span class="relay-name">${team.team_name}<br><span class="muted" style="font-size:11px;font-weight:400">${teamLastCp}</span></span>
-                    <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
-                </div>
-                <div class="relay-members">`;
-            team.members.forEach(m => {
-                const stageTime = m.relay_stage === 'swim' ? m.swim_s
-                    : m.relay_stage === 'bike' ? (m.bike1_s != null && m.bike2_s != null ? m.bike1_s + m.bike2_s
-                        : m.bike2_s ?? m.bike1_s)
-                    : m.run_s;
-                const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
-                    : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
-                    : fmtPace(m.run_pace);
-                html += `<div class="relay-member">
-                    <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
-                    <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
-                    <span class="relay-member-time">${fmtTime(stageTime)}</span>
-                    <span class="relay-member-meta">${stageMeta}</span>
-                    <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
-                </div>`;
-            });
-            html += `</div></div>`;
-        });
-        html += '</div>';
-    }
-
-    if (individual.length === 0 && relay.length === 0)
+    if (individual.length === 0 && relay.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
+        document.getElementById('app').innerHTML = html;
+        return;
+    }
+
+    // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
+    // один тип) — группируем соседние записи одного типа в HTML-фрагменты:
+    // цепочка table-фрагментов (личники) чередуется с relay-card'ами.
+    const merged = buildMergedOverallEntries(individual, relay);
+    let relayPos = 0;
+    let tableOpen = false;
+    let headerUsed = false;
+    merged.forEach((item, i) => {
+        if (item.type === 'individual') {
+            if (!tableOpen) {
+                html += `<div class="table-wrap"><table>${headerUsed ? '' : OVERALL_TABLE_HEAD()}<tbody>`;
+                tableOpen = true;
+                headerUsed = true;
+            }
+            html += buildIndividualOverallRow(item.entry, overallGaps);
+        } else {
+            if (tableOpen) { html += '</tbody></table></div>'; tableOpen = false; }
+            relayPos++;
+            html += buildRelayOverallCard(item.entry, relayPos, overallGaps);
+        }
+    });
+    if (tableOpen) html += '</tbody></table></div>';
 
     document.getElementById('app').innerHTML = html;
 }
@@ -552,37 +605,37 @@ function renderStage(stage) {
     const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
 
     const showStart = stage === 'bike2';
-    const colCount = showStart ? 10 : 9;
+
+    // Присваиваем эстафетчикам, финишировавшим этап, собственный порядковый
+    // номер (у relay-участников нет DB-поля ранга per-этап, в отличие от
+    // личников) — relayMembers уже отсортирован так, что финишировавшие идут
+    // первыми по возрастанию времени, так что порядковый номер = позиция+1.
+    let _relayRankSeq = 0;
+    const relayMembersRanked = relayMembers.map(m => {
+        const pos = lastReached(m.cp, dbStage);
+        const finished = !!pos && pos.seq === maxSeq;
+        return { ...m, _finished: finished, _relayRank: finished ? ++_relayRankSeq : null };
+    });
 
     let html = buildStats(individual, relay, stage);
-    html += `<div class="table-wrap"><table>
-    <thead><tr>
-        <th>Место</th><th>№</th><th>Участник</th><th>Пол</th>
-        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
-        ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
-        <th>Статус</th>
-    </tr></thead><tbody>`;
 
     // При активном фильтре по полу "Место" должно быть местом ВНУТРИ этого
     // пола (пересчитанным, не абсолютным) — иначе абсолютный ранг (17, 20...)
     // выглядит так, будто места "не пересчитались" под фильтр.
     const mainRankKey = _gender === 'all' ? cfg.rankKey : cfg.rankGKey;
-    rows.forEach(r => {
+
+    const buildIndividualStageRow = r => {
         const t = r[cfg.timeKey];
         const noTime = t == null;
         const rc = noTime ? '' : rankClass(r[mainRankKey]);
-        // Последняя пройденная КТ — отдельная колонка (и для финишировавших
-        // тоже, показывает финишную отсечку).
         const pos = lastReached(r.cp, dbStage);
         const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
-        html += `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-            <td>
-                <span class="rank-num">${noTime ? '—' : (r[mainRankKey] ?? '—')}</span>
-                ${!noTime && _gender === 'all' && r[cfg.rankGKey] != null ? `<span class="rank-sub">${genderBadge(r.gender)}${r[cfg.rankGKey]}</span>` : ''}
-            </td>
+        return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+            ${rankBodyCells(r[cfg.rankKey], r[cfg.rankGKey], r.gender, noTime ? '' : rc)}
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
+            <td class="muted">Индивидуальный</td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[r.bib])}</td>
@@ -590,38 +643,70 @@ function renderStage(stage) {
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
         </tr>`;
-    });
+    };
 
-    if (relayMembers.length > 0) {
-        html += `<tr><td colspan="${colCount}" style="padding:6px 10px;background:var(--bg3);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px">Эстафеты</td></tr>`;
-        let relayRank = 1;
-        relayMembers.forEach(m => {
-            const t = m[cfg.timeKey];
-            const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
-            const hasTime = t != null;
-            const pos = lastReached(m.cp, dbStage);
-            const finished = !!pos && pos.seq === maxSeq;
-            const rankDisplay = finished ? relayRank : '—';
-            if (finished) relayRank++;
-            const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
-            html += `<tr style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
-                <td><span class="rank-num">${rankDisplay}</span></td>
-                <td class="bib-cell">${m._bib}</td>
-                <td>
-                    <span class="name-main">${m.surname} ${m.name}</span>
-                    <br><span class="name-city">${m._team}</span>
-                </td>
-                <td>${genderBadge(m.gender)}</td>
-                <td class="r time-cell">${fmtTime(t)}</td>
-                <td class="muted">${lastCpCell}</td>
-                <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
-                <td class="r muted">${hasTime ? meta : '—'}</td>
-                ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-                <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
-            </tr>`;
-        });
+    const buildRelayStageRow = m => {
+        const t = m[cfg.timeKey];
+        const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
+        const hasTime = t != null;
+        const pos = lastReached(m.cp, dbStage);
+        const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
+        const rc = m._finished ? rankClass(m._relayRank) : '';
+        return `<tr class="${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
+            ${rankBodyCells(m._relayRank, null, null, rc)}
+            <td class="bib-cell">${m._bib}</td>
+            <td>
+                <span class="name-main">${m.surname} ${m.name}</span>
+                <br><span class="name-city">${m._team}</span>
+            </td>
+            <td>${genderBadge(m.gender)}</td>
+            <td class="muted">Эстафета</td>
+            <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="muted">${lastCpCell}</td>
+            <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
+            <td class="r muted">${hasTime ? meta : '—'}</td>
+            ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
+            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
+        </tr>`;
+    };
+
+    // Единый порядок: финишировавшие этот этап (личники + эстафетчики этой
+    // роли) перемежаются по времени, затем остальные (не финишировавшие
+    // личники — свой порядок sortByStatus, затем не финишировавшие
+    // эстафетчики) — без разделительной строки-заголовка "Эстафеты".
+    const rowsFinished = rows.filter(r => r[cfg.timeKey] != null && r.status === 'active');
+    const rowsRest = rows.filter(r => !(r[cfg.timeKey] != null && r.status === 'active'));
+    const relFinished = relayMembersRanked.filter(m => m._finished);
+    const relRest = relayMembersRanked.filter(m => !m._finished);
+
+    let orderedRows;
+    if (_fmt === 'all') {
+        const interleaved = [
+            ...rowsFinished.map(r => ({ type: 'individual', entry: r })),
+            ...relFinished.map(m => ({ type: 'relay', entry: m })),
+        ].sort((a, b) => a.entry[cfg.timeKey] - b.entry[cfg.timeKey]);
+        orderedRows = [
+            ...interleaved,
+            ...rowsRest.map(r => ({ type: 'individual', entry: r })),
+            ...relRest.map(m => ({ type: 'relay', entry: m })),
+        ];
+    } else {
+        orderedRows = [
+            ...rows.map(r => ({ type: 'individual', entry: r })),
+            ...relayMembersRanked.map(m => ({ type: 'relay', entry: m })),
+        ];
     }
 
+    html += `<div class="table-wrap"><table>
+    <thead><tr>
+        ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th><th>Формат</th>
+        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
+        ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
+        <th>Статус</th>
+    </tr></thead><tbody>`;
+    orderedRows.forEach(item => {
+        html += item.type === 'individual' ? buildIndividualStageRow(item.entry) : buildRelayStageRow(item.entry);
+    });
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
 }
