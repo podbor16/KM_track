@@ -22,6 +22,8 @@ const sandbox = {
         documentElement: { setAttribute: () => {}, getAttribute: () => 'dark' },
     },
     localStorage: { getItem: () => null, setItem: () => {} },
+    setInterval: () => 0,
+    clearInterval: () => {},
     window: {},
 };
 sandbox.window = sandbox;
@@ -145,6 +147,66 @@ check('day1Progress/day2Progress используют globalProgress по STAGE_
     assert.strictEqual(sandbox.day1Progress(row), 5000);
     // bike_day2 elapsed отсчитывается от старта СВОЕГО этапа -> + swim_s + bike1_s
     assert.strictEqual(sandbox.day2Progress(row), 1000 + 4000 + 9000);
+});
+
+// ── Живой секундомер этапа: stageStartOffset()/stageIsPending()/computeActiveStageTimers() ──
+// _data/_raceStartEpoch объявлены как let внутри исполненного скрипта —
+// та же лексическая изоляция, что и _gender/_fmt (см. setState выше).
+function setRaceData(individual, relay, raceStartEpoch) {
+    sandbox.__individual = individual;
+    sandbox.__relay = relay;
+    sandbox.__raceStartEpoch = raceStartEpoch;
+    vm.runInContext('_data = { individual: __individual, relay: __relay }; _raceStartEpoch = __raceStartEpoch;', sandbox);
+}
+function mkTimerInd(bib, overrides = {}) {
+    return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
+}
+
+check('stageStartOffset — swim всегда 0, bike_day1 = min swim_s среди дошедших', () => {
+    setRaceData([mkTimerInd(1, { swim_s: 3000 }), mkTimerInd(2, { swim_s: 2500 }), mkTimerInd(3, { swim_s: null })], [], Date.now());
+    assert.strictEqual(sandbox.stageStartOffset('swim'), 0);
+    assert.strictEqual(sandbox.stageStartOffset('bike_day1'), 2500);
+});
+
+check('stageStartOffset — этап без единого дошедшего участника ещё не начался (null)', () => {
+    setRaceData([mkTimerInd(1, { swim_s: null })], [], Date.now());
+    assert.strictEqual(sandbox.stageStartOffset('bike_day1'), null);
+});
+
+check('stageIsPending — false, когда все участники этапа финишировали/сошли', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const finished = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const dnf = mkTimerInd(2, { status: 'dnf' });
+    setRaceData([finished, dnf], [], Date.now());
+    assert.strictEqual(sandbox.stageIsPending('swim'), false);
+});
+
+check('stageIsPending — true, пока хотя бы один активный участник не дошёл до последней КТ этапа', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const finished = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const stillSwimming = mkTimerInd(2, { cp: { swim: { 1: 500 } } });
+    setRaceData([finished, stillSwimming], [], Date.now());
+    assert.strictEqual(sandbox.stageIsPending('swim'), true);
+});
+
+check('computeActiveStageTimers — два таймера одновременно (плавание ещё не закрыто, вело1 уже началось)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const now = Date.now();
+    const finishedSwim = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 }); // уехал на вело
+    const stillSwimming = mkTimerInd(2, { cp: { swim: { 1: 500 } } });
+    setRaceData([finishedSwim, stillSwimming], [], now - 100000);
+    const timers = sandbox.computeActiveStageTimers().map(t => t.dbStage);
+    assert.strictEqual(JSON.stringify(timers.sort()), JSON.stringify(['bike_day1', 'swim']));
+});
+
+check('computeActiveStageTimers — таймер плавания пропадает, когда все доплыли', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const now = Date.now();
+    const a = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const b = mkTimerInd(2, { cp: { swim: { [maxSeqSwim]: 3500 } }, swim_s: 3500 });
+    setRaceData([a, b], [], now - 100000);
+    const timers = sandbox.computeActiveStageTimers().map(t => t.dbStage);
+    assert.strictEqual(JSON.stringify(timers), JSON.stringify(['bike_day1']));
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

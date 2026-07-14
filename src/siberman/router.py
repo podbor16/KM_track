@@ -2,6 +2,7 @@ import os
 import pickle
 import logging
 import tempfile
+import datetime
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -11,7 +12,7 @@ from src.siberman.parser import parse_excel
 from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
-from src.siberman.db import get_siberman_connection, get_results_for_year
+from src.siberman.db import get_siberman_connection, get_results_for_year, set_race_start
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(tags=["Siberman"])
@@ -53,17 +54,15 @@ def _is_authed(request: Request) -> bool:
     return request.headers.get("X-Admin-Token", "") == ADMIN_TOKEN
 
 
-def _parse_race_start(raw: str) -> int:
-    """'HH:MM' или 'HH:MM:SS' → секунды от полуночи. Вело-ввод HH:MM здесь
-    ВСЕГДА часы:минуты (не минуты:секунды, в отличие от parse_time_to_seconds)."""
-    parts = raw.strip().split(":")
-    if len(parts) == 2:
-        h, m, s = parts[0], parts[1], "0"
-    elif len(parts) == 3:
-        h, m, s = parts
-    else:
+def _parse_race_start(raw: str) -> datetime.datetime:
+    """'YYYY-MM-DDTHH:MM' или 'YYYY-MM-DDTHH:MM:SS' (input type=datetime-local) →
+    datetime. Гонка многодневная, поэтому нужна не только время-суток, но и
+    дата — иначе нельзя построить абсолютный якорь для live-секундомера
+    этапов (bike_day2/run стартуют на следующий календарный день)."""
+    try:
+        return datetime.datetime.fromisoformat(raw.strip())
+    except ValueError:
         raise ValueError(f"Неверный формат времени старта: {raw!r}")
-    return int(h) * 3600 + int(m) * 60 + int(s)
 
 
 @router.get("/siberman/results", response_class=HTMLResponse)
@@ -101,6 +100,8 @@ async def api_results(year: int = 2025):
     data["individual"] = [_clean_row(r) for r in data["individual"]]
     for team in data["relay"]:
         team["members"] = [_clean_row(m) for m in team["members"]]
+    if data.get("race_start") is not None:
+        data["race_start"] = data["race_start"].isoformat()
     return JSONResponse(data)
 
 
@@ -119,9 +120,10 @@ async def upload_excel(request: Request, file: UploadFile = File(...),
     if not race_start:
         raise HTTPException(status_code=422, detail="Укажите время старта гонки (день 1)")
     try:
-        race_start_s = _parse_race_start(race_start)
+        race_start_dt = _parse_race_start(race_start)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    race_start_s = race_start_dt.hour * 3600 + race_start_dt.minute * 60 + race_start_dt.second
 
     data = await file.read()
     try:
@@ -132,6 +134,7 @@ async def upload_excel(request: Request, file: UploadFile = File(...),
 
     bike_day2_starts = convert_bike_times_to_elapsed(parsed, race_start_s)
     parsed.handicaps = bike_day2_starts  # {rider_key: start_day2_s} → apply_to_db пишет в bike_day2_handicap_s
+    parsed.race_start = race_start_dt
 
     preview = build_preview(parsed)
     preview["bike_day2_starts"] = build_bike_day2_starts(parsed, bike_day2_starts)
@@ -149,5 +152,12 @@ async def apply_data(request: Request, race_year: int = 2025):
     summary = apply_to_db(parsed)
     if not summary.get("ok"):
         raise HTTPException(status_code=500, detail=summary.get("error", "Ошибка БД"))
+    if parsed.race_start is not None:
+        conn = get_siberman_connection()
+        if conn is not None:
+            try:
+                set_race_start(conn, race_year, parsed.race_start)
+            finally:
+                conn.close()
     _clear_pending(race_year)
     return JSONResponse(summary)

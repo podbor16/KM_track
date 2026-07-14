@@ -33,6 +33,25 @@ def get_checkpoints(conn, race_year: int) -> list[dict]:
     return cur.fetchall()
 
 
+def get_race_start(conn, race_year: int):
+    """Абсолютное время старта гонки (день 1, плавание) — датой + временем.
+    None, если для этого года ещё не сохранено (загрузка была до миграции
+    004 или race_start не передан при апрувe)."""
+    cur = conn.cursor()
+    cur.execute("SELECT race_start FROM race_config WHERE race_year=%s", (race_year,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def set_race_start(conn, race_year: int, race_start) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO race_config (race_year, race_start) VALUES (%s, %s)
+           ON DUPLICATE KEY UPDATE race_start=VALUES(race_start)""",
+        (race_year, race_start)
+    )
+
+
 def clear_race_year(conn, race_year: int) -> None:
     """Удалить всех участников (и каскадно все связанные данные) за год."""
     cur = conn.cursor()
@@ -267,4 +286,6 @@ def get_results_for_year(conn, race_year: int) -> dict:
         relay_list.append(team)
     relay_list.sort(key=lambda t: (t["overall_s"] is None, t["overall_s"] or 0, t["bib"]))
 
-    return {"individual": individual, "relay": relay_list}
+    race_start = get_race_start(conn, race_year)
+
+    return {"individual": individual, "relay": relay_list, "race_start": race_start}

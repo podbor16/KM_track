@@ -49,8 +49,8 @@
             <h2>1. Загрузить файл Excel</h2>
             <label>Год гонки</label>
             <input type="number" id="race-year" value="2025" min="2020" max="2030" style="width:120px">
-            <label>Время старта гонки (день 1, плавание, по красноярскому времени)</label>
-            <input type="time" id="race-start" value="08:00" step="1" style="width:120px" required>
+            <label>Дата и время старта гонки (день 1, плавание, по красноярскому времени)</label>
+            <input type="datetime-local" id="race-start" step="1" style="width:220px" required>
             <label>Файл (.xlsx)</label>
             <input type="file" id="file-input" accept=".xlsx,.xls">
             <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
@@ -120,7 +120,7 @@
         $('btn-upload').textContent = 'Загружаю…';
         hideMsg();
         try {
-            const r = await fetch(`/api/siberman/admin/upload?race_year=${year}&race_start=${raceStart}`, { method:'POST', body:fd });
+            const r = await fetch(`/api/siberman/admin/upload?race_year=${year}&race_start=${encodeURIComponent(raceStart)}`, { method:'POST', body:fd });
             const data = await r.json();
             if (!r.ok) { showErr(data.detail || 'Ошибка'); return; }
             $('preview-summary').textContent =

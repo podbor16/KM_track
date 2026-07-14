@@ -106,6 +106,10 @@ class ParseResult:
     # convert_bike_times_to_elapsed() в service.py (расчётный старт вело-2)
     handicaps: dict[str, Optional[int]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    # Абсолютное время старта гонки (дата+время, день 1, плавание) — задаётся
+    # в админке при загрузке, сохраняется в БД при apply() для live-секундомера
+    # этапов на публичной странице результатов.
+    race_start: Optional[datetime.datetime] = None
 
 
 def parse_time_to_seconds(value) -> Optional[int]:

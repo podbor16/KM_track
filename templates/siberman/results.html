@@ -128,6 +128,20 @@
         .tabs-bar--sub { padding: 0 20px; background: var(--bg); }
         .tabs-bar--sub .tab { padding: 8px 14px; font-size: 11px; }
 
+        /* ── Живой секундомер этапа(ов) ── */
+        .stage-timers {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 10px 20px; background: var(--bg3);
+            border-bottom: 1px solid var(--border);
+        }
+        .stage-timer {
+            display: flex; align-items: baseline; gap: 8px;
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 6px 14px;
+        }
+        .stage-timer-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+        .stage-timer-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red); }
+
         /* ── Filters ── */
         .filters {
             display: flex; align-items: center; gap: 10px;
@@ -268,6 +282,10 @@
             .relay-member > span { padding: 6px 10px; }
             .tabs-bar--sub { padding: 0 14px; }
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
+            .stage-timers { padding: 8px 14px; gap: 8px; }
+            .stage-timer { padding: 5px 10px; }
+            .stage-timer-lbl { font-size: 10px; }
+            .stage-timer-val { font-size: 15px; }
         }
     </style>
 </head>
@@ -288,6 +306,9 @@
         <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
     </div>
 </div>
+
+<!-- ── Живой секундомер этапа(ов) ── -->
+<div class="stage-timers" id="stageTimers" style="display:none"></div>
 
 <!-- ── Tabs ── -->
 <div class="tabs-bar" id="tabs">
@@ -337,6 +358,7 @@ let _bikeSubTab = 'combined';
 let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
+let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
 
 /* ──────────────── Theme ──────────────── */
 siInitTheme();
@@ -852,6 +874,90 @@ function renderStartlist() {
     document.getElementById('app').innerHTML = html;
 }
 
+/* ──────────────── Живой секундомер этапа(ов) ──────────────── */
+// Виджет над табами, не привязан к фильтрам/вкладке. Показывает тикающие
+// секундомеры "время от начала этапа" для всех этапов, которые уже
+// начались (кто-то в них вошёл) и ещё не закрылись (кто-то ещё активен).
+const STAGE_TIMER_LABEL = { swim: 'Плавание', bike_day1: 'Вело День 1', bike_day2: 'Вело День 2', run: 'Бег' };
+// Сумма total-времён этапов, предшествующих данному — момент входа в этап
+// = race_start + эта сумма (у первого дошедшего участника). Для swim — 0
+// (масс-старт, начало этапа = старт гонки).
+const STAGE_PRIOR_KEYS = { swim: [], bike_day1: ['swim_s'], bike_day2: ['swim_s', 'bike1_s'], run: ['swim_s', 'bike1_s', 'bike2_s'] };
+const STAGE_ROLE = { swim: 'swim', bike_day1: 'bike', bike_day2: 'bike', run: 'run' };
+
+function stageParticipantRows(dbStage) {
+    const rows = [...(_data.individual || [])];
+    (_data.relay || []).forEach(t => {
+        const m = t.members.find(mm => mm.relay_stage === STAGE_ROLE[dbStage]);
+        if (m) rows.push(m);
+    });
+    return rows;
+}
+
+// Момент входа КОНКРЕТНОГО участника в этап (секунды от старта гонки),
+// null — ещё не дошёл (предыдущий этап не завершён).
+function stageEntryOffset(row, dbStage) {
+    if (dbStage === 'swim') return 0;
+    const keys = STAGE_PRIOR_KEYS[dbStage];
+    if (keys.some(k => row[k] == null)) return null;
+    return keys.reduce((sum, k) => sum + row[k], 0);
+}
+
+// Момент начала этапа в целом = вход САМОГО БЫСТРОГО дошедшего участника.
+// null — в этап ещё никто не вошёл (этап не начался).
+function stageStartOffset(dbStage) {
+    if (dbStage === 'swim') return 0;
+    let min = null;
+    stageParticipantRows(dbStage).forEach(r => {
+        const off = stageEntryOffset(r, dbStage);
+        if (off != null && (min == null || off < min)) min = off;
+    });
+    return min;
+}
+
+// Остался ли хоть один активный участник, ещё не завершивший этап
+// (статус active и не дошёл до последней КТ этапа) — таймер тикает, пока
+// это true.
+function stageIsPending(dbStage) {
+    return stageParticipantRows(dbStage).some(r => {
+        if (r.status !== 'active') return false;
+        const pos = lastReached(r.cp, dbStage);
+        return !(pos && pos.seq === STAGE_MAX_SEQ[dbStage]);
+    });
+}
+
+function computeActiveStageTimers() {
+    if (!_raceStartEpoch || !_data) return [];
+    return STAGE_ORDER
+        .map(dbStage => ({ dbStage, startOffset: stageStartOffset(dbStage) }))
+        .filter(x => x.startOffset != null && stageIsPending(x.dbStage))
+        .map(x => ({ dbStage: x.dbStage, startEpoch: _raceStartEpoch + x.startOffset * 1000 }));
+}
+
+function renderStageTimers() {
+    const el = document.getElementById('stageTimers');
+    const timers = computeActiveStageTimers();
+    if (timers.length === 0) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+    }
+    el.style.display = '';
+    el.innerHTML = timers.map(t => `
+        <div class="stage-timer" data-start="${t.startEpoch}">
+            <span class="stage-timer-lbl">${STAGE_TIMER_LABEL[t.dbStage]}</span>
+            <span class="stage-timer-val">00:00:00</span>
+        </div>`).join('');
+    tickStageTimers();
+}
+
+function tickStageTimers() {
+    document.querySelectorAll('.stage-timer').forEach(el => {
+        const elapsed = Math.max(0, Math.floor((Date.now() - Number(el.dataset.start)) / 1000));
+        el.querySelector('.stage-timer-val').textContent = fmtTime(elapsed);
+    });
+}
+
 /* ──────────────── Main render ──────────────── */
 function render() {
     if (!_data) return;
@@ -884,11 +990,30 @@ async function loadYear(year) {
         const resp = await fetch(`/api/siberman/results?year=${year}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         _data = await resp.json();
+        _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         render();
+        renderStageTimers();
     } catch(e) {
         document.getElementById('loading').textContent = 'Ошибка загрузки: ' + e.message;
     }
 }
+
+// Медленный поллинг (обновляет данные + состав активных секундомеров,
+// без сетевого запроса на каждый тик) — на странице раньше не было вообще
+// никакого автообновления, вся загрузка была одноразовой при открытии.
+async function refreshData() {
+    if (!_data) return;
+    try {
+        const resp = await fetch(`/api/siberman/results?year=${_year}`);
+        if (!resp.ok) return;
+        _data = await resp.json();
+        _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
+        render();
+        renderStageTimers();
+    } catch(e) { /* сеть моргнула — подождём следующего цикла поллинга */ }
+}
+setInterval(refreshData, 20000);
+setInterval(tickStageTimers, 1000);
 
 /* ──────────────── Event listeners ──────────────── */
 document.querySelectorAll('#tabs .tab').forEach(t => {
