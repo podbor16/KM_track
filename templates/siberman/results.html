@@ -125,6 +125,8 @@
         .tab:hover { color: var(--text); }
         .tab.active { color: var(--red); border-bottom-color: var(--red); }
         .tab .tab-dist { font-size: 10px; font-weight: 400; opacity: .7; margin-left: 4px; }
+        .tabs-bar--sub { padding: 0 20px; background: var(--bg); }
+        .tabs-bar--sub .tab { padding: 8px 14px; font-size: 11px; }
 
         /* ── Filters ── */
         .filters {
@@ -264,6 +266,8 @@
             td, thead th { padding: 7px 7px; font-size: 12px; }
             .relay-card-hdr { padding: 8px 10px; }
             .relay-member > span { padding: 6px 10px; }
+            .tabs-bar--sub { padding: 0 14px; }
+            .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
         }
     </style>
 </head>
@@ -287,12 +291,19 @@
 
 <!-- ── Tabs ── -->
 <div class="tabs-bar" id="tabs">
-    <div class="tab active" data-tab="overall">Финал</div>
+    <div class="tab active" data-tab="overall">Итоги гонки</div>
     <div class="tab" data-tab="swim">Плавание <span class="tab-dist">10 км</span></div>
-    <div class="tab" data-tab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
-    <div class="tab" data-tab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
+    <div class="tab" data-tab="bike">Вело <span class="tab-dist">421 км</span></div>
+    <div class="tab" data-tab="day1">День 1 <span class="tab-dist">155 км</span></div>
+    <div class="tab" data-tab="day2">День 2 <span class="tab-dist">431 км</span></div>
     <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
     <div class="tab" data-tab="startlist">Старт Вело-2</div>
+</div>
+<!-- Подвкладки "Вело" — свод по обоим дням / по-дневная разбивка -->
+<div class="tabs-bar tabs-bar--sub" id="bikeSubTabs" style="display:none">
+    <div class="tab active" data-biketab="combined">Свод (оба дня)</div>
+    <div class="tab" data-biketab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
+    <div class="tab" data-biketab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
 </div>
 
 <!-- ── Filters ── -->
@@ -322,6 +333,7 @@
 /* ──────────────── State ──────────────── */
 let _data = null;
 let _tab = 'overall';
+let _bikeSubTab = 'combined';
 let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
@@ -711,6 +723,92 @@ function renderStage(stage) {
     document.getElementById('app').innerHTML = html;
 }
 
+/* ──────────────── Render: Вело (свод) / День 1 / День 2 ────────────────
+   Общий рендер для "кумулятивных" зачётов, не привязанных к конкретному
+   этапу (свод вело за оба дня, снапшот гонки на конец календарного дня).
+   В отличие от Итогов/этапов тут нет DB-полей ранга — место считается
+   позицией в отсортированном списке, одна колонка "Место" (при активном
+   фильтре пола getFiltered() уже отдаёт только участников этого пола —
+   позиция и так получается местом внутри пола). */
+function progressStatusBadge(status, hasValue) {
+    if (status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
+    if (status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
+    if (status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
+    return hasValue ? '<span class="badge badge-fin">Пройден</span>' : '<span class="badge badge-live">В гонке</span>';
+}
+
+function bikeCombinedTime(row) {
+    return (row.bike1_s != null && row.bike2_s != null) ? row.bike1_s + row.bike2_s : null;
+}
+function day1Progress(row) {
+    return globalProgress(row, 'bike_day1', STAGE_MAX_SEQ.bike_day1);
+}
+function day2Progress(row) {
+    return globalProgress(row, 'bike_day2', STAGE_MAX_SEQ.bike_day2);
+}
+
+// individual: getValue вызывается на самой строке участника (есть .cp,
+// .bike1_s и т.д.). relay: getValue вызывается на teamGapRow(team) —
+// том же "виртуальном участнике", что и в Итогах/Отставании.
+function buildRankedEntries(individual, relay, getValue) {
+    const withVal = [
+        ...individual.map(r => ({ type: 'individual', entry: r, v: r.status === 'active' ? getValue(r) : null })),
+        ...relay.map(t => {
+            const tr = teamGapRow(t);
+            return { type: 'relay', entry: t, status: tr.status, v: tr.status === 'active' ? getValue(tr) : null };
+        }),
+    ];
+    return withVal.sort((a, b) => {
+        if (a.v == null && b.v == null) return 0;
+        if (a.v == null) return 1;
+        if (b.v == null) return -1;
+        return a.v - b.v;
+    });
+}
+
+function buildProgressRow(item, pos) {
+    const { type, entry, v } = item;
+    const hasVal = v != null;
+    const rc = hasVal ? rankClass(pos) : '';
+    const status = type === 'individual' ? entry.status : item.status;
+    const nameCell = type === 'individual'
+        ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
+        : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
+    return `<tr class="${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+        <td><span class="rank-num ${rc}">${hasVal ? pos : '—'}</span></td>
+        <td class="bib-cell">${entry.bib}</td>
+        <td>${nameCell}</td>
+        <td>${type === 'individual' ? genderBadge(entry.gender) : '<span class="muted">—</span>'}</td>
+        <td class="muted">${type === 'individual' ? 'Индивидуальный' : 'Эстафета'}</td>
+        <td class="r time-cell">${fmtTime(v)}</td>
+        <td>${progressStatusBadge(status, hasVal)}</td>
+    </tr>`;
+}
+
+function renderRankedProgress(getValue) {
+    const { individual, relay } = getFiltered();
+    let html = buildStats(individual, relay, null);
+    const entries = buildRankedEntries(individual, relay, getValue);
+    if (entries.length === 0) {
+        html += '<div class="empty">Нет данных для выбранного фильтра</div>';
+        document.getElementById('app').innerHTML = html;
+        return;
+    }
+    html += `<div class="table-wrap"><table>
+    <thead><tr><th>Место</th><th>№</th><th>Участник</th><th>Пол</th><th>Формат</th><th class="r">Время</th><th>Статус</th></tr></thead><tbody>`;
+    let pos = 0;
+    entries.forEach(item => {
+        if (item.v != null) pos++;
+        html += buildProgressRow(item, pos);
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('app').innerHTML = html;
+}
+
+function renderBikeCombined() { renderRankedProgress(bikeCombinedTime); }
+function renderDay1() { renderRankedProgress(day1Progress); }
+function renderDay2() { renderRankedProgress(day2Progress); }
+
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */
 function renderStartlist() {
     const { individual, relay } = getFiltered();
@@ -765,8 +863,15 @@ function render() {
     const hideGender = _fmt === 'relay';
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
+    document.getElementById('bikeSubTabs').style.display = _tab === 'bike' ? '' : 'none';
     if (_tab === 'overall') renderOverall();
     else if (_tab === 'startlist') renderStartlist();
+    else if (_tab === 'day1') renderDay1();
+    else if (_tab === 'day2') renderDay2();
+    else if (_tab === 'bike') {
+        if (_bikeSubTab === 'combined') renderBikeCombined();
+        else renderStage(_bikeSubTab);
+    }
     else renderStage(_tab);
 }
 
@@ -786,11 +891,20 @@ async function loadYear(year) {
 }
 
 /* ──────────────── Event listeners ──────────────── */
-document.querySelectorAll('.tab').forEach(t => {
+document.querySelectorAll('#tabs .tab').forEach(t => {
     t.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('#tabs .tab').forEach(x => x.classList.remove('active'));
         t.classList.add('active');
         _tab = t.dataset.tab;
+        render();
+    });
+});
+
+document.querySelectorAll('#bikeSubTabs .tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('#bikeSubTabs .tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        _bikeSubTab = t.dataset.biketab;
         render();
     });
 });

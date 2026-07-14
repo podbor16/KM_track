@@ -95,5 +95,57 @@ check('rankBodyCells порядок меняется местами по _gender
     assert.ok(idx2 < idx5, `при _gender=M по-полу (2) должен идти раньше абсолюта (5); html=${genderHtml}`);
 });
 
+// ── buildRankedEntries()/bikeCombinedTime()/day1Progress()/day2Progress() ──
+function mkIndProgress(bib, overrides = {}) {
+    return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
+}
+function mkRelayProgress(bib, membersOverrides) {
+    return {
+        bib, team_name: `Team${bib}`,
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: membersOverrides.swimCp ?? {}, swim_s: membersOverrides.swim_s },
+            { relay_stage: 'bike', status: 'active', cp: membersOverrides.bikeCp ?? {}, bike1_s: membersOverrides.bike1_s, bike2_s: membersOverrides.bike2_s },
+            { relay_stage: 'run', status: 'active', cp: membersOverrides.runCp ?? {}, run_s: membersOverrides.run_s },
+        ],
+    };
+}
+
+check('bikeCombinedTime — сумма bike1+bike2, null если этап не завершён', () => {
+    assert.strictEqual(sandbox.bikeCombinedTime({ bike1_s: 100, bike2_s: 200 }), 300);
+    assert.strictEqual(sandbox.bikeCombinedTime({ bike1_s: 100, bike2_s: null }), null);
+});
+
+check('buildRankedEntries — сортировка по значению, null (не дошедшие/dnf) — в хвост', () => {
+    const individual = [
+        mkIndProgress(1, { bike1_s: 100, bike2_s: 200 }),        // 300
+        mkIndProgress(2, { bike1_s: 50, bike2_s: null }),        // null (ещё не доехал день2)
+        mkIndProgress(3, { bike1_s: 40, bike2_s: 60, status: 'dnf' }), // dnf -> null несмотря на времена
+    ];
+    const relay = [mkRelayProgress(10, { bike1_s: 30, bike2_s: 40 })]; // 70
+    const entries = sandbox.buildRankedEntries(individual, relay, sandbox.bikeCombinedTime);
+    const order = entries.map(e => e.entry.bib);
+    assert.strictEqual(JSON.stringify(order), JSON.stringify([10, 1, 2, 3]), `expected [10,1,2,3], got [${order}]`);
+    assert.strictEqual(entries[0].v, 70);
+    assert.strictEqual(entries[1].v, 300);
+    assert.strictEqual(entries[2].v, null);
+});
+
+check('day1Progress/day2Progress используют globalProgress по STAGE_MAX_SEQ', () => {
+    // STAGE_MAX_SEQ объявлен как const внутри исполненного скрипта — та же
+    // лексическая изоляция, что и у _gender/_fmt, читаем через runInContext.
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqBike2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const row = {
+        cp: {
+            bike_day1: { [maxSeqBike1]: 5000 },
+            bike_day2: { [maxSeqBike2]: 9000 },
+        },
+        swim_s: 1000, bike1_s: 4000, bike2_s: 8000, run_s: null,
+    };
+    assert.strictEqual(sandbox.day1Progress(row), 5000);
+    // bike_day2 elapsed отсчитывается от старта СВОЕГО этапа -> + swim_s + bike1_s
+    assert.strictEqual(sandbox.day2Progress(row), 1000 + 4000 + 9000);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
