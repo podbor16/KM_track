@@ -209,5 +209,34 @@ check('computeActiveStageTimers — таймер плавания пропада
     assert.strictEqual(JSON.stringify(timers), JSON.stringify(['bike_day1']));
 });
 
+// ── Графики: buildPaceDatasets()/buildPositionDatasets() ──
+check('buildPaceDatasets — точки по реальным КТ (X=км этапа, Y=темп/скорость), участники без сплитов не попадают', () => {
+    setState('all', 'all');
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const withSplits = mkTimerInd(1, { splits: { bike_day1: { 1: 600, 2: 1200 } } }); // 3км/600с, 7км/1200с
+    const noSplits = mkTimerInd(2, { splits: {} });
+    setRaceData([withSplits, noSplits], [], Date.now());
+    const datasets = sandbox.buildPaceDatasets('bike1');
+    assert.strictEqual(datasets.length, 1, `ожидался 1 датасет (только с данными), получено ${datasets.length}`);
+    assert.strictEqual(datasets[0]._bib, 1);
+    assert.strictEqual(datasets[0].data[0].x, 3); // CHECKPOINT_DIST_KM.bike_day1[1]
+    assert.ok(datasets[0].data[0].y > 0, 'скорость должна быть положительным числом');
+});
+
+check('buildPositionDatasets — X учитывает STAGE_KM_OFFSET, Y = глобальное место на КТ', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const offsetBike1 = vm.runInContext('STAGE_KM_OFFSET.bike_day1', sandbox);
+    const a = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { 1: 400 } }, swim_s: 3000 });
+    const b = mkTimerInd(2, { cp: { swim: { [maxSeqSwim]: 3200 }, bike_day1: { 1: 500 } }, swim_s: 3200 });
+    setRaceData([a, b], [], Date.now());
+    const datasets = sandbox.buildPositionDatasets();
+    assert.strictEqual(datasets.length, 2);
+    const distTable = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1', sandbox);
+    const bike1PointA = datasets.find(d => d._bib === 1).data.find(p => p.x === offsetBike1 + distTable[1]);
+    assert.ok(bike1PointA, 'ожидалась точка на bike_day1 seq=1 со смещением STAGE_KM_OFFSET.bike_day1');
+    assert.strictEqual(bike1PointA.y, 1); // участник 1 пришёл на эту КТ первым (globalProgress меньше)
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

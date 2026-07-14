@@ -33,6 +33,7 @@
             --header-bg:var(--bg2);
             --dnf-op:   .45;
             --stat-val: var(--blue);
+            --chart-context: rgba(106,171,215,.28);
         }
 
         /* ── Light theme ── */
@@ -52,6 +53,7 @@
             --header-bg:var(--white);
             --dnf-op:   .4;
             --stat-val: var(--red);
+            --chart-context: rgba(79,127,155,.28);
         }
 
         body {
@@ -141,6 +143,19 @@
         }
         .stage-timer-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
         .stage-timer-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red); }
+
+        /* ── График ── */
+        .chart-card {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px;
+        }
+        .chart-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+        .chart-canvas-wrap { position: relative; height: 420px; }
+        .chart-canvas-wrap--position { height: 460px; }
+        @media (max-width: 640px) {
+            .chart-canvas-wrap { height: 320px; }
+            .chart-canvas-wrap--position { height: 360px; }
+        }
 
         /* ── Filters ── */
         .filters {
@@ -319,12 +334,18 @@
     <div class="tab" data-tab="day2">День 2 <span class="tab-dist">431 км</span></div>
     <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
     <div class="tab" data-tab="startlist">Старт Вело-2</div>
+    <div class="tab" data-tab="chart">График</div>
 </div>
 <!-- Подвкладки "Вело" — свод по обоим дням / по-дневная разбивка -->
 <div class="tabs-bar tabs-bar--sub" id="bikeSubTabs" style="display:none">
     <div class="tab active" data-biketab="combined">Свод (оба дня)</div>
     <div class="tab" data-biketab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
     <div class="tab" data-biketab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
+</div>
+<!-- Подвкладки "График" — темп/скорость по этапу / позиция по всей гонке -->
+<div class="tabs-bar tabs-bar--sub" id="chartSubTabs" style="display:none">
+    <div class="tab active" data-charttab="pace">Темп/скорость</div>
+    <div class="tab" data-charttab="position">Позиция</div>
 </div>
 
 <!-- ── Filters ── -->
@@ -349,6 +370,7 @@
     <div id="app" style="display:none"></div>
 </div>
 
+<script src="/static/lib/chart4/chart.umd.min.js"></script>
 <script src="/static/js/siberman-common.js"></script>
 <script>
 /* ──────────────── State ──────────────── */
@@ -359,6 +381,10 @@ let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
 let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
+let _chartSubTab = 'pace';
+let _paceStage = 'swim';
+let _paceChart = null;
+let _positionChart = null;
 
 /* ──────────────── Theme ──────────────── */
 siInitTheme();
@@ -831,6 +857,261 @@ function renderBikeCombined() { renderRankedProgress(bikeCombinedTime); }
 function renderDay1() { renderRankedProgress(day1Progress); }
 function renderDay2() { renderRankedProgress(day2Progress); }
 
+/* ──────────────── Render: Графики (Темп/скорость, Позиция) ────────────────
+   Форма — "spaghetti + hover-highlight" (эмфазис, не категориальный цвет):
+   все линии тонкие/приглушённые по умолчанию, наведение/тап подсвечивает
+   ближайшую акцентным цветом и показывает подсказку по ней одной. Так
+   график остаётся читаемым независимо от числа участников (не упирается в
+   потолок в 7-8 категориальных цветов) — сознательно НЕ копирует ручной
+   мультивыбор+легенда Суточной велогонки (там неидеальна мобильная версия,
+   см. правки плана). */
+function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function fmtSecClock(s) {
+    if (s == null) return '';
+    const r = Math.round(s);
+    return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`;
+}
+const STAGE_UNIT_TITLE = { swim: 'Темп, /100 м', bike1: 'Скорость, км/ч', bike2: 'Скорость, км/ч', run: 'Темп, /км' };
+const PACE_STAGE_LABEL = { swim: 'Плавание', bike1: 'Вело День 1', bike2: 'Вело День 2', run: 'Бег' };
+function paceValueLabel(dbStage, v) {
+    if (v == null) return '—';
+    if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(v);
+    const label = fmtSecClock(v);
+    return dbStage === 'swim' ? `${label} /100м` : `${label} /км`;
+}
+
+function chartParticipantRowsForStage(tabStage) {
+    const dbStage = TAB_TO_DB_STAGE[tabStage];
+    const role = STAGE_ROLE[dbStage];
+    const { individual, relay } = getFiltered();
+    const rows = individual.map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, splits: r.splits }));
+    relay.forEach(t => {
+        const m = t.members.find(mm => mm.relay_stage === role);
+        if (m) rows.push({ bib: t.bib, name: `${m.surname} ${m.name} (${t.team_name})`, splits: m.splits });
+    });
+    return { dbStage, rows };
+}
+
+function buildPaceDatasets(tabStage) {
+    const { dbStage, rows } = chartParticipantRowsForStage(tabStage);
+    const maxSeq = STAGE_MAX_SEQ[dbStage];
+    return rows.map(r => {
+        const pts = [];
+        for (let seq = 1; seq <= maxSeq; seq++) {
+            const v = splitPaceValue(dbStage, seq, r.splits?.[dbStage]?.[seq]);
+            if (v != null) pts.push({ x: CHECKPOINT_DIST_KM[dbStage][seq], y: v });
+        }
+        return pts.length ? { _bib: r.bib, _name: r.name, data: pts } : null;
+    }).filter(Boolean);
+}
+
+// Приглушённый цвет линий (--chart-context) на тёмной теме не проходит
+// порог контраста 3:1 сам по себе (см. dataviz skill validate_palette.js —
+// WARN, "not dismissable" без видимой подписи) — активная линия ПОДСВЕЧЕНА
+// (толще + акцентный цвет), но дополнительно несёт подпись участника прямо
+// на канвасе (не только в тултипе), поэтому опознание не зависит от того,
+// хватает ли контраста самой линии.
+const activeLineLabelPlugin = {
+    id: 'activeLineLabel',
+    afterDatasetsDraw(chart) {
+        const info = chart._hoverInfo;
+        if (!info) return;
+        const { ctx } = chart;
+        ctx.save();
+        ctx.font = '700 11px system-ui, sans-serif';
+        const padX = 7, padY = 4;
+        const tw = ctx.measureText(info.text).width;
+        const bw = tw + padX * 2, bh = 14 + padY * 2;
+        let bx = info.x + 10;
+        if (bx + bw > chart.width - 4) bx = info.x - bw - 10;
+        const by = Math.max(2, Math.min(chart.height - bh - 2, info.y - bh / 2));
+        ctx.fillStyle = cssVar('--red');
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 4); else ctx.rect(bx, by, bw, bh);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(info.text, bx + padX, by + bh / 2);
+        ctx.restore();
+    },
+};
+
+// Общий "hover подсвечивает ближайшую линию" — переиспользуется обоими
+// графиками (Темп/скорость и Позиция).
+function attachSpaghettiHover(chart, accent, context) {
+    chart.options.onHover = function (evt, elements) {
+        const activeIdx = elements.length ? elements[0].datasetIndex : null;
+        this.data.datasets.forEach((d, i) => {
+            const active = i === activeIdx;
+            d.borderColor = active ? accent : context;
+            d.borderWidth = active ? 2.5 : 1;
+        });
+        if (activeIdx != null) {
+            const el = elements[0];
+            const pt = this.getDatasetMeta(activeIdx).data[el.index];
+            this._hoverInfo = { x: pt.x, y: pt.y, text: this.data.datasets[activeIdx].label };
+        } else {
+            this._hoverInfo = null;
+        }
+        this.update('none');
+    };
+}
+
+function buildSpaghettiDataset(d, accent, context) {
+    return {
+        label: d._name, data: d.data,
+        borderColor: context, backgroundColor: context,
+        borderWidth: 1, pointRadius: 0, pointHoverRadius: 5,
+        pointHoverBackgroundColor: accent, pointHoverBorderColor: cssVar('--bg2'), pointHoverBorderWidth: 2,
+        tension: 0.15, spanGaps: true,
+    };
+}
+
+function renderPaceChart() {
+    document.getElementById('app').innerHTML = `
+        <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
+            <span class="filter-label">Этап:</span>
+            <div class="filter-group" id="paceStageGroup">
+                ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === _paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-hint">Наведите курсор (или коснитесь на телефоне) на линию, чтобы увидеть участника</div>
+            <div class="chart-canvas-wrap"><canvas id="sibermanPaceChart"></canvas></div>
+        </div>`;
+    document.querySelectorAll('#paceStageGroup [data-pacestage]').forEach(btn => {
+        btn.addEventListener('click', () => { _paceStage = btn.dataset.pacestage; renderPaceChart(); });
+    });
+
+    if (_paceChart) { _paceChart.destroy(); _paceChart = null; }
+    const dbStage = TAB_TO_DB_STAGE[_paceStage];
+    const datasets = buildPaceDatasets(_paceStage);
+    if (datasets.length === 0) {
+        document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
+        return;
+    }
+    const accent = cssVar('--red');
+    const context = cssVar('--chart-context');
+    const ctx = document.getElementById('sibermanPaceChart').getContext('2d');
+    _paceChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: datasets.map(d => buildSpaghettiDataset(d, accent, context)) },
+        plugins: [activeLineLabelPlugin],
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title(items) { return items[0]?.dataset.label ?? ''; },
+                        label(item) { return `${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; },
+                    },
+                },
+            },
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Километраж этапа', color: cssVar('--muted') }, ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') } },
+                y: {
+                    title: { display: true, text: STAGE_UNIT_TITLE[_paceStage], color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted'), callback: v => (dbStage === 'bike_day1' || dbStage === 'bike_day2') ? v.toFixed(0) : fmtSecClock(v) },
+                    grid: { color: cssVar('--border') },
+                },
+            },
+        },
+    });
+    attachSpaghettiHover(_paceChart, accent, context);
+}
+
+function buildPositionDatasets() {
+    const { individual, relay } = getFiltered();
+    const rows = [
+        ...individual.map(r => ({ key: r.bib, name: `${r.surname} ${r.name}`, cp: r.cp, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
+        ...relay.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
+    ];
+    const ranksByStage = {};
+    STAGE_ORDER.forEach(stage => { ranksByStage[stage] = computeGlobalCheckpointRanks(rows, stage, STAGE_MAX_SEQ[stage]); });
+    return rows.map(r => {
+        const pts = [];
+        STAGE_ORDER.forEach(stage => {
+            const bySeq = ranksByStage[stage];
+            for (let seq = 1; seq <= STAGE_MAX_SEQ[stage]; seq++) {
+                const rank = bySeq[seq]?.[r.key];
+                if (rank != null) pts.push({ x: STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][seq], y: rank });
+            }
+        });
+        return pts.length ? { _bib: r.key, _name: r.name, data: pts } : null;
+    }).filter(Boolean);
+}
+
+function renderPositionChart() {
+    document.getElementById('app').innerHTML = `
+        <div class="chart-card">
+            <div class="chart-hint">Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника.</div>
+            <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
+        </div>`;
+
+    if (_positionChart) { _positionChart.destroy(); _positionChart = null; }
+    const datasets = buildPositionDatasets();
+    if (datasets.length === 0) {
+        document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
+        return;
+    }
+    const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
+    const accent = cssVar('--red');
+    const context = cssVar('--chart-context');
+
+    const stageBoundaryPlugin = {
+        id: 'stageBoundaries',
+        afterDraw(chart) {
+            const { ctx, chartArea, scales } = chart;
+            ctx.save();
+            ctx.strokeStyle = cssVar('--border');
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1;
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.fillStyle = cssVar('--muted');
+            STAGE_ORDER.forEach(stage => {
+                const km = STAGE_KM_OFFSET[stage];
+                if (km === 0) return;
+                const x = scales.x.getPixelForValue(km);
+                ctx.beginPath();
+                ctx.moveTo(x, chartArea.top);
+                ctx.lineTo(x, chartArea.bottom);
+                ctx.stroke();
+                ctx.fillText(STAGE_TIMER_LABEL[stage], x + 4, chartArea.top + 12);
+            });
+            ctx.restore();
+        },
+    };
+
+    const ctx = document.getElementById('sibermanPositionChart').getContext('2d');
+    _positionChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: datasets.map(d => buildSpaghettiDataset(d, accent, context)) },
+        plugins: [stageBoundaryPlugin, activeLineLabelPlugin],
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title(items) { return items[0]?.dataset.label ?? ''; },
+                        label(item) { return `${item.parsed.x.toFixed(1)} км: место ${item.parsed.y}`; },
+                    },
+                },
+            },
+            scales: {
+                x: { type: 'linear', min: 0, max: 515, title: { display: true, text: 'Километраж гонки', color: cssVar('--muted') }, ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') } },
+                y: { reverse: true, min: 1, max: maxRank, title: { display: true, text: 'Место', color: cssVar('--muted') }, ticks: { color: cssVar('--muted'), precision: 0 }, grid: { color: cssVar('--border') } },
+            },
+        },
+    });
+    attachSpaghettiHover(_positionChart, accent, context);
+}
+
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */
 function renderStartlist() {
     const { individual, relay } = getFiltered();
@@ -970,6 +1251,7 @@ function render() {
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
     document.getElementById('bikeSubTabs').style.display = _tab === 'bike' ? '' : 'none';
+    document.getElementById('chartSubTabs').style.display = _tab === 'chart' ? '' : 'none';
     if (_tab === 'overall') renderOverall();
     else if (_tab === 'startlist') renderStartlist();
     else if (_tab === 'day1') renderDay1();
@@ -977,6 +1259,10 @@ function render() {
     else if (_tab === 'bike') {
         if (_bikeSubTab === 'combined') renderBikeCombined();
         else renderStage(_bikeSubTab);
+    }
+    else if (_tab === 'chart') {
+        if (_chartSubTab === 'pace') renderPaceChart();
+        else renderPositionChart();
     }
     else renderStage(_tab);
 }
@@ -1030,6 +1316,15 @@ document.querySelectorAll('#bikeSubTabs .tab').forEach(t => {
         document.querySelectorAll('#bikeSubTabs .tab').forEach(x => x.classList.remove('active'));
         t.classList.add('active');
         _bikeSubTab = t.dataset.biketab;
+        render();
+    });
+});
+
+document.querySelectorAll('#chartSubTabs .tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('#chartSubTabs .tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        _chartSubTab = t.dataset.charttab;
         render();
     });
 });

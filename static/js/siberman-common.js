@@ -162,6 +162,26 @@ function splitPaceLabel(dbStage, seq, splitS) {
     return fmtPace(Math.round(splitS / distKm));
 }
 
+// То же самое, но возвращает ЧИСЛО (не форматированную строку) для графика:
+// плавание — сек/100м, вело — км/ч, бег — сек/км. null, если сплит
+// отсутствует или дистанция сплита нулевая (не должно случаться, но КТ
+// таблица — внешние данные).
+function splitPaceValue(dbStage, seq, splitS) {
+    if (splitS == null) return null;
+    const distTable = CHECKPOINT_DIST_KM[dbStage];
+    const distKm = distTable[seq] - (distTable[seq - 1] ?? 0);
+    if (!(distKm > 0)) return null;
+    if (dbStage === 'swim') return splitS / distKm / 10;
+    if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return distKm / (splitS / 3600);
+    return splitS / distKm;
+}
+
+// Смещение старта этапа в общем километраже гонки (0→515 км) — график
+// "Позиция" использует это для оси X через весь забег целиком.
+// 10 (плавание) + 145 (вело1) = 155; 155 + 276 (вело2) = 431 (см. также
+// STAGE_LABEL_RU/STAGE_CFG в results.html и STAGE_DISTANCES_KM в service.py).
+const STAGE_KM_OFFSET = { swim: 0, bike_day1: 10, bike_day2: 155, run: 431 };
+
 // "N/4 кругов" для плавания, "N/12 кругов" для бега, null для вело (там нет
 // понятия "круг").
 function lapLabel(stage, seq) {
