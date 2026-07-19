@@ -466,13 +466,21 @@ const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike
 
 // Заголовок двух колонок места — порядок и подписи меняются местами в
 // зависимости от фильтра пола: без фильтра сначала абсолют, с фильтром —
-// сначала пересчитанное место внутри пола (см. п.1 задачи).
-function rankHeaderCells() {
+// сначала пересчитанное место внутри пола (см. п.1 задачи). teamLevel=true
+// (Итоги гонки, Свод вело — строка представляет КОМАНДУ целиком, не
+// конкретного человека) скрывает колонку "По полу" целиком при активном
+// фильтре формата "Эстафета" — иначе она была бы сплошными прочерками
+// (у команды на этом уровне нет единого пола). На табах этапов
+// (renderStage) teamLevel НЕ используется — там строка эстафеты это
+// конкретный участник со своим полом, колонка остаётся осмысленной.
+function rankHeaderCells(teamLevel = false) {
+    if (teamLevel && _fmt === 'relay') return '<th>Место</th>';
     return _gender === 'all'
         ? '<th>Место</th><th>По полу</th>'
         : '<th>По полу</th><th>Абсолют</th>';
 }
-function rankBodyCells(rankAbs, rankGender, gender, rc) {
+function rankBodyCells(rankAbs, rankGender, gender, rc, teamLevel = false) {
+    if (teamLevel && _fmt === 'relay') return `<td><span class="rank-num ${rc}">${rankAbs ?? '—'}</span></td>`;
     const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
     const g = rankGender != null ? `<span class="rank-num ${rc}">${genderBadge(gender)}${rankGender}</span>` : '<span class="muted">—</span>';
     return _gender === 'all' ? `<td>${a}</td><td>${g}</td>` : `<td>${g}</td><td>${a}</td>`;
@@ -487,7 +495,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
     const pos = cur ? lastReached(r.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, r.gender, rc)}
+        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, r.gender, rc, true)}
         <td class="bib-cell">${r.bib}</td>
         <td>
             <span class="name-main">${r.surname} ${r.name}</span>
@@ -521,7 +529,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks) {
         ? (tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">В гонке</span>')
         : '<span class="badge badge-fin">Финишировал</span>';
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[team.bib], null, null, rc)}
+        ${rankBodyCells(combinedRanks[team.bib], null, null, rc, true)}
         <td class="bib-cell">${team.bib}</td>
         <td><span class="name-main">${team.team_name}</span> <span class="badge badge-relay">Эстафета</span></td>
         <td class="muted">—</td>
@@ -568,7 +576,7 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
+    ${rankHeaderCells(true)}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
@@ -850,26 +858,50 @@ function buildRankedEntries(individual, relay, getValue) {
     });
 }
 
-function buildProgressRow(item, pos) {
+// options.genderRanks — {M:{bib:rank}, F:{bib:rank}} — если задано, "Место"
+// разделяется на абсолют/по полу (тот же rankHeaderCells/rankBodyCells
+// паттерн, что и в Итогах/на этапах); эстафета — всегда "—" по полу (у
+// команды на этом уровне нет единого пола, как и в Итогах гонки).
+// options.speedFn(v) — если задано, добавляет колонку "Скорость" (км/ч).
+function buildProgressRow(item, pos, options = {}) {
     const { type, entry, v } = item;
     const hasVal = v != null;
-    const rc = hasVal ? rankClass(pos) : '';
+    const genderRank = options.genderRanks && type === 'individual' ? options.genderRanks[entry.gender]?.[entry.bib] : null;
+    const absRank = hasVal ? pos : null;
+    const mainRank = options.genderRanks && _gender !== 'all' ? genderRank : absRank;
+    const rc = mainRank != null ? rankClass(mainRank) : '';
     const status = type === 'individual' ? entry.status : item.status;
     const nameCell = type === 'individual'
         ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
         : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
+    const rankCells = options.genderRanks
+        ? rankBodyCells(absRank, genderRank, entry.gender, rc, true)
+        : `<td><span class="rank-num ${rc}">${hasVal ? pos : '—'}</span></td>`;
     return `<tr class="${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-        <td><span class="rank-num ${rc}">${hasVal ? pos : '—'}</span></td>
+        ${rankCells}
         <td class="bib-cell">${entry.bib}</td>
         <td>${nameCell}</td>
         <td>${type === 'individual' ? genderBadge(entry.gender) : '<span class="muted">—</span>'}</td>
         ${_fmt === 'all' ? `<td class="muted">${type === 'individual' ? 'Индивидуальный' : 'Эстафета'}</td>` : ''}
         <td class="r time-cell">${fmtTime(v)}</td>
+        ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
         <td>${progressStatusBadge(status, hasVal)}</td>
     </tr>`;
 }
 
-function renderRankedProgress(getValue) {
+// Место по полу считается только среди личников (у эстафетной команды на
+// уровне сводных зачётов нет единого пола) и по ПОЛНОМУ ростеру года (не
+// по текущим фильтрам) — тот же принцип стабильности, что и у
+// computeCombinedOverallRanks.
+function computeGenderRanksFor(getValue) {
+    const rows = _data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? getValue(r) : null, status: r.status, gender: r.gender }));
+    return {
+        M: computeRanksByValue(rows.filter(r => r.gender === 'M')),
+        F: computeRanksByValue(rows.filter(r => r.gender === 'F')),
+    };
+}
+
+function renderRankedProgress(getValue, options = {}) {
     const { individual, relay } = getFiltered();
     let html = buildStats(individual, relay, null);
     const entries = buildRankedEntries(individual, relay, getValue);
@@ -879,17 +911,24 @@ function renderRankedProgress(getValue) {
         return;
     }
     html += `<div class="table-wrap"><table>
-    <thead><tr><th>Место</th><th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${options.genderRanks ? rankHeaderCells(true) : '<th>Место</th>'}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     let pos = 0;
     entries.forEach(item => {
         if (item.v != null) pos++;
-        html += buildProgressRow(item, pos);
+        html += buildProgressRow(item, pos, options);
     });
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
 }
 
-function renderBikeCombined() { renderRankedProgress(bikeCombinedTime); }
+// Свод вело (421 км = 145+276) — единственная сводная вкладка с однородной
+// метрикой на всей дистанции (в отличие от Дней 1/2, где дистанция смешана
+// из разных дисциплин), поэтому только у неё осмысленны средняя скорость и
+// место по полу как отдельная колонка (запрошено пользователем 2026-07-19).
+function renderBikeCombined() {
+    const genderRanks = computeGenderRanksFor(bikeCombinedTime);
+    renderRankedProgress(bikeCombinedTime, { genderRanks, speedFn: s => 421 / (s / 3600) });
+}
 function renderDay1() { renderRankedProgress(day1Progress); }
 function renderDay2() { renderRankedProgress(day2Progress); }
 

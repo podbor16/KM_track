@@ -12,11 +12,22 @@ const commonJs = fs.readFileSync(path.join(ROOT, 'static/js/siberman-common.js')
 const html = fs.readFileSync(path.join(ROOT, 'templates/siberman/results.html'), 'utf-8');
 const inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])[0];
 
+// getElementById('app') должен возвращать ОДИН и тот же объект при каждом
+// вызове (не новый) — иначе рендер-функции пишут innerHTML в объект, который
+// тест-код уже никогда не увидит (та же ловушка, что и с let-переменными в
+// vm-контексте, но для DOM-стабов).
+const elementsById = {};
+function domStub(id) {
+    if (id && elementsById[id]) return elementsById[id];
+    const el = { innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {}, addEventListener: () => {} };
+    if (id) elementsById[id] = el;
+    return el;
+}
 const sandbox = {
     console,
     fetch: () => Promise.resolve({ json: () => Promise.resolve({}) }),
     document: {
-        getElementById: () => ({ innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {}, addEventListener: () => {} }),
+        getElementById: (id) => domStub(id),
         querySelectorAll: () => [],
         addEventListener: () => {},
         documentElement: { setAttribute: () => {}, getAttribute: () => 'dark' },
@@ -446,6 +457,58 @@ check('computeRanksByValue — раздельные ранги по полу (л
     const femaleRanks = sandbox.computeRanksByValue(rows.filter(r => r.gender === 'F'));
     assert.strictEqual(JSON.stringify(maleRanks), JSON.stringify({ 1: 1, '10:swim': 2 }));
     assert.strictEqual(JSON.stringify(femaleRanks), JSON.stringify({ 2: 1 }));
+});
+
+// ── rankHeaderCells()/rankBodyCells(teamLevel) — скрывать "По полу" при
+// активном фильтре формата "Эстафета" в командных контекстах (Итоги гонки,
+// Свод вело), т.к. у команды на этом уровне нет единого пола (запрошено
+// пользователем 2026-07-19) ──
+check('rankHeaderCells(true) — одна колонка "Место" при fmt=relay', () => {
+    setState('relay', 'all');
+    assert.strictEqual(sandbox.rankHeaderCells(true), '<th>Место</th>');
+});
+check('rankHeaderCells(true) — обе колонки при fmt!==relay (не затронуто)', () => {
+    setState('all', 'all');
+    assert.strictEqual(sandbox.rankHeaderCells(true), '<th>Место</th><th>По полу</th>');
+});
+check('rankHeaderCells() без teamLevel — не схлопывается даже при fmt=relay (табы этапов)', () => {
+    setState('relay', 'all');
+    assert.strictEqual(sandbox.rankHeaderCells(), '<th>Место</th><th>По полу</th>');
+});
+check('rankBodyCells(..., true) — одна ячейка при fmt=relay', () => {
+    setState('relay', 'all');
+    const html = sandbox.rankBodyCells(5, null, null, '', true);
+    assert.strictEqual(html, '<td><span class="rank-num ">5</span></td>');
+});
+
+// ── computeGenderRanksFor()/renderBikeCombined — место по полу + скорость
+// в своде вело (421 км), запрошено пользователем 2026-07-19 ──
+check('computeGenderRanksFor — ранг по полу считается по ПОЛНОМУ ростеру (не по текущим фильтрам)', () => {
+    setState('all', 'M'); // фильтр пола активен — не должен влиять на расчёт
+    const individual = [
+        mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100 }), // 200
+        mkIndProgress(2, { gender: 'M', bike1_s: 50, bike2_s: 50 }),   // 100 — быстрее
+        mkIndProgress(3, { gender: 'F', bike1_s: 10, bike2_s: 10 }),   // 20, другой пол — свой пул
+    ];
+    sandbox.__individual = individual;
+    vm.runInContext('_data = { individual: __individual, relay: [] };', sandbox);
+    const ranks = sandbox.computeGenderRanksFor(sandbox.bikeCombinedTime);
+    assert.strictEqual(JSON.stringify(ranks.M), JSON.stringify({ 2: 1, 1: 2 }));
+    assert.strictEqual(JSON.stringify(ranks.F), JSON.stringify({ 3: 1 }));
+});
+check('renderBikeCombined() — не падает, средняя скорость и место по полу присутствуют в разметке', () => {
+    setState('all', 'all');
+    const individual = [
+        mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 }),
+        mkIndProgress(2, { gender: 'F', bike1_s: 6000, bike2_s: 11000 }),
+    ];
+    sandbox.__individual = individual;
+    vm.runInContext('_data = { individual: __individual, relay: [] };', sandbox);
+    sandbox.renderBikeCombined();
+    const html = sandbox.document.getElementById('app').innerHTML;
+    assert.ok(html.includes('Скорость'), 'ожидалась колонка "Скорость" в заголовке');
+    assert.ok(html.includes('По полу'), 'ожидалась колонка "По полу" в заголовке');
+    assert.ok(/\d+[.,]\d\s*км\/ч/.test(html), `ожидалось значение скорости в км/ч, html: ${html.slice(0, 400)}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
