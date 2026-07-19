@@ -139,9 +139,20 @@
             .logo-name { font-size: 18px; }
             .content { padding: 14px; }
             .card-hdr, .stats-row { padding: 12px 14px; }
+            .p-name { font-size: 17px; }
+            .p-bib, .p-team { font-size: 12px; }
+            .p-city { font-size: 11px; }
+            .stat { padding: 6px 10px; min-width: 76px; }
+            .stat-val { font-size: 15px; }
+            .stat-lbl { font-size: 9px; }
             .mode-toggle { padding: 0 14px 12px; }
+            .mode-btn { padding: 4px 11px; font-size: 11px; }
             details.stage summary { padding: 10px 14px; }
+            .stage-title { font-size: 13px; }
+            .stage-dist, .stage-gap, .stage-lap { font-size: 10px; }
             .cp-table th, .cp-table td { padding: 6px 10px; }
+            .cp-table th { font-size: 9px; }
+            .cp-table td { font-size: 11px; }
         }
     </style>
 </head>
@@ -211,13 +222,13 @@ function buildOverallGapPool(data) {
 // совокупному времени гонки на момент этой КТ (прошлые полные этапы +
 // прогресс на текущем) — так видно, как менялась позиция в общем зачёте,
 // а не только на отдельном этапе.
-let _mode = 'stage';
+let _mode = 'race';
 let _rerender = null;
 
 function modeToggle() {
     return `<div class="mode-toggle">
-        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">На этапе</button>
         <button class="mode-btn ${_mode === 'race' ? 'active' : ''}" onclick="_mode='race'; _rerender();">В гонке</button>
+        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">На этапе</button>
     </div>`;
 }
 

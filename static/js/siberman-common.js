@@ -420,3 +420,32 @@ function teamGapRow(team) {
         status: team.members.some(m => m.status === 'dnf') ? 'dnf' : 'active',
     };
 }
+
+// rows для computeCombinedOverallRanks — личники и эстафета в одной форме
+// {key, overall_s, status}. Личники (rank_overall) и эстафета (считается
+// на клиенте) раньше ранжировались раздельно — единого "абсолютного" места
+// по всей гонке (личники+эстафета вместе) не было нигде. Эта пара функций
+// его вводит.
+function combinedOverallRankRows(individual, relay) {
+    return [
+        ...individual.map(r => ({ key: r.bib, overall_s: r.overall_s, status: r.status })),
+        ...relay.map(t => ({ key: t.bib, overall_s: t.overall_s, status: teamGapRow(t).status })),
+    ];
+}
+
+// Единое место по всей гонке (личники+эстафета вместе), независимо от
+// активных фильтров формата/пола — считается по ПОЛНОМУ ростеру (все
+// участники года), поэтому значение не "плавает" при переключении
+// фильтров таблицы (см. п.14/п.4 задачи 2026-07-19).
+function computeCombinedOverallRanks(rows) {
+    const finishers = rows
+        .filter(r => r.status === 'active' && r.overall_s != null)
+        .sort((a, b) => a.overall_s - b.overall_s);
+    const ranks = {};
+    finishers.forEach((r, i) => {
+        ranks[r.key] = (i > 0 && r.overall_s === finishers[i - 1].overall_s)
+            ? ranks[finishers[i - 1].key]
+            : i + 1;
+    });
+    return ranks;
+}

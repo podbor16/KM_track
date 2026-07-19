@@ -204,6 +204,9 @@
         tbody tr:last-child { border-bottom: none; }
         tbody tr:hover { background: var(--bg3); }
         tbody tr.dnf { opacity: var(--dnf-op); }
+        /* Строка эстафетчика двухстрочная (имя + команда) — фиксируем
+           высоту строки, чтобы совпадала с однострочной строкой личника. */
+        table.stage-table tbody tr { height: 46px; }
         td { padding: 9px 10px; white-space: nowrap; }
         td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -247,32 +250,6 @@
         }
         .section-hdr::after { content: ''; flex: 1; height: 1px; background: var(--border); display: block; }
 
-        /* ── Relay cards ── */
-        .relay-grid { display: flex; flex-direction: column; gap: 8px; }
-        .relay-card {
-            background: var(--bg2); border: 1px solid var(--border);
-            border-radius: var(--radius); overflow: hidden;
-        }
-        .relay-card-hdr {
-            padding: 10px 14px; display: flex; align-items: center; gap: 10px;
-            border-bottom: 1px solid var(--border); background: var(--bg3);
-        }
-        .relay-pos { font-size: 14px; font-weight: 800; color: var(--red); min-width: 24px; }
-        .relay-bib { font-size: 12px; font-weight: 700; color: var(--muted); }
-        .relay-name { font-weight: 700; font-size: 14px; flex: 1; }
-        .relay-total { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
-        .relay-members { display: table; width: 100%; }
-        .relay-member { display: table-row; }
-        .relay-member > span {
-            display: table-cell; padding: 7px 14px;
-            border-bottom: 1px solid var(--border); vertical-align: middle;
-        }
-        .relay-member:last-child > span { border-bottom: none; }
-        .relay-stage-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--blue); width: 70px; }
-        .relay-member-name { font-size: 13px; font-weight: 500; }
-        .relay-member-time { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
-        .relay-member-meta { font-size: 11px; color: var(--muted); text-align: right; width: 100px; }
-
         /* ── Empty / loading ── */
         .empty, .loading {
             padding: 60px 20px; text-align: center;
@@ -293,9 +270,16 @@
             .tab { padding: 10px 12px; font-size: 12px; }
             .filters { padding: 8px 14px; }
             .content { padding: 12px 14px 32px; }
-            td, thead th { padding: 7px 7px; font-size: 12px; }
-            .relay-card-hdr { padding: 8px 10px; }
-            .relay-member > span { padding: 6px 10px; }
+            td, thead th { padding: 6px 6px; font-size: 11px; }
+            thead th { font-size: 9px; }
+            .name-main { font-size: 12px; }
+            .name-city { font-size: 10px; }
+            .rank-num { font-size: 12px; }
+            .bib-cell { font-size: 11px; }
+            .badge { font-size: 9px; padding: 1px 5px; }
+            .time-cell { font-size: 11px; }
+            .stat-val { font-size: 17px; }
+            .stat-lbl { font-size: 9px; }
             .tabs-bar--sub { padding: 0 14px; }
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
             .stage-timers { padding: 8px 14px; gap: 8px; }
@@ -448,24 +432,23 @@ function rankBodyCells(rankAbs, rankGender, gender, rc) {
     return _gender === 'all' ? `<td>${a}</td><td>${g}</td>` : `<td>${g}</td><td>${a}</td>`;
 }
 
-function buildIndividualOverallRow(r, overallGaps) {
-    const mainOverallRank = _gender === 'all' ? 'rank_overall' : 'overall_rank_g';
+function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
     const notFinished = r.overall_s == null || r.status !== 'active';
-    const rc = notFinished ? '' : rankClass(r[mainOverallRank]);
+    const rc = notFinished ? '' : rankClass(combinedRanks[r.bib]);
     // Последняя пройденная КТ (этап + отсечка) — отдельная колонка, и для
     // финишировавших (последняя КТ = финиш бега), и для тех, кто ещё в гонке.
     const cur = currentStage(r);
     const pos = cur ? lastReached(r.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-        ${rankBodyCells(r.rank_overall, r.overall_rank_g, r.gender, rc)}
+        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, r.gender, rc)}
         <td class="bib-cell">${r.bib}</td>
         <td>
             <span class="name-main">${r.surname} ${r.name}</span>
             ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
         </td>
         <td>${genderBadge(r.gender)}</td>
-        <td class="muted">Индивидуальный</td>
+        ${_fmt === 'all' ? '<td class="muted">Индивидуальный</td>' : ''}
         <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
         <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
         <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
@@ -477,41 +460,35 @@ function buildIndividualOverallRow(r, overallGaps) {
     </tr>`;
 }
 
-function buildRelayOverallCard(team, pos, overallGaps) {
-    const STAGE_LABELS = { swim: 'Плавание', bike: 'Велосипед', run: 'Бег' };
-    // Последняя КТ команды — по её "виртуальному участнику" (см. teamGapRow:
-    // cp собран из cp тех членов команды, кто отвечает за
-    // swim/bike_day1+bike_day2/run) — тот же принцип, что и "текущий этап" личника.
-    const teamRow = teamGapRow(team);
-    const teamCur = currentStage(teamRow);
-    const teamPos = teamCur ? lastReached(teamRow.cp, teamCur) : null;
-    const teamLastCp = teamPos ? `${STAGE_LABEL_RU[teamCur]}, ${CHECKPOINT_LABELS[teamCur][teamPos.seq]}` : '—';
-    let html = `<div class="relay-card">
-        <div class="relay-card-hdr" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
-            <span class="relay-pos">${pos}</span>
-            <span class="relay-bib">${team.bib}</span>
-            <span class="relay-name">${team.team_name} <span class="badge badge-relay">Эстафета</span><br><span class="muted" style="font-size:11px;font-weight:400">${teamLastCp}</span></span>
-            <span class="relay-total">${fmtTime(team.overall_s)}${overallGaps[team.bib] ? ` <span class="muted" style="font-size:.85em">${fmtGap(overallGaps[team.bib])}</span>` : ''}</span>
-        </div>
-        <div class="relay-members">`;
-    team.members.forEach(m => {
-        const stageTime = m.relay_stage === 'swim' ? m.swim_s
-            : m.relay_stage === 'bike' ? (m.bike1_s != null && m.bike2_s != null ? m.bike1_s + m.bike2_s
-                : m.bike2_s ?? m.bike1_s)
-            : m.run_s;
-        const stageMeta = m.relay_stage === 'swim' ? fmtPace100m(m.swim_pace)
-            : m.relay_stage === 'bike' ? fmtSpeed(m.bike2_speed ?? m.bike1_speed)
-            : fmtPace(m.run_pace);
-        html += `<div class="relay-member">
-            <span class="relay-stage-lbl">${STAGE_LABELS[m.relay_stage] ?? m.relay_stage}</span>
-            <span class="relay-member-name">${m.surname} ${m.name} ${genderBadge(m.gender)}</span>
-            <span class="relay-member-time">${fmtTime(stageTime)}</span>
-            <span class="relay-member-meta">${stageMeta}</span>
-            <span style="margin-left:8px">${relayMemberStatusBadge(m)}</span>
-        </div>`;
-    });
-    html += `</div></div>`;
-    return html;
+// Эстафета в Итогах гонки — ОДНА строка (название команды), как и у
+// личников, без развёрнутого списка участников по ролям (см. п.14
+// задачи 2026-07-19 — раньше это была карточка .relay-card с тремя
+// строками участников, дублировавшая место отдельным счётчиком).
+function buildRelayOverallRow(team, overallGaps, combinedRanks) {
+    const tr = teamGapRow(team);
+    const notFinished = team.overall_s == null || tr.status !== 'active';
+    const rc = notFinished ? '' : rankClass(combinedRanks[team.bib]);
+    const cur = currentStage(tr);
+    const pos = cur ? lastReached(tr.cp, cur) : null;
+    const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
+    const statusCell = notFinished
+        ? (tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">В гонке</span>')
+        : '<span class="badge badge-fin">Финишировал</span>';
+    return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
+        ${rankBodyCells(combinedRanks[team.bib], null, null, rc)}
+        <td class="bib-cell">${team.bib}</td>
+        <td><span class="name-main">${team.team_name}</span> <span class="badge badge-relay">Эстафета</span></td>
+        <td class="muted">—</td>
+        ${_fmt === 'all' ? '<td class="muted">Эстафета</td>' : ''}
+        <td class="r time-cell muted">${fmtTime(tr.swim_s)}</td>
+        <td class="r time-cell muted">${fmtTime(tr.bike1_s)}</td>
+        <td class="r time-cell muted">${fmtTime(tr.bike2_s)}</td>
+        <td class="r time-cell muted">${fmtTime(tr.run_s)}</td>
+        <td class="r time-cell" style="font-weight:800">${fmtTime(team.overall_s)}</td>
+        <td class="muted">${lastCpCell}</td>
+        <td class="r muted">${fmtGap(overallGaps[team.bib])}</td>
+        <td>${statusCell}</td>
+    </tr>`;
 }
 
 // Объединяет личников и эстафету в порядок отображения: финишировавшие обоих
@@ -545,7 +522,7 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th><th>Формат</th>
+    ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
@@ -566,6 +543,10 @@ function renderOverall() {
         ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(teamGapRow),
     ]);
+    // Единое место по всей гонке (личники+эстафета) — считается по ПОЛНОМУ
+    // ростеру года (не по текущим фильтрам), не "плавает" при переключении
+    // формата/пола, см. combinedOverallRankRows/computeCombinedOverallRanks.
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(_data.individual, _data.relay));
     let html = buildStats(individual, relay, null);
 
     if (individual.length === 0 && relay.length === 0) {
@@ -575,27 +556,15 @@ function renderOverall() {
     }
 
     // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
-    // один тип) — группируем соседние записи одного типа в HTML-фрагменты:
-    // цепочка table-фрагментов (личники) чередуется с relay-card'ами.
+    // один тип) — личники и эстафета теперь однородные строки одной таблицы.
     const merged = buildMergedOverallEntries(individual, relay);
-    let relayPos = 0;
-    let tableOpen = false;
-    let headerUsed = false;
-    merged.forEach((item, i) => {
-        if (item.type === 'individual') {
-            if (!tableOpen) {
-                html += `<div class="table-wrap"><table>${headerUsed ? '' : OVERALL_TABLE_HEAD()}<tbody>`;
-                tableOpen = true;
-                headerUsed = true;
-            }
-            html += buildIndividualOverallRow(item.entry, overallGaps);
-        } else {
-            if (tableOpen) { html += '</tbody></table></div>'; tableOpen = false; }
-            relayPos++;
-            html += buildRelayOverallCard(item.entry, relayPos, overallGaps);
-        }
+    html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD()}<tbody>`;
+    merged.forEach(item => {
+        html += item.type === 'individual'
+            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks)
+            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks);
     });
-    if (tableOpen) html += '</tbody></table></div>';
+    html += '</tbody></table></div>';
 
     document.getElementById('app').innerHTML = html;
 }
@@ -696,7 +665,7 @@ function renderStage(stage) {
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
-            <td class="muted">Индивидуальный</td>
+            ${_fmt === 'all' ? '<td class="muted">Индивидуальный</td>' : ''}
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[r.bib])}</td>
@@ -721,7 +690,7 @@ function renderStage(stage) {
                 <br><span class="name-city">${m._team}</span>
             </td>
             <td>${genderBadge(m.gender)}</td>
-            <td class="muted">Эстафета</td>
+            ${_fmt === 'all' ? '<td class="muted">Эстафета</td>' : ''}
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
@@ -758,9 +727,9 @@ function renderStage(stage) {
         ];
     }
 
-    html += `<div class="table-wrap"><table>
+    html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
-        ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th><th>Формат</th>
+        ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
         <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
@@ -828,7 +797,7 @@ function buildProgressRow(item, pos) {
         <td class="bib-cell">${entry.bib}</td>
         <td>${nameCell}</td>
         <td>${type === 'individual' ? genderBadge(entry.gender) : '<span class="muted">—</span>'}</td>
-        <td class="muted">${type === 'individual' ? 'Индивидуальный' : 'Эстафета'}</td>
+        ${_fmt === 'all' ? `<td class="muted">${type === 'individual' ? 'Индивидуальный' : 'Эстафета'}</td>` : ''}
         <td class="r time-cell">${fmtTime(v)}</td>
         <td>${progressStatusBadge(status, hasVal)}</td>
     </tr>`;
@@ -844,7 +813,7 @@ function renderRankedProgress(getValue) {
         return;
     }
     html += `<div class="table-wrap"><table>
-    <thead><tr><th>Место</th><th>№</th><th>Участник</th><th>Пол</th><th>Формат</th><th class="r">Время</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr><th>Место</th><th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th><th>Статус</th></tr></thead><tbody>`;
     let pos = 0;
     entries.forEach(item => {
         if (item.v != null) pos++;

@@ -263,5 +263,25 @@ check('buildPositionDatasets — X учитывает STAGE_KM_OFFSET, Y = гл�
     assert.strictEqual(bike1PointA.y, 1); // участник 1 пришёл на эту КТ первым (globalProgress меньше)
 });
 
+// ── computeCombinedOverallRanks() / combinedOverallRankRows() — единое место
+// личники+эстафета вместе (п.14 задачи 2026-07-19: раньше личники (rank_overall
+// из БД) и эстафета (relayPos-счётчик в разметке) ранжировались раздельно,
+// что давало дублирующиеся места "1, 1, 2, 2..." при интерливинге ──
+check('computeCombinedOverallRanks — единая последовательность 1,2,3... без дублей', () => {
+    const individual = [mkInd(1, 22 * 3600), mkInd(2, 23 * 3600)];
+    const relay = [mkRelay(10, 22.2 * 3600)]; // между личником 1 и 2 по времени
+    const rows = sandbox.combinedOverallRankRows(individual, relay);
+    const ranks = sandbox.computeCombinedOverallRanks(rows);
+    assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1, 10: 2, 2: 3 }));
+});
+
+check('computeCombinedOverallRanks — не финишировавшие (null/dnf) не получают место', () => {
+    const individual = [mkInd(1, 100), mkInd(2, null, 'dnf')];
+    const relay = [mkRelay(10, null)];
+    const rows = sandbox.combinedOverallRankRows(individual, relay);
+    const ranks = sandbox.computeCombinedOverallRanks(rows);
+    assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1 }));
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
