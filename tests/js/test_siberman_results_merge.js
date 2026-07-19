@@ -266,8 +266,16 @@ check('buildPaceDatasets — точки по реальным КТ (X=км эт�
     const datasets = sandbox.buildPaceDatasets('bike1');
     assert.strictEqual(datasets.length, 1, `ожидался 1 датасет (только с данными), получено ${datasets.length}`);
     assert.strictEqual(datasets[0]._bib, 1);
-    assert.strictEqual(datasets[0].data[0].x, 3); // CHECKPOINT_DIST_KM.bike_day1[1]
-    assert.ok(datasets[0].data[0].y > 0, 'скорость должна быть положительным числом');
+    assert.strictEqual(datasets[0].data[1].x, 3); // CHECKPOINT_DIST_KM.bike_day1[1] — вторая точка, первая реальная КТ
+    assert.ok(datasets[0].data[1].y > 0, 'скорость должна быть положительным числом');
+});
+check('buildPaceDatasets — добавляет экстраполированную точку x=0 (первая КТ не с начала этапа)', () => {
+    setState('all', 'all');
+    const withSplits = mkTimerInd(1, { splits: { bike_day1: { 1: 600 } } });
+    setRaceData([withSplits], [], Date.now());
+    const datasets = sandbox.buildPaceDatasets('bike1');
+    assert.strictEqual(datasets[0].data[0].x, 0, 'первая точка должна быть на x=0');
+    assert.strictEqual(datasets[0].data[0].y, datasets[0].data[1].y, 'экстраполированная точка должна иметь то же Y, что первая реальная КТ');
 });
 
 check('buildPositionDatasets — X учитывает STAGE_KM_OFFSET, Y = глобальное место на КТ', () => {
@@ -563,6 +571,28 @@ check('renderPositionChart() — та же автоочистка выбора',
     sandbox.renderPositionChart();
     const selected = vm.runInContext('_chartSelectedBibs', sandbox);
     assert.strictEqual(JSON.stringify(selected), JSON.stringify([1]), `ожидался только bib=1 после смены фильтра, получено ${JSON.stringify(selected)}`);
+});
+
+// ── Реальный баг: bib в API — СТРОКА (JSON), а не число. Чекбокс-обработчик
+// раньше делал chartToggleSelect(Number(cb.dataset.chartbib)) — число
+// никогда не совпадало с d._bib (строка) в .includes()/.indexOf(), выбор
+// визуально отмечался, но график тут же оставался пустым/не сравнивал
+// (найдено пользователем 2026-07-19, дважды воспроизведено на скриншотах) ──
+check('Мультивыбор со СТРОКОВЫМ bib (как в реальном API) — график не остаётся пустым после выбора', () => {
+    setState('all', 'all');
+    const individual = [mkSwimRow('9999', 'M'), mkSwimRow('144', 'M')]; // bib строками, как в prod JSON
+    sandbox.__individual = individual;
+    vm.runInContext('_data = { individual: __individual, relay: [] }; _paceStage = "swim"; _chartSelectedBibs = [];', sandbox);
+    sandbox.renderPaceChart();
+    const datasets = sandbox.buildPaceDatasets('swim');
+    assert.strictEqual(typeof datasets[0]._bib, 'string', 'd._bib должен остаться строкой (как bib из API)');
+    // Симулируем реальный клик по чекбоксу — dataset.chartbib ВСЕГДА строка
+    // (HTML data-атрибут), передаём как есть, без Number().
+    sandbox.chartToggleSelect(datasets[0]._bib);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    assert.strictEqual(chart.config.data.datasets.length, 1, `после выбора одного участника график должен показать 1 линию, получено ${chart.config.data.datasets.length}`);
+    assert.strictEqual(chart.config.data.datasets[0].label, datasets[0]._name);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

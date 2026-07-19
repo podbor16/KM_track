@@ -1075,7 +1075,13 @@ function refreshChartParticipantList() {
 function attachChartCheckboxHandlers() {
     document.querySelectorAll('[data-chartbib]').forEach(cb => {
         cb.addEventListener('change', () => {
-            chartToggleSelect(Number(cb.dataset.chartbib));
+            // bib из API приходит СТРОКОЙ (JSON), а dataset.chartbib — тоже
+            // строка (HTML data-атрибуты всегда строки) — раньше здесь стоял
+            // Number(...), из-за чего _chartSelectedBibs (числа) никогда не
+            // совпадал с d._bib (строки) в .includes()/.indexOf() — выбор
+            // визуально "срабатывал" (чекбокс отмечался), но график тут же
+            // не находил совпадений и оставался пустым/несравнивающим.
+            chartToggleSelect(cb.dataset.chartbib);
             render(); // выбор меняет сами линии графика — нужен полный ре-рендер
         });
     });
@@ -1123,6 +1129,12 @@ function buildPaceDatasets(tabStage) {
             const v = splitPaceValue(dbStage, seq, r.splits?.[dbStage]?.[seq]);
             if (v != null) pts.push({ x: CHECKPOINT_DIST_KM[dbStage][seq], y: v });
         }
+        // Реального темпа на 0 км не существует (старт этапа) — первая КТ
+        // обычно на 1+ км, из-за чего линия визуально "не доходила" до
+        // начала оси (даже с min:0 на шкале). Экстраполируем горизонтально
+        // от старта до первой КТ на уровне её темпа — читаемости ради,
+        // не как измеренное значение (запрошено пользователем 2026-07-19).
+        if (pts.length && pts[0].x > 0) pts.unshift({ x: 0, y: pts[0].y });
         return pts.length ? { _bib: r.bib, _name: r.name, data: pts } : null;
     }).filter(Boolean);
 }
