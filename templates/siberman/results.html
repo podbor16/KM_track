@@ -997,7 +997,7 @@ function renderDay2() { renderRankedProgress(day2Progress); }
    подсвечивает ближайшую акцентным цветом. Так график остаётся читаемым
    независимо от числа участников. Поверх этого — опциональный режим
    сравнения (см. chart-sidebar ниже, п.7.2 задачи 2026-07-19): пользователь
-   явно выбирает до CHART_COMPARE_MAX участников через поиск+чекбоксы,
+   явно выбирает участников через поиск+чекбоксы (без ограничения по числу),
    тогда spaghetti уступает место обычным категориальным линиям с легендой
    (сознательно НЕ копирует ручной мультивыбор Суточной велогонки один-в-один
    — там неидеальна мобильная версия, см. план). */
@@ -1009,8 +1009,8 @@ function fmtSecClock(s) {
     const r = Math.round(s);
     return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`;
 }
-const STAGE_UNIT_TITLE = { swim: 'Темп, /100 м', bike1: 'Скорость, км/ч', bike2: 'Скорость, км/ч', run: 'Темп, /км' };
-const PACE_STAGE_LABEL = { swim: 'Плавание', bike1: 'Вело День 1', bike2: 'Вело День 2', run: 'Бег' };
+const STAGE_UNIT_TITLE = { swim: 'Темп, /100 м', bike: 'Скорость, км/ч', bike1: 'Скорость, км/ч', bike2: 'Скорость, км/ч', run: 'Темп, /км' };
+const PACE_STAGE_LABEL = { swim: 'Плавание', bike: 'Вело (оба дня)', bike1: 'Вело День 1', bike2: 'Вело День 2', run: 'Бег' };
 function paceValueLabel(dbStage, v) {
     if (v == null) return '—';
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(v);
@@ -1019,13 +1019,12 @@ function paceValueLabel(dbStage, v) {
 }
 
 /* ──────────────── Мультивыбор для сравнения (п.7.2/п.8) ────────────────
-   До 4 одновременных линий — категориальная палитра валидирована skill'ом
-   dataviz именно на "all-pairs" (не только соседние) сравнение до 4 цветов
-   в обоих режимах темы; больше — цвета начинают визуально сливаться.
-   Цвет закреплён за конкретным bib по ПОРЯДКУ выбора (не по позиции в
-   отфильтрованном списке) — не "перекрашивает выживших", когда другой
-   участник добавляется/убирается из сравнения. */
-const CHART_COMPARE_MAX = 4;
+   Без ограничения на число участников (снято по просьбе пользователя
+   2026-07-19) — категориальная палитра из 4 цветов (валидирована skill'ом
+   dataviz на "all-pairs" сравнение) переиспользуется по кругу для 5-го и
+   далее участника; цвет закреплён за конкретным bib по ПОРЯДКУ выбора (не
+   по позиции в отфильтрованном списке) — не "перекрашивает выживших", когда
+   другой участник добавляется/убирается из сравнения. */
 const CHART_COMPARE_COLORS = {
     light: ['#2a78d6', '#008300', '#e87ba4', '#eda100'],
     dark:  ['#3987e5', '#008300', '#d55181', '#c98500'],
@@ -1038,7 +1037,7 @@ function chartCompareColor(slotIdx) {
 function chartToggleSelect(bib) {
     const idx = _chartSelectedBibs.indexOf(bib);
     if (idx !== -1) _chartSelectedBibs.splice(idx, 1);
-    else if (_chartSelectedBibs.length < CHART_COMPARE_MAX) _chartSelectedBibs.push(bib);
+    else _chartSelectedBibs.push(bib);
 }
 function chartParticipantListItemsHtml(datasets) {
     const q = _chartSearchQuery.trim().toLowerCase();
@@ -1046,9 +1045,8 @@ function chartParticipantListItemsHtml(datasets) {
     if (filtered.length === 0) return '<div class="muted" style="padding:10px;font-size:12px">Ничего не найдено</div>';
     return filtered.map(d => {
         const checked = _chartSelectedBibs.includes(d._bib);
-        const disabled = !checked && _chartSelectedBibs.length >= CHART_COMPARE_MAX;
         return `<label class="chart-participant-item">
-            <input type="checkbox" data-chartbib="${d._bib}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+            <input type="checkbox" data-chartbib="${d._bib}" ${checked ? 'checked' : ''}>
             <span>${d._name}</span>
         </label>`;
     }).join('');
@@ -1056,7 +1054,7 @@ function chartParticipantListItemsHtml(datasets) {
 function chartSidebarHtml(datasets) {
     const footer = _chartSelectedBibs.length
         ? `<button class="chart-clear-btn" id="chartClearSelection">Сбросить выбор (${_chartSelectedBibs.length})</button>`
-        : `<div class="chart-hint-sidebar">Выберите до ${CHART_COMPARE_MAX} участников для сравнения</div>`;
+        : `<div class="chart-hint-sidebar">Выберите участников для сравнения</div>`;
     return `<div class="chart-sidebar">
         <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
         <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
@@ -1112,21 +1110,65 @@ function chartParticipantRowsForStage(tabStage) {
     const dbStage = TAB_TO_DB_STAGE[tabStage];
     const role = STAGE_ROLE[dbStage];
     const { individual, relay } = getFiltered();
-    const rows = individual.map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, splits: r.splits }));
+    // swimRef — время заплыва (у относящегося участника лично, у эстафеты —
+    // пловца команды) — нужно, чтобы скорректировать первую КТ вело1 (см.
+    // buildPaceDatasets: cumulative этой КТ считается от старта ГОНКИ,
+    // включает заплыв+переход, а не только время на самом велосипеде).
+    const rows = individual.map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, splits: r.splits, swimRef: r.swim_s }));
     relay.forEach(t => {
         const m = t.members.find(mm => mm.relay_stage === role);
-        if (m) rows.push({ bib: t.bib, name: `${m.surname} ${m.name} (${t.team_name})`, splits: m.splits });
+        if (m) rows.push({ bib: t.bib, name: `${m.surname} ${m.name} (${t.team_name})`, splits: m.splits, swimRef: t.members.find(x => x.relay_stage === 'swim')?.swim_s });
     });
     return { dbStage, rows };
 }
 
+// Вело (оба дня) — непрерывная линия скорости через весь велоэтап (421 км):
+// вело1 (0-145км) сразу продолжается вело2 (145-421км), X — накопительный
+// километраж, без разрыва на границе дней (запрошено пользователем
+// 2026-07-19, по аналогии со Сводом вело в таблице результатов).
+function buildBikeCombinedPaceDatasets() {
+    const { individual, relay } = getFiltered();
+    const rows = individual.map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, splits: r.splits, swimRef: r.swim_s }));
+    relay.forEach(t => {
+        const m = t.members.find(mm => mm.relay_stage === 'bike');
+        if (m) rows.push({ bib: t.bib, name: `${m.surname} ${m.name} (${t.team_name})`, splits: m.splits, swimRef: t.members.find(x => x.relay_stage === 'swim')?.swim_s });
+    });
+    const BIKE1_KM = CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1]; // 145
+    return rows.map(r => {
+        const pts = [];
+        for (let seq = 1; seq <= STAGE_MAX_SEQ.bike_day1; seq++) {
+            let splitRaw = r.splits?.bike_day1?.[seq];
+            if (seq === 1 && splitRaw != null && r.swimRef != null) splitRaw -= r.swimRef; // см. buildPaceDatasets
+            const v = splitPaceValue('bike_day1', seq, splitRaw);
+            if (v != null) pts.push({ x: CHECKPOINT_DIST_KM.bike_day1[seq], y: v });
+        }
+        for (let seq = 1; seq <= STAGE_MAX_SEQ.bike_day2; seq++) {
+            const v = splitPaceValue('bike_day2', seq, r.splits?.bike_day2?.[seq]);
+            if (v != null) pts.push({ x: BIKE1_KM + CHECKPOINT_DIST_KM.bike_day2[seq], y: v });
+        }
+        if (pts.length && pts[0].x > 0) pts.unshift({ x: 0, y: pts[0].y });
+        return pts.length ? { _bib: r.bib, _name: r.name, data: pts } : null;
+    }).filter(Boolean);
+}
+
 function buildPaceDatasets(tabStage) {
+    if (tabStage === 'bike') return buildBikeCombinedPaceDatasets();
     const { dbStage, rows } = chartParticipantRowsForStage(tabStage);
     const maxSeq = STAGE_MAX_SEQ[dbStage];
     return rows.map(r => {
         const pts = [];
         for (let seq = 1; seq <= maxSeq; seq++) {
-            const v = splitPaceValue(dbStage, seq, r.splits?.[dbStage]?.[seq]);
+            let splitRaw = r.splits?.[dbStage]?.[seq];
+            // Первая КТ bike_day1: cumulative_s в БД = elapsed от старта
+            // ГОНКИ (единый таймер со swim, нет seq=0 от которого вычесть),
+            // значит она "впридачу" содержит время всего заплыва+перехода —
+            // без вычитания скорость на первом отрезке считалась бы по
+            // раздутому времени (см. тот же нюанс на странице участника,
+            // stageBody()). Баг найден пользователем 2026-07-19.
+            if (dbStage === 'bike_day1' && seq === 1 && splitRaw != null && r.swimRef != null) {
+                splitRaw = splitRaw - r.swimRef;
+            }
+            const v = splitPaceValue(dbStage, seq, splitRaw);
             if (v != null) pts.push({ x: CHECKPOINT_DIST_KM[dbStage][seq], y: v });
         }
         // Реального темпа на 0 км не существует (старт этапа) — первая КТ
@@ -1215,7 +1257,11 @@ function buildSpaghettiDataset(d, accent, context) {
 const CHART_TOOLTIP_NO_TITLE = { title: () => '' };
 
 function renderPaceChart() {
-    const dbStage = TAB_TO_DB_STAGE[_paceStage];
+    // "Вело (оба дня)" — bike_day1 как эталон единиц (км/ч, без инверсии Y)
+    // для форматирования/тултипа; сама шкала X считается отдельно ниже
+    // (0-421 км на весь объединённый велоэтап, не 0-145 одного дня).
+    const isBikeCombined = _paceStage === 'bike';
+    const dbStage = isBikeCombined ? 'bike_day1' : TAB_TO_DB_STAGE[_paceStage];
     const datasets = buildPaceDatasets(_paceStage);
     _lastChartDatasets = datasets;
     // Ранее выбранные для сравнения участники могли "выпасть" из текущего
@@ -1277,7 +1323,8 @@ function renderPaceChart() {
                 // (напр. 1.3 км для заплыва), визуально создавая впечатление,
                 // что гонка стартует не от нуля, а от первой точки данных.
                 x: {
-                    type: 'linear', min: 0, max: CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]],
+                    type: 'linear', min: 0,
+                    max: isBikeCombined ? CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1] + CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2] : CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]],
                     title: { display: true, text: 'Километраж этапа', color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') },
                 },
@@ -1351,6 +1398,10 @@ function buildPositionDatasets() {
                 if (rank != null) pts.push({ x: STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][seq], y: rank });
             }
         });
+        // Та же экстраполяция до X=0, что и в buildPaceDatasets (первая КТ
+        // плавания обычно на 1+ км, не на 0) — читаемости ради, не как
+        // измеренное место (запрошено пользователем 2026-07-19).
+        if (pts.length && pts[0].x > 0) pts.unshift({ x: 0, y: pts[0].y });
         return pts.length ? { _bib: r.key, _name: r.name, data: pts } : null;
     }).filter(Boolean);
 }

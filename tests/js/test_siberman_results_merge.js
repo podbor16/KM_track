@@ -409,7 +409,7 @@ check('virtualXToKm — обратное преобразование (round-tri
 });
 
 // ── chartToggleSelect()/chartCompareColor() — мультивыбор для сравнения
-// (п.7.2), лимит CHART_COMPARE_MAX, порядок = порядок выбора (не сортировка) ──
+// (п.7.2), без лимита на число (снят 2026-07-19), порядок = порядок выбора ──
 function resetChartSelection() {
     vm.runInContext('_chartSelectedBibs = [];', sandbox);
 }
@@ -428,11 +428,16 @@ check('chartToggleSelect — повторный вызов на тот же bib 
     const selected = vm.runInContext('_chartSelectedBibs', sandbox);
     assert.strictEqual(selected.length, 0);
 });
-check('chartToggleSelect — лимит CHART_COMPARE_MAX (5-й выбор игнорируется)', () => {
+check('chartToggleSelect — без лимита, 5+ участников можно выбрать одновременно', () => {
     resetChartSelection();
-    [1, 2, 3, 4, 5].forEach(bib => sandbox.chartToggleSelect(bib));
+    [1, 2, 3, 4, 5, 6].forEach(bib => sandbox.chartToggleSelect(bib));
     const selected = vm.runInContext('_chartSelectedBibs', sandbox);
-    assert.strictEqual(JSON.stringify(selected), JSON.stringify([1, 2, 3, 4]));
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify([1, 2, 3, 4, 5, 6]));
+});
+check('chartCompareColor — переиспользует палитру по кругу для 5-го и далее (без лимита)', () => {
+    const c0 = sandbox.chartCompareColor(0);
+    const c4 = sandbox.chartCompareColor(4); // 5-й участник (индекс 4) — тот же цвет, что 1-й (индекс 0)
+    assert.strictEqual(c0, c4);
 });
 check('chartCompareColor — детерминирован по слоту, не зависит от вызова дважды подряд', () => {
     const c0a = sandbox.chartCompareColor(0);
@@ -593,6 +598,44 @@ check('Мультивыбор со СТРОКОВЫМ bib (как в реаль�
     const chart = vm.runInContext('_paceChart', sandbox);
     assert.strictEqual(chart.config.data.datasets.length, 1, `после выбора одного участника график должен показать 1 линию, получено ${chart.config.data.datasets.length}`);
     assert.strictEqual(chart.config.data.datasets[0].label, datasets[0]._name);
+});
+
+// ── Вело (оба дня) — непрерывная линия скорости вело1+вело2 на графике
+// Темп/скорость (запрошено пользователем 2026-07-19) ──
+check('buildBikeCombinedPaceDatasets — вело2 продолжает вело1 по X (145+), без разрыва', () => {
+    setState('all', 'all');
+    const swimS = 2000;
+    const row = mkTimerInd(1, {
+        swim_s: swimS,
+        splits: {
+            bike_day1: { 1: swimS + 600, 2: 500 }, // seq=1 "раздут" заплывом — должен скорректироваться
+            bike_day2: { 1: 700, 2: 650 },
+        },
+    });
+    setRaceData([row], [], Date.now());
+    const datasets = sandbox.buildBikeCombinedPaceDatasets();
+    assert.strictEqual(datasets.length, 1);
+    const xs = datasets[0].data.map(p => p.x);
+    // Первая точка — экстраполяция x=0; далее вело1 (CHECKPOINT_DIST_KM.bike_day1[1..2]),
+    // затем вело2 СМЕЩЁН на 145км (CHECKPOINT_DIST_KM.bike_day1[maxSeq]).
+    const bike1MaxKm = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1]', sandbox);
+    assert.ok(xs.some(x => x > bike1MaxKm), `ожидались точки вело2 за пределами вело1 (>${bike1MaxKm} км), получено [${xs}]`);
+    assert.strictEqual(xs[0], 0, 'первая точка должна быть экстраполяцией на x=0');
+});
+check('renderPaceChart(bike) — ось X охватывает весь объединённый велоэтап (421 км)', () => {
+    setState('all', 'all');
+    const row = mkTimerInd(1, {
+        swim_s: 2000,
+        splits: { bike_day1: { 1: 2600, 2: 500 }, bike_day2: { 1: 700 } },
+    });
+    setRaceData([row], [], Date.now());
+    vm.runInContext(`_paceStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    const bike1Max = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1]', sandbox);
+    const bike2Max = vm.runInContext('CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2]', sandbox);
+    assert.strictEqual(chart.config.options.scales.x.max, bike1Max + bike2Max);
+    assert.strictEqual(chart.config.options.scales.y.reverse, false, 'скорость (км/ч) не должна инвертироваться');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
