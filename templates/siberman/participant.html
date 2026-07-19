@@ -392,18 +392,24 @@ function renderIndividual(data, r) {
     const overallGapPool = buildOverallGapPool(data);
     // overallGapPool уже объединяет личников и эстафету (buildOverallGapPool),
     // так что computeOverallGaps здесь считает отставание ОТ ЛИДЕРА ПО
-    // АБСОЛЮТУ (весь пул) — то, что нужно для индикаторов (п.6 задачи
-    // 2026-07-19: индикаторы места убраны, остаётся только Итого+Отставание,
-    // сразу за общим временем; детальная разбивка мест — в таблицах по КТ).
+    // АБСОЛЮТУ (весь пул) — сразу за общим временем (п.6 задачи 2026-07-19).
     const overallGaps = computeOverallGaps(overallGapPool);
     const trulyFinished = currentStage(r) === 'run' && lastReached(r.cp, 'run')?.seq === STAGE_MAX_SEQ.run;
 
     let overallStat;
     if (trulyFinished) {
         const gap = fmtGap(overallGaps[r.bib]);
+        // Место (абсолют) — единый ранг личники+эстафета вместе (та же
+        // функция, что и в Итогах гонки на /siberman/results); место (по
+        // полу) — готовое DB-поле (пересчёт места по формату для личников
+        // не нужен, юзер попросил вернуть только эти два, см. итог п.6).
+        const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay));
+        const absRank = combinedRanks[r.bib];
         overallStat = `
             <div class="stat"><div class="stat-val">${fmtTime(r.overall_s)}</div><div class="stat-lbl">Итого</div></div>
             ${gap ? `<div class="stat"><div class="stat-val">${gap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
+            ${absRank != null ? `<div class="stat"><div class="stat-val">${absRank}</div><div class="stat-lbl">Место (абсолют)</div></div>` : ''}
+            ${r.overall_rank_g != null ? `<div class="stat"><div class="stat-val">${r.overall_rank_g}</div><div class="stat-lbl">Место (по полу)</div></div>` : ''}
         `;
     } else {
         const cur = currentStage(r);
@@ -441,6 +447,13 @@ function renderTeam(data, team) {
     const overallGaps = computeOverallGaps(overallGapPool);
     const teamRow = teamGapRow(team);
     const gap = fmtGap(overallGaps[team.bib]);
+    // Место (абсолют) — единый ранг личники+эстафета вместе; место (формат)
+    // — ранг только среди эстафетных команд (своего рода "личное" место
+    // команды в её формате, аналог "место по полу" у личников).
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay));
+    const relayFormatRanks = computeRanksByValue(data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
+    const absRank = combinedRanks[team.bib];
+    const formatRank = relayFormatRanks[team.bib];
 
     const memberStages = {
         swim: STAGES.filter(s => s.relayStage === 'swim'),
@@ -477,6 +490,8 @@ function renderTeam(data, team) {
         <div class="stats-row">
             <div class="stat"><div class="stat-val">${fmtTime(team.overall_s)}</div><div class="stat-lbl">Итого команды</div></div>
             ${gap ? `<div class="stat"><div class="stat-val">${gap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
+            ${absRank != null ? `<div class="stat"><div class="stat-val">${absRank}</div><div class="stat-lbl">Место (абсолют)</div></div>` : ''}
+            ${formatRank != null ? `<div class="stat"><div class="stat-val">${formatRank}</div><div class="stat-lbl">Место (формат)</div></div>` : ''}
         </div>
         ${modeToggle()}
     </div>
