@@ -283,5 +283,82 @@ check('computeCombinedOverallRanks — не финишировавшие (null/d
     assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1 }));
 });
 
+// ── computeAutoScrollTab() — п.1 задачи 2026-07-19 (визуальный скролл
+// табов до активного этапа, независимо от секундомера) ──
+check('computeAutoScrollTab — плавание ещё активно -> swim', () => {
+    const stillSwimming = mkTimerInd(1, { cp: { swim: { 1: 500 } } });
+    setRaceData([stillSwimming], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'swim');
+});
+
+check('computeAutoScrollTab — плавание закрыто, вело1 активно -> bike', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const a = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { 1: 500 } }, swim_s: 3000 });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
+});
+
+check('computeAutoScrollTab — вело1 закрыт, вело2 не начался -> startlist', () => {
+    // "Вело1 закрыт" при "вело2 не начался" данными представимо только через
+    // сход ДО вело1 (dnf во время/после плавания, bike1_s так и не
+    // проставлен) — иначе bike1_s сам по себе уже означал бы "вошёл в вело2"
+    // (см. stageEntryOffset/STAGE_PRIOR_KEYS, тот же нюанс что и в тесте
+    // computeStageTimerState выше).
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const a = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'startlist');
+});
+
+check('computeAutoScrollTab — вело2 активно -> bike', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const a = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 }, bike_day2: { 1: 500 } },
+        swim_s: 3000, bike1_s: 9000,
+    });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
+});
+
+check('computeAutoScrollTab — бег ещё не начался (никто не вошёл) -> run', () => {
+    // Аналогично — bike2_s не проставлен (сошёл во время вело2, не завершив),
+    // иначе он сам по себе означал бы "вошёл в бег".
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const a = mkTimerInd(1, {
+        status: 'dnf',
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 }, bike_day2: { 3: 1000 } },
+        swim_s: 3000, bike1_s: 9000,
+    });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'run');
+});
+
+check('computeAutoScrollTab — бег активен -> run', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqBike2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const a = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 }, bike_day2: { [maxSeqBike2]: 8000 }, run: { 3: 500 } },
+        swim_s: 3000, bike1_s: 9000, bike2_s: 8000,
+    });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'run');
+});
+
+check('computeAutoScrollTab — гонка полностью завершена -> overall', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqBike2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const a = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 }, bike_day2: { [maxSeqBike2]: 8000 }, run: { [maxSeqRun]: 2000 } },
+        swim_s: 3000, bike1_s: 9000, bike2_s: 8000, run_s: 2000,
+    });
+    setRaceData([a], [], Date.now());
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'overall');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
