@@ -19,9 +19,17 @@ const inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m =
 const elementsById = {};
 function domStub(id) {
     if (id && elementsById[id]) return elementsById[id];
-    const el = { innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {}, addEventListener: () => {} };
+    const el = { innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {}, addEventListener: () => {}, dataset: {}, querySelector: () => domStub(), getContext: () => ({}) };
     if (id) elementsById[id] = el;
     return el;
+}
+// Chart.js стаб — рендер-функции графиков (renderPaceChart/renderPositionChart)
+// создают `new Chart(...)`, без стаба падают с ReferenceError.
+class ChartStub {
+    constructor(ctx, config) { this.config = config; this.options = config.options || {}; }
+    destroy() {}
+    getDatasetMeta() { return { data: [] }; }
+    update() {}
 }
 const sandbox = {
     console,
@@ -29,12 +37,15 @@ const sandbox = {
     document: {
         getElementById: (id) => domStub(id),
         querySelectorAll: () => [],
+        querySelector: () => domStub(),
         addEventListener: () => {},
         documentElement: { setAttribute: () => {}, getAttribute: () => 'dark' },
     },
     localStorage: { getItem: () => null, setItem: () => {} },
     setInterval: () => 0,
     clearInterval: () => {},
+    getComputedStyle: () => ({ getPropertyValue: () => '#6AABD7' }),
+    Chart: ChartStub,
     window: {},
 };
 sandbox.window = sandbox;
@@ -520,6 +531,38 @@ check('renderBikeCombined() — эстафетчик получает насто
     // Быстров быстрее личника — должен получить место 1 (в т.ч. по полу)
     const rowMatch = html.match(/rank-num[^>]*>1<\/span>[\s\S]{0,400}?Быстров/);
     assert.ok(rowMatch, 'эстафетчик Быстров должен быть на 1 месте (быстрее личника)');
+});
+
+// ── Автоочистка _chartSelectedBibs при смене фильтра формата/пола (баг
+// найден пользователем 2026-07-19: выбранный участник "выпадал" из
+// getFiltered(), график сравнения становился пустым, а "Сбросить выбор (N)"
+// показывало устаревшее число, не совпадающее с реально видимыми чекбоксами) ──
+function mkSwimRow(bib, gender) {
+    const splits = { swim: {} };
+    const cp = { swim: {} };
+    for (let seq = 1; seq <= 7; seq++) { splits.swim[seq] = 300; cp.swim[seq] = 300 * seq + bib; }
+    return { bib, surname: `Surname${bib}`, name: `Name${bib}`, gender, status: 'active', splits, cp, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+}
+check('renderPaceChart() — ранее выбранный участник, выпавший из фильтра пола, снимается с выбора', () => {
+    setState('all', 'all');
+    const individual = [mkSwimRow(1, 'M'), mkSwimRow(2, 'F')];
+    sandbox.__individual = individual;
+    vm.runInContext('_data = { individual: __individual, relay: [] }; _paceStage = "swim"; _chartSelectedBibs = [1, 2];', sandbox);
+    // Переключаем фильтр на "только женщины" — участник 1 (M) должен выпасть.
+    vm.runInContext('_gender = "F";', sandbox);
+    sandbox.renderPaceChart();
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify([2]), `ожидался только bib=2 после смены фильтра, получено ${JSON.stringify(selected)}`);
+});
+check('renderPositionChart() — та же автоочистка выбора', () => {
+    setState('all', 'all');
+    const individual = [mkSwimRow(1, 'M'), mkSwimRow(2, 'F')];
+    sandbox.__individual = individual;
+    vm.runInContext('_data = { individual: __individual, relay: [] }; _chartSelectedBibs = [1, 2];', sandbox);
+    vm.runInContext('_gender = "M";', sandbox);
+    sandbox.renderPositionChart();
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify([1]), `ожидался только bib=1 после смены фильтра, получено ${JSON.stringify(selected)}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

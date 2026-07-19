@@ -151,13 +151,14 @@
             border-radius: var(--radius); padding: 14px;
         }
         .chart-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
-        /* Больше высоты + отступы сверху/снизу канваса (п.9) — раньше линии
-           у самой верхней/нижней границы визуально "обрезались". */
-        .chart-canvas-wrap { position: relative; height: 520px; padding: 6px 0; }
-        .chart-canvas-wrap--position { height: 560px; }
+        /* Больше высоты + отступы сверху/снизу канваса (п.9) — с 39
+           участниками на графике "Позиция" линии визуально не вписывались
+           по оси Y при прежней высоте (найдено пользователем 2026-07-19). */
+        .chart-canvas-wrap { position: relative; height: 620px; padding: 10px 0; }
+        .chart-canvas-wrap--position { height: 720px; }
         @media (max-width: 640px) {
-            .chart-canvas-wrap { height: 380px; }
-            .chart-canvas-wrap--position { height: 420px; }
+            .chart-canvas-wrap { height: 480px; }
+            .chart-canvas-wrap--position { height: 560px; }
         }
 
         /* ── Сайдбар выбора участников для сравнения (п.7.2) ── */
@@ -871,9 +872,11 @@ function buildProgressRow(item, pos, options = {}) {
     const mainRank = options.genderRanks && _gender !== 'all' ? genderRank : absRank;
     const rc = mainRank != null ? rankClass(mainRank) : '';
     const status = type === 'individual' ? entry.status : item.status;
+    // Без бейджа "Эстафета" у имени — уже есть отдельная колонка "Формат",
+    // дублирование избыточно (запрошено пользователем 2026-07-19).
     const nameCell = type === 'individual'
         ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
-        : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
+        : `<span class="name-main">${entry.team_name}</span>`;
     const rankCells = options.genderRanks
         ? rankBodyCells(absRank, genderRank, entry.gender, rc, true)
         : `<td><span class="rank-num ${rc}">${hasVal ? pos : '—'}</span></td>`;
@@ -1203,6 +1206,12 @@ function renderPaceChart() {
     const dbStage = TAB_TO_DB_STAGE[_paceStage];
     const datasets = buildPaceDatasets(_paceStage);
     _lastChartDatasets = datasets;
+    // Ранее выбранные для сравнения участники могли "выпасть" из текущего
+    // списка при смене фильтра формата/пола (getFiltered() внутри
+    // chartParticipantRowsForStage) — без этой очистки график сравнения
+    // становился пустым, а чекбоксы не совпадали с "Сбросить выбор (N)".
+    const visibleBibs = new Set(datasets.map(d => d._bib));
+    _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
             <span class="filter-label">Этап:</span>
@@ -1241,7 +1250,7 @@ function renderPaceChart() {
         plugins: [activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: 16, bottom: 8 } },
+            layout: { padding: { top: 24, bottom: 12, left: 4, right: 12 } },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
@@ -1252,7 +1261,14 @@ function renderPaceChart() {
                 },
             },
             scales: {
-                x: { type: 'linear', title: { display: true, text: 'Километраж этапа', color: cssVar('--muted') }, ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') } },
+                // min:0 — иначе Chart.js авто-подбирает диапазон от первой КТ
+                // (напр. 1.3 км для заплыва), визуально создавая впечатление,
+                // что гонка стартует не от нуля, а от первой точки данных.
+                x: {
+                    type: 'linear', min: 0, max: CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]],
+                    title: { display: true, text: 'Километраж этапа', color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') },
+                },
                 y: {
                     // Плавание/бег — темп (секунды, меньше = быстрее): быстрый
                     // темп сверху, медленный снизу (п.10) — инвертируем шкалу.
@@ -1330,6 +1346,8 @@ function buildPositionDatasets() {
 function renderPositionChart() {
     const datasets = buildPositionDatasets();
     _lastChartDatasets = datasets;
+    const visibleBibs = new Set(datasets.map(d => d._bib));
+    _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
     document.getElementById('app').innerHTML = `
         <div class="chart-card"><div class="chart-layout">
             ${chartSidebarHtml(datasets)}
@@ -1386,7 +1404,7 @@ function renderPositionChart() {
         plugins: [stageBoundaryPlugin, activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: 16, bottom: 8 } },
+            layout: { padding: { top: 24, bottom: 12, left: 4, right: 12 } },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
