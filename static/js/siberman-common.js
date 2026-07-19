@@ -376,29 +376,6 @@ function computeOverallGaps(rows) {
     return gaps;
 }
 
-// Аналог computeStageRanks, но в терминах "глобального прогресса гонки"
-// (см. computeOverallGaps) — место среди тех, кто реально финишировал ВСЮ
-// гонку. Нужно для "текущего места" на странице участника до финиша.
-function computeOverallRanks(rows) {
-    const withPos = rows.map(r => {
-        const stage = currentStage(r);
-        if (!stage) return null;
-        const pos = lastReached(r.cp, stage);
-        const value = globalProgress(r, stage, pos.seq);
-        return value == null ? null : { key: r.key, stage, seq: pos.seq, value };
-    }).filter(Boolean);
-    const finishers = withPos
-        .filter(r => r.stage === 'run' && r.seq === STAGE_MAX_SEQ.run)
-        .sort((a, b) => a.value - b.value);
-    const ranks = {};
-    finishers.forEach((r, i) => {
-        ranks[r.key] = (i > 0 && r.value === finishers[i - 1].value)
-            ? ranks[finishers[i - 1].key]
-            : i + 1;
-    });
-    return ranks;
-}
-
 // Собрать "виртуального участника" эстафетной команды для computeOverallGaps —
 // swim/bike/run у неё разбросаны по трём разным членам команды.
 function teamGapRow(team) {
