@@ -360,5 +360,57 @@ check('computeAutoScrollTab — гонка полностью завершена
     assert.strictEqual(sandbox.computeAutoScrollTab(), 'overall');
 });
 
+// ── kmToVirtualX()/virtualXToKm() — пропорциональный X графика «Позиция»
+// (п.7.4): плавание 20% / вело 50% / бег 30% ширины, не реальный км ──
+check('kmToVirtualX — границы сегментов (0/10/431/515 км -> 0/20/70/100%)', () => {
+    assert.strictEqual(sandbox.kmToVirtualX(0), 0);
+    assert.strictEqual(sandbox.kmToVirtualX(10), 20);
+    assert.strictEqual(sandbox.kmToVirtualX(431), 70);
+    assert.strictEqual(sandbox.kmToVirtualX(515), 100);
+});
+check('kmToVirtualX — середина сегмента плавания (5 км -> 10%)', () => {
+    assert.strictEqual(sandbox.kmToVirtualX(5), 10);
+});
+check('virtualXToKm — обратное преобразование (round-trip)', () => {
+    [0, 3, 10, 50, 155, 300, 431, 480, 515].forEach(km => {
+        const roundTripped = sandbox.virtualXToKm(sandbox.kmToVirtualX(km));
+        assert.ok(Math.abs(roundTripped - km) < 0.001, `${km} км round-trip дал ${roundTripped}`);
+    });
+});
+
+// ── chartToggleSelect()/chartCompareColor() — мультивыбор для сравнения
+// (п.7.2), лимит CHART_COMPARE_MAX, порядок = порядок выбора (не сортировка) ──
+function resetChartSelection() {
+    vm.runInContext('_chartSelectedBibs = [];', sandbox);
+}
+check('chartToggleSelect — добавление сохраняет порядок выбора, не сортирует по bib', () => {
+    resetChartSelection();
+    sandbox.chartToggleSelect(30);
+    sandbox.chartToggleSelect(5);
+    sandbox.chartToggleSelect(17);
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify([30, 5, 17]));
+});
+check('chartToggleSelect — повторный вызов на тот же bib снимает выбор', () => {
+    resetChartSelection();
+    sandbox.chartToggleSelect(30);
+    sandbox.chartToggleSelect(30);
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(selected.length, 0);
+});
+check('chartToggleSelect — лимит CHART_COMPARE_MAX (5-й выбор игнорируется)', () => {
+    resetChartSelection();
+    [1, 2, 3, 4, 5].forEach(bib => sandbox.chartToggleSelect(bib));
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify([1, 2, 3, 4]));
+});
+check('chartCompareColor — детерминирован по слоту, не зависит от вызова дважды подряд', () => {
+    const c0a = sandbox.chartCompareColor(0);
+    const c0b = sandbox.chartCompareColor(0);
+    const c1 = sandbox.chartCompareColor(1);
+    assert.strictEqual(c0a, c0b);
+    assert.notStrictEqual(c0a, c1);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

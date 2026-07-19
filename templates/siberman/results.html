@@ -151,11 +151,50 @@
             border-radius: var(--radius); padding: 14px;
         }
         .chart-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
-        .chart-canvas-wrap { position: relative; height: 420px; }
-        .chart-canvas-wrap--position { height: 460px; }
+        /* Больше высоты + отступы сверху/снизу канваса (п.9) — раньше линии
+           у самой верхней/нижней границы визуально "обрезались". */
+        .chart-canvas-wrap { position: relative; height: 520px; padding: 6px 0; }
+        .chart-canvas-wrap--position { height: 560px; }
         @media (max-width: 640px) {
-            .chart-canvas-wrap { height: 320px; }
-            .chart-canvas-wrap--position { height: 360px; }
+            .chart-canvas-wrap { height: 380px; }
+            .chart-canvas-wrap--position { height: 420px; }
+        }
+
+        /* ── Сайдбар выбора участников для сравнения (п.7.2) ── */
+        .chart-layout { display: flex; gap: 14px; align-items: flex-start; }
+        .chart-main { flex: 1; min-width: 0; }
+        .chart-sidebar {
+            width: 220px; flex-shrink: 0;
+            border: 1px solid var(--border); border-radius: var(--radius);
+            background: var(--bg3); display: flex; flex-direction: column;
+            max-height: 520px;
+        }
+        .chart-search {
+            margin: 8px; padding: 6px 10px; border-radius: 20px;
+            border: 1px solid var(--border); background: var(--bg2); color: var(--text);
+            font-size: 12px; outline: none;
+        }
+        .chart-search:focus { border-color: var(--blue); }
+        .chart-participant-list { overflow-y: auto; flex: 1; padding: 0 4px 8px; }
+        .chart-participant-item {
+            display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+            font-size: 12px; border-radius: 6px; cursor: pointer;
+        }
+        .chart-participant-item:hover { background: var(--bg2); }
+        .chart-participant-item input { accent-color: var(--red); cursor: pointer; }
+        .chart-participant-item input:disabled ~ span { opacity: .4; }
+        .chart-clear-btn, .chart-hint-sidebar {
+            margin: 6px 8px 8px; font-size: 11px; text-align: center;
+        }
+        .chart-clear-btn {
+            padding: 6px; border-radius: 20px; border: 1px solid var(--border);
+            background: transparent; color: var(--muted); cursor: pointer;
+        }
+        .chart-clear-btn:hover { color: var(--text); border-color: var(--text); }
+        .chart-hint-sidebar { color: var(--muted); }
+        @media (max-width: 640px) {
+            .chart-layout { flex-direction: column; }
+            .chart-sidebar { width: 100%; max-height: 220px; }
         }
 
         /* ── Filters ── */
@@ -370,6 +409,13 @@ let _chartSubTab = 'pace';
 let _paceStage = 'swim';
 let _paceChart = null;
 let _positionChart = null;
+// Мультивыбор для сравнения на графике (п.7.2/п.8) — объявлены на верхнем
+// уровне (не внутри render-функций), поэтому переживают и render(), и
+// периодический refreshData() без сброса; порядок в массиве = порядок
+// добавления, от него зависит закреплённый цвет (см. chartCompareColor).
+let _chartSelectedBibs = [];
+let _chartSearchQuery = '';
+let _lastChartDatasets = []; // для лёгкого обновления списка участников без пересборки графика
 
 /* ──────────────── Theme ──────────────── */
 siInitTheme();
@@ -828,13 +874,15 @@ function renderDay1() { renderRankedProgress(day1Progress); }
 function renderDay2() { renderRankedProgress(day2Progress); }
 
 /* ──────────────── Render: Графики (Темп/скорость, Позиция) ────────────────
-   Форма — "spaghetti + hover-highlight" (эмфазис, не категориальный цвет):
-   все линии тонкие/приглушённые по умолчанию, наведение/тап подсвечивает
-   ближайшую акцентным цветом и показывает подсказку по ней одной. Так
-   график остаётся читаемым независимо от числа участников (не упирается в
-   потолок в 7-8 категориальных цветов) — сознательно НЕ копирует ручной
-   мультивыбор+легенда Суточной велогонки (там неидеальна мобильная версия,
-   см. правки плана). */
+   Форма по умолчанию — "spaghetti + hover-highlight" (эмфазис, не
+   категориальный цвет): все линии тонкие/приглушённые, наведение/тап
+   подсвечивает ближайшую акцентным цветом. Так график остаётся читаемым
+   независимо от числа участников. Поверх этого — опциональный режим
+   сравнения (см. chart-sidebar ниже, п.7.2 задачи 2026-07-19): пользователь
+   явно выбирает до CHART_COMPARE_MAX участников через поиск+чекбоксы,
+   тогда spaghetti уступает место обычным категориальным линиям с легендой
+   (сознательно НЕ копирует ручной мультивыбор Суточной велогонки один-в-один
+   — там неидеальна мобильная версия, см. план). */
 function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
@@ -850,6 +898,90 @@ function paceValueLabel(dbStage, v) {
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(v);
     const label = fmtSecClock(v);
     return dbStage === 'swim' ? `${label} /100м` : `${label} /км`;
+}
+
+/* ──────────────── Мультивыбор для сравнения (п.7.2/п.8) ────────────────
+   До 4 одновременных линий — категориальная палитра валидирована skill'ом
+   dataviz именно на "all-pairs" (не только соседние) сравнение до 4 цветов
+   в обоих режимах темы; больше — цвета начинают визуально сливаться.
+   Цвет закреплён за конкретным bib по ПОРЯДКУ выбора (не по позиции в
+   отфильтрованном списке) — не "перекрашивает выживших", когда другой
+   участник добавляется/убирается из сравнения. */
+const CHART_COMPARE_MAX = 4;
+const CHART_COMPARE_COLORS = {
+    light: ['#2a78d6', '#008300', '#e87ba4', '#eda100'],
+    dark:  ['#3987e5', '#008300', '#d55181', '#c98500'],
+};
+function chartCompareColor(slotIdx) {
+    const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const palette = CHART_COMPARE_COLORS[theme];
+    return palette[slotIdx % palette.length];
+}
+function chartToggleSelect(bib) {
+    const idx = _chartSelectedBibs.indexOf(bib);
+    if (idx !== -1) _chartSelectedBibs.splice(idx, 1);
+    else if (_chartSelectedBibs.length < CHART_COMPARE_MAX) _chartSelectedBibs.push(bib);
+}
+function chartParticipantListItemsHtml(datasets) {
+    const q = _chartSearchQuery.trim().toLowerCase();
+    const filtered = q ? datasets.filter(d => d._name.toLowerCase().includes(q)) : datasets;
+    if (filtered.length === 0) return '<div class="muted" style="padding:10px;font-size:12px">Ничего не найдено</div>';
+    return filtered.map(d => {
+        const checked = _chartSelectedBibs.includes(d._bib);
+        const disabled = !checked && _chartSelectedBibs.length >= CHART_COMPARE_MAX;
+        return `<label class="chart-participant-item">
+            <input type="checkbox" data-chartbib="${d._bib}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+            <span>${d._name}</span>
+        </label>`;
+    }).join('');
+}
+function chartSidebarHtml(datasets) {
+    const footer = _chartSelectedBibs.length
+        ? `<button class="chart-clear-btn" id="chartClearSelection">Сбросить выбор (${_chartSelectedBibs.length})</button>`
+        : `<div class="chart-hint-sidebar">Выберите до ${CHART_COMPARE_MAX} участников для сравнения</div>`;
+    return `<div class="chart-sidebar">
+        <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
+        <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
+        ${footer}
+    </div>`;
+}
+// Лёгкое обновление списка участников (поиск) — НЕ трогает <input>, чтобы
+// не терять фокус/курсор на каждое нажатие клавиши (полный render() чата
+// пересоздаёт DOM целиком, что сбросило бы фокус посреди набора текста).
+function refreshChartParticipantList() {
+    const listEl = document.getElementById('chartParticipantList');
+    if (!listEl) return;
+    listEl.innerHTML = chartParticipantListItemsHtml(_lastChartDatasets);
+    attachChartCheckboxHandlers();
+}
+function attachChartCheckboxHandlers() {
+    document.querySelectorAll('[data-chartbib]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            chartToggleSelect(Number(cb.dataset.chartbib));
+            render(); // выбор меняет сами линии графика — нужен полный ре-рендер
+        });
+    });
+}
+function attachChartSidebarHandlers() {
+    const search = document.getElementById('chartSearchInput');
+    if (search) {
+        search.addEventListener('input', () => {
+            _chartSearchQuery = search.value;
+            refreshChartParticipantList();
+        });
+    }
+    attachChartCheckboxHandlers();
+    const clearBtn = document.getElementById('chartClearSelection');
+    if (clearBtn) clearBtn.addEventListener('click', () => { _chartSelectedBibs = []; render(); });
+}
+function buildCompareDataset(d, color) {
+    return {
+        label: d._name, data: d.data,
+        borderColor: color, backgroundColor: color,
+        borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6,
+        pointBackgroundColor: color, pointBorderColor: cssVar('--bg2'), pointBorderWidth: 1.5,
+        tension: 0.15, spanGaps: true,
+    };
 }
 
 function chartParticipantRowsForStage(tabStage) {
@@ -917,6 +1049,8 @@ function attachSpaghettiHover(chart, accent, context) {
             const active = i === activeIdx;
             d.borderColor = active ? accent : context;
             d.borderWidth = active ? 2.5 : 1;
+            d.pointRadius = active ? 4 : 2;
+            d.pointBackgroundColor = active ? accent : context;
         });
         if (activeIdx != null) {
             const el = elements[0];
@@ -933,13 +1067,27 @@ function buildSpaghettiDataset(d, accent, context) {
     return {
         label: d._name, data: d.data,
         borderColor: context, backgroundColor: context,
-        borderWidth: 1, pointRadius: 0, pointHoverRadius: 5,
+        // Точки на местах КТ видны всегда (п.7.3), не только на hover —
+        // маленькие/приглушённые по умолчанию, крупнее на активной линии
+        // (см. attachSpaghettiHover, который переключает pointRadius так же,
+        // как сейчас переключает borderColor/borderWidth).
+        borderWidth: 1, pointRadius: 2, pointHoverRadius: 5,
+        pointBackgroundColor: context, pointBorderWidth: 0,
         pointHoverBackgroundColor: accent, pointHoverBorderColor: cssVar('--bg2'), pointHoverBorderWidth: 2,
         tension: 0.15, spanGaps: true,
     };
 }
 
+// Обычный тултип (значение на КТ) — БЕЗ заголовка-имени: имя участника уже
+// показывает activeLineLabelPlugin прямо на канвасе рядом с точкой; заголовок
+// тултипа дублировал бы тот же текст в двух местах одновременно при
+// наведении (см. скриншот пользователя, п.7.1 задачи 2026-07-19).
+const CHART_TOOLTIP_NO_TITLE = { title: () => '' };
+
 function renderPaceChart() {
+    const dbStage = TAB_TO_DB_STAGE[_paceStage];
+    const datasets = buildPaceDatasets(_paceStage);
+    _lastChartDatasets = datasets;
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
             <span class="filter-label">Этап:</span>
@@ -947,43 +1095,55 @@ function renderPaceChart() {
                 ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === _paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
             </div>
         </div>
-        <div class="chart-card">
-            <div class="chart-hint">Наведите курсор (или коснитесь на телефоне) на линию, чтобы увидеть участника</div>
-            <div class="chart-canvas-wrap"><canvas id="sibermanPaceChart"></canvas></div>
-        </div>`;
+        <div class="chart-card"><div class="chart-layout">
+            ${chartSidebarHtml(datasets)}
+            <div class="chart-main">
+                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : 'Наведите курсор (или коснитесь на телефоне) на линию, чтобы увидеть участника, либо выберите нескольких слева для сравнения'}</div>
+                <div class="chart-canvas-wrap"><canvas id="sibermanPaceChart"></canvas></div>
+            </div>
+        </div></div>`;
     document.querySelectorAll('#paceStageGroup [data-pacestage]').forEach(btn => {
         btn.addEventListener('click', () => { _paceStage = btn.dataset.pacestage; renderPaceChart(); });
     });
+    attachChartSidebarHandlers();
 
     if (_paceChart) { _paceChart.destroy(); _paceChart = null; }
-    const dbStage = TAB_TO_DB_STAGE[_paceStage];
-    const datasets = buildPaceDatasets(_paceStage);
     if (datasets.length === 0) {
         document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
         return;
     }
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
+    const isCompare = _chartSelectedBibs.length > 0;
+    const chartDatasets = isCompare
+        ? datasets.filter(d => _chartSelectedBibs.includes(d._bib))
+            .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
+        : datasets.map(d => buildSpaghettiDataset(d, accent, context));
     const ctx = document.getElementById('sibermanPaceChart').getContext('2d');
     _paceChart = new Chart(ctx, {
         type: 'line',
-        data: { datasets: datasets.map(d => buildSpaghettiDataset(d, accent, context)) },
+        data: { datasets: chartDatasets },
         plugins: [activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
+            layout: { padding: { top: 16, bottom: 8 } },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
-                legend: { display: false },
+                legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
                 tooltip: {
-                    callbacks: {
-                        title(items) { return items[0]?.dataset.label ?? ''; },
-                        label(item) { return `${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; },
-                    },
+                    callbacks: isCompare
+                        ? { label(item) { return `${item.dataset.label} — ${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; } }
+                        : { ...CHART_TOOLTIP_NO_TITLE, label(item) { return `${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; } },
                 },
             },
             scales: {
                 x: { type: 'linear', title: { display: true, text: 'Километраж этапа', color: cssVar('--muted') }, ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') } },
                 y: {
+                    // Плавание/бег — темп (секунды, меньше = быстрее): быстрый
+                    // темп сверху, медленный снизу (п.10) — инвертируем шкалу.
+                    // Вело — скорость (км/ч, больше = быстрее) уже естественно
+                    // растёт вверх, инверсия не нужна.
+                    reverse: dbStage === 'swim' || dbStage === 'run',
                     title: { display: true, text: STAGE_UNIT_TITLE[_paceStage], color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted'), callback: v => (dbStage === 'bike_day1' || dbStage === 'bike_day2') ? v.toFixed(0) : fmtSecClock(v) },
                     grid: { color: cssVar('--border') },
@@ -991,7 +1151,44 @@ function renderPaceChart() {
             },
         },
     });
-    attachSpaghettiHover(_paceChart, accent, context);
+    if (!isCompare) attachSpaghettiHover(_paceChart, accent, context);
+}
+
+// Пропорциональная ширина по X для графика "Позиция" (п.7.4) — НЕ реальный
+// километраж (тогда плавание 10/515≈2% сжималось бы в почти невидимую
+// полоску), а фиксированные доли ширины графика: Плавание 20% / Вело 50%
+// (вело1+вело2 идут подряд без разрыва в километраже, 10→431 км — единый
+// сегмент) / Бег 30%. Ось X рисуется в этом "виртуальном" пространстве
+// [0,100], подписи тиков конвертируются обратно в реальные км.
+const POSITION_X_SEGMENTS = [
+    { kmStart: 0,   kmEnd: 10,  xStart: 0,  xEnd: 20 },   // Плавание — 20%
+    { kmStart: 10,  kmEnd: 431, xStart: 20, xEnd: 70 },   // Вело (день1+день2) — 50%
+    { kmStart: 431, kmEnd: 515, xStart: 70, xEnd: 100 },  // Бег — 30%
+];
+function kmToVirtualX(km) {
+    for (const seg of POSITION_X_SEGMENTS) {
+        if (km <= seg.kmEnd) {
+            const frac = seg.kmEnd === seg.kmStart ? 0 : (km - seg.kmStart) / (seg.kmEnd - seg.kmStart);
+            return seg.xStart + frac * (seg.xEnd - seg.xStart);
+        }
+    }
+    return 100;
+}
+function virtualXToKm(x) {
+    for (const seg of POSITION_X_SEGMENTS) {
+        if (x <= seg.xEnd) {
+            const frac = seg.xEnd === seg.xStart ? 0 : (x - seg.xStart) / (seg.xEnd - seg.xStart);
+            return seg.kmStart + frac * (seg.kmEnd - seg.kmStart);
+        }
+    }
+    return 515;
+}
+// Точки датасета остаются в реальных км (buildPositionDatasets тестируется
+// именно на реальных км, см. tests/js) — трансформация в виртуальное
+// X-пространство применяется только непосредственно перед передачей в
+// Chart.js, отдельным шагом.
+function withVirtualX(d) {
+    return { ...d, data: d.data.map(p => ({ x: kmToVirtualX(p.x), y: p.y })) };
 }
 
 function buildPositionDatasets() {
@@ -1016,14 +1213,19 @@ function buildPositionDatasets() {
 }
 
 function renderPositionChart() {
+    const datasets = buildPositionDatasets();
+    _lastChartDatasets = datasets;
     document.getElementById('app').innerHTML = `
-        <div class="chart-card">
-            <div class="chart-hint">Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника.</div>
-            <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
-        </div>`;
+        <div class="chart-card"><div class="chart-layout">
+            ${chartSidebarHtml(datasets)}
+            <div class="chart-main">
+                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения'}</div>
+                <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
+            </div>
+        </div></div>`;
+    attachChartSidebarHandlers();
 
     if (_positionChart) { _positionChart.destroy(); _positionChart = null; }
-    const datasets = buildPositionDatasets();
     if (datasets.length === 0) {
         document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
         return;
@@ -1031,6 +1233,12 @@ function renderPositionChart() {
     const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
+    const isCompare = _chartSelectedBibs.length > 0;
+    const virtualDatasets = datasets.map(withVirtualX);
+    const chartDatasets = isCompare
+        ? virtualDatasets.filter(d => _chartSelectedBibs.includes(d._bib))
+            .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
+        : virtualDatasets.map(d => buildSpaghettiDataset(d, accent, context));
 
     const stageBoundaryPlugin = {
         id: 'stageBoundaries',
@@ -1042,15 +1250,15 @@ function renderPositionChart() {
             ctx.lineWidth = 1;
             ctx.font = '10px system-ui, sans-serif';
             ctx.fillStyle = cssVar('--muted');
-            STAGE_ORDER.forEach(stage => {
-                const km = STAGE_KM_OFFSET[stage];
-                if (km === 0) return;
-                const x = scales.x.getPixelForValue(km);
+            // Границы дней вело (10 и 155 км) внутри общего блока "Вело" —
+            // тоньше/без подписи, чтобы не спорить с главными подписями этапов.
+            [{ km: 10, label: 'Вело' }, { km: 155, label: null }, { km: 431, label: 'Бег' }].forEach(({ km, label }) => {
+                const x = scales.x.getPixelForValue(kmToVirtualX(km));
                 ctx.beginPath();
                 ctx.moveTo(x, chartArea.top);
                 ctx.lineTo(x, chartArea.bottom);
                 ctx.stroke();
-                ctx.fillText(STAGE_LABEL_RU[stage], x + 4, chartArea.top + 12);
+                if (label) ctx.fillText(label, x + 4, chartArea.top + 12);
             });
             ctx.restore();
         },
@@ -1059,27 +1267,32 @@ function renderPositionChart() {
     const ctx = document.getElementById('sibermanPositionChart').getContext('2d');
     _positionChart = new Chart(ctx, {
         type: 'line',
-        data: { datasets: datasets.map(d => buildSpaghettiDataset(d, accent, context)) },
+        data: { datasets: chartDatasets },
         plugins: [stageBoundaryPlugin, activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
+            layout: { padding: { top: 16, bottom: 8 } },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
-                legend: { display: false },
+                legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
                 tooltip: {
-                    callbacks: {
-                        title(items) { return items[0]?.dataset.label ?? ''; },
-                        label(item) { return `${item.parsed.x.toFixed(1)} км: место ${item.parsed.y}`; },
-                    },
+                    callbacks: isCompare
+                        ? { label(item) { return `${item.dataset.label} — ${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } }
+                        : { ...CHART_TOOLTIP_NO_TITLE, label(item) { return `${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } },
                 },
             },
             scales: {
-                x: { type: 'linear', min: 0, max: 515, title: { display: true, text: 'Километраж гонки', color: cssVar('--muted') }, ticks: { color: cssVar('--muted') }, grid: { color: cssVar('--border') } },
+                x: {
+                    type: 'linear', min: 0, max: 100,
+                    title: { display: true, text: 'Километраж гонки', color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted'), stepSize: 10, callback: v => Math.round(virtualXToKm(v)) },
+                    grid: { color: cssVar('--border') },
+                },
                 y: { reverse: true, min: 1, max: maxRank, title: { display: true, text: 'Место', color: cssVar('--muted') }, ticks: { color: cssVar('--muted'), precision: 0 }, grid: { color: cssVar('--border') } },
             },
         },
     });
-    attachSpaghettiHover(_positionChart, accent, context);
+    if (!isCompare) attachSpaghettiHover(_positionChart, accent, context);
 }
 
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */
