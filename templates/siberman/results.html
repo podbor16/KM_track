@@ -1041,7 +1041,8 @@ function chartToggleSelect(bib) {
 }
 function chartParticipantListItemsHtml(datasets) {
     const q = _chartSearchQuery.trim().toLowerCase();
-    const filtered = q ? datasets.filter(d => d._name.toLowerCase().includes(q)) : datasets;
+    const filtered = (q ? datasets.filter(d => d._name.toLowerCase().includes(q)) : datasets)
+        .slice().sort((a, b) => a._name.localeCompare(b._name, 'ru'));
     if (filtered.length === 0) return '<div class="muted" style="padding:10px;font-size:12px">Ничего не найдено</div>';
     return filtered.map(d => {
         const checked = _chartSelectedBibs.includes(d._bib);
@@ -1334,6 +1335,11 @@ function renderPaceChart() {
                     // Вело — скорость (км/ч, больше = быстрее) уже естественно
                     // растёт вверх, инверсия не нужна.
                     reverse: dbStage === 'swim' || dbStage === 'run',
+                    // grace — запас поверх авто-подобранного диапазона данных,
+                    // иначе крайняя точка (напр. самая быстрая скорость)
+                    // рисуется ровно на границе области графика и визуально
+                    // "обрезается" (найдено пользователем 2026-07-19).
+                    grace: '8%',
                     title: { display: true, text: STAGE_UNIT_TITLE[_paceStage], color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted'), callback: v => (dbStage === 'bike_day1' || dbStage === 'bike_day2') ? v.toFixed(0) : fmtSecClock(v) },
                     grid: { color: cssVar('--border') },
@@ -1484,7 +1490,12 @@ function renderPositionChart() {
                     ticks: { color: cssVar('--muted'), stepSize: 10, callback: v => Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },
                 },
-                y: { reverse: true, min: 1, max: maxRank, title: { display: true, text: 'Место', color: cssVar('--muted') }, ticks: { color: cssVar('--muted'), precision: 0 }, grid: { color: cssVar('--border') } },
+                // min/max заданы явно (не авто-подбор) — grace тут не
+                // применяется, поэтому запас сверху/снизу добавляем вручную:
+                // 1-е место и последнее место иначе рисуются РОВНО на
+                // границе области графика и визуально "обрезаются" (найдено
+                // пользователем 2026-07-19, аналогично графику Темп/скорость).
+                y: { reverse: true, min: 0.5, max: maxRank + 0.5, title: { display: true, text: 'Место', color: cssVar('--muted') }, ticks: { color: cssVar('--muted'), precision: 0 }, grid: { color: cssVar('--border') } },
             },
         },
     });

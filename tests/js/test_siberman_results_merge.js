@@ -638,5 +638,45 @@ check('renderPaceChart(bike) — ось X охватывает весь объе
     assert.strictEqual(chart.config.options.scales.y.reverse, false, 'скорость (км/ч) не должна инвертироваться');
 });
 
+// ── Запас по оси Y (grace/min-max) — крайние точки данных (1-е место,
+// самая быстрая скорость) не должны рисоваться ровно на границе графика
+// (найдено пользователем 2026-07-19) ──
+check('renderPaceChart — ось Y использует grace (запас над авто-диапазоном)', () => {
+    setState('all', 'all');
+    const row = mkTimerInd(1, { splits: { swim: { 1: 300 } } });
+    setRaceData([row], [], Date.now());
+    vm.runInContext(`_paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    assert.strictEqual(chart.config.options.scales.y.grace, '8%');
+});
+check('renderPositionChart — min/max оси Y с запасом (не 1..maxRank впритык)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const row = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 300 } }, swim_s: 300 });
+    setRaceData([row], [], Date.now());
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    const yScale = chart.config.options.scales.y;
+    assert.strictEqual(yScale.min, 0.5, 'min должен быть меньше 1 (запас сверху)');
+    assert.ok(yScale.max > 1, 'max должен быть больше реального худшего места (запас снизу)');
+});
+
+// ── Список участников для сравнения сортируется по алфавиту (не по порядку
+// API) — запрошено пользователем 2026-07-19 ──
+check('chartParticipantListItemsHtml — сортировка по алфавиту, не по порядку datasets', () => {
+    const datasets = [
+        { _bib: 1, _name: 'Яковлев Иван' },
+        { _bib: 2, _name: 'Астафьев Сергей' },
+        { _bib: 3, _name: 'Летницкий Дмитрий' },
+    ];
+    vm.runInContext('_chartSearchQuery = ""; _chartSelectedBibs = [];', sandbox);
+    const html = sandbox.chartParticipantListItemsHtml(datasets);
+    const idxA = html.indexOf('Астафьев');
+    const idxL = html.indexOf('Летницкий');
+    const idxY = html.indexOf('Яковлев');
+    assert.ok(idxA < idxL && idxL < idxY, `ожидался алфавитный порядок Астафьев < Летницкий < Яковлев, html: ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
