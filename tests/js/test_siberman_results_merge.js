@@ -412,5 +412,41 @@ check('chartCompareColor — детерминирован по слоту, не 
     assert.notStrictEqual(c0a, c1);
 });
 
+// ── computeRanksByValue() — общий примитив (баг-фикс дублирующихся мест
+// на табах этапов, найден пользователем после хардрефреша: личники брали
+// ранг из БД (только среди личников), эстафетчики — свой отдельный
+// relayPos-счётчик; при интерливинге получались "1, 1, 2, 2...") ──
+check('computeRanksByValue — произвольное поле val (не только overall_s), общий примитив', () => {
+    const rows = [
+        { key: 'a', val: 300, status: 'active' },
+        { key: 'b', val: 100, status: 'active' },
+        { key: 'c', val: 200, status: 'active' },
+    ];
+    const ranks = sandbox.computeRanksByValue(rows);
+    assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ b: 1, c: 2, a: 3 }));
+});
+check('computeRanksByValue — личник и эстафетчик с близкими временами на этапе не дублируют место', () => {
+    // Ровно сценарий со скриншота: bib=1 личник 0:35:01, bib=1000:swim
+    // эстафетчик 2:16:10 — единый пул, разные места (не оба "1").
+    const rows = [
+        { key: 1, val: 2101, status: 'active', gender: 'M' },
+        { key: '1000:swim', val: 8170, status: 'active', gender: 'M' },
+        { key: 2, val: 8647, status: 'active', gender: 'M' },
+    ];
+    const ranks = sandbox.computeRanksByValue(rows);
+    assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1, '1000:swim': 2, 2: 3 }));
+});
+check('computeRanksByValue — раздельные ранги по полу (личник+эстафетчик одного пола вместе)', () => {
+    const rows = [
+        { key: 1, val: 100, status: 'active', gender: 'M' },
+        { key: '10:swim', val: 150, status: 'active', gender: 'M' },
+        { key: 2, val: 50, status: 'active', gender: 'F' },
+    ];
+    const maleRanks = sandbox.computeRanksByValue(rows.filter(r => r.gender === 'M'));
+    const femaleRanks = sandbox.computeRanksByValue(rows.filter(r => r.gender === 'F'));
+    assert.strictEqual(JSON.stringify(maleRanks), JSON.stringify({ 1: 1, '10:swim': 2 }));
+    assert.strictEqual(JSON.stringify(femaleRanks), JSON.stringify({ 2: 1 }));
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

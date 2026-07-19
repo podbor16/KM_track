@@ -414,15 +414,28 @@ function combinedOverallRankRows(individual, relay) {
 // активных фильтров формата/пола — считается по ПОЛНОМУ ростеру (все
 // участники года), поэтому значение не "плавает" при переключении
 // фильтров таблицы (см. п.14/п.4 задачи 2026-07-19).
-function computeCombinedOverallRanks(rows) {
+// Место 1,2,3... по возрастанию r.val среди rows со status==='active' и
+// val!=null (ничьи получают одинаковое место, следующее — пропускается).
+// Общий примитив для "единого ранга" объединённого пула (личники+эстафета
+// вместе) — переиспользуется и для абсолютного места по всей гонке
+// (computeCombinedOverallRanks), и для места на конкретном этапе/по полу
+// внутри этапа (results.html:renderStage — раньше личники брали ранг из
+// БД, который считает ТОЛЬКО среди личников, а эстафетчики — свой отдельный
+// relayPos-счётчик; при интерливинге в единый список это давало
+// дублирующиеся места "1, 1, 2, 2..." — тот же баг, что чинили для Итогов
+// гонки, п.14/доп.находка задачи 2026-07-19).
+function computeRanksByValue(rows) {
     const finishers = rows
-        .filter(r => r.status === 'active' && r.overall_s != null)
-        .sort((a, b) => a.overall_s - b.overall_s);
+        .filter(r => r.status === 'active' && r.val != null)
+        .sort((a, b) => a.val - b.val);
     const ranks = {};
     finishers.forEach((r, i) => {
-        ranks[r.key] = (i > 0 && r.overall_s === finishers[i - 1].overall_s)
+        ranks[r.key] = (i > 0 && r.val === finishers[i - 1].val)
             ? ranks[finishers[i - 1].key]
             : i + 1;
     });
     return ranks;
+}
+function computeCombinedOverallRanks(rows) {
+    return computeRanksByValue(rows.map(r => ({ key: r.key, val: r.overall_s, status: r.status })));
 }

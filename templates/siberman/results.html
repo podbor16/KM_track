@@ -617,10 +617,14 @@ function renderOverall() {
 
 /* ──────────────── Render: Stage ──────────────── */
 const STAGE_CFG = {
-    swim:  { timeKey: 'swim_s',  rankKey: 'swim_rank',  rankGKey: 'swim_rank_g',  metaKey: 'swim_pace',   metaFn: fmtPace100m, metaLbl: 'Темп',     relayStage: 'swim' },
-    bike1: { timeKey: 'bike1_s', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaKey: 'bike1_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
-    bike2: { timeKey: 'bike2_s', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaKey: 'bike2_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
-    run:   { timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaKey: 'run_pace',    metaFn: fmtPace,     metaLbl: 'Темп',     relayStage: 'run'  },
+    // rank/rank_g из БД (per-этап, только личники) больше не используются
+    // для отображения "Место"/"По полу" — заменены единым computeRanksByValue
+    // по личники+эстафетчики вместе (см. stageAbsRanks/stageGenderRanks ниже),
+    // иначе места дублировались при интерливинге в общий список.
+    swim:  { timeKey: 'swim_s',  metaKey: 'swim_pace',   metaFn: fmtPace100m, metaLbl: 'Темп',     relayStage: 'swim' },
+    bike1: { timeKey: 'bike1_s', metaKey: 'bike1_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
+    bike2: { timeKey: 'bike2_s', metaKey: 'bike2_speed', metaFn: fmtSpeed,    metaLbl: 'Скорость', relayStage: 'bike' },
+    run:   { timeKey: 'run_s',   metaKey: 'run_pace',    metaFn: fmtPace,     metaLbl: 'Темп',     relayStage: 'run'  },
 };
 
 function renderStage(stage) {
@@ -683,31 +687,45 @@ function renderStage(stage) {
     const showStart = stage === 'bike2';
 
     // Присваиваем эстафетчикам, финишировавшим этап, собственный порядковый
-    // номер (у relay-участников нет DB-поля ранга per-этап, в отличие от
-    // личников) — relayMembers уже отсортирован так, что финишировавшие идут
-    // первыми по возрастанию времени, так что порядковый номер = позиция+1.
-    let _relayRankSeq = 0;
+    // "Финишировал этап" — та же проверка, что раньше использовал ручной
+    // relayPos-счётчик; сам счётчик убран (см. ниже — единый ранг вместо него).
     const relayMembersRanked = relayMembers.map(m => {
         const pos = lastReached(m.cp, dbStage);
-        const finished = !!pos && pos.seq === maxSeq;
-        return { ...m, _finished: finished, _relayRank: finished ? ++_relayRankSeq : null };
+        return { ...m, _finished: !!pos && pos.seq === maxSeq };
     });
+
+    // Единый ранг (абсолют и по полу) для ВСЕГО пула этапа — личники и
+    // эстафетчики этой роли вместе, а не раздельно (личники — DB rank_stage,
+    // эстафетчики — свой отдельный счётчик), иначе при интерливинге в общий
+    // список получаются дублирующиеся места "1, 1, 2, 2...". Тот же принцип,
+    // что и в Итогах гонки (computeCombinedOverallRanks), только по времени
+    // конкретного этапа вместо overall_s.
+    const stageRankRows = [
+        ...rows.map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender })),
+        ...relayMembersRanked.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender })),
+    ];
+    const stageAbsRanks = computeRanksByValue(stageRankRows);
+    const stageGenderRanks = {
+        M: computeRanksByValue(stageRankRows.filter(x => x.gender === 'M')),
+        F: computeRanksByValue(stageRankRows.filter(x => x.gender === 'F')),
+    };
+    const stageGenderRankFor = (key, gender) => stageGenderRanks[gender]?.[key];
 
     let html = buildStats(individual, relay, stage);
 
     // При активном фильтре по полу "Место" должно быть местом ВНУТРИ этого
     // пола (пересчитанным, не абсолютным) — иначе абсолютный ранг (17, 20...)
     // выглядит так, будто места "не пересчитались" под фильтр.
-    const mainRankKey = _gender === 'all' ? cfg.rankKey : cfg.rankGKey;
+    const mainRankFor = (key, gender) => _gender === 'all' ? stageAbsRanks[key] : stageGenderRankFor(key, gender);
 
     const buildIndividualStageRow = r => {
         const t = r[cfg.timeKey];
         const noTime = t == null;
-        const rc = noTime ? '' : rankClass(r[mainRankKey]);
+        const rc = noTime ? '' : rankClass(mainRankFor(r.bib, r.gender));
         const pos = lastReached(r.cp, dbStage);
         const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
         return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-            ${rankBodyCells(r[cfg.rankKey], r[cfg.rankGKey], r.gender, noTime ? '' : rc)}
+            ${rankBodyCells(stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), r.gender, noTime ? '' : rc)}
             <td class="bib-cell">${r.bib}</td>
             <td class="name-main">${r.surname} ${r.name}</td>
             <td>${genderBadge(r.gender)}</td>
@@ -723,13 +741,15 @@ function renderStage(stage) {
 
     const buildRelayStageRow = m => {
         const t = m[cfg.timeKey];
+        const key = `${m._bib}:${m.relay_stage}`;
         const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
         const hasTime = t != null;
         const pos = lastReached(m.cp, dbStage);
         const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
-        const rc = m._finished ? rankClass(m._relayRank) : '';
+        const mainRank = mainRankFor(key, m.gender);
+        const rc = mainRank != null ? rankClass(mainRank) : '';
         return `<tr class="${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
-            ${rankBodyCells(m._relayRank, null, null, rc)}
+            ${rankBodyCells(stageAbsRanks[key], stageGenderRankFor(key, m.gender), m.gender, rc)}
             <td class="bib-cell">${m._bib}</td>
             <td>
                 <span class="name-main">${m.surname} ${m.name}</span>
