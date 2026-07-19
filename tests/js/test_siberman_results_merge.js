@@ -189,24 +189,49 @@ check('stageIsPending — true, пока хотя бы один активный
     assert.strictEqual(sandbox.stageIsPending('swim'), true);
 });
 
-check('computeActiveStageTimers — два таймера одновременно (плавание ещё не закрыто, вело1 уже началось)', () => {
+check('computeStageTimerState — единый таймер «День 1», пока хотя бы плавание ИЛИ вело1 не закрыты', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const now = Date.now();
-    const finishedSwim = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 }); // уехал на вело
+    // Один уже уехал на вело1 (заплыв закрыт для него), второй ещё плывёт —
+    // день 1 в целом всё ещё "активен", отдельного таймера на вело1 нет.
+    const finishedSwim = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
     const stillSwimming = mkTimerInd(2, { cp: { swim: { 1: 500 } } });
     setRaceData([finishedSwim, stillSwimming], [], now - 100000);
-    const timers = sandbox.computeActiveStageTimers().map(t => t.dbStage);
-    assert.strictEqual(JSON.stringify(timers.sort()), JSON.stringify(['bike_day1', 'swim']));
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'timer');
+    assert.strictEqual(state.label, 'День 1');
 });
 
-check('computeActiveStageTimers — таймер плавания пропадает, когда все доплыли', () => {
+check('computeStageTimerState — «Следующий этап Вело День 2», когда день 1 закрыт (все доплывшие сошли до вело1), а вело2 ещё не начался', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const now = Date.now();
-    const a = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
-    const b = mkTimerInd(2, { cp: { swim: { [maxSeqSwim]: 3500 } }, swim_s: 3500 });
-    setRaceData([a, b], [], now - 100000);
-    const timers = sandbox.computeActiveStageTimers().map(t => t.dbStage);
-    assert.strictEqual(JSON.stringify(timers), JSON.stringify(['bike_day1']));
+    // Доплыл, но снялся до старта вело1 — bike1_s так и не проставлен, значит
+    // формально "не вошёл" в вело2 (см. STAGE_PRIOR_KEYS/stageEntryOffset).
+    const dnfAfterSwim = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    setRaceData([dnfAfterSwim], [], now - 100000);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'next');
+    assert.strictEqual(state.label, 'Вело День 2');
+});
+
+check('computeStageTimerState — «Гонка завершена», когда все закончили бег (dnf/финиш)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqBike2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const now = Date.now();
+    const finished = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 }, bike_day2: { [maxSeqBike2]: 8000 }, run: { [maxSeqRun]: 2000 } },
+        swim_s: 3000, bike1_s: 9000, bike2_s: 8000, run_s: 2000,
+    });
+    const dnfOnRun = mkTimerInd(2, {
+        status: 'dnf',
+        cp: { swim: { [maxSeqSwim]: 3100 }, bike_day1: { [maxSeqBike1]: 9100 }, bike_day2: { [maxSeqBike2]: 8100 }, run: { 3: 500 } },
+        swim_s: 3100, bike1_s: 9100, bike2_s: 8100,
+    });
+    setRaceData([finished, dnfOnRun], [], now - 100000);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'done');
 });
 
 // ── Графики: buildPaceDatasets()/buildPositionDatasets() ──

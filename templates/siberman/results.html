@@ -143,6 +143,7 @@
         }
         .stage-timer-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
         .stage-timer-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red); }
+        .stage-timer--static .stage-timer-val { color: var(--text); font-size: 15px; }
 
         /* ── График ── */
         .chart-card {
@@ -1080,7 +1081,7 @@ function renderPositionChart() {
                 ctx.moveTo(x, chartArea.top);
                 ctx.lineTo(x, chartArea.bottom);
                 ctx.stroke();
-                ctx.fillText(STAGE_TIMER_LABEL[stage], x + 4, chartArea.top + 12);
+                ctx.fillText(STAGE_LABEL_RU[stage], x + 4, chartArea.top + 12);
             });
             ctx.restore();
         },
@@ -1156,10 +1157,10 @@ function renderStartlist() {
 }
 
 /* ──────────────── Живой секундомер этапа(ов) ──────────────── */
-// Виджет над табами, не привязан к фильтрам/вкладке. Показывает тикающие
-// секундомеры "время от начала этапа" для всех этапов, которые уже
-// начались (кто-то в них вошёл) и ещё не закрылись (кто-то ещё активен).
-const STAGE_TIMER_LABEL = { swim: 'Плавание', bike_day1: 'Вело День 1', bike_day2: 'Вело День 2', run: 'Бег' };
+// Виджет над табами, не привязан к фильтрам/вкладке. Плавание и Вело
+// День 1 проходят в один календарный день — единый секундомер "День 1"
+// от старта гонки (не два отдельных, как могло бы показаться по стадиям).
+// Вело День 2 и Бег — отдельные дни, свои секундомеры.
 // Сумма total-времён этапов, предшествующих данному — момент входа в этап
 // = race_start + эта сумма (у первого дошедшего участника). Для swim — 0
 // (масс-старт, начало этапа = старт гонки).
@@ -1207,33 +1208,59 @@ function stageIsPending(dbStage) {
     });
 }
 
-function computeActiveStageTimers() {
-    if (!_raceStartEpoch || !_data) return [];
-    return STAGE_ORDER
-        .map(dbStage => ({ dbStage, startOffset: stageStartOffset(dbStage) }))
-        .filter(x => x.startOffset != null && stageIsPending(x.dbStage))
-        .map(x => ({ dbStage: x.dbStage, startEpoch: _raceStartEpoch + x.startOffset * 1000 }));
+// Последовательные "дни" гонки для виджета — swim+bike_day1 склеены в один
+// (см. комментарий выше), bike_day2/run идут по отдельности как раньше.
+// startOffset() === null значит "ещё не начался" (никто не вошёл), pending()
+// значит "кто-то ещё активен внутри".
+const WIDGET_STAGES = [
+    { label: 'День 1', startOffset: () => 0, pending: () => stageIsPending('swim') || stageIsPending('bike_day1') },
+    { label: 'Вело День 2', startOffset: () => stageStartOffset('bike_day2'), pending: () => stageIsPending('bike_day2') },
+    { label: 'Бег', startOffset: () => stageStartOffset('run'), pending: () => stageIsPending('run') },
+];
+
+// Идём по WIDGET_STAGES по порядку: первый ещё не закрытый элемент и есть
+// текущее состояние виджета — тикающий секундомер (уже начался и кто-то
+// внутри активен), "следующий этап" (ещё не начался — предыдущий день уже
+// закрыт, этот ещё нет) или, если все элементы закрыты, гонка завершена.
+function computeStageTimerState() {
+    if (!_raceStartEpoch || !_data) return null;
+    for (const s of WIDGET_STAGES) {
+        const off = s.startOffset();
+        if (off == null) return { type: 'next', label: s.label };
+        if (s.pending()) return { type: 'timer', label: s.label, startEpoch: _raceStartEpoch + off * 1000 };
+    }
+    return { type: 'done' };
 }
 
 function renderStageTimers() {
     const el = document.getElementById('stageTimers');
-    const timers = computeActiveStageTimers();
-    if (timers.length === 0) {
+    const state = computeStageTimerState();
+    if (!state) {
         el.style.display = 'none';
         el.innerHTML = '';
         return;
     }
     el.style.display = '';
-    el.innerHTML = timers.map(t => `
-        <div class="stage-timer" data-start="${t.startEpoch}">
-            <span class="stage-timer-lbl">${STAGE_TIMER_LABEL[t.dbStage]}</span>
+    if (state.type === 'timer') {
+        el.innerHTML = `<div class="stage-timer" data-start="${state.startEpoch}">
+            <span class="stage-timer-lbl">${state.label}</span>
             <span class="stage-timer-val">00:00:00</span>
-        </div>`).join('');
-    tickStageTimers();
+        </div>`;
+        tickStageTimers();
+    } else if (state.type === 'next') {
+        el.innerHTML = `<div class="stage-timer stage-timer--static">
+            <span class="stage-timer-lbl">Следующий этап</span>
+            <span class="stage-timer-val">${state.label}</span>
+        </div>`;
+    } else {
+        el.innerHTML = `<div class="stage-timer stage-timer--static">
+            <span class="stage-timer-val">Гонка завершена</span>
+        </div>`;
+    }
 }
 
 function tickStageTimers() {
-    document.querySelectorAll('.stage-timer').forEach(el => {
+    document.querySelectorAll('.stage-timer[data-start]').forEach(el => {
         const elapsed = Math.max(0, Math.floor((Date.now() - Number(el.dataset.start)) / 1000));
         el.querySelector('.stage-timer-val').textContent = fmtTime(elapsed);
     });
