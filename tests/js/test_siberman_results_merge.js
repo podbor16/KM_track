@@ -481,34 +481,45 @@ check('rankBodyCells(..., true) — одна ячейка при fmt=relay', () 
     assert.strictEqual(html, '<td><span class="rank-num ">5</span></td>');
 });
 
-// ── computeGenderRanksFor()/renderBikeCombined — место по полу + скорость
-// в своде вело (421 км), запрошено пользователем 2026-07-19 ──
-check('computeGenderRanksFor — ранг по полу считается по ПОЛНОМУ ростеру (не по текущим фильтрам)', () => {
-    setState('all', 'M'); // фильтр пола активен — не должен влиять на расчёт
-    const individual = [
-        mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100 }), // 200
-        mkIndProgress(2, { gender: 'M', bike1_s: 50, bike2_s: 50 }),   // 100 — быстрее
-        mkIndProgress(3, { gender: 'F', bike1_s: 10, bike2_s: 10 }),   // 20, другой пол — свой пул
-    ];
-    sandbox.__individual = individual;
-    vm.runInContext('_data = { individual: __individual, relay: [] };', sandbox);
-    const ranks = sandbox.computeGenderRanksFor(sandbox.bikeCombinedTime);
-    assert.strictEqual(JSON.stringify(ranks.M), JSON.stringify({ 2: 1, 1: 2 }));
-    assert.strictEqual(JSON.stringify(ranks.F), JSON.stringify({ 3: 1 }));
+// ── bikeCombinedRelayRider()/renderBikeCombined — место по полу + скорость
+// в своде вело (421 км), запрошено пользователем 2026-07-19. Эстафета
+// показывается как РЕАЛЬНЫЙ велосипедист команды (один и тот же человек
+// едет оба дня), не как безликая команда — у него есть личный пол/место. ──
+function mkBikeRelay(bib, overrides) {
+    return {
+        bib, team_name: `Team${bib}`,
+        members: [
+            { relay_stage: 'bike', status: overrides.status ?? 'active', surname: overrides.surname, name: overrides.name, gender: overrides.gender, bike1_s: overrides.bike1_s, bike2_s: overrides.bike2_s },
+        ],
+    };
+}
+check('bikeCombinedRelayRider — реальные ФИО/пол велосипедиста, не название команды', () => {
+    const team = mkBikeRelay(1000, { surname: 'Иванов', name: 'Пётр', gender: 'M', bike1_s: 100, bike2_s: 200 });
+    const rider = sandbox.bikeCombinedRelayRider(team);
+    assert.strictEqual(rider.bib, 1000);
+    assert.strictEqual(rider.surname, 'Иванов');
+    assert.strictEqual(rider.gender, 'M');
+    assert.strictEqual(rider.team_name, 'Team1000');
 });
-check('renderBikeCombined() — не падает, средняя скорость и место по полу присутствуют в разметке', () => {
+check('renderBikeCombined() — эстафетчик получает настоящее место по полу (не "—")', () => {
     setState('all', 'all');
-    const individual = [
-        mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 }),
-        mkIndProgress(2, { gender: 'F', bike1_s: 6000, bike2_s: 11000 }),
-    ];
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 })];
+    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200 })]; // заметно быстрее личника
     sandbox.__individual = individual;
-    vm.runInContext('_data = { individual: __individual, relay: [] };', sandbox);
+    sandbox.__relay = relay;
+    vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
     sandbox.renderBikeCombined();
     const html = sandbox.document.getElementById('app').innerHTML;
     assert.ok(html.includes('Скорость'), 'ожидалась колонка "Скорость" в заголовке');
     assert.ok(html.includes('По полу'), 'ожидалась колонка "По полу" в заголовке');
-    assert.ok(/\d+[.,]\d\s*км\/ч/.test(html), `ожидалось значение скорости в км/ч, html: ${html.slice(0, 400)}`);
+    assert.ok(html.includes('Быстров Олег'), `ожидалось реальное имя велосипедиста в разметке, html: ${html.slice(0, 500)}`);
+    // Название команды может остаться подписью под ФИО (как на этапах), но
+    // главным "именем участника" должно быть ФИО, не название команды.
+    assert.ok(!/name-main">Team1000/.test(html), 'название команды не должно быть ГЛАВНЫМ именем участника');
+    assert.ok(/\d+[.,]\d\s*км\/ч/.test(html), 'ожидалось значение скорости в км/ч');
+    // Быстров быстрее личника — должен получить место 1 (в т.ч. по полу)
+    const rowMatch = html.match(/rank-num[^>]*>1<\/span>[\s\S]{0,400}?Быстров/);
+    assert.ok(rowMatch, 'эстафетчик Быстров должен быть на 1 месте (быстрее личника)');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

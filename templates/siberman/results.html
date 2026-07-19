@@ -889,18 +889,6 @@ function buildProgressRow(item, pos, options = {}) {
     </tr>`;
 }
 
-// Место по полу считается только среди личников (у эстафетной команды на
-// уровне сводных зачётов нет единого пола) и по ПОЛНОМУ ростеру года (не
-// по текущим фильтрам) — тот же принцип стабильности, что и у
-// computeCombinedOverallRanks.
-function computeGenderRanksFor(getValue) {
-    const rows = _data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? getValue(r) : null, status: r.status, gender: r.gender }));
-    return {
-        M: computeRanksByValue(rows.filter(r => r.gender === 'M')),
-        F: computeRanksByValue(rows.filter(r => r.gender === 'F')),
-    };
-}
-
 function renderRankedProgress(getValue, options = {}) {
     const { individual, relay } = getFiltered();
     let html = buildStats(individual, relay, null);
@@ -921,13 +909,81 @@ function renderRankedProgress(getValue, options = {}) {
     document.getElementById('app').innerHTML = html;
 }
 
+// Велоэтап эстафетной команды (день1+день2) всегда едет ОДИН И ТОТ ЖЕ
+// человек — в отличие от Итогов/Дней 1-2, где команда объединяет трёх
+// разных людей на трёх разных этапах, здесь "команда" на Своде вело — это
+// фактически один конкретный велосипедист с реальным полом. Возвращает
+// personal-подобный объект (bib команды, но ФИО/пол велосипедиста), чтобы
+// он мог получить настоящее место по полу наравне с личниками.
+function bikeCombinedRelayRider(team) {
+    const m = team.members.find(x => x.relay_stage === 'bike');
+    if (!m) return null;
+    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, bike1_s: m.bike1_s, bike2_s: m.bike2_s };
+}
+
 // Свод вело (421 км = 145+276) — единственная сводная вкладка с однородной
-// метрикой на всей дистанции (в отличие от Дней 1/2, где дистанция смешана
-// из разных дисциплин), поэтому только у неё осмысленны средняя скорость и
-// место по полу как отдельная колонка (запрошено пользователем 2026-07-19).
+// метрикой на всей дистанции, поэтому только у неё осмысленны средняя
+// скорость и настоящее место по полу и для личников, и для велосипедиста
+// эстафетной команды (запрошено пользователем 2026-07-19). Не переиспользует
+// renderRankedProgress/buildRankedEntries (те рассчитаны на команду как
+// единое целое без пола — верно для Итогов/Дней 1-2, но не здесь).
 function renderBikeCombined() {
-    const genderRanks = computeGenderRanksFor(bikeCombinedTime);
-    renderRankedProgress(bikeCombinedTime, { genderRanks, speedFn: s => 421 / (s / 3600) });
+    const { individual, relay } = getFiltered();
+    const riders = relay.map(bikeCombinedRelayRider).filter(Boolean);
+    let html = buildStats(individual, relay, null);
+
+    const rows = [
+        ...individual.map(r => ({ isRelay: false, entry: r, v: r.status === 'active' ? bikeCombinedTime(r) : null })),
+        ...riders.map(r => ({ isRelay: true, entry: r, v: r.status === 'active' ? bikeCombinedTime(r) : null })),
+    ].sort((a, b) => {
+        if (a.v == null && b.v == null) return 0;
+        if (a.v == null) return 1;
+        if (b.v == null) return -1;
+        return a.v - b.v;
+    });
+
+    if (rows.length === 0) {
+        html += '<div class="empty">Нет данных для выбранного фильтра</div>';
+        document.getElementById('app').innerHTML = html;
+        return;
+    }
+
+    // Единый ранг (абсолют + по полу) по ПОЛНОМУ ростеру года — не по
+    // текущим фильтрам, тот же принцип, что и в Итогах/на этапах.
+    const allRiders = _data.relay.map(bikeCombinedRelayRider).filter(Boolean);
+    const rankPool = [
+        ..._data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender })),
+        ...allRiders.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender })),
+    ];
+    const absRanks = computeRanksByValue(rankPool);
+    const genderRanks = {
+        M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),
+        F: computeRanksByValue(rankPool.filter(x => x.gender === 'F')),
+    };
+
+    html += `<div class="table-wrap"><table>
+    <thead><tr>${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
+    rows.forEach(({ isRelay, entry, v }) => {
+        const hasVal = v != null;
+        const absRank = hasVal ? absRanks[entry.bib] : null;
+        const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
+        const mainRank = _gender === 'all' ? absRank : genderRank;
+        const rc = mainRank != null ? rankClass(mainRank) : '';
+        const subLine = isRelay ? entry.team_name : entry.city;
+        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<br><span class="name-city">${subLine}</span>` : ''}`;
+        html += `<tr class="${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+            ${rankBodyCells(absRank, genderRank, entry.gender, rc)}
+            <td class="bib-cell">${entry.bib}</td>
+            <td>${nameCell}</td>
+            <td>${genderBadge(entry.gender)}</td>
+            ${_fmt === 'all' ? `<td class="muted">${isRelay ? 'Эстафета' : 'Индивидуальный'}</td>` : ''}
+            <td class="r time-cell">${fmtTime(v)}</td>
+            <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
+            <td>${progressStatusBadge(entry.status, hasVal)}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('app').innerHTML = html;
 }
 function renderDay1() { renderRankedProgress(day1Progress); }
 function renderDay2() { renderRankedProgress(day2Progress); }
