@@ -388,6 +388,52 @@ function combinedBikeSection(b1, b2) {
     </details>`;
 }
 
+// Бегунок прохождения КТ (п.12 бэклога) — единая полоса 0→515 км на
+// виртуальных пропорциях (POSITION_X_SEGMENTS/kmToVirtualX из
+// siberman-common.js — те же, что использует график "Позиция"). Работает
+// одинаково для личников и команд — оба несут cp/swim_s/bike1_s/bike2_s/
+// run_s в одинаковой форме (у команды — через teamGapRow()).
+function progressBarHtml(row) {
+    const stage = currentStage(row);
+    const finished = stage === 'run' && lastReached(row.cp, 'run')?.seq === STAGE_MAX_SEQ.run;
+    let fillPct = 0, chipText = null, activeStageKey = null;
+    if (finished) {
+        fillPct = 100;
+        chipText = 'Финиш';
+        activeStageKey = 'run';
+    } else if (stage) {
+        const pos = lastReached(row.cp, stage);
+        const kmInStage = CHECKPOINT_DIST_KM[stage][pos.seq];
+        const stageLenKm = CHECKPOINT_DIST_KM[stage][STAGE_MAX_SEQ[stage]];
+        fillPct = kmToVirtualX(STAGE_KM_OFFSET[stage] + kmInStage);
+        chipText = `${kmInStage.toFixed(1)} / ${stageLenKm} км`;
+        activeStageKey = stage;
+    }
+    const isBikeActive = activeStageKey === 'bike_day1' || activeStageKey === 'bike_day2';
+    const b1 = kmToVirtualX(10), b2 = kmToVirtualX(155), b3 = kmToVirtualX(431);
+    return `
+    <div class="pb-outer">
+        <div class="pb-track-wrap">
+            ${chipText != null ? `<div class="pb-inline-chip" style="left:${fillPct}%">${chipText}</div>` : ''}
+            <div class="pb-track">
+                <div class="pb-seg swim"></div>
+                <div class="pb-seg bike"></div>
+                <div class="pb-seg run"></div>
+                <div class="pb-fill" style="width:${fillPct}%"></div>
+                <div class="pb-boundary" style="left:${b1}%"></div>
+                <div class="pb-boundary" style="left:${b2}%;opacity:.5"></div>
+                <div class="pb-boundary" style="left:${b3}%"></div>
+            </div>
+            <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+        </div>
+        <div class="pb-stage-labels">
+            <span class="swim${activeStageKey === 'swim' ? ' active' : ''}">Плавание</span>
+            <span class="bike${isBikeActive ? ' active' : ''}">Вело</span>
+            <span class="run${activeStageKey === 'run' ? ' active' : ''}">Бег</span>
+        </div>
+    </div>`;
+}
+
 function renderIndividual(data, r) {
     const overallGapPool = buildOverallGapPool(data);
     // overallGapPool уже объединяет личников и эстафету (buildOverallGapPool),

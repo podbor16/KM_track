@@ -103,5 +103,44 @@ check('renderTeam() — Место (абсолют) + Место (формат),
     assert.ok(!stats.includes('Место (по полу)'), 'у команды не должно быть "Место (по полу)"');
 });
 
+function progressBarBlockHtml() {
+    const m = appEl.innerHTML.match(/<div class="pb-outer">([\s\S]*?)<\/div>\s*<div class="stats-row">/);
+    return m ? m[1] : '';
+}
+
+check('progressBarHtml() — не стартовал: маркер на 0%, чип с километражем не показан', () => {
+    const row = { bib: 1, gender: 'M', status: 'active', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    const html = sandbox.progressBarHtml(row);
+    assert.ok(html.includes('pb-marker-dot') && html.includes('left:0%'), `маркер должен быть на 0%: ${html}`);
+    assert.ok(!html.includes('pb-inline-chip'), `чип не должен показываться для не стартовавшего: ${html}`);
+});
+
+check('progressBarHtml() — активен на Вело День 2: чип "km / len км", маркер на позиции', () => {
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const row = {
+        bib: 1, gender: 'M', status: 'active',
+        swim_s: 1000, bike1_s: 9000, bike2_s: null, run_s: null,
+        cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqBike1]: 10000 }, bike_day2: { 3: 400 } },
+    };
+    const html = sandbox.progressBarHtml(row);
+    // CHECKPOINT_DIST_KM.bike_day2[3] = 119 км, длина этапа = 276 км
+    assert.ok(html.includes('119.0 / 276 км'), `ожидался чип "119.0 / 276 км": ${html}`);
+    const expectedX = vm.runInContext('kmToVirtualX(STAGE_KM_OFFSET.bike_day2 + CHECKPOINT_DIST_KM.bike_day2[3])', sandbox);
+    assert.ok(html.includes(`left:${expectedX}%`), `маркер должен быть на ${expectedX}%: ${html}`);
+});
+
+check('progressBarHtml() — финишировал: заливка 100%, подпись "Финиш"', () => {
+    const html = sandbox.progressBarHtml(mkFinishedInd(1, 20000, 'M', 1));
+    assert.ok(html.includes('Финиш'), `ожидалась подпись "Финиш": ${html}`);
+    assert.ok(html.includes('width:100%'), `заливка должна быть 100%: ${html}`);
+});
+
+check('progressBarHtml() — эстафетная команда через teamGapRow (та же функция, без спецкейса)', () => {
+    const team = mkRelayTeam(1000, 'КомандаА', 22000);
+    const teamRow = vm.runInContext('teamGapRow', sandbox)(team);
+    const html = sandbox.progressBarHtml(teamRow);
+    assert.ok(html.includes('Финиш'), `команда из mkRelayTeam уже финишировала (run cp = maxSeq): ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
