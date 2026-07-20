@@ -432,10 +432,16 @@ function progressBarHtml(row) {
     }
     const isBikeActive = activeStageKey === 'bike_day1' || activeStageKey === 'bike_day2';
     const b1 = kmToVirtualX(10), b2 = kmToVirtualX(155), b3 = kmToVirtualX(431);
+    // Чип центрируется через translateX(-50%) на позиции fillPct — у самого
+    // края полосы (участник только стартовал/почти финишировал) это уводит
+    // текст за пределы карточки (.card имеет overflow:hidden). Позицию ЧИПА
+    // зажимаем в безопасный диапазон отдельно от маркера/заливки, которые
+    // остаются на истинном fillPct.
+    const chipPct = Math.min(94, Math.max(6, fillPct));
     return `
     <div class="pb-outer">
         <div class="pb-track-wrap">
-            ${chipText != null ? `<div class="pb-inline-chip" style="left:${fillPct}%">${chipText}</div>` : ''}
+            ${chipText != null ? `<div class="pb-inline-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
             <div class="pb-track">
                 <div class="pb-seg swim"></div>
                 <div class="pb-seg bike"></div>
