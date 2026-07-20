@@ -142,5 +142,22 @@ check('progressBarHtml() — эстафетная команда через team
     assert.ok(html.includes('Финиш'), `команда из mkRelayTeam уже финишировала (run cp = maxSeq): ${html}`);
 });
 
+check('progressBarHtml() встроен в renderIndividual() перед .stats-row', () => {
+    const data = { individual: [mkFinishedInd(1, 20000, 'M', 1)], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, data.individual[0]);
+    const block = progressBarBlockHtml();
+    assert.ok(block.includes('pb-track'), `бегунок должен быть отрисован перед stats-row: ${appEl.innerHTML.slice(0, 400)}`);
+});
+check('progressBarHtml() встроен в renderTeam() перед .stats-row', () => {
+    const data = { individual: [], relay: [mkRelayTeam(1000, 'КомандаА', 22000)] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderTeam(data, data.relay[0]);
+    const block = progressBarBlockHtml();
+    assert.ok(block.includes('pb-track'), `бегунок команды должен быть отрисован перед stats-row: ${appEl.innerHTML.slice(0, 400)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
