@@ -1356,26 +1356,6 @@ function renderPaceChart() {
     if (!isCompare) attachSpaghettiHover(_paceChart, accent, context, (x, y) => `${x.toFixed(1)} км: ${paceValueLabel(dbStage, y)}`);
 }
 
-// Пропорциональная ширина по X для графика "Позиция" (п.7.4) — НЕ реальный
-// километраж (тогда плавание 10/515≈2% сжималось бы в почти невидимую
-// полоску), а фиксированные доли ширины графика: Плавание 20% / Вело 50%
-// (вело1+вело2 идут подряд без разрыва в километраже, 10→431 км — единый
-// сегмент) / Бег 30%. Ось X рисуется в этом "виртуальном" пространстве
-// [0,100], подписи тиков конвертируются обратно в реальные км.
-const POSITION_X_SEGMENTS = [
-    { kmStart: 0,   kmEnd: 10,  xStart: 0,  xEnd: 20 },   // Плавание — 20%
-    { kmStart: 10,  kmEnd: 431, xStart: 20, xEnd: 70 },   // Вело (день1+день2) — 50%
-    { kmStart: 431, kmEnd: 515, xStart: 70, xEnd: 100 },  // Бег — 30%
-];
-function kmToVirtualX(km) {
-    for (const seg of POSITION_X_SEGMENTS) {
-        if (km <= seg.kmEnd) {
-            const frac = seg.kmEnd === seg.kmStart ? 0 : (km - seg.kmStart) / (seg.kmEnd - seg.kmStart);
-            return seg.xStart + frac * (seg.xEnd - seg.xStart);
-        }
-    }
-    return 100;
-}
 function virtualXToKm(x) {
     for (const seg of POSITION_X_SEGMENTS) {
         if (x <= seg.xEnd) {

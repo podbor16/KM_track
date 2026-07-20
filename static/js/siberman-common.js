@@ -182,6 +182,26 @@ function splitPaceValue(dbStage, seq, splitS) {
 // STAGE_LABEL_RU/STAGE_CFG в results.html и STAGE_DISTANCES_KM в service.py).
 const STAGE_KM_OFFSET = { swim: 0, bike_day1: 10, bike_day2: 155, run: 431 };
 
+// Пропорциональная ширина по X для графика "Позиция" и бегунка прохождения
+// КТ на странице участника — НЕ реальный километраж (тогда плавание
+// 10/515≈2% сжималось бы в почти невидимую полоску), а фиксированные доли
+// ширины: Плавание 20% / Вело 50% (вело1+вело2 идут подряд без разрыва в
+// километраже, 10→431 км — единый сегмент) / Бег 30%.
+const POSITION_X_SEGMENTS = [
+    { kmStart: 0,   kmEnd: 10,  xStart: 0,  xEnd: 20 },   // Плавание — 20%
+    { kmStart: 10,  kmEnd: 431, xStart: 20, xEnd: 70 },   // Вело (день1+день2) — 50%
+    { kmStart: 431, kmEnd: 515, xStart: 70, xEnd: 100 },  // Бег — 30%
+];
+function kmToVirtualX(km) {
+    for (const seg of POSITION_X_SEGMENTS) {
+        if (km <= seg.kmEnd) {
+            const frac = seg.kmEnd === seg.kmStart ? 0 : (km - seg.kmStart) / (seg.kmEnd - seg.kmStart);
+            return seg.xStart + frac * (seg.xEnd - seg.xStart);
+        }
+    }
+    return 100;
+}
+
 // "N/4 кругов" для плавания, "N/12 кругов" для бега, null для вело (там нет
 // понятия "круг").
 function lapLabel(stage, seq) {
