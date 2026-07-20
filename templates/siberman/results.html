@@ -408,6 +408,7 @@ let _year = 2025;
 let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
 let _chartSubTab = 'pace';
 let _paceStage = 'swim';
+let _positionStage = null; // null = "Вся гонка"; иначе один из STAGE_ORDER
 let _paceChart = null;
 let _positionChart = null;
 // Мультивыбор для сравнения на графике (п.7.2/п.8) — объявлены на верхнем
@@ -1434,18 +1435,28 @@ function buildPositionDatasets(stage) {
 }
 
 function renderPositionChart() {
-    const datasets = buildPositionDatasets();
+    const datasets = buildPositionDatasets(_positionStage);
     _lastChartDatasets = datasets;
     const visibleBibs = new Set(datasets.map(d => d._bib));
     _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
+    const positionStageOptions = [{ key: 'all', label: 'Вся гонка' }, ...STAGE_ORDER.map(s => ({ key: s, label: STAGE_LABEL_RU[s] }))];
     document.getElementById('app').innerHTML = `
+        <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
+            <span class="filter-label">Этап:</span>
+            <div class="filter-group" id="positionStageGroup">
+                ${positionStageOptions.map(o => `<button class="filter-btn${(o.key === 'all' ? _positionStage === null : o.key === _positionStage) ? ' active' : ''}" data-positionstage="${o.key}">${o.label}</button>`).join('')}
+            </div>
+        </div>
         <div class="chart-card"><div class="chart-layout">
             ${chartSidebarHtml(datasets)}
             <div class="chart-main">
-                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения'}</div>
+                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_positionStage ? `Место на этапе «${STAGE_LABEL_RU[_positionStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
                 <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
             </div>
         </div></div>`;
+    document.querySelectorAll('#positionStageGroup [data-positionstage]').forEach(btn => {
+        btn.addEventListener('click', () => { _positionStage = btn.dataset.positionstage === 'all' ? null : btn.dataset.positionstage; renderPositionChart(); });
+    });
     attachChartSidebarHandlers();
 
     if (_positionChart) { _positionChart.destroy(); _positionChart = null; }
