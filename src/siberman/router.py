@@ -18,6 +18,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(tags=["Siberman"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+def _get_deploy_version() -> str:
+    """Git short hash текущего коммита — меняется с каждым деплоем, используется
+    как ?v= у статики, чтобы браузер не держал 7-дневный кэш старой версии."""
+    import subprocess as _sp
+    import time as _t
+    try:
+        r = _sp.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=3, cwd=BASE_DIR,
+        )
+        v = r.stdout.strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    return str(int(_t.time()))
+
+
+templates.env.globals["v"] = _get_deploy_version()
+
 log = logging.getLogger(__name__)
 
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
