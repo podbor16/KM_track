@@ -96,3 +96,6 @@ docs/siberman/~$*.xlsx
 # Активное событие, переключаемое из /admin — runtime-состояние, не код.
 # Не в git, чтобы деплой (git checkout) не затирал переключение на сервере.
 config/active_event.local
+
+# Мокапы brainstorming-скилла (визуальный компаньон) — локальный черновой вывод
+.superpowers/
