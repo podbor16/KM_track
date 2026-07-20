@@ -1465,9 +1465,6 @@ function renderPositionChart() {
         return;
     }
     const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
-    // В per-stage режиме ось X — реальный км этапа, растёт вместе с прогрессом
-    // (максимум среди фактически пройденных КТ), а не фиксированная длина этапа.
-    const maxStageKm = _positionStage ? Math.max(...datasets.flatMap(d => d.data.map(p => p.x))) : null;
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
     const isCompare = _chartSelectedBibs.length > 0;
@@ -1529,7 +1526,7 @@ function renderPositionChart() {
             scales: {
                 x: {
                     type: 'linear', min: 0,
-                    max: _positionStage ? maxStageKm : 100,
+                    max: _positionStage ? CHECKPOINT_DIST_KM[_positionStage][STAGE_MAX_SEQ[_positionStage]] : 100,
                     title: { display: true, text: _positionStage ? 'Километраж этапа' : 'Километраж гонки', color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted'), stepSize: _positionStage ? undefined : 10, callback: v => _positionStage ? v.toFixed(0) : Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },

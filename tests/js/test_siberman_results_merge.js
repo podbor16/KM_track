@@ -763,15 +763,14 @@ check('buildPositionDatasets() без аргумента — прежнее по
     assert.strictEqual(a.data[0].x, 0, 'глобальный режим по-прежнему экстраполирует до x=0');
 });
 
-check('renderPositionChart() per-stage — ось X реальный км этапа, без stageBoundaries-плагина', () => {
+check('renderPositionChart() per-stage — ось X фиксированная длина этапа (не растёт по мере прогресса), без stageBoundaries-плагина', () => {
     setState('all', 'all');
     const rowA = mkTimerInd('1', { cp: { run: { 1: 500, 2: 1000 } } });
     setRaceData([rowA], [], Date.now());
     vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
-    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
-    assert.strictEqual(chart.config.options.scales.x.max, 14, 'CHECKPOINT_DIST_KM.run[2] = 14 (7 * 2)');
+    assert.strictEqual(chart.config.options.scales.x.max, 84, 'CHECKPOINT_DIST_KM.run[12] = 84 — вся длина этапа, как у графика Темп/скорость, а не только пройденная часть');
     assert.ok(!chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'границы этапов не рисуются в per-stage режиме');
 });
 check('renderPositionChart() без выбранного этапа — прежнее поведение (виртуальная ось 0-100, stageBoundaries на месте)', () => {
