@@ -1415,14 +1415,14 @@ function buildPositionDatasets(stage) {
         }).filter(Boolean);
     }
     const ranksByStage = {};
-    STAGE_ORDER.forEach(stage => { ranksByStage[stage] = computeGlobalCheckpointRanks(rows, stage, STAGE_MAX_SEQ[stage]); });
+    STAGE_ORDER.forEach(s => { ranksByStage[s] = computeGlobalCheckpointRanks(rows, s, STAGE_MAX_SEQ[s]); });
     return rows.map(r => {
         const pts = [];
-        STAGE_ORDER.forEach(stage => {
-            const bySeq = ranksByStage[stage];
-            for (let seq = 1; seq <= STAGE_MAX_SEQ[stage]; seq++) {
+        STAGE_ORDER.forEach(s => {
+            const bySeq = ranksByStage[s];
+            for (let seq = 1; seq <= STAGE_MAX_SEQ[s]; seq++) {
                 const rank = bySeq[seq]?.[r.key];
-                if (rank != null) pts.push({ x: STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][seq], y: rank });
+                if (rank != null) pts.push({ x: STAGE_KM_OFFSET[s] + CHECKPOINT_DIST_KM[s][seq], y: rank });
             }
         });
         // Та же экстраполяция до X=0, что и в buildPaceDatasets (первая КТ
