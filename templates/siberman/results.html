@@ -1214,8 +1214,12 @@ const activeLineLabelPlugin = {
 };
 
 // Общий "hover подсвечивает ближайшую линию" — переиспользуется обоими
-// графиками (Темп/скорость и Позиция).
-function attachSpaghettiHover(chart, accent, context) {
+// графиками (Темп/скорость и Позиция). formatPoint(rawX, rawY) — строит
+// текст значения ("3.9 км: 0:22 /100м" и т.п.); ОДНА плашка
+// (activeLineLabelPlugin) показывает имя+значение вместе — раньше имя
+// рисовал канвас-плагин, а значение отдельно стандартный тултип Chart.js,
+// и они могли перекрываться (найдено пользователем 2026-07-20).
+function attachSpaghettiHover(chart, accent, context, formatPoint) {
     chart.options.onHover = function (evt, elements) {
         const activeIdx = elements.length ? elements[0].datasetIndex : null;
         this.data.datasets.forEach((d, i) => {
@@ -1227,8 +1231,11 @@ function attachSpaghettiHover(chart, accent, context) {
         });
         if (activeIdx != null) {
             const el = elements[0];
-            const pt = this.getDatasetMeta(activeIdx).data[el.index];
-            this._hoverInfo = { x: pt.x, y: pt.y, text: this.data.datasets[activeIdx].label };
+            const pt = this.getDatasetMeta(activeIdx).data[el.index]; // пиксельные координаты
+            const raw = this.data.datasets[activeIdx].data[el.index]; // реальные x/y значения
+            const name = this.data.datasets[activeIdx].label;
+            const valueText = formatPoint ? formatPoint(raw.x, raw.y) : '';
+            this._hoverInfo = { x: pt.x, y: pt.y, text: valueText ? `${name} — ${valueText}` : name };
         } else {
             this._hoverInfo = null;
         }
@@ -1250,12 +1257,6 @@ function buildSpaghettiDataset(d, accent, context) {
         tension: 0.15, spanGaps: true,
     };
 }
-
-// Обычный тултип (значение на КТ) — БЕЗ заголовка-имени: имя участника уже
-// показывает activeLineLabelPlugin прямо на канвасе рядом с точкой; заголовок
-// тултипа дублировал бы тот же текст в двух местах одновременно при
-// наведении (см. скриншот пользователя, п.7.1 задачи 2026-07-19).
-const CHART_TOOLTIP_NO_TITLE = { title: () => '' };
 
 function renderPaceChart() {
     // "Вело (оба дня)" — bike_day1 как эталон единиц (км/ч, без инверсии Y)
@@ -1313,11 +1314,15 @@ function renderPaceChart() {
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: isCompare
-                        ? { label(item) { return `${item.dataset.label} — ${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; } }
-                        : { ...CHART_TOOLTIP_NO_TITLE, label(item) { return `${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; } },
-                },
+                // В обычном режиме (не сравнение) значение уже показывает
+                // ОДНА плашка activeLineLabelPlugin (имя+значение вместе) —
+                // встроенный тултип Chart.js отключён, чтобы не рисовать
+                // вторую плашку поверх/рядом с первой (найдено 2026-07-20).
+                // В режиме сравнения (легенда уже называет линии) — обычный
+                // тултип с именем в подписи, без activeLineLabelPlugin.
+                tooltip: isCompare
+                    ? { callbacks: { label(item) { return `${item.dataset.label} — ${item.parsed.x.toFixed(1)} км: ${paceValueLabel(dbStage, item.parsed.y)}`; } } }
+                    : { enabled: false },
             },
             scales: {
                 // min:0 — иначе Chart.js авто-подбирает диапазон от первой КТ
@@ -1347,7 +1352,7 @@ function renderPaceChart() {
             },
         },
     });
-    if (!isCompare) attachSpaghettiHover(_paceChart, accent, context);
+    if (!isCompare) attachSpaghettiHover(_paceChart, accent, context, (x, y) => `${x.toFixed(1)} км: ${paceValueLabel(dbStage, y)}`);
 }
 
 // Пропорциональная ширина по X для графика "Позиция" (п.7.4) — НЕ реальный
@@ -1473,15 +1478,17 @@ function renderPositionChart() {
         plugins: [stageBoundaryPlugin, activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
-            layout: { padding: { top: 24, bottom: 12, left: 4, right: 12 } },
+            // Больше отступа сверху, чем у графика Темп/скорость — иначе
+            // подписи этапов ("Вело"/"Бег", stageBoundaryPlugin) пересекались
+            // с линией 1-го места (найдено пользователем 2026-07-20).
+            layout: { padding: { top: 36, bottom: 12, left: 4, right: 12 } },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             plugins: {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: isCompare
-                        ? { label(item) { return `${item.dataset.label} — ${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } }
-                        : { ...CHART_TOOLTIP_NO_TITLE, label(item) { return `${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } },
-                },
+                // См. комментарий в renderPaceChart — одна плашка вместо двух.
+                tooltip: isCompare
+                    ? { callbacks: { label(item) { return `${item.dataset.label} — ${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } } }
+                    : { enabled: false },
             },
             scales: {
                 x: {
@@ -1490,16 +1497,29 @@ function renderPositionChart() {
                     ticks: { color: cssVar('--muted'), stepSize: 10, callback: v => Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },
                 },
-                // min/max заданы явно (не авто-подбор) — grace тут не
-                // применяется, поэтому запас сверху/снизу добавляем вручную:
-                // 1-е место и последнее место иначе рисуются РОВНО на
-                // границе области графика и визуально "обрезаются" (найдено
-                // пользователем 2026-07-19, аналогично графику Темп/скорость).
-                y: { reverse: true, min: 0.5, max: maxRank + 0.5, title: { display: true, text: 'Место', color: cssVar('--muted') }, ticks: { color: cssVar('--muted'), precision: 0 }, grid: { color: cssVar('--border') } },
+                y: {
+                    reverse: true,
+                    // min/max заданы явно (не авто-подбор Chart.js) — запас
+                    // существенно больше сверху (min глубоко в отрицательные
+                    // значения), чтобы линия 1-го места не пересекалась с
+                    // подписями этапов у самого верха области графика; тики
+                    // всё равно строятся ТОЛЬКО целыми от 1 до maxRank ниже
+                    // (afterBuildTicks), так что отрицательный min никогда
+                    // не станет видимой подписью (найдено 2026-07-20: раньше
+                    // тики были дробными — 0.5, 5, 10... — вместо целых).
+                    min: -Math.max(2, Math.round(maxRank * 0.12)), max: maxRank + 1.5,
+                    afterBuildTicks: axis => {
+                        axis.ticks = [];
+                        for (let v = 1; v <= maxRank; v++) axis.ticks.push({ value: v });
+                    },
+                    title: { display: true, text: 'Место', color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted') },
+                    grid: { color: cssVar('--border') },
+                },
             },
         },
     });
-    if (!isCompare) attachSpaghettiHover(_positionChart, accent, context);
+    if (!isCompare) attachSpaghettiHover(_positionChart, accent, context, (x, y) => `${virtualXToKm(x).toFixed(1)} км: место ${y}`);
 }
 
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */

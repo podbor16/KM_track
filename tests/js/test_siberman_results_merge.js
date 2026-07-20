@@ -658,8 +658,20 @@ check('renderPositionChart — min/max оси Y с запасом (не 1..maxRa
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     const yScale = chart.config.options.scales.y;
-    assert.strictEqual(yScale.min, 0.5, 'min должен быть меньше 1 (запас сверху)');
+    assert.ok(yScale.min < 1, `min должен быть меньше 1 (запас сверху), получено ${yScale.min}`);
     assert.ok(yScale.max > 1, 'max должен быть больше реального худшего места (запас снизу)');
+});
+check('renderPositionChart — тики оси Y только целые, от 1 до maxRank (afterBuildTicks)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const rows = [1, 2, 3].map(bib => mkTimerInd(bib, { cp: { swim: { [maxSeqSwim]: 300 + bib } }, swim_s: 300 + bib }));
+    setRaceData(rows, [], Date.now());
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    const axisStub = { ticks: null };
+    chart.config.options.scales.y.afterBuildTicks(axisStub);
+    const values = axisStub.ticks.map(t => t.value);
+    assert.strictEqual(JSON.stringify(values), JSON.stringify([1, 2, 3]), `ожидались целые тики 1..3, получено ${JSON.stringify(values)}`);
 });
 
 // ── Список участников для сравнения сортируется по алфавиту (не по порядку
@@ -676,6 +688,50 @@ check('chartParticipantListItemsHtml — сортировка по алфави�
     const idxL = html.indexOf('Летницкий');
     const idxY = html.indexOf('Яковлев');
     assert.ok(idxA < idxL && idxL < idxY, `ожидался алфавитный порядок Астафьев < Летницкий < Яковлев, html: ${html}`);
+});
+
+// ── Единая плашка hover (имя+значение вместе), не два конкурирующих
+// элемента (canvas-плагин + встроенный тултип Chart.js) — найдено
+// пользователем 2026-07-20 на реальных скриншотах (плашки перекрывались) ──
+check('renderPaceChart() режим по умолчанию — встроенный тултип отключён (одна плашка вместо двух)', () => {
+    setState('all', 'all');
+    const row = mkTimerInd(1, { splits: { swim: { 1: 300 } } });
+    setRaceData([row], [], Date.now());
+    vm.runInContext(`_paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    assert.strictEqual(chart.config.options.plugins.tooltip.enabled, false, 'встроенный тултип должен быть отключён вне режима сравнения');
+});
+check('renderPositionChart() режим по умолчанию — встроенный тултип отключён', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const row = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 300 } }, swim_s: 300 });
+    setRaceData([row], [], Date.now());
+    vm.runInContext(`_chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    assert.strictEqual(chart.config.options.plugins.tooltip.enabled, false);
+});
+check('renderPaceChart() режим сравнения — встроенный тултип ВКЛЮЧЁН (легенда уже называет линии, canvas-плагин не рисует)', () => {
+    setState('all', 'all');
+    const row = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
+    setRaceData([row], [], Date.now());
+    vm.runInContext(`_paceStage = 'swim';`, sandbox);
+    sandbox.chartToggleSelect('1');
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    assert.notStrictEqual(chart.config.options.plugins.tooltip.enabled, false, 'в режиме сравнения тултип должен остаться включён');
+});
+check('attachSpaghettiHover — hoverInfo.text объединяет имя И значение (formatPoint)', () => {
+    const fakeChart = {
+        data: { datasets: [{ label: 'Иванов Иван', data: [{ x: 3.9, y: 22 }] }] },
+        getDatasetMeta: () => ({ data: [{ x: 100, y: 200 }] }),
+        update: () => {},
+        options: {},
+    };
+    sandbox.attachSpaghettiHover(fakeChart, '#f00', '#ccc', (x, y) => `${x} км: место ${y}`);
+    fakeChart.options.onHover.call(fakeChart, null, [{ datasetIndex: 0, index: 0 }]);
+    assert.strictEqual(fakeChart._hoverInfo.text, 'Иванов Иван — 3.9 км: место 22');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
