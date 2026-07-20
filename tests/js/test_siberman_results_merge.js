@@ -734,5 +734,31 @@ check('attachSpaghettiHover — hoverInfo.text объединяет имя И з
     assert.strictEqual(fakeChart._hoverInfo.text, 'Иванов Иван — 3.9 км: место 22');
 });
 
+check('buildPositionDatasets(stage) — место ВНУТРИ этапа (не по всей гонке), реальный км без экстраполяции x=0', () => {
+    setState('all', 'all');
+    // A: медленно прошёл плавание+вело (сумма 18000с до бега), но САМЫЙ
+    // быстрый на 1-м km бега (500с) — глобально позади, локально на бегу впереди.
+    const rowA = mkTimerInd('1', { swim_s: 1000, bike1_s: 9000, bike2_s: 8000, cp: { run: { 1: 500 } } });
+    // B: быстро прошёл плавание+вело (сумма 9500с), но медленнее на 1-м км бега (5000с).
+    const rowB = mkTimerInd('2', { swim_s: 500, bike1_s: 5000, bike2_s: 4000, cp: { run: { 1: 5000 } } });
+    setRaceData([rowA, rowB], [], Date.now());
+    const datasets = sandbox.buildPositionDatasets('run');
+    const a = datasets.find(d => d._bib === '1');
+    const b = datasets.find(d => d._bib === '2');
+    assert.strictEqual(a.data.length, 1, 'без экстраполяции до x=0 в per-stage режиме');
+    assert.strictEqual(a.data[0].x, 7, 'X — реальный км ВНУТРИ этапа (CHECKPOINT_DIST_KM.run[1] = 7)');
+    assert.strictEqual(a.data[0].y, 1, 'A локально впереди на бегу (500с < 5000с) — место 1');
+    assert.strictEqual(b.data[0].y, 2, 'B локально позади на бегу — место 2');
+});
+check('buildPositionDatasets() без аргумента — прежнее поведение (глобальный ранг, экстраполяция x=0)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const rowA = mkTimerInd('1', { cp: { swim: { [maxSeqSwim]: 300 } }, swim_s: 300 });
+    setRaceData([rowA], [], Date.now());
+    const datasets = sandbox.buildPositionDatasets();
+    const a = datasets.find(d => d._bib === '1');
+    assert.strictEqual(a.data[0].x, 0, 'глобальный режим по-прежнему экстраполирует до x=0');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

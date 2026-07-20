@@ -1392,12 +1392,28 @@ function withVirtualX(d) {
     return { ...d, data: d.data.map(p => ({ x: kmToVirtualX(p.x), y: p.y })) };
 }
 
-function buildPositionDatasets() {
+function buildPositionDatasets(stage) {
     const { individual, relay } = getFiltered();
     const rows = [
         ...individual.map(r => ({ key: r.bib, name: `${r.surname} ${r.name}`, cp: r.cp, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
     ];
+    if (stage) {
+        // Место ВНУТРИ этапа (не по всей гонке) — сравнение только по
+        // сырому времени НА этом этапе (computeCheckpointRanks), не по
+        // накопленному времени гонки. X — реальный км этапа, без
+        // экстраполяции до x=0 (у каждого этапа своя первая настоящая
+        // КТ рядом со стартом, "нулевая" точка тут не нужна).
+        const bySeq = computeCheckpointRanks(rows, stage, STAGE_MAX_SEQ[stage]);
+        return rows.map(r => {
+            const pts = [];
+            for (let seq = 1; seq <= STAGE_MAX_SEQ[stage]; seq++) {
+                const rank = bySeq[seq]?.[r.key];
+                if (rank != null) pts.push({ x: CHECKPOINT_DIST_KM[stage][seq], y: rank });
+            }
+            return pts.length ? { _bib: r.key, _name: r.name, data: pts } : null;
+        }).filter(Boolean);
+    }
     const ranksByStage = {};
     STAGE_ORDER.forEach(stage => { ranksByStage[stage] = computeGlobalCheckpointRanks(rows, stage, STAGE_MAX_SEQ[stage]); });
     return rows.map(r => {
