@@ -1465,10 +1465,15 @@ function renderPositionChart() {
         return;
     }
     const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
+    // В per-stage режиме ось X — реальный км этапа, растёт вместе с прогрессом
+    // (максимум среди фактически пройденных КТ), а не фиксированная длина этапа.
+    const maxStageKm = _positionStage ? Math.max(...datasets.flatMap(d => d.data.map(p => p.x))) : null;
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
     const isCompare = _chartSelectedBibs.length > 0;
-    const virtualDatasets = datasets.map(withVirtualX);
+    // В per-stage режиме X уже реальный км этапа — виртуальное преобразование
+    // (kmToVirtualX/withVirtualX) применимо только к графику "вся гонка".
+    const virtualDatasets = _positionStage ? datasets : datasets.map(withVirtualX);
     const chartDatasets = isCompare
         ? virtualDatasets.filter(d => _chartSelectedBibs.includes(d._bib))
             .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
@@ -1498,11 +1503,15 @@ function renderPositionChart() {
         },
     };
 
+    const formatHoverPoint = _positionStage
+        ? (x, y) => `${x.toFixed(1)} км: место ${y}`
+        : (x, y) => `${virtualXToKm(x).toFixed(1)} км: место ${y}`;
+
     const ctx = document.getElementById('sibermanPositionChart').getContext('2d');
     _positionChart = new Chart(ctx, {
         type: 'line',
         data: { datasets: chartDatasets },
-        plugins: [stageBoundaryPlugin, activeLineLabelPlugin],
+        plugins: [...(_positionStage ? [] : [stageBoundaryPlugin]), activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
             // Больше отступа сверху, чем у графика Темп/скорость — иначе
@@ -1514,14 +1523,15 @@ function renderPositionChart() {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
                 // См. комментарий в renderPaceChart — одна плашка вместо двух.
                 tooltip: isCompare
-                    ? { callbacks: { label(item) { return `${item.dataset.label} — ${virtualXToKm(item.parsed.x).toFixed(1)} км: место ${item.parsed.y}`; } } }
+                    ? { callbacks: { label(item) { const km = _positionStage ? item.parsed.x : virtualXToKm(item.parsed.x); return `${item.dataset.label} — ${km.toFixed(1)} км: место ${item.parsed.y}`; } } }
                     : { enabled: false },
             },
             scales: {
                 x: {
-                    type: 'linear', min: 0, max: 100,
-                    title: { display: true, text: 'Километраж гонки', color: cssVar('--muted') },
-                    ticks: { color: cssVar('--muted'), stepSize: 10, callback: v => Math.round(virtualXToKm(v)) },
+                    type: 'linear', min: 0,
+                    max: _positionStage ? maxStageKm : 100,
+                    title: { display: true, text: _positionStage ? 'Километраж этапа' : 'Километраж гонки', color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted'), stepSize: _positionStage ? undefined : 10, callback: v => _positionStage ? v.toFixed(0) : Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },
                 },
                 y: {
@@ -1546,7 +1556,7 @@ function renderPositionChart() {
             },
         },
     });
-    if (!isCompare) attachSpaghettiHover(_positionChart, accent, context, (x, y) => `${virtualXToKm(x).toFixed(1)} км: место ${y}`);
+    if (!isCompare) attachSpaghettiHover(_positionChart, accent, context, formatHoverPoint);
 }
 
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */

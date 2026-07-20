@@ -26,9 +26,12 @@ function domStub(id) {
 // Chart.js стаб — рендер-функции графиков (renderPaceChart/renderPositionChart)
 // создают `new Chart(...)`, без стаба падают с ReferenceError.
 class ChartStub {
-    constructor(ctx, config) { this.config = config; this.options = config.options || {}; }
+    constructor(ctx, config) { this.config = config; this.options = config.options || {}; this.data = config.data || {}; }
     destroy() {}
-    getDatasetMeta() { return { data: [] }; }
+    getDatasetMeta(datasetIndex) {
+        const ds = this.data.datasets?.[datasetIndex];
+        return { data: (ds?.data || []).map(() => ({ x: 0, y: 0 })) };
+    }
     update() {}
 }
 const sandbox = {
@@ -758,6 +761,39 @@ check('buildPositionDatasets() без аргумента — прежнее по
     const datasets = sandbox.buildPositionDatasets();
     const a = datasets.find(d => d._bib === '1');
     assert.strictEqual(a.data[0].x, 0, 'глобальный режим по-прежнему экстраполирует до x=0');
+});
+
+check('renderPositionChart() per-stage — ось X реальный км этапа, без stageBoundaries-плагина', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { cp: { run: { 1: 500, 2: 1000 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    assert.strictEqual(chart.config.options.scales.x.max, 14, 'CHECKPOINT_DIST_KM.run[2] = 14 (7 * 2)');
+    assert.ok(!chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'границы этапов не рисуются в per-stage режиме');
+});
+check('renderPositionChart() без выбранного этапа — прежнее поведение (виртуальная ось 0-100, stageBoundaries на месте)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const rowA = mkTimerInd('1', { cp: { swim: { [maxSeqSwim]: 300 } }, swim_s: 300 });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_positionStage = null; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    assert.strictEqual(chart.config.options.scales.x.max, 100);
+    assert.ok(chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'в глобальном режиме границы этапов рисуются, как раньше');
+});
+check('attachSpaghettiHover formatPoint per-stage — текст без пересчёта в виртуальный км (реальный км этапа как есть)', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { cp: { run: { 1: 500 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    chart.options.onHover.call(chart, null, [{ datasetIndex: 0, index: 0 }]);
+    assert.ok(chart._hoverInfo.text.includes('7.0 км: место 1'), `неожиданный текст: ${chart._hoverInfo.text}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
