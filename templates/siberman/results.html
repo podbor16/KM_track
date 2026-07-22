@@ -127,6 +127,10 @@
         .tab:hover { color: var(--text); }
         .tab.active { color: var(--red); border-bottom-color: var(--red); }
         .tab .tab-dist { font-size: 10px; font-weight: 400; opacity: .7; margin-left: 4px; }
+        /* "Итоги гонки" всегда виден слева при автоскролле #tabs до
+           активного этапа (п.10, 2026-07-22) — порядок табов не меняется,
+           просто не даём первому табу уехать из виду вместе с остальными. */
+        .tab-pinned { position: sticky; left: 0; z-index: 2; background: var(--bg2); border-right: 1px solid var(--border); }
         .tabs-bar--sub { padding: 0 20px; background: var(--bg); }
         .tabs-bar--sub .tab { padding: 8px 14px; font-size: 11px; }
 
@@ -358,7 +362,7 @@
 
 <!-- ── Tabs ── -->
 <div class="tabs-bar" id="tabs">
-    <div class="tab active" data-tab="overall">Итоги гонки</div>
+    <div class="tab active tab-pinned" data-tab="overall">Итоги гонки</div>
     <div class="tab" data-tab="swim">Плавание <span class="tab-dist">10 км</span></div>
     <div class="tab" data-tab="bike">Вело <span class="tab-dist">421 км</span></div>
     <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
