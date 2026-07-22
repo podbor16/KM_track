@@ -1971,7 +1971,14 @@ function render() {
     // Скрыть фильтр пола при выборе Эстафеты
     const genderGroup = document.getElementById('genderGroup');
     const genderLabel = document.getElementById('genderLabel');
-    const hideGender = _fmt === 'relay';
+    // Фильтр по полу скрыт при "Эстафета" на командных вкладках (Итоги/Дни —
+    // у команды нет личного пола на этом уровне), но виден на
+    // персонифицированных (этапы + Свод вело — там уже настоящий личный пол
+    // конкретного эстафетчика, задача 2026-07-22 п.8). "bike" покрывает и
+    // Свод, и Вело1/Вело2 (оба сабтаба). График/Старт вело-2 — вне скопа,
+    // фильтр там остаётся скрытым при эстафете как раньше.
+    const PERSONIFIED_TABS = ['swim', 'run', 'bike'];
+    const hideGender = _fmt === 'relay' && !PERSONIFIED_TABS.includes(_tab);
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
     document.getElementById('bikeSubTabs').style.display = _tab === 'bike' ? '' : 'none';

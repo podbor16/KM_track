@@ -1159,5 +1159,20 @@ check('renderStage() фильтр "Эстафета" — формат/пол р�
     assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1 (быстрее КомандыБ, полный ростер учитывает обе команды): ${rowMatch[0]}`);
 });
 
+check('render() — фильтр по полу виден на этапах/Своде вело при fmt=relay, скрыт на Итогах/Днях', () => {
+    setRaceData([], [{ bib: '1000', team_name: 'К', overall_s: 1000, members: [] }], Date.now());
+    setState('relay', 'all');
+    const genderGroupTab = (tab) => {
+        vm.runInContext(`_tab = ${JSON.stringify(tab)};`, sandbox);
+        sandbox.render();
+        return domStub('genderGroup').style.display;
+    };
+    assert.strictEqual(genderGroupTab('overall'), 'none', 'Итоги гонки — фильтр по полу скрыт при эстафете');
+    assert.strictEqual(genderGroupTab('day1'), 'none', 'День 1 — фильтр по полу скрыт при эстафете');
+    assert.strictEqual(genderGroupTab('swim'), '', 'Плавание — фильтр по полу ВИДЕН при эстафете');
+    vm.runInContext(`_bikeSubTab = 'combined';`, sandbox);
+    assert.strictEqual(genderGroupTab('bike'), '', 'Свод вело/Вело1/Вело2 — фильтр по полу ВИДЕН при эстафете');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
