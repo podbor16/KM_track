@@ -159,5 +159,28 @@ check('progressBarHtml() встроен в renderTeam() перед .stats-row', 
     assert.ok(block.includes('pb-track'), `бегунок команды должен быть отрисован перед stats-row: ${appEl.innerHTML.slice(0, 400)}`);
 });
 
+check('renderIndividual() — бейдж "Индивидуальный" у ФИО в шапке, колонка "Формат" убрана из таблицы КТ (2026-07-22 п.2)', () => {
+    const data = { individual: [mkFinishedInd(1, 20000, 'M', 1)], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, data.individual[0]);
+    assert.ok(appEl.innerHTML.includes('badge-individual'), 'должен быть бейдж "Индивидуальный" у ФИО');
+    assert.ok(!appEl.innerHTML.includes('>Формат<'), `колонка "Формат" должна быть убрана из таблицы КТ: ${appEl.innerHTML.slice(0, 800)}`);
+});
+check('renderTeam() — бейдж "Эстафета" + статус у названия команды в шапке (2026-07-22 п.2/п.4)', () => {
+    const data = { individual: [], relay: [mkRelayTeam(1000, 'КомандаА', 22000)] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderTeam(data, data.relay[0]);
+    assert.ok(appEl.innerHTML.includes('badge-relay'), 'должен быть бейдж "Эстафета" у названия команды');
+    assert.ok(appEl.innerHTML.includes('badge-fin">Финишировал'), `команда из mkRelayTeam финишировала — ожидался бейдж "Финишировал": ${appEl.innerHTML.slice(0, 800)}`);
+});
+check('teamStatusBadge() — DNF любого члена команды даёт бейдж DNF', () => {
+    const team = mkRelayTeam(1000, 'КомандаБ', null);
+    team.members[1].status = 'dnf';
+    const badge = vm.runInContext('teamStatusBadge', sandbox)(team);
+    assert.ok(badge.includes('badge-dnf'), `ожидался бейдж DNF: ${badge}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

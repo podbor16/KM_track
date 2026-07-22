@@ -527,9 +527,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks) {
     const cur = currentStage(tr);
     const pos = cur ? lastReached(tr.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
-    const statusCell = notFinished
-        ? (tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">В гонке</span>')
-        : '<span class="badge badge-fin">Финишировал</span>';
+    const statusCell = teamStatusBadge(team);
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(combinedRanks[team.bib], null, null, rc, true)}
         <td class="bib-cell">${team.bib}</td>

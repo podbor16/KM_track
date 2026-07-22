@@ -76,6 +76,8 @@
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
         .badge-fin  { background: rgba(34,197,94,.12);   color: #22c55e; }
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
+        .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; }
+        .badge-individual { background: rgba(122,170,191,.12); color: var(--muted); font-weight: 700; }
         .muted { color: var(--muted); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .rank-num { font-weight: 800; }
@@ -253,12 +255,13 @@ function modeToggle() {
     </div>`;
 }
 
-// Порядок колонок (задача 2026-07-19, п.4): Общее время → Формат →
-// [личники: Место(пол) → Отставание(пол)] → Место(формат) →
-// Отставание(формат) → Место(абсолют) → Отставание(абсолют). Три
-// независимых пары место+отставание — каждая относительно лидера СВОЕГО
-// пула (пол/формат/весь пул), а не одно общее отставание в конце, как
-// было раньше.
+// Порядок колонок (задача 2026-07-19 п.4, колонка "Формат" убрана
+// 2026-07-22 п.2 — тип виден в бейдже у ФИО в шапке карточки, дублировать
+// на каждой строке КТ избыточно): Общее время → [личники: Место(пол) →
+// Отставание(пол)] → Место(формат) → Отставание(формат) → Место(абсолют) →
+// Отставание(абсолют). Три независимых пары место+отставание — каждая
+// относительно лидера СВОЕГО пула (пол/формат/весь пул), а не одно общее
+// отставание в конце, как было раньше.
 function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     const maxSeq = STAGE_MAX_SEQ[dbStage];
     const isRace = _mode === 'race';
@@ -272,7 +275,6 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     const ranksFn = isRace ? computeGlobalCheckpointRanks : computeCheckpointRanks;
 
     const isRelayRow = !!r.relay_stage;
-    const formatLabel = isRelayRow ? 'Эстафета' : 'Индивидуальный';
 
     const absRanks = ranksFn(pool, dbStage, maxSeq);
     const absGaps = gapsFn(pool, dbStage, maxSeq);
@@ -321,7 +323,6 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             <td class="r time-cell">${split != null ? fmtTime(split) : '—'}</td>
             <td class="r muted">${paceCell}</td>
             <td class="r time-cell">${cum != null ? fmtTime(cum) : '—'}</td>
-            <td class="muted">${formatLabel}</td>
             ${gen ? `<td class="r">${gen.rank}</td><td class="r">${gen.gap}</td>` : ''}
             <td class="r">${fmtC.rank}</td>
             <td class="r">${fmtC.gap}</td>
@@ -332,7 +333,6 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     return `<div style="overflow-x:auto"><table class="cp-table">
         <thead><tr>
             <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
-            <th>Формат</th>
             ${!isRelayRow ? '<th class="r">Место (пол)</th><th class="r">Отставание (пол)</th>' : ''}
             <th class="r">Место (формат)</th><th class="r">Отставание (формат)</th>
             <th class="r">Место (абсолют)</th><th class="r">Отставание (абсолют)</th>
@@ -502,6 +502,7 @@ function renderIndividual(data, r) {
                 <span class="p-bib">№${r.bib}</span>
                 <span class="p-name">${r.surname} ${r.name}</span>
                 ${genderBadge(r.gender)}
+                <span class="badge badge-individual">Индивидуальный</span>
                 ${statusBadge(r, null)}
             </div>
             ${r.city ? `<div class="p-city">${r.city}</div>` : ''}
@@ -559,6 +560,8 @@ function renderTeam(data, team) {
             <div class="card-hdr-top">
                 <span class="p-bib">№${team.bib}</span>
                 <span class="p-name">${team.team_name}</span>
+                <span class="badge badge-relay">Эстафета</span>
+                ${teamStatusBadge(team)}
             </div>
         </div>
         ${progressBarHtml(teamRow)}

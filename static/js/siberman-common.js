@@ -104,6 +104,16 @@ function relayMemberStatusBadge(m) {
     if (m.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
     return '<span class="badge badge-fin">Финишировал</span>';
 }
+// Статус ЭСТАФЕТНОЙ КОМАНДЫ целиком (не отдельного участника) — тот же
+// 3-состояний бейдж, что уже был у личников (statusBadge), но команда не
+// несёт своего "status" в API — используем упрощённый teamGapRow().status
+// (dnf любого члена → dnf команды) + team.overall_s как признак финиша.
+function teamStatusBadge(team) {
+    const tr = teamGapRow(team);
+    const notFinished = team.overall_s == null || tr.status !== 'active';
+    if (!notFinished) return '<span class="badge badge-fin">Финишировал</span>';
+    return tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">В гонке</span>';
+}
 
 /* ──────────────── Этапы / контрольные точки ──────────────── */
 const STAGE_MAX_SEQ = { swim: 7, bike_day1: 6, bike_day2: 8, run: 12 };
