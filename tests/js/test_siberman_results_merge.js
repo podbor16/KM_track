@@ -19,7 +19,16 @@ const inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m =
 const elementsById = {};
 function domStub(id) {
     if (id && elementsById[id]) return elementsById[id];
-    const el = { innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {}, addEventListener: () => {}, dataset: {}, querySelector: () => domStub(), getContext: () => ({}) };
+    const handlers = {};
+    const el = {
+        innerHTML: '', style: {}, textContent: '', value: '2025', appendChild: () => {},
+        // Реально запоминаем обработчики (не no-op) — нужно, чтобы тесты
+        // могли симулировать клик по кнопкам сайдбара графика, не завися
+        // от настоящего DOM.
+        addEventListener: (type, fn) => { (handlers[type] ??= []).push(fn); },
+        _handlers: handlers,
+        dataset: {}, querySelector: () => domStub(), getContext: () => ({}), scrollIntoView: () => {},
+    };
     if (id) elementsById[id] = el;
     return el;
 }
@@ -831,6 +840,44 @@ check('renderPositionChart() _positionStage=\'bike\' — ось X на весь 
     const chart = vm.runInContext('_positionChart', sandbox);
     assert.strictEqual(chart.config.options.scales.x.max, 421, 'CHECKPOINT_DIST_KM.bike_day1[6] + bike_day2[8] = 145 + 276 = 421');
     assert.ok(!chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'границы этапов не рисуются в per-stage режиме');
+});
+
+check('chartSelectAllToggleHtml — "Выбрать всех" когда не все видимые выбраны', () => {
+    const datasets = [{ _bib: '1', _name: 'Иванов Иван' }, { _bib: '2', _name: 'Петров Пётр' }];
+    vm.runInContext(`_chartSearchQuery = ''; _chartSelectedBibs = ['1'];`, sandbox);
+    const html = sandbox.chartSelectAllToggleHtml(datasets);
+    assert.ok(html.includes('Выбрать всех'), `ожидалась кнопка "Выбрать всех": ${html}`);
+});
+check('chartSelectAllToggleHtml — "Очистить всех" когда все видимые (по фильтру поиска) уже выбраны', () => {
+    const datasets = [{ _bib: '1', _name: 'Иванов Иван' }, { _bib: '2', _name: 'Петров Пётр' }];
+    // Поиск сужает список до одного "Иванов" — он уже выбран, значит ВСЕ
+    // видимые выбраны, хотя Петров (вне фильтра) — нет.
+    vm.runInContext(`_chartSearchQuery = 'иванов'; _chartSelectedBibs = ['1'];`, sandbox);
+    const html = sandbox.chartSelectAllToggleHtml(datasets);
+    assert.ok(html.includes('Очистить всех'), `ожидалась кнопка "Очистить всех": ${html}`);
+});
+check('attachChartSelectAllHandler — клик "Выбрать всех" добавляет только отфильтрованных, не трогая остальных', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
+    const rowB = mkTimerInd('2', { splits: { swim: { 1: 400 } } });
+    setRaceData([rowA, rowB], [], Date.now());
+    vm.runInContext(`_paceStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const btn = domStub('chartSelectAllToggle');
+    btn._handlers.click[0]();
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected.slice().sort()), JSON.stringify(['1', '2']), `получено [${selected}]`);
+});
+check('attachChartSelectAllHandler — повторный клик, когда все выбраны, очищает выбор ("Очистить всех")', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_paceStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = ['1'];`, sandbox);
+    sandbox.renderPaceChart();
+    const btn = domStub('chartSelectAllToggle');
+    btn._handlers.click[0]();
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(selected.length, 0, `ожидался пустой выбор, получено [${selected}]`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

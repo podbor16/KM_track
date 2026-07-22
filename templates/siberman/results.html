@@ -193,6 +193,12 @@
         }
         .chart-clear-btn:hover { color: var(--text); border-color: var(--text); }
         .chart-hint-sidebar { color: var(--muted); }
+        .chart-select-all-btn {
+            display: block; width: calc(100% - 16px); margin: 8px 8px 4px;
+            padding: 5px; border-radius: 20px; border: 1px solid var(--border);
+            background: transparent; color: var(--muted); font-size: 11px; cursor: pointer;
+        }
+        .chart-select-all-btn:hover { color: var(--text); border-color: var(--text); }
         @media (max-width: 640px) {
             .chart-layout { flex-direction: column; }
             .chart-sidebar { width: 100%; max-height: 220px; }
@@ -1051,12 +1057,26 @@ function chartParticipantListItemsHtml(datasets) {
         </label>`;
     }).join('');
 }
+// Одна кнопка "Выбрать всех/Очистить всех" — учитывает текущий поиск (жмут
+// её обычно после того как отфильтровали список по имени, ожидая выбрать
+// именно видимых, а не вообще всех участников гонки).
+function chartFilteredDatasets(datasets) {
+    const q = _chartSearchQuery.trim().toLowerCase();
+    return q ? datasets.filter(d => d._name.toLowerCase().includes(q)) : datasets;
+}
+function chartSelectAllToggleHtml(datasets) {
+    const filtered = chartFilteredDatasets(datasets);
+    if (filtered.length === 0) return '';
+    const allSelected = filtered.every(d => _chartSelectedBibs.includes(d._bib));
+    return `<button class="chart-select-all-btn" id="chartSelectAllToggle">${allSelected ? 'Очистить всех' : 'Выбрать всех'}</button>`;
+}
 function chartSidebarHtml(datasets) {
     const footer = _chartSelectedBibs.length
         ? `<button class="chart-clear-btn" id="chartClearSelection">Сбросить выбор (${_chartSelectedBibs.length})</button>`
         : `<div class="chart-hint-sidebar">Выберите участников для сравнения</div>`;
     return `<div class="chart-sidebar">
         <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
+        <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
         <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
         ${footer}
     </div>`;
@@ -1069,6 +1089,14 @@ function refreshChartParticipantList() {
     if (!listEl) return;
     listEl.innerHTML = chartParticipantListItemsHtml(_lastChartDatasets);
     attachChartCheckboxHandlers();
+    // Кнопка "Выбрать/Очистить всех" зависит от текущего поиска (тот же
+    // фильтр, что применяется к списку) — при вводе в поиск её текст и
+    // набор участников, на которых она действует, тоже должны обновляться.
+    const toggleWrapEl = document.getElementById('chartSelectAllWrap');
+    if (toggleWrapEl) {
+        toggleWrapEl.innerHTML = chartSelectAllToggleHtml(_lastChartDatasets);
+        attachChartSelectAllHandler();
+    }
 }
 function attachChartCheckboxHandlers() {
     document.querySelectorAll('[data-chartbib]').forEach(cb => {
@@ -1093,8 +1121,26 @@ function attachChartSidebarHandlers() {
         });
     }
     attachChartCheckboxHandlers();
+    attachChartSelectAllHandler();
     const clearBtn = document.getElementById('chartClearSelection');
     if (clearBtn) clearBtn.addEventListener('click', () => { _chartSelectedBibs = []; render(); });
+}
+function attachChartSelectAllHandler() {
+    const btn = document.getElementById('chartSelectAllToggle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const filtered = chartFilteredDatasets(_lastChartDatasets);
+        const allSelected = filtered.length > 0 && filtered.every(d => _chartSelectedBibs.includes(d._bib));
+        if (allSelected) {
+            // "Очистить всех" — снимаем выбор только с видимых (по поиску),
+            // остальной ранее выбранный вне фильтра остаётся нетронутым.
+            const filteredBibs = new Set(filtered.map(d => d._bib));
+            _chartSelectedBibs = _chartSelectedBibs.filter(bib => !filteredBibs.has(bib));
+        } else {
+            filtered.forEach(d => { if (!_chartSelectedBibs.includes(d._bib)) _chartSelectedBibs.push(d._bib); });
+        }
+        render();
+    });
 }
 function buildCompareDataset(d, color) {
     return {
