@@ -254,28 +254,28 @@
         td { padding: 9px 10px; white-space: nowrap; }
         td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
-        /* Top-3 highlight */
-        tbody tr.rank-1 { background: rgba(190,10,33,.07); }
+        /* Top-2/3 highlight — у лидера (rank-1) больше нет отдельной
+           подсветки, он и так первый в таблице (запрошено пользователем
+           2026-07-22: "и так понятно что человек первый, если он первый
+           в таблице"). */
         tbody tr.rank-2 { background: rgba(106,171,215,.06); }
         tbody tr.rank-3 { background: rgba(106,171,215,.04); }
-        tbody tr.rank-1:hover, tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
+        tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
 
-        /* Строка эстафеты — синяя подсветка + полоска слева (вариант C
-           брейншторминга 2026-07-22). Полоска (box-shadow) — основной
-           индикатор эстафеты, всегда видна. Фон top-3 (rank-1/2/3) имеет
-           приоритет над фоном relay-row — у обоих одинаковая "сила" селектора
-           (tbody tr.класс), без явного override побеждал бы просто
-           later-in-source relay-row, пряча "1 место" за синим (найдено
-           code-review Task 1, 2026-07-22) — комбинированный селектор ниже
-           специфичнее обоих по отдельности и решает конфликт явно. */
-        tbody tr.relay-row { background: rgba(106,171,215,.08); box-shadow: inset 3px 0 0 var(--blue); }
+        /* Строка эстафеты — синяя подсветка на всю строку + полоска слева
+           (усилено 2026-07-22 — раньше фон был почти незаметен, заметна
+           была только полоска). Фон top-2/3 имеет приоритет над фоном
+           relay-row — у обоих одинаковая "сила" селектора (tbody
+           tr.класс), без явного override побеждал бы просто
+           later-in-source relay-row (найдено code-review Task 1,
+           2026-07-22) — комбинированный селектор ниже специфичнее обоих
+           по отдельности и решает конфликт явно. */
+        tbody tr.relay-row { background: rgba(106,171,215,.14); box-shadow: inset 3px 0 0 var(--blue); }
         tbody tr.relay-row:hover { background: var(--bg3); }
-        tbody tr.relay-row.rank-1 { background: rgba(190,10,33,.07); }
         tbody tr.relay-row.rank-2 { background: rgba(106,171,215,.06); }
         tbody tr.relay-row.rank-3 { background: rgba(106,171,215,.04); }
 
         .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
-        .rank-1 .rank-num { color: var(--red); }
         .rank-sub { font-size: 10px; color: var(--muted); display: block; }
         .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; }
         .name-main { font-weight: 600; }
@@ -289,7 +289,7 @@
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
         .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; vertical-align: middle; }
         .badge-e { background: rgba(106,171,215,.15); color: var(--blue); }
-        .badge-individual { background: rgba(122,170,191,.12); color: var(--muted); font-weight: 700; }
+        .badge-individual { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
