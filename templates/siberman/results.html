@@ -250,7 +250,7 @@
         tbody tr.dnf { opacity: var(--dnf-op); }
         /* Строка эстафетчика двухстрочная (имя + команда) — фиксируем
            высоту строки, чтобы совпадала с однострочной строкой личника. */
-        table.stage-table tbody tr { height: 46px; }
+        table tbody tr { height: 46px; }
         td { padding: 9px 10px; white-space: nowrap; }
         td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -776,6 +776,7 @@ function renderStage(stage) {
             <td>
                 <span class="name-main">${r.surname} ${r.name}</span>
                 <span class="badge badge-individual">Индивидуальный</span>
+                ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
             </td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
