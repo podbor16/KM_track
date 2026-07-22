@@ -1023,7 +1023,12 @@ function renderBikeCombined() {
         const absRank = hasVal ? absRanks[entry.bib] : null;
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
         const formatRank = hasVal ? formatRanks[entry.bib] : null;
-        const mainRank = isRelayFilter ? formatRank : (_gender === 'all' ? absRank : genderRank);
+        // Подсветка top-3 (rc) всегда по абсолюту/полу, НИКОГДА по формату —
+        // тот же принцип, что и на вкладках этапов (renderStage:mainRankFor),
+        // формат в 3-колоночном режиме — просто дополнительный видимый
+        // бейдж, не источник подсветки (найдено code-review Task 4,
+        // 2026-07-22 — несогласованность с renderStage до фикса).
+        const mainRank = _gender === 'all' ? absRank : genderRank;
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${isRelay ? ' <span class="badge badge-relay">Эстафета</span>' : ' <span class="badge badge-individual">Индивидуальный</span>'}${subLine ? `<br><span class="name-city">${subLine}</span>` : ''}`;
