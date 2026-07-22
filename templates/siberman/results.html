@@ -1147,7 +1147,7 @@ function attachChartSelectAllHandler() {
 }
 function buildCompareDataset(d, color) {
     return {
-        label: d._name, data: d.data,
+        _bib: d._bib, label: d._name, data: d.data,
         borderColor: color, backgroundColor: color,
         borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6,
         pointBackgroundColor: color, pointBorderColor: cssVar('--bg2'), pointBorderWidth: 1.5,
@@ -1261,15 +1261,57 @@ const activeLineLabelPlugin = {
     },
 };
 
+// Единый геометрический hit-test для графиков-"спагетти" (Темп/скорость и
+// Позиция) — какая ЛИНИЯ ближе всего к пикселю курсора/клика. Chart.js'овский
+// interaction.mode:'nearest' ищет ближайшую ОТДЕЛЬНУЮ плотную точку (там, где
+// стоят КТ) среди ВСЕХ линий сразу — при большом числе пересекающихся линий
+// и редких КТ он мог подсветить линию, чья ближайшая точка формально ближе
+// курсору в пикселях, хотя сама линия МЕЖДУ КТ проходит визуально далеко от
+// курсора (баг-репорт пользователя со скриншотом, 2026-07-22). Вместо этого
+// для каждого датасета берём Y на прямой, соединяющей два соседних по X
+// точки, РОВНО в X курсора (линейная интерполяция — так же, как Chart.js
+// физически рисует линию между КТ) и сравниваем пиксельное Y-расстояние от
+// курсора именно до этой интерполированной линии, а не до одиночных точек.
+function nearestDatasetIndexAtPixel(chart, xPixel, yPixel, maxDistPx = null) {
+    const xScale = chart.scales?.x, yScale = chart.scales?.y;
+    if (!xScale || !yScale) return null;
+    const cursorX = xScale.getValueForPixel(xPixel);
+    let bestIdx = null, bestDist = Infinity;
+    chart.data.datasets.forEach((ds, i) => {
+        const pts = ds.data;
+        if (!pts || pts.length === 0) return;
+        let p0 = null, p1 = null;
+        for (let k = 0; k < pts.length - 1; k++) {
+            if (pts[k].x <= cursorX && cursorX <= pts[k + 1].x) { p0 = pts[k]; p1 = pts[k + 1]; break; }
+        }
+        let yAtCursor;
+        if (p0 && p1) {
+            const frac = p1.x === p0.x ? 0 : (cursorX - p0.x) / (p1.x - p0.x);
+            yAtCursor = p0.y + frac * (p1.y - p0.y);
+        } else {
+            // Курсор левее первой или правее последней точки датасета —
+            // ближайшая точка линии в этом направлении это её крайняя точка.
+            const edge = cursorX < pts[0].x ? pts[0] : pts[pts.length - 1];
+            yAtCursor = edge.y;
+        }
+        const dist = Math.abs(yScale.getPixelForValue(yAtCursor) - yPixel);
+        if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    });
+    if (bestIdx == null) return null;
+    return (maxDistPx != null && bestDist > maxDistPx) ? null : bestIdx;
+}
+
 // Общий "hover подсвечивает ближайшую линию" — переиспользуется обоими
 // графиками (Темп/скорость и Позиция). formatPoint(rawX, rawY) — строит
 // текст значения ("3.9 км: 0:22 /100м" и т.п.); ОДНА плашка
 // (activeLineLabelPlugin) показывает имя+значение вместе — раньше имя
 // рисовал канвас-плагин, а значение отдельно стандартный тултип Chart.js,
-// и они могли перекрываться (найдено пользователем 2026-07-20).
+// и они могли перекрываться (найдено пользователем 2026-07-20). Активная
+// линия определяется через nearestDatasetIndexAtPixel (см. выше), не через
+// встроенный elements/interaction.mode Chart.js.
 function attachSpaghettiHover(chart, accent, context, formatPoint) {
-    chart.options.onHover = function (evt, elements) {
-        const activeIdx = elements.length ? elements[0].datasetIndex : null;
+    chart.options.onHover = function (evt) {
+        const activeIdx = nearestDatasetIndexAtPixel(this, evt.x, evt.y);
         this.data.datasets.forEach((d, i) => {
             const active = i === activeIdx;
             d.borderColor = active ? accent : context;
@@ -1278,9 +1320,17 @@ function attachSpaghettiHover(chart, accent, context, formatPoint) {
             d.pointBackgroundColor = active ? accent : context;
         });
         if (activeIdx != null) {
-            const el = elements[0];
-            const pt = this.getDatasetMeta(activeIdx).data[el.index]; // пиксельные координаты
-            const raw = this.data.datasets[activeIdx].data[el.index]; // реальные x/y значения
+            const dataPts = this.data.datasets[activeIdx].data;
+            // Плашка/значение по-прежнему привязаны к РЕАЛЬНОЙ точке КТ —
+            // ближайшей по X к курсору внутри уже выбранного (по линии) датасета.
+            const cursorX = this.scales.x.getValueForPixel(evt.x);
+            let nearestI = 0, nearestDist = Infinity;
+            dataPts.forEach((p, i) => {
+                const dx = Math.abs(p.x - cursorX);
+                if (dx < nearestDist) { nearestDist = dx; nearestI = i; }
+            });
+            const pt = this.getDatasetMeta(activeIdx).data[nearestI]; // пиксельные координаты
+            const raw = dataPts[nearestI]; // реальные x/y значения
             const name = this.data.datasets[activeIdx].label;
             const valueText = formatPoint ? formatPoint(raw.x, raw.y) : '';
             this._hoverInfo = { x: pt.x, y: pt.y, text: valueText ? `${name} — ${valueText}` : name };
@@ -1291,9 +1341,26 @@ function attachSpaghettiHover(chart, accent, context, formatPoint) {
     };
 }
 
+// Клик по линии на графике-"спагетти" добавляет/убирает участника из
+// сравнения (_chartSelectedBibs) — та же кнопка, что и чекбокс в сайдбаре
+// (chartToggleSelect). Использует ТОТ ЖЕ hit-test, что и hover
+// (nearestDatasetIndexAtPixel) — иначе клик мог бы выбрать не того
+// участника, которого только что подсвечивал hover. Клик мимо всех линий
+// (дальше maxDistPx) ничего не делает.
+function attachSpaghettiClick(chart) {
+    chart.options.onClick = function (evt) {
+        const idx = nearestDatasetIndexAtPixel(this, evt.x, evt.y, 30);
+        if (idx == null) return;
+        const bib = this.data.datasets[idx]._bib;
+        if (bib == null) return;
+        chartToggleSelect(bib);
+        render();
+    };
+}
+
 function buildSpaghettiDataset(d, accent, context) {
     return {
-        label: d._name, data: d.data,
+        _bib: d._bib, label: d._name, data: d.data,
         borderColor: context, backgroundColor: context,
         // Точки на местах КТ видны всегда (п.7.3), не только на hover —
         // маленькие/приглушённые по умолчанию, крупнее на активной линии
@@ -1401,6 +1468,9 @@ function renderPaceChart() {
         },
     });
     if (!isCompare) attachSpaghettiHover(_paceChart, accent, context, (x, y) => `${x.toFixed(1)} км: ${paceValueLabel(dbStage, y)}`);
+    // Клик работает и в режиме сравнения — тем же кликом по линии участника
+    // можно снять его со сравнения (симметрично чекбоксу в сайдбаре).
+    attachSpaghettiClick(_paceChart);
 }
 
 function virtualXToKm(x) {
@@ -1420,6 +1490,20 @@ function withVirtualX(d) {
     return { ...d, data: d.data.map(p => ({ x: kmToVirtualX(p.x), y: p.y })) };
 }
 
+// На графике "Позиция" эстафету на конкретном этапе подписываем как
+// "Имя Фамилия (Команда)" — участник, который реально бежал/плыл/крутил
+// педали этот этап, по аналогии с chartParticipantRowsForStage/
+// buildBikeCombinedPaceDatasets (график Темп/скорость). На "Вся гонка"
+// (stage falsy) оставляем только название команды — там сравнивается
+// команда целиком, а не конкретный её участник (подтверждено пользователем
+// 2026-07-22: "На всей гонке показывается только название команды").
+function relayDisplayName(team, stage) {
+    if (!stage) return team.team_name;
+    const role = stage === 'bike' ? 'bike' : STAGE_ROLE[stage];
+    const m = team.members.find(x => x.relay_stage === role);
+    return m ? `${m.surname} ${m.name} (${team.team_name})` : team.team_name;
+}
+
 function buildPositionDatasets(stage) {
     const { individual, relay } = getFiltered();
     // getFiltered() не фильтрует эстафету по полу вообще (команда не имеет
@@ -1432,7 +1516,7 @@ function buildPositionDatasets(stage) {
     const relayForRows = (!stage && _gender !== 'all') ? [] : relay;
     const rows = [
         ...individual.map(r => ({ key: r.bib, name: `${r.surname} ${r.name}`, cp: r.cp, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
-        ...relayForRows.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
+        ...relayForRows.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: relayDisplayName(t, stage), cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
     ];
     if (stage === 'bike') {
         // Вело (оба дня) — единый велоэтап 421 км без разрыва на границе
@@ -1639,6 +1723,9 @@ function renderPositionChart() {
         },
     });
     if (!isCompare) attachSpaghettiHover(_positionChart, accent, context, formatHoverPoint);
+    // Клик работает и в режиме сравнения — тем же кликом по линии участника
+    // можно снять его со сравнения (симметрично чекбоксу в сайдбаре).
+    attachSpaghettiClick(_positionChart);
 }
 
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */

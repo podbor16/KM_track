@@ -35,11 +35,21 @@ function domStub(id) {
 // Chart.js стаб — рендер-функции графиков (renderPaceChart/renderPositionChart)
 // создают `new Chart(...)`, без стаба падают с ReferenceError.
 class ChartStub {
-    constructor(ctx, config) { this.config = config; this.options = config.options || {}; this.data = config.data || {}; }
+    constructor(ctx, config) {
+        this.config = config; this.options = config.options || {}; this.data = config.data || {};
+        // Простое 1px=1единица отображение — достаточно для тестов
+        // nearestDatasetIndexAtPixel/onHover/onClick (реальная раскладка
+        // canvas в node:vm недоступна, но геометрия хит-теста проверяется
+        // именно в этих условных единицах).
+        this.scales = {
+            x: { getValueForPixel: px => px, getPixelForValue: v => v },
+            y: { getValueForPixel: px => px, getPixelForValue: v => v },
+        };
+    }
     destroy() {}
     getDatasetMeta(datasetIndex) {
         const ds = this.data.datasets?.[datasetIndex];
-        return { data: (ds?.data || []).map(() => ({ x: 0, y: 0 })) };
+        return { data: (ds?.data || []).map(p => ({ x: p.x, y: p.y })) };
     }
     update() {}
 }
@@ -737,12 +747,15 @@ check('renderPaceChart() режим сравнения — встроенный 
 check('attachSpaghettiHover — hoverInfo.text объединяет имя И значение (formatPoint)', () => {
     const fakeChart = {
         data: { datasets: [{ label: 'Иванов Иван', data: [{ x: 3.9, y: 22 }] }] },
+        scales: { x: { getValueForPixel: px => px, getPixelForValue: v => v }, y: { getValueForPixel: px => px, getPixelForValue: v => v } },
         getDatasetMeta: () => ({ data: [{ x: 100, y: 200 }] }),
         update: () => {},
         options: {},
     };
     sandbox.attachSpaghettiHover(fakeChart, '#f00', '#ccc', (x, y) => `${x} км: место ${y}`);
-    fakeChart.options.onHover.call(fakeChart, null, [{ datasetIndex: 0, index: 0 }]);
+    // Курсор ровно на x=3.9 (значение = пиксель в этом стабе) — единственная
+    // точка датасета, hit-test обязан выбрать датасет 0.
+    fakeChart.options.onHover.call(fakeChart, { x: 3.9, y: 22 });
     assert.strictEqual(fakeChart._hoverInfo.text, 'Иванов Иван — 3.9 км: место 22');
 });
 
@@ -804,9 +817,10 @@ check('attachSpaghettiHover formatPoint per-stage — текст без пере
     vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
-    // index:1 — реальная КТ (index:0 теперь экстраполированная точка x=0,
-    // добавленная 2026-07-21 для сплошного начала линии от края графика).
-    chart.options.onHover.call(chart, null, [{ datasetIndex: 0, index: 1 }]);
+    // Курсор ровно на реальной КТ (x=7 км, ChartStub.scales — 1px=1 единица) —
+    // index:0 теперь экстраполированная точка x=0, добавленная 2026-07-21
+    // для сплошного начала линии от края графика, index:1 реальная КТ.
+    chart.options.onHover.call(chart, { x: 7, y: 1 });
     assert.ok(chart._hoverInfo.text.includes('7.0 км: место 1'), `неожиданный текст: ${chart._hoverInfo.text}`);
 });
 
@@ -919,6 +933,138 @@ check('buildPositionDatasets() — эстафета исключена из "В�
     assert.strictEqual(wholeRace.length, 0, `эстафета не должна попадать на график "Вся гонка" с фильтром пола: ${JSON.stringify(wholeRace)}`);
     const swimStage = sandbox.buildPositionDatasets('swim');
     assert.strictEqual(swimStage.length, 1, `на конкретном этапе эстафета должна остаться: ${JSON.stringify(swimStage)}`);
+});
+
+// ── buildPositionDatasets(stage) — подпись эстафеты меняется в зависимости
+// от этапа (аналогично chartParticipantRowsForStage/buildBikeCombinedPaceDatasets
+// на графике Темп/скорость): на "Вся гонка" — только название команды,
+// на конкретном этапе — "Имя Фамилия (Команда)" именно того члена команды,
+// который бежал/плыл/крутил педали ИМЕННО этот этап (найдено пользователем
+// 2026-07-22: раньше подпись была ВСЕГДА только названием команды).
+function mkRelayTeamStages() {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    return { bib: '1000', team_name: 'КомандаX', members: [
+        { relay_stage: 'swim', status: 'active', surname: 'Пловцов', name: 'Иван', gender: 'M', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 } } },
+        { relay_stage: 'bike', status: 'active', surname: 'Велосипедов', name: 'Пётр', gender: 'M', bike1_s: 3000, bike2_s: 3500, cp: { bike_day1: { 1: 400 }, bike_day2: { 1: 300 } } },
+        { relay_stage: 'run', status: 'active', surname: 'Бегунов', name: 'Сергей', gender: 'M', run_s: 2000, cp: { run: { 1: 500 } } },
+    ] };
+}
+check('buildPositionDatasets(null) — эстафета на "Вся гонка" подписана ТОЛЬКО названием команды (без изменений)', () => {
+    setState('all', 'all');
+    const team = mkRelayTeamStages();
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPositionDatasets(null);
+    const d = datasets.find(x => x._bib === '1000');
+    assert.strictEqual(d._name, 'КомандаX', `ожидалось только название команды, получено: ${d._name}`);
+});
+check('buildPositionDatasets(\'swim\') — эстафета подписана именем ПЛОВЦА команды', () => {
+    setState('all', 'all');
+    const team = mkRelayTeamStages();
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPositionDatasets('swim');
+    const d = datasets.find(x => x._bib === '1000');
+    assert.strictEqual(d._name, 'Пловцов Иван (КомандаX)', `получено: ${d._name}`);
+});
+check('buildPositionDatasets(\'run\') — эстафета подписана именем БЕГУНА команды (не пловца/велосипедиста)', () => {
+    setState('all', 'all');
+    const team = mkRelayTeamStages();
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPositionDatasets('run');
+    const d = datasets.find(x => x._bib === '1000');
+    assert.strictEqual(d._name, 'Бегунов Сергей (КомандаX)', `получено: ${d._name}`);
+});
+check('buildPositionDatasets(\'bike\') — эстафета подписана именем ВЕЛОСИПЕДИСТА команды', () => {
+    setState('all', 'all');
+    const team = mkRelayTeamStages();
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPositionDatasets('bike');
+    const d = datasets.find(x => x._bib === '1000');
+    assert.strictEqual(d._name, 'Велосипедов Пётр (КомандаX)', `получено: ${d._name}`);
+});
+
+// ── nearestDatasetIndexAtPixel() — геометрический hit-test для hover/click
+// на графиках-спагетти (см. комментарий над функцией в results.html):
+// выбирает линию по Y на ИНТЕРПОЛЯЦИИ между соседними точками ровно в X
+// курсора, а не по ближайшей одиночной точке (как встроенный Chart.js
+// mode:'nearest') — иначе при редких КТ подсвечивалась линия, чья точка
+// формально ближе курсору, хотя сама линия проходит далеко от него.
+function identityScaleChart(datasets) {
+    return {
+        data: { datasets },
+        scales: {
+            x: { getValueForPixel: px => px, getPixelForValue: v => v },
+            y: { getValueForPixel: px => px, getPixelForValue: v => v },
+        },
+    };
+}
+check('nearestDatasetIndexAtPixel — доказательство изменения поведения: старая nearest-по-точке логика выбрала бы ДРУГОЙ датасет', () => {
+    // NEAR: плоская линия y=0 от x=0 до x=10 — в X курсора (x=5) её
+    // интерполированный Y равен 0, всего 0.5px от курсора (y=0.5).
+    const near = { data: [{ x: 0, y: 0 }, { x: 10, y: 0 }] };
+    // FAR: у неё есть ОТДЕЛЬНАЯ точка (x=4, y=0.4) почти вплотную к курсору
+    // в "сыром" пиксельном расстоянии (dist~1.0 до курсора x=5,y=0.5) — это
+    // ровно тот сценарий, который ломал старый mode:'nearest' (ближайшая
+    // ОДНА точка), хотя дальше линия FAR резко уходит вверх к (x=20,y=100),
+    // и на X=5 (курсор) FAR-линия физически проходит далеко от курсора
+    // (интерполяция даёт y≈6.6, за пределы NEAR).
+    const far = { data: [{ x: 4, y: 0.4 }, { x: 20, y: 100 }] };
+    const chart = identityScaleChart([near, far]);
+    // Курсор x=5, y=0.5.
+    const idx = sandbox.nearestDatasetIndexAtPixel(chart, 5, 0.5);
+    assert.strictEqual(idx, 0, `новый hit-test должен выбрать NEAR (линия визуально под курсором), получено idx=${idx}`);
+    // Явная проверка, что "наивный ближайшая одиночная точка" дала бы FAR:
+    // расстояние курсора до точки FAR(4,0.4) = sqrt(1^2+0.1^2)≈1.005,
+    // до ближайшей точки NEAR (0,0) или (10,0) = sqrt(25+0.25)≈5.02.
+    const distFarPoint = Math.hypot(5 - 4, 0.5 - 0.4);
+    const distNearPoint = Math.min(Math.hypot(5 - 0, 0.5 - 0), Math.hypot(5 - 10, 0.5 - 0));
+    assert.ok(distFarPoint < distNearPoint, 'сетап должен подтверждать, что старая точечная логика выбрала бы FAR (иначе тест не доказывает изменение поведения)');
+});
+check('nearestDatasetIndexAtPixel — клик мимо всех линий (дальше maxDistPx) возвращает null', () => {
+    const chart = identityScaleChart([{ data: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }]);
+    const idx = sandbox.nearestDatasetIndexAtPixel(chart, 5, 1000, 30);
+    assert.strictEqual(idx, null, `клик далеко от единственной линии должен вернуть null, получено ${idx}`);
+});
+
+// ── attachSpaghettiClick() — клик по линии добавляет/убирает участника из
+// сравнения (Task 3) — та же кнопка, что и чекбокс в сайдбаре ──
+check('attachSpaghettiClick — клик по линии добавляет bib в _chartSelectedBibs, повторный клик по той же точке убирает (toggle)', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
+    const rowB = mkTimerInd('2', { splits: { swim: { 1: 900 } } });
+    setRaceData([rowA, rowB], [], Date.now());
+    // _tab/_chartSubTab выставлены на 'chart'/'pace' — иначе render() внутри
+    // attachSpaghettiClick пойдёт по умолчанию в renderOverall() (default
+    // _tab='overall') и не пересоздаст _paceChart по-настоящему.
+    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    // Датасет '1' — единственная точка на x=0 (splitPaceValue), см. buildPaceDatasets;
+    // ChartStub.scales — 1px=1единица, кликаем прямо в неё.
+    const dsA = chart.data.datasets.find(d => d._bib === '1');
+    assert.ok(dsA, 'ожидался датасет для bib=1');
+    const clickPoint = dsA.data[dsA.data.length - 1];
+    chart.options.onClick.call(chart, { x: clickPoint.x, y: clickPoint.y });
+    let selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(selected), JSON.stringify(['1']), `после первого клика ожидался ['1'], получено ${JSON.stringify(selected)}`);
+    // render() внутри attachSpaghettiClick пересоздаёт _paceChart — берём
+    // свежий объект и кликаем в ту же точку данных ещё раз (toggle обратно).
+    const chart2 = vm.runInContext('_paceChart', sandbox);
+    const dsA2 = chart2.data.datasets.find(d => d.label === dsA.label) || chart2.data.datasets[0];
+    const clickPoint2 = dsA2.data[dsA2.data.length - 1];
+    chart2.options.onClick.call(chart2, { x: clickPoint2.x, y: clickPoint2.y });
+    selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(selected.length, 0, `после второго клика (toggle) ожидался пустой выбор, получено ${JSON.stringify(selected)}`);
+});
+check('attachSpaghettiClick — клик мимо всех линий не меняет выбор', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    const chart = vm.runInContext('_paceChart', sandbox);
+    chart.options.onClick.call(chart, { x: 99999, y: 99999 });
+    const selected = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(selected.length, 0, `клик далеко от всех линий не должен ничего выбрать, получено ${JSON.stringify(selected)}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
