@@ -328,6 +328,24 @@ function computeGlobalCheckpointRanks(rows, dbStage, maxSeq) {
     return _checkpointRanksByValueFn(rows, (r, seq) => globalProgress(r, dbStage, seq), maxSeq);
 }
 
+// Место "по этапу" для ОБЪЕДИНЁННОГО вело (день1+день2 как один этап,
+// 421 км, без разрыва на границе дней) — та же семантика, что и
+// computeCheckpointRanks (сравнение только внутри вело-этапа, не по всей
+// гонке), но КТ дня2 сравниваются по elapsed-времени ОТ НАЧАЛА ВСЕГО
+// вело-этапа (bike1_s + cp.bike_day2[seq]), а не только внутри дня2 —
+// иначе участники с разным временем на дне1 сравнивались бы некорректно
+// на одинаковых КТ дня2. rows должны нести cp и bike1_s (как в
+// computeGlobalCheckpointRanks). Виртуальный seq: 1..STAGE_MAX_SEQ.bike_day1
+// — день1, дальше — день2 со сдвигом.
+function computeBikeCombinedCheckpointRanks(rows) {
+    const n1 = STAGE_MAX_SEQ.bike_day1;
+    return _checkpointRanksByValueFn(rows, (r, vseq) => {
+        if (vseq <= n1) return r.cp?.bike_day1?.[vseq];
+        const v2 = r.cp?.bike_day2?.[vseq - n1];
+        return v2 == null ? null : (r.bike1_s ?? 0) + v2;
+    }, n1 + STAGE_MAX_SEQ.bike_day2);
+}
+
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —
 // только среди тех, кто реально дошёл до последней КТ этапа (та же логика
 // финиша, что и в computeStageGaps), с учётом ничьих (как rank_by в

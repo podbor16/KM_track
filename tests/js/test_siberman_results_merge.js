@@ -801,5 +801,37 @@ check('attachSpaghettiHover formatPoint per-stage — текст без пере
     assert.ok(chart._hoverInfo.text.includes('7.0 км: место 1'), `неожиданный текст: ${chart._hoverInfo.text}`);
 });
 
+check('computeBikeCombinedCheckpointRanks — КТ дня2 сравниваются по elapsed ОТ НАЧАЛА ВЕЛО (bike1_s + cp.bike_day2), не по сырому cp.bike_day2', () => {
+    // A: долго ехал день1 (9000с), но "быстрый" сырой сплит на 1-й КТ дня2 (100с)
+    //    — наивное сравнение сырых cp.bike_day2 поставило бы A первым, но по
+    //    факту A суммарно медленнее (9000+100=9100 > 1000+5000=6000).
+    const rowA = { key: '1', cp: { bike_day1: {}, bike_day2: { 1: 100 } }, bike1_s: 9000 };
+    const rowB = { key: '2', cp: { bike_day1: {}, bike_day2: { 1: 5000 } }, bike1_s: 1000 };
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const ranks = vm.runInContext('computeBikeCombinedCheckpointRanks', sandbox)([rowA, rowB]);
+    assert.strictEqual(ranks[n1 + 1]['2'], 1, 'B суммарно быстрее (6000 < 9100) — место 1');
+    assert.strictEqual(ranks[n1 + 1]['1'], 2, 'A суммарно медленнее — место 2');
+});
+check('buildPositionDatasets(\'bike\') — единый вело-этап 421км, день2 смещён на длину дня1, с экстраполяцией x=0', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { bike1_s: 9000, cp: { bike_day1: { 1: 3000 }, bike_day2: { 1: 200 } } });
+    setRaceData([rowA], [], Date.now());
+    const datasets = sandbox.buildPositionDatasets('bike');
+    const a = datasets.find(d => d._bib === '1');
+    const bike1MaxKm = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1]', sandbox);
+    assert.strictEqual(a.data[0].x, 0, 'экстраполяция до x=0');
+    assert.ok(a.data.some(p => p.x > bike1MaxKm), `ожидались точки дня2 за пределами дня1 (>${bike1MaxKm} км): ${JSON.stringify(a.data)}`);
+});
+check('renderPositionChart() _positionStage=\'bike\' — ось X на весь объединённый велоэтап (421 км), без stageBoundaries', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { bike1_s: 9000, cp: { bike_day1: { 1: 3000 }, bike_day2: { 1: 200 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_positionStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    assert.strictEqual(chart.config.options.scales.x.max, 421, 'CHECKPOINT_DIST_KM.bike_day1[6] + bike_day2[8] = 145 + 276 = 421');
+    assert.ok(!chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'границы этапов не рисуются в per-stage режиме');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

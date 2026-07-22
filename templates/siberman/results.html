@@ -464,7 +464,7 @@ function getFiltered() {
 }
 
 /* ──────────────── Render: Overall ──────────────── */
-const STAGE_LABEL_RU = { swim: 'Плавание', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
+const STAGE_LABEL_RU = { swim: 'Плавание', bike: 'Вело (оба дня)', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
 
 // Заголовок двух колонок места — порядок и подписи меняются местами в
 // зависимости от фильтра пола: без фильтра сначала абсолют, с фильтром —
@@ -1379,6 +1379,27 @@ function buildPositionDatasets(stage) {
         ...individual.map(r => ({ key: r.bib, name: `${r.surname} ${r.name}`, cp: r.cp, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
     ];
+    if (stage === 'bike') {
+        // Вело (оба дня) — единый велоэтап 421 км без разрыва на границе
+        // дней, по аналогии с buildBikeCombinedPaceDatasets (запрошено
+        // пользователем 2026-07-22).
+        const n1 = STAGE_MAX_SEQ.bike_day1, n2 = STAGE_MAX_SEQ.bike_day2;
+        const bySeq = computeBikeCombinedCheckpointRanks(rows);
+        const BIKE1_KM = CHECKPOINT_DIST_KM.bike_day1[n1];
+        return rows.map(r => {
+            const pts = [];
+            for (let vseq = 1; vseq <= n1; vseq++) {
+                const rank = bySeq[vseq]?.[r.key];
+                if (rank != null) pts.push({ x: CHECKPOINT_DIST_KM.bike_day1[vseq], y: rank });
+            }
+            for (let vseq = n1 + 1; vseq <= n1 + n2; vseq++) {
+                const rank = bySeq[vseq]?.[r.key];
+                if (rank != null) pts.push({ x: BIKE1_KM + CHECKPOINT_DIST_KM.bike_day2[vseq - n1], y: rank });
+            }
+            if (pts.length && pts[0].x > 0) pts.unshift({ x: 0, y: pts[0].y });
+            return pts.length ? { _bib: r.key, _name: r.name, data: pts } : null;
+        }).filter(Boolean);
+    }
     if (stage) {
         // Место ВНУТРИ этапа (не по всей гонке) — сравнение только по
         // сырому времени НА этом этапе (computeCheckpointRanks), не по
@@ -1422,7 +1443,16 @@ function renderPositionChart() {
     _lastChartDatasets = datasets;
     const visibleBibs = new Set(datasets.map(d => d._bib));
     _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
-    const positionStageOptions = [{ key: 'all', label: 'Вся гонка' }, ...STAGE_ORDER.map(s => ({ key: s, label: STAGE_LABEL_RU[s] }))];
+    // Порядок как в переключателе "Темп/скорость" — объединённое "Вело
+    // (оба дня)" сразу после Плавания, до раздельных Вело 1/Вело 2.
+    const positionStageOptions = [
+        { key: 'all', label: 'Вся гонка' },
+        { key: 'swim', label: STAGE_LABEL_RU.swim },
+        { key: 'bike', label: STAGE_LABEL_RU.bike },
+        { key: 'bike_day1', label: STAGE_LABEL_RU.bike_day1 },
+        { key: 'bike_day2', label: STAGE_LABEL_RU.bike_day2 },
+        { key: 'run', label: STAGE_LABEL_RU.run },
+    ];
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
             <span class="filter-label">Этап:</span>
@@ -1448,6 +1478,9 @@ function renderPositionChart() {
         return;
     }
     const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
+    const positionStageMaxKm = _positionStage === 'bike'
+        ? CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1] + CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2]
+        : (_positionStage ? CHECKPOINT_DIST_KM[_positionStage][STAGE_MAX_SEQ[_positionStage]] : 100);
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
     const isCompare = _chartSelectedBibs.length > 0;
@@ -1509,7 +1542,7 @@ function renderPositionChart() {
             scales: {
                 x: {
                     type: 'linear', min: 0,
-                    max: _positionStage ? CHECKPOINT_DIST_KM[_positionStage][STAGE_MAX_SEQ[_positionStage]] : 100,
+                    max: positionStageMaxKm,
                     title: { display: true, text: _positionStage ? 'Километраж этапа' : 'Километраж гонки', color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted'), stepSize: _positionStage ? undefined : 10, callback: v => _positionStage ? v.toFixed(0) : Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },
