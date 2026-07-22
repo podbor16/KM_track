@@ -416,6 +416,11 @@ let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
 let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
+// Сериализованный снимок последних загруженных данных — refreshData()
+// перерисовывает страницу (и графики) ТОЛЬКО когда данные реально
+// изменились, а не на каждый тик поллинга (иначе Chart.js пересоздаётся
+// каждые 20с даже без изменений — видимое "дёрганье" графика, п.1 2026-07-22).
+let _lastDataJson = null;
 let _chartSubTab = 'pace';
 let _paceStage = 'swim';
 let _positionStage = null; // null = "Вся гонка"; иначе один из STAGE_ORDER
@@ -1839,7 +1844,9 @@ async function loadYear(year) {
     try {
         const resp = await fetch(`/api/siberman/results?year=${year}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        _data = await resp.json();
+        const raw = await resp.text();
+        _lastDataJson = raw;
+        _data = JSON.parse(raw);
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         render();
         renderStageTimers();
@@ -1848,6 +1855,13 @@ async function loadYear(year) {
     }
 }
 
+// Сравнение с последним загруженным телом ответа — перерисовываем
+// (и пересоздаём Chart.js) ТОЛЬКО когда данные реально изменились, а не
+// на каждый тик поллинга (п.1 2026-07-22, найдено пользователем как
+// "дёрганье" графика).
+function dataChanged(rawBody) {
+    return rawBody !== _lastDataJson;
+}
 // Медленный поллинг (обновляет данные + состав активных секундомеров,
 // без сетевого запроса на каждый тик) — на странице раньше не было вообще
 // никакого автообновления, вся загрузка была одноразовой при открытии.
@@ -1856,7 +1870,10 @@ async function refreshData() {
     try {
         const resp = await fetch(`/api/siberman/results?year=${_year}`);
         if (!resp.ok) return;
-        _data = await resp.json();
+        const raw = await resp.text();
+        if (!dataChanged(raw)) return;
+        _lastDataJson = raw;
+        _data = JSON.parse(raw);
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         render();
         renderStageTimers();

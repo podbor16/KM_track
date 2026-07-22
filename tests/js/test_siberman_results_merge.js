@@ -880,5 +880,14 @@ check('attachChartSelectAllHandler — повторный клик, когда �
     assert.strictEqual(selected.length, 0, `ожидался пустой выбор, получено [${selected}]`);
 });
 
+check('dataChanged() — false, когда тело ответа идентично последнему загруженному (защита от лишней перерисовки графика на каждый тик поллинга)', () => {
+    vm.runInContext(`_lastDataJson = '{"individual":[]}';`, sandbox);
+    assert.strictEqual(sandbox.dataChanged('{"individual":[]}'), false, 'идентичное тело — данные не изменились');
+});
+check('dataChanged() — true, когда тело ответа отличается', () => {
+    vm.runInContext(`_lastDataJson = '{"individual":[]}';`, sandbox);
+    assert.strictEqual(sandbox.dataChanged('{"individual":[{"bib":"1"}]}'), true, 'другое тело — данные изменились');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
