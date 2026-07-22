@@ -906,37 +906,35 @@ function buildRankedEntries(individual, relay, getValue) {
     });
 }
 
-// options.genderRanks — {M:{bib:rank}, F:{bib:rank}} — если задано, "Место"
-// разделяется на абсолют/по полу (тот же rankHeaderCells/rankBodyCells
-// паттерн, что и в Итогах/на этапах); эстафета — всегда "—" по полу (у
-// команды на этом уровне нет единого пола, как и в Итогах гонки).
-// options.speedFn(v) — если задано, добавляет колонку "Скорость" (км/ч).
-function buildProgressRow(item, pos, options = {}) {
-    const { type, entry, v } = item;
-    const hasVal = v != null;
-    const genderRank = options.genderRanks && type === 'individual' ? options.genderRanks[entry.gender]?.[entry.bib] : null;
-    const absRank = hasVal ? pos : null;
-    const mainRank = options.genderRanks && _gender !== 'all' ? genderRank : absRank;
-    const rc = mainRank != null ? rankClass(mainRank) : '';
-    const status = type === 'individual' ? entry.status : item.status;
-    // Без бейджа "Эстафета" у имени — уже есть отдельная колонка "Формат",
-    // дублирование избыточно (запрошено пользователем 2026-07-19).
-    const nameCell = type === 'individual'
-        ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
-        : `<span class="name-main">${entry.team_name}</span>`;
-    const rankCells = options.genderRanks
-        ? rankBodyCells(absRank, genderRank, entry.gender, rc, true)
-        : `<td><span class="rank-num ${rc}">${hasVal ? pos : '—'}</span></td>`;
-    return `<tr class="${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-        ${rankCells}
-        <td class="bib-cell">${entry.bib}</td>
-        <td>${nameCell}</td>
-        <td>${type === 'individual' ? genderBadge(entry.gender) : '<span class="muted">—</span>'}</td>
-        ${_fmt === 'all' ? `<td class="muted">${type === 'individual' ? 'Индивидуальный' : 'Эстафета'}</td>` : ''}
-        <td class="r time-cell">${fmtTime(v)}</td>
-        ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
-        <td>${progressStatusBadge(status, hasVal)}</td>
-    </tr>`;
+// Отставание внутри произвольного пула entries (уже отсортированного по
+// возрастанию v, как возвращает buildRankedEntries) — от лидера ЭТОГО пула
+// (наименьший v среди финишировавших). Простое вычитание — day1Progress/
+// day2Progress уже дают единое сравнимое число (не нужен checkpoint-based
+// computeOverallGaps). key — bib участника/команды.
+function poolGap(entries) {
+    const leader = entries.find(e => e.v != null);
+    if (!leader) return {};
+    const gaps = {};
+    entries.forEach(e => {
+        if (e.v != null) gaps[e.entry.bib] = e.v - leader.v;
+    });
+    return gaps;
+}
+
+// genderRanks/formatRanks — по ПОЛНОМУ ростеру года (не по текущим
+// фильтрам), тот же принцип что и абсолют — считаются один раз здесь,
+// а не внутри renderRankedProgress (там уже есть похожий "весь ростер"
+// расчёт для absRanksAll, но пол/формат нужны ОТДЕЛЬНО от абсолюта).
+function dayRankOptions(getValue) {
+    const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
+    const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status }));
+    return {
+        genderRanks: {
+            M: computeRanksByValue(rowsFor(e => e.type === 'individual' && e.entry.gender === 'M')),
+            F: computeRanksByValue(rowsFor(e => e.type === 'individual' && e.entry.gender === 'F')),
+        },
+        formatRanks: computeRanksByValue(rowsFor(e => e.type === 'relay')),
+    };
 }
 
 function renderRankedProgress(getValue, options = {}) {
@@ -948,12 +946,41 @@ function renderRankedProgress(getValue, options = {}) {
         document.getElementById('app').innerHTML = html;
         return;
     }
+    // Пул-отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (согласовано
+    // с активными фильтрами, п.9). Абсолютное место/отставание — от лидера
+    // ПОЛНОГО ростера года (личники+эстафета вместе), тот же принцип что и
+    // в Итогах гонки — считается отдельно, не зависит от текущих фильтров.
+    const gaps = poolGap(entries);
+    const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
+    const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
+    const absGapsAll = poolGap(allEntries);
     html += `<div class="table-wrap"><table>
-    <thead><tr>${options.genderRanks ? rankHeaderCells(true) : '<th>Место</th>'}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
-    let pos = 0;
+    <thead><tr><th>Место</th><th class="r">Отставание</th><th>Абсолют</th><th class="r">Отставание (абс.)</th><th>№</th><th>Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
-        if (item.v != null) pos++;
-        html += buildProgressRow(item, pos, options);
+        const { type, entry, v } = item;
+        const hasVal = v != null;
+        const genderRank = options.genderRanks && type === 'individual' ? options.genderRanks[entry.gender]?.[entry.bib] : null;
+        const formatRank = options.formatRanks && type === 'relay' ? options.formatRanks[entry.bib] : null;
+        const secondaryRank = type === 'individual' ? genderRank : formatRank;
+        const secondaryBadge = type === 'individual' ? genderBadge(entry.gender) : formatBadge();
+        const absRank = hasVal ? absRanksAll[entry.bib] : null;
+        const mainRank = secondaryRank ?? absRank;
+        const rc = mainRank != null ? rankClass(mainRank) : '';
+        const status = type === 'individual' ? entry.status : item.status;
+        const nameCell = type === 'individual'
+            ? `<span class="name-main">${entry.surname} ${entry.name}</span> <span class="badge badge-individual">Индивидуальный</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
+            : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
+        html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+            <td>${secondaryRank != null ? `<span class="rank-num ${rc}">${secondaryBadge}${secondaryRank}</span>` : '<span class="muted">—</span>'}</td>
+            <td class="r muted">${fmtGap(gaps[entry.bib])}</td>
+            <td><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>
+            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
+            <td class="bib-cell">${entry.bib}</td>
+            <td>${nameCell}</td>
+            <td class="r time-cell">${fmtTime(v)}</td>
+            ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
+            <td>${progressStatusBadge(status, hasVal)}</td>
+        </tr>`;
     });
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
@@ -1049,8 +1076,8 @@ function renderBikeCombined() {
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
 }
-function renderDay1() { renderRankedProgress(day1Progress); }
-function renderDay2() { renderRankedProgress(day2Progress); }
+function renderDay1() { renderRankedProgress(day1Progress, dayRankOptions(day1Progress)); }
+function renderDay2() { renderRankedProgress(day2Progress, dayRankOptions(day2Progress)); }
 
 /* ──────────────── Render: Графики (Темп/скорость, Позиция) ────────────────
    Форма по умолчанию — "spaghetti + hover-highlight" (эмфазис, не

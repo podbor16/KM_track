@@ -1174,5 +1174,56 @@ check('render() — фильтр по полу виден на этапах/Св
     assert.strictEqual(genderGroupTab('bike'), '', 'Свод вело/Вело1/Вело2 — фильтр по полу ВИДЕН при эстафете');
 });
 
+check('renderRankedProgress() (Дни) — 4 колонки: Место(формат/пол)+Отставание + Место(абсолют)+Отставание', () => {
+    setState('all', 'all');
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const ind = mkTimerInd('1', { gender: 'M', bike1_s: 5000, swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqB1]: 5000 } } });
+    setRaceData([ind], [], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('<th>Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
+    assert.ok(html.includes('Отставание'), `ожидалась колонка отставания: ${html.slice(0,600)}`);
+    assert.ok((html.match(/Абсолют/g) || []).length >= 1, `ожидалась колонка "Абсолют": ${html.slice(0,600)}`);
+});
+check('poolGap — отставание внутри пула считается от лидера пула (наименьшее v)', () => {
+    setState('all', 'all');
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    // day1Progress = globalProgress(row, 'bike_day1', seq), которая читает
+    // row.cp.bike_day1[seq] — checkpoint обязателен, одного bike1_s
+    // недостаточно (bike1_s используется лишь для day2/run-этапов).
+    const rowA = mkTimerInd('1', { gender: 'M', swim_s: 1000, bike1_s: 4000, cp: { bike_day1: { [maxSeqB1]: 4000 } } });
+    const rowB = mkTimerInd('2', { gender: 'M', swim_s: 1000, bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
+    setRaceData([rowA, rowB], [], Date.now());
+    const entries = sandbox.buildRankedEntries([rowA, rowB], [], vm.runInContext('day1Progress', sandbox));
+    const gaps = sandbox.poolGap(entries);
+    assert.strictEqual(gaps['1'], 0, `лидер (меньший v) — отставание 0: ${JSON.stringify(gaps)}`);
+    assert.strictEqual(gaps['2'], 1000, `отстающий — разница v: ${JSON.stringify(gaps)}`);
+});
+check('День 1 — Место (абсолют) = ранг среди ВСЕХ участников года (личники+эстафета), не только текущего фильтра', () => {
+    setState('individual', 'all');
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const ind = mkTimerInd('1', { swim_s: 5000, bike1_s: 5000, cp: { swim: { [maxSeqSwim]: 5000 }, bike_day1: { [maxSeqB1]: 5000 } } });
+    const relayFaster = { bib: '1000', team_name: 'К', members: [
+        { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 100, cp: { swim: { [maxSeqSwim]: 100 } } },
+        { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 100, bike2_s: null, cp: { bike_day1: { [maxSeqB1]: 100 } } },
+        { relay_stage: 'run', status: 'active', gender: 'M', run_s: null, cp: {} },
+    ] };
+    setRaceData([ind], [relayFaster], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    // Личник фильтром "individual" не видит эстафету в строках, но эстафета
+    // (быстрее на 9900с) должна "обогнать" его в АБСОЛЮТНОМ ранге — личник
+    // должен получить абсолютное место 2, не 1.
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка личника не найдена: ${html}`);
+    // Найти ячейку "Абсолют" (третья rank-содержащая ячейка по порядку в
+    // строке — Место(пол)+Отставание(пол)+Место(абсолют)+Отставание(абсолют))
+    // и убедиться, что значение там — 2, не 1.
+    const rankNums = [...rowMatch[0].matchAll(/rank-num[^>]*>(\d+)</g)].map(m => m[1]);
+    assert.ok(rankNums.includes('2'), `ожидалось абсолютное место 2 где-то в строке (личник обогнан эстафетой): rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
