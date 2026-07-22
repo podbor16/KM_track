@@ -1422,9 +1422,17 @@ function withVirtualX(d) {
 
 function buildPositionDatasets(stage) {
     const { individual, relay } = getFiltered();
+    // getFiltered() не фильтрует эстафету по полу вообще (команда не имеет
+    // единого пола) — корректно для этапов (там команду представляет один
+    // участник со своим полом), но не для графика "Вся гонка": там ранг
+    // считается на уровне всей команды, и сравнивать её с полом-фильтром
+    // некорректно. Убираем эстафету из "Вся гонка" при активном фильтре
+    // пола, оставляем как есть на конкретном этапе (найдено пользователем
+    // 2026-07-22).
+    const relayForRows = (!stage && _gender !== 'all') ? [] : relay;
     const rows = [
         ...individual.map(r => ({ key: r.bib, name: `${r.surname} ${r.name}`, cp: r.cp, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
-        ...relay.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
+        ...relayForRows.map(t => { const tr = teamGapRow(t); return { key: t.bib, name: t.team_name, cp: tr.cp, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
     ];
     if (stage === 'bike') {
         // Вело (оба дня) — единый велоэтап 421 км без разрыва на границе

@@ -906,5 +906,20 @@ check('renderPositionChart() — диапазон оси Y компактный 
     assert.ok(yScale.max < 6, `диапазон должен быть компактным вокруг мест 1-2, получено max=${yScale.max}`);
 });
 
+check('buildPositionDatasets() — эстафета исключена из "Вся гонка" при активном фильтре пола (нет единого пола у команды), но остаётся на конкретном этапе', () => {
+    setState('all', 'F');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const team = { bib: '1000', team_name: 'КомандаА', members: [
+        { relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 } } },
+        { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 9000, bike2_s: 8000, cp: {} },
+        { relay_stage: 'run', status: 'active', gender: 'M', run_s: null, cp: {} },
+    ] };
+    setRaceData([], [team], Date.now());
+    const wholeRace = sandbox.buildPositionDatasets(null);
+    assert.strictEqual(wholeRace.length, 0, `эстафета не должна попадать на график "Вся гонка" с фильтром пола: ${JSON.stringify(wholeRace)}`);
+    const swimStage = sandbox.buildPositionDatasets('swim');
+    assert.strictEqual(swimStage.length, 1, `на конкретном этапе эстафета должна остаться: ${JSON.stringify(swimStage)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
