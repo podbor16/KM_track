@@ -964,7 +964,13 @@ function renderRankedProgress(getValue, options = {}) {
         const secondaryRank = type === 'individual' ? genderRank : formatRank;
         const secondaryBadge = type === 'individual' ? genderBadge(entry.gender) : formatBadge();
         const absRank = hasVal ? absRanksAll[entry.bib] : null;
-        const mainRank = secondaryRank ?? absRank;
+        // Подсветка top-3 (rc) — по абсолюту, когда пол не отфильтрован,
+        // иначе по вторичному (пол/формат) рангу — тот же принцип, что и на
+        // Итогах/этапах/Своде вело (найдено code-review Task 6, 2026-07-22:
+        // раньше вторичный ранг всегда приоритетен, из-за чего на Днях
+        // одновременно подсвечивались top-1 мужчина, top-1 женщина И top-1
+        // эстафета как rank-1, в отличие от остальных таблиц).
+        const mainRank = _gender === 'all' ? absRank : secondaryRank;
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const status = type === 'individual' ? entry.status : item.status;
         const nameCell = type === 'individual'
