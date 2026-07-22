@@ -182,5 +182,27 @@ check('teamStatusBadge() — DNF любого члена команды даёт
     assert.ok(badge.includes('badge-dnf'), `ожидался бейдж DNF: ${badge}`);
 });
 
+check('renderIndividual() — Место (по полу) и Место (абсолют) несут СВОЁ отставание (stat-subgap), не одно общее "Отставание" (п.3, 2026-07-22)', () => {
+    // М 20000с (лидер абсолюта и мужчин), Ж 21000с (лидер женщин, но не абсолюта — отставание от М),
+    // М2 25000с (не лидер ни по чему).
+    const data = {
+        individual: [
+            mkFinishedInd(1, 20000, 'M', 1),
+            mkFinishedInd(2, 21000, 'F', 1),
+            mkFinishedInd(3, 25000, 'M', 2),
+        ],
+        relay: [],
+    };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, data.individual[1]); // Женщина, 21000с
+    const stats = statsRowHtml();
+    assert.ok(!stats.includes('>Отставание<'), `общего "Отставание" быть не должно — только внутри Место (по полу)/(абсолют): ${stats}`);
+    // Женщина — лидер СРЕДИ ЖЕНЩИН (единственная), отставание по полу = 0 → не показывается (fmtGap(0) falsy).
+    // Но отставание ПО АБСОЛЮТУ — от мужчины-лидера (20000с): +1000с = "+16:40".
+    assert.ok(stats.includes('+16:40'), `ожидалось отставание по абсолюту +16:40 от лидера 20000с: ${stats}`);
+    assert.ok(stats.includes('stat-subgap'), `отставание должно быть внутри блока места (stat-subgap): ${stats}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

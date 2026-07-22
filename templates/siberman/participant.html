@@ -95,6 +95,7 @@
         .stats-row { display: flex; gap: 12px; padding: 14px 18px; flex-wrap: wrap; }
         .stat { background: var(--bg3); border-radius: var(--radius); padding: 8px 14px; min-width: 90px; }
         .stat-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .stat-subgap { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
         .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
         /* ── Бегунок прохождения КТ (п.12) ── */
@@ -461,6 +462,20 @@ function progressBarHtml(row) {
     </div>`;
 }
 
+// Индикатор "место + своё отставание" одним блоком — отставание мельче и
+// менее акцентировано, второй строкой под местом (п.3, 2026-07-22): у
+// личников это пара (по полу, по абсолюту), у команд — (по формату, по
+// абсолюту), каждое отставание считается ОТНОСИТЕЛЬНО ЛИДЕРА СВОЕГО ПУЛА
+// (не общее отставание в конце, как было раньше).
+function rankStatHtml(rank, gap, label) {
+    if (rank == null) return '';
+    return `<div class="stat">
+        <div class="stat-val">${rank}</div>
+        ${gap ? `<div class="stat-subgap">${gap}</div>` : ''}
+        <div class="stat-lbl">${label}</div>
+    </div>`;
+}
+
 function renderIndividual(data, r) {
     const overallGapPool = buildOverallGapPool(data);
     // overallGapPool уже объединяет личников и эстафету (buildOverallGapPool),
@@ -478,11 +493,14 @@ function renderIndividual(data, r) {
         // не нужен, юзер попросил вернуть только эти два, см. итог п.6).
         const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay));
         const absRank = combinedRanks[r.bib];
+        // Отставание "по полу" — от лидера ТОЛЬКО среди личников своего пола
+        // (не готовое DB-поле — там только сам ранг, не отставание).
+        const genderGapPool = overallGapPool.filter(x => !x.isRelay && x.gender === r.gender);
+        const genderGap = fmtGap(computeOverallGaps(genderGapPool)[r.bib]);
         overallStat = `
             <div class="stat"><div class="stat-val">${fmtTime(r.overall_s)}</div><div class="stat-lbl">Итого</div></div>
-            ${gap ? `<div class="stat"><div class="stat-val">${gap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
-            ${absRank != null ? `<div class="stat"><div class="stat-val">${absRank}</div><div class="stat-lbl">Место (абсолют)</div></div>` : ''}
-            ${r.overall_rank_g != null ? `<div class="stat"><div class="stat-val">${r.overall_rank_g}</div><div class="stat-lbl">Место (по полу)</div></div>` : ''}
+            ${rankStatHtml(r.overall_rank_g, genderGap, 'Место (по полу)')}
+            ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
         `;
     } else {
         const cur = currentStage(r);
@@ -529,6 +547,10 @@ function renderTeam(data, team) {
     const relayFormatRanks = computeRanksByValue(data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
     const absRank = combinedRanks[team.bib];
     const formatRank = relayFormatRanks[team.bib];
+    // Отставание "по формату" — от лидера ТОЛЬКО среди эстафетных команд
+    // (аналог "по полу" у личников).
+    const formatGapPool = overallGapPool.filter(x => x.isRelay);
+    const formatGap = fmtGap(computeOverallGaps(formatGapPool)[team.bib]);
 
     const memberStages = {
         swim: STAGES.filter(s => s.relayStage === 'swim'),
@@ -567,9 +589,8 @@ function renderTeam(data, team) {
         ${progressBarHtml(teamRow)}
         <div class="stats-row">
             <div class="stat"><div class="stat-val">${fmtTime(team.overall_s)}</div><div class="stat-lbl">Итого команды</div></div>
-            ${gap ? `<div class="stat"><div class="stat-val">${gap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
-            ${absRank != null ? `<div class="stat"><div class="stat-val">${absRank}</div><div class="stat-lbl">Место (абсолют)</div></div>` : ''}
-            ${formatRank != null ? `<div class="stat"><div class="stat-val">${formatRank}</div><div class="stat-lbl">Место (формат)</div></div>` : ''}
+            ${rankStatHtml(formatRank, formatGap, 'Место (формат)')}
+            ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
         </div>
         ${modeToggle()}
     </div>
