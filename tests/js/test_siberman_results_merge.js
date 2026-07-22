@@ -889,5 +889,22 @@ check('dataChanged() — true, когда тело ответа отличает
     assert.strictEqual(sandbox.dataChanged('{"individual":[{"bib":"1"}]}'), true, 'другое тело — данные изменились');
 });
 
+check('renderPositionChart() — диапазон оси Y компактный при сравнении маленькой группы, не по всему полю участников (п.5, 2026-07-22)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // 10 участников, места 1..10 на одной КТ — выбираем для сравнения
+    // только тех, кто занял места 1-2 (лучшая пара).
+    const rows = Array.from({ length: 10 }, (_, i) => mkTimerInd(String(i + 1), { cp: { swim: { [maxSeqSwim]: 300 + i } }, swim_s: 300 + i }));
+    setRaceData(rows, [], Date.now());
+    vm.runInContext(`_positionStage = null; _chartSelectedBibs = ['1', '2'];`, sandbox);
+    sandbox.renderPositionChart();
+    const chart = vm.runInContext('_positionChart', sandbox);
+    const yScale = chart.config.options.scales.y;
+    // Без динамики диапазон был бы привязан к худшему месту среди ВСЕХ 10
+    // участников (max ~10); при сравнении только топ-2 диапазон должен
+    // ужаться к местам 1-2 с небольшим запасом, а не оставаться огромным.
+    assert.ok(yScale.max < 6, `диапазон должен быть компактным вокруг мест 1-2, получено max=${yScale.max}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

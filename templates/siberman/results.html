@@ -1530,7 +1530,6 @@ function renderPositionChart() {
         document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
         return;
     }
-    const maxRank = Math.max(...datasets.flatMap(d => d.data.map(p => p.y)));
     const positionStageMaxKm = _positionStage === 'bike'
         ? CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1] + CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2]
         : (_positionStage ? CHECKPOINT_DIST_KM[_positionStage][STAGE_MAX_SEQ[_positionStage]] : 100);
@@ -1544,6 +1543,16 @@ function renderPositionChart() {
         ? virtualDatasets.filter(d => _chartSelectedBibs.includes(d._bib))
             .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
         : virtualDatasets.map(d => buildSpaghettiDataset(d, accent, context));
+    // Диапазон оси Y — по ФАКТИЧЕСКИ отображаемым линиям (при сравнении —
+    // только выбранные участники), а не по всему полю; иначе при выборе
+    // маленькой группы (например, топ-4 среди 39) отступы становятся
+    // огромными и бесполезными (п.5, найдено пользователем 2026-07-22).
+    const displayedRanks = chartDatasets.flatMap(d => d.data.map(p => p.y));
+    const rangeMinRank = Math.min(...displayedRanks);
+    const rangeMaxRank = Math.max(...displayedRanks);
+    const rankSpan = rangeMaxRank - rangeMinRank + 1;
+    const yAxisMin = rangeMinRank - Math.max(2, Math.round(rankSpan * 0.15));
+    const yAxisMax = rangeMaxRank + Math.max(1, Math.round(rankSpan * 0.08));
 
     const stageBoundaryPlugin = {
         id: 'stageBoundaries',
@@ -1603,17 +1612,22 @@ function renderPositionChart() {
                 y: {
                     reverse: true,
                     // min/max заданы явно (не авто-подбор Chart.js) — запас
-                    // существенно больше сверху (min глубоко в отрицательные
-                    // значения), чтобы линия 1-го места не пересекалась с
-                    // подписями этапов у самого верха области графика; тики
-                    // всё равно строятся ТОЛЬКО целыми от 1 до maxRank ниже
-                    // (afterBuildTicks), так что отрицательный min никогда
-                    // не станет видимой подписью (найдено 2026-07-20: раньше
-                    // тики были дробными — 0.5, 5, 10... — вместо целых).
-                    min: -Math.max(2, Math.round(maxRank * 0.12)), max: maxRank + 1.5,
+                    // пропорционален диапазону ОТОБРАЖАЕМЫХ мест (rankSpan),
+                    // не всему полю участников: при сравнении маленькой
+                    // группы отступы автоматически становятся компактными.
+                    // Сверху запас больше — там же подписи границ этапов
+                    // (stageBoundaryPlugin) в режиме "Вся гонка"; тики всё
+                    // равно строятся ТОЛЬКО целыми ниже (afterBuildTicks),
+                    // так что дробный/отрицательный min никогда не станет
+                    // видимой подписью.
+                    min: yAxisMin, max: yAxisMax,
                     afterBuildTicks: axis => {
+                        // Тики — только по РЕАЛЬНО отображаемому диапазону мест
+                        // (rangeMinRank..rangeMaxRank), не по yAxisMin/Max —
+                        // те включают буферную зону под подписи этапов, там
+                        // не должно быть подписей тиков без реальных данных.
                         axis.ticks = [];
-                        for (let v = 1; v <= maxRank; v++) axis.ticks.push({ value: v });
+                        for (let v = Math.max(1, rangeMinRank); v <= rangeMaxRank; v++) axis.ticks.push({ value: v });
                     },
                     title: { display: true, text: 'Место', color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted') },
