@@ -737,7 +737,7 @@ check('attachSpaghettiHover — hoverInfo.text объединяет имя И з
     assert.strictEqual(fakeChart._hoverInfo.text, 'Иванов Иван — 3.9 км: место 22');
 });
 
-check('buildPositionDatasets(stage) — место ВНУТРИ этапа (не по всей гонке), реальный км без экстраполяции x=0', () => {
+check('buildPositionDatasets(stage) — место ВНУТРИ этапа (не по всей гонке), реальный км + экстраполяция x=0', () => {
     setState('all', 'all');
     // A: медленно прошёл плавание+вело (сумма 18000с до бега), но САМЫЙ
     // быстрый на 1-м km бега (500с) — глобально позади, локально на бегу впереди.
@@ -748,10 +748,14 @@ check('buildPositionDatasets(stage) — место ВНУТРИ этапа (не
     const datasets = sandbox.buildPositionDatasets('run');
     const a = datasets.find(d => d._bib === '1');
     const b = datasets.find(d => d._bib === '2');
-    assert.strictEqual(a.data.length, 1, 'без экстраполяции до x=0 в per-stage режиме');
-    assert.strictEqual(a.data[0].x, 7, 'X — реальный км ВНУТРИ этапа (CHECKPOINT_DIST_KM.run[1] = 7)');
-    assert.strictEqual(a.data[0].y, 1, 'A локально впереди на бегу (500с < 5000с) — место 1');
-    assert.strictEqual(b.data[0].y, 2, 'B локально позади на бегу — место 2');
+    // Экстраполяция до x=0 — та же, что и в глобальном режиме (найдено
+    // пользователем 2026-07-21: без неё линии на графике "по этапу"
+    // визуально начинались не с самого начала оси X).
+    assert.strictEqual(a.data.length, 2, 'экстраполированная точка x=0 + реальная КТ');
+    assert.strictEqual(a.data[0].x, 0, 'экстраполяция до x=0');
+    assert.strictEqual(a.data[1].x, 7, 'X — реальный км ВНУТРИ этапа (CHECKPOINT_DIST_KM.run[1] = 7)');
+    assert.strictEqual(a.data[1].y, 1, 'A локально впереди на бегу (500с < 5000с) — место 1');
+    assert.strictEqual(b.data[1].y, 2, 'B локально позади на бегу — место 2');
 });
 check('buildPositionDatasets() без аргумента — прежнее поведение (глобальный ранг, экстраполяция x=0)', () => {
     setState('all', 'all');
@@ -791,7 +795,9 @@ check('attachSpaghettiHover formatPoint per-stage — текст без пере
     vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
-    chart.options.onHover.call(chart, null, [{ datasetIndex: 0, index: 0 }]);
+    // index:1 — реальная КТ (index:0 теперь экстраполированная точка x=0,
+    // добавленная 2026-07-21 для сплошного начала линии от края графика).
+    chart.options.onHover.call(chart, null, [{ datasetIndex: 0, index: 1 }]);
     assert.ok(chart._hoverInfo.text.includes('7.0 км: место 1'), `неожиданный текст: ${chart._hoverInfo.text}`);
 });
 

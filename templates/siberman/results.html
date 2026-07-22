@@ -1382,9 +1382,7 @@ function buildPositionDatasets(stage) {
     if (stage) {
         // Место ВНУТРИ этапа (не по всей гонке) — сравнение только по
         // сырому времени НА этом этапе (computeCheckpointRanks), не по
-        // накопленному времени гонки. X — реальный км этапа, без
-        // экстраполяции до x=0 (у каждого этапа своя первая настоящая
-        // КТ рядом со стартом, "нулевая" точка тут не нужна).
+        // накопленному времени гонки. X — реальный км этапа.
         const bySeq = computeCheckpointRanks(rows, stage, STAGE_MAX_SEQ[stage]);
         return rows.map(r => {
             const pts = [];
@@ -1392,6 +1390,11 @@ function buildPositionDatasets(stage) {
                 const rank = bySeq[seq]?.[r.key];
                 if (rank != null) pts.push({ x: CHECKPOINT_DIST_KM[stage][seq], y: rank });
             }
+            // Та же экстраполяция до X=0, что и в глобальном режиме ниже —
+            // первая КТ этапа обычно не на 0 км, без неё линии визуально
+            // начинаются с "воздуха" вместо самого начала оси (найдено
+            // пользователем 2026-07-21 на графике "Плавание").
+            if (pts.length && pts[0].x > 0) pts.unshift({ x: 0, y: pts[0].y });
             return pts.length ? { _bib: r.key, _name: r.name, data: pts } : null;
         }).filter(Boolean);
     }
