@@ -1091,5 +1091,51 @@ check('renderOverall() — эстафета получает бейдж Э{фо�
     assert.ok(html.includes('badge-individual'), `личник должен получить бейдж "Индивидуальный": ${html}`);
 });
 
+// ── renderStage() — истинный абсолют (полный ростер) + 3-колоночный режим
+// при fmt='relay' (задача 3 плана 2026-07-22) ──
+check('renderStage() внутренние ранги — computeRanksByValue по ПОЛНОМУ ростеру, не по getFiltered()', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const rows = [
+        mkTimerInd('1', { gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }),
+        mkTimerInd('2', { gender: 'F', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } }),
+        mkTimerInd('3', { gender: 'F', swim_s: 500, cp: { swim: { [maxSeqSwim]: 500 } } }),
+    ];
+    setRaceData(rows, [], Date.now());
+    setState('individual', 'F');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    // Строка bib=2 должна содержать rank-num "2" (истинный абсолют — мужчина
+    // быстрее обеих женщин, значит женщина №2 НЕ первая в абсолюте), не "1".
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
+    assert.ok(/rank-num[^>]*>2</.test(rowMatch[0]), `ожидался истинный абсолют 2 в строке личницы №2: ${rowMatch[0]}`);
+});
+check('renderStage() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
+        { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } }] },
+    ];
+    setRaceData([], relay, Date.now());
+    setState('relay', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('<th>Формат</th>') && html.includes('<th>Пол</th>') && html.includes('<th>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+});
+check('renderStage() фильтр "Эстафета" — формат/пол рассчитаны по ПОЛНОМУ ростеру этапа, не зависят от текущего gender-фильтра', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
+        { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } }] },
+    ];
+    setRaceData([], relay, Date.now());
+    setState('relay', 'M');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка КомандыА не найдена: ${html}`);
+    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1 (быстрее КомандыБ, полный ростер учитывает обе команды): ${rowMatch[0]}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

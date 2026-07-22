@@ -733,29 +733,35 @@ function renderStage(stage) {
         return { ...m, _finished: !!pos && pos.seq === maxSeq };
     });
 
-    // Единый ранг (абсолют и по полу) для ВСЕГО пула этапа — личники и
-    // эстафетчики этой роли вместе, а не раздельно (личники — DB rank_stage,
-    // эстафетчики — свой отдельный счётчик), иначе при интерливинге в общий
-    // список получаются дублирующиеся места "1, 1, 2, 2...". Тот же принцип,
-    // что и в Итогах гонки (computeCombinedOverallRanks), только по времени
-    // конкретного этапа вместо overall_s.
-    const stageRankRows = [
-        ...rows.map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender })),
-        ...relayMembersRanked.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender })),
-    ];
-    const stageAbsRanks = computeRanksByValue(stageRankRows);
+    // "Абсолют"/"По полу"/"Формат" — НАСТОЯЩИЕ ранги: считаются по ПОЛНОМУ
+    // ростеру этапа (весь _data, не getFiltered()-отфильтрованный набор),
+    // не зависят от текущих фильтров формата/пола — тот же принцип, что и
+    // "Абсолют" в Итогах гонки/на карточке участника (согласовано с
+    // пользователем 2026-07-22 — раньше здесь была фильтро-зависимая
+    // величина, что вводило в заблуждение при активном фильтре по полу).
+    const allIndRows = _data.individual.map(withStageStatus)
+        .map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender, isRelay: false }));
+    const allRelayRows = _data.relay
+        .flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => withStageStatus({ ...m, _bib: t.bib, _team: t.team_name })))
+        .map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender, isRelay: true }));
+    const allStageRows = [...allIndRows, ...allRelayRows];
+    const stageAbsRanks = computeRanksByValue(allStageRows);
     const stageGenderRanks = {
-        M: computeRanksByValue(stageRankRows.filter(x => x.gender === 'M')),
-        F: computeRanksByValue(stageRankRows.filter(x => x.gender === 'F')),
+        M: computeRanksByValue(allStageRows.filter(x => x.gender === 'M')),
+        F: computeRanksByValue(allStageRows.filter(x => x.gender === 'F')),
     };
+    const stageFormatRanks = computeRanksByValue(allStageRows.filter(x => x.isRelay));
     const stageGenderRankFor = (key, gender) => stageGenderRanks[gender]?.[key];
 
     let html = buildStats(individual, relay, stage);
 
-    // При активном фильтре по полу "Место" должно быть местом ВНУТРИ этого
-    // пола (пересчитанным, не абсолютным) — иначе абсолютный ранг (17, 20...)
-    // выглядит так, будто места "не пересчитались" под фильтр.
+    // При активном фильтре по полу "Место" (2-колоночный режим) должно быть
+    // местом ВНУТРИ этого пола (пересчитанным, не абсолютным) — иначе
+    // абсолютный ранг (17, 20...) выглядит так, будто места "не
+    // пересчитались" под фильтр. Не применяется в 3-колоночном режиме
+    // (fmt==='relay') — там все три ранга показаны одновременно явно.
     const mainRankFor = (key, gender) => _gender === 'all' ? stageAbsRanks[key] : stageGenderRankFor(key, gender);
+    const isRelayFilter = _fmt === 'relay';
 
     const buildIndividualStageRow = r => {
         const t = r[cfg.timeKey];
@@ -763,12 +769,14 @@ function renderStage(stage) {
         const rc = noTime ? '' : rankClass(mainRankFor(r.bib, r.gender));
         const pos = lastReached(r.cp, dbStage);
         const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
+        const rankCells = rankBodyCells(stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc, _gender !== 'all');
         return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-            ${rankBodyCells(stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), r.gender, noTime ? '' : rc)}
+            ${rankCells}
             <td class="bib-cell">${r.bib}</td>
-            <td class="name-main">${r.surname} ${r.name}</td>
-            <td>${genderBadge(r.gender)}</td>
-            ${_fmt === 'all' ? '<td class="muted">Индивидуальный</td>' : ''}
+            <td>
+                <span class="name-main">${r.surname} ${r.name}</span>
+                <span class="badge badge-individual">Индивидуальный</span>
+            </td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[r.bib])}</td>
@@ -787,15 +795,21 @@ function renderStage(stage) {
         const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
         const mainRank = mainRankFor(key, m.gender);
         const rc = mainRank != null ? rankClass(mainRank) : '';
-        return `<tr class="${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
-            ${rankBodyCells(stageAbsRanks[key], stageGenderRankFor(key, m.gender), m.gender, rc)}
+        // 3-колоночный режим (Формат/Пол/Абсолют) только при fmt==='relay' —
+        // тогда личников на этапе нет вовсе, buildIndividualStageRow не
+        // вызывается, три колонки в шапке соответствуют трём ячейкам здесь.
+        const rankCells = isRelayFilter
+            ? `<td><span class="rank-num ${rc}">${formatBadge()}${stageFormatRanks[key] ?? '—'}</span></td>` +
+              `<td>${stageGenderRankFor(key, m.gender) != null ? `<span class="rank-num ${rc}">${genderBadge(m.gender)}${stageGenderRankFor(key, m.gender)}</span>` : '<span class="muted">—</span>'}</td>` +
+              `<td><span class="rank-num ${rc}">${stageAbsRanks[key] ?? '—'}</span></td>`
+            : rankBodyCells(stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc, _gender !== 'all');
+        return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
+            ${rankCells}
             <td class="bib-cell">${m._bib}</td>
             <td>
-                <span class="name-main">${m.surname} ${m.name}</span>
+                <span class="name-main">${m.surname} ${m.name}</span> <span class="badge badge-relay">Эстафета</span>
                 <br><span class="name-city">${m._team}</span>
             </td>
-            <td>${genderBadge(m.gender)}</td>
-            ${_fmt === 'all' ? '<td class="muted">Эстафета</td>' : ''}
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
@@ -832,9 +846,12 @@ function renderStage(stage) {
         ];
     }
 
+    const rankHead = isRelayFilter
+        ? '<th>Формат</th><th>Пол</th><th>Абсолют</th>'
+        : rankHeaderCells('По полу', _gender !== 'all');
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
-        ${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
+        ${rankHead}<th>№</th><th>Участник</th>
         <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
