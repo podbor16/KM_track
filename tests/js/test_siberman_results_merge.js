@@ -1174,7 +1174,7 @@ check('render() — фильтр по полу виден на этапах/Св
     assert.strictEqual(genderGroupTab('bike'), '', 'Свод вело/Вело1/Вело2 — фильтр по полу ВИДЕН при эстафете');
 });
 
-check('renderRankedProgress() (Дни) — 4 колонки: Место(формат/пол)+Отставание + Место(абсолют)+Отставание', () => {
+check('renderRankedProgress() (Дни) — 2 колонки рангов как в Итогах/на этапах (не 4), + Последняя КТ + "Финишировал"', () => {
     setState('all', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1183,8 +1183,10 @@ check('renderRankedProgress() (Дни) — 4 колонки: Место(форм
     sandbox.renderDay1();
     const html = domGetAppHtml();
     assert.ok(html.includes('<th>Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
-    assert.ok(html.includes('Отставание'), `ожидалась колонка отставания: ${html.slice(0,600)}`);
-    assert.ok((html.match(/Абсолют/g) || []).length >= 1, `ожидалась колонка "Абсолют": ${html.slice(0,600)}`);
+    assert.ok(html.includes('Последняя КТ'), `ожидалась колонка "Последняя КТ" (как в Итогах/на этапах): ${html.slice(0,600)}`);
+    assert.strictEqual((html.match(/<th class="r">Отставание<\/th>/g) || []).length, 1, `ожидалась ровно одна колонка "Отставание" (не пул+абсолют): ${html.slice(0,700)}`);
+    assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" больше не нужна (место уже абсолютное): ${html.slice(0,700)}`);
+    assert.ok(html.includes('Финишировал'), `статус должен быть "Финишировал" (унифицировано с Итогами/Этапами, не "Пройден"): ${html}`);
 });
 check('poolGap — отставание внутри пула считается от лидера пула (наименьшее v)', () => {
     setState('all', 'all');

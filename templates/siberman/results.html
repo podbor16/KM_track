@@ -875,7 +875,9 @@ function progressStatusBadge(status, hasValue) {
     if (status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
     if (status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
-    return hasValue ? '<span class="badge badge-fin">Пройден</span>' : '<span class="badge badge-live">В гонке</span>';
+    // "Финишировал" (не "Пройден") — та же формулировка, что и статус-бейдж
+    // на Итогах/этапах (statusBadge()), для единого словаря по всему сайту.
+    return hasValue ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>';
 }
 
 function bikeCombinedTime(row) {
@@ -938,6 +940,14 @@ function dayRankOptions(getValue) {
     };
 }
 
+// Колонки/вид приведены к единому паттерну Итогов гонки/вкладок этапов
+// (rankHeaderCells/rankBodyCells — Место(абсолют, полный ростер) + По
+// полу/Формат, "Последняя КТ", одна колонка "Отставание") — раньше здесь
+// были отдельные 4 колонки (пул-относительные Место+Отставание рядом с
+// абсолютными), что визуально и функционально расходилось с остальными
+// таблицами (запрошено пользователем 2026-07-23). Пул-относительное место
+// (poolGap(entries) от лидера ТЕКУЩЕГО фильтра) убрано — секция "по
+// полу/формату" из rankHeaderCells уже даёт аналог этого смысла.
 function renderRankedProgress(getValue, options = {}) {
     const { individual, relay } = getFiltered();
     let html = buildStats(individual, relay, null);
@@ -947,16 +957,14 @@ function renderRankedProgress(getValue, options = {}) {
         document.getElementById('app').innerHTML = html;
         return;
     }
-    // Пул-отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (согласовано
-    // с активными фильтрами, п.9). Абсолютное место/отставание — от лидера
-    // ПОЛНОГО ростера года (личники+эстафета вместе), тот же принцип что и
-    // в Итогах гонки — считается отдельно, не зависит от текущих фильтров.
-    const gaps = poolGap(entries);
+    // Абсолютное место/отставание — от лидера ПОЛНОГО ростера года
+    // (личники+эстафета вместе), тот же принцип что и в Итогах гонки —
+    // считается отдельно, не зависит от текущих фильтров.
     const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
     const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
     const absGapsAll = poolGap(allEntries);
     html += `<div class="table-wrap"><table>
-    <thead><tr><th>Место</th><th class="r">Отставание</th><th>Абсолют</th><th class="r">Отставание (абс.)</th><th>№</th><th>Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th>№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -974,17 +982,24 @@ function renderRankedProgress(getValue, options = {}) {
         const mainRank = _gender === 'all' ? absRank : secondaryRank;
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const status = type === 'individual' ? entry.status : item.status;
+        // "Последняя КТ" — тот же приём, что и в Итогах гонки: текущий этап
+        // + последняя пройденная на нём отметка, по фактическому прогрессу
+        // (не по границе дня — граница дня влияет только на то, попадает ли
+        // v/ранг участника в зачёт этого снапшота).
+        const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
+        const cur = currentStage(statusEntity);
+        const pos = cur ? lastReached(statusEntity.cp, cur) : null;
+        const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span> <span class="badge badge-individual">Индивидуальный</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
             : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-            <td>${secondaryRank != null ? `<span class="rank-num ${rc}">${secondaryBadge}${secondaryRank}</span>` : '<span class="muted">—</span>'}</td>
-            <td class="r muted">${fmtGap(gaps[entry.bib])}</td>
-            <td><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>
-            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
+            ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, overallRankSwapped())}
             <td class="bib-cell">${entry.bib}</td>
             <td>${nameCell}</td>
             <td class="r time-cell">${fmtTime(v)}</td>
+            <td class="muted">${lastCpCell}</td>
+            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
             ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
             <td>${progressStatusBadge(status, hasVal)}</td>
         </tr>`;
