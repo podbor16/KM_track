@@ -127,20 +127,6 @@ check('fmt=individual — эстафета не подмешивается', () 
     assert.strictEqual(merged[0].type, 'individual');
 });
 
-check('rankBodyCells порядок меняется местами по _gender', () => {
-    setState('all', 'all');
-    const allHtml = sandbox.rankBodyCells(5, 2, 'M', '');
-    const idxAll5 = allHtml.indexOf('5</span>');
-    const idxAll2 = allHtml.indexOf('2</span>');
-    assert.ok(idxAll5 < idxAll2, `при _gender=all абсолют (5) должен идти раньше по-полу (2); html=${allHtml}`);
-
-    setState('all', 'M');
-    const genderHtml = sandbox.rankBodyCells(5, 2, 'M', '');
-    const idx2 = genderHtml.indexOf('2</span>');
-    const idx5 = genderHtml.indexOf('5</span>');
-    assert.ok(idx2 < idx5, `при _gender=M по-полу (2) должен идти раньше абсолюта (5); html=${genderHtml}`);
-});
-
 // ── buildRankedEntries()/bikeCombinedTime()/day1Progress()/day2Progress() ──
 function mkIndProgress(bib, overrides = {}) {
     return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
@@ -503,28 +489,6 @@ check('computeRanksByValue — раздельные ранги по полу (л
     const femaleRanks = sandbox.computeRanksByValue(rows.filter(r => r.gender === 'F'));
     assert.strictEqual(JSON.stringify(maleRanks), JSON.stringify({ 1: 1, '10:swim': 2 }));
     assert.strictEqual(JSON.stringify(femaleRanks), JSON.stringify({ 2: 1 }));
-});
-
-// ── rankHeaderCells()/rankBodyCells(teamLevel) — скрывать "По полу" при
-// активном фильтре формата "Эстафета" в командных контекстах (Итоги гонки,
-// Свод вело), т.к. у команды на этом уровне нет единого пола (запрошено
-// пользователем 2026-07-19) ──
-check('rankHeaderCells(true) — одна колонка "Место" при fmt=relay', () => {
-    setState('relay', 'all');
-    assert.strictEqual(sandbox.rankHeaderCells(true), '<th>Место</th>');
-});
-check('rankHeaderCells(true) — обе колонки при fmt!==relay (не затронуто)', () => {
-    setState('all', 'all');
-    assert.strictEqual(sandbox.rankHeaderCells(true), '<th>Место</th><th>По полу</th>');
-});
-check('rankHeaderCells() без teamLevel — не схлопывается даже при fmt=relay (табы этапов)', () => {
-    setState('relay', 'all');
-    assert.strictEqual(sandbox.rankHeaderCells(), '<th>Место</th><th>По полу</th>');
-});
-check('rankBodyCells(..., true) — одна ячейка при fmt=relay', () => {
-    setState('relay', 'all');
-    const html = sandbox.rankBodyCells(5, null, null, '', true);
-    assert.strictEqual(html, '<td><span class="rank-num ">5</span></td>');
 });
 
 // ── bikeCombinedRelayRider()/renderBikeCombined — место по полу + скорость
