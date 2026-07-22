@@ -1834,6 +1834,9 @@ function renderStartlist() {
 // (масс-старт, начало этапа = старт гонки).
 const STAGE_PRIOR_KEYS = { swim: [], bike_day1: ['swim_s'], bike_day2: ['swim_s', 'bike1_s'], run: ['swim_s', 'bike1_s', 'bike2_s'] };
 const STAGE_ROLE = { swim: 'swim', bike_day1: 'bike', bike_day2: 'bike', run: 'run' };
+// Вкладки, где у эстафетчика уже есть настоящий личный пол (этапы + Свод
+// вело) — используется в render() для видимости фильтра по полу (п.8).
+const PERSONIFIED_TABS = ['swim', 'run', 'bike'];
 
 function stageParticipantRows(dbStage) {
     const rows = [...(_data.individual || [])];
@@ -1977,7 +1980,6 @@ function render() {
     // конкретного эстафетчика, задача 2026-07-22 п.8). "bike" покрывает и
     // Свод, и Вело1/Вело2 (оба сабтаба). График/Старт вело-2 — вне скопа,
     // фильтр там остаётся скрытым при эстафете как раньше.
-    const PERSONIFIED_TABS = ['swim', 'run', 'bike'];
     const hideGender = _fmt === 'relay' && !PERSONIFIED_TABS.includes(_tab);
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
