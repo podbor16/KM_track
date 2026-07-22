@@ -531,6 +531,28 @@ check('renderBikeCombined() — эстафетчик получает насто
     const rowMatch = html.match(/rank-num[^>]*>1<\/span>[\s\S]{0,400}?Быстров/);
     assert.ok(rowMatch, 'эстафетчик Быстров должен быть на 1 месте (быстрее личника)');
 });
+check('renderBikeCombined() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют, formatRanks по полному ростеру', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [
+            { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 100, cp: {} },
+            { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 5000, bike2_s: 4000, cp: {} },
+            { relay_stage: 'run', status: 'active', gender: 'M', run_s: 100, cp: {} },
+        ] },
+        { bib: '1001', team_name: 'КомандаБ', members: [
+            { relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 100, cp: {} },
+            { relay_stage: 'bike', status: 'active', gender: 'F', bike1_s: 6000, bike2_s: 5000, cp: {} },
+            { relay_stage: 'run', status: 'active', gender: 'F', run_s: 100, cp: {} },
+        ] },
+    ];
+    setRaceData([], relay, Date.now());
+    setState('relay', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('<th>Формат</th>') && html.includes('<th>Пол</th>') && html.includes('<th>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+    const rowA = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/)[0];
+    assert.ok(/badge-e">Э<\/span>1/.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — формат-ранг 1: ${rowA}`);
+});
 
 // ── Автоочистка _chartSelectedBibs при смене фильтра формата/пола (баг
 // найден пользователем 2026-07-19: выбранный участник "выпадал" из

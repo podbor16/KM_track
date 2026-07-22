@@ -1002,31 +1002,40 @@ function renderBikeCombined() {
     // текущим фильтрам, тот же принцип, что и в Итогах/на этапах.
     const allRiders = _data.relay.map(bikeCombinedRelayRider).filter(Boolean);
     const rankPool = [
-        ..._data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender })),
-        ...allRiders.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender })),
+        ..._data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender, isRelay: false })),
+        ...allRiders.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender, isRelay: true })),
     ];
     const absRanks = computeRanksByValue(rankPool);
     const genderRanks = {
         M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),
         F: computeRanksByValue(rankPool.filter(x => x.gender === 'F')),
     };
+    const formatRanks = computeRanksByValue(rankPool.filter(x => x.isRelay));
+    const isRelayFilter = _fmt === 'relay';
 
+    const rankHead = isRelayFilter
+        ? '<th>Формат</th><th>Пол</th><th>Абсолют</th>'
+        : rankHeaderCells('По полу', _gender !== 'all');
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells()}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}<th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHead}<th>№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, v }) => {
         const hasVal = v != null;
         const absRank = hasVal ? absRanks[entry.bib] : null;
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
-        const mainRank = _gender === 'all' ? absRank : genderRank;
+        const formatRank = hasVal ? formatRanks[entry.bib] : null;
+        const mainRank = isRelayFilter ? formatRank : (_gender === 'all' ? absRank : genderRank);
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
-        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<br><span class="name-city">${subLine}</span>` : ''}`;
-        html += `<tr class="${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-            ${rankBodyCells(absRank, genderRank, entry.gender, rc)}
+        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${isRelay ? ' <span class="badge badge-relay">Эстафета</span>' : ' <span class="badge badge-individual">Индивидуальный</span>'}${subLine ? `<br><span class="name-city">${subLine}</span>` : ''}`;
+        const rankCells = isRelayFilter
+            ? `<td><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +
+              `<td>${genderRank != null ? `<span class="rank-num ${rc}">${genderBadge(entry.gender)}${genderRank}</span>` : '<span class="muted">—</span>'}</td>` +
+              `<td><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>`
+            : rankBodyCells(absRank, genderRank, genderBadge(entry.gender), rc, _gender !== 'all');
+        html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+            ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td>${nameCell}</td>
-            <td>${genderBadge(entry.gender)}</td>
-            ${_fmt === 'all' ? `<td class="muted">${isRelay ? 'Эстафета' : 'Индивидуальный'}</td>` : ''}
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
             <td>${progressStatusBadge(entry.status, hasVal)}</td>
