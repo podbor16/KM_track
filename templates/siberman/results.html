@@ -188,15 +188,9 @@
         .chart-participant-item:hover { background: var(--bg2); }
         .chart-participant-item input { accent-color: var(--red); cursor: pointer; }
         .chart-participant-item input:disabled ~ span { opacity: .4; }
-        .chart-clear-btn, .chart-hint-sidebar {
-            margin: 6px 8px 8px; font-size: 11px; text-align: center;
+        .chart-hint-sidebar {
+            margin: 6px 8px 8px; font-size: 11px; text-align: center; color: var(--muted);
         }
-        .chart-clear-btn {
-            padding: 6px; border-radius: 20px; border: 1px solid var(--border);
-            background: transparent; color: var(--muted); cursor: pointer;
-        }
-        .chart-clear-btn:hover { color: var(--text); border-color: var(--text); }
-        .chart-hint-sidebar { color: var(--muted); }
         .chart-select-all-btn {
             display: block; width: calc(100% - 16px); margin: 8px 8px 4px;
             padding: 5px; border-radius: 20px; border: 1px solid var(--border);
@@ -1080,14 +1074,16 @@ function chartSelectAllToggleHtml(datasets) {
     return `<button class="chart-select-all-btn" id="chartSelectAllToggle">${allSelected ? 'Очистить всех' : 'Выбрать всех'}</button>`;
 }
 function chartSidebarHtml(datasets) {
-    const footer = _chartSelectedBibs.length
-        ? `<button class="chart-clear-btn" id="chartClearSelection">Сбросить выбор (${_chartSelectedBibs.length})</button>`
-        : `<div class="chart-hint-sidebar">Выберите участников для сравнения</div>`;
+    // Раньше здесь были ДВЕ кнопки очистки одновременно — "Выбрать/Очистить
+    // всех" над списком и "Сбросить выбор (N)" под ним, дублирующие друг
+    // друга при полном выборе. Оставили одну, под списком (найдено
+    // пользователем 2026-07-22).
+    const hint = _chartSelectedBibs.length ? '' : `<div class="chart-hint-sidebar">Выберите участников для сравнения</div>`;
     return `<div class="chart-sidebar">
         <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
-        <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
         <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
-        ${footer}
+        <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
+        ${hint}
     </div>`;
 }
 // Лёгкое обновление списка участников (поиск) — НЕ трогает <input>, чтобы
@@ -1131,8 +1127,6 @@ function attachChartSidebarHandlers() {
     }
     attachChartCheckboxHandlers();
     attachChartSelectAllHandler();
-    const clearBtn = document.getElementById('chartClearSelection');
-    if (clearBtn) clearBtn.addEventListener('click', () => { _chartSelectedBibs = []; render(); });
 }
 function attachChartSelectAllHandler() {
     const btn = document.getElementById('chartSelectAllToggle');
