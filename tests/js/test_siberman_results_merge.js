@@ -1062,5 +1062,34 @@ check('rankBodyCells — rankSecondary=null даёт прочерк во вто�
     assert.ok(html.includes('<span class="muted">—</span>'), `ожидался прочерк: ${html}`);
 });
 
+function domGetAppHtml() {
+    return domStub('app').innerHTML;
+}
+
+check('renderOverall() — эстафета получает бейдж Э{формат} вместо прочерка, строка подсвечена, колонки Пол/Формат убраны', () => {
+    setState('all', 'all');
+    const ind = mkTimerInd('1', { surname: 'Иванов', name: 'Иван', status: 'active', overall_s: 20000, overall_rank_g: 1, cp: { run: { [vm.runInContext('STAGE_MAX_SEQ.run', sandbox)]: 20000 } } });
+    const relay = [{
+        bib: '1000', team_name: 'Автобаланс', overall_s: 22000,
+        members: [
+            { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 1000, cp: { swim: { [vm.runInContext('STAGE_MAX_SEQ.swim', sandbox)]: 1000 } } },
+            { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 9000, bike2_s: 8000, cp: {} },
+            { relay_stage: 'run', status: 'active', gender: 'M', run_s: 4000, cp: { run: { [vm.runInContext('STAGE_MAX_SEQ.run', sandbox)]: 22000 } } },
+        ],
+    }];
+    setRaceData([ind], relay, Date.now());
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('<th>Пол</th>'), `колонка "Пол" должна быть убрана: ${html.slice(0,500)}`);
+    assert.ok(!html.includes('<th>Формат</th>'), `колонка "Формат" должна быть убрана: ${html.slice(0,500)}`);
+    // formatBadge() оборачивает "Э" в свой собственный <span> (см.
+    // siberman-common.js), поэтому в итоговой разметке между "Э" и рангом
+    // остаётся закрывающий тег ("...badge-e">Э</span>1") — проверяем это
+    // регэкспом вместо литеральной подстроки ">Э1<".
+    assert.ok(html.includes('badge-e') && /Э<\/span>1</.test(html), `эстафета должна получить бейдж Э1 (единственная команда — формат-ранг 1): ${html}`);
+    assert.ok(html.includes('relay-row'), `строка эстафеты должна быть подсвечена: ${html}`);
+    assert.ok(html.includes('badge-individual'), `личник должен получить бейдж "Индивидуальный": ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

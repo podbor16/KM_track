@@ -509,23 +509,30 @@ function rankBodyCells(rankAbs, rankSecondary, secondaryBadge, rc, swapped) {
     return swapped ? `<td>${s}</td><td>${a}</td>` : `<td>${a}</td><td>${s}</td>`;
 }
 
+// Место — 2 колонки (Абсолют + Пол/Формат), swapped при fmt==='relay'
+// (формат становится первой колонкой) — команда не имеет личного пола на
+// этом уровне (три разных человека на трёх этапах), поэтому вторая колонка
+// у эстафеты ВСЕГДА показывает формат-ранг, у личника — гендерный.
+function overallSecondaryLabel() {
+    if (_fmt === 'relay') return 'Формат';
+    return _fmt === 'individual' ? 'По полу' : 'Пол/Формат';
+}
+function overallRankSwapped() { return _fmt === 'relay'; }
+
 function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
     const notFinished = r.overall_s == null || r.status !== 'active';
     const rc = notFinished ? '' : rankClass(combinedRanks[r.bib]);
-    // Последняя пройденная КТ (этап + отсечка) — отдельная колонка, и для
-    // финишировавших (последняя КТ = финиш бега), и для тех, кто ещё в гонке.
     const cur = currentStage(r);
     const pos = cur ? lastReached(r.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, r.gender, rc, true)}
+        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc, overallRankSwapped())}
         <td class="bib-cell">${r.bib}</td>
         <td>
             <span class="name-main">${r.surname} ${r.name}</span>
+            <span class="badge badge-individual">Индивидуальный</span>
             ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
         </td>
-        <td>${genderBadge(r.gender)}</td>
-        ${_fmt === 'all' ? '<td class="muted">Индивидуальный</td>' : ''}
         <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
         <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
         <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
@@ -539,9 +546,10 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
 
 // Эстафета в Итогах гонки — ОДНА строка (название команды), как и у
 // личников, без развёрнутого списка участников по ролям (см. п.14
-// задачи 2026-07-19 — раньше это была карточка .relay-card с тремя
-// строками участников, дублировавшая место отдельным счётчиком).
-function buildRelayOverallRow(team, overallGaps, combinedRanks) {
+// задачи 2026-07-19). formatRanks — новое: место среди только эстафетных
+// команд (computeRanksByValue по overall_s ТОЛЬКО эстафеты, полный ростер
+// года — не зависит от текущих фильтров, тот же принцип что combinedRanks).
+function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
     const tr = teamGapRow(team);
     const notFinished = team.overall_s == null || tr.status !== 'active';
     const rc = notFinished ? '' : rankClass(combinedRanks[team.bib]);
@@ -549,12 +557,10 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks) {
     const pos = cur ? lastReached(tr.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     const statusCell = teamStatusBadge(team);
-    return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[team.bib], null, null, rc, true)}
+    return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
+        ${rankBodyCells(combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc, overallRankSwapped())}
         <td class="bib-cell">${team.bib}</td>
         <td><span class="name-main">${team.team_name}</span> <span class="badge badge-relay">Эстафета</span></td>
-        <td class="muted">—</td>
-        ${_fmt === 'all' ? '<td class="muted">Эстафета</td>' : ''}
         <td class="r time-cell muted">${fmtTime(tr.swim_s)}</td>
         <td class="r time-cell muted">${fmtTime(tr.bike1_s)}</td>
         <td class="r time-cell muted">${fmtTime(tr.bike2_s)}</td>
@@ -597,7 +603,7 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells(true)}<th>№</th><th>Участник</th><th>Пол</th>${_fmt === 'all' ? '<th>Формат</th>' : ''}
+    ${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th>№</th><th>Участник</th>
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
@@ -622,6 +628,10 @@ function renderOverall() {
     // ростеру года (не по текущим фильтрам), не "плавает" при переключении
     // формата/пола, см. combinedOverallRankRows/computeCombinedOverallRanks.
     const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(_data.individual, _data.relay));
+    // Формат-ранг — место команды среди ТОЛЬКО эстафетных команд по всей
+    // гонке, полный ростер года (не зависит от текущих фильтров) — тот же
+    // принцип, что и combinedRanks.
+    const relayFormatRanks = computeRanksByValue(_data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
     let html = buildStats(individual, relay, null);
 
     if (individual.length === 0 && relay.length === 0) {
@@ -637,7 +647,7 @@ function renderOverall() {
     merged.forEach(item => {
         html += item.type === 'individual'
             ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks)
-            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks);
+            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks);
     });
     html += '</tbody></table></div>';
 
