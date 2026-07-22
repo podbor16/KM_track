@@ -1067,5 +1067,36 @@ check('attachSpaghettiClick — клик мимо всех линий не ме�
     assert.strictEqual(selected.length, 0, `клик далеко от всех линий не должен ничего выбрать, получено ${JSON.stringify(selected)}`);
 });
 
+check('formatBadge() — бейдж "Э" тем же CSS-паттерном, что genderBadge', () => {
+    const html = vm.runInContext('formatBadge', sandbox)();
+    assert.ok(html.includes('badge-e'), `ожидался класс badge-e: ${html}`);
+    assert.ok(html.includes('>Э<'), `ожидалась буква Э: ${html}`);
+});
+check('rankHeaderCells(label, swapped=false) — Место первой колонкой', () => {
+    const html = sandbox.rankHeaderCells('Пол/Формат', false);
+    assert.strictEqual(html, '<th>Место</th><th>Пол/Формат</th>');
+});
+check('rankHeaderCells(label, swapped=true) — вторичная колонка первой', () => {
+    const html = sandbox.rankHeaderCells('Формат', true);
+    assert.strictEqual(html, '<th>Формат</th><th>Абсолют</th>');
+});
+check('rankBodyCells — не swapped: абсолют первой ячейкой, бейдж+число второй', () => {
+    const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-m">М</span>', '', false);
+    const m = html.match(/^<td>(.*?)<\/td><td>(.*?)<\/td>$/);
+    assert.ok(m, `неожиданная структура: ${html}`);
+    assert.ok(m[1].includes('>5<'), `первая колонка — абсолют 5: ${html}`);
+    assert.ok(m[2].includes('badge-m') && m[2].includes('>2<'), `вторая колонка — бейдж+2: ${html}`);
+});
+check('rankBodyCells — swapped: вторичная ячейка первой', () => {
+    const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-e">Э</span>', '', true);
+    const m = html.match(/^<td>(.*?)<\/td><td>(.*?)<\/td>$/);
+    assert.ok(m[1].includes('badge-e') && m[1].includes('>2<'), `первая колонка — Э-бейдж+2: ${html}`);
+    assert.ok(m[2].includes('>5<'), `вторая колонка — абсолют 5: ${html}`);
+});
+check('rankBodyCells — rankSecondary=null даёт прочерк во вторичной ячейке', () => {
+    const html = sandbox.rankBodyCells(5, null, '', '', false);
+    assert.ok(html.includes('<span class="muted">—</span>'), `ожидался прочерк: ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

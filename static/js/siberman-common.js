@@ -50,6 +50,9 @@ function genderBadge(g) {
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';
     return '';
 }
+function formatBadge() {
+    return '<span class="badge badge-e">Э</span>';
+}
 function rankClass(rank) {
     if (rank === 1) return 'rank-1';
     if (rank === 2) return 'rank-2';

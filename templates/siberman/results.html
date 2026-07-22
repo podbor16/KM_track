@@ -260,6 +260,13 @@
         tbody tr.rank-3 { background: rgba(106,171,215,.04); }
         tbody tr.rank-1:hover, tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
 
+        /* Строка эстафеты — синяя подсветка + полоска слева (вариант C
+           брейншторминга 2026-07-22), поверх top-3 подсветки (обе
+           полупрозрачные, конфликта не будет — полоска остаётся основным
+           индикатором эстафеты). */
+        tbody tr.relay-row { background: rgba(106,171,215,.08); box-shadow: inset 3px 0 0 var(--blue); }
+        tbody tr.relay-row:hover { background: var(--bg3); }
+
         .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
         .rank-1 .rank-num { color: var(--red); }
         .rank-sub { font-size: 10px; color: var(--muted); display: block; }
@@ -274,6 +281,8 @@
         [data-theme="dark"] .badge-m { background: rgba(106,171,215,.15); color: var(--blue); }
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
         .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; vertical-align: middle; }
+        .badge-e { background: rgba(106,171,215,.15); color: var(--blue); }
+        .badge-individual { background: rgba(122,170,191,.12); color: var(--muted); font-weight: 700; }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
@@ -475,26 +484,22 @@ function getFiltered() {
 /* ──────────────── Render: Overall ──────────────── */
 const STAGE_LABEL_RU = { swim: 'Плавание', bike: 'Вело (оба дня)', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
 
-// Заголовок двух колонок места — порядок и подписи меняются местами в
-// зависимости от фильтра пола: без фильтра сначала абсолют, с фильтром —
-// сначала пересчитанное место внутри пола (см. п.1 задачи). teamLevel=true
-// (Итоги гонки, Свод вело — строка представляет КОМАНДУ целиком, не
-// конкретного человека) скрывает колонку "По полу" целиком при активном
-// фильтре формата "Эстафета" — иначе она была бы сплошными прочерками
-// (у команды на этом уровне нет единого пола). На табах этапов
-// (renderStage) teamLevel НЕ используется — там строка эстафеты это
-// конкретный участник со своим полом, колонка остаётся осмысленной.
-function rankHeaderCells(teamLevel = false) {
-    if (teamLevel && _fmt === 'relay') return '<th>Место</th>';
-    return _gender === 'all'
-        ? '<th>Место</th><th>По полу</th>'
-        : '<th>По полу</th><th>Абсолют</th>';
+// Место — генерик-рендерер ДВУХ колонок: абсолют + вторичный ранг (смысл —
+// пол или формат, решает вызывающий код). secondaryLabel — заголовок второй
+// колонки. swapped — вторичная колонка первой (для персонифицированных
+// таблиц триггер — активный фильтр _gender; для командных — _fmt==='relay';
+// каждый вызывающий код решает сам). secondaryBadge — HTML готового бейджа
+// буквы (genderBadge(gender) или formatBadge()) — тоже решает вызывающий код,
+// эта функция не знает, эстафета строка или личник.
+function rankHeaderCells(secondaryLabel, swapped) {
+    return swapped
+        ? `<th>${secondaryLabel}</th><th>Абсолют</th>`
+        : `<th>Место</th><th>${secondaryLabel}</th>`;
 }
-function rankBodyCells(rankAbs, rankGender, gender, rc, teamLevel = false) {
-    if (teamLevel && _fmt === 'relay') return `<td><span class="rank-num ${rc}">${rankAbs ?? '—'}</span></td>`;
+function rankBodyCells(rankAbs, rankSecondary, secondaryBadge, rc, swapped) {
     const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
-    const g = rankGender != null ? `<span class="rank-num ${rc}">${genderBadge(gender)}${rankGender}</span>` : '<span class="muted">—</span>';
-    return _gender === 'all' ? `<td>${a}</td><td>${g}</td>` : `<td>${g}</td><td>${a}</td>`;
+    const s = rankSecondary != null ? `<span class="rank-num ${rc}">${secondaryBadge}${rankSecondary}</span>` : '<span class="muted">—</span>';
+    return swapped ? `<td>${s}</td><td>${a}</td>` : `<td>${a}</td><td>${s}</td>`;
 }
 
 function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
