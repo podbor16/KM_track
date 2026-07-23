@@ -116,6 +116,12 @@
         .pb-boundary { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.3); }
         .pb-marker-dot { position: absolute; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg2); border: 2px solid var(--red); transform: translateX(-5px); }
         .pb-inline-chip { position: absolute; top: -24px; transform: translateX(-50%); background: var(--red); color: #fff; padding: 3px 8px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+        /* Флажки старта/финиша (п.7, 2026-07-23) — внутри track-wrap (не
+           .pb-track, у которой overflow:hidden обрежет их), на 0%/100%,
+           над треком — не пересекаются с самим треком/сегментами. */
+        .pb-flag { position: absolute; top: -13px; font-size: 11px; line-height: 1; }
+        .pb-flag-start { left: 0; }
+        .pb-flag-finish { right: 0; }
         .pb-stage-labels { display: flex; margin-top: 6px; font-size: 11px; color: var(--muted); }
         .pb-stage-labels span.swim { width: 20%; }
         .pb-stage-labels span.bike { width: 50%; }
@@ -262,6 +268,35 @@ function modeToggle() {
     </div>`;
 }
 
+// Бегунок ВНУТРИ одного этапа (0-100% этого этапа, не всей гонки 0-515км) —
+// та же вёрстка, что и общий progressBarHtml(), но без сегментов
+// swim/bike/run (один сплошной этап) и без глобального kmToVirtualX/
+// STAGE_KM_OFFSET (запрошено пользователем 2026-07-23, п.8 — при раскрытии
+// аккордеона этапа виден прогресс именно по нему, не по всей гонке).
+function stageProgressBarHtml(dbStage, r) {
+    const stageLenKm = CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]];
+    const pos = lastReached(r.cp, dbStage);
+    let fillPct = 0, chipText = null;
+    if (pos) {
+        const kmInStage = CHECKPOINT_DIST_KM[dbStage][pos.seq];
+        fillPct = (kmInStage / stageLenKm) * 100;
+        chipText = pos.seq === STAGE_MAX_SEQ[dbStage] ? 'Финиш' : `${kmInStage.toFixed(1)} / ${stageLenKm} км`;
+    }
+    const chipPct = Math.min(94, Math.max(6, fillPct));
+    return `
+    <div class="pb-outer">
+        <div class="pb-track-wrap">
+            <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+            <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+            ${chipText != null ? `<div class="pb-inline-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
+            <div class="pb-track">
+                <div class="pb-fill" style="width:${fillPct}%"></div>
+            </div>
+            <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+        </div>
+    </div>`;
+}
+
 // Порядок колонок (задача 2026-07-19 п.4, колонка "Формат" убрана
 // 2026-07-22 п.2 — тип виден в бейдже у ФИО в шапке карточки, дублировать
 // на каждой строке КТ избыточно): Общее время → [личники: Место(пол) →
@@ -337,7 +372,7 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             <td class="r">${abs.gap}</td>
         </tr>`;
     }
-    return `<div style="overflow-x:auto"><table class="cp-table">
+    return `${stageProgressBarHtml(dbStage, r)}<div style="overflow-x:auto"><table class="cp-table">
         <thead><tr>
             <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
             ${!isRelayRow ? '<th class="r">Место (пол)</th><th class="r">Отставание (пол)</th>' : ''}
@@ -448,6 +483,8 @@ function progressBarHtml(row) {
     return `
     <div class="pb-outer">
         <div class="pb-track-wrap">
+            <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+            <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
             ${chipText != null ? `<div class="pb-inline-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
             <div class="pb-track">
                 <div class="pb-seg swim"></div>

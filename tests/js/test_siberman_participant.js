@@ -135,6 +135,30 @@ check('progressBarHtml() — финишировал: заливка 100%, под
     assert.ok(html.includes('width:100%'), `заливка должна быть 100%: ${html}`);
 });
 
+check('progressBarHtml() — флажки старта и финиша присутствуют (п.7, 2026-07-23)', () => {
+    const html = sandbox.progressBarHtml(mkFinishedInd(1, 20000, 'M', 1));
+    assert.ok(html.includes('pb-flag-start'), `ожидался флажок старта: ${html}`);
+    assert.ok(html.includes('pb-flag-finish'), `ожидался флажок финиша: ${html}`);
+});
+
+check('stageProgressBarHtml() — прогресс ВНУТРИ этапа (0-100% этапа, не всей гонки), п.8 2026-07-23', () => {
+    const maxSeqBike2Local = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const row = { cp: { bike_day2: { 3: 400 } } };
+    const html = sandbox.stageProgressBarHtml('bike_day2', row);
+    // CHECKPOINT_DIST_KM.bike_day2[3] = 119 км, длина этапа = 276 км -> ~43.1%
+    const expectedPct = vm.runInContext('(CHECKPOINT_DIST_KM.bike_day2[3] / CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2]) * 100', sandbox);
+    assert.ok(html.includes(`width:${expectedPct}%`), `заливка должна быть ${expectedPct}% (прогресс внутри этапа): ${html}`);
+    assert.ok(html.includes('119.0'), `чип должен показывать километраж внутри этапа: ${html}`);
+    assert.ok(html.includes('pb-flag-start') && html.includes('pb-flag-finish'), `флажки должны быть и на этапном бегунке: ${html}`);
+});
+check('stageProgressBarHtml() — финиш этапа: заливка 100%, подпись "Финиш"', () => {
+    const maxSeqBike2Local = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const row = { cp: { bike_day2: { [maxSeqBike2Local]: 18000 } } };
+    const html = sandbox.stageProgressBarHtml('bike_day2', row);
+    assert.ok(html.includes('width:100%'), `заливка должна быть 100% на финише этапа: ${html}`);
+    assert.ok(html.includes('Финиш'), `ожидалась подпись "Финиш": ${html}`);
+});
+
 check('progressBarHtml() — эстафетная команда через teamGapRow (та же функция, без спецкейса)', () => {
     const team = mkRelayTeam(1000, 'КомандаА', 22000);
     const teamRow = vm.runInContext('teamGapRow', sandbox)(team);
