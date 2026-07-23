@@ -297,26 +297,16 @@
            блока, а не прижимается к верху. */
         .name-stack { min-height: 82px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; }
 
-        /* Top-2/3 highlight — у лидера (rank-1) больше нет отдельной
-           подсветки, он и так первый в таблице (запрошено пользователем
-           2026-07-22: "и так понятно что человек первый, если он первый
-           в таблице"). */
-        tbody tr.rank-2 { background: rgba(106,171,215,.06); }
-        tbody tr.rank-3 { background: rgba(106,171,215,.04); }
-        tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
-
-        /* Строка эстафеты — синяя подсветка на всю строку + полоска слева,
-           ВСЕГДА одинаковой силы, независимо от top-2/3 (запрошено
-           пользователем 2026-07-23: "все эстафетные команды вне зависимости
-           от лидерства должны быть с цветовым выделением" — top-2/3 не
-           должен ослаблять цвет эстафеты). Комбинированный селектор ниже
-           явно фиксирует силу фона у top-2/3 эстафетных строк равной
-           обычной relay-row — иначе более специфичный tr.relay-row.rank-N
-           перекрыл бы её приглушённым фоном top-2/3 (найдено code-review
-           Task 1, 2026-07-22, сила подсветки скорректирована 2026-07-23). */
+        /* Ранговая подсветка (rank-1/2/3) полностью убрана — сначала лидер
+           (2026-07-22, "и так понятно, что человек первый"), затем и top-2/3
+           тоже (запрошено пользователем 2026-07-23). Место видно в колонке
+           "Место", отдельного цветового акцента ему не нужно. Единственная
+           оставшаяся подсветка строки — у эстафетных команд, ВСЕГДА полной
+           силы, независимо от места (класс rank-N в разметке ещё
+           присваивается JS'ом для другой логики, но CSS больше не
+           реагирует на него у обычных строк). */
         tbody tr.relay-row { background: rgba(106,171,215,.14); box-shadow: inset 3px 0 0 var(--blue); }
         tbody tr.relay-row:hover { background: var(--bg3); }
-        tbody tr.relay-row.rank-2, tbody tr.relay-row.rank-3 { background: rgba(106,171,215,.14); }
 
         .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
         .rank-sub { font-size: 10px; color: var(--muted); display: block; }
@@ -849,24 +839,22 @@ function renderStage(stage) {
         return { ...m, _finished: !!pos && pos.seq === maxSeq };
     });
 
-    // "Абсолют"/"По полу"/"Формат" — НАСТОЯЩИЕ ранги: считаются по ПОЛНОМУ
-    // ростеру этапа (весь _data, не getFiltered()-отфильтрованный набор),
-    // не зависят от текущих фильтров формата/пола — тот же принцип, что и
-    // "Абсолют" в Итогах гонки/на карточке участника (согласовано с
-    // пользователем 2026-07-22 — раньше здесь была фильтро-зависимая
-    // величина, что вводило в заблуждение при активном фильтре по полу).
-    const allIndRows = _data.individual.map(withStageStatus)
-        .map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender, isRelay: false }));
-    const allRelayRows = _data.relay
-        .flatMap(t => t.members.filter(m => m.relay_stage === cfg.relayStage).map(m => withStageStatus({ ...m, _bib: t.bib, _team: t.team_name })))
-        .map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender, isRelay: true }));
-    const allStageRows = [...allIndRows, ...allRelayRows];
-    const stageAbsRanks = computeRanksByValue(allStageRows);
+    // "Абсолют"/"По полу"/"Формат" — ранги СРЕДИ ВИДИМЫХ строк (rows +
+    // relayMembers, уже отфильтрованы по текущим _fmt/_gender), не по
+    // полному ростеру этапа — полный откат к фильтро-зависимому месту
+    // (запрошено пользователем 2026-07-23: "Место" при фильтре "Личный"
+    // не пересчитывалось, всё ещё учитывало невидимых эстафетчиков).
+    // Данные о "невидимом" участнике не должны влиять на нумерацию мест
+    // в таблице, где он не показан.
+    const visibleIndRows = rows.map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender, isRelay: false }));
+    const visibleRelayRows = relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender, isRelay: true }));
+    const visibleStageRows = [...visibleIndRows, ...visibleRelayRows];
+    const stageAbsRanks = computeRanksByValue(visibleStageRows);
     const stageGenderRanks = {
-        M: computeRanksByValue(allStageRows.filter(x => x.gender === 'M')),
-        F: computeRanksByValue(allStageRows.filter(x => x.gender === 'F')),
+        M: computeRanksByValue(visibleStageRows.filter(x => x.gender === 'M')),
+        F: computeRanksByValue(visibleStageRows.filter(x => x.gender === 'F')),
     };
-    const stageFormatRanks = computeRanksByValue(allStageRows.filter(x => x.isRelay));
+    const stageFormatRanks = computeRanksByValue(visibleStageRows.filter(x => x.isRelay));
     const stageGenderRankFor = (key, gender) => stageGenderRanks[gender]?.[key];
 
     // Статистика ("Команд"/"Эстафет"/"Финишировали") на вкладке этапа должна
@@ -1201,13 +1189,11 @@ function renderBikeCombined() {
         return;
     }
 
-    // Единый ранг (абсолют + по полу) по ПОЛНОМУ ростеру года — не по
-    // текущим фильтрам, тот же принцип, что и в Итогах/на этапах.
-    const allRiders = _data.relay.map(bikeCombinedRelayRider).filter(Boolean);
-    const rankPool = [
-        ..._data.individual.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender, isRelay: false })),
-        ...allRiders.map(r => ({ key: r.bib, val: r.status === 'active' ? bikeCombinedTime(r) : null, status: r.status, gender: r.gender, isRelay: true })),
-    ];
+    // Ранг (абсолют + по полу/формату) — среди ВИДИМЫХ строк (rows, уже
+    // отфильтрованы по _fmt/_gender), не по полному ростеру года — тот же
+    // откат, что и на вкладках этапов (запрошено пользователем 2026-07-23:
+    // "Место" не должно учитывать невидимых участников).
+    const rankPool = rows.map(({ isRelay, entry, v }) => ({ key: entry.bib, val: v, status: entry.status, gender: entry.gender, isRelay }));
     const absRanks = computeRanksByValue(rankPool);
     const genderRanks = {
         M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),

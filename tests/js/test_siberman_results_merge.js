@@ -543,7 +543,7 @@ check('renderBikeCombined() — отставание встроено под в�
     assert.ok(html.includes('time-gap-sub'), `ожидалось отставание под временем: ${html.slice(0, 700)}`);
     assert.ok(html.includes('Лидер'), `лидер (Быстров, 300с) должен получить подпись "Лидер": ${html.slice(0, 700)}`);
 });
-check('renderBikeCombined() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют, formatRanks по полному ростеру', () => {
+check('renderBikeCombined() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют', () => {
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [
@@ -564,6 +564,21 @@ check('renderBikeCombined() фильтр "Эстафета" — 3 колонки
     assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
     const rowA = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/)[0];
     assert.ok(/badge-e">Э<\/span>1/.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — формат-ранг 1: ${rowA}`);
+});
+check('renderBikeCombined() — ранг среди ВИДИМЫХ строк, не по полному ростеру (откат 2026-07-23)', () => {
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100 })]; // 200с — самый быстрый, но невидим
+    const relay = [mkBikeRelay(1000, { surname: 'Средний', name: 'Иван', gender: 'M', bike1_s: 5000, bike2_s: 4000 })]; // 9000с
+    sandbox.__individual = individual;
+    sandbox.__relay = relay;
+    vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
+    setState('relay', 'all'); // личник (самый быстрый) не виден при fmt=relay
+    sandbox.renderBikeCombined();
+    const html = sandbox.document.getElementById('app').innerHTML;
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка эстафеты не найдена: ${html}`);
+    // Единственная видимая строка — должна получить абсолютный ранг 1,
+    // несмотря на то, что невидимый личник объективно быстрее.
+    assert.ok(/rank-num[^>]*>1</.test(rowMatch[0]), `эстафета — единственная видимая строка, абсолютный ранг 1: ${rowMatch[0]}`);
 });
 
 // ── Автоочистка _chartSelectedBibs при смене фильтра формата/пола (баг
@@ -1162,7 +1177,7 @@ check('renderOverall() — новый порядок колонок (Итого+
 
 // ── renderStage() — истинный абсолют (полный ростер) + 3-колоночный режим
 // при fmt='relay' (задача 3 плана 2026-07-22) ──
-check('renderStage() внутренние ранги — computeRanksByValue по ПОЛНОМУ ростеру, не по getFiltered()', () => {
+check('renderStage() внутренние ранги — computeRanksByValue по ВИДИМЫМ строкам, не по полному ростеру (откат 2026-07-23)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const rows = [
         mkTimerInd('1', { gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }),
@@ -1173,11 +1188,15 @@ check('renderStage() внутренние ранги — computeRanksByValue п�
     setState('individual', 'F');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
-    // Строка bib=2 должна содержать rank-num "2" (истинный абсолют — мужчина
-    // быстрее обеих женщин, значит женщина №2 НЕ первая в абсолюте), не "1".
+    // Строка bib=2 должна содержать rank-num "1" — мужчина №1 не виден в
+    // таблице (фильтр "Женщины"), значит "Место" считается ТОЛЬКО среди
+    // видимых женщин: №2 (400с) идёт первой, №3 (500с) — второй. Полный
+    // откат: раньше "Место" было "истинным абсолютом" по полному ростеру
+    // (включая невидимого мужчину) — пользователь попросил вернуть
+    // фильтро-зависимый пересчёт (2026-07-23).
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
-    assert.ok(/rank-num[^>]*>2</.test(rowMatch[0]), `ожидался истинный абсолют 2 в строке личницы №2: ${rowMatch[0]}`);
+    assert.ok(/rank-num[^>]*>1</.test(rowMatch[0]), `ожидалось место 1 среди видимых женщин (мужчина не виден): ${rowMatch[0]}`);
 });
 check('renderStage() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1204,19 +1223,39 @@ check('renderStage() — время+отставание в одной ячей�
     assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
     assert.ok(rowMatch[0].includes('time-gap-sub'), `под временем должно быть отставание отстающего (time-gap-sub): ${rowMatch[0]}`);
 });
-check('renderStage() фильтр "Эстафета" — формат/пол рассчитаны по ПОЛНОМУ ростеру этапа, не зависят от текущего gender-фильтра', () => {
+check('renderStage() фильтр "Эстафета" — формат-ранг среди ВИДИМЫХ команд (откат 2026-07-23)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
         { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } }] },
     ];
     setRaceData([], relay, Date.now());
+    // gender='M' — КомандаБ (F) не видна в таблице вовсе (relayMembers её
+    // исключает). КомандаА получает Э1 — здесь совпадает с "полным
+    // ростером" просто потому, что она и так быстрее обеих команд;
+    // реальная разница видна в отдельном тесте ниже.
     setState('relay', 'M');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка КомандыА не найдена: ${html}`);
-    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1 (быстрее КомандыБ, полный ростер учитывает обе команды): ${rowMatch[0]}`);
+    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1: ${rowMatch[0]}`);
+});
+check('renderStage() фильтр "Эстафета" — формат-ранг НЕ учитывает невидимую (отфильтрованную по полу) команду', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 500, cp: { swim: { [maxSeqSwim]: 500 } } }] },
+        { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 100, cp: { swim: { [maxSeqSwim]: 100 } } }] },
+    ];
+    setRaceData([], relay, Date.now());
+    // КомандаБ (F, самая быстрая) НЕ видна при фильтре "Мужчины" — КомандаА
+    // (M, медленнее КомандыБ) должна получить Э1 среди видимых, не Э2.
+    setState('relay', 'M');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка КомандыА не найдена: ${html}`);
+    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1 среди видимых (невидимая быстрая КомандаБ не в счёт): ${rowMatch[0]}`);
 });
 
 check('render() — фильтр по полу виден на этапах/Своде вело при fmt=relay, скрыт на Итогах/Днях', () => {
