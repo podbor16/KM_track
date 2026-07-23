@@ -239,6 +239,25 @@
         .stat-val { font-size: 20px; font-weight: 800; color: var(--stat-val); }
         .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
+        /* Индикаторы — 2 карточки (Личники/Эстафеты), 3 строки чисел одного
+           цвета убывающего размера: N (всего) → M (финишировало) → L
+           (DNF/DSQ) (запрошено пользователем 2026-07-23, п.2 v5 — заменяет
+           набор разрозненных плашек Участников/Финишировали/Эстафет/DNF). */
+        .stats-v2 { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-card {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 18px; min-width: 130px;
+        }
+        .stat-card .stat-val { font-size: 20px; font-weight: 800; color: var(--stat-val); }
+        .stat-card .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+        .stat-card .stat-sub { font-size: 13px; font-weight: 800; color: var(--stat-val); margin-top: 6px; }
+        .stat-card .stat-sub2 { font-size: 11px; font-weight: 800; color: var(--stat-val); margin-top: 2px; }
+
+        /* Время + отставание в одной ячейке (timeGapCell) — заменяет пары
+           "колонка Время" + отдельная "колонка Отставание" (п.3/4, v5). */
+        .time-gap-sub { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
+        .time-gap-sub.lead { color: var(--red); }
+
         /* ── Table ── */
         .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
         table { width: 100%; border-collapse: collapse; background: var(--bg2); }
@@ -376,6 +395,11 @@
             .name-stack { min-height: 65px; }
             .stat-val { font-size: 17px; }
             .stat-lbl { font-size: 9px; }
+            .stat-card { padding: 8px 14px; min-width: 110px; }
+            .stat-card .stat-val { font-size: 17px; }
+            .stat-card .stat-lbl { font-size: 9px; }
+            .stat-card .stat-sub { font-size: 12px; }
+            .stat-card .stat-sub2 { font-size: 10px; }
             .tabs-bar--sub { padding: 0 14px; }
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
             .stage-timers { padding: 8px 14px; gap: 8px; }
@@ -488,31 +512,64 @@ function participantLink(bib) {
     return `/siberman/participant/${bib}?year=${_year}`;
 }
 
-function buildStats(individual, relay, stageKey) {
+// Индикаторы — 2 карточки (Личники/Эстафеты, п.2 v5, 2026-07-23), каждая
+// со своими N (всего) / M (финишировало) / L (DNF+DSQ). relayStats
+// {total,finished,dnfDsq} ПРЕДВЫЧИСЛЯЕТСЯ каждым вызывающим кодом — форма
+// relay-данных отличается по контексту (team-объекты на командных
+// таблицах vs персонифицированные участники роли на этапах/Своде вело),
+// buildStats не пытается угадывать её единообразно (см. план 2026-07-23).
+// Карточка скрывается целиком, если её total === 0.
+function buildStats(individual, relayStats, stageKey) {
     const finInd = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] != null : r.overall_s != null)).length;
-    const finRel = relay.filter(t => t.overall_s != null).length;
-    const finished = finInd + finRel;
-    const live     = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] == null : r.overall_s == null)).length;
     const dnfCount = individual.filter(r => r.status === 'dnf').length;
     const dsqCount = individual.filter(r => r.status === 'dsq').length;
     const dnsCount = individual.filter(r => r.status === 'dns').length;
-    const total = individual.length + relay.length;
-    const relayOnly = individual.length === 0 && relay.length > 0;
-    let html = `<div class="stats">`;
-    if (relayOnly) {
-        html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Команд</div></div>`;
-        html += `<div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
-    } else {
-        html += `<div class="stat"><div class="stat-val">${total}</div><div class="stat-lbl">Участников</div></div>`;
-        html += `<div class="stat"><div class="stat-val">${finished}</div><div class="stat-lbl">Финишировали</div></div>`;
-        if (relay.length > 0 && stageKey === null) html += `<div class="stat"><div class="stat-val">${relay.length}</div><div class="stat-lbl">Эстафет</div></div>`;
+    const indDnfDsq = dnfCount + dsqCount;
+    let html = `<div class="stats-v2">`;
+    if (individual.length > 0) {
+        html += `<div class="stat-card">
+            <div class="stat-val">${individual.length}</div><div class="stat-lbl">Личников</div>
+            <div class="stat-sub">${finInd} финишировало</div>
+            <div class="stat-sub2">${indDnfDsq} DNF/DSQ</div>
+        </div>`;
     }
-    if (live > 0)     html += `<div class="stat"><div class="stat-val">${live}</div><div class="stat-lbl">В гонке</div></div>`;
-    if (dnfCount > 0) html += `<div class="stat" style="border-color:rgba(190,10,33,.3)"><div class="stat-val" style="color:var(--red)">${dnfCount}</div><div class="stat-lbl">DNF</div></div>`;
-    if (dsqCount > 0) html += `<div class="stat"><div class="stat-val" style="color:#a78bfa">${dsqCount}</div><div class="stat-lbl">DSQ</div></div>`;
-    if (dnsCount > 0) html += `<div class="stat"><div class="stat-val">${dnsCount}</div><div class="stat-lbl">Не стартовали</div></div>`;
+    if (relayStats.total > 0) {
+        html += `<div class="stat-card">
+            <div class="stat-val">${relayStats.total}</div><div class="stat-lbl">Эстафет</div>
+            <div class="stat-sub">${relayStats.finished} финишировало</div>
+            <div class="stat-sub2">${relayStats.dnfDsq} DNF/DSQ</div>
+        </div>`;
+    }
     html += `</div>`;
+    if (dnsCount > 0) html += `<div class="stats"><div class="stat"><div class="stat-val">${dnsCount}</div><div class="stat-lbl">Не стартовали</div></div></div>`;
     return html;
+}
+
+// Время + отставание в одной ячейке (не отдельной колонкой) — п.3/4 v5,
+// 2026-07-23. timeStr — уже отформатированная строка (fmtTime/'—'),
+// gapSeconds — секунды отставания от лидера пула, null если сравнивать
+// не с чем (участник не дошёл/лидер).
+function timeGapCell(timeStr, gapSeconds) {
+    if (timeStr === '—' || timeStr == null) return '<span class="muted">—</span>';
+    if (gapSeconds == null) return `<span class="time-main">${timeStr}</span>`;
+    const gapHtml = gapSeconds === 0
+        ? '<span class="time-gap-sub lead">Лидер</span>'
+        : `<span class="time-gap-sub">${fmtGap(gapSeconds)}</span>`;
+    return `<span class="time-main">${timeStr}</span>${gapHtml}`;
+}
+
+// Простое отставание от минимума по прямому полю (не checkpoint-based, как
+// computeOverallGaps/computeStageGaps) — для "сырых" суммарных времён
+// этапа (swim_s/bike1_s/...), где интерполяция не нужна: участник либо
+// уже имеет значение поля, либо ещё не финишировал этап (тогда — прочерк,
+// не оценка). rows — [{bib, [key]: сек|null, ...}], возвращает {bib: gap}.
+function fieldGaps(rows, key) {
+    const vals = rows.map(r => r[key]).filter(v => v != null);
+    if (!vals.length) return {};
+    const min = Math.min(...vals);
+    const gaps = {};
+    rows.forEach(r => { if (r[key] != null) gaps[r.bib] = r[key] - min; });
+    return gaps;
 }
 /* ──────────────── Filter helpers ──────────────── */
 function getFiltered() {
@@ -558,7 +615,11 @@ function overallSecondaryLabel() {
 }
 function overallRankSwapped() { return _fmt === 'relay'; }
 
-function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
+// stageGaps — {swim,bike1,bike2,run} каждая {bib: секунды} от fieldGaps()
+// по ПОЛНОМУ объединённому пулу личники+эстафета (см. renderOverall) — у
+// каждой временной колонки своё отставание (п.3, v5, 2026-07-23), не
+// только у итогового времени.
+function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
     const notFinished = r.overall_s == null || r.status !== 'active';
     const rc = notFinished ? '' : rankClass(combinedRanks[r.bib]);
     const cur = currentStage(r);
@@ -572,13 +633,12 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
             ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
             <span class="badge badge-individual">Индивидуальный</span>
         </div></td>
-        <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
-        <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(r.overall_s), overallGaps[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib])}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
         <td>${statusBadge(r, null)}</td>
     </tr>`;
 }
@@ -588,7 +648,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
 // задачи 2026-07-19). formatRanks — новое: место среди только эстафетных
 // команд (computeRanksByValue по overall_s ТОЛЬКО эстафеты, полный ростер
 // года — не зависит от текущих фильтров, тот же принцип что combinedRanks).
-function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
+function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, stageGaps) {
     const tr = teamGapRow(team);
     const notFinished = team.overall_s == null || tr.status !== 'active';
     const rc = notFinished ? '' : rankClass(combinedRanks[team.bib]);
@@ -603,13 +663,12 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
             <span class="name-main">${team.team_name}</span>
             <span class="badge badge-relay">Эстафета</span>
         </div></td>
-        <td class="r time-cell muted">${fmtTime(tr.swim_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.bike1_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.bike2_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.run_s)}</td>
-        <td class="r time-cell" style="font-weight:800">${fmtTime(team.overall_s)}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(team.overall_s), overallGaps[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib])}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted">${fmtGap(overallGaps[team.bib])}</td>
         <td>${statusCell}</td>
     </tr>`;
 }
@@ -646,13 +705,12 @@ function buildMergedOverallEntries(individual, relay) {
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
     ${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th>
+    <th class="r">Итого</th>
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
     <th class="r">🏃 Бег</th>
-    <th class="r">Итого</th>
     <th>Последняя КТ</th>
-    <th class="r">Отставание</th>
     <th>Статус</th>
 </tr></thead>`;
 
@@ -674,7 +732,12 @@ function renderOverall() {
     // гонке, полный ростер года (не зависит от текущих фильтров) — тот же
     // принцип, что и combinedRanks.
     const relayFormatRanks = computeRanksByValue(_data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
-    let html = buildStats(individual, relay, null);
+    const relayStats = {
+        total: relay.length,
+        finished: relay.filter(t => t.overall_s != null).length,
+        dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
+    };
+    let html = buildStats(individual, relayStats, null);
 
     if (individual.length === 0 && relay.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
@@ -682,14 +745,30 @@ function renderOverall() {
         return;
     }
 
+    // Отставание по КАЖДОЙ временной колонке отдельно (п.3, v5, 2026-07-23)
+    // — простое вычитание от минимума среди финишировавших ЭТОТ конкретный
+    // сегмент (не checkpoint-based, как overallGaps — там нужна
+    // интерполяция для ещё не финишировавших, здесь достаточно прямого
+    // поля swim_s/bike1_s/...).
+    const stageGapPool = [
+        ...individual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
+        ...relay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
+    ];
+    const stageGaps = {
+        swim: fieldGaps(stageGapPool, 'swim_s'),
+        bike1: fieldGaps(stageGapPool, 'bike1_s'),
+        bike2: fieldGaps(stageGapPool, 'bike2_s'),
+        run: fieldGaps(stageGapPool, 'run_s'),
+    };
+
     // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
     // один тип) — личники и эстафета теперь однородные строки одной таблицы.
     const merged = buildMergedOverallEntries(individual, relay);
     html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD()}<tbody>`;
     merged.forEach(item => {
         html += item.type === 'individual'
-            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks)
-            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks);
+            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, stageGaps)
+            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks, stageGaps);
     });
     html += '</tbody></table></div>';
 
@@ -802,8 +881,12 @@ function renderStage(stage) {
     // (m[cfg.timeKey]), не общее overall_s (найдено пользователем
     // 2026-07-23, п.9 — раньше stats всегда показывала полный relay.length
     // независимо от фильтра пола, например неизменные "13 команд").
-    const relayForStats = relayMembers.map(m => ({ overall_s: m[cfg.timeKey] }));
-    let html = buildStats(individual, relayForStats, stage);
+    const relayStatsStage = {
+        total: relayMembers.length,
+        finished: relayMembers.filter(m => m[cfg.timeKey] != null).length,
+        dnfDsq: relayMembers.filter(m => m.status === 'dnf' || m.status === 'dsq').length,
+    };
+    let html = buildStats(individual, relayStatsStage, stage);
 
     // При активном фильтре по полу "Место" (2-колоночный режим) должно быть
     // местом ВНУТРИ этого пола (пересчитанным, не абсолютным) — иначе
@@ -828,9 +911,8 @@ function renderStage(stage) {
                 ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
                 <span class="badge badge-individual">Индивидуальный</span>
             </div></td>
-            <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(gaps[r.bib])}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
@@ -862,9 +944,8 @@ function renderStage(stage) {
                 <span class="name-city">${m._team}</span>
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
-            <td class="r time-cell">${fmtTime(t)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`])}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
             <td class="r muted">${hasTime ? meta : '—'}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
             <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
@@ -904,7 +985,7 @@ function renderStage(stage) {
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHead}<th class="r">№</th><th>Участник</th>
-        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th>Последняя КТ</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -992,30 +1073,47 @@ function dayRankOptions(getValue) {
 }
 
 // Колонки/вид приведены к единому паттерну Итогов гонки/вкладок этапов
-// (rankHeaderCells/rankBodyCells — Место(абсолют, полный ростер) + По
-// полу/Формат, "Последняя КТ", одна колонка "Отставание") — раньше здесь
-// были отдельные 4 колонки (пул-относительные Место+Отставание рядом с
-// абсолютными), что визуально и функционально расходилось с остальными
-// таблицами (запрошено пользователем 2026-07-23). Пул-относительное место
-// (poolGap(entries) от лидера ТЕКУЩЕГО фильтра) убрано — секция "по
-// полу/формату" из rankHeaderCells уже даёт аналог этого смысла.
+// (rankHeaderCells/rankBodyCells, "Последняя КТ", время+отставание в одной
+// ячейке). МЕСТО — абсолютное (полный ростер года, не зависит от текущих
+// фильтров), но ОТСТАВАНИЕ — от лидера ТЕКУЩЕГО отфильтрованного пула
+// (poolGap(entries)), как и на вкладках этапов — вернули по запросу
+// пользователя 2026-07-23 (п.10 v5), единое абсолютное отставание
+// (предыдущая версия, 2026-07-23 раньше в тот же день) оказалось
+// нежелательным. Порядок rank-колонок — swap по активному фильтру пола
+// (_gender !== 'all'), тот же критерий, что на этапах.
 function renderRankedProgress(getValue, options = {}) {
     const { individual, relay } = getFiltered();
-    let html = buildStats(individual, relay, null);
     const entries = buildRankedEntries(individual, relay, getValue);
+    // "Финишировало" для эстафетной карточки — дошли до конца ИМЕННО ЭТОГО
+    // дня/снапшота (entries[].v уже несёт эту семантику через getValue),
+    // не общее overall_s всей гонки.
+    const relayStatsDay = {
+        total: relay.length,
+        finished: entries.filter(e => e.type === 'relay' && e.v != null).length,
+        dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
+    };
+    let html = buildStats(individual, relayStatsDay, null);
     if (entries.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
         document.getElementById('app').innerHTML = html;
         return;
     }
-    // Абсолютное место/отставание — от лидера ПОЛНОГО ростера года
-    // (личники+эстафета вместе), тот же принцип что и в Итогах гонки —
-    // считается отдельно, не зависит от текущих фильтров.
+    // Абсолютное МЕСТО — от лидера ПОЛНОГО ростера года (личники+эстафета
+    // вместе), тот же принцип что и в Итогах гонки — не зависит от текущих
+    // фильтров. ОТСТАВАНИЕ же — от лидера ТЕКУЩЕГО отфильтрованного пула
+    // (poolGap(entries)), не полного ростера (вернули по запросу
+    // пользователя 2026-07-23, п.10 — вчерашнее упрощение до единого
+    // абсолютного отставания оказалось нежелательным).
     const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
     const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
-    const absGapsAll = poolGap(allEntries);
+    const gaps = poolGap(entries);
+    // Порядок колонок места — сначала По полу/Формату (если фильтр по полу
+    // активен), затем Абсолют, тот же критерий swap, что и на вкладках
+    // этапов (rankBodyCells(..., _gender !== 'all')), не только формат —
+    // п.10, v5.
+    const daySwapped = _gender !== 'all';
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), daySwapped)}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -1045,12 +1143,11 @@ function renderRankedProgress(getValue, options = {}) {
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Индивидуальный</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-            ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, overallRankSwapped())}
+            ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, daySwapped)}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
-            <td class="r time-cell">${fmtTime(v)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
             ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
             <td>${progressStatusBadge(status, hasVal)}</td>
         </tr>`;
@@ -1086,8 +1183,12 @@ function renderBikeCombined() {
     // пользователем 2026-07-23, п.9 — тот же класс бага, что и на этапах:
     // строки/статистика эстафеты не пересчитывались под фильтр пола).
     const riders = relay.map(bikeCombinedRelayRider).filter(Boolean).filter(r => _gender === 'all' || r.gender === _gender);
-    const relayForStats = riders.map(r => ({ overall_s: r.status === 'active' ? bikeCombinedTime(r) : null }));
-    let html = buildStats(individual, relayForStats, null);
+    const relayStatsBike = {
+        total: riders.length,
+        finished: riders.filter(r => r.status === 'active' && bikeCombinedTime(r) != null).length,
+        dnfDsq: riders.filter(r => r.status === 'dnf' || r.status === 'dsq').length,
+    };
+    let html = buildStats(individual, relayStatsBike, null);
 
     const rows = [
         ...individual.map(r => ({ isRelay: false, entry: r, v: r.status === 'active' ? bikeCombinedTime(r) : null })),
@@ -1119,6 +1220,10 @@ function renderBikeCombined() {
     };
     const formatRanks = computeRanksByValue(rankPool.filter(x => x.isRelay));
     const isRelayFilter = _fmt === 'relay';
+    // Отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (rows уже в
+    // форме {entry,v}, подходит для poolGap напрямую) — раньше на этой
+    // вкладке колонки "Отставание" не было вовсе (п.3, v5, 2026-07-23).
+    const gaps = poolGap(rows);
 
     const rankHead = isRelayFilter
         ? '<th class="r">Формат</th><th class="r">Пол</th><th class="r">Абсолют</th>'
@@ -1149,7 +1254,7 @@ function renderBikeCombined() {
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
-            <td class="r time-cell">${fmtTime(v)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
             <td>${progressStatusBadge(entry.status, hasVal)}</td>
         </tr>`;

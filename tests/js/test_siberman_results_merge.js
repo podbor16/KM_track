@@ -531,6 +531,18 @@ check('renderBikeCombined() — эстафетчик получает насто
     const rowMatch = html.match(/rank-num[^>]*>1<\/span>[\s\S]{0,400}?Быстров/);
     assert.ok(rowMatch, 'эстафетчик Быстров должен быть на 1 месте (быстрее личника)');
 });
+check('renderBikeCombined() — отставание встроено под временем (новая колонка, п.3 v5, 2026-07-23)', () => {
+    setState('all', 'all');
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 })]; // 14500с
+    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200 })]; // 300с — лидер
+    sandbox.__individual = individual;
+    sandbox.__relay = relay;
+    vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
+    sandbox.renderBikeCombined();
+    const html = sandbox.document.getElementById('app').innerHTML;
+    assert.ok(html.includes('time-gap-sub'), `ожидалось отставание под временем: ${html.slice(0, 700)}`);
+    assert.ok(html.includes('Лидер'), `лидер (Быстров, 300с) должен получить подпись "Лидер": ${html.slice(0, 700)}`);
+});
 check('renderBikeCombined() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют, formatRanks по полному ростеру', () => {
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const relay = [
@@ -1128,6 +1140,26 @@ check('renderOverall() — эстафета получает бейдж Э{фо�
     assert.ok(html.includes('badge-individual'), `личник должен получить бейдж "Индивидуальный": ${html}`);
 });
 
+check('renderOverall() — новый порядок колонок (Итого+Отст. перед Плав/Вело/Бег), отставание под временем не отдельной колонкой (п.3/4, v5)', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const fast = mkTimerInd('1', { swim_s: 1000, bike1_s: 9000, bike2_s: 8000, run_s: 2000, overall_s: 20000, cp: { swim: { [maxSeqSwim]: 1000 }, run: { [maxSeqRun]: 20000 } } });
+    const slow = mkTimerInd('2', { swim_s: 1500, bike1_s: 9500, bike2_s: 8500, run_s: 2500, overall_s: 22000, cp: { swim: { [maxSeqSwim]: 1500 }, run: { [maxSeqRun]: 22000 } } });
+    setRaceData([fast, slow], [], Date.now());
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    // Заголовок: Итого идёт СРАЗУ после Участника, до Плав./Вело/Бег.
+    const headOrder = html.indexOf('>Итого<') < html.indexOf('Плав.') && html.indexOf('>Итого<') > html.indexOf('УЧАСТНИК');
+    assert.ok(headOrder, `ожидался порядок Участник→Итого→Плав/Вело/Бег в шапке: ${html.slice(0, 700)}`);
+    assert.ok(!html.includes('<th class="r">Отставание</th>'), `отдельной колонки "Отставание" быть не должно: ${html.slice(0, 700)}`);
+    // У отстающего (bib=2) под временем Плавания должно быть его личное
+    // отставание (500с = 1500-1000) — timeGapCell встроил его в ту же ячейку.
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
+    assert.ok(rowMatch[0].includes('time-gap-sub'), `под временем плавания должно быть отставание (time-gap-sub): ${rowMatch[0]}`);
+});
+
 // ── renderStage() — истинный абсолют (полный ростер) + 3-колоночный режим
 // при fmt='relay' (задача 3 плана 2026-07-22) ──
 check('renderStage() внутренние ранги — computeRanksByValue по ПОЛНОМУ ростеру, не по getFiltered()', () => {
@@ -1159,6 +1191,19 @@ check('renderStage() фильтр "Эстафета" — 3 колонки Фор
     const html = domGetAppHtml();
     assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
 });
+check('renderStage() — время+отставание в одной ячейке, отдельной колонки "Отставание" нет (п.3 v5)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const fast = mkTimerInd('1', { gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } });
+    const slow = mkTimerInd('2', { gender: 'M', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } });
+    setRaceData([fast, slow], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('<th class="r">Отставание</th>'), `отдельной колонки "Отставание" быть не должно: ${html.slice(0,700)}`);
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
+    assert.ok(rowMatch[0].includes('time-gap-sub'), `под временем должно быть отставание отстающего (time-gap-sub): ${rowMatch[0]}`);
+});
 check('renderStage() фильтр "Эстафета" — формат/пол рассчитаны по ПОЛНОМУ ростеру этапа, не зависят от текущего gender-фильтра', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const relay = [
@@ -1189,7 +1234,7 @@ check('render() — фильтр по полу виден на этапах/Св
     assert.strictEqual(genderGroupTab('bike'), '', 'Свод вело/Вело1/Вело2 — фильтр по полу ВИДЕН при эстафете');
 });
 
-check('renderRankedProgress() (Дни) — 2 колонки рангов как в Итогах/на этапах (не 4), + Последняя КТ + "Финишировал"', () => {
+check('renderRankedProgress() (Дни) — 2 колонки рангов как в Итогах/на этапах, Последняя КТ, "Финишировал"', () => {
     setState('all', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1197,11 +1242,37 @@ check('renderRankedProgress() (Дни) — 2 колонки рангов как 
     setRaceData([ind], [], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
-    assert.ok(html.includes('<th>Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
+    assert.ok(html.includes('<th class="r">Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
     assert.ok(html.includes('Последняя КТ'), `ожидалась колонка "Последняя КТ" (как в Итогах/на этапах): ${html.slice(0,600)}`);
-    assert.strictEqual((html.match(/<th[^>]*>Отставание<\/th>/g) || []).length, 1, `ожидалась ровно одна колонка "Отставание" (не пул+абсолют): ${html.slice(0,700)}`);
-    assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" больше не нужна (место уже абсолютное): ${html.slice(0,700)}`);
+    // Отставание больше не отдельной колонкой (п.3 v5) — встроено под
+    // временем через timeGapCell, поэтому колонки "Отставание" в шапке нет.
+    assert.ok(!html.includes('<th class="r">Отставание</th>'), `отдельной колонки "Отставание" быть не должно: ${html.slice(0,700)}`);
+    assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" не нужна (место уже абсолютное): ${html.slice(0,700)}`);
     assert.ok(html.includes('Финишировал'), `статус должен быть "Финишировал" (унифицировано с Итогами/Этапами, не "Пройден"): ${html}`);
+});
+check('renderRankedProgress() (Дни) — отставание ПУЛ-ОТНОСИТЕЛЬНОЕ (от лидера текущего фильтра), не абсолютное (п.10 v5)', () => {
+    setState('individual', 'all');
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // Быстрая эстафета (не видна при fmt=individual) НЕ должна быть точкой
+    // отсчёта для отставания второго личника — при пул-относительном
+    // отставании (п.10) отсчёт идёт от лидера СРЕДИ ВИДИМЫХ (личник bib=1).
+    const fastInd = mkTimerInd('1', { gender: 'M', bike1_s: 5000, swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqB1]: 5000 } } });
+    const slowInd = mkTimerInd('2', { gender: 'M', bike1_s: 6000, swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqB1]: 6000 } } });
+    const relayFaster = { bib: '1000', team_name: 'К', members: [
+        { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 100, cp: { swim: { [maxSeqSwim]: 100 } } },
+        { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 100, bike2_s: null, cp: { bike_day1: { [maxSeqB1]: 100 } } },
+        { relay_stage: 'run', status: 'active', gender: 'M', run_s: null, cp: {} },
+    ] };
+    setRaceData([fastInd, slowInd], [relayFaster], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const leaderRow = html.match(/<tr class="[^"]*"[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    const slowRow = html.match(/<tr class="[^"]*"[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(leaderRow && slowRow, `обе строки личников должны быть найдены: ${html}`);
+    assert.ok(leaderRow[0].includes('Лидер'), `bib=1 — лидер видимого пула, timeGapCell должен показать "Лидер": ${leaderRow[0]}`);
+    const expectedGap = vm.runInContext('fmtGap(1000)', sandbox); // 6000-5000
+    assert.ok(slowRow[0].includes(expectedGap), `bib=2 отстаёт от bib=1 (видимый лидер) на ${expectedGap}, не от невидимой эстафеты: ${slowRow[0]}`);
 });
 check('poolGap — отставание внутри пула считается от лидера пула (наименьшее v)', () => {
     setState('all', 'all');
@@ -1240,6 +1311,56 @@ check('День 1 — Место (абсолют) = ранг среди ВСЕХ
     // и убедиться, что значение там — 2, не 1.
     const rankNums = [...rowMatch[0].matchAll(/rank-num[^>]*>(\d+)</g)].map(m => m[1]);
     assert.ok(rankNums.includes('2'), `ожидалось абсолютное место 2 где-то в строке (личник обогнан эстафетой): rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
+});
+
+// ── timeGapCell()/fieldGaps()/buildStats() — v5 п.2/3/4 фундамент (2026-07-23) ──
+check('timeGapCell() — время+0 отставание даёт "Лидер"', () => {
+    const html = sandbox.timeGapCell('1:00:00', 0);
+    assert.ok(html.includes('1:00:00'), `время должно быть в разметке: ${html}`);
+    assert.ok(html.includes('Лидер'), `нулевое отставание — подпись "Лидер": ${html}`);
+});
+check('timeGapCell() — положительное отставание форматируется через fmtGap', () => {
+    const html = sandbox.timeGapCell('1:05:00', 300);
+    const expected = vm.runInContext('fmtGap(300)', sandbox);
+    assert.ok(html.includes(expected), `ожидался fmtGap(300)="${expected}": ${html}`);
+});
+check('timeGapCell() — время="—" даёт прочерк, gap игнорируется', () => {
+    const html = sandbox.timeGapCell('—', null);
+    assert.ok(html.includes('—') && !html.includes('time-main'), `ожидался просто прочерк: ${html}`);
+});
+check('timeGapCell() — gap=null (не с чем сравнивать) — время без под-строки', () => {
+    const html = sandbox.timeGapCell('1:00:00', null);
+    assert.ok(html.includes('1:00:00') && !html.includes('time-gap-sub'), `не должно быть под-строки отставания: ${html}`);
+});
+check('fieldGaps() — отставание от минимума по прямому полю, null не участвует', () => {
+    const rows = [{ bib: 1, swim_s: 1000 }, { bib: 2, swim_s: 1200 }, { bib: 3, swim_s: null }];
+    const gaps = sandbox.fieldGaps(rows, 'swim_s');
+    assert.strictEqual(gaps[1], 0, `лидер — отставание 0: ${JSON.stringify(gaps)}`);
+    assert.strictEqual(gaps[2], 200, `отстающий — разница: ${JSON.stringify(gaps)}`);
+    assert.strictEqual(gaps[3], undefined, `без значения — не участвует: ${JSON.stringify(gaps)}`);
+});
+check('buildStats() — 2 карточки (Личники/Эстафеты) с DNF/DSQ по relayStats', () => {
+    const individual = [
+        mkTimerInd('1', { status: 'active', overall_s: 20000, cp: { run: { [vm.runInContext('STAGE_MAX_SEQ.run', sandbox)]: 20000 } } }),
+        mkTimerInd('2', { status: 'dnf', overall_s: null, cp: {} }),
+    ];
+    const relayStats = { total: 3, finished: 1, dnfDsq: 2 };
+    const html = sandbox.buildStats(individual, relayStats, null);
+    assert.ok(html.includes('stat-card'), `ожидались карточки: ${html}`);
+    assert.ok(html.includes('>2<') && html.includes('Личников'), `личников должно быть 2: ${html}`);
+    assert.ok(html.includes('>3<') && html.includes('Эстафет'), `эстафет должно быть 3 (relayStats.total): ${html}`);
+    assert.ok(html.includes('1 финишировало'), `1 личник финишировал: ${html}`);
+    assert.ok(html.includes('2 DNF/DSQ'), `2 DNF/DSQ у эстафет (relayStats.dnfDsq): ${html}`);
+});
+check('buildStats() — карточка "Эстафеты" скрыта, когда relayStats.total === 0', () => {
+    const individual = [mkTimerInd('1', { status: 'active', overall_s: 20000, cp: { run: { [vm.runInContext('STAGE_MAX_SEQ.run', sandbox)]: 20000 } } })];
+    const html = sandbox.buildStats(individual, { total: 0, finished: 0, dnfDsq: 0 }, null);
+    assert.ok(!html.includes('Эстафет'), `карточка эстафет не должна рендериться при total=0: ${html}`);
+});
+check('buildStats() — карточка "Личников" скрыта, когда individual пуст (только эстафета)', () => {
+    const html = sandbox.buildStats([], { total: 5, finished: 2, dnfDsq: 1 }, null);
+    assert.ok(!html.includes('Личников'), `карточка личников не должна рендериться при пустом individual: ${html}`);
+    assert.ok(html.includes('Эстафет'), `карточка эстафет должна остаться: ${html}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
