@@ -549,7 +549,7 @@ check('renderBikeCombined() фильтр "Эстафета" — 3 колонки
     setState('relay', 'all');
     sandbox.renderBikeCombined();
     const html = domGetAppHtml();
-    assert.ok(html.includes('<th>Формат</th>') && html.includes('<th>Пол</th>') && html.includes('<th>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+    assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
     const rowA = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/)[0];
     assert.ok(/badge-e">Э<\/span>1/.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — формат-ранг 1: ${rowA}`);
 });
@@ -1060,22 +1060,23 @@ check('formatBadge() — бейдж "Э" тем же CSS-паттерном, ч�
 });
 check('rankHeaderCells(label, swapped=false) — Место первой колонкой', () => {
     const html = sandbox.rankHeaderCells('Пол/Формат', false);
-    assert.strictEqual(html, '<th>Место</th><th>Пол/Формат</th>');
+    assert.strictEqual(html, '<th class="r">Место</th><th class="r mobile-hide">Пол/Формат</th>');
 });
 check('rankHeaderCells(label, swapped=true) — вторичная колонка первой', () => {
     const html = sandbox.rankHeaderCells('Формат', true);
-    assert.strictEqual(html, '<th>Формат</th><th>Абсолют</th>');
+    assert.strictEqual(html, '<th class="r">Формат</th><th class="r mobile-hide">Абсолют</th>');
 });
 check('rankBodyCells — не swapped: абсолют первой ячейкой, бейдж+число второй', () => {
     const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-m">М</span>', '', false);
-    const m = html.match(/^<td>(.*?)<\/td><td>(.*?)<\/td>$/);
+    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r mobile-hide">(.*?)<\/td>$/);
     assert.ok(m, `неожиданная структура: ${html}`);
     assert.ok(m[1].includes('>5<'), `первая колонка — абсолют 5: ${html}`);
     assert.ok(m[2].includes('badge-m') && m[2].includes('>2<'), `вторая колонка — бейдж+2: ${html}`);
 });
 check('rankBodyCells — swapped: вторичная ячейка первой', () => {
     const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-e">Э</span>', '', true);
-    const m = html.match(/^<td>(.*?)<\/td><td>(.*?)<\/td>$/);
+    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r mobile-hide">(.*?)<\/td>$/);
+    assert.ok(m, `неожиданная структура: ${html}`);
     assert.ok(m[1].includes('badge-e') && m[1].includes('>2<'), `первая колонка — Э-бейдж+2: ${html}`);
     assert.ok(m[2].includes('>5<'), `вторая колонка — абсолют 5: ${html}`);
 });
@@ -1142,7 +1143,7 @@ check('renderStage() фильтр "Эстафета" — 3 колонки Фор
     setState('relay', 'all');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
-    assert.ok(html.includes('<th>Формат</th>') && html.includes('<th>Пол</th>') && html.includes('<th>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+    assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
 });
 check('renderStage() фильтр "Эстафета" — формат/пол рассчитаны по ПОЛНОМУ ростеру этапа, не зависят от текущего gender-фильтра', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1184,7 +1185,7 @@ check('renderRankedProgress() (Дни) — 2 колонки рангов как 
     const html = domGetAppHtml();
     assert.ok(html.includes('<th>Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
     assert.ok(html.includes('Последняя КТ'), `ожидалась колонка "Последняя КТ" (как в Итогах/на этапах): ${html.slice(0,600)}`);
-    assert.strictEqual((html.match(/<th class="r">Отставание<\/th>/g) || []).length, 1, `ожидалась ровно одна колонка "Отставание" (не пул+абсолют): ${html.slice(0,700)}`);
+    assert.strictEqual((html.match(/<th[^>]*>Отставание<\/th>/g) || []).length, 1, `ожидалась ровно одна колонка "Отставание" (не пул+абсолют): ${html.slice(0,700)}`);
     assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" больше не нужна (место уже абсолютное): ${html.slice(0,700)}`);
     assert.ok(html.includes('Финишировал'), `статус должен быть "Финишировал" (унифицировано с Итогами/Этапами, не "Пройден"): ${html}`);
 });

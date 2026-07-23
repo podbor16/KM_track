@@ -262,22 +262,22 @@
         tbody tr.rank-3 { background: rgba(106,171,215,.04); }
         tbody tr.rank-2:hover, tbody tr.rank-3:hover { background: var(--bg3); }
 
-        /* Строка эстафеты — синяя подсветка на всю строку + полоска слева
-           (усилено 2026-07-22 — раньше фон был почти незаметен, заметна
-           была только полоска). Фон top-2/3 имеет приоритет над фоном
-           relay-row — у обоих одинаковая "сила" селектора (tbody
-           tr.класс), без явного override побеждал бы просто
-           later-in-source relay-row (найдено code-review Task 1,
-           2026-07-22) — комбинированный селектор ниже специфичнее обоих
-           по отдельности и решает конфликт явно. */
+        /* Строка эстафеты — синяя подсветка на всю строку + полоска слева,
+           ВСЕГДА одинаковой силы, независимо от top-2/3 (запрошено
+           пользователем 2026-07-23: "все эстафетные команды вне зависимости
+           от лидерства должны быть с цветовым выделением" — top-2/3 не
+           должен ослаблять цвет эстафеты). Комбинированный селектор ниже
+           явно фиксирует силу фона у top-2/3 эстафетных строк равной
+           обычной relay-row — иначе более специфичный tr.relay-row.rank-N
+           перекрыл бы её приглушённым фоном top-2/3 (найдено code-review
+           Task 1, 2026-07-22, сила подсветки скорректирована 2026-07-23). */
         tbody tr.relay-row { background: rgba(106,171,215,.14); box-shadow: inset 3px 0 0 var(--blue); }
         tbody tr.relay-row:hover { background: var(--bg3); }
-        tbody tr.relay-row.rank-2 { background: rgba(106,171,215,.06); }
-        tbody tr.relay-row.rank-3 { background: rgba(106,171,215,.04); }
+        tbody tr.relay-row.rank-2, tbody tr.relay-row.rank-3 { background: rgba(106,171,215,.14); }
 
         .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
         .rank-sub { font-size: 10px; color: var(--muted); display: block; }
-        .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; }
+        .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
         .name-main { font-weight: 600; }
         .name-city { font-size: 11px; color: var(--muted); }
         .badge {
@@ -330,7 +330,7 @@
             .tab { padding: 10px 12px; font-size: 12px; }
             .filters { padding: 8px 14px; }
             .content { padding: 12px 14px 32px; }
-            td, thead th { padding: 6px 6px; font-size: 11px; }
+            td, thead th { padding: 6px 4px; font-size: 11px; }
             thead th { font-size: 9px; }
             .name-main { font-size: 12px; }
             .name-city { font-size: 10px; }
@@ -338,6 +338,16 @@
             .bib-cell { font-size: 11px; }
             .badge { font-size: 9px; padding: 1px 5px; }
             .time-cell { font-size: 11px; }
+            /* Скрыть второстепенные колонки (второй ранг, отставание, темп/
+               скорость, старт вело-2, статус) — на узком экране в первую
+               очередь должны помещаться без скролла Место/№/Участник/Время/
+               Последняя КТ (запрошено пользователем 2026-07-23). */
+            .mobile-hide { display: none; }
+            /* Ячейка участника — единственная с "гибкой" шириной: разрешаем
+               перенос строки (бейдж/город уходят на свою строку), иначе
+               td.white-space:nowrap растягивает колонку и вся таблица не
+               помещается на узком экране. */
+            .name-cell { white-space: normal; max-width: 34vw; }
             .stat-val { font-size: 17px; }
             .stat-lbl { font-size: 9px; }
             .tabs-bar--sub { padding: 0 14px; }
@@ -498,15 +508,22 @@ const STAGE_LABEL_RU = { swim: 'Плавание', bike: 'Вело (оба дн�
 // каждый вызывающий код решает сам). secondaryBadge — HTML готового бейджа
 // буквы (genderBadge(gender) или formatBadge()) — тоже решает вызывающий код,
 // эта функция не знает, эстафета строка или личник.
+// Первая (позиционно) rank-колонка — всегда самая важная (место в
+// текущем контексте, будь то абсолют или формат при swapped) — остаётся
+// видна на мобильном; вторая — второстепенная, скрывается (.mobile-hide,
+// см. @media(max-width:640px)), чтобы освободить ширину под Место/№/
+// Участника/Время/Последнюю КТ без горизонтального скролла (запрошено
+// пользователем 2026-07-23). Обе — class="r" (числовые, выравнивание
+// вправо, как и остальные числовые колонки).
 function rankHeaderCells(secondaryLabel, swapped) {
     return swapped
-        ? `<th>${secondaryLabel}</th><th>Абсолют</th>`
-        : `<th>Место</th><th>${secondaryLabel}</th>`;
+        ? `<th class="r">${secondaryLabel}</th><th class="r mobile-hide">Абсолют</th>`
+        : `<th class="r">Место</th><th class="r mobile-hide">${secondaryLabel}</th>`;
 }
 function rankBodyCells(rankAbs, rankSecondary, secondaryBadge, rc, swapped) {
     const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
     const s = rankSecondary != null ? `<span class="rank-num ${rc}">${secondaryBadge}${rankSecondary}</span>` : '<span class="muted">—</span>';
-    return swapped ? `<td>${s}</td><td>${a}</td>` : `<td>${a}</td><td>${s}</td>`;
+    return swapped ? `<td class="r">${s}</td><td class="r mobile-hide">${a}</td>` : `<td class="r">${a}</td><td class="r mobile-hide">${s}</td>`;
 }
 
 // Место — 2 колонки (Абсолют + Пол/Формат), swapped при fmt==='relay'
@@ -528,19 +545,19 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
         ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc, overallRankSwapped())}
         <td class="bib-cell">${r.bib}</td>
-        <td>
+        <td class="name-cell">
             <span class="name-main">${r.surname} ${r.name}</span>
             <span class="badge badge-individual">Индивидуальный</span>
-            ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
+            <br><span class="name-city">${r.city || '&nbsp;'}</span>
         </td>
-        <td class="r time-cell muted">${fmtTime(r.swim_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.bike1_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.bike2_s)}</td>
-        <td class="r time-cell muted">${fmtTime(r.run_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(r.swim_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(r.bike1_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(r.bike2_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(r.run_s)}</td>
         <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
-        <td>${statusBadge(r, null)}</td>
+        <td class="r muted mobile-hide">${fmtGap(overallGaps[r.bib])}</td>
+        <td class="mobile-hide">${statusBadge(r, null)}</td>
     </tr>`;
 }
 
@@ -560,15 +577,18 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
     return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc, overallRankSwapped())}
         <td class="bib-cell">${team.bib}</td>
-        <td><span class="name-main">${team.team_name}</span> <span class="badge badge-relay">Эстафета</span></td>
-        <td class="r time-cell muted">${fmtTime(tr.swim_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.bike1_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.bike2_s)}</td>
-        <td class="r time-cell muted">${fmtTime(tr.run_s)}</td>
+        <td class="name-cell">
+            <span class="name-main">${team.team_name}</span> <span class="badge badge-relay">Эстафета</span>
+            <br><span class="name-city">&nbsp;</span>
+        </td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(tr.swim_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(tr.bike1_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(tr.bike2_s)}</td>
+        <td class="r time-cell muted mobile-hide">${fmtTime(tr.run_s)}</td>
         <td class="r time-cell" style="font-weight:800">${fmtTime(team.overall_s)}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted">${fmtGap(overallGaps[team.bib])}</td>
-        <td>${statusCell}</td>
+        <td class="r muted mobile-hide">${fmtGap(overallGaps[team.bib])}</td>
+        <td class="mobile-hide">${statusCell}</td>
     </tr>`;
 }
 
@@ -603,15 +623,15 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th>№</th><th>Участник</th>
-    <th class="r">🏊 Плав.</th>
-    <th class="r">🚴 Вело 1</th>
-    <th class="r">🚴 Вело 2</th>
-    <th class="r">🏃 Бег</th>
+    ${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th>
+    <th class="r mobile-hide">🏊 Плав.</th>
+    <th class="r mobile-hide">🚴 Вело 1</th>
+    <th class="r mobile-hide">🚴 Вело 2</th>
+    <th class="r mobile-hide">🏃 Бег</th>
     <th class="r">Итого</th>
     <th>Последняя КТ</th>
-    <th class="r">Отставание</th>
-    <th>Статус</th>
+    <th class="r mobile-hide">Отставание</th>
+    <th class="mobile-hide">Статус</th>
 </tr></thead>`;
 
 function renderOverall() {
@@ -773,17 +793,17 @@ function renderStage(stage) {
         return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
-            <td>
+            <td class="name-cell">
                 <span class="name-main">${r.surname} ${r.name}</span>
                 <span class="badge badge-individual">Индивидуальный</span>
-                ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
+                <br><span class="name-city">${r.city || '&nbsp;'}</span>
             </td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(gaps[r.bib])}</td>
-            <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
-            ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
-            <td>${statusBadge(r, stage)}</td>
+            <td class="r muted mobile-hide">${fmtGap(gaps[r.bib])}</td>
+            <td class="r muted mobile-hide">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            ${showStart ? `<td class="r muted mobile-hide">${fmtTime(r.bike2_start_s)}</td>` : ''}
+            <td class="mobile-hide">${statusBadge(r, stage)}</td>
         </tr>`;
     };
 
@@ -800,23 +820,23 @@ function renderStage(stage) {
         // тогда личников на этапе нет вовсе, buildIndividualStageRow не
         // вызывается, три колонки в шапке соответствуют трём ячейкам здесь.
         const rankCells = isRelayFilter
-            ? `<td><span class="rank-num ${rc}">${formatBadge()}${stageFormatRanks[key] ?? '—'}</span></td>` +
-              `<td>${stageGenderRankFor(key, m.gender) != null ? `<span class="rank-num ${rc}">${genderBadge(m.gender)}${stageGenderRankFor(key, m.gender)}</span>` : '<span class="muted">—</span>'}</td>` +
-              `<td><span class="rank-num ${rc}">${stageAbsRanks[key] ?? '—'}</span></td>`
+            ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${stageFormatRanks[key] ?? '—'}</span></td>` +
+              `<td class="r mobile-hide">${stageGenderRankFor(key, m.gender) != null ? `<span class="rank-num ${rc}">${genderBadge(m.gender)}${stageGenderRankFor(key, m.gender)}</span>` : '<span class="muted">—</span>'}</td>` +
+              `<td class="r mobile-hide"><span class="rank-num ${rc}">${stageAbsRanks[key] ?? '—'}</span></td>`
             : rankBodyCells(stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc, _gender !== 'all');
         return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${m._bib}</td>
-            <td>
+            <td class="name-cell">
                 <span class="name-main">${m.surname} ${m.name}</span> <span class="badge badge-relay">Эстафета</span>
                 <br><span class="name-city">${m._team}</span>
             </td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
-            <td class="r muted">${hasTime ? meta : '—'}</td>
-            ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
+            <td class="r muted mobile-hide">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
+            <td class="r muted mobile-hide">${hasTime ? meta : '—'}</td>
+            ${showStart ? `<td class="r muted mobile-hide">${fmtTime(m.bike2_start_s)}</td>` : ''}
+            <td class="mobile-hide">${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
         </tr>`;
     };
 
@@ -848,14 +868,14 @@ function renderStage(stage) {
     }
 
     const rankHead = isRelayFilter
-        ? '<th>Формат</th><th>Пол</th><th>Абсолют</th>'
+        ? '<th class="r">Формат</th><th class="r mobile-hide">Пол</th><th class="r mobile-hide">Абсолют</th>'
         : rankHeaderCells('По полу', _gender !== 'all');
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
-        ${rankHead}<th>№</th><th>Участник</th>
-        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r">${cfg.metaLbl}</th>
-        ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
-        <th>Статус</th>
+        ${rankHead}<th class="r">№</th><th>Участник</th>
+        <th class="r">Время</th><th>Последняя КТ</th><th class="r mobile-hide">Отставание</th><th class="r mobile-hide">${cfg.metaLbl}</th>
+        ${showStart ? '<th class="r mobile-hide">Старт вело-2</th>' : ''}
+        <th class="mobile-hide">Статус</th>
     </tr></thead><tbody>`;
     orderedRows.forEach(item => {
         html += item.type === 'individual' ? buildIndividualStageRow(item.entry) : buildRelayStageRow(item.entry);
@@ -964,7 +984,7 @@ function renderRankedProgress(getValue, options = {}) {
     const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
     const absGapsAll = poolGap(allEntries);
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th>№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r mobile-hide">Отставание</th>${options.speedFn ? '<th class="r mobile-hide">Скорость</th>' : ''}<th class="mobile-hide">Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -991,17 +1011,17 @@ function renderRankedProgress(getValue, options = {}) {
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name}</span> <span class="badge badge-individual">Индивидуальный</span>${entry.city ? `<br><span class="name-city">${entry.city}</span>` : ''}`
-            : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span>`;
+            ? `<span class="name-main">${entry.surname} ${entry.name}</span> <span class="badge badge-individual">Индивидуальный</span><br><span class="name-city">${entry.city || '&nbsp;'}</span>`
+            : `<span class="name-main">${entry.team_name}</span> <span class="badge badge-relay">Эстафета</span><br><span class="name-city">&nbsp;</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, overallRankSwapped())}
             <td class="bib-cell">${entry.bib}</td>
-            <td>${nameCell}</td>
+            <td class="name-cell">${nameCell}</td>
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
-            ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
-            <td>${progressStatusBadge(status, hasVal)}</td>
+            <td class="r muted mobile-hide">${fmtGap(absGapsAll[entry.bib])}</td>
+            ${options.speedFn ? `<td class="r muted mobile-hide">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
+            <td class="mobile-hide">${progressStatusBadge(status, hasVal)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
@@ -1063,10 +1083,10 @@ function renderBikeCombined() {
     const isRelayFilter = _fmt === 'relay';
 
     const rankHead = isRelayFilter
-        ? '<th>Формат</th><th>Пол</th><th>Абсолют</th>'
+        ? '<th class="r">Формат</th><th class="r mobile-hide">Пол</th><th class="r mobile-hide">Абсолют</th>'
         : rankHeaderCells('По полу', _gender !== 'all');
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHead}<th>№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHead}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r mobile-hide">Скорость</th><th class="mobile-hide">Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, v }) => {
         const hasVal = v != null;
         const absRank = hasVal ? absRanks[entry.bib] : null;
@@ -1080,19 +1100,19 @@ function renderBikeCombined() {
         const mainRank = _gender === 'all' ? absRank : genderRank;
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
-        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${isRelay ? ' <span class="badge badge-relay">Эстафета</span>' : ' <span class="badge badge-individual">Индивидуальный</span>'}${subLine ? `<br><span class="name-city">${subLine}</span>` : ''}`;
+        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${isRelay ? ' <span class="badge badge-relay">Эстафета</span>' : ' <span class="badge badge-individual">Индивидуальный</span>'}<br><span class="name-city">${subLine || '&nbsp;'}</span>`;
         const rankCells = isRelayFilter
-            ? `<td><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +
-              `<td>${genderRank != null ? `<span class="rank-num ${rc}">${genderBadge(entry.gender)}${genderRank}</span>` : '<span class="muted">—</span>'}</td>` +
-              `<td><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>`
+            ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +
+              `<td class="r mobile-hide">${genderRank != null ? `<span class="rank-num ${rc}">${genderBadge(entry.gender)}${genderRank}</span>` : '<span class="muted">—</span>'}</td>` +
+              `<td class="r mobile-hide"><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>`
             : rankBodyCells(absRank, genderRank, genderBadge(entry.gender), rc, _gender !== 'all');
         html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
-            <td>${nameCell}</td>
+            <td class="name-cell">${nameCell}</td>
             <td class="r time-cell">${fmtTime(v)}</td>
-            <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
-            <td>${progressStatusBadge(entry.status, hasVal)}</td>
+            <td class="r muted mobile-hide">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
+            <td class="mobile-hide">${progressStatusBadge(entry.status, hasVal)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
