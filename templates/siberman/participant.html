@@ -78,6 +78,12 @@
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; }
         .badge-individual { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; }
+        /* --red при одинаковой alpha даёт заметно менее контрастный фон на
+           тёмном фоне, чем --blue — красные бейджи почти не видны в тёмной
+           теме (запрошено пользователем 2026-07-23, тот же фикс что и в
+           results.html). */
+        [data-theme="dark"] .badge-f { background: rgba(190,10,33,.28); }
+        [data-theme="dark"] .badge-individual { background: rgba(190,10,33,.28); }
         .muted { color: var(--muted); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .rank-num { font-weight: 800; }

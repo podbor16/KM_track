@@ -959,6 +959,20 @@ check('buildPositionDatasets(\'run\') — эстафета подписана и
     const d = datasets.find(x => x._bib === '1000');
     assert.strictEqual(d._name, 'Бегунов Сергей (КомандаX)', `получено: ${d._name}`);
 });
+check('buildPositionDatasets(stage) — фильтр по полу исключает эстафетчика не того пола (2026-07-23, п.5)', () => {
+    setState('all', 'F');
+    const team = mkRelayTeamStages(); // пловец команды — мужчина
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPositionDatasets('swim');
+    assert.strictEqual(datasets.find(x => x._bib === '1000'), undefined, 'команда с пловцом-мужчиной не должна попасть в список при фильтре "Женщины"');
+});
+check('chartParticipantRowsForStage/buildPaceDatasets — фильтр по полу исключает эстафетчика не того пола (2026-07-23, п.5)', () => {
+    setState('all', 'F');
+    const team = mkRelayTeamStages(); // велосипедист команды — мужчина
+    setRaceData([], [team], Date.now());
+    const datasets = sandbox.buildPaceDatasets('bike1');
+    assert.strictEqual(datasets.find(x => x._bib === '1000'), undefined, 'команда с велосипедистом-мужчиной не должна попасть в список при фильтре "Женщины"');
+});
 check('buildPositionDatasets(\'bike\') — эстафета подписана именем ВЕЛОСИПЕДИСТА команды', () => {
     setState('all', 'all');
     const team = mkRelayTeamStages();
@@ -1060,22 +1074,22 @@ check('formatBadge() — бейдж "Э" тем же CSS-паттерном, ч�
 });
 check('rankHeaderCells(label, swapped=false) — Место первой колонкой', () => {
     const html = sandbox.rankHeaderCells('Пол/Формат', false);
-    assert.strictEqual(html, '<th class="r">Место</th><th class="r mobile-hide">Пол/Формат</th>');
+    assert.strictEqual(html, '<th class="r">Место</th><th class="r">Пол/Формат</th>');
 });
 check('rankHeaderCells(label, swapped=true) — вторичная колонка первой', () => {
     const html = sandbox.rankHeaderCells('Формат', true);
-    assert.strictEqual(html, '<th class="r">Формат</th><th class="r mobile-hide">Абсолют</th>');
+    assert.strictEqual(html, '<th class="r">Формат</th><th class="r">Абсолют</th>');
 });
 check('rankBodyCells — не swapped: абсолют первой ячейкой, бейдж+число второй', () => {
     const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-m">М</span>', '', false);
-    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r mobile-hide">(.*?)<\/td>$/);
+    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r">(.*?)<\/td>$/);
     assert.ok(m, `неожиданная структура: ${html}`);
     assert.ok(m[1].includes('>5<'), `первая колонка — абсолют 5: ${html}`);
     assert.ok(m[2].includes('badge-m') && m[2].includes('>2<'), `вторая колонка — бейдж+2: ${html}`);
 });
 check('rankBodyCells — swapped: вторичная ячейка первой', () => {
     const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-e">Э</span>', '', true);
-    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r mobile-hide">(.*?)<\/td>$/);
+    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r">(.*?)<\/td>$/);
     assert.ok(m, `неожиданная структура: ${html}`);
     assert.ok(m[1].includes('badge-e') && m[1].includes('>2<'), `первая колонка — Э-бейдж+2: ${html}`);
     assert.ok(m[2].includes('>5<'), `вторая колонка — абсолют 5: ${html}`);
