@@ -108,7 +108,14 @@
         .tabs-bar {
             background: var(--bg2);
             border-bottom: 1px solid var(--border);
-            padding: 0 20px;
+            /* Левый padding убран (был 0 20px) — на нём "sticky left:0"
+               прилипает ВНУТРИ padding-области контейнера, оставляя слева
+               от закреплённого таба зазор шириной с padding, сквозь
+               который при скролле видны проскроллившие табы (запрошено
+               пользователем 2026-07-23: "за закреплённым табом ничего не
+               появлялось"). Отступ первого таба вместо этого — его
+               собственный padding-left (см. .tab-pinned). */
+            padding: 0 20px 0 0;
             display: flex;
             gap: 0;
             overflow-x: auto;
@@ -130,7 +137,7 @@
         /* "Итоги гонки" всегда виден слева при автоскролле #tabs до
            активного этапа (п.10, 2026-07-22) — порядок табов не меняется,
            просто не даём первому табу уехать из виду вместе с остальными. */
-        .tab-pinned { position: sticky; left: 0; z-index: 2; background: var(--bg2); border-right: 1px solid var(--border); }
+        .tab-pinned { position: sticky; left: 0; z-index: 2; background: var(--bg2); border-right: 1px solid var(--border); padding-left: 20px; }
         .tabs-bar--sub { padding: 0 20px; background: var(--bg); }
         .tabs-bar--sub .tab { padding: 8px 14px; font-size: 11px; }
 
@@ -343,7 +350,8 @@
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
             .logo-name { font-size: 18px; }
-            .tabs-bar { padding: 0 14px; }
+            .tabs-bar { padding: 0 14px 0 0; }
+            .tab-pinned { padding-left: 14px; }
             .tab { padding: 10px 12px; font-size: 12px; }
             .filters { padding: 8px 14px; }
             .content { padding: 12px 14px 32px; }
