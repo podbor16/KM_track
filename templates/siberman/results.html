@@ -447,11 +447,6 @@
     <div class="tab" data-biketab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
     <div class="tab" data-biketab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
 </div>
-<!-- Подвкладки "График" — темп/скорость по этапу / позиция по всей гонке -->
-<div class="tabs-bar tabs-bar--sub" id="chartSubTabs" style="display:none">
-    <div class="tab active" data-charttab="pace">Темп/скорость</div>
-    <div class="tab" data-charttab="position">Позиция</div>
-</div>
 
 <!-- ── Filters ── -->
 <div class="filters">
@@ -1644,6 +1639,22 @@ function buildSpaghettiDataset(d, accent, context) {
     };
 }
 
+// Переключатель Темп/скорость ↔ Позиция — встроен в строку .filters (тот
+// же filter-group/filter-btn паттерн, что и остальные фильтры), не
+// отдельная полоса подтабов над графиком (запрошено пользователем
+// 2026-07-23, п.6 v5 — вариант A брейншторминга с визуальным компаньоном).
+function chartModeSwitchHtml() {
+    return `<div class="filter-group" id="chartModeGroup">
+        <button class="filter-btn${_chartSubTab === 'pace' ? ' active' : ''}" data-chartmode="pace">Темп/скорость</button>
+        <button class="filter-btn${_chartSubTab === 'position' ? ' active' : ''}" data-chartmode="position">Позиция</button>
+    </div>`;
+}
+function attachChartModeSwitchHandler() {
+    document.querySelectorAll('#chartModeGroup [data-chartmode]').forEach(btn => {
+        btn.addEventListener('click', () => { _chartSubTab = btn.dataset.chartmode; render(); });
+    });
+}
+
 function renderPaceChart() {
     // "Вело (оба дня)" — bike_day1 как эталон единиц (км/ч, без инверсии Y)
     // для форматирования/тултипа; сама шкала X считается отдельно ниже
@@ -1660,6 +1671,7 @@ function renderPaceChart() {
     _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
+            ${chartModeSwitchHtml()}
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="paceStageGroup">
                 ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === _paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
@@ -1675,6 +1687,7 @@ function renderPaceChart() {
     document.querySelectorAll('#paceStageGroup [data-pacestage]').forEach(btn => {
         btn.addEventListener('click', () => { _paceStage = btn.dataset.pacestage; renderPaceChart(); });
     });
+    attachChartModeSwitchHandler();
     attachChartSidebarHandlers();
 
     if (_paceChart) { _paceChart.destroy(); _paceChart = null; }
@@ -1876,6 +1889,7 @@ function renderPositionChart() {
     ];
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
+            ${chartModeSwitchHtml()}
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="positionStageGroup">
                 ${positionStageOptions.map(o => `<button class="filter-btn${(o.key === 'all' ? _positionStage === null : o.key === _positionStage) ? ' active' : ''}" data-positionstage="${o.key}">${o.label}</button>`).join('')}
@@ -1891,6 +1905,7 @@ function renderPositionChart() {
     document.querySelectorAll('#positionStageGroup [data-positionstage]').forEach(btn => {
         btn.addEventListener('click', () => { _positionStage = btn.dataset.positionstage === 'all' ? null : btn.dataset.positionstage; renderPositionChart(); });
     });
+    attachChartModeSwitchHandler();
     attachChartSidebarHandlers();
 
     if (_positionChart) { _positionChart.destroy(); _positionChart = null; }
@@ -1919,7 +1934,12 @@ function renderPositionChart() {
     const rangeMinRank = Math.min(...displayedRanks);
     const rangeMaxRank = Math.max(...displayedRanks);
     const rankSpan = rangeMaxRank - rangeMinRank + 1;
-    const yAxisMin = rangeMinRank - Math.max(2, Math.round(rankSpan * 0.15));
+    // В режиме "Вся гонка" (!_positionStage) сверху ещё рисуются подписи
+    // границ этапов (stageBoundaryPlugin) — при маленьком диапазоне мест
+    // (сравнение узкой группы) запаса в 2 места не хватало, подписи почти
+    // прилипали к верхней линии (найдено пользователем 2026-07-23, п.6 v5).
+    const topBufferMin = _positionStage ? 2 : 4;
+    const yAxisMin = rangeMinRank - Math.max(topBufferMin, Math.round(rankSpan * 0.15));
     const yAxisMax = rangeMaxRank + Math.max(1, Math.round(rankSpan * 0.08));
 
     const stageBoundaryPlugin = {
@@ -2213,7 +2233,6 @@ function render() {
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
     document.getElementById('bikeSubTabs').style.display = _tab === 'bike' ? '' : 'none';
-    document.getElementById('chartSubTabs').style.display = _tab === 'chart' ? '' : 'none';
     if (_tab === 'overall') renderOverall();
     else if (_tab === 'startlist') renderStartlist();
     else if (_tab === 'day1') renderDay1();
@@ -2291,15 +2310,6 @@ document.querySelectorAll('#bikeSubTabs .tab').forEach(t => {
         document.querySelectorAll('#bikeSubTabs .tab').forEach(x => x.classList.remove('active'));
         t.classList.add('active');
         _bikeSubTab = t.dataset.biketab;
-        render();
-    });
-});
-
-document.querySelectorAll('#chartSubTabs .tab').forEach(t => {
-    t.addEventListener('click', () => {
-        document.querySelectorAll('#chartSubTabs .tab').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        _chartSubTab = t.dataset.charttab;
         render();
     });
 });
