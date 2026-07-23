@@ -257,21 +257,19 @@
         td.r { text-align: center; font-variant-numeric: tabular-nums; }
         /* Ячейка участника — единственная с переменным числом строк (у
            эстафеты в Итогах/Днях на одну строку меньше — нет города).
-           min-height подгоняется под САМЫЙ высокий вариант (личник: имя +
-           город + бейдж, 3 строки) — у более короткого варианta высота
-           строки таблицы от этого не меняется (min-height — не текст),
-           vertical-align:middle (выше) центрирует его контент по вертикали
-           внутри этой же высоты. Надёжнее, чем фиксированная высота на
-           <tr> — та ломается, как только реальный контент оказывается выше
-           угаданного числа (нашлось 2026-07-23, после первой попытки через
-           tr{height}). */
-        /* Значение замерено на реальной странице (offsetHeight ячейки
-           личника — самого высокого варианта, 3 строки) через
-           agent-browser eval, а не угадано на глаз — предыдущая попытка
-           (50px/42px) явно не дотягивала: box-sizing:border-box у таблицы
-           означает, что min-height считает ПОЛНУЮ высоту ячейки (с
-           padding), а не только контент. */
-        .name-cell { min-height: 82px; }
+           .name-stack — вложенный блочный div (не сам td) с min-height,
+           подогнанным под САМЫЙ высокий вариант (личник: имя+город+бейдж,
+           3 строки, замерено через agent-browser eval на реальной
+           странице). min-height НЕ вешаем на сам td (display:table-cell) —
+           браузер игнорирует min-height на table-cell при расчёте высоты
+           строки (подтверждено на живом сайте 2026-07-23: getComputedStyle
+           показывал min-height корректно, а реальная offsetHeight всё
+           равно была меньше) — известная особенность CSS Tables,
+           min-height надёжно работает только на обычном block-элементе.
+           display:flex + justify-content:center — короткий (2-строчный)
+           контент центрируется по вертикали внутри выросшего до min-height
+           блока, а не прижимается к верху. */
+        .name-stack { min-height: 82px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; }
 
         /* Top-2/3 highlight — у лидера (rank-1) больше нет отдельной
            подсветки, он и так первый в таблице (запрошено пользователем
@@ -365,7 +363,7 @@
             /* Имя/город/бейдж всегда на отдельных строках (явные <br> в
                разметке) — колонке не нужно "переносить" текст, нужен только
                меньший минимум высоты под уменьшенные мобильные шрифты. */
-            .name-cell { min-height: 65px; }
+            .name-stack { min-height: 65px; }
             .stat-val { font-size: 17px; }
             .stat-lbl { font-size: 9px; }
             .tabs-bar--sub { padding: 0 14px; }
@@ -563,11 +561,11 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
         ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc, overallRankSwapped())}
         <td class="bib-cell">${r.bib}</td>
-        <td class="name-cell">
-            <span class="name-main">${r.surname} ${r.name}</span><br>
-            ${r.city ? `<span class="name-city">${r.city}</span><br>` : ''}
+        <td class="name-cell"><div class="name-stack">
+            <span class="name-main">${r.surname} ${r.name}</span>
+            ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
             <span class="badge badge-individual">Индивидуальный</span>
-        </td>
+        </div></td>
         <td class="r time-cell muted mobile-hide">${fmtTime(r.swim_s)}</td>
         <td class="r time-cell muted mobile-hide">${fmtTime(r.bike1_s)}</td>
         <td class="r time-cell muted mobile-hide">${fmtTime(r.bike2_s)}</td>
@@ -595,10 +593,10 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
     return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc, overallRankSwapped())}
         <td class="bib-cell">${team.bib}</td>
-        <td class="name-cell">
-            <span class="name-main">${team.team_name}</span><br>
+        <td class="name-cell"><div class="name-stack">
+            <span class="name-main">${team.team_name}</span>
             <span class="badge badge-relay">Эстафета</span>
-        </td>
+        </div></td>
         <td class="r time-cell muted mobile-hide">${fmtTime(tr.swim_s)}</td>
         <td class="r time-cell muted mobile-hide">${fmtTime(tr.bike1_s)}</td>
         <td class="r time-cell muted mobile-hide">${fmtTime(tr.bike2_s)}</td>
@@ -811,11 +809,11 @@ function renderStage(stage) {
         return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
-            <td class="name-cell">
-                <span class="name-main">${r.surname} ${r.name}</span><br>
-                ${r.city ? `<span class="name-city">${r.city}</span><br>` : ''}
+            <td class="name-cell"><div class="name-stack">
+                <span class="name-main">${r.surname} ${r.name}</span>
+                ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
                 <span class="badge badge-individual">Индивидуальный</span>
-            </td>
+            </div></td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted mobile-hide">${fmtGap(gaps[r.bib])}</td>
@@ -845,11 +843,11 @@ function renderStage(stage) {
         return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${m._bib}</td>
-            <td class="name-cell">
-                <span class="name-main">${m.surname} ${m.name}</span><br>
-                <span class="name-city">${m._team}</span><br>
+            <td class="name-cell"><div class="name-stack">
+                <span class="name-main">${m.surname} ${m.name}</span>
+                <span class="name-city">${m._team}</span>
                 <span class="badge badge-relay">Эстафета</span>
-            </td>
+            </div></td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted mobile-hide">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
@@ -1030,12 +1028,12 @@ function renderRankedProgress(getValue, options = {}) {
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name}</span><br>${entry.city ? `<span class="name-city">${entry.city}</span><br>` : ''}<span class="badge badge-individual">Индивидуальный</span>`
-            : `<span class="name-main">${entry.team_name}</span><br><span class="badge badge-relay">Эстафета</span>`;
+            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Индивидуальный</span>`
+            : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, overallRankSwapped())}
             <td class="bib-cell">${entry.bib}</td>
-            <td class="name-cell">${nameCell}</td>
+            <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="muted">${lastCpCell}</td>
             <td class="r muted mobile-hide">${fmtGap(absGapsAll[entry.bib])}</td>
@@ -1120,7 +1118,7 @@ function renderBikeCombined() {
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
         const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Индивидуальный</span>';
-        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span><br>${subLine ? `<span class="name-city">${subLine}</span><br>` : ''}${badgeHtml}`;
+        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = isRelayFilter
             ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +
               `<td class="r mobile-hide">${genderRank != null ? `<span class="rank-num ${rc}">${genderBadge(entry.gender)}${genderRank}</span>` : '<span class="muted">—</span>'}</td>` +
@@ -1129,7 +1127,7 @@ function renderBikeCombined() {
         html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
-            <td class="name-cell">${nameCell}</td>
+            <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="r muted mobile-hide">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
             <td class="mobile-hide">${progressStatusBadge(entry.status, hasVal)}</td>
