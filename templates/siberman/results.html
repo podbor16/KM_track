@@ -265,7 +265,13 @@
            <tr> — та ломается, как только реальный контент оказывается выше
            угаданного числа (нашлось 2026-07-23, после первой попытки через
            tr{height}). */
-        .name-cell { min-height: 50px; }
+        /* Значение замерено на реальной странице (offsetHeight ячейки
+           личника — самого высокого варианта, 3 строки) через
+           agent-browser eval, а не угадано на глаз — предыдущая попытка
+           (50px/42px) явно не дотягивала: box-sizing:border-box у таблицы
+           означает, что min-height считает ПОЛНУЮ высоту ячейки (с
+           padding), а не только контент. */
+        .name-cell { min-height: 82px; }
 
         /* Top-2/3 highlight — у лидера (rank-1) больше нет отдельной
            подсветки, он и так первый в таблице (запрошено пользователем
@@ -290,7 +296,7 @@
 
         .rank-num { font-size: 13px; font-weight: 800; color: var(--rank-col); }
         .rank-sub { font-size: 10px; color: var(--muted); display: block; }
-        .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+        .bib-cell { font-weight: 700; color: var(--muted); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
         .name-main { font-weight: 600; }
         .name-city { font-size: 11px; color: var(--muted); }
         .badge {
@@ -359,7 +365,7 @@
             /* Имя/город/бейдж всегда на отдельных строках (явные <br> в
                разметке) — колонке не нужно "переносить" текст, нужен только
                меньший минимум высоты под уменьшенные мобильные шрифты. */
-            .name-cell { min-height: 42px; }
+            .name-cell { min-height: 65px; }
             .stat-val { font-size: 17px; }
             .stat-lbl { font-size: 9px; }
             .tabs-bar--sub { padding: 0 14px; }
