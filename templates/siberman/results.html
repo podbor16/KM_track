@@ -572,8 +572,8 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks) {
         <td class="r time-cell muted mobile-hide">${fmtTime(r.run_s)}</td>
         <td class="r time-cell" style="font-weight:800">${fmtTime(r.overall_s)}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted mobile-hide">${fmtGap(overallGaps[r.bib])}</td>
-        <td class="mobile-hide">${statusBadge(r, null)}</td>
+        <td class="r muted">${fmtGap(overallGaps[r.bib])}</td>
+        <td>${statusBadge(r, null)}</td>
     </tr>`;
 }
 
@@ -603,8 +603,8 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks) {
         <td class="r time-cell muted mobile-hide">${fmtTime(tr.run_s)}</td>
         <td class="r time-cell" style="font-weight:800">${fmtTime(team.overall_s)}</td>
         <td class="muted">${lastCpCell}</td>
-        <td class="r muted mobile-hide">${fmtGap(overallGaps[team.bib])}</td>
-        <td class="mobile-hide">${statusCell}</td>
+        <td class="r muted">${fmtGap(overallGaps[team.bib])}</td>
+        <td>${statusCell}</td>
     </tr>`;
 }
 
@@ -646,8 +646,8 @@ const OVERALL_TABLE_HEAD = () => `<thead><tr>
     <th class="r mobile-hide">🏃 Бег</th>
     <th class="r">Итого</th>
     <th>Последняя КТ</th>
-    <th class="r mobile-hide">Отставание</th>
-    <th class="mobile-hide">Статус</th>
+    <th class="r">Отставание</th>
+    <th>Статус</th>
 </tr></thead>`;
 
 function renderOverall() {
@@ -816,10 +816,10 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted mobile-hide">${fmtGap(gaps[r.bib])}</td>
+            <td class="r muted">${fmtGap(gaps[r.bib])}</td>
             <td class="r muted mobile-hide">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
             ${showStart ? `<td class="r muted mobile-hide">${fmtTime(r.bike2_start_s)}</td>` : ''}
-            <td class="mobile-hide">${statusBadge(r, stage)}</td>
+            <td>${statusBadge(r, stage)}</td>
         </tr>`;
     };
 
@@ -850,10 +850,10 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${fmtTime(t)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted mobile-hide">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
+            <td class="r muted">${fmtGap(gaps[`${m._bib}:${m.relay_stage}`])}</td>
             <td class="r muted mobile-hide">${hasTime ? meta : '—'}</td>
             ${showStart ? `<td class="r muted mobile-hide">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td class="mobile-hide">${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
+            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
         </tr>`;
     };
 
@@ -890,9 +890,9 @@ function renderStage(stage) {
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHead}<th class="r">№</th><th>Участник</th>
-        <th class="r">Время</th><th>Последняя КТ</th><th class="r mobile-hide">Отставание</th><th class="r mobile-hide">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th><th class="r mobile-hide">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r mobile-hide">Старт вело-2</th>' : ''}
-        <th class="mobile-hide">Статус</th>
+        <th>Статус</th>
     </tr></thead><tbody>`;
     orderedRows.forEach(item => {
         html += item.type === 'individual' ? buildIndividualStageRow(item.entry) : buildRelayStageRow(item.entry);
@@ -1001,7 +1001,7 @@ function renderRankedProgress(getValue, options = {}) {
     const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
     const absGapsAll = poolGap(allEntries);
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r mobile-hide">Отставание</th>${options.speedFn ? '<th class="r mobile-hide">Скорость</th>' : ''}<th class="mobile-hide">Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th><th class="r">Отставание</th>${options.speedFn ? '<th class="r mobile-hide">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -1036,9 +1036,9 @@ function renderRankedProgress(getValue, options = {}) {
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="muted">${lastCpCell}</td>
-            <td class="r muted mobile-hide">${fmtGap(absGapsAll[entry.bib])}</td>
+            <td class="r muted">${fmtGap(absGapsAll[entry.bib])}</td>
             ${options.speedFn ? `<td class="r muted mobile-hide">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
-            <td class="mobile-hide">${progressStatusBadge(status, hasVal)}</td>
+            <td>${progressStatusBadge(status, hasVal)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
@@ -1103,7 +1103,7 @@ function renderBikeCombined() {
         ? '<th class="r">Формат</th><th class="r mobile-hide">Пол</th><th class="r mobile-hide">Абсолют</th>'
         : rankHeaderCells('По полу', _gender !== 'all');
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHead}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r mobile-hide">Скорость</th><th class="mobile-hide">Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHead}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r mobile-hide">Скорость</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, v }) => {
         const hasVal = v != null;
         const absRank = hasVal ? absRanks[entry.bib] : null;
@@ -1130,7 +1130,7 @@ function renderBikeCombined() {
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${fmtTime(v)}</td>
             <td class="r muted mobile-hide">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
-            <td class="mobile-hide">${progressStatusBadge(entry.status, hasVal)}</td>
+            <td>${progressStatusBadge(entry.status, hasVal)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
