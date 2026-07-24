@@ -212,7 +212,56 @@
         .chart-select-all-btn:hover { color: var(--text); border-color: var(--text); }
         @media (max-width: 640px) {
             .chart-layout { flex-direction: column; }
-            .chart-sidebar { width: 100%; max-height: 220px; }
+        }
+
+        /* ── Мобильный picker участников — bottom sheet (запрошено
+           пользователем 2026-07-24: инлайн-сайдбар на мобильном был слишком
+           тесным). На мобильном chartSidebarHtml() рендерит ЭТУ разметку
+           ВМЕСТО .chart-sidebar (взаимоисключающе, определяется через
+           isMobileChartLayout() в момент рендера) — .chart-picker-mobile
+           отдельно скрывать на десктопе не нужно, там она просто не
+           рендерится. */
+        .chart-picker-trigger {
+            width: 100%; display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; border-radius: 12px; margin-bottom: 10px;
+            border: 1px solid var(--border); background: var(--bg3); color: var(--text);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .chart-picker-trigger-arrow { color: var(--muted); font-size: 16px; }
+        .chart-sheet-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            z-index: 1000; display: flex; align-items: flex-end; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity .2s;
+        }
+        .chart-sheet-overlay.open { opacity: 1; pointer-events: auto; }
+        .chart-sheet {
+            width: 100%; max-width: 480px; max-height: 88vh;
+            background: var(--bg2); border-radius: 16px 16px 0 0;
+            display: flex; flex-direction: column;
+            transform: translateY(100%); transition: transform .25s ease;
+            box-shadow: 0 -4px 24px rgba(0,0,0,.3);
+        }
+        .chart-sheet-overlay.open .chart-sheet { transform: translateY(0); }
+        .chart-sheet-hdr {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px; font-size: 14px; font-weight: 700; color: var(--text);
+            border-bottom: 1px solid var(--border);
+        }
+        .chart-sheet-close {
+            border: none; background: transparent; color: var(--muted);
+            font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 8px;
+        }
+        .chart-sheet .chart-search { margin: 10px 16px; }
+        .chart-sheet .chart-participant-list { padding: 0 12px 8px; }
+        .chart-sheet-footer {
+            display: flex; align-items: center; gap: 10px; padding: 10px 16px 16px;
+            border-top: 1px solid var(--border);
+        }
+        .chart-sheet-footer #chartSelectAllWrap { flex: 1; }
+        .chart-sheet-footer .chart-select-all-btn { width: 100%; margin: 0; }
+        .chart-sheet-done {
+            flex-shrink: 0; padding: 10px 20px; border-radius: 20px; border: none;
+            background: var(--red); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
         }
 
         /* ── Filters ── */
@@ -503,6 +552,11 @@ let _positionChart = null;
 let _chartSelectedBibs = [];
 let _chartSearchQuery = '';
 let _lastChartDatasets = []; // для лёгкого обновления списка участников без пересборки графика
+// На мобильном (<=640px) сайдбар выбора участников заменяется bottom sheet
+// (запрошено пользователем 2026-07-24 — инлайн-окно было слишком тесным);
+// _chartSheetOpen переживает render() так же, как _chartSelectedBibs, иначе
+// выбор чекбокса (который вызывает render()) закрывал бы шторку.
+let _chartSheetOpen = false;
 
 /* ──────────────── Theme ──────────────── */
 siInitTheme();
@@ -1335,7 +1389,11 @@ function chartSelectAllToggleHtml(datasets) {
     const allSelected = filtered.every(d => _chartSelectedBibs.includes(d._bib));
     return `<button class="chart-select-all-btn" id="chartSelectAllToggle">${allSelected ? 'Очистить всех' : 'Выбрать всех'}</button>`;
 }
+function isMobileChartLayout() {
+    return window.matchMedia('(max-width: 640px)').matches;
+}
 function chartSidebarHtml(datasets) {
+    if (isMobileChartLayout()) return chartPickerMobileHtml(datasets);
     // Раньше здесь были ДВЕ кнопки очистки одновременно — "Выбрать/Очистить
     // всех" над списком и "Сбросить выбор (N)" под ним, дублирующие друг
     // друга при полном выборе. Оставили одну, под списком (найдено
@@ -1346,6 +1404,36 @@ function chartSidebarHtml(datasets) {
         <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
         <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
         ${hint}
+    </div>`;
+}
+// Мобильный picker — компактная кнопка-триггер + bottom sheet, вместо тесного
+// инлайн-сайдбара (запрошено пользователем 2026-07-24). Переиспользует те же
+// id (#chartSearchInput/#chartParticipantList/#chartSelectAllWrap), что и
+// десктопный .chart-sidebar — на экране одновременно есть только один из
+// двух вариантов (см. isMobileChartLayout() в chartSidebarHtml), поэтому
+// конфликта дублирующихся id нет, а весь остальной handler-код (поиск,
+// чекбоксы, "выбрать всех") работает без изменений в обоих вариантах.
+function chartPickerMobileHtml(datasets) {
+    const n = _chartSelectedBibs.length;
+    return `<div class="chart-picker-mobile">
+        <button class="chart-picker-trigger" id="chartPickerTrigger">
+            <span>${n ? `Сравниваю: ${n} участник${n === 1 ? '' : n < 5 ? 'а' : 'ов'}` : 'Выбрать участников для сравнения'}</span>
+            <span class="chart-picker-trigger-arrow">›</span>
+        </button>
+    </div>
+    <div class="chart-sheet-overlay${_chartSheetOpen ? ' open' : ''}" id="chartSheetOverlay">
+        <div class="chart-sheet">
+            <div class="chart-sheet-hdr">
+                <span>Выбор участников</span>
+                <button class="chart-sheet-close" id="chartSheetClose" aria-label="Закрыть">✕</button>
+            </div>
+            <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
+            <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
+            <div class="chart-sheet-footer">
+                <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
+                <button class="chart-sheet-done" id="chartSheetDone">Готово</button>
+            </div>
+        </div>
     </div>`;
 }
 // Лёгкое обновление списка участников (поиск) — НЕ трогает <input>, чтобы
@@ -1389,6 +1477,24 @@ function attachChartSidebarHandlers() {
     }
     attachChartCheckboxHandlers();
     attachChartSelectAllHandler();
+    attachChartSheetHandlers();
+}
+// Открытие/закрытие мобильного bottom sheet (см. chartPickerMobileHtml).
+// Клик по фону (не по самой шторке) закрывает — сама шторка не всплывает
+// клик наверх благодаря проверке e.target === overlay. Пока шторка открыта,
+// скролл фоновой страницы заблокирован (overflow:hidden на body), иначе
+// свайп по затемнённому фону прокручивал бы список результатов под ней.
+function attachChartSheetHandlers() {
+    const overlay = document.getElementById('chartSheetOverlay');
+    if (!overlay) { document.body.style.overflow = ''; return; }
+    document.body.style.overflow = _chartSheetOpen ? 'hidden' : '';
+    const trigger = document.getElementById('chartPickerTrigger');
+    if (trigger) trigger.addEventListener('click', () => { _chartSheetOpen = true; render(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { _chartSheetOpen = false; render(); } });
+    const closeBtn = document.getElementById('chartSheetClose');
+    if (closeBtn) closeBtn.addEventListener('click', () => { _chartSheetOpen = false; render(); });
+    const doneBtn = document.getElementById('chartSheetDone');
+    if (doneBtn) doneBtn.addEventListener('click', () => { _chartSheetOpen = false; render(); });
 }
 function attachChartSelectAllHandler() {
     const btn = document.getElementById('chartSelectAllToggle');
@@ -1618,8 +1724,17 @@ function attachSpaghettiHover(chart, accent, context, formatPoint) {
 // (nearestDatasetIndexAtPixel) — иначе клик мог бы выбрать не того
 // участника, которого только что подсвечивал hover. Клик мимо всех линий
 // (дальше maxDistPx) ничего не делает.
+//
+// На тач-устройствах (pointer: coarse) клик/тап по линии ОТКЛЮЧЁН — тап на
+// телефоне это единственный способ увидеть activeLineLabelPlugin в точке
+// касания (hover там же эмулируется через touchmove), и если тап ЕЩЁ и
+// переключает сравнение — график сразу перестраивается в режим сравнения
+// вместо показа значения в точке (запрошено пользователем 2026-07-24: "я
+// хочу посмотреть информацию в точке, а у меня перестраивается график").
+// На мобильном сравнение включается только через чекбоксы (сайдбар/модалка).
 function attachSpaghettiClick(chart) {
     chart.options.onClick = function (evt) {
+        if (window.matchMedia('(pointer: coarse)').matches) return;
         const idx = nearestDatasetIndexAtPixel(this, evt.x, evt.y, 30);
         if (idx == null) return;
         const bib = this.data.datasets[idx]._bib;
