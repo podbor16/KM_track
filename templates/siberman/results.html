@@ -162,6 +162,12 @@
             border-radius: var(--radius); padding: 14px;
         }
         .chart-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+        /* Переключатель Темп/скорость↔Позиция — над самим графиком, не в
+           строке "Этап:" (уточнено пользователем 2026-07-24 по скриншоту со
+           стрелкой: первая реализация "варианта A" смешала переключатель со
+           строкой фильтра этапа, а имелась в виду отдельная строка прямо
+           над графиком/подсказкой). */
+        .chart-mode-switch-row { margin-bottom: 10px; }
         /* Больше высоты + отступы сверху/снизу канваса (п.9) — с 39
            участниками на графике "Позиция" линии визуально не вписывались
            по оси Y при прежней высоте (найдено пользователем 2026-07-19). */
@@ -217,12 +223,21 @@
             background: var(--bg2);
         }
         .filter-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-        .filter-group { display: flex; gap: 4px; }
+        /* flex-wrap: чтобы группы с длинными подписями (этапы: "Вело (оба
+           дня)", "Вело День 1"...) на узких экранах переносились НА НОВУЮ
+           СТРОКУ целиком, а не сжимались вдоль строки — иначе flex-shrink
+           по умолчанию сминал кнопки до нечитаемой ширины, из-за чего
+           текст переносился ВНУТРИ кнопки и она превращалась в высокую
+           "карточку" (найдено пользователем 2026-07-24 на мобильной
+           версии графика). flex-shrink:0 на .filter-btn — кнопки держат
+           свой естественный размер и переносятся, а не сжимаются. */
+        .filter-group { display: flex; gap: 4px; flex-wrap: wrap; }
         .filter-btn {
             padding: 4px 12px; border-radius: 20px;
             border: 1px solid var(--border); background: transparent;
             color: var(--muted); font-size: 12px; font-weight: 600;
             cursor: pointer; transition: all .15s;
+            flex-shrink: 0; white-space: nowrap;
         }
         .filter-btn:hover { color: var(--text); border-color: var(--text); }
         .filter-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
@@ -1501,6 +1516,10 @@ const activeLineLabelPlugin = {
         const bw = tw + padX * 2, bh = 14 + padY * 2;
         let bx = info.x + 10;
         if (bx + bw > chart.width - 4) bx = info.x - bw - 10;
+        // Клэмп в границы канваса — на узких мобильных ширинах плашка шире
+        // свободного места С ОБЕИХ сторон точки, и без этого могла вылезать
+        // за левый край (найдено пользователем 2026-07-24, текст обрезался).
+        bx = Math.max(4, Math.min(chart.width - bw - 4, bx));
         const by = Math.max(2, Math.min(chart.height - bh - 2, info.y - bh / 2));
         ctx.fillStyle = cssVar('--red');
         ctx.beginPath();
@@ -1625,10 +1644,12 @@ function buildSpaghettiDataset(d, accent, context) {
     };
 }
 
-// Переключатель Темп/скорость ↔ Позиция — встроен в строку .filters (тот
-// же filter-group/filter-btn паттерн, что и остальные фильтры), не
-// отдельная полоса подтабов над графиком (запрошено пользователем
-// 2026-07-23, п.6 v5 — вариант A брейншторминга с визуальным компаньоном).
+// Переключатель Темп/скорость ↔ Позиция — компактный filter-group/filter-btn
+// (тот же паттерн, что у остальных фильтров), но выведен ОТДЕЛЬНОЙ строкой
+// над графиком внутри .chart-main (см. .chart-mode-switch-row), а не в
+// строке .filters рядом с "Этап:" — так, как реально имел в виду пользователь
+// в "варианте A" брейншторминга (2026-07-23, п.6 v5), уточнено скриншотом
+// 2026-07-24 после того, как первая попытка смешала его со строкой "Этап:".
 function chartModeSwitchHtml() {
     return `<div class="filter-group" id="chartModeGroup">
         <button class="filter-btn${_chartSubTab === 'pace' ? ' active' : ''}" data-chartmode="pace">Темп/скорость</button>
@@ -1657,7 +1678,6 @@ function renderPaceChart() {
     _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
-            ${chartModeSwitchHtml()}
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="paceStageGroup">
                 ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === _paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
@@ -1666,6 +1686,7 @@ function renderPaceChart() {
         <div class="chart-card"><div class="chart-layout">
             ${chartSidebarHtml(datasets)}
             <div class="chart-main">
+                <div class="chart-mode-switch-row">${chartModeSwitchHtml()}</div>
                 <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : 'Наведите курсор (или коснитесь на телефоне) на линию, чтобы увидеть участника, либо выберите нескольких слева для сравнения'}</div>
                 <div class="chart-canvas-wrap"><canvas id="sibermanPaceChart"></canvas></div>
             </div>
@@ -1875,7 +1896,6 @@ function renderPositionChart() {
     ];
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
-            ${chartModeSwitchHtml()}
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="positionStageGroup">
                 ${positionStageOptions.map(o => `<button class="filter-btn${(o.key === 'all' ? _positionStage === null : o.key === _positionStage) ? ' active' : ''}" data-positionstage="${o.key}">${o.label}</button>`).join('')}
@@ -1884,6 +1904,7 @@ function renderPositionChart() {
         <div class="chart-card"><div class="chart-layout">
             ${chartSidebarHtml(datasets)}
             <div class="chart-main">
+                <div class="chart-mode-switch-row">${chartModeSwitchHtml()}</div>
                 <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_positionStage ? `Место на этапе «${STAGE_LABEL_RU[_positionStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
                 <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
             </div>
