@@ -62,6 +62,7 @@ const sandbox = {
         querySelector: () => domStub(),
         addEventListener: () => {},
         documentElement: { setAttribute: () => {}, getAttribute: () => 'dark' },
+        body: { style: {} },
     },
     localStorage: { getItem: () => null, setItem: () => {} },
     setInterval: () => 0,
@@ -69,6 +70,10 @@ const sandbox = {
     getComputedStyle: () => ({ getPropertyValue: () => '#6AABD7' }),
     Chart: ChartStub,
     window: {},
+    // Тесты по умолчанию эмулируют десктоп с мышью (не мобильный виджет
+    // выбора участников, не touch-специфичное отключение клика по линии) —
+    // matches:false для любого запроса, если тесту не нужно другое.
+    matchMedia: () => ({ matches: false }),
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
@@ -1327,7 +1332,7 @@ check('poolGap — отставание внутри пула считается
     assert.strictEqual(gaps['1'], 0, `лидер (меньший v) — отставание 0: ${JSON.stringify(gaps)}`);
     assert.strictEqual(gaps['2'], 1000, `отстающий — разница v: ${JSON.stringify(gaps)}`);
 });
-check('День 1 — Место (абсолют) = ранг среди ВСЕХ участников года (личники+эстафета), не только текущего фильтра', () => {
+check('День 1 — Место (абсолют) = ранг среди ВИДИМЫХ строк текущего фильтра, невидимая эстафета не "съедает" места (откат 2026-07-24)', () => {
     setState('individual', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1340,16 +1345,17 @@ check('День 1 — Место (абсолют) = ранг среди ВСЕХ
     setRaceData([ind], [relayFaster], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
-    // Личник фильтром "individual" не видит эстафету в строках, но эстафета
-    // (быстрее на 9900с) должна "обогнать" его в АБСОЛЮТНОМ ранге — личник
-    // должен получить абсолютное место 2, не 1.
+    // Фильтр "individual" скрывает эстафету из строк — при пересчёте по
+    // ВИДИМЫМ строкам (не по полному ростеру года) единственный видимый
+    // личник должен получить абсолютное место 1, а не 2 (эстафета быстрее,
+    // но невидима — не должна "занимать" место в фильтрованном зачёте;
+    // запрошено пользователем 2026-07-24, при фильтре "Личный" номера мест
+    // ранее пропускались из-за скрытых эстафетчиков).
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка личника не найдена: ${html}`);
-    // Найти ячейку "Абсолют" (третья rank-содержащая ячейка по порядку в
-    // строке — Место(пол)+Отставание(пол)+Место(абсолют)+Отставание(абсолют))
-    // и убедиться, что значение там — 2, не 1.
     const rankNums = [...rowMatch[0].matchAll(/rank-num[^>]*>(\d+)</g)].map(m => m[1]);
-    assert.ok(rankNums.includes('2'), `ожидалось абсолютное место 2 где-то в строке (личник обогнан эстафетой): rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
+    assert.ok(rankNums.includes('1'), `ожидалось абсолютное место 1 (единственный видимый): rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
+    assert.ok(!rankNums.includes('2'), `невидимая эстафета не должна давать место 2: rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
 });
 
 // ── timeGapCell()/fieldGaps()/buildStats() — v5 п.2/3/4 фундамент (2026-07-23) ──

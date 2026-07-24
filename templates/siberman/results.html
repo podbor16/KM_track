@@ -181,12 +181,18 @@
         /* ── Сайдбар выбора участников для сравнения (п.7.2) ── */
         .chart-layout { display: flex; gap: 14px; align-items: flex-start; }
         .chart-main { flex: 1; min-width: 0; }
+        /* Высота сайдбара подогнана под высоту canvas'а того же графика
+           (620px/720px, см. .chart-canvas-wrap/--position) — раньше была
+           фиксированной 520px независимо от графика, из-за чего заметно не
+           совпадала по размеру и показывала мало участников без скролла
+           (запрошено пользователем 2026-07-24). */
         .chart-sidebar {
             width: 220px; flex-shrink: 0;
             border: 1px solid var(--border); border-radius: var(--radius);
             background: var(--bg3); display: flex; flex-direction: column;
-            max-height: 520px;
+            max-height: 620px;
         }
+        .chart-sidebar--tall { max-height: 720px; }
         .chart-search {
             margin: 8px; padding: 6px 10px; border-radius: 20px;
             border: 1px solid var(--border); background: var(--bg2); color: var(--text);
@@ -778,14 +784,19 @@ function renderOverall() {
         ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
         ...relay.map(teamGapRow),
     ]);
-    // Единое место по всей гонке (личники+эстафета) — считается по ПОЛНОМУ
-    // ростеру года (не по текущим фильтрам), не "плавает" при переключении
-    // формата/пола, см. combinedOverallRankRows/computeCombinedOverallRanks.
-    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(_data.individual, _data.relay));
-    // Формат-ранг — место команды среди ТОЛЬКО эстафетных команд по всей
-    // гонке, полный ростер года (не зависит от текущих фильтров) — тот же
-    // принцип, что и combinedRanks.
-    const relayFormatRanks = computeRanksByValue(_data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
+    // Единое место по всей гонке (личники+эстафета) — среди ВИДИМЫХ строк
+    // (individual/relay уже отфильтрованы по формату/полу выше), тот же
+    // откат, что и на вкладках этапов/Свода вело: "Место" не должно
+    // учитывать невидимых участников (запрошено пользователем 2026-07-24 —
+    // при фильтре "Личный" отсутствующие в зачёте эстафетчики "съедали"
+    // номера мест, вызывая пропуски 1,2,3,5,7...). Раньше считалось по
+    // полному ростеру года независимо от фильтров — намеренно, чтобы место
+    // не "плавало" при переключении фильтров, но это оказалось нежелательно.
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(individual, relay));
+    // Формат-ранг — место команды среди ТОЛЬКО эстафетных команд — тоже
+    // среди видимых (relay уже пуст, если фильтр пола активен — тогда и
+    // сама колонка формата не отображается).
+    const relayFormatRanks = computeRanksByValue(relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
     const relayStats = {
         total: relay.length,
         finished: relay.filter(t => t.overall_s != null).length,
@@ -1108,10 +1119,13 @@ function poolGap(entries) {
     return gaps;
 }
 
-// genderRanks/formatRanks — по ПОЛНОМУ ростеру года (не по текущим
-// фильтрам), тот же принцип что и абсолют — считаются один раз здесь,
-// а не внутри renderRankedProgress (там уже есть похожий "весь ростер"
-// расчёт для absRanksAll, но пол/формат нужны ОТДЕЛЬНО от абсолюта).
+// genderRanks/formatRanks — по ПОЛНОМУ ростеру года. В отличие от absRanks
+// (renderRankedProgress, теперь считается по видимым строкам — см. фикс
+// 2026-07-24) полный ростер здесь безвреден: genderRanks.M/F берут только
+// личников своего пола — фильтры формата/пола не выбрасывают "чужих"
+// личников ИЗ ЭТОГО пола, а formatRanks берёт всех эстафетчиков — состав
+// relay не зависит от фильтра пола (у команды нет общего пола), поэтому оба
+// набора совпадают с видимым пулом при любом активном фильтре.
 function dayRankOptions(getValue) {
     const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
     const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status }));
@@ -1126,13 +1140,13 @@ function dayRankOptions(getValue) {
 
 // Колонки/вид приведены к единому паттерну Итогов гонки/вкладок этапов
 // (rankHeaderCells/rankBodyCells, "Последняя КТ", время+отставание в одной
-// ячейке). МЕСТО — абсолютное (полный ростер года, не зависит от текущих
-// фильтров), но ОТСТАВАНИЕ — от лидера ТЕКУЩЕГО отфильтрованного пула
-// (poolGap(entries)), как и на вкладках этапов — вернули по запросу
-// пользователя 2026-07-23 (п.10 v5), единое абсолютное отставание
-// (предыдущая версия, 2026-07-23 раньше в тот же день) оказалось
-// нежелательным. Порядок rank-колонок — swap по активному фильтру пола
-// (_gender !== 'all'), тот же критерий, что на этапах.
+// ячейке). МЕСТО и ОТСТАВАНИЕ — оба среди ВИДИМЫХ строк (entries уже
+// отфильтрованы по формату/полу выше) — тот же откат, что и на Итогах гонки
+// (запрошено пользователем 2026-07-24: при фильтре "Личный" невидимые
+// эстафетчики "съедали" номера мест, 1,2,3,5,7...). Раньше МЕСТО считалось
+// по полному ростеру года намеренно — не подтвердилось на практике. Порядок
+// rank-колонок — swap по активному фильтру пола (_gender !== 'all'), тот же
+// критерий, что на этапах.
 function renderRankedProgress(getValue, options = {}) {
     const { individual, relay } = getFiltered();
     const entries = buildRankedEntries(individual, relay, getValue);
@@ -1150,14 +1164,7 @@ function renderRankedProgress(getValue, options = {}) {
         document.getElementById('app').innerHTML = html;
         return;
     }
-    // Абсолютное МЕСТО — от лидера ПОЛНОГО ростера года (личники+эстафета
-    // вместе), тот же принцип что и в Итогах гонки — не зависит от текущих
-    // фильтров. ОТСТАВАНИЕ же — от лидера ТЕКУЩЕГО отфильтрованного пула
-    // (poolGap(entries)), не полного ростера (вернули по запросу
-    // пользователя 2026-07-23, п.10 — вчерашнее упрощение до единого
-    // абсолютного отставания оказалось нежелательным).
-    const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue);
-    const absRanksAll = computeRanksByValue(allEntries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
+    const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
     const gaps = poolGap(entries);
     // Порядок колонок места — сначала По полу/Формату (если фильтр по полу
     // активен), затем Абсолют, тот же критерий swap, что и на вкладках
@@ -1173,7 +1180,7 @@ function renderRankedProgress(getValue, options = {}) {
         const formatRank = options.formatRanks && type === 'relay' ? options.formatRanks[entry.bib] : null;
         const secondaryRank = type === 'individual' ? genderRank : formatRank;
         const secondaryBadge = type === 'individual' ? genderBadge(entry.gender) : formatBadge();
-        const absRank = hasVal ? absRanksAll[entry.bib] : null;
+        const absRank = hasVal ? absRanks[entry.bib] : null;
         // Подсветка top-3 (rc) — по абсолюту, когда пол не отфильтрован,
         // иначе по вторичному (пол/формат) рангу — тот же принцип, что и на
         // Итогах/этапах/Своде вело (найдено code-review Task 6, 2026-07-22:
@@ -1392,14 +1399,14 @@ function chartSelectAllToggleHtml(datasets) {
 function isMobileChartLayout() {
     return window.matchMedia('(max-width: 640px)').matches;
 }
-function chartSidebarHtml(datasets) {
+function chartSidebarHtml(datasets, tall) {
     if (isMobileChartLayout()) return chartPickerMobileHtml(datasets);
     // Раньше здесь были ДВЕ кнопки очистки одновременно — "Выбрать/Очистить
     // всех" над списком и "Сбросить выбор (N)" под ним, дублирующие друг
     // друга при полном выборе. Оставили одну, под списком (найдено
     // пользователем 2026-07-22).
     const hint = _chartSelectedBibs.length ? '' : `<div class="chart-hint-sidebar">Выберите участников для сравнения</div>`;
-    return `<div class="chart-sidebar">
+    return `<div class="chart-sidebar${tall ? ' chart-sidebar--tall' : ''}">
         <input type="text" class="chart-search" id="chartSearchInput" placeholder="Поиск участника..." value="${_chartSearchQuery.replace(/"/g, '&quot;')}">
         <div class="chart-participant-list" id="chartParticipantList">${chartParticipantListItemsHtml(datasets)}</div>
         <div id="chartSelectAllWrap">${chartSelectAllToggleHtml(datasets)}</div>
@@ -2017,7 +2024,7 @@ function renderPositionChart() {
             </div>
         </div>
         <div class="chart-card"><div class="chart-layout">
-            ${chartSidebarHtml(datasets)}
+            ${chartSidebarHtml(datasets, true)}
             <div class="chart-main">
                 <div class="chart-mode-switch-row">${chartModeSwitchHtml()}</div>
                 <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_positionStage ? `Место на этапе «${STAGE_LABEL_RU[_positionStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
