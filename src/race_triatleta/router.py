@@ -1,14 +1,20 @@
 import asyncio
+import hmac
 import subprocess
 import sys
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from pydantic import BaseModel
 
-from src.core.auth import require_auth, api_require_auth
+from src.config import settings
+from src.core.auth import (
+    COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
+)
 from src.race_triatleta.service import get_standings, get_all_laps
+
+_require_auth = require_auth_for("/24h/login")
 
 TRI_EVENT_ID = 1
 TRI_LOADER_NAME = "tri_24h"
@@ -71,8 +77,41 @@ async def tri_laps():
 # Admin page
 # ---------------------------------------------------------------------------
 
+@router.get("/24h/login", response_class=HTMLResponse)
+async def tri_login_page(request: Request):
+    return templates.TemplateResponse("race_triatleta/login.html", {"request": request, "error": None})
+
+
+@router.post("/24h/login")
+async def tri_login_submit(username: str = Form(...), password: str = Form(...)):
+    creds_ok = (
+        username == settings.ADMIN_USERNAME
+        and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
+    )
+    if creds_ok:
+        cookie_value = create_session_cookie(username)
+        response = RedirectResponse("/24h/admin", status_code=302)
+        response.set_cookie(
+            COOKIE_NAME, cookie_value, httponly=True,
+            max_age=EXPIRY_SECONDS, samesite="lax",
+        )
+        return response
+    return templates.TemplateResponse(
+        "race_triatleta/login.html",
+        {"request": {}, "error": "Неверный логин или пароль"},
+        status_code=401,
+    )
+
+
+@router.get("/24h/logout")
+async def tri_logout():
+    response = RedirectResponse("/24h/login", status_code=302)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
 @router.get("/24h/admin", response_class=HTMLResponse)
-async def tri_admin_page(request: Request, user=Depends(require_auth)):
+async def tri_admin_page(request: Request, user=Depends(_require_auth)):
     if isinstance(user, RedirectResponse):
         return user
     return templates.TemplateResponse("race_triatleta/tri_admin.html", {"request": request})

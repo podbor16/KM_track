@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Siberman Admin</title>
+    <style>
+        :root {
+            --red:    #BE0A21;
+            --blue:   #6AABD7;
+            --bg:     #071622;
+            --bg2:    #0c2035;
+            --border: rgba(106,171,215,.18);
+            --text:   #e4eef6;
+            --muted:  #7aaabf;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .logo-name { font-size: 26px; font-weight: 800; letter-spacing: 1px; text-align: center; margin-bottom: 28px; }
+        .logo-name .m { color: var(--red); }
+        .login-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 380px;
+        }
+        .login-card h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .login-card .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block; color: var(--muted); font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
+        }
+        .form-group input {
+            width: 100%; padding: 10px 12px; background: var(--bg);
+            border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+            font-size: 14px; outline: none; transition: border-color .15s;
+        }
+        .form-group input:focus { border-color: var(--blue); }
+        .error-msg {
+            background: rgba(190,10,33,.12); border: 1px solid rgba(190,10,33,.4);
+            border-radius: 6px; color: var(--red); font-size: 13px; padding: 10px 12px;
+            margin-bottom: 16px;
+        }
+        .btn-login {
+            width: 100%; padding: 12px; background: var(--red); border: none;
+            border-radius: 6px; color: #fff; font-size: 14px; font-weight: 700;
+            letter-spacing: .5px; cursor: pointer; transition: opacity .15s;
+        }
+        .btn-login:hover { opacity: .85; }
+    </style>
+</head>
+<body>
+    <div>
+        <div class="logo-name">SIBER<span class="m">M</span>AN</div>
+        <div class="login-card">
+            <h1>Admin</h1>
+            <p class="subtitle">Доступ только для организаторов гонки</p>
+
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="/siberman/login">
+                <div class="form-group">
+                    <label for="username">Логин</label>
+                    <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Пароль</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-login">Войти</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

@@ -45,14 +45,22 @@ def verify_session_cookie(token: str) -> str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
 
-def require_auth(km_session: str | None = Cookie(default=None)):
-    """FastAPI dependency для страниц: редиректит на /login если невалидна."""
-    if not km_session:
-        return RedirectResponse(url="/login", status_code=302)
-    try:
-        return verify_session_cookie(km_session)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+def require_auth_for(login_path: str):
+    """Фабрика require_auth с редиректом на СВОЙ login_path — нужна продуктам
+    на отдельных доменах (siberman/triatleta), где общий /login с домена
+    krasmarafon недоступен из-за nginx domain isolation (см.
+    deploy/nginx.conf, каждый домен видит только свои префиксы)."""
+    def _dep(km_session: str | None = Cookie(default=None)):
+        if not km_session:
+            return RedirectResponse(url=login_path, status_code=302)
+        try:
+            return verify_session_cookie(km_session)
+        except HTTPException:
+            return RedirectResponse(url=login_path, status_code=302)
+    return _dep
+
+
+require_auth = require_auth_for("/login")
 
 
 def api_require_auth(km_session: str | None = Cookie(default=None)) -> str:

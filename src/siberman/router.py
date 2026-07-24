@@ -1,10 +1,10 @@
-import os
+import hmac
 import pickle
 import logging
 import tempfile
 import datetime
-from fastapi import APIRouter, Request, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -13,6 +13,12 @@ from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
 from src.siberman.db import get_siberman_connection, get_results_for_year, set_race_start
+from src.config import settings
+from src.core.auth import (
+    COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
+)
+
+_require_auth = require_auth_for("/siberman/login")
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(tags=["Siberman"])
@@ -41,8 +47,6 @@ templates.env.globals["v"] = _get_deploy_version()
 
 log = logging.getLogger(__name__)
 
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
-
 # Путь к временным файлам (общий для всех воркеров gunicorn)
 _PENDING_DIR = Path(tempfile.gettempdir()) / "siberman_pending"
 _PENDING_DIR.mkdir(exist_ok=True)
@@ -67,12 +71,6 @@ def _load_pending(race_year: int):
 
 def _clear_pending(race_year: int) -> None:
     _pending_path(race_year).unlink(missing_ok=True)
-
-
-def _is_authed(request: Request) -> bool:
-    if not ADMIN_TOKEN:
-        return True
-    return request.headers.get("X-Admin-Token", "") == ADMIN_TOKEN
 
 
 def _parse_race_start(raw: str) -> datetime.datetime:
@@ -126,18 +124,54 @@ async def api_results(year: int = 2025):
     return JSONResponse(data)
 
 
+@router.get("/siberman/login", response_class=HTMLResponse)
+async def siberman_login_page(request: Request):
+    return templates.TemplateResponse(
+        "siberman/login.html", {"request": request, "error": None}
+    )
+
+
+@router.post("/siberman/login")
+async def siberman_login_submit(username: str = Form(...), password: str = Form(...)):
+    creds_ok = (
+        username == settings.ADMIN_USERNAME
+        and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
+    )
+    if creds_ok:
+        cookie_value = create_session_cookie(username)
+        response = RedirectResponse("/siberman/admin", status_code=302)
+        response.set_cookie(
+            COOKIE_NAME, cookie_value, httponly=True,
+            max_age=EXPIRY_SECONDS, samesite="lax",
+        )
+        return response
+    return templates.TemplateResponse(
+        "siberman/login.html",
+        {"request": {}, "error": "Неверный логин или пароль"},
+        status_code=401,
+    )
+
+
+@router.get("/siberman/logout")
+async def siberman_logout():
+    response = RedirectResponse("/siberman/login", status_code=302)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
 @router.get("/siberman/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
+async def admin_page(request: Request, user=Depends(_require_auth)):
+    if isinstance(user, RedirectResponse):
+        return user
     return templates.TemplateResponse(
         "siberman/admin.html", {"request": request}
     )
 
 
 @router.post("/api/siberman/admin/upload")
-async def upload_excel(request: Request, file: UploadFile = File(...),
-                        race_year: int = 2025, race_start: str = ""):
-    if not _is_authed(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def upload_excel(file: UploadFile = File(...),
+                        race_year: int = 2025, race_start: str = "",
+                        user: str = Depends(api_require_auth)):
     if not race_start:
         raise HTTPException(status_code=422, detail="Укажите время старта гонки (день 1)")
     try:
@@ -164,9 +198,7 @@ async def upload_excel(request: Request, file: UploadFile = File(...),
 
 
 @router.post("/api/siberman/admin/apply")
-async def apply_data(request: Request, race_year: int = 2025):
-    if not _is_authed(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def apply_data(race_year: int = 2025, user: str = Depends(api_require_auth)):
     parsed = _load_pending(race_year)
     if parsed is None:
         raise HTTPException(status_code=400, detail="Нет загруженных данных. Сначала загрузите файл.")

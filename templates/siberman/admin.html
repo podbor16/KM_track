@@ -31,75 +31,103 @@
         .msg { padding: 12px 16px; border-radius: 6px; font-size: 14px; margin-bottom: 16px; display: none; }
         .msg-error { background: #fdecea; color: #c0392b; border: 1px solid #f5c6c2; }
         .msg-success { background: #eafaf1; color: #1e8449; border: 1px solid #a9dfbf; }
+        .race-start-hint { font-size: 12px; color: #888; margin: -8px 0 12px; }
+        .logout-link { color: #ccc; font-size: 13px; text-decoration: none; }
+        .logout-link:hover { color: #fff; }
+        .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #ddd; }
+        .admin-tab {
+            padding: 10px 18px; border: none; background: transparent; cursor: pointer;
+            font-size: 14px; font-weight: 600; color: #777; border-bottom: 2px solid transparent;
+        }
+        .admin-tab--active { color: #c0392b; border-bottom-color: #c0392b; }
+        .admin-tab-content { }
     </style>
 </head>
 <body>
     <div class="header">
         <div>
             <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:1px">Siberman 515</div>
-            <h1>Загрузка результатов</h1>
+            <h1>Админка</h1>
+        </div>
+        <div style="margin-left:auto">
+            <a href="/siberman/logout" class="logout-link">Выйти</a>
         </div>
     </div>
 
     <div class="container">
-        <div class="msg msg-error" id="msg-error"></div>
-        <div class="msg msg-success" id="msg-success"></div>
-
-        <div class="card">
-            <h2>1. Загрузить файл Excel</h2>
-            <label>Год гонки</label>
-            <input type="number" id="race-year" value="2025" min="2020" max="2030" style="width:120px">
-            <label>Дата и время старта гонки (день 1, плавание, по красноярскому времени)</label>
-            <input type="datetime-local" id="race-start" step="1" style="width:220px" required>
-            <label>Файл (.xlsx)</label>
-            <input type="file" id="file-input" accept=".xlsx,.xls">
-            <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
+        <div class="admin-tabs">
+            <button class="admin-tab admin-tab--active" onclick="switchTab('upload', this)">Загрузка результатов</button>
+            <button class="admin-tab" onclick="switchTab('broadcast', this)">Трансляция</button>
         </div>
 
-        <div class="card" id="errors-card" style="display:none">
-            <h2>⚠ Ошибки и предупреждения в файле</h2>
-            <ul id="errors-list" style="margin:0;padding-left:20px;font-size:13px;color:#c0392b;line-height:1.6"></ul>
+        <div id="tab-upload" class="admin-tab-content">
+            <div class="msg msg-error" id="msg-error"></div>
+            <div class="msg msg-success" id="msg-success"></div>
+
+            <div class="card">
+                <h2>1. Загрузить файл Excel</h2>
+                <label>Год гонки</label>
+                <input type="number" id="race-year" value="2025" min="2020" max="2030" style="width:120px">
+                <label>Дата и время старта гонки (день 1, плавание, по красноярскому времени)</label>
+                <input type="datetime-local" id="race-start" step="1" style="width:220px" required>
+                <p class="race-start-hint">Подставлено из сохранённого старта года — меняйте только если старт реально сдвинулся (экстренная правка).</p>
+                <label>Файл (.xlsx)</label>
+                <input type="file" id="file-input" accept=".xlsx,.xls">
+                <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
+            </div>
+
+            <div class="card" id="errors-card" style="display:none">
+                <h2>⚠ Ошибки и предупреждения в файле</h2>
+                <ul id="errors-list" style="margin:0;padding-left:20px;font-size:13px;color:#c0392b;line-height:1.6"></ul>
+            </div>
+
+            <div class="card" id="preview">
+                <h2>2. Проверить данные</h2>
+                <p id="preview-summary" style="font-size:14px;color:#555;margin-bottom:16px"></p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Номер</th><th>Участник</th><th>Пол</th>
+                            <th>Формат</th><th>Статус</th><th>ЧКП</th>
+                        </tr>
+                    </thead>
+                    <tbody id="preview-body"></tbody>
+                </table>
+            </div>
+
+            <div class="card" id="starts-card" style="display:none">
+                <h2>Расчётный старт вело-2 (предпросмотр загружаемого файла)</h2>
+                <table>
+                    <thead>
+                        <tr><th>Номер</th><th>Участник</th><th>Старт</th></tr>
+                    </thead>
+                    <tbody id="starts-body"></tbody>
+                </table>
+            </div>
+
+            <div class="card" id="apply-card" style="display:none">
+                <button class="btn btn-success" id="btn-apply">Применить в БД</button>
+            </div>
+
+            <div class="card">
+                <h2>Текущий стартовый лист вело-2 (сохранённые данные)</h2>
+                <label>Год</label>
+                <input type="number" id="startlist-year" value="2025" min="2020" max="2030" style="width:120px">
+                <button class="btn btn-primary" id="btn-startlist" style="margin-top:8px">Показать</button>
+                <table style="margin-top:16px">
+                    <thead>
+                        <tr><th>Ранг</th><th>Номер</th><th>Участник</th><th>Старт</th></tr>
+                    </thead>
+                    <tbody id="current-starts-body"></tbody>
+                </table>
+            </div>
         </div>
 
-        <div class="card" id="preview">
-            <h2>2. Проверить данные</h2>
-            <p id="preview-summary" style="font-size:14px;color:#555;margin-bottom:16px"></p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Номер</th><th>Участник</th><th>Пол</th>
-                        <th>Формат</th><th>Статус</th><th>ЧКП</th>
-                    </tr>
-                </thead>
-                <tbody id="preview-body"></tbody>
-            </table>
-        </div>
-
-        <div class="card" id="starts-card" style="display:none">
-            <h2>Расчётный старт вело-2 (предпросмотр загружаемого файла)</h2>
-            <table>
-                <thead>
-                    <tr><th>Номер</th><th>Участник</th><th>Старт</th></tr>
-                </thead>
-                <tbody id="starts-body"></tbody>
-            </table>
-        </div>
-
-        <div class="card" id="apply-card" style="display:none">
-            <button class="btn btn-success" id="btn-apply">Применить в БД</button>
-        </div>
-
-        <div class="card">
-            <h2>Текущий стартовый лист вело-2 (сохранённые данные)</h2>
-            <label>Год</label>
-            <input type="number" id="startlist-year" value="2025" min="2020" max="2030" style="width:120px">
-            <button class="btn btn-primary" id="btn-startlist" style="margin-top:8px">Показать</button>
-            <table style="margin-top:16px">
-                <thead>
-                    <tr><th>Ранг</th><th>Номер</th><th>Участник</th><th>Старт</th></tr>
-                </thead>
-                <tbody id="current-starts-body"></tbody>
-            </table>
+        <div id="tab-broadcast" class="admin-tab-content" style="display:none">
+            <div class="card">
+                <h2>Трансляция</h2>
+                <p style="color:#888;font-size:14px">Функционал для команды трансляции — в разработке.</p>
+            </div>
         </div>
     </div>
 
@@ -108,6 +136,32 @@
     const showErr = msg => { $('msg-error').textContent = msg; $('msg-error').style.display='block'; $('msg-success').style.display='none'; };
     const showOk  = msg => { $('msg-success').textContent = msg; $('msg-success').style.display='block'; $('msg-error').style.display='none'; };
     const hideMsg = () => { $('msg-error').style.display='none'; $('msg-success').style.display='none'; };
+
+    function switchTab(name, btn) {
+        document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
+        $('tab-' + name).style.display = '';
+        btn.classList.add('admin-tab--active');
+    }
+
+    // Дата/время старта гонки нужно вводить только один раз (при первой
+    // загрузке результатов года) — дальше подставляется уже сохранённое
+    // значение (запрошено пользователем 2026-07-24, раньше приходилось
+    // вбивать заново при каждой загрузке файла). Ручная правка поля
+    // остаётся возможной для экстренных случаев (ошибка на старте и т.п.).
+    async function prefillRaceStart() {
+        const year = $('race-year').value;
+        try {
+            const r = await fetch(`/api/siberman/results?year=${year}`);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.race_start) {
+                $('race-start').value = data.race_start.slice(0, 19);
+            }
+        } catch (e) { /* нет сохранённого старта года — оставляем поле пустым для первого ввода */ }
+    }
+    $('race-year').addEventListener('change', prefillRaceStart);
+    prefillRaceStart();
 
     $('btn-upload').addEventListener('click', async () => {
         const file = $('file-input').files[0];
