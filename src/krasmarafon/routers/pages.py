@@ -9,12 +9,13 @@ from typing import Optional
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request, Query
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.config import settings
-from src.config.event_loader import get_event_by_name
+from src.config.event_loader import get_event_by_name, get_event_by_db_id
+from src.krasmarafon.services.diploma_service import get_diploma_data
 from src.core.auth import (
     COOKIE_NAME,
     EXPIRY_SECONDS,
@@ -192,6 +193,28 @@ async def history_page(request: Request):
 async def athlete_profile_page(request: Request):
     """Профиль спортсмена со всеми его результатами."""
     return templates.TemplateResponse("krasmarafon/athlete-profile.html", {"request": request})
+
+
+@router.get("/diploma/{event_id}/{bib}", response_class=HTMLResponse)
+async def diploma_page(request: Request, event_id: int, bib: str):
+    """Публичный диплом участника — фон+медаль от дизайнера (per-дистанция
+    в конфиге события), поверх — ФИО/чистое время/места. Без авторизации
+    и без общей шапки сайта — самостоятельная полноэкранная страница,
+    можно переслать прямой ссылкой."""
+    event_cfg, distance_cfg = get_event_by_db_id(settings.EVENTS, event_id)
+    if event_cfg is None or distance_cfg is None or distance_cfg.diploma is None:
+        raise HTTPException(status_code=404, detail="Диплом для этого события/дистанции недоступен")
+
+    data = get_diploma_data(event_id, bib)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Результат участника не найден")
+
+    return templates.TemplateResponse("krasmarafon/diploma.html", {
+        "request": request,
+        "event": event_cfg,
+        "distance": distance_cfg,
+        "diploma": data,
+    })
 
 
 @router.get("/race-analysis", response_class=HTMLResponse)
