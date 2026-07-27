@@ -519,6 +519,36 @@
         return `📍 Контрольная точка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${lapsSuffix}${suffix ?? '.'}`;
     }
 
+    // DNF/DSQ-участники категории, которых нет в ранжированном списке этой
+    // КТ (не дошли до неё вообще, либо снятые до старта этой отметки) —
+    // раньше молча пропадали из поста; команда трансляции должна видеть,
+    // что о них не забыли, и на какой отметке гонки они закончили
+    // выступление (последняя КТ, до которой реально дошли — по ВСЕЙ
+    // гонке, не только по этапу текущего поста, т.к. DNF мог случиться
+    // на более раннем этапе, чем тот, для которого генерируется пост).
+    function bcLastCheckpointLabel(row) {
+        const stage = currentStage(row);
+        if (!stage) return 'нет отметок';
+        const pos = lastReached(row.cp, stage);
+        if (!pos) return 'нет отметок';
+        return `${BC_STAGE_TITLE_INLINE[stage]}, ${CHECKPOINT_LABELS[stage][pos.seq]}`;
+    }
+    function bcSimpleName(row, category) {
+        return category === 'relay' ? row._team.team_name : `${row._ind.surname} ${row._ind.name}`;
+    }
+    function bcDnfDsqBlock(rows, list, category) {
+        const shown = new Set(list.map(item => item.row.key));
+        const missing = rows.filter(r => (r.status === 'dnf' || r.status === 'dsq') && !shown.has(r.key));
+        if (missing.length === 0) return '';
+        const lineFor = r => `${bcSimpleName(r, category)} (последняя отметка: ${bcLastCheckpointLabel(r)})`;
+        const dnf = missing.filter(r => r.status === 'dnf').map(lineFor);
+        const dsq = missing.filter(r => r.status === 'dsq').map(lineFor);
+        const blocks = [];
+        if (dnf.length) blocks.push(`🚫 DNF:\n${dnf.join('\n')}`);
+        if (dsq.length) blocks.push(`⛔ DSQ:\n${dsq.join('\n')}`);
+        return '\n\n' + blocks.join('\n\n');
+    }
+
     function bcBuildStagePost(data, stage, seq, category) {
         const rows = bcCategoryRows(data, category);
         const maxSeq = bcMaxSeq(stage);
@@ -531,7 +561,7 @@
         const title = `${BC_CATEGORY_TITLE[category]}. ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
         const header = bcCpHeaderLine(stage, seq);
         const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'stage')).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка на этапе:\n\n${body}`;
+        return `${title}\n${header}\n\nТекущая расстановка на этапе:\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
     }
 
     function bcBuildGlobalPost(data, stage, seq, category) {
@@ -546,7 +576,7 @@
         const title = `${BC_CATEGORY_TITLE[category]}${titleSuffix}. SIBERMAN 2026`;
         const header = bcCpHeaderLine(stage, seq, ` этапа «${BC_STAGE_TITLE[stage]}».`);
         const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'global')).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка по сумме трёх дней гонки.\n\n${body}`;
+        return `${title}\n${header}\n\nТекущая расстановка по сумме трёх дней гонки.\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
     }
 
     const BC_DAY_CONFIG = {
@@ -572,7 +602,7 @@
             const timeS = globalProgress(item.row, cfg.stage, maxSeq);
             return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
         }).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}`;
+        return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
     }
 
     async function bcGenerate() {
