@@ -571,7 +571,7 @@
             } else {
                 gapLine = `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
             }
-            const timeS = item.row.cp?.[cfg.stage]?.[maxSeq];
+            const timeS = globalProgress(item.row, cfg.stage, maxSeq);
             return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
         }).join('\n\n');
         return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}`;
