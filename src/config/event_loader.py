@@ -36,6 +36,11 @@ class CheckpointCoord(BaseModel):
     lon: float
 
 
+class DiplomaConfig(BaseModel):
+    background: str   # путь к фоновой картинке, относительно корня репо (напр. "static/images/diplomas/women7/7km/background.png")
+    medal: str         # путь к картинке медали, тот же формат
+
+
 class DistanceConfig(BaseModel):
     distance: str                        # "5 км"
     distance_km: float
@@ -45,6 +50,7 @@ class DistanceConfig(BaseModel):
     checkpoint_distances: list[float] = []
     checkpoints: list[CheckpointCoord] = []
     decorative_checkpoints: list[CheckpointCoord] = []  # маркеры на карте без хронометража (kt1/kt2 и т.п.)
+    diploma: Optional[DiplomaConfig] = None      # если не задано — диплом для этой дистанции недоступен
     gpx_file: Optional[str] = None
     event_date: Optional[str] = None
     route: RouteConfig = RouteConfig()
