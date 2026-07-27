@@ -469,6 +469,16 @@
         return String(km).replace('.', ',');
     }
 
+    // fmtGap возвращает '' для gapS<=0 (используется для гэпов, которые
+    // всегда положительны у неотстающих) — но здесь 0 — легитимный, пусть и
+    // редкий случай (участник получил ТОЧНО такое же время, что и лидер, на
+    // этой отметке). Пустая строка после "Отставание от лидера: " выглядела
+    // бы как баг, а не как "ничья" (тот же класс проблемы уже чинили для
+    // строки лидера — см. bcEntryText/bcBuildDayPost).
+    function bcGapOrZeroText(gapS) {
+        return gapS === 0 ? '0:00' : fmtGap(gapS);
+    }
+
     function bcEntryText(item, idx, list, category, stage, seq, mode) {
         const wording = bcGapWording(mode, category);
         const name = bcDisplayName(item.row, category, stage);
@@ -483,7 +493,7 @@
             const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
             gapLine = `📊 ${wording.leader}: ${advText}`;
         } else {
-            gapLine = `📊 ${wording.trail}: ${fmtGap(item.gap)}`;
+            gapLine = `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
         }
         return `${bcRankEmoji(idx + 1)} ${name}\n${timeLine}\n${gapLine}`;
     }
@@ -559,7 +569,7 @@
                 const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
                 gapLine = `📊 ${wording.leader}: ${advText}`;
             } else {
-                gapLine = `📊 ${wording.trail}: ${fmtGap(item.gap)}`;
+                gapLine = `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
             }
             const timeS = item.row.cp?.[cfg.stage]?.[maxSeq];
             return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
