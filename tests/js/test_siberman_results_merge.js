@@ -1434,5 +1434,53 @@ check('buildStats() — карточка "Личников" скрыта, ког
     assert.ok(html.includes('Эстафет'), `карточка эстафет должна остаться: ${html}`);
 });
 
+// ── bikeCombinedRawCp()/computeBikeCombinedCheckpointGaps()/bikeCombinedDistKm()/
+// bikeCombinedCheckpointLabel() — гэпы/дистанция/подписи для виртуальных КТ
+// «Вело (оба дня)», нужны генератору постов трансляции (Задача 6) ──
+check('bikeCombinedRawCp — виртуальный seq в пределах Дня 1 берёт cp.bike_day1 напрямую', () => {
+    const row = { cp: { bike_day1: { 3: 5000 }, bike_day2: {} }, bike1_s: 20000 };
+    assert.strictEqual(sandbox.bikeCombinedRawCp(row, 3), 5000, 'seq<=6 (День 1) — сырое значение cp.bike_day1');
+});
+check('bikeCombinedRawCp — виртуальный seq в Дне 2 прибавляет bike1_s (итог Дня 1)', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox); // 6
+    const row = { cp: { bike_day1: {}, bike_day2: { 2: 3000 } }, bike1_s: 20000 };
+    assert.strictEqual(sandbox.bikeCombinedRawCp(row, n1 + 2), 23000, 'День 2 seq2 → bike1_s + cp.bike_day2[2]');
+});
+check('bikeCombinedRawCp — null, если КТ ещё не пройдена', () => {
+    const row = { cp: { bike_day1: {}, bike_day2: {} }, bike1_s: 20000 };
+    assert.strictEqual(sandbox.bikeCombinedRawCp(row, 1), undefined, 'нет данных на этой КТ — undefined/null');
+});
+check('computeBikeCombinedCheckpointRanks не сломан рефакторингом (regression)', () => {
+    const rows = [
+        { key: 'A', cp: { bike_day1: { 6: 18000 }, bike_day2: {} }, bike1_s: 18000, status: 'active' },
+        { key: 'B', cp: { bike_day1: { 6: 19000 }, bike_day2: {} }, bike1_s: 19000, status: 'active' },
+    ];
+    const ranks = sandbox.computeBikeCombinedCheckpointRanks(rows);
+    assert.strictEqual(ranks[6].A, 1, 'A быстрее на КТ6 Дня 1 — место 1');
+    assert.strictEqual(ranks[6].B, 2, 'B медленнее — место 2');
+});
+check('computeBikeCombinedCheckpointGaps — гэп между участниками на виртуальной КТ', () => {
+    const rows = [
+        { key: 'A', cp: { bike_day1: { 6: 18000 }, bike_day2: {} }, bike1_s: 18000, status: 'active' },
+        { key: 'B', cp: { bike_day1: { 6: 19000 }, bike_day2: {} }, bike1_s: 19000, status: 'active' },
+    ];
+    const gaps = sandbox.computeBikeCombinedCheckpointGaps(rows);
+    assert.strictEqual(gaps[6].A, 0, 'лидер — гэп 0');
+    assert.strictEqual(gaps[6].B, 1000, 'отстаёт на 1000с');
+});
+check('bikeCombinedDistKm — дистанция на виртуальной КТ (День1 и День2)', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const distKmBikeDay1 = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1', sandbox);
+    const distKmBikeDay2 = vm.runInContext('CHECKPOINT_DIST_KM.bike_day2', sandbox);
+    assert.strictEqual(sandbox.bikeCombinedDistKm(3), distKmBikeDay1[3], 'КТ внутри Дня 1 — прямая дистанция');
+    const expectedDay2 = distKmBikeDay1[n1] + distKmBikeDay2[2];
+    assert.strictEqual(sandbox.bikeCombinedDistKm(n1 + 2), expectedDay2, 'КТ в Дне 2 — 145 (весь День1) + дистанция внутри Дня2');
+});
+check('bikeCombinedCheckpointLabel — подпись с пометкой дня', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    assert.ok(sandbox.bikeCombinedCheckpointLabel(3).includes('День 1'), 'КТ Дня 1 помечена "(День 1)"');
+    assert.ok(sandbox.bikeCombinedCheckpointLabel(n1 + 2).includes('День 2'), 'КТ Дня 2 помечена "(День 2)"');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

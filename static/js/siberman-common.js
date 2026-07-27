@@ -354,6 +354,16 @@ function computeGlobalCheckpointRanks(rows, dbStage, maxSeq) {
     return _checkpointRanksByValueFn(rows, (r, seq) => globalProgress(r, dbStage, seq), maxSeq);
 }
 
+// Сырое elapsed-время на ВИРТУАЛЬНОЙ КТ объединённого вело (день1+день2 как
+// один этап 0..421 км) — вынесено из computeBikeCombinedCheckpointRanks
+// отдельной функцией, т.к. генератору постов трансляции нужно само значение
+// времени (для строки "⏱️ Время на отметке"), не только место/гэп.
+function bikeCombinedRawCp(row, vseq) {
+    const n1 = STAGE_MAX_SEQ.bike_day1;
+    if (vseq <= n1) return row.cp?.bike_day1?.[vseq];
+    const v2 = row.cp?.bike_day2?.[vseq - n1];
+    return v2 == null ? null : (row.bike1_s ?? 0) + v2;
+}
 // Место "по этапу" для ОБЪЕДИНЁННОГО вело (день1+день2 как один этап,
 // 421 км, без разрыва на границе дней) — та же семантика, что и
 // computeCheckpointRanks (сравнение только внутри вело-этапа, не по всей
@@ -365,11 +375,28 @@ function computeGlobalCheckpointRanks(rows, dbStage, maxSeq) {
 // — день1, дальше — день2 со сдвигом.
 function computeBikeCombinedCheckpointRanks(rows) {
     const n1 = STAGE_MAX_SEQ.bike_day1;
-    return _checkpointRanksByValueFn(rows, (r, vseq) => {
-        if (vseq <= n1) return r.cp?.bike_day1?.[vseq];
-        const v2 = r.cp?.bike_day2?.[vseq - n1];
-        return v2 == null ? null : (r.bike1_s ?? 0) + v2;
-    }, n1 + STAGE_MAX_SEQ.bike_day2);
+    return _checkpointRanksByValueFn(rows, (r, vseq) => bikeCombinedRawCp(r, vseq), n1 + STAGE_MAX_SEQ.bike_day2);
+}
+// Гэп-вариант того же самого — нужен генератору постов трансляции (график
+// "Позиция" использовал только Ranks, Gaps раньше не было нигде).
+function computeBikeCombinedCheckpointGaps(rows) {
+    const n1 = STAGE_MAX_SEQ.bike_day1;
+    return _checkpointGapsByValueFn(rows, (r, vseq) => bikeCombinedRawCp(r, vseq), n1 + STAGE_MAX_SEQ.bike_day2);
+}
+// Дистанция (км) на виртуальной КТ объединённого вело — для отображения
+// "N из 421 км" и для avgPaceLabel в постах трансляции.
+function bikeCombinedDistKm(vseq) {
+    const n1 = STAGE_MAX_SEQ.bike_day1;
+    if (vseq <= n1) return CHECKPOINT_DIST_KM.bike_day1[vseq];
+    return CHECKPOINT_DIST_KM.bike_day1[n1] + CHECKPOINT_DIST_KM.bike_day2[vseq - n1];
+}
+// Человекочитаемая подпись виртуальной КТ с пометкой дня — для выпадающего
+// списка КТ в форме генератора постов трансляции.
+function bikeCombinedCheckpointLabel(vseq) {
+    const n1 = STAGE_MAX_SEQ.bike_day1;
+    return vseq <= n1
+        ? `${CHECKPOINT_LABELS.bike_day1[vseq]} (День 1)`
+        : `${CHECKPOINT_LABELS.bike_day2[vseq - n1]} (День 2)`;
 }
 
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —
