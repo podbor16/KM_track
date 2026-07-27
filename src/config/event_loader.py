@@ -37,8 +37,10 @@ class CheckpointCoord(BaseModel):
 
 
 class DiplomaConfig(BaseModel):
+    # Один полный фон от дизайнера (медаль/лого/декор уже вписаны в саму
+    # картинку, поверх остаются только два размеченных прямоугольника-
+    # плейсхолдера под текст — не отдельная картинка медали).
     background: str   # путь к фоновой картинке, относительно корня репо (напр. "static/images/diplomas/women7/7km/background.png")
-    medal: str         # путь к картинке медали, тот же формат
 
 
 class DistanceConfig(BaseModel):

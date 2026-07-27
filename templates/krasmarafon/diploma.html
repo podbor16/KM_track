@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Диплом — {{ diploma.surname }} {{ diploma.name }}</title>
+    <title>Диплом — {{ (diploma.surname or '') }} {{ (diploma.name or '') }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -11,24 +11,36 @@
             min-height: 100vh; display: flex; flex-direction: column;
             align-items: center; padding: 24px 16px;
         }
+        /* Фон — полностью готовая картинка от дизайнера (лого/название
+           события/дистанция/медаль уже нарисованы) — соотношение сторон
+           1080×1920 (9:16), два прямоугольника-плейсхолдера под текст
+           размечены дизайнером внутри самой картинки. Держим карточку в
+           этой же пропорции (aspect-ratio), тогда оверлеи-проценты ниже
+           всегда попадают точно на плейсхолдеры независимо от ширины
+           экрана. */
         .diploma-card {
-            width: 100%; max-width: 420px;
+            width: 100%; max-width: 420px; aspect-ratio: 1080 / 1920;
             background-image: url('/{{ distance.diploma.background }}');
             background-size: cover; background-position: center;
-            border-radius: 8px; padding: 28px 24px; color: #fff;
-            position: relative; min-height: 640px;
+            border-radius: 8px; position: relative; overflow: hidden;
         }
-        .diploma-header { display: flex; justify-content: space-between; align-items: flex-start; }
-        .diploma-title { font-size: 22px; font-weight: 800; line-height: 1.15; }
-        .diploma-logo { font-size: 13px; font-weight: 700; border: 1px solid #fff; border-radius: 4px; padding: 4px 8px; }
-        .diploma-distance-row { display: flex; justify-content: space-between; margin-top: 18px; font-size: 12px; opacity: .85; letter-spacing: .5px; }
-        .diploma-name-card { background: rgba(255,255,255,.14); border-radius: 14px; padding: 18px; margin-top: 14px; text-align: center; }
-        .diploma-name { font-size: 16px; font-weight: 700; letter-spacing: .5px; }
-        .diploma-time { font-size: 30px; font-weight: 800; margin-top: 6px; }
-        .diploma-ranks-card { background: rgba(255,255,255,.14); border-radius: 14px; padding: 14px 18px; margin-top: 12px; font-size: 15px; }
-        .diploma-rank-row { display: flex; justify-content: space-between; padding: 4px 0; }
-        .diploma-medal { display: flex; justify-content: center; margin-top: 24px; }
-        .diploma-medal img { max-width: 140px; max-height: 140px; }
+        /* Позиции измерены по реальному пикселю картинки-примера
+           (1080×1920): бокс 1 — y 477–820, бокс 2 — y 880–1193,
+           x 95–976 у обоих. Если дизайнер пришлёт следующий диплом с
+           другой разметкой плейсхолдеров — эти проценты нужно будет
+           пересчитать под новую картинку (общий для всех событий шаблон
+           вёрстки, см. спеку, Часть 3/4). */
+        .diploma-slot {
+            position: absolute; left: 8.8%; width: 81.6%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #fff; text-align: center;
+        }
+        .diploma-slot--name { top: 24.8%; height: 17.9%; }
+        .diploma-slot--ranks { top: 45.8%; height: 16.3%; }
+        .diploma-name { font-size: 4.2vw; max-font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+        .diploma-time { font-size: 7.5vw; max-font-size: 32px; font-weight: 800; margin-top: 4px; }
+        .diploma-ranks { width: 100%; font-size: 3.8vw; padding: 0 8%; }
+        .diploma-rank-row { display: flex; justify-content: space-between; padding: 2px 0; }
         .diploma-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .diploma-btn {
             padding: 10px 20px; border-radius: 20px; border: none;
@@ -38,35 +50,26 @@
         @media print {
             body { background: #fff; padding: 0; }
             .diploma-actions { display: none; }
-            .diploma-card { max-width: 100%; min-height: 100vh; border-radius: 0; }
+            .diploma-card { max-width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="diploma-card" id="diplomaCard">
-        <div class="diploma-header">
-            <div class="diploma-title">{{ event.display_name.upper() }}</div>
-            <div class="diploma-logo">KM</div>
-        </div>
-        <div class="diploma-distance-row">
-            <span>ДИСТАНЦИЯ</span>
-            <span>{{ distance.distance }}</span>
-        </div>
-        <div class="diploma-name-card">
+        <div class="diploma-slot diploma-slot--name">
             <div class="diploma-name">{{ (diploma.surname or '').upper() }} {{ (diploma.name or '').upper() }}</div>
             <div class="diploma-time">{{ diploma.time_display }}</div>
         </div>
-        <div class="diploma-ranks-card">
-            <div class="diploma-rank-row"><span>Абсолют</span><span>{{ diploma.rank_absolute or '-' }}</span></div>
-            {% if diploma.show_sex_rank %}
-            <div class="diploma-rank-row"><span>Пол</span><span>{{ diploma.rank_sex or '-' }}</span></div>
-            {% endif %}
-            {% if diploma.rank_category %}
-            <div class="diploma-rank-row"><span>{{ diploma.category or 'Категория' }}</span><span>{{ diploma.rank_category }}</span></div>
-            {% endif %}
-        </div>
-        <div class="diploma-medal">
-            <img src="/{{ distance.diploma.medal }}" alt="Медаль">
+        <div class="diploma-slot diploma-slot--ranks">
+            <div class="diploma-ranks">
+                <div class="diploma-rank-row"><span>Абсолют</span><span>{{ diploma.rank_absolute or '-' }}</span></div>
+                {% if diploma.show_sex_rank %}
+                <div class="diploma-rank-row"><span>Пол</span><span>{{ diploma.rank_sex or '-' }}</span></div>
+                {% endif %}
+                {% if diploma.rank_category %}
+                <div class="diploma-rank-row"><span>{{ diploma.category or 'Категория' }}</span><span>{{ diploma.rank_category }}</span></div>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -85,7 +88,7 @@
             try {
                 const canvas = await html2canvas(document.getElementById('diplomaCard'), { useCORS: true, scale: 2 });
                 const link = document.createElement('a');
-                link.download = 'diploma-{{ diploma.surname }}-{{ diploma.name }}.png';
+                link.download = 'diploma-{{ (diploma.surname or "diplom") }}-{{ (diploma.name or "") }}.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             } finally {

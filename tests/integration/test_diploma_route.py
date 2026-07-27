@@ -16,7 +16,6 @@ def _fake_event():
                 distance="7 км", distance_km=7.0, db_event_id=555, tracked=True,
                 diploma=DiplomaConfig(
                     background="static/images/diplomas/women7/7km/background.png",
-                    medal="static/images/diplomas/women7/7km/medal.png",
                 ),
             ),
         ],
