@@ -523,27 +523,38 @@ git commit -m "feat(krasmarafon): роут /diploma/{event_id}/{bib} + шабл�
 
 ## Task 4: Вендоринг `html2canvas`
 
+**Отклонение от исходного текста плана (найдено при реализации):** план ошибочно предполагал, что `static/lib/` — часть git-репозитория (по аналогии с `static/lib/chart3/chart.min.js`). На деле `static/lib/` в `.gitignore` целиком — ни один файл в этой папке не коммитится, все библиотеки скачиваются на этапе деплоя через `deploy/download_static_libs.py` (вызывается из `deploy/update.sh`). Ниже — уже исправленная версия задачи.
+
 **Files:**
-- Create: `static/lib/html2canvas/html2canvas.min.js`
+- Modify: `deploy/download_static_libs.py` (добавить запись в `LIBS`)
 
-- [ ] **Step 1: Скачать библиотеку**
+- [ ] **Step 1: Добавить html2canvas в `LIBS`**
 
-```bash
-mkdir -p static/lib/html2canvas
-curl -sL "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" -o static/lib/html2canvas/html2canvas.min.js
+В `deploy/download_static_libs.py`, в словарь `LIBS` (рядом с существующими записями Chart.js), добавить:
+
+```python
+    # html2canvas 1.4.1 (для скачивания диплома на krasmarafon)
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js":
+        "html2canvas/html2canvas.min.js",
 ```
 
-- [ ] **Step 2: Проверить, что файл скачался и не пустой**
+- [ ] **Step 2: Скачать локально для проверки** (не коммитится — `static/lib/` в `.gitignore`)
 
-Run: `wc -l static/lib/html2canvas/html2canvas.min.js`
-Expected: файл существует, не пустой (минифицированный JS, обычно 1 длинная строка, размер файла в районе 200KB — проверить `ls -la static/lib/html2canvas/html2canvas.min.js`, size > 100000 bytes)
+```bash
+conda run -n base python deploy/download_static_libs.py
+ls -la static/lib/html2canvas/html2canvas.min.js
+```
+
+Expected: файл существует, размер в районе 150-250KB, начинается с UMD-заголовка `/*! html2canvas 1.4.1 ...`.
 
 - [ ] **Step 3: Коммит**
 
 ```bash
-git add static/lib/html2canvas/html2canvas.min.js
+git add deploy/download_static_libs.py
 git commit -m "chore(krasmarafon): вендоринг html2canvas 1.4.1 для скачивания диплома"
 ```
+
+Реальный бинарник на проде появится автоматически на следующем деплое (`deploy/update.sh` уже вызывает `download_static_libs.py` безусловно).
 
 ---
 
