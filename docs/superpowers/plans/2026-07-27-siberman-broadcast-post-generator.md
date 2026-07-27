@@ -572,13 +572,20 @@ git commit -m "feat(siberman): построение пулов по катего
         return String(km).replace('.', ',');
     }
 
+    // "Время на отметке" — только в режиме "По этапу" (посты 1-3 исходного
+    // ТЗ). В "По всей гонке" исходное ТЗ (посты 4-5) подставляет НАЗВАНИЕ
+    // ЭТАПА вместо слова "Время" ("Бег на отметке...") — найдено на
+    // финальном ревью, где строка ошибочно была одинаковой в обоих режимах.
+    const BC_STAGE_TITLE_INLINE = { swim: 'Плавание', bike_day1: 'Вело День 1', bike_day2: 'Вело День 2', bike_combined: 'Вело (оба дня)', run: 'Бег' };
+
     function bcEntryText(item, idx, list, category, stage, seq, mode) {
         const wording = bcGapWording(mode, category);
         const name = bcDisplayName(item.row, category, stage);
         const timeS = bcStageRawTime(item.row, stage, seq);
         const distKm = bcDistKm(stage, seq);
         const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
-        const timeLine = `⏱️ Время на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
+        const timeLinePrefix = mode === 'global' ? BC_STAGE_TITLE_INLINE[stage] : 'Время';
+        const timeLine = `⏱️ ${timeLinePrefix} на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
         let gapLine;
         if (idx === 0) {
             const second = list[1];
@@ -686,12 +693,12 @@ git commit -m "feat(siberman): генератор текста поста — р
             if (idx === 0) {
                 const second = list[1];
                 const advGap = second ? second.gap : null;
-                const advText = advGap != null ? fmtGap(advGap).replace(/^\+/, '') : '—';
+                const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
                 gapLine = `📊 ${wording.leader}: ${advText}`;
             } else {
                 gapLine = `📊 ${wording.trail}: ${fmtGap(item.gap)}`;
             }
-            const timeS = item.row.cp?.[cfg.stage]?.[maxSeq];
+            const timeS = globalProgress(item.row, cfg.stage, maxSeq); // не сырой cp[stage][seq] — для bike_day2 это elapsed от старта ДНЯ 2, а не гонки (см. globalProgress/day2Progress в results.html)
             return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
         }).join('\n\n');
         return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}`;
