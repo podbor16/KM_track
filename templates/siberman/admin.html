@@ -479,6 +479,18 @@
         return gapS === 0 ? '0:00' : fmtGap(gapS);
     }
 
+    // Строка "📊 ..." (преимущество лидера / отставание остальных) — общая
+    // для bcEntryText и bcBuildDayPost (раньше дублировалась дословно).
+    function bcGapLine(idx, list, wording, item) {
+        if (idx === 0) {
+            const second = list[1];
+            const advGap = second ? second.gap : null;
+            const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
+            return `📊 ${wording.leader}: ${advText}`;
+        }
+        return `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
+    }
+
     function bcEntryText(item, idx, list, category, stage, seq, mode) {
         const wording = bcGapWording(mode, category);
         const name = bcDisplayName(item.row, category, stage);
@@ -486,15 +498,7 @@
         const distKm = bcDistKm(stage, seq);
         const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
         const timeLine = `⏱️ Время на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
-        let gapLine;
-        if (idx === 0) {
-            const second = list[1];
-            const advGap = second ? second.gap : null;
-            const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
-            gapLine = `📊 ${wording.leader}: ${advText}`;
-        } else {
-            gapLine = `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
-        }
+        const gapLine = bcGapLine(idx, list, wording, item);
         return `${bcRankEmoji(idx + 1)} ${name}\n${timeLine}\n${gapLine}`;
     }
 
@@ -562,15 +566,7 @@
         const wording = { leader: 'Преимущество над 2-м местом', trail: category === 'relay' ? 'Отставание от лидеров' : 'Отставание от лидера' };
         const body = list.map((item, idx) => {
             const name = bcDisplayName(item.row, category, cfg.stage);
-            let gapLine;
-            if (idx === 0) {
-                const second = list[1];
-                const advGap = second ? second.gap : null;
-                const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
-                gapLine = `📊 ${wording.leader}: ${advText}`;
-            } else {
-                gapLine = `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
-            }
+            const gapLine = bcGapLine(idx, list, wording, item);
             const timeS = globalProgress(item.row, cfg.stage, maxSeq);
             return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
         }).join('\n\n');
