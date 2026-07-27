@@ -382,6 +382,54 @@
     $('bc-mode').addEventListener('change', bcOnModeChange);
     $('bc-stage').addEventListener('change', bcPopulateCpOptions);
     bcOnModeChange(); // начальное состояние при загрузке страницы
+
+    function bcCategoryRows(data, category) {
+        if (category === 'relay') {
+            return data.relay.map(t => {
+                const g = teamGapRow(t);
+                return { key: t.bib, cp: g.cp, status: g.status, swim_s: g.swim_s, bike1_s: g.bike1_s, bike2_s: g.bike2_s, run_s: g.run_s, _team: t };
+            });
+        }
+        return data.individual
+            .filter(r => r.gender === category)
+            .map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, _ind: r }));
+    }
+
+    const BC_ROLE_WORD = { swim: 'плывёт', bike_day1: 'едет', bike_day2: 'едет', bike_combined: 'едет', run: 'бежит' };
+    const BC_ROLE_MEMBER_STAGE = { swim: 'swim', bike_day1: 'bike', bike_day2: 'bike', bike_combined: 'bike', run: 'run' };
+
+    function bcDisplayName(row, category, stage) {
+        if (category !== 'relay') {
+            const p = row._ind;
+            return `${p.surname} ${p.name}`;
+        }
+        const team = row._team;
+        const roleWord = BC_ROLE_WORD[stage];
+        const memberStage = BC_ROLE_MEMBER_STAGE[stage];
+        const member = team.members.find(m => m.relay_stage === memberStage);
+        const memberName = member ? `${member.surname} ${member.name}` : '';
+        return `${team.team_name} (${roleWord}: ${memberName})`;
+    }
+
+    // Сырое elapsed-время НА ЭТАПЕ (для строки "⏱️ ... на отметке") — не
+    // глобальное время гонки, даже в режиме "По всей гонке" (там от этого
+    // значения зависит только показ времени/темпа, а РАНГ считается отдельно
+    // через globalProgress — см. bcBuildStagePost/bcBuildGlobalPost).
+    function bcStageRawTime(row, stage, seq) {
+        return stage === 'bike_combined' ? bikeCombinedRawCp(row, seq) : row.cp?.[stage]?.[seq];
+    }
+    // dbStage для форматирования единиц (avgPaceLabel/fmtSpeed и т.п.) —
+    // виртуальный "bike_combined" сам по себе не единица измерения, нужно
+    // понять, в какой РЕАЛЬНЫЙ день попадает конкретная виртуальная КТ.
+    function bcUnitStage(stage, seq) {
+        if (stage !== 'bike_combined') return stage;
+        return seq <= STAGE_MAX_SEQ.bike_day1 ? 'bike_day1' : 'bike_day2';
+    }
+
+    function bcRankEmoji(n) {
+        const keycaps = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+        return n <= 9 ? keycaps[n] : `${n}.`;
+    }
     </script>
 </body>
 </html>
