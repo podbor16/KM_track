@@ -51,7 +51,11 @@
         @media print {
             body { background: #fff; padding: 0; }
             .diploma-actions { display: none; }
-            .diploma-card { max-width: 100%; }
+            .diploma-card {
+                max-width: 100%;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
         }
     </style>
 </head>

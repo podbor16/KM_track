@@ -55,6 +55,9 @@ jobs:
             # Установить/обновить зависимости
             /opt/km_track/venv/bin/pip install -r /opt/km_track/requirements.txt
 
+            # Загрузка статических библиотек (не в git, см. deploy/download_static_libs.py)
+            cd /opt/km_track && /opt/km_track/venv/bin/python deploy/download_static_libs.py
+
             # Перезапустить приложение
             systemctl restart km_track
             # Перезапустить загрузчик Triatleta если запущен
