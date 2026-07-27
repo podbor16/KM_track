@@ -130,6 +130,10 @@
     {% include 'krasmarafon/krasmarafon_footer.html' %}
 
     <script>
+        const DIPLOMA_EVENT_IDS = new Set({{ diploma_event_ids | tojson }});
+    </script>
+
+    <script>
         let currentAthlete = null;
         let currentResults = [];
         let filteredResults = [];
@@ -809,6 +813,9 @@
                 // Дата из event_date
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
 
+                const isFinished = race.race_status === 'Finished' || race.race_status === 'finished' || race.race_status === 'fifnished';
+                const hasDiploma = isFinished && race.event_id && race.start_number && DIPLOMA_EVENT_IDS.has(race.event_id);
+
                 racesGrid.innerHTML += `
                     <div class="race-card">
                         <div class="race-date">${dateStr}</div>
@@ -831,6 +838,7 @@
                             ${race.rank_sex ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${race.rank_sex}</span></div>` : ''}
                             ${race.rank_category ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${race.rank_category}</span></div>` : ''}
                         </div>
+                        ${hasDiploma ? `<a href="/diploma/${race.event_id}/${race.start_number}" target="_blank" class="diploma-link-btn">🏅 Диплом</a>` : ''}
                     </div>
                 `;
             });

@@ -192,7 +192,16 @@ async def history_page(request: Request):
 @router.get("/athlete-profile", response_class=HTMLResponse)
 async def athlete_profile_page(request: Request):
     """Профиль спортсмена со всеми его результатами."""
-    return templates.TemplateResponse("krasmarafon/athlete-profile.html", {"request": request})
+    diploma_event_ids = [
+        d.db_event_id
+        for event in settings.EVENTS.values()
+        for d in event.distances
+        if d.diploma is not None and d.db_event_id is not None
+    ]
+    return templates.TemplateResponse("krasmarafon/athlete-profile.html", {
+        "request": request,
+        "diploma_event_ids": diploma_event_ids,
+    })
 
 
 @router.get("/diploma/{event_id}/{bib}", response_class=HTMLResponse)

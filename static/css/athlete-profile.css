@@ -167,6 +167,13 @@
     color: white;
 }
 
+.diploma-link-btn {
+    display: block; text-align: center; margin-top: 12px;
+    padding: 8px 14px; border-radius: 20px; background: #e91e8c;
+    color: #fff; font-size: 13px; font-weight: 700; text-decoration: none;
+}
+.diploma-link-btn:hover { opacity: .85; }
+
 .status-running {
     background-color: #2196F3;
     color: white;
