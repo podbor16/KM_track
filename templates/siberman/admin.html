@@ -432,6 +432,7 @@
     }
 
     const BC_STAGE_TITLE = { swim: 'ПЛАВАНИЕ', bike_day1: 'ВЕЛО ДЕНЬ 1', bike_day2: 'ВЕЛО ДЕНЬ 2', bike_combined: 'ВЕЛО (ОБА ДНЯ)', run: 'БЕГ' };
+    const BC_STAGE_TITLE_INLINE = { swim: 'Плавание', bike_day1: 'Вело День 1', bike_day2: 'Вело День 2', bike_combined: 'Вело (оба дня)', run: 'Бег' };
     const BC_STAGE_EMOJI = { swim: { M: '🏊🏻‍♂️', F: '🏊🏻', relay: '🏊🏻‍♂️' }, bike_day1: '🚴', bike_day2: '🚴', bike_combined: '🚴', run: '🏃' };
     const BC_CATEGORY_TITLE = { M: 'МУЖЧИНЫ', F: 'ЖЕНЩИНЫ', relay: 'ЭСТАФЕТЫ' };
 
@@ -497,7 +498,8 @@
         const timeS = bcStageRawTime(item.row, stage, seq);
         const distKm = bcDistKm(stage, seq);
         const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
-        const timeLine = `⏱️ Время на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
+        const timeLinePrefix = mode === 'global' ? BC_STAGE_TITLE_INLINE[stage] : 'Время';
+        const timeLine = `⏱️ ${timeLinePrefix} на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
         const gapLine = bcGapLine(idx, list, wording, item);
         return `${bcRankEmoji(idx + 1)} ${name}\n${timeLine}\n${gapLine}`;
     }
