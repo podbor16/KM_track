@@ -75,3 +75,12 @@ def test_get_diploma_data_status_check_accepts_typo_variant():
     with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
         data = get_diploma_data(event_id=1, bib='101')
     assert data is not None
+
+
+def test_get_diploma_data_handles_finished_with_missing_time():
+    """Помечен финишировавшим, но время почему-то не записано — не должно падать."""
+    rows = [_row('101', 'female', status='Finished', time_s=None)]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data is not None
+    assert data['time_display'] == '-'

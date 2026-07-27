@@ -45,7 +45,7 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
     if status not in _FINISHED_STATUSES:
         return None
 
-    sexes = {r.get('sex') for r in rows if r.get('sex')}
+    sexes = {str(r.get('sex')).strip().lower() for r in rows if r.get('sex')}
 
     return {
         'surname': target.get('surname'),
