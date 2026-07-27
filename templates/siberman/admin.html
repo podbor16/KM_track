@@ -329,6 +329,59 @@
             showErr('Сетевая ошибка: ' + e.message);
         }
     });
+
+    // ---- Трансляция: генератор постов ----
+
+    const BC_STAGE_OPTIONS_BY_MODE = {
+        stage:  [['swim', 'Плавание'], ['bike_day1', 'Вело День 1'], ['bike_day2', 'Вело День 2'], ['bike_combined', 'Вело (оба дня)'], ['run', 'Бег']],
+        global: [['swim', 'Плавание'], ['bike_day1', 'Вело День 1'], ['bike_day2', 'Вело День 2'], ['run', 'Бег']],
+    };
+
+    function bcMaxSeq(stage) {
+        return stage === 'bike_combined' ? (STAGE_MAX_SEQ.bike_day1 + STAGE_MAX_SEQ.bike_day2) : STAGE_MAX_SEQ[stage];
+    }
+    function bcCpLabel(stage, seq) {
+        return stage === 'bike_combined' ? bikeCombinedCheckpointLabel(seq) : CHECKPOINT_LABELS[stage][seq];
+    }
+    function bcDistKm(stage, seq) {
+        return stage === 'bike_combined' ? bikeCombinedDistKm(seq) : CHECKPOINT_DIST_KM[stage][seq];
+    }
+
+    function bcPopulateStageOptions() {
+        const mode = $('bc-mode').value;
+        const sel = $('bc-stage');
+        sel.innerHTML = '';
+        (BC_STAGE_OPTIONS_BY_MODE[mode] || []).forEach(([val, label]) => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = label;
+            sel.appendChild(opt);
+        });
+        bcPopulateCpOptions();
+    }
+    function bcPopulateCpOptions() {
+        const stage = $('bc-stage').value;
+        const sel = $('bc-cp');
+        sel.innerHTML = '';
+        const maxSeq = bcMaxSeq(stage);
+        for (let seq = 1; seq <= maxSeq; seq++) {
+            const opt = document.createElement('option');
+            opt.value = seq;
+            opt.textContent = bcCpLabel(stage, seq);
+            sel.appendChild(opt);
+        }
+    }
+    function bcOnModeChange() {
+        const mode = $('bc-mode').value;
+        $('bc-stage-field').style.display = mode === 'day' ? 'none' : '';
+        $('bc-cp-field').style.display = mode === 'day' ? 'none' : '';
+        $('bc-day-field').style.display = mode === 'day' ? '' : 'none';
+        if (mode !== 'day') bcPopulateStageOptions();
+    }
+
+    $('bc-mode').addEventListener('change', bcOnModeChange);
+    $('bc-stage').addEventListener('change', bcPopulateCpOptions);
+    bcOnModeChange(); // начальное состояние при загрузке страницы
     </script>
 </body>
 </html>
