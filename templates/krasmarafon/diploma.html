@@ -53,7 +53,7 @@
             <span>{{ distance.distance }}</span>
         </div>
         <div class="diploma-name-card">
-            <div class="diploma-name">{{ diploma.surname.upper() }} {{ diploma.name.upper() }}</div>
+            <div class="diploma-name">{{ (diploma.surname or '').upper() }} {{ (diploma.name or '').upper() }}</div>
             <div class="diploma-time">{{ diploma.time_display }}</div>
         </div>
         <div class="diploma-ranks-card">
