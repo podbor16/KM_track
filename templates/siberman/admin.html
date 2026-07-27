@@ -430,6 +430,108 @@
         const keycaps = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
         return n <= 9 ? keycaps[n] : `${n}.`;
     }
+
+    const BC_STAGE_TITLE = { swim: 'ПЛАВАНИЕ', bike_day1: 'ВЕЛО ДЕНЬ 1', bike_day2: 'ВЕЛО ДЕНЬ 2', bike_combined: 'ВЕЛО (ОБА ДНЯ)', run: 'БЕГ' };
+    const BC_STAGE_EMOJI = { swim: { M: '🏊🏻‍♂️', F: '🏊🏻', relay: '🏊🏻‍♂️' }, bike_day1: '🚴', bike_day2: '🚴', bike_combined: '🚴', run: '🏃' };
+    const BC_CATEGORY_TITLE = { M: 'МУЖЧИНЫ', F: 'ЖЕНЩИНЫ', relay: 'ЭСТАФЕТЫ' };
+
+    function bcStageEmoji(stage, category) {
+        const e = BC_STAGE_EMOJI[stage];
+        return typeof e === 'string' ? e : e[category];
+    }
+
+    // Ранжированный + отфильтрованный по видимости список для одной КТ —
+    // общий для обоих режимов (различаются только источником ranksBySeq/gapsBySeq).
+    function bcRankedList(rows, ranksBySeq, gapsBySeq, seq) {
+        const ranks = ranksBySeq[seq] || {};
+        const gaps = gapsBySeq[seq] || {};
+        return rows
+            .filter(r => ranks[r.key] != null)
+            .map(r => ({ row: r, rank: ranks[r.key], gap: gaps[r.key] }))
+            .sort((a, b) => a.rank - b.rank);
+    }
+
+    function bcGapWording(mode, category) {
+        if (mode === 'stage') {
+            return { leader: 'Преимущество над 2-м местом', trail: 'Отставание от лидера' };
+        }
+        return {
+            leader: 'Виртуальное преимущество над 2-м местом',
+            trail: category === 'relay' ? 'Отставание от лидеров' : 'Отставание от лидера',
+        };
+    }
+
+    // Дистанции swim — дробные (1.3/2.6 км...), сайт везде показывает их с
+    // русской запятой (см. CHECKPOINT_LABELS.swim: "1,3 км" — уже строка с
+    // запятой), а не точкой — интерполяция числа в текст поста напрямую дала
+    // бы точку, расходясь с остальным сайтом.
+    function bcFmtKm(km) {
+        return String(km).replace('.', ',');
+    }
+
+    function bcEntryText(item, idx, list, category, stage, seq, mode) {
+        const wording = bcGapWording(mode, category);
+        const name = bcDisplayName(item.row, category, stage);
+        const timeS = bcStageRawTime(item.row, stage, seq);
+        const distKm = bcDistKm(stage, seq);
+        const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
+        const timeLine = `⏱️ Время на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
+        let gapLine;
+        if (idx === 0) {
+            const second = list[1];
+            const advGap = second ? second.gap : null;
+            const advText = advGap != null ? fmtGap(advGap).replace(/^\+/, '') : '—';
+            gapLine = `📊 ${wording.leader}: ${advText}`;
+        } else {
+            gapLine = `📊 ${wording.trail}: ${fmtGap(item.gap)}`;
+        }
+        return `${bcRankEmoji(idx + 1)} ${name}\n${timeLine}\n${gapLine}`;
+    }
+
+    // suffix — конец предложения после "N из M км(N кругов)"; по умолчанию
+    // просто точка (режим "По этапу"), режим "По всей гонке" передаёт
+    // " этапа «Название».", чтобы получить одно связное предложение —
+    // раньше это делалось через .replace('.', ...) поверх готовой строки,
+    // что ЛОМАЛОСЬ на дробных дистанциях заплыва (нашёл бы первую точку в
+    // "1.3 км", а не точку в конце предложения) — суффикс теперь параметр,
+    // а не постобработка строки.
+    function bcCpHeaderLine(stage, seq, suffix) {
+        const distKm = bcDistKm(stage, seq);
+        const totalKm = bcDistKm(stage, bcMaxSeq(stage));
+        const laps = lapLabel(bcUnitStage(stage, seq), stage === 'bike_combined' ? (seq <= STAGE_MAX_SEQ.bike_day1 ? seq : seq - STAGE_MAX_SEQ.bike_day1) : seq);
+        const lapsSuffix = laps ? ` (${laps})` : '';
+        return `📍 Контрольная точка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${lapsSuffix}${suffix ?? '.'}`;
+    }
+
+    function bcBuildStagePost(data, stage, seq, category) {
+        const rows = bcCategoryRows(data, category);
+        const maxSeq = bcMaxSeq(stage);
+        const { ranksBySeq, gapsBySeq } = stage === 'bike_combined'
+            ? { ranksBySeq: computeBikeCombinedCheckpointRanks(rows), gapsBySeq: computeBikeCombinedCheckpointGaps(rows) }
+            : { ranksBySeq: computeCheckpointRanks(rows, stage, maxSeq), gapsBySeq: computeCheckpointGaps(rows, stage, maxSeq) };
+        const list = bcRankedList(rows, ranksBySeq, gapsBySeq, seq);
+        if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
+
+        const title = `${BC_CATEGORY_TITLE[category]}. ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+        const header = bcCpHeaderLine(stage, seq);
+        const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'stage')).join('\n\n');
+        return `${title}\n${header}\n\nТекущая расстановка на этапе:\n\n${body}`;
+    }
+
+    function bcBuildGlobalPost(data, stage, seq, category) {
+        const rows = bcCategoryRows(data, category);
+        const maxSeq = STAGE_MAX_SEQ[stage];
+        const ranksBySeq = computeGlobalCheckpointRanks(rows, stage, maxSeq);
+        const gapsBySeq = computeGlobalCheckpointGaps(rows, stage, maxSeq);
+        const list = bcRankedList(rows, ranksBySeq, gapsBySeq, seq);
+        if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
+
+        const titleSuffix = category === 'relay' ? '' : '. ЛИЧНЫЙ ЗАЧЁТ';
+        const title = `${BC_CATEGORY_TITLE[category]}${titleSuffix}. SIBERMAN 2026`;
+        const header = bcCpHeaderLine(stage, seq, ` этапа «${BC_STAGE_TITLE[stage]}».`);
+        const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'global')).join('\n\n');
+        return `${title}\n${header}\n\nТекущая расстановка по сумме трёх дней гонки.\n\n${body}`;
+    }
     </script>
 </body>
 </html>
