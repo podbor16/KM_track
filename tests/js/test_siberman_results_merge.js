@@ -1384,6 +1384,32 @@ check('fieldGaps() — отставание от минимума по прям�
     assert.strictEqual(gaps[2], 200, `отстающий — разница: ${JSON.stringify(gaps)}`);
     assert.strictEqual(gaps[3], undefined, `без значения — не участвует: ${JSON.stringify(gaps)}`);
 });
+check('avgPaceLabel(swim) — темп на 100м из дистанции и времени', () => {
+    // 2,6 км за 1500с → 1500/2.6=576.9 с/км → /10=57.7≈58с/100м → "0:58 /100м"
+    const label = sandbox.avgPaceLabel('swim', 2.6, 1500);
+    assert.strictEqual(label, sandbox.fmtPace100m(1500 / 2.6), `ожидался тот же формат, что и fmtPace100m: ${label}`);
+});
+check('avgPaceLabel(bike_day1) — скорость км/ч из дистанции и времени', () => {
+    // 72 км за 7200с (2ч) → 36 км/ч
+    const label = sandbox.avgPaceLabel('bike_day1', 72, 7200);
+    assert.strictEqual(label, sandbox.fmtSpeed(72 / (7200 / 3600)), `ожидалась скорость через fmtSpeed: ${label}`);
+});
+check('avgPaceLabel(run) — темп мин/км из дистанции и времени', () => {
+    // 35 км за 12600с → 360с/км → "6:00 /км"
+    const label = sandbox.avgPaceLabel('run', 35, 12600);
+    assert.strictEqual(label, sandbox.fmtPace(Math.round(12600 / 35)), `ожидался темп через fmtPace: ${label}`);
+});
+check('avgPaceLabel — null при отсутствии времени или нулевой дистанции', () => {
+    assert.strictEqual(sandbox.avgPaceLabel('run', 10, null), '—', `null timeS → прочерк`);
+    assert.strictEqual(sandbox.avgPaceLabel('run', 0, 100), '—', `нулевая дистанция → прочерк`);
+});
+check('splitPaceLabel не сломан рефакторингом (regression)', () => {
+    // Существующий пример поведения ДО рефакторинга: 10 км общий сплит между
+    // seq=1(3км) и seq=2(10км) на bike_day1 → distKm=7, если splitS=630 (10.5 мин)
+    // → 7/(630/3600)=40 км/ч
+    const label = sandbox.splitPaceLabel('bike_day1', 2, 630);
+    assert.strictEqual(label, sandbox.fmtSpeed(7 / (630 / 3600)), `splitPaceLabel должен работать как раньше: ${label}`);
+});
 check('buildStats() — 2 карточки (Личники/Эстафеты) с DNF/DSQ по relayStats', () => {
     const individual = [
         mkTimerInd('1', { status: 'active', overall_s: 20000, cp: { run: { [vm.runInContext('STAGE_MAX_SEQ.run', sandbox)]: 20000 } } }),

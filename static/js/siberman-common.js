@@ -163,16 +163,29 @@ const CHECKPOINT_DIST_KM = {
     run: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, (i + 1) * 7])),
 };
 
-// Темп/скорость на СПЛИТЕ (между соседними КТ) — единицы зависят от этапа:
-// плавание — темп на 100м, вело — скорость км/ч, бег — темп на 1 км.
+// Общая развилка единиц измерения по этапу — плавание темп/100м, вело
+// скорость км/ч, бег темп/км. Общий примитив для splitPaceLabel (сплит
+// между соседними КТ) и avgPaceLabel (средний темп от старта этапа до КТ,
+// нужен генератору постов трансляции) — раньше эта развилка была ТОЛЬКО
+// внутри splitPaceLabel, дублировать её для второго случая означало бы
+// повторить тот же класс расхождений, что уже чинили в этом проекте
+// (см. шапку файла).
+function _paceOrSpeedLabel(dbStage, distKm, timeS) {
+    if (timeS == null || !(distKm > 0)) return '—';
+    if (dbStage === 'swim') return fmtPace100m(timeS / distKm);
+    if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(distKm / (timeS / 3600));
+    return fmtPace(Math.round(timeS / distKm));
+}
+// Темп/скорость на СПЛИТЕ (между соседними КТ).
 function splitPaceLabel(dbStage, seq, splitS) {
-    if (splitS == null) return '—';
     const distTable = CHECKPOINT_DIST_KM[dbStage];
     const distKm = distTable[seq] - (distTable[seq - 1] ?? 0);
-    if (!(distKm > 0)) return '—';
-    if (dbStage === 'swim') return fmtPace100m(splitS / distKm);
-    if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(distKm / (splitS / 3600));
-    return fmtPace(Math.round(splitS / distKm));
+    return _paceOrSpeedLabel(dbStage, distKm, splitS);
+}
+// Средний темп/скорость ОТ СТАРТА ЭТАПА до конкретной КТ (не сплит между
+// соседними КТ) — нужен генератору постов трансляции ("темп на отметке X км").
+function avgPaceLabel(dbStage, distKm, elapsedS) {
+    return _paceOrSpeedLabel(dbStage, distKm, elapsedS);
 }
 
 // То же самое, но возвращает ЧИСЛО (не форматированную строку) для графика:
