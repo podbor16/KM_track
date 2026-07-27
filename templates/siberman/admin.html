@@ -532,6 +532,85 @@
         const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'global')).join('\n\n');
         return `${title}\n${header}\n\nТекущая расстановка по сумме трёх дней гонки.\n\n${body}`;
     }
+
+    const BC_DAY_CONFIG = {
+        day1:      { stage: 'bike_day1', label: '1' },
+        day1plus2: { stage: 'bike_day2', label: '1+2' },
+    };
+
+    function bcBuildDayPost(data, dayKey, category) {
+        const cfg = BC_DAY_CONFIG[dayKey];
+        const rows = bcCategoryRows(data, category);
+        const maxSeq = STAGE_MAX_SEQ[cfg.stage];
+        const ranksBySeq = computeGlobalCheckpointRanks(rows, cfg.stage, maxSeq);
+        const gapsBySeq = computeGlobalCheckpointGaps(rows, cfg.stage, maxSeq);
+        const list = bcRankedList(rows, ranksBySeq, gapsBySeq, maxSeq);
+        if (list.length === 0) return 'Нет данных — этот день ещё не завершён ни для одного участника категории.';
+
+        const title = `${BC_CATEGORY_TITLE[category]}. ИТОГИ ДНЯ ${cfg.label}. SIBERMAN 2026`;
+        const header = `📍 Снапшот на конец дня ${cfg.label}.`;
+        const wording = { leader: 'Преимущество над 2-м местом', trail: category === 'relay' ? 'Отставание от лидеров' : 'Отставание от лидера' };
+        const body = list.map((item, idx) => {
+            const name = bcDisplayName(item.row, category, cfg.stage);
+            let gapLine;
+            if (idx === 0) {
+                const second = list[1];
+                const advGap = second ? second.gap : null;
+                const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
+                gapLine = `📊 ${wording.leader}: ${advText}`;
+            } else {
+                gapLine = `📊 ${wording.trail}: ${fmtGap(item.gap)}`;
+            }
+            const timeS = item.row.cp?.[cfg.stage]?.[maxSeq];
+            return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
+        }).join('\n\n');
+        return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}`;
+    }
+
+    async function bcGenerate() {
+        const btn = $('btn-bc-generate');
+        const resultCard = $('bc-result-card');
+        const ta = $('bc-post-preview');
+        btn.textContent = 'Генерирую…';
+        resultCard.style.display = 'none';
+        try {
+            const year = $('bc-year').value;
+            const r = await fetch(`/api/siberman/results?year=${year}`);
+            if (!r.ok) throw new Error('Не удалось загрузить данные');
+            const data = await r.json();
+            const mode = $('bc-mode').value;
+            const category = $('bc-category').value;
+            let text;
+            if (mode === 'stage') {
+                text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+            } else if (mode === 'global') {
+                text = bcBuildGlobalPost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+            } else {
+                text = bcBuildDayPost(data, $('bc-day').value, category);
+            }
+            ta.value = text;
+            resultCard.style.display = '';
+        } catch (e) {
+            ta.value = 'Ошибка: ' + e.message;
+            resultCard.style.display = '';
+        } finally {
+            btn.textContent = 'Сгенерировать';
+        }
+    }
+    $('btn-bc-generate').addEventListener('click', bcGenerate);
+
+    $('btn-bc-copy').addEventListener('click', async () => {
+        const ta = $('bc-post-preview');
+        const ok = $('bc-copy-ok');
+        try {
+            await navigator.clipboard.writeText(ta.value);
+        } catch (e) {
+            ta.select();
+            document.execCommand('copy');
+        }
+        ok.style.display = '';
+        setTimeout(() => { ok.style.display = 'none'; }, 2000);
+    });
     </script>
 </body>
 </html>
