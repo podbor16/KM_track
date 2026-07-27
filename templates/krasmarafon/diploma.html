@@ -23,6 +23,7 @@
             background-image: url('/{{ distance.diploma.background }}');
             background-size: cover; background-position: center;
             border-radius: 8px; position: relative; overflow: hidden;
+            container-type: inline-size;
         }
         /* Позиции измерены по реальному пикселю картинки-примера
            (1080×1920): бокс 1 — y 477–820, бокс 2 — y 880–1193,
@@ -37,9 +38,9 @@
         }
         .diploma-slot--name { top: 24.8%; height: 17.9%; }
         .diploma-slot--ranks { top: 45.8%; height: 16.3%; }
-        .diploma-name { font-size: 4.2vw; max-font-size: 18px; font-weight: 700; letter-spacing: .5px; }
-        .diploma-time { font-size: 7.5vw; max-font-size: 32px; font-weight: 800; margin-top: 4px; }
-        .diploma-ranks { width: 100%; font-size: 3.8vw; padding: 0 8%; }
+        .diploma-name { font-size: clamp(11px, 4.2cqw, 18px); font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
+        .diploma-time { font-size: clamp(20px, 7.5cqw, 32px); font-weight: 800; margin-top: 4px; }
+        .diploma-ranks { width: 100%; font-size: clamp(10px, 3.8cqw, 15px); padding: 0 8%; }
         .diploma-rank-row { display: flex; justify-content: space-between; padding: 2px 0; }
         .diploma-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .diploma-btn {
