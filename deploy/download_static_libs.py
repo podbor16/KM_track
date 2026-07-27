@@ -33,6 +33,10 @@ LIBS = {
     # Chart.js v3.9.1 (для athlete-profile.html, race-analysis.html)
     "https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js":
         "chart3/chart.min.js",
+
+    # html2canvas 1.4.1 (для скачивания диплома на krasmarafon)
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js":
+        "html2canvas/html2canvas.min.js",
 }
 
 HEADERS = {"User-Agent": "Mozilla/5.0 KM_track-deploy/1.0"}
