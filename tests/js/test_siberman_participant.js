@@ -183,7 +183,7 @@ check('progressBarHtml() встроен в renderTeam() перед .stats-row', 
     assert.ok(block.includes('pb-track'), `бегунок команды должен быть отрисован перед stats-row: ${appEl.innerHTML.slice(0, 400)}`);
 });
 
-check('renderIndividual() — бейдж "Индивидуальный" у ФИО в шапке, колонка "Формат" убрана из таблицы КТ (2026-07-22 п.2)', () => {
+check('renderIndividual() — бейдж "Лично" у ФИО в шапке, колонка "Формат" убрана из таблицы КТ (2026-07-22 п.2)', () => {
     const data = { individual: [mkFinishedInd(1, 20000, 'M', 1)], relay: [] };
     appEl.innerHTML = '';
     vm.runInContext(`_mode = 'race';`, sandbox);

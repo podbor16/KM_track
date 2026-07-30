@@ -1419,7 +1419,7 @@ check('buildStats() — 2 карточки (Личники/Эстафеты) с 
     const html = sandbox.buildStats(individual, relayStats, null);
     assert.ok(html.includes('stat-card'), `ожидались карточки: ${html}`);
     assert.ok(html.includes('>2<') && html.includes('Лично'), `личников должно быть 2: ${html}`);
-    assert.ok(html.includes('>3<') && html.includes('Эстафет'), `эстафет должно быть 3 (relayStats.total): ${html}`);
+    assert.ok(html.includes('>3<') && html.includes('Эстафеты'), `должно быть "Эстафеты" (не "Эстафет"), эстафет должно быть 3 (relayStats.total): ${html}`);
     assert.ok(html.includes('1 финишировало'), `1 личник финишировал: ${html}`);
     assert.ok(html.includes('2 DNF/DSQ'), `2 DNF/DSQ у эстафет (relayStats.dnfDsq): ${html}`);
 });
