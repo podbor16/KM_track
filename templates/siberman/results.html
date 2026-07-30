@@ -52,8 +52,6 @@
             --accent2:  var(--red);
             --tab-act:  var(--bg);
             --rank-col: var(--blue);
-            --logo-main:#FFFFFF;
-            --logo-sub: var(--blue);
             --header-bg:var(--bg2);
             --dnf-op:   .45;
             --stat-val: var(--blue);
@@ -72,8 +70,6 @@
             --accent2:  var(--red);
             --tab-act:  var(--bg);
             --rank-col: var(--navy);
-            --logo-main:var(--navy);
-            --logo-sub: var(--red);
             --header-bg:var(--white);
             --dnf-op:   .4;
             --stat-val: var(--red);
@@ -98,21 +94,10 @@
             align-items: center;
             gap: 16px;
         }
-        .logo-block { display: flex; flex-direction: column; gap: 1px; }
-        .logo-name {
-            font-size: 22px; font-weight: 900; letter-spacing: 3px;
-            text-transform: uppercase; color: var(--logo-main);
-            line-height: 1;
-        }
-        .logo-name .m { color: var(--red); }
-        .logo-tagline {
-            font-size: 9px; font-weight: 700; letter-spacing: 2.5px;
-            text-transform: uppercase; color: var(--logo-sub);
-        }
-        .logo-dist {
-            font-size: 9px; font-weight: 600; letter-spacing: 1.5px;
-            color: var(--muted); margin-top: 1px;
-        }
+        .logo-block { display: flex; align-items: center; }
+        .logo-img { height: 40px; width: auto; display: none; }
+        [data-theme="dark"] .logo-img--dark { display: block; }
+        [data-theme="light"] .logo-img--light { display: block; }
         .header-spacer { flex: 1; }
         .header-controls { display: flex; align-items: center; gap: 10px; }
         .year-select {
@@ -459,7 +444,7 @@
 
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
-            .logo-name { font-size: 18px; }
+            .logo-img { height: 32px; }
             .tabs-bar { padding: 0 14px 0 0; }
             .tab-pinned { padding-left: 14px; }
             .tab { padding: 10px 12px; font-size: 12px; }
@@ -498,9 +483,8 @@
 <!-- ── Header ── -->
 <div class="header">
     <div class="logo-block">
-        <div class="logo-name">SIBER<span class="m">M</span>AN</div>
-        <div class="logo-tagline">Ultra Triathlon</div>
-        <div class="logo-dist">10 KM SWIM · 421 KM BIKE · 84 KM RUN</div>
+        <img class="logo-img logo-img--dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon">
+        <img class="logo-img logo-img--light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon">
     </div>
     <div class="header-spacer"></div>
     <div class="header-controls">
