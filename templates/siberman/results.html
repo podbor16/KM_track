@@ -504,14 +504,14 @@
     <div class="tab" data-tab="swim">Плавание <span class="tab-dist">10 км</span></div>
     <div class="tab" data-tab="bike">Вело <span class="tab-dist">421 км</span></div>
     <div class="tab" data-tab="run">Бег <span class="tab-dist">84 км</span></div>
-    <div class="tab" data-tab="day1">День 1 <span class="tab-dist">155 км</span></div>
-    <div class="tab" data-tab="day2">День 1+2 <span class="tab-dist">431 км</span></div>
+    <div class="tab" data-tab="day1">Итог 1 дня <span class="tab-dist">155 км</span></div>
+    <div class="tab" data-tab="day2">Итог 2 дней <span class="tab-dist">431 км</span></div>
     <div class="tab" data-tab="chart">График</div>
-    <div class="tab" data-tab="startlist">Старт Вело-2</div>
+    <div class="tab" data-tab="startlist">День 2: Стартовый лист</div>
 </div>
 <!-- Подвкладки "Вело" — свод по обоим дням / по-дневная разбивка -->
 <div class="tabs-bar tabs-bar--sub" id="bikeSubTabs" style="display:none">
-    <div class="tab active" data-biketab="combined">Свод (оба дня)</div>
+    <div class="tab active" data-biketab="combined">Вело итого</div>
     <div class="tab" data-biketab="bike1">Вело День 1 <span class="tab-dist">145 км</span></div>
     <div class="tab" data-biketab="bike2">Вело День 2 <span class="tab-dist">276 км</span></div>
 </div>
@@ -521,7 +521,7 @@
     <span class="filter-label">Формат:</span>
     <div class="filter-group" id="fmtGroup">
         <button class="filter-btn active" data-fmt="all">Все</button>
-        <button class="filter-btn" data-fmt="individual">Личный</button>
+        <button class="filter-btn" data-fmt="individual">Лично</button>
         <button class="filter-btn" data-fmt="relay">Эстафета</button>
     </div>
     <span class="filter-label" id="genderLabel">Пол:</span>
@@ -596,14 +596,14 @@ function buildStats(individual, relayStats, stageKey) {
     let html = `<div class="stats-v2">`;
     if (individual.length > 0) {
         html += `<div class="stat-card">
-            <div class="stat-val">${individual.length}</div><div class="stat-lbl">Личников</div>
+            <div class="stat-val">${individual.length}</div><div class="stat-lbl">Лично</div>
             <div class="stat-sub">${finInd} финишировало</div>
             <div class="stat-sub2">${indDnfDsq} DNF/DSQ</div>
         </div>`;
     }
     if (relayStats.total > 0) {
         html += `<div class="stat-card">
-            <div class="stat-val">${relayStats.total}</div><div class="stat-lbl">Эстафет</div>
+            <div class="stat-val">${relayStats.total}</div><div class="stat-lbl">Эстафеты</div>
             <div class="stat-sub">${relayStats.finished} финишировало</div>
             <div class="stat-sub2">${relayStats.dnfDsq} DNF/DSQ</div>
         </div>`;
@@ -679,7 +679,7 @@ function rankBodyCells(rankAbs, rankSecondary, secondaryBadge, rc, swapped) {
 // у эстафеты ВСЕГДА показывает формат-ранг, у личника — гендерный.
 function overallSecondaryLabel() {
     if (_fmt === 'relay') return 'Формат';
-    return _fmt === 'individual' ? 'По полу' : 'Пол/Формат';
+    return _fmt === 'individual' ? 'Место (пол)' : 'Пол/Формат';
 }
 function overallRankSwapped() { return _fmt === 'relay'; }
 
@@ -699,7 +699,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
         <td class="name-cell"><div class="name-stack">
             <span class="name-main">${r.surname} ${r.name}</span>
             ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
-            <span class="badge badge-individual">Индивидуальный</span>
+            <span class="badge badge-individual">Лично</span>
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(r.overall_s), overallGaps[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
@@ -778,7 +778,7 @@ const OVERALL_TABLE_HEAD = () => `<thead><tr>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
     <th class="r">🏃 Бег</th>
-    <th>Последняя КТ</th>
+    <th>Отметка</th>
     <th>Статус</th>
 </tr></thead>`;
 
@@ -980,7 +980,7 @@ function renderStage(stage) {
             <td class="name-cell"><div class="name-stack">
                 <span class="name-main">${r.surname} ${r.name}</span>
                 ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
-                <span class="badge badge-individual">Индивидуальный</span>
+                <span class="badge badge-individual">Лично</span>
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
             <td class="muted">${lastCpCell}</td>
@@ -1052,11 +1052,11 @@ function renderStage(stage) {
 
     const rankHead = isRelayFilter
         ? '<th class="r">Формат</th><th class="r">Пол</th><th class="r">Абсолют</th>'
-        : rankHeaderCells('По полу', _gender !== 'all');
+        : rankHeaderCells('Место (пол)', _gender !== 'all');
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHead}<th class="r">№</th><th>Участник</th>
-        <th class="r">Время</th><th>Последняя КТ</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th>Отметка</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -1180,7 +1180,7 @@ function renderRankedProgress(getValue, options = {}) {
     // п.10, v5.
     const daySwapped = _gender !== 'all';
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), daySwapped)}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Последняя КТ</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), daySwapped)}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -1207,7 +1207,7 @@ function renderRankedProgress(getValue, options = {}) {
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Индивидуальный</span>`
+            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, daySwapped)}
@@ -1292,7 +1292,7 @@ function renderBikeCombined() {
 
     const rankHead = isRelayFilter
         ? '<th class="r">Формат</th><th class="r">Пол</th><th class="r">Абсолют</th>'
-        : rankHeaderCells('По полу', _gender !== 'all');
+        : rankHeaderCells('Место (пол)', _gender !== 'all');
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHead}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, v }) => {
@@ -1308,7 +1308,7 @@ function renderBikeCombined() {
         const mainRank = _gender === 'all' ? absRank : genderRank;
         const rc = mainRank != null ? rankClass(mainRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
-        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Индивидуальный</span>';
+        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Лично</span>';
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = isRelayFilter
             ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +

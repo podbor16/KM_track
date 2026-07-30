@@ -526,7 +526,7 @@ check('renderBikeCombined() — эстафетчик получает насто
     sandbox.renderBikeCombined();
     const html = sandbox.document.getElementById('app').innerHTML;
     assert.ok(html.includes('Скорость'), 'ожидалась колонка "Скорость" в заголовке');
-    assert.ok(html.includes('По полу'), 'ожидалась колонка "По полу" в заголовке');
+    assert.ok(html.includes('Место (пол)'), 'ожидалась колонка "Место (пол)" в заголовке');
     assert.ok(html.includes('Быстров Олег'), `ожидалось реальное имя велосипедиста в разметке, html: ${html.slice(0, 500)}`);
     // Название команды может остаться подписью под ФИО (как на этапах), но
     // главным "именем участника" должно быть ФИО, не название команды.
@@ -1286,8 +1286,8 @@ check('renderRankedProgress() (Дни) — 2 колонки рангов как 
     setRaceData([ind], [], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
-    assert.ok(html.includes('<th class="r">Место</th>') || html.includes('Пол/Формат') || html.includes('По полу'), `ожидалась колонка места: ${html.slice(0,500)}`);
-    assert.ok(html.includes('Последняя КТ'), `ожидалась колонка "Последняя КТ" (как в Итогах/на этапах): ${html.slice(0,600)}`);
+    assert.ok(html.includes('<th class="r">Место</th>') || html.includes('Пол/Формат') || html.includes('Место (пол)'), `ожидалась колонка места: ${html.slice(0,500)}`);
+    assert.ok(html.includes('Отметка'), `ожидалась колонка "Отметка" (как в Итогах/на этапах): ${html.slice(0,600)}`);
     // Отставание больше не отдельной колонкой (п.3 v5) — встроено под
     // временем через timeGapCell, поэтому колонки "Отставание" в шапке нет.
     assert.ok(!html.includes('<th class="r">Отставание</th>'), `отдельной колонки "Отставание" быть не должно: ${html.slice(0,700)}`);
@@ -1418,7 +1418,7 @@ check('buildStats() — 2 карточки (Личники/Эстафеты) с 
     const relayStats = { total: 3, finished: 1, dnfDsq: 2 };
     const html = sandbox.buildStats(individual, relayStats, null);
     assert.ok(html.includes('stat-card'), `ожидались карточки: ${html}`);
-    assert.ok(html.includes('>2<') && html.includes('Личников'), `личников должно быть 2: ${html}`);
+    assert.ok(html.includes('>2<') && html.includes('Лично'), `личников должно быть 2: ${html}`);
     assert.ok(html.includes('>3<') && html.includes('Эстафет'), `эстафет должно быть 3 (relayStats.total): ${html}`);
     assert.ok(html.includes('1 финишировало'), `1 личник финишировал: ${html}`);
     assert.ok(html.includes('2 DNF/DSQ'), `2 DNF/DSQ у эстафет (relayStats.dnfDsq): ${html}`);
@@ -1430,7 +1430,7 @@ check('buildStats() — карточка "Эстафеты" скрыта, ког
 });
 check('buildStats() — карточка "Личников" скрыта, когда individual пуст (только эстафета)', () => {
     const html = sandbox.buildStats([], { total: 5, finished: 2, dnfDsq: 1 }, null);
-    assert.ok(!html.includes('Личников'), `карточка личников не должна рендериться при пустом individual: ${html}`);
+    assert.ok(!html.includes('Лично'), `карточка личников не должна рендериться при пустом individual: ${html}`);
     assert.ok(html.includes('Эстафет'), `карточка эстафет должна остаться: ${html}`);
 });
 

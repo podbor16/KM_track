@@ -284,8 +284,8 @@ let _rerender = null;
 
 function modeToggle() {
     return `<div class="mode-toggle">
-        <button class="mode-btn ${_mode === 'race' ? 'active' : ''}" onclick="_mode='race'; _rerender();">В гонке</button>
-        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">На этапе</button>
+        <button class="mode-btn ${_mode === 'race' ? 'active' : ''}" onclick="_mode='race'; _rerender();">Гонка</button>
+        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">Этап</button>
     </div>`;
 }
 
@@ -572,7 +572,7 @@ function renderIndividual(data, r) {
         const liveGap = fmtGap(overallGaps[r.bib]);
         overallStat = cur && pos ? `
             <div class="stat"><div class="stat-val">${STAGES.find(s => s.dbStage === cur)?.label ?? cur}</div><div class="stat-lbl">Сейчас на этапе</div></div>
-            <div class="stat"><div class="stat-val">${CHECKPOINT_LABELS[cur][pos.seq]}</div><div class="stat-lbl">Последняя КТ</div></div>
+            <div class="stat"><div class="stat-val">${CHECKPOINT_LABELS[cur][pos.seq]}</div><div class="stat-lbl">Отметка</div></div>
             ${liveGap ? `<div class="stat"><div class="stat-val">${liveGap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
         ` : '';
     }
@@ -584,7 +584,7 @@ function renderIndividual(data, r) {
                 <span class="p-bib">№${r.bib}</span>
                 <span class="p-name">${r.surname} ${r.name}</span>
                 ${genderBadge(r.gender)}
-                <span class="badge badge-individual">Индивидуальный</span>
+                <span class="badge badge-individual">Лично</span>
                 ${statusBadge(r, null)}
             </div>
             ${r.city ? `<div class="p-city">${r.city}</div>` : ''}
