@@ -535,8 +535,8 @@ function rankStatHtml(rank, gap, label) {
     if (rank == null) return '';
     return `<div class="stat">
         <div class="stat-val">${rank}</div>
-        ${gap ? `<div class="stat-subgap">${gap}</div>` : ''}
         <div class="stat-lbl">${label}</div>
+        ${gap ? `<div class="stat-subgap">${gap}</div>` : ''}
     </div>`;
 }
 

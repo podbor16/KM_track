@@ -228,5 +228,13 @@ check('renderIndividual() — Место (по полу) и Место (абсо
     assert.ok(stats.includes('stat-subgap'), `отставание должно быть внутри блока места (stat-subgap): ${stats}`);
 });
 
+check('rankStatHtml() — внутри блока лейбл идёт ПЕРЕД отставанием (число места → лейбл → отставание)', () => {
+    const html = vm.runInContext('rankStatHtml', sandbox)(1, '+00:12', 'Место (абсолют)');
+    const lblPos = html.indexOf('Место (абсолют)');
+    const gapPos = html.indexOf('+00:12');
+    assert.ok(lblPos !== -1 && gapPos !== -1, `оба фрагмента должны присутствовать: ${html}`);
+    assert.ok(lblPos < gapPos, `лейбл должен идти раньше отставания: ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
