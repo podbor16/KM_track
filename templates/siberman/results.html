@@ -7,6 +7,30 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* ── Фирменный шрифт (Onest) ── */
+        /* Зарегистрированы только 2 реальных начертания (Light/ExtraBold).
+           Остальные font-weight в этом файле (600-900 — табы/бейджи/числа)
+           резолвятся браузером в ExtraBold по алгоритму CSS Fonts Level 4
+           fallback-подбора (ищет вверх от запрошенного веса), а обычный
+           текст (unset/400) — в Light (тот же алгоритм для диапазона
+           [400,500] сначала ищет вверх до 500, не находит, затем вниз —
+           попадает на 300). Поэтому НЕ нужно расставлять font-weight:300
+           по всем обычным текстовым элементам вручную. */
+        @font-face {
+            font-family: 'Onest';
+            src: url('/static/fonts/siberman/Onest-Light.ttf') format('truetype');
+            font-weight: 300;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Onest';
+            src: url('/static/fonts/siberman/Onest-ExtraBold.ttf') format('truetype');
+            font-weight: 800;
+            font-style: normal;
+            font-display: swap;
+        }
+
         /* ── Brand tokens ── */
         :root {
             --navy:   #003D62;
@@ -59,7 +83,7 @@
         body {
             background: var(--bg);
             color: var(--text);
-            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
             font-size: 14px;
             line-height: 1.5;
             transition: background .2s, color .2s;
