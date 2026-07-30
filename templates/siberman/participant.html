@@ -45,8 +45,6 @@
             --border:   rgba(106,171,215,.18);
             --text:     #e4eef6;
             --muted:    #7aaabf;
-            --logo-main:#FFFFFF;
-            --logo-sub: var(--blue);
             --header-bg:var(--bg2);
             --dnf-op:   .45;
         }
@@ -57,8 +55,6 @@
             --border:   #b8d5e8;
             --text:     var(--navy);
             --muted:    #4f7f9b;
-            --logo-main:var(--navy);
-            --logo-sub: var(--red);
             --header-bg:var(--white);
             --dnf-op:   .4;
         }
@@ -71,10 +67,10 @@
             background: var(--header-bg); border-bottom: 3px solid var(--red);
             padding: 14px 20px; display: flex; align-items: center; gap: 16px;
         }
-        .logo-block { display: flex; flex-direction: column; gap: 1px; }
-        .logo-name { font-size: 22px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; color: var(--logo-main); line-height: 1; }
-        .logo-name .m { color: var(--red); }
-        .logo-tagline { font-size: 9px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--logo-sub); }
+        .logo-block { display: flex; align-items: center; }
+        .logo-img { height: 30px; width: auto; display: none; }
+        [data-theme="dark"] .logo-img--dark { display: block; }
+        [data-theme="light"] .logo-img--light { display: block; }
         .header-spacer { flex: 1; }
         .back-link {
             color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
@@ -193,7 +189,7 @@
 
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
-            .logo-name { font-size: 18px; }
+            .logo-img { height: 24px; }
             .content { padding: 14px; }
             .card-hdr, .stats-row { padding: 12px 14px; }
             .p-name { font-size: 17px; }
@@ -221,8 +217,9 @@
 <div class="header">
     <a class="back-link" href="/siberman/results?year={{ year }}">← Результаты</a>
     <div class="header-spacer"></div>
-    <div class="logo-block" style="align-items:center">
-        <div class="logo-name" style="font-size:16px">SIBER<span class="m">M</span>AN</div>
+    <div class="logo-block">
+        <img class="logo-img logo-img--dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon">
+        <img class="logo-img logo-img--light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon">
     </div>
     <div class="header-spacer"></div>
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
