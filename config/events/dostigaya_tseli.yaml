@@ -11,7 +11,7 @@ description: "Благотворительный забег «Достигая �
 distances:
   - distance: "5 км"
     distance_km: 5.0
-    db_event_id: null         # ← ЗАГЛУШКА: заполнить после создания записи в таблице `events` (см. docs/race-day-runbook.md)
+    db_event_id: 152           # запись создана в events (2026-07-31)
     tracked: true
     has_start_list: true
     checkpoint_distances: [0, 2.5, 5.0]
