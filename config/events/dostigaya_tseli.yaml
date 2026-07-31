@@ -28,7 +28,7 @@ distances:
       race_id: "--2026-17236"
       login: "podbor250718@gmail.com"
       preset: "km_rzd_5km_2026"
-      event: "5 км"
+      event: "5 km"
     diploma:
       background: "static/images/diplomas/dostigaya_tseli/5km/background.jpg"
       width_px: 705

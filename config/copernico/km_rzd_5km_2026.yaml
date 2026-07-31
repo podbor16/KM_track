@@ -1,0 +1,22 @@
+description: "Достигая цели (в честь Дня железнодорожника) 2026, 5км, 1 КТ (Разворот 2.5км). Chip-времена НЕ включены в пресет (нет times.real_*)."
+# Проверено живым fetch 2026-08-01: 1010 строк, поля подтверждены реальным
+# ответом Copernico. Если судья добавит chip-поля в пресет — вписать имена
+# в chip_start/chip_finish и перезапустить.
+
+fields:
+  bib: dorsal
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+time_fields:
+  gun_start:   "times.official_:::start:::"
+  gun_finish:  "times.official_:::finish:::"
+  chip_start:  null   # в пресете нет times.real_* — чистое время = gun_finish - gun_start
+  chip_finish: null
+
+checkpoint_fields:
+  kt1: "times.official_2.5"   # разворот 2.5 км
