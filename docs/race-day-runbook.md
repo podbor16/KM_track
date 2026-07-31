@@ -41,6 +41,7 @@ copernico:
 | `config/events/kids.yaml` | Детский забег | 1 км |
 | `config/events/x_trail.yaml` | Х Трейл (показ: Забег Икс) | 10 км |
 | `config/events/snow7.yaml` | Снежная семерка | 7 км |
+| `config/events/dostigaya_tseli.yaml` | Достигая цели | 5 км |
 
 ### 2. В таблице `events` — убедиться что запись для нового события существует
 

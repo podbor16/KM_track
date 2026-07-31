@@ -1,0 +1,37 @@
+name: "Достигая цели"
+display_name: "Достигая цели"
+year: 2026
+code: "dostigaya_tseli"
+is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных. Активировать через /admin перед стартом
+start_lat: 56.0063930          # трасса как у "Весна" (тот же старт/маршрут)
+start_lon: 92.8714990
+gun_time: "10:00:00"          # старт 2026-08-01 10:00 (план) — уточнить точное время после настройки Copernico
+description: "Благотворительный забег «Достигая цели» (в честь Дня железнодорожника) | Дистанция: 5 км"
+
+distances:
+  - distance: "5 км"
+    distance_km: 5.0
+    db_event_id: null         # ← ЗАГЛУШКА: заполнить после создания записи в таблице `events` (см. docs/race-day-runbook.md)
+    tracked: true
+    has_start_list: true
+    checkpoint_distances: [0, 2.5, 5.0]
+    checkpoints:
+      - {name: "Старт",           distance_km: 0.0, lat: 56.0063930, lon: 92.8714990}
+      - {name: "Разворот 2.5 км", distance_km: 2.5, lat: 55.99875, lon: 92.835}
+      - {name: "Финиш",           distance_km: 5.0, lat: 56.0063930, lon: 92.8714990}
+    gpx_file: "static/map/2026/vesna.gpx"    # трасса переиспользована с "Весна" — тот же маршрут
+    event_date: "2026-08-01"
+    route:
+      laps: 1
+      total_km: 5.0
+    copernico:
+      race_id: null            # ← ЗАГЛУШКА: Copernico пока не настроен, заполнить когда появится race_id
+      login: "podbor250718@gmail.com"
+      preset: "km_dostigaya_tseli_5km_2026"
+      event: "5 км"
+    diploma:
+      background: "static/images/diplomas/dostigaya_tseli/5km/background.jpg"
+      width_px: 705
+      height_px: 1280
+      name_box: {top: 41.7, left: 8.9, width: 82.0, height: 15.9}
+      ranks_box: {top: 60.6, left: 8.9, width: 82.0, height: 15.8}

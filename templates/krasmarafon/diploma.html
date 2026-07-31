@@ -12,32 +12,33 @@
             align-items: center; padding: 24px 16px;
         }
         /* Фон — полностью готовая картинка от дизайнера (лого/название
-           события/дистанция/медаль уже нарисованы) — соотношение сторон
-           1080×1920 (9:16), два прямоугольника-плейсхолдера под текст
-           размечены дизайнером внутри самой картинки. Держим карточку в
-           этой же пропорции (aspect-ratio), тогда оверлеи-проценты ниже
-           всегда попадают точно на плейсхолдеры независимо от ширины
-           экрана. */
+           события/дистанция/медаль/декор уже нарисованы), поверх — два
+           прямоугольника-плейсхолдера под текст. Разные события — разные
+           картинки с разными пропорциями и разной позицией плейсхолдеров
+           (см. DiplomaConfig в event_loader.py) — ширина/высота и позиции
+           боксов ниже подставляются из конфига события, а не хардкодятся,
+           чтобы один и тот же шаблон одинаково работал для любого дизайна. */
         .diploma-card {
-            width: 100%; max-width: 420px; aspect-ratio: 1080 / 1920;
+            width: 100%; max-width: 420px;
+            aspect-ratio: {{ distance.diploma.width_px }} / {{ distance.diploma.height_px }};
             background-image: url('/{{ distance.diploma.background }}');
             background-size: cover; background-position: center;
             border-radius: 8px; position: relative; overflow: hidden;
             container-type: inline-size;
         }
-        /* Позиции измерены по реальному пикселю картинки-примера
-           (1080×1920): бокс 1 — y 477–820, бокс 2 — y 880–1193,
-           x 95–976 у обоих. Если дизайнер пришлёт следующий диплом с
-           другой разметкой плейсхолдеров — эти проценты нужно будет
-           пересчитать под новую картинку (общий для всех событий шаблон
-           вёрстки, см. спеку, Часть 3/4). */
         .diploma-slot {
-            position: absolute; left: 8.8%; width: 81.6%;
+            position: absolute;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             color: #fff; text-align: center;
         }
-        .diploma-slot--name { top: 24.8%; height: 17.9%; }
-        .diploma-slot--ranks { top: 45.8%; height: 16.3%; }
+        .diploma-slot--name {
+            top: {{ distance.diploma.name_box.top }}%; left: {{ distance.diploma.name_box.left }}%;
+            width: {{ distance.diploma.name_box.width }}%; height: {{ distance.diploma.name_box.height }}%;
+        }
+        .diploma-slot--ranks {
+            top: {{ distance.diploma.ranks_box.top }}%; left: {{ distance.diploma.ranks_box.left }}%;
+            width: {{ distance.diploma.ranks_box.width }}%; height: {{ distance.diploma.ranks_box.height }}%;
+        }
         .diploma-name { font-size: clamp(11px, 4.2cqw, 18px); font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
         .diploma-time { font-size: clamp(20px, 7.5cqw, 32px); font-weight: 800; margin-top: 4px; }
         .diploma-ranks { width: 100%; font-size: clamp(10px, 3.8cqw, 15px); padding: 0 8%; }
@@ -53,11 +54,14 @@
             body { background: #fff; padding: 0; min-height: 0; }
             .diploma-actions { display: none; }
             .diploma-card {
-                /* Карточка уже, чем страница (соотношение сторон 1080:1920 ≈
-                   0.56), а страница A4 — 0.71 — если ограничивать по ширине
-                   (max-width: 100%), высота от aspect-ratio вылезает за
-                   пределы одной страницы. Ограничиваем по высоте вместо
-                   ширины — тогда ширина всегда меньше ширины страницы. */
+                /* Диплом — портретная карточка уже, чем страница A4
+                   (соотношение сторон ~0.71) при любом реальном дизайне
+                   (женская семёрка ~0.56, достигая цели ~0.55 и т.п.) — если
+                   ограничивать по ширине (max-width: 100%), высота от
+                   aspect-ratio вылезает за пределы одной страницы.
+                   Ограничиваем по высоте вместо ширины — тогда ширина
+                   всегда меньше ширины страницы, независимо от конкретных
+                   пропорций конкретного фона. */
                 width: auto; max-width: 100%;
                 height: 100vh; max-height: 100vh;
                 margin: 0 auto;

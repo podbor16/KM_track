@@ -2,7 +2,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from src.config.event_loader import EventConfig, DistanceConfig, DiplomaConfig
+from src.config.event_loader import EventConfig, DistanceConfig, DiplomaConfig, DiplomaBoxConfig
 
 
 def _fake_event():
@@ -16,6 +16,9 @@ def _fake_event():
                 distance="7 км", distance_km=7.0, db_event_id=555, tracked=True,
                 diploma=DiplomaConfig(
                     background="static/images/diplomas/women7/7km/background.png",
+                    width_px=1080, height_px=1920,
+                    name_box=DiplomaBoxConfig(top=24.8, left=8.8, width=81.6, height=17.9),
+                    ranks_box=DiplomaBoxConfig(top=45.8, left=8.8, width=81.6, height=16.3),
                 ),
             ),
         ],
