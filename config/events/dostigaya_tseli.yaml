@@ -27,7 +27,7 @@ distances:
     copernico:
       race_id: "--2026-17236"
       login: "podbor250718@gmail.com"
-      preset: "km_dostigaya_tseli_5km_2026"
+      preset: "km_rzd_5km_2026"
       event: "5 км"
     diploma:
       background: "static/images/diplomas/dostigaya_tseli/5km/background.jpg"
