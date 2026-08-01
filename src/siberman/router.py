@@ -1,10 +1,9 @@
-import hmac
 import pickle
 import logging
 import tempfile
 import datetime
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -13,12 +12,7 @@ from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
 from src.siberman.db import get_siberman_connection, get_results_for_year, set_race_start
-from src.config import settings
-from src.core.auth import (
-    COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
-)
-
-_require_auth = require_auth_for("/siberman/login")
+from src.core.auth import api_require_auth
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 router = APIRouter(tags=["Siberman"])
@@ -84,30 +78,14 @@ def _parse_race_start(raw: str) -> datetime.datetime:
         raise ValueError(f"Неверный формат времени старта: {raw!r}")
 
 
-@router.get("/siberman/results", response_class=HTMLResponse)
-async def results_page(request: Request):
-    return templates.TemplateResponse(
-        "siberman/results.html", {"request": request}
-    )
-
-
-async def _participant_response(request: Request, bib: str, year: int):
+@router.get("/participant/{bib}", response_class=HTMLResponse)
+async def participant_page(request: Request, bib: str, year: int = 2025):
     """Данные подгружаются на клиенте из уже существующего
     /api/siberman/results (тот же пул данных, что и у результатов), bib
     ищется среди individual/relay в JS."""
     return templates.TemplateResponse(
         "siberman/participant.html", {"request": request, "bib": bib, "year": year}
     )
-
-
-@router.get("/siberman/participant/{bib}", response_class=HTMLResponse)
-async def participant_page(request: Request, bib: str, year: int = 2025):
-    return await _participant_response(request, bib, year)
-
-
-@router.get("/participant/{bib}", response_class=HTMLResponse)
-async def participant_page_short(request: Request, bib: str, year: int = 2025):
-    return await _participant_response(request, bib, year)
 
 
 @router.get("/api/siberman/results")
@@ -131,50 +109,6 @@ async def api_results(year: int = 2025):
     if data.get("race_start") is not None:
         data["race_start"] = data["race_start"].isoformat()
     return JSONResponse(data)
-
-
-@router.get("/siberman/login", response_class=HTMLResponse)
-async def siberman_login_page(request: Request):
-    return templates.TemplateResponse(
-        "siberman/login.html", {"request": request, "error": None}
-    )
-
-
-@router.post("/siberman/login")
-async def siberman_login_submit(username: str = Form(...), password: str = Form(...)):
-    creds_ok = (
-        username == settings.ADMIN_USERNAME
-        and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
-    )
-    if creds_ok:
-        cookie_value = create_session_cookie(username)
-        response = RedirectResponse("/siberman/admin", status_code=302)
-        response.set_cookie(
-            COOKIE_NAME, cookie_value, httponly=True,
-            max_age=EXPIRY_SECONDS, samesite="lax",
-        )
-        return response
-    return templates.TemplateResponse(
-        "siberman/login.html",
-        {"request": {}, "error": "Неверный логин или пароль"},
-        status_code=401,
-    )
-
-
-@router.get("/siberman/logout")
-async def siberman_logout():
-    response = RedirectResponse("/siberman/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
-    return response
-
-
-@router.get("/siberman/admin", response_class=HTMLResponse)
-async def admin_page(request: Request, user=Depends(_require_auth)):
-    if isinstance(user, RedirectResponse):
-        return user
-    return templates.TemplateResponse(
-        "siberman/admin.html", {"request": request}
-    )
 
 
 @router.post("/api/siberman/admin/upload")
