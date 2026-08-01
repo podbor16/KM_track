@@ -94,7 +94,7 @@
             <div class="diploma-ranks">
                 <div class="diploma-rank-row"><span>Абсолют</span><span>{{ diploma.rank_absolute or '-' }}</span></div>
                 {% if diploma.show_sex_rank %}
-                <div class="diploma-rank-row"><span>Пол</span><span>{{ diploma.rank_sex or '-' }}</span></div>
+                <div class="diploma-rank-row"><span>{{ diploma.sex_label or 'Пол' }}</span><span>{{ diploma.rank_sex or '-' }}</span></div>
                 {% endif %}
                 {% if diploma.show_category_rank and diploma.rank_category %}
                 <div class="diploma-rank-row"><span>{{ diploma.category or 'Категория' }}</span><span>{{ diploma.rank_category }}</span></div>

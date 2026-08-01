@@ -27,6 +27,20 @@ def _is_gender_only_category(category: str) -> bool:
     return category.strip().lower() in _GENDER_ONLY_CATEGORY_WORDS
 
 
+def _gender_label(sex: Optional[str]) -> str:
+    """'Мужчины'/'Женщины' для подписи строки места по полу — вместо
+    нейтрального 'Пол' (та же эвристика распознавания значений sex из БД,
+    что и convertSexToGender() в analytics-results.js)."""
+    if not sex:
+        return 'Пол'
+    lowered = str(sex).strip().lower()
+    if 'муж' in lowered or lowered in ('male', 'm', 'м'):
+        return 'Мужчины'
+    if 'жен' in lowered or lowered in ('female', 'f', 'ж'):
+        return 'Женщины'
+    return 'Пол'
+
+
 def format_finish_time(td: Optional[timedelta]) -> str:
     """timedelta → 'H:MM:SS' (или 'MM:SS', если меньше часа), '-' для None."""
     if td is None:
@@ -69,6 +83,7 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
         'rank_absolute': target.get('rank_absolute_clean'),
         'rank_sex': target.get('rank_sex_clean'),
         'rank_category': target.get('rank_category_clean'),
+        'sex_label': _gender_label(target.get('sex')),
         'show_sex_rank': len(sexes) > 1,
         'show_category_rank': show_category_rank,
     }

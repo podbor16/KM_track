@@ -100,6 +100,17 @@ def test_get_diploma_data_hides_category_row_when_category_is_just_gender():
     assert data['show_category_rank'] is False
 
 
+def test_get_diploma_data_sex_label_is_gender_name_not_generic():
+    """Вместо нейтрального 'Пол' строка должна называться 'Мужчины'/
+    'Женщины' — конкретный пол участника."""
+    rows = [_row('101', 'female', time_s=1576), _row('102', 'male', time_s=1500)]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data_f = get_diploma_data(event_id=1, bib='101')
+        data_m = get_diploma_data(event_id=1, bib='102')
+    assert data_f['sex_label'] == 'Женщины'
+    assert data_m['sex_label'] == 'Мужчины'
+
+
 def test_get_diploma_data_shows_category_row_when_real_age_category():
     """У события с настоящими возрастными категориями (напр. 'мужчины до
     49 лет') строка категории несёт данные, которых нет в строке "Пол" —
