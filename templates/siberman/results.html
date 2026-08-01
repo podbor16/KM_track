@@ -416,6 +416,7 @@
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .muted { color: var(--muted); }
+        .muted-sub { font-size: 11px; color: var(--muted); }
 
         /* Stage icon dots in overall table */
         .stage-icon { font-size: 10px; color: var(--muted); white-space: nowrap; }
@@ -652,36 +653,37 @@ function getFiltered() {
 /* ──────────────── Render: Overall ──────────────── */
 const STAGE_LABEL_RU = { swim: 'Плавание', bike: 'Вело (оба дня)', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
 
-// Место — генерик-рендерер ДВУХ колонок: абсолют + вторичный ранг (смысл —
-// пол или формат, решает вызывающий код). secondaryLabel — заголовок второй
-// колонки. swapped — вторичная колонка первой (для персонифицированных
-// таблиц триггер — активный фильтр _gender; для командных — _fmt==='relay';
-// каждый вызывающий код решает сам). secondaryBadge — HTML готового бейджа
-// буквы (genderBadge(gender) или formatBadge()) — тоже решает вызывающий код,
-// эта функция не знает, эстафета строка или личник.
+// Место — генерик-рендерер колонок мест. show2=false → одна колонка
+// "Место"; show2=true → две колонки "Место"+secondaryLabel (пол/формат,
+// решает вызывающий код). secondaryBadge — HTML готового бейджа буквы
+// (genderBadge(gender) или formatBadge()) — тоже решает вызывающий код,
+// эта функция не знает, эстафета строка или личник. Порядок колонок
+// больше не меняется (swap убран п.7 v6, 2026-08-02) — "Место" всегда
+// первая колонка, когда обе колонки вообще показаны.
 // Обе rank-колонки — class="r" (числовые, выравнивание по центру, как и
 // остальные числовые колонки). Мобильная версия показывает те же колонки,
 // что и десктоп — никакого (отменено 2026-07-23, п.1 v5).
-function rankHeaderCells(secondaryLabel, swapped) {
-    return swapped
-        ? `<th class="r">${secondaryLabel}</th><th class="r">Абсолют</th>`
-        : `<th class="r">Место</th><th class="r">${secondaryLabel}</th>`;
+function rankHeaderCells(show2, secondaryLabel) {
+    if (!show2) return '<th class="r">Место</th>';
+    return `<th class="r">Место</th><th class="r">${secondaryLabel}</th>`;
 }
-function rankBodyCells(rankAbs, rankSecondary, secondaryBadge, rc, swapped) {
+function rankBodyCells(show2, rankAbs, rankSecondary, secondaryBadge, rc) {
     const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
+    if (!show2) return `<td class="r">${a}</td>`;
     const s = rankSecondary != null ? `<span class="rank-num ${rc}">${secondaryBadge}${rankSecondary}</span>` : '<span class="muted">—</span>';
-    return swapped ? `<td class="r">${s}</td><td class="r">${a}</td>` : `<td class="r">${a}</td><td class="r">${s}</td>`;
+    return `<td class="r">${a}</td><td class="r">${s}</td>`;
 }
 
-// Место — 2 колонки (Абсолют + Пол/Формат), swapped при fmt==='relay'
-// (формат становится первой колонкой) — команда не имеет личного пола на
-// этом уровне (три разных человека на трёх этапах), поэтому вторая колонка
-// у эстафеты ВСЕГДА показывает формат-ранг, у личника — гендерный.
+// Подпись второй колонки места на Итогах/Днях, когда она вообще
+// показывается (см. showSecondaryRank — при fmt==='relay' вторая колонка
+// не показывается никогда, п.7 v6, поэтому ветка на этот случай не нужна).
 function overallSecondaryLabel() {
-    if (_fmt === 'relay') return 'Формат';
     return _fmt === 'individual' ? 'Место (пол)' : 'Пол/Формат';
 }
-function overallRankSwapped() { return _fmt === 'relay'; }
+// Вторая колонка места на Итогах/Днях — только когда Пол=Все И Формат не
+// Эстафета (у эстафеты в Итогах/Днях нет личного пола, показывать нечего;
+// в остальных случаях — по явному запросу пользователя, п.7 v6, 2026-08-02).
+function showSecondaryRank() { return _gender === 'all' && _fmt !== 'relay'; }
 
 // stageGaps — {swim,bike1,bike2,run} каждая {bib: секунды} от fieldGaps()
 // по ПОЛНОМУ объединённому пулу личники+эстафета (см. renderOverall) — у
@@ -694,7 +696,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
     const pos = cur ? lastReached(r.cp, cur) : null;
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc, overallRankSwapped())}
+        ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
         <td class="name-cell"><div class="name-stack">
             <span class="name-main">${r.surname} ${r.name}</span>
@@ -705,6 +707,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
+        <td class="r time-cell muted">${fmtTime(bikeCombinedTime(r))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusBadge(r, null)}</td>
@@ -725,7 +728,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
     const statusCell = teamStatusBadge(team);
     return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
-        ${rankBodyCells(combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc, overallRankSwapped())}
+        ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
         <td class="bib-cell">${team.bib}</td>
         <td class="name-cell"><div class="name-stack">
             <span class="name-main">${team.team_name}</span>
@@ -735,6 +738,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
+        <td class="r time-cell muted">${fmtTime(bikeCombinedTime(tr))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusCell}</td>
@@ -772,11 +776,12 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells(overallSecondaryLabel(), overallRankSwapped())}<th class="r">№</th><th>Участник</th>
+    ${rankHeaderCells(showSecondaryRank(), overallSecondaryLabel())}<th class="r">№</th><th>Участник</th>
     <th class="r">Итого</th>
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
+    <th class="r">🚴 Вело итого</th>
     <th class="r">🏃 Бег</th>
     <th>Отметка</th>
     <th>Статус</th>
@@ -942,7 +947,6 @@ function renderStage(stage) {
         M: computeRanksByValue(visibleStageRows.filter(x => x.gender === 'M')),
         F: computeRanksByValue(visibleStageRows.filter(x => x.gender === 'F')),
     };
-    const stageFormatRanks = computeRanksByValue(visibleStageRows.filter(x => x.isRelay));
     const stageGenderRankFor = (key, gender) => stageGenderRanks[gender]?.[key];
 
     // Статистика ("Команд"/"Эстафет"/"Финишировали") на вкладке этапа должна
@@ -959,21 +963,20 @@ function renderStage(stage) {
     };
     let html = buildStats(individual, relayStatsStage, stage);
 
-    // При активном фильтре по полу "Место" (2-колоночный режим) должно быть
-    // местом ВНУТРИ этого пола (пересчитанным, не абсолютным) — иначе
-    // абсолютный ранг (17, 20...) выглядит так, будто места "не
-    // пересчитались" под фильтр. Не применяется в 3-колоночном режиме
-    // (fmt==='relay') — там все три ранга показаны одновременно явно.
-    const mainRankFor = (key, gender) => _gender === 'all' ? stageAbsRanks[key] : stageGenderRankFor(key, gender);
-    const isRelayFilter = _fmt === 'relay';
+    // "Место" всегда = stageAbsRanks (ранг внутри ВИДИМОГО пула) — при
+    // активном фильтре по полу видимый пул уже однополый, так что
+    // абсолютный ранг внутри него и есть ранг по полу (п.7 v6, 2026-08-02:
+    // 3-колоночный режим для эстафеты убран — эстафетчик персонифицирован
+    // на этой вкладке точно так же, как личник).
+    const showGenderCol = _gender === 'all';
 
     const buildIndividualStageRow = r => {
         const t = r[cfg.timeKey];
         const noTime = t == null;
-        const rc = noTime ? '' : rankClass(mainRankFor(r.bib, r.gender));
+        const rc = noTime ? '' : rankClass(stageAbsRanks[r.bib]);
         const pos = lastReached(r.cp, dbStage);
-        const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
-        const rankCells = rankBodyCells(stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc, _gender !== 'all');
+        const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
+        const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
         return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
@@ -996,17 +999,9 @@ function renderStage(stage) {
         const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
         const hasTime = t != null;
         const pos = lastReached(m.cp, dbStage);
-        const lastCpCell = pos ? CHECKPOINT_LABELS[dbStage][pos.seq] : '—';
-        const mainRank = mainRankFor(key, m.gender);
-        const rc = mainRank != null ? rankClass(mainRank) : '';
-        // 3-колоночный режим (Формат/Пол/Абсолют) только при fmt==='relay' —
-        // тогда личников на этапе нет вовсе, buildIndividualStageRow не
-        // вызывается, три колонки в шапке соответствуют трём ячейкам здесь.
-        const rankCells = isRelayFilter
-            ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${stageFormatRanks[key] ?? '—'}</span></td>` +
-              `<td class="r">${stageGenderRankFor(key, m.gender) != null ? `<span class="rank-num ${rc}">${genderBadge(m.gender)}${stageGenderRankFor(key, m.gender)}</span>` : '<span class="muted">—</span>'}</td>` +
-              `<td class="r"><span class="rank-num ${rc}">${stageAbsRanks[key] ?? '—'}</span></td>`
-            : rankBodyCells(stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc, _gender !== 'all');
+        const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
+        const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
+        const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
         return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${m._bib}</td>
@@ -1050,12 +1045,9 @@ function renderStage(stage) {
         ];
     }
 
-    const rankHead = isRelayFilter
-        ? '<th class="r">Формат</th><th class="r">Пол</th><th class="r">Абсолют</th>'
-        : rankHeaderCells('Место (пол)', _gender !== 'all');
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
-        ${rankHead}<th class="r">№</th><th>Участник</th>
+        ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th>
         <th class="r">Время</th><th>Отметка</th><th class="r">${cfg.metaLbl}</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
@@ -1152,11 +1144,16 @@ function dayRankOptions(getValue) {
 // отфильтрованы по формату/полу выше) — тот же откат, что и на Итогах гонки
 // (запрошено пользователем 2026-07-24: при фильтре "Личный" невидимые
 // эстафетчики "съедали" номера мест, 1,2,3,5,7...). Раньше МЕСТО считалось
-// по полному ростеру года намеренно — не подтвердилось на практике. Порядок
-// rank-колонок — swap по активному фильтру пола (_gender !== 'all'), тот же
-// критерий, что на этапах.
+// по полному ростеру года намеренно — не подтвердилось на практике. Число
+// колонок места и исключение эстафеты при фильтре пола — тот же критерий
+// showSecondaryRank(), что и на Итогах гонки (п.7 v6, 2026-08-02).
 function renderRankedProgress(getValue, options = {}) {
-    const { individual, relay } = getFiltered();
+    const filtered = getFiltered();
+    const individual = filtered.individual;
+    // Эстафетная команда не имеет единого пола — при выбранном фильтре
+    // пола команды на "Днях" не показываем вовсе, тот же приём, что и в
+    // renderOverall (запрошено пользователем 2026-08-02, п.7 v6).
+    const relay = _gender === 'all' ? filtered.relay : [];
     const entries = buildRankedEntries(individual, relay, getValue);
     // "Финишировало" для эстафетной карточки — дошли до конца ИМЕННО ЭТОГО
     // дня/снапшота (entries[].v уже несёт эту семантику через getValue),
@@ -1174,13 +1171,9 @@ function renderRankedProgress(getValue, options = {}) {
     }
     const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.type === 'individual' ? e.entry.status : e.status })));
     const gaps = poolGap(entries);
-    // Порядок колонок места — сначала По полу/Формату (если фильтр по полу
-    // активен), затем Абсолют, тот же критерий swap, что и на вкладках
-    // этапов (rankBodyCells(..., _gender !== 'all')), не только формат —
-    // п.10, v5.
-    const daySwapped = _gender !== 'all';
+    const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(overallSecondaryLabel(), daySwapped)}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v } = item;
         const hasVal = v != null;
@@ -1189,28 +1182,22 @@ function renderRankedProgress(getValue, options = {}) {
         const secondaryRank = type === 'individual' ? genderRank : formatRank;
         const secondaryBadge = type === 'individual' ? genderBadge(entry.gender) : formatBadge();
         const absRank = hasVal ? absRanks[entry.bib] : null;
-        // Подсветка top-3 (rc) — по абсолюту, когда пол не отфильтрован,
-        // иначе по вторичному (пол/формат) рангу — тот же принцип, что и на
-        // Итогах/этапах/Своде вело (найдено code-review Task 6, 2026-07-22:
-        // раньше вторичный ранг всегда приоритетен, из-за чего на Днях
-        // одновременно подсвечивались top-1 мужчина, top-1 женщина И top-1
-        // эстафета как rank-1, в отличие от остальных таблиц).
-        const mainRank = _gender === 'all' ? absRank : secondaryRank;
-        const rc = mainRank != null ? rankClass(mainRank) : '';
+        const rc = absRank != null ? rankClass(absRank) : '';
         const status = type === 'individual' ? entry.status : item.status;
-        // "Последняя КТ" — тот же приём, что и в Итогах гонки: текущий этап
-        // + последняя пройденная на нём отметка, по фактическому прогрессу
-        // (не по границе дня — граница дня влияет только на то, попадает ли
-        // v/ранг участника в зачёт этого снапшота).
+        // "Последняя КТ" — тот же приём, что и в Итогах гонки, но
+        // ограничена границей дня (options.maxStage: 'bike_day1' для Дня 1,
+        // 'bike_day2' для Дня 1+2) — раньше могла показать этап "Бег",
+        // если участник уже добежал до него, хотя вкладка про вело
+        // (найдено пользователем 2026-08-02, п.1 v6).
         const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
-        const cur = currentStage(statusEntity);
+        const cur = currentStage(statusEntity, options.maxStage);
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
-            ${rankBodyCells(absRank, secondaryRank, secondaryBadge, rc, daySwapped)}
+            ${rankBodyCells(showGenderCol, absRank, secondaryRank, secondaryBadge, rc)}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
@@ -1232,7 +1219,18 @@ function renderRankedProgress(getValue, options = {}) {
 function bikeCombinedRelayRider(team) {
     const m = team.members.find(x => x.relay_stage === 'bike');
     if (!m) return null;
-    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, bike1_s: m.bike1_s, bike2_s: m.bike2_s };
+    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: m.cp };
+}
+
+// Статус ИМЕННО вело-этапа (оба дня) — по факту достижения последней КТ
+// bike_day2, а не по общему статусу гонки (row.status относится ко ВСЕЙ
+// гонке: DNF на беге не должен превращать в DNF уже пройденное вело —
+// найдено пользователем 2026-08-02, п.2 v6, тот же класс бага, что уже
+// чинили в renderStage через withStageStatus, только для составного этапа).
+function bikeCombinedStatus(row) {
+    if (row.status === 'active') return 'active';
+    const pos = lastReached(row.cp, 'bike_day2');
+    return (pos && pos.seq === STAGE_MAX_SEQ.bike_day2) ? 'active' : row.status;
 }
 
 // Свод вело (421 км = 145+276) — единственная сводная вкладка с однородной
@@ -1258,8 +1256,8 @@ function renderBikeCombined() {
     let html = buildStats(individual, relayStatsBike, null);
 
     const rows = [
-        ...individual.map(r => ({ isRelay: false, entry: r, v: r.status === 'active' ? bikeCombinedTime(r) : null })),
-        ...riders.map(r => ({ isRelay: true, entry: r, v: r.status === 'active' ? bikeCombinedTime(r) : null })),
+        ...individual.map(r => ({ isRelay: false, entry: r, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
+        ...riders.map(r => ({ isRelay: true, entry: r, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
     ].sort((a, b) => {
         if (a.v == null && b.v == null) return 0;
         if (a.v == null) return 1;
@@ -1273,62 +1271,50 @@ function renderBikeCombined() {
         return;
     }
 
-    // Ранг (абсолют + по полу/формату) — среди ВИДИМЫХ строк (rows, уже
+    // Ранг (абсолют + по полу) — среди ВИДИМЫХ строк (rows, уже
     // отфильтрованы по _fmt/_gender), не по полному ростеру года — тот же
     // откат, что и на вкладках этапов (запрошено пользователем 2026-07-23:
-    // "Место" не должно учитывать невидимых участников).
-    const rankPool = rows.map(({ isRelay, entry, v }) => ({ key: entry.bib, val: v, status: entry.status, gender: entry.gender, isRelay }));
+    // "Место" не должно учитывать невидимых участников). status — именно
+    // вело-статус (bikeCombinedStatus), не общий гоночный (п.2 v6).
+    const rankPool = rows.map(({ isRelay, entry, v }) => ({ key: entry.bib, val: v, status: bikeCombinedStatus(entry), gender: entry.gender, isRelay }));
     const absRanks = computeRanksByValue(rankPool);
     const genderRanks = {
         M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),
         F: computeRanksByValue(rankPool.filter(x => x.gender === 'F')),
     };
-    const formatRanks = computeRanksByValue(rankPool.filter(x => x.isRelay));
-    const isRelayFilter = _fmt === 'relay';
     // Отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (rows уже в
     // форме {entry,v}, подходит для poolGap напрямую) — раньше на этой
     // вкладке колонки "Отставание" не было вовсе (п.3, v5, 2026-07-23).
     const gaps = poolGap(rows);
+    const showGenderCol = _gender === 'all';
 
-    const rankHead = isRelayFilter
-        ? '<th class="r">Формат</th><th class="r">Пол</th><th class="r">Абсолют</th>'
-        : rankHeaderCells('Место (пол)', _gender !== 'all');
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHead}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, v }) => {
         const hasVal = v != null;
         const absRank = hasVal ? absRanks[entry.bib] : null;
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
-        const formatRank = hasVal ? formatRanks[entry.bib] : null;
-        // Подсветка top-3 (rc) всегда по абсолюту/полу, НИКОГДА по формату —
-        // тот же принцип, что и на вкладках этапов (renderStage:mainRankFor),
-        // формат в 3-колоночном режиме — просто дополнительный видимый
-        // бейдж, не источник подсветки (найдено code-review Task 4,
-        // 2026-07-22 — несогласованность с renderStage до фикса).
-        const mainRank = _gender === 'all' ? absRank : genderRank;
-        const rc = mainRank != null ? rankClass(mainRank) : '';
+        const rc = absRank != null ? rankClass(absRank) : '';
         const subLine = isRelay ? entry.team_name : entry.city;
         const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Лично</span>';
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
-        const rankCells = isRelayFilter
-            ? `<td class="r"><span class="rank-num ${rc}">${formatBadge()}${formatRank ?? '—'}</span></td>` +
-              `<td class="r">${genderRank != null ? `<span class="rank-num ${rc}">${genderBadge(entry.gender)}${genderRank}</span>` : '<span class="muted">—</span>'}</td>` +
-              `<td class="r"><span class="rank-num ${rc}">${absRank ?? '—'}</span></td>`
-            : rankBodyCells(absRank, genderRank, genderBadge(entry.gender), rc, _gender !== 'all');
+        const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
+        const status = bikeCombinedStatus(entry);
         html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
-            <td>${progressStatusBadge(entry.status, hasVal)}</td>
+            <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
+            <td>${progressStatusBadge(status, hasVal)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
 }
-function renderDay1() { renderRankedProgress(day1Progress, dayRankOptions(day1Progress)); }
-function renderDay2() { renderRankedProgress(day2Progress, dayRankOptions(day2Progress)); }
+function renderDay1() { renderRankedProgress(day1Progress, { ...dayRankOptions(day1Progress), maxStage: 'bike_day1' }); }
+function renderDay2() { renderRankedProgress(day2Progress, { ...dayRankOptions(day2Progress), maxStage: 'bike_day2' }); }
 
 /* ──────────────── Render: Графики (Темп/скорость, Позиция) ────────────────
    Форма по умолчанию — "spaghetti + hover-highlight" (эмфазис, не

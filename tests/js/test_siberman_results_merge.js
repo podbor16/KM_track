@@ -548,8 +548,7 @@ check('renderBikeCombined() — отставание встроено под в�
     assert.ok(html.includes('time-gap-sub'), `ожидалось отставание под временем: ${html.slice(0, 700)}`);
     assert.ok(html.includes('Лидер'), `лидер (Быстров, 300с) должен получить подпись "Лидер": ${html.slice(0, 700)}`);
 });
-check('renderBikeCombined() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют', () => {
-    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+check('renderBikeCombined() фильтр "Эстафета"+Пол=Все — 2 колонки Место/Место (пол), 3-колоночный режим убран (п.7 v6, 2026-08-02)', () => {
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [
             { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 100, cp: {} },
@@ -566,9 +565,10 @@ check('renderBikeCombined() фильтр "Эстафета" — 3 колонки
     setState('relay', 'all');
     sandbox.renderBikeCombined();
     const html = domGetAppHtml();
-    assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+    assert.ok(html.includes('<th class="r">Место</th>') && html.includes('Место (пол)'), `ожидались колонки Место/Место (пол): ${html.slice(0,600)}`);
+    assert.ok(!html.includes('>Формат</th>'), `колонки "Формат" быть не должно: ${html.slice(0,600)}`);
     const rowA = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/)[0];
-    assert.ok(/badge-e">Э<\/span>1/.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — формат-ранг 1: ${rowA}`);
+    assert.ok(/rank-num[^>]*>1</.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — место 1: ${rowA}`);
 });
 check('renderBikeCombined() — ранг среди ВИДИМЫХ строк, не по полному ростеру (откат 2026-07-23)', () => {
     const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100 })]; // 200с — самый быстрый, но невидим
@@ -1104,30 +1104,28 @@ check('formatBadge() — бейдж "Э" тем же CSS-паттерном, ч�
     assert.ok(html.includes('badge-e'), `ожидался класс badge-e: ${html}`);
     assert.ok(html.includes('>Э<'), `ожидалась буква Э: ${html}`);
 });
-check('rankHeaderCells(label, swapped=false) — Место первой колонкой', () => {
-    const html = sandbox.rankHeaderCells('Пол/Формат', false);
+check('rankHeaderCells(show2=false) — только колонка Место', () => {
+    const html = sandbox.rankHeaderCells(false, 'Пол/Формат');
+    assert.strictEqual(html, '<th class="r">Место</th>');
+});
+check('rankHeaderCells(show2=true) — Место + вторичная колонка', () => {
+    const html = sandbox.rankHeaderCells(true, 'Пол/Формат');
     assert.strictEqual(html, '<th class="r">Место</th><th class="r">Пол/Формат</th>');
 });
-check('rankHeaderCells(label, swapped=true) — вторичная колонка первой', () => {
-    const html = sandbox.rankHeaderCells('Формат', true);
-    assert.strictEqual(html, '<th class="r">Формат</th><th class="r">Абсолют</th>');
+check('rankBodyCells(show2=false) — только ячейка абсолюта', () => {
+    const html = sandbox.rankBodyCells(false, 5, 2, '<span class="badge badge-m">М</span>', '');
+    assert.strictEqual(html.match(/<td/g).length, 1, `ожидалась ровно одна ячейка: ${html}`);
+    assert.ok(html.includes('>5<'), `ожидался абсолют 5: ${html}`);
 });
-check('rankBodyCells — не swapped: абсолют первой ячейкой, бейдж+число второй', () => {
-    const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-m">М</span>', '', false);
+check('rankBodyCells(show2=true) — абсолют первой ячейкой, бейдж+число второй', () => {
+    const html = sandbox.rankBodyCells(true, 5, 2, '<span class="badge badge-m">М</span>', '');
     const m = html.match(/^<td class="r">(.*?)<\/td><td class="r">(.*?)<\/td>$/);
     assert.ok(m, `неожиданная структура: ${html}`);
     assert.ok(m[1].includes('>5<'), `первая колонка — абсолют 5: ${html}`);
     assert.ok(m[2].includes('badge-m') && m[2].includes('>2<'), `вторая колонка — бейдж+2: ${html}`);
 });
-check('rankBodyCells — swapped: вторичная ячейка первой', () => {
-    const html = sandbox.rankBodyCells(5, 2, '<span class="badge badge-e">Э</span>', '', true);
-    const m = html.match(/^<td class="r">(.*?)<\/td><td class="r">(.*?)<\/td>$/);
-    assert.ok(m, `неожиданная структура: ${html}`);
-    assert.ok(m[1].includes('badge-e') && m[1].includes('>2<'), `первая колонка — Э-бейдж+2: ${html}`);
-    assert.ok(m[2].includes('>5<'), `вторая колонка — абсолют 5: ${html}`);
-});
 check('rankBodyCells — rankSecondary=null даёт прочерк во вторичной ячейке', () => {
-    const html = sandbox.rankBodyCells(5, null, '', '', false);
+    const html = sandbox.rankBodyCells(true, 5, null, '', '');
     assert.ok(html.includes('<span class="muted">—</span>'), `ожидался прочерк: ${html}`);
 });
 
@@ -1203,7 +1201,7 @@ check('renderStage() внутренние ранги — computeRanksByValue п�
     assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
     assert.ok(/rank-num[^>]*>1</.test(rowMatch[0]), `ожидалось место 1 среди видимых женщин (мужчина не виден): ${rowMatch[0]}`);
 });
-check('renderStage() фильтр "Эстафета" — 3 колонки Формат/Пол/Абсолют', () => {
+check('renderStage() фильтр "Эстафета"+Пол=Все — 2 колонки Место/Место (пол), 3-колоночный режим убран (п.7 v6, 2026-08-02)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
@@ -1213,7 +1211,21 @@ check('renderStage() фильтр "Эстафета" — 3 колонки Фор
     setState('relay', 'all');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
-    assert.ok(html.includes('>Формат</th>') && html.includes('>Пол</th>') && html.includes('>Абсолют</th>'), `ожидались 3 колонки: ${html.slice(0,600)}`);
+    assert.ok(html.includes('<th class="r">Место</th>') && html.includes('Место (пол)'), `ожидались колонки Место/Место (пол): ${html.slice(0,600)}`);
+    assert.ok(!html.includes('>Формат</th>'), `колонки "Формат" быть не должно: ${html.slice(0,600)}`);
+});
+check('renderStage() фильтр "Эстафета"+Пол=М — 1 колонка "Место" (п.7 v6, 2026-08-02)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
+        { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 400, cp: { swim: { [maxSeqSwim]: 400 } } }] },
+    ];
+    setRaceData([], relay, Date.now());
+    setState('relay', 'M');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.match(/<th class="r">Место<\/th>/g)?.length === 1, `ожидалась ровно одна колонка "Место": ${html.slice(0,600)}`);
+    assert.ok(!html.includes('Место (пол)'), `второй колонки быть не должно при активном фильтре пола: ${html.slice(0,600)}`);
 });
 check('renderStage() — время+отставание в одной ячейке, отдельной колонки "Отставание" нет (п.3 v5)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1228,7 +1240,7 @@ check('renderStage() — время+отставание в одной ячей�
     assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
     assert.ok(rowMatch[0].includes('time-gap-sub'), `под временем должно быть отставание отстающего (time-gap-sub): ${rowMatch[0]}`);
 });
-check('renderStage() фильтр "Эстафета" — формат-ранг среди ВИДИМЫХ команд (откат 2026-07-23)', () => {
+check('renderStage() фильтр "Эстафета"+Пол=М — "Место" среди ВИДИМЫХ команд (откат 2026-07-23, обновлено под п.7 v6)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 300, cp: { swim: { [maxSeqSwim]: 300 } } }] },
@@ -1236,7 +1248,7 @@ check('renderStage() фильтр "Эстафета" — формат-ранг �
     ];
     setRaceData([], relay, Date.now());
     // gender='M' — КомандаБ (F) не видна в таблице вовсе (relayMembers её
-    // исключает). КомандаА получает Э1 — здесь совпадает с "полным
+    // исключает). КомандаА получает место 1 — здесь совпадает с "полным
     // ростером" просто потому, что она и так быстрее обеих команд;
     // реальная разница видна в отдельном тесте ниже.
     setState('relay', 'M');
@@ -1244,9 +1256,9 @@ check('renderStage() фильтр "Эстафета" — формат-ранг �
     const html = domGetAppHtml();
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка КомандыА не найдена: ${html}`);
-    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1: ${rowMatch[0]}`);
+    assert.ok(/rank-num[^>]*>1</.test(rowMatch[0]), `КомандаА должна получить место 1: ${rowMatch[0]}`);
 });
-check('renderStage() фильтр "Эстафета" — формат-ранг НЕ учитывает невидимую (отфильтрованную по полу) команду', () => {
+check('renderStage() фильтр "Эстафета"+Пол=М — "Место" НЕ учитывает невидимую (отфильтрованную по полу) команду', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 500, cp: { swim: { [maxSeqSwim]: 500 } } }] },
@@ -1254,13 +1266,13 @@ check('renderStage() фильтр "Эстафета" — формат-ранг �
     ];
     setRaceData([], relay, Date.now());
     // КомандаБ (F, самая быстрая) НЕ видна при фильтре "Мужчины" — КомандаА
-    // (M, медленнее КомандыБ) должна получить Э1 среди видимых, не Э2.
+    // (M, медленнее КомандыБ) должна получить место 1 среди видимых, не 2.
     setState('relay', 'M');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1000<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка КомандыА не найдена: ${html}`);
-    assert.ok(/badge-e">Э<\/span>1/.test(rowMatch[0]), `КомандаА должна получить Э1 среди видимых (невидимая быстрая КомандаБ не в счёт): ${rowMatch[0]}`);
+    assert.ok(/rank-num[^>]*>1</.test(rowMatch[0]), `КомандаА должна получить место 1 среди видимых (невидимая быстрая КомандаБ не в счёт): ${rowMatch[0]}`);
 });
 
 check('render() — фильтр по полу виден на этапах/Своде вело при fmt=relay, скрыт на Итогах/Днях', () => {
@@ -1480,6 +1492,102 @@ check('bikeCombinedCheckpointLabel — подпись с пометкой дня
     const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     assert.ok(sandbox.bikeCombinedCheckpointLabel(3).includes('День 1'), 'КТ Дня 1 помечена "(День 1)"');
     assert.ok(sandbox.bikeCombinedCheckpointLabel(n1 + 2).includes('День 2'), 'КТ Дня 2 помечена "(День 2)"');
+});
+
+// ── currentStage(row, maxStage) — п.1 v6, 2026-08-02: ограничение границей
+// дня на вкладках "Дни" (раньше показывал этап "Бег", если участник уже
+// там отметился, хотя вкладка про вело) ──
+check('currentStage(row, maxStage) — не заходит дальше maxStage, даже если есть данные дальше', () => {
+    const row = { cp: {
+        swim: { 7: 1000 },
+        bike_day1: { 6: 5000 },
+        bike_day2: { 8: 9000 },
+        run: { 12: 20000 },
+    } };
+    assert.strictEqual(sandbox.currentStage(row, 'bike_day1'), 'bike_day1', 'День 1 — не должен видеть bike_day2/run');
+    assert.strictEqual(sandbox.currentStage(row, 'bike_day2'), 'bike_day2', 'День 1+2 — не должен видеть run');
+});
+check('currentStage(row) без maxStage — прежнее поведение (последний этап по всей гонке)', () => {
+    const row = { cp: { swim: { 7: 1000 }, run: { 12: 20000 } } };
+    assert.strictEqual(sandbox.currentStage(row), 'run', 'без maxStage — реальный текущий этап (Итоги/Свод вело)');
+});
+
+// ── _circleWord()/lastCpTwoLineHtml() — п.3 v6, 2026-08-02: двухстрочная
+// ячейка "последняя КТ" ──
+check('_circleWord — русское склонение по числу', () => {
+    assert.strictEqual(sandbox._circleWord(1), 'круг');
+    assert.strictEqual(sandbox._circleWord(2), 'круга');
+    assert.strictEqual(sandbox._circleWord(4), 'круга');
+    assert.strictEqual(sandbox._circleWord(5), 'кругов');
+    assert.strictEqual(sandbox._circleWord(11), 'кругов');
+    assert.strictEqual(sandbox._circleWord(12), 'кругов');
+});
+check('lastCpTwoLineHtml — плавание, круговая КТ — "N км" + "m круг"', () => {
+    const html = sandbox.lastCpTwoLineHtml('swim', 4); // seq4 = круг 2 (SWIM_LAP_SEQS)
+    assert.ok(html.includes('5,2 км'), `ожидалась дистанция 5,2 км: ${html}`);
+    assert.ok(html.includes('2 круга'), `ожидался круг 2: ${html}`);
+});
+check('lastCpTwoLineHtml — плавание, "разворот" (не круг) — только "N км", без второй строки', () => {
+    const html = sandbox.lastCpTwoLineHtml('swim', 1); // seq1 = разворот, не круг
+    assert.ok(html.includes('1,3 км'), `ожидалась дистанция 1,3 км: ${html}`);
+    assert.ok(!html.includes('muted-sub'), `второй строки быть не должно: ${html}`);
+});
+check('lastCpTwoLineHtml — бег, промежуточная КТ — "N км" + "m круг"', () => {
+    const html = sandbox.lastCpTwoLineHtml('run', 3);
+    assert.ok(html.includes('21 км'), `ожидалась дистанция 21 км: ${html}`);
+    assert.ok(html.includes('3 круга'), `ожидался круг 3: ${html}`);
+});
+check('lastCpTwoLineHtml — вело, промежуточная КТ — только "N км" (у вело нет круга)', () => {
+    const html = sandbox.lastCpTwoLineHtml('bike_day1', 2);
+    assert.ok(html.includes('10 км'), `ожидалась дистанция 10 км: ${html}`);
+    assert.ok(!html.includes('muted-sub'), `второй строки быть не должно (вело без кругов): ${html}`);
+});
+check('lastCpTwoLineHtml — финиш любого этапа — вторая строка "Финиш"', () => {
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    assert.ok(sandbox.lastCpTwoLineHtml('run', maxSeqRun).includes('Финиш'), 'финиш бега — "Финиш"');
+    assert.ok(sandbox.lastCpTwoLineHtml('bike_day1', maxSeqBike1).includes('Финиш'), 'финиш вело — тоже "Финиш" (не круг)');
+});
+check('lastCpTwoLineHtml — seq=null даёт прочерк', () => {
+    assert.strictEqual(sandbox.lastCpTwoLineHtml('run', null), '—');
+});
+
+// ── bikeCombinedLastSeq()/bikeCombinedLastCpHtml() — Отметка на Своде вело
+// (п.3 v6, колонки раньше не было вовсе) ──
+check('bikeCombinedLastSeq — приоритет дня 2 над днём 1, если есть данные обоих', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const cp = { bike_day1: { [n1]: 5000 }, bike_day2: { 2: 3000 } };
+    assert.strictEqual(sandbox.bikeCombinedLastSeq(cp), n1 + 2);
+});
+check('bikeCombinedLastSeq — только день 1 — виртуальный seq в пределах дня 1', () => {
+    const cp = { bike_day1: { 3: 5000 }, bike_day2: {} };
+    assert.strictEqual(sandbox.bikeCombinedLastSeq(cp), 3);
+});
+check('bikeCombinedLastSeq — нет данных вовсе — null', () => {
+    assert.strictEqual(sandbox.bikeCombinedLastSeq({ bike_day1: {}, bike_day2: {} }), null);
+});
+check('bikeCombinedLastCpHtml — финиш дня 2 (весь Свод вело пройден) — "Финиш"', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const n2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const cp = { bike_day1: { [n1]: 145 }, bike_day2: { [n2]: 421 } };
+    const html = sandbox.bikeCombinedLastCpHtml(cp);
+    assert.ok(html.includes('Финиш'), `ожидался "Финиш": ${html}`);
+});
+
+// ── bikeCombinedStatus() — п.2 v6, 2026-08-02: DNF на беге не должен
+// превращать в DNF уже пройденное вело (найдено на Дащенко/Пушкарёве) ──
+check('bikeCombinedStatus — DNF по общей гонке, но вело-2 реально финишировано — "active"', () => {
+    const n2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const row = { status: 'dnf', cp: { bike_day2: { [n2]: 9000 } } };
+    assert.strictEqual(sandbox.bikeCombinedStatus(row), 'active', 'вело пройдено полностью — DNF (на беге) не должен просачиваться сюда');
+});
+check('bikeCombinedStatus — DNF реально НА вело (не дошёл до финиша дня 2) — остаётся DNF', () => {
+    const row = { status: 'dnf', cp: { bike_day2: { 3: 4000 } } }; // не последняя КТ
+    assert.strictEqual(sandbox.bikeCombinedStatus(row), 'dnf');
+});
+check('bikeCombinedStatus — status уже active — возвращает active без проверки cp', () => {
+    const row = { status: 'active', cp: {} };
+    assert.strictEqual(sandbox.bikeCombinedStatus(row), 'active');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

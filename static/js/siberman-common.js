@@ -239,6 +239,27 @@ function lapLabel(stage, seq) {
     return null;
 }
 
+// Русское склонение "круг"/"круга"/"кругов" по числу n.
+function _circleWord(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 'круг';
+    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return 'круга';
+    return 'кругов';
+}
+
+// Двухстрочная ячейка "последняя КТ": "N км" + "m круг"/"Финиш" на второй
+// строке. Круг показывается только для плавания/бега (SWIM_LAP_SEQS/seq
+// напрямую) — у вело нет понятия круга, там на некруговых КТ только "N км".
+// На финише второй строкой всегда "Финиш", независимо от этапа.
+function lastCpTwoLineHtml(dbStage, seq) {
+    if (seq == null) return '—';
+    const km = CHECKPOINT_DIST_KM[dbStage][seq];
+    const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
+    if (seq === STAGE_MAX_SEQ[dbStage]) return kmLine + '<div class="muted-sub">Финиш</div>';
+    const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
+    return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;
+}
+
 function lastReached(cp, stage) {
     // {seq, value} последней непустой КТ этапа для участника, либо null
     if (!cp || !cp[stage]) return null;
@@ -399,6 +420,26 @@ function bikeCombinedCheckpointLabel(vseq) {
         : `${CHECKPOINT_LABELS.bike_day2[vseq - n1]} (День 2)`;
 }
 
+// Последняя достигнутая виртуальная КТ Свода вело (день2 приоритетнее —
+// если есть хоть одна КТ дня2, день1 уже полностью пройден). null, если
+// участник ещё не начинал вело вовсе.
+function bikeCombinedLastSeq(cp) {
+    const posDay2 = lastReached(cp, 'bike_day2');
+    if (posDay2) return STAGE_MAX_SEQ.bike_day1 + posDay2.seq;
+    const posDay1 = lastReached(cp, 'bike_day1');
+    return posDay1 ? posDay1.seq : null;
+}
+// Двухстрочная ячейка "последняя КТ" для Свода вело — только "N км" (у
+// вело нет круга), "Финиш" второй строкой на самой последней виртуальной КТ.
+function bikeCombinedLastCpHtml(cp) {
+    const vseq = bikeCombinedLastSeq(cp);
+    if (vseq == null) return '—';
+    const km = bikeCombinedDistKm(vseq);
+    const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
+    const maxVseq = STAGE_MAX_SEQ.bike_day1 + STAGE_MAX_SEQ.bike_day2;
+    return vseq === maxVseq ? kmLine + '<div class="muted-sub">Финиш</div>' : kmLine;
+}
+
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —
 // только среди тех, кто реально дошёл до последней КТ этапа (та же логика
 // финиша, что и в computeStageGaps), с учётом ничьих (как rank_by в
@@ -434,9 +475,13 @@ function globalProgress(row, stage, seq) {
     return (row.swim_s ?? 0) + (row.bike1_s ?? 0) + (row.bike2_s ?? 0) + v; // run
 }
 
-function currentStage(row) {
-    // Последний этап (в порядке гонки), по которому есть хоть какие-то данные
-    for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
+// maxStage — не заходить дальше этого этапа (используется на вкладках
+// "Дни", где прогресс должен ограничиваться границей дня, а не реальным
+// текущим этапом гонки — см. renderRankedProgress). Без maxStage — как
+// раньше, последний этап по всей гонке (Итоги/Свод вело).
+function currentStage(row, maxStage) {
+    const maxIdx = maxStage ? STAGE_ORDER.indexOf(maxStage) : STAGE_ORDER.length - 1;
+    for (let i = maxIdx; i >= 0; i--) {
         if (lastReached(row.cp, STAGE_ORDER[i])) return STAGE_ORDER[i];
     }
     return null;
