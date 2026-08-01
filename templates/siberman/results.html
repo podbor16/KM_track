@@ -280,13 +280,21 @@
         }
 
         /* ── Filters ── */
+        /* Grid, не flex (п.4 v6, 2026-08-02): "Формат:"/"Пол:" — своя строка
+           каждый, метки выровнены по общей колонке (текст встык к кнопкам,
+           «Пол:» подтягивается под ширину более длинного «Формат:»), группы
+           кнопок обеих строк начинаются с одного и того же x. Другие места,
+           переиспользующие класс .filters с ОДНОЙ парой label+group (чарт —
+           "Этап:"), визуально не меняются — grid из одной строки выглядит
+           как прежний flex-row. */
         .filters {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 20px; flex-wrap: wrap;
+            display: grid; grid-template-columns: auto 1fr;
+            align-items: center; gap: 8px 10px;
+            padding: 10px 20px;
             border-bottom: 1px solid var(--border);
             background: var(--bg2);
         }
-        .filter-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+        .filter-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; text-align: right; white-space: nowrap; }
         /* flex-wrap: чтобы группы с длинными подписями (этапы: "Вело (оба
            дня)", "Вело День 1"...) на узких экранах переносились НА НОВУЮ
            СТРОКУ целиком, а не сжимались вдоль строки — иначе flex-shrink
@@ -518,7 +526,7 @@
 </div>
 
 <!-- ── Filters ── -->
-<div class="filters">
+<div class="filters" id="mainFiltersBar">
     <span class="filter-label">Формат:</span>
     <div class="filter-group" id="fmtGroup">
         <button class="filter-btn active" data-fmt="all">Все</button>
@@ -1014,7 +1022,7 @@ function renderStage(stage) {
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${hasTime ? meta : '—'}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">В гонке</span>' : relayMemberStatusBadge(m)}</td>
+            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">На трассе</span>' : relayMemberStatusBadge(m)}</td>
         </tr>`;
     };
 
@@ -1072,7 +1080,7 @@ function progressStatusBadge(status, hasValue) {
     if (status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     // "Финишировал" (не "Пройден") — та же формулировка, что и статус-бейдж
     // на Итогах/этапах (statusBadge()), для единого словаря по всему сайту.
-    return hasValue ? '<span class="badge badge-fin">Финишировал</span>' : '<span class="badge badge-live">В гонке</span>';
+    return hasValue ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>';
 }
 
 function bikeCombinedTime(row) {
@@ -1768,8 +1776,8 @@ function buildSpaghettiDataset(d, accent, context) {
 // 2026-07-24 после того, как первая попытка смешала его со строкой "Этап:".
 function chartModeSwitchHtml() {
     return `<div class="filter-group" id="chartModeGroup">
-        <button class="filter-btn${_chartSubTab === 'pace' ? ' active' : ''}" data-chartmode="pace">Темп/скорость</button>
         <button class="filter-btn${_chartSubTab === 'position' ? ' active' : ''}" data-chartmode="position">Позиция</button>
+        <button class="filter-btn${_chartSubTab === 'pace' ? ' active' : ''}" data-chartmode="pace">Темп/скорость</button>
     </div>`;
 }
 function attachChartModeSwitchHandler() {
@@ -2154,22 +2162,23 @@ function renderPositionChart() {
 }
 
 /* ──────────────── Render: Стартовый лист вело-2 ──────────────── */
+// Без фильтров формата/пола (п.8 v6, 2026-08-02, UI-кнопки скрыты в
+// render()) — читает _data напрямую, а не getFiltered(), иначе список
+// молча остался бы отфильтрованным по формату/полу, унаследованному с
+// другой вкладки, без единого видимого элемента, объясняющего почему.
 function renderStartlist() {
-    const { individual, relay } = getFiltered();
+    const individual = _data.individual;
+    const relay = _data.relay;
 
     let riders = [];
-    if (_fmt !== 'relay') {
-        riders = riders.concat(individual
-            .filter(r => r.bike2_start_s != null)
-            .map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, city: r.city, gender: r.gender, start_s: r.bike2_start_s })));
-    }
-    if (_fmt !== 'individual') {
-        relay.forEach(team => {
-            team.members.filter(m => m.relay_stage === 'bike' && m.bike2_start_s != null).forEach(m => {
-                riders.push({ bib: team.bib, name: `${m.surname} ${m.name}`, city: team.team_name, gender: m.gender, start_s: m.bike2_start_s });
-            });
+    riders = riders.concat(individual
+        .filter(r => r.bike2_start_s != null)
+        .map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, city: r.city, gender: r.gender, start_s: r.bike2_start_s })));
+    relay.forEach(team => {
+        team.members.filter(m => m.relay_stage === 'bike' && m.bike2_start_s != null).forEach(m => {
+            riders.push({ bib: team.bib, name: `${m.surname} ${m.name}`, city: team.team_name, gender: m.gender, start_s: m.bike2_start_s });
         });
-    }
+    });
     riders.sort((a, b) => a.start_s - b.start_s);
 
     if (riders.length === 0) {
@@ -2179,7 +2188,7 @@ function renderStartlist() {
 
     let html = `<div class="section-hdr">Расчётный старт вело-2 (по рангу вело-1, топ-5 — интервал 3 мин, далее 1 мин)</div>`;
     html += `<div class="table-wrap"><table>
-    <thead><tr><th>Ранг</th><th class="r">№</th><th>Участник</th><th>Пол</th><th class="r">Старт вело-2</th></tr></thead><tbody>`;
+    <thead><tr><th>Порядок<br>старта</th><th class="r">№</th><th>Участник</th><th>Пол</th><th class="r">Время<br>старта</th></tr></thead><tbody>`;
     riders.forEach((r, i) => {
         html += `<tr>
             <td><span class="rank-num">${i + 1}</span></td>
@@ -2355,6 +2364,10 @@ function render() {
     const hideGender = _fmt === 'relay' && !PERSONIFIED_TABS.includes(_tab);
     genderGroup.style.display = hideGender ? 'none' : '';
     genderLabel.style.display = hideGender ? 'none' : '';
+    // Стартовый лист вело-2 не фильтруется по формату/полу пользователем —
+    // список и так показывает всех стартующих в порядке старта (п.8 v6,
+    // 2026-08-02): фильтры на этой вкладке только путают, скрываем целиком.
+    document.getElementById('mainFiltersBar').style.display = _tab === 'startlist' ? 'none' : '';
     document.getElementById('bikeSubTabs').style.display = _tab === 'bike' ? '' : 'none';
     if (_tab === 'overall') renderOverall();
     else if (_tab === 'startlist') renderStartlist();

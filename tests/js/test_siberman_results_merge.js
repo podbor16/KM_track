@@ -1290,7 +1290,7 @@ check('render() — фильтр по полу виден на этапах/Св
     assert.strictEqual(genderGroupTab('bike'), '', 'Свод вело/Вело1/Вело2 — фильтр по полу ВИДЕН при эстафете');
 });
 
-check('renderRankedProgress() (Дни) — 2 колонки рангов как в Итогах/на этапах, Последняя КТ, "Финишировал"', () => {
+check('renderRankedProgress() (Дни) — 2 колонки рангов как в Итогах/на этапах, Последняя КТ, "Финиш"', () => {
     setState('all', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
@@ -1304,7 +1304,7 @@ check('renderRankedProgress() (Дни) — 2 колонки рангов как 
     // временем через timeGapCell, поэтому колонки "Отставание" в шапке нет.
     assert.ok(!html.includes('<th class="r">Отставание</th>'), `отдельной колонки "Отставание" быть не должно: ${html.slice(0,700)}`);
     assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" не нужна (место уже абсолютное): ${html.slice(0,700)}`);
-    assert.ok(html.includes('Финишировал'), `статус должен быть "Финишировал" (унифицировано с Итогами/Этапами, не "Пройден"): ${html}`);
+    assert.ok(html.includes('badge-fin">Финиш<'), `статус должен быть "Финиш" (унифицировано с Итогами/Этапами, п.6 v6): ${html}`);
 });
 check('renderRankedProgress() (Дни) — отставание ПУЛ-ОТНОСИТЕЛЬНОЕ (от лидера текущего фильтра), не абсолютное (п.10 v5)', () => {
     setState('individual', 'all');
@@ -1588,6 +1588,40 @@ check('bikeCombinedStatus — DNF реально НА вело (не дошёл 
 check('bikeCombinedStatus — status уже active — возвращает active без проверки cp', () => {
     const row = { status: 'active', cp: {} };
     assert.strictEqual(sandbox.bikeCombinedStatus(row), 'active');
+});
+
+// ── renderStartlist() — без фильтров формата/пола, новые заголовки (п.8 v6, 2026-08-02) ──
+check('renderStartlist() — заголовки "Порядок старта"/"Время старта" (две строки)', () => {
+    const ind = mkTimerInd('1', { surname: 'Иванов', name: 'Иван', bike2_start_s: 1000 });
+    setRaceData([ind], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStartlist();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('Порядок<br>старта'), `ожидался заголовок "Порядок старта": ${html.slice(0, 400)}`);
+    assert.ok(html.includes('Время<br>старта'), `ожидался заголовок "Время старта": ${html.slice(0, 400)}`);
+});
+check('renderStartlist() — игнорирует активный фильтр пола (показывает всех стартующих)', () => {
+    const men = mkTimerInd('1', { surname: 'Иванов', name: 'Иван', gender: 'M', bike2_start_s: 1000 });
+    const women = mkTimerInd('2', { surname: 'Петрова', name: 'Анна', gender: 'F', bike2_start_s: 2000 });
+    setRaceData([men, women], [], Date.now());
+    // Фильтр "Мужчины" оставлен активным (унаследован с другой вкладки) —
+    // стартовый лист всё равно должен показать обоих: фильтров на этой
+    // вкладке больше нет вовсе (не только UI, но и сама выборка данных).
+    setState('all', 'M');
+    sandbox.renderStartlist();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('bib-cell">1<'), `мужчина должен быть в списке: ${html}`);
+    assert.ok(html.includes('bib-cell">2<'), `женщина тоже должна быть в списке, несмотря на фильтр "Мужчины": ${html}`);
+});
+check('render() — блок фильтров скрыт на вкладке "Стартовый список"', () => {
+    setRaceData([], [], Date.now());
+    setState('all', 'all');
+    vm.runInContext(`_tab = 'startlist';`, sandbox);
+    sandbox.render();
+    assert.strictEqual(domStub('mainFiltersBar').style.display, 'none', 'фильтры должны быть скрыты на Стартовом листе');
+    vm.runInContext(`_tab = 'overall';`, sandbox);
+    sandbox.render();
+    assert.strictEqual(domStub('mainFiltersBar').style.display, '', 'на других вкладках фильтры должны быть видны');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

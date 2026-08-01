@@ -21,6 +21,8 @@
             border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
             margin-bottom: 12px; background: #fff; font-family: inherit;
         }
+        .radio-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .radio-option { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #1a1a1a; cursor: pointer; }
         #bc-post-preview {
             width: 100%; min-height: 420px; font-family: 'Courier New', monospace;
             font-size: 13px; padding: 12px; border: 1px solid #ddd; border-radius: 6px;
@@ -141,11 +143,11 @@
                 <input type="number" id="bc-year" value="2025" min="2020" max="2030" style="width:120px">
 
                 <label>Режим</label>
-                <select id="bc-mode" style="width:280px">
-                    <option value="stage">По этапу</option>
-                    <option value="global">По всей гонке (виртуальный зачёт)</option>
-                    <option value="day">По дням</option>
-                </select>
+                <div class="radio-group" id="bc-mode-group">
+                    <label class="radio-option"><input type="radio" name="bc-mode" value="stage" checked> По этапу</label>
+                    <label class="radio-option"><input type="radio" name="bc-mode" value="global"> По всей гонке</label>
+                    <label class="radio-option"><input type="radio" name="bc-mode" value="day"> По дням</label>
+                </div>
 
                 <div id="bc-stage-field">
                     <label>Этап</label>
@@ -164,12 +166,12 @@
                 </div>
 
                 <label>Категория</label>
-                <select id="bc-category" style="width:220px">
-                    <option value="M">Мужчины</option>
-                    <option value="F">Женщины</option>
-                    <option value="relay">Эстафеты</option>
-                    <option value="combined">Абсолют</option>
-                </select>
+                <div class="radio-group" id="bc-category-group">
+                    <label class="radio-option"><input type="radio" name="bc-category" value="M" checked> Мужчины</label>
+                    <label class="radio-option"><input type="radio" name="bc-category" value="F"> Женщины</label>
+                    <label class="radio-option"><input type="radio" name="bc-category" value="relay"> Эстафеты</label>
+                    <label class="radio-option"><input type="radio" name="bc-category" value="combined"> Абсолют</label>
+                </div>
 
                 <button class="btn btn-primary" id="btn-bc-generate" style="margin-top:8px">Сгенерировать</button>
             </div>
@@ -348,8 +350,14 @@
         return stage === 'bike_combined' ? bikeCombinedDistKm(seq) : CHECKPOINT_DIST_KM[stage][seq];
     }
 
+    // Режим/Категория — радиокнопки (п.10 v6, 2026-08-02), не select —
+    // читаем значение через :checked, как обычный select.value.
+    function radioValue(name) {
+        return document.querySelector(`input[name="${name}"]:checked`).value;
+    }
+
     function bcPopulateStageOptions() {
-        const mode = $('bc-mode').value;
+        const mode = radioValue('bc-mode');
         const sel = $('bc-stage');
         sel.innerHTML = '';
         (BC_STAGE_OPTIONS_BY_MODE[mode] || []).forEach(([val, label]) => {
@@ -373,14 +381,14 @@
         }
     }
     function bcOnModeChange() {
-        const mode = $('bc-mode').value;
+        const mode = radioValue('bc-mode');
         $('bc-stage-field').style.display = mode === 'day' ? 'none' : '';
         $('bc-cp-field').style.display = mode === 'day' ? 'none' : '';
         $('bc-day-field').style.display = mode === 'day' ? '' : 'none';
         if (mode !== 'day') bcPopulateStageOptions();
     }
 
-    $('bc-mode').addEventListener('change', bcOnModeChange);
+    document.querySelectorAll('input[name="bc-mode"]').forEach(r => r.addEventListener('change', bcOnModeChange));
     $('bc-stage').addEventListener('change', bcPopulateCpOptions);
     bcOnModeChange(); // начальное состояние при загрузке страницы
 
@@ -702,8 +710,8 @@
             const r = await fetch(`/api/siberman/results?year=${year}`);
             if (!r.ok) throw new Error('Не удалось загрузить данные');
             const data = await r.json();
-            const mode = $('bc-mode').value;
-            const category = $('bc-category').value;
+            const mode = radioValue('bc-mode');
+            const category = radioValue('bc-category');
             let text;
             if (mode === 'stage') {
                 text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);

@@ -197,7 +197,7 @@ check('renderTeam() — бейдж "Эстафета" + статус у назв
     vm.runInContext(`_mode = 'race';`, sandbox);
     sandbox.renderTeam(data, data.relay[0]);
     assert.ok(appEl.innerHTML.includes('badge-relay'), 'должен быть бейдж "Эстафета" у названия команды');
-    assert.ok(appEl.innerHTML.includes('badge-fin">Финишировал'), `команда из mkRelayTeam финишировала — ожидался бейдж "Финишировал": ${appEl.innerHTML.slice(0, 800)}`);
+    assert.ok(appEl.innerHTML.includes('badge-fin">Финиш'), `команда из mkRelayTeam финишировала — ожидался бейдж "Финиш": ${appEl.innerHTML.slice(0, 800)}`);
 });
 check('teamStatusBadge() — DNF любого члена команды даёт бейдж DNF', () => {
     const team = mkRelayTeam(1000, 'КомандаБ', null);

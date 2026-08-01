@@ -91,21 +91,21 @@ function statusBadge(r, stageKey) {
         if (stageKey === null) return '<span class="badge badge-dnf">DNF</span>'; // Финал
         const dnfStage = getDnfStage(r);
         const diff = STAGE_ORD[stageKey] - STAGE_ORD[dnfStage];
-        if (diff < 0)  return '<span class="badge badge-fin">Финишировал</span>';
+        if (diff < 0)  return '<span class="badge badge-fin">Финиш</span>';
         if (diff === 0) return '<span class="badge badge-dnf">DNF</span>';
         return '<span class="badge badge-dns">Не стартовал</span>';
     }
     // active
     const hasTime = stageKey ? r[stageKey + '_s'] != null : r.overall_s != null;
     return hasTime
-        ? '<span class="badge badge-fin">Финишировал</span>'
-        : '<span class="badge badge-live">В гонке</span>';
+        ? '<span class="badge badge-fin">Финиш</span>'
+        : '<span class="badge badge-live">На трассе</span>';
 }
 function relayMemberStatusBadge(m) {
     if (m.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     if (m.status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (m.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
-    return '<span class="badge badge-fin">Финишировал</span>';
+    return '<span class="badge badge-fin">Финиш</span>';
 }
 // Статус ЭСТАФЕТНОЙ КОМАНДЫ целиком (не отдельного участника) — тот же
 // 3-состояний бейдж, что уже был у личников (statusBadge), но команда не
@@ -114,8 +114,8 @@ function relayMemberStatusBadge(m) {
 function teamStatusBadge(team) {
     const tr = teamGapRow(team);
     const notFinished = team.overall_s == null || tr.status !== 'active';
-    if (!notFinished) return '<span class="badge badge-fin">Финишировал</span>';
-    return tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">В гонке</span>';
+    if (!notFinished) return '<span class="badge badge-fin">Финиш</span>';
+    return tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">На трассе</span>';
 }
 
 /* ──────────────── Этапы / контрольные точки ──────────────── */
