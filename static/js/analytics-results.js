@@ -166,7 +166,13 @@ async function loadRunnersData(silent = false) {
                 
                 const data = await response.json();
                 console.log(`Загружено из БД (event_id=${eventId}):`, data.results ? data.results.length : 0, 'участников');
-                rawData = rawData.concat(data.results || []);
+                // event_id не приходит в самих результатах (только в query
+                // параметре запроса) — событий-групп с несколькими
+                // дистанциями (Жара/Первомай/Достигая цели) объединяют
+                // несколько event_id в один allRunners, поэтому привязку
+                // нужно проставить здесь, до конкатенации, иначе после
+                // merge её не восстановить (нужна для ссылки на диплом).
+                rawData = rawData.concat((data.results || []).map(r => ({ ...r, event_id: eventId })));
             }
         } else {
             // Для неизвестных комбинаций загружаем из legacy API
@@ -261,7 +267,8 @@ function normalizeRunnerData(runners) {
             rank_sex_clean: runner.rank_sex_clean,
             rank_category_clean: runner.rank_category_clean,
             start_number: runner.start_number,
-            
+            event_id: runner.event_id,
+
             // Дистанция и событие - используем distance_from_event из БД если есть
             event: runner.event || runner.distance_from_event || 'Ночной забег',
             distance: runner.distance || runner.distance_from_event || '5 км',
@@ -837,6 +844,16 @@ function buildDetailPanelHTML(runner) {
 
     const profileUrl = `/athlete-profile?surname=${encodeURIComponent(runner.surname || '')}&name=${encodeURIComponent(runner.name || '')}`;
 
+    // DIPLOMA_EVENT_IDS — глобальный Set из results.html (event_id, для
+    // которых вообще настроен diploma-конфиг). event_id проставляется на
+    // runner при загрузке (см. loadRunnersData) — без него, как и без
+    // start_number, ссылка на /diploma/{event_id}/{bib} была бы битой.
+    const hasDiploma = runner.status === 'finished' && runner.event_id && runner.start_number
+        && typeof DIPLOMA_EVENT_IDS !== 'undefined' && DIPLOMA_EVENT_IDS.has(runner.event_id);
+    const diplomaBtn = hasDiploma
+        ? `<a href="/diploma/${runner.event_id}/${runner.start_number}" class="km-btn-profile" target="_blank">🏅 Диплом</a>`
+        : '';
+
     const timeCol = (title, time, cls, pace, absR, sexR, catR) => `
         <div class="detail-time-col detail-time-col--${cls}">
             <div class="detail-time-col-title">${title}</div>
@@ -853,6 +870,7 @@ function buildDetailPanelHTML(runner) {
             <div class="detail-name-row">
                 <span class="detail-panel-name">${fullName}</span>
                 <a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>
+                ${diplomaBtn}
             </div>
             <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
         </div>

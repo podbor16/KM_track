@@ -102,6 +102,10 @@
 
     </div>
 
+    <script>
+        const DIPLOMA_EVENT_IDS = new Set({{ diploma_event_ids | tojson }});
+    </script>
+
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
     <script src="/static/js/utils.js?v={{ v }}"></script>
     <script src="/static/js/realtime.js?v={{ v }}"></script>

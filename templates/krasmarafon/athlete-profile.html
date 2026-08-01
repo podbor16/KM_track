@@ -113,6 +113,7 @@
                                 <th>Время</th>
                                 <th>Темп (мин/км)</th>
                                 <th>Место</th>
+                                <th>Диплом</th>
                             </tr>
                         </thead>
                         <tbody id="racesTableBody"></tbody>
@@ -131,6 +132,17 @@
 
     <script>
         const DIPLOMA_EVENT_IDS = new Set({{ diploma_event_ids | tojson }});
+        // Общая для Сетки и Таблицы — раньше проверка дублировалась в обеих
+        // функциях рендера и рисковала разойтись при будущей правке условия.
+        function raceHasDiploma(race) {
+            const isFinished = race.race_status === 'Finished' || race.race_status === 'finished' || race.race_status === 'fifnished';
+            return Boolean(isFinished && race.event_id && race.start_number && DIPLOMA_EVENT_IDS.has(race.event_id));
+        }
+        function diplomaLinkHtml(race, btnClass) {
+            return raceHasDiploma(race)
+                ? `<a href="/diploma/${race.event_id}/${race.start_number}" target="_blank" class="${btnClass}">🏅 Диплом</a>`
+                : '';
+        }
     </script>
 
     <script>
@@ -813,9 +825,6 @@
                 // Дата из event_date
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
 
-                const isFinished = race.race_status === 'Finished' || race.race_status === 'finished' || race.race_status === 'fifnished';
-                const hasDiploma = isFinished && race.event_id && race.start_number && DIPLOMA_EVENT_IDS.has(race.event_id);
-
                 racesGrid.innerHTML += `
                     <div class="race-card">
                         <div class="race-date">${dateStr}</div>
@@ -838,7 +847,7 @@
                             ${race.rank_sex ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${race.rank_sex}</span></div>` : ''}
                             ${race.rank_category ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${race.rank_category}</span></div>` : ''}
                         </div>
-                        ${hasDiploma ? `<a href="/diploma/${race.event_id}/${race.start_number}" target="_blank" class="diploma-link-btn">🏅 Диплом</a>` : ''}
+                        ${diplomaLinkHtml(race, 'diploma-link-btn')}
                     </div>
                 `;
             });
@@ -861,8 +870,9 @@
                 const time = formatTime(parseTimeToSeconds(race.time_clear_finish));
 
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
-                
+
                 const ranking = race.rank_absolute || '-';
+                const diplomaCell = diplomaLinkHtml(race, 'diploma-link-btn--table') || '-';
 
                 tbody.innerHTML += `
                     <tr>
@@ -872,6 +882,7 @@
                         <td>${time}</td>
                         <td><span class="pace">${pace}</span></td>
                         <td>${ranking}</td>
+                        <td>${diplomaCell}</td>
                     </tr>
                 `;
             });

@@ -174,12 +174,25 @@ async def analytics_page():
     return RedirectResponse("/admin", status_code=302)
 
 
+def _diploma_event_ids() -> list[int]:
+    """event_id всех дистанций, у которых включена печать диплома — общий
+    список, нужен и /athlete-profile (история спортсмена), и /results
+    (кнопка диплома прямо в результатах забега)."""
+    return [
+        d.db_event_id
+        for event in settings.EVENTS.values()
+        for d in event.distances
+        if d.diploma is not None and d.db_event_id is not None
+    ]
+
+
 @router.get("/results", response_class=HTMLResponse)
 async def results_page(request: Request):
     """Результаты забега."""
     return templates.TemplateResponse("krasmarafon/results.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
+        "diploma_event_ids": _diploma_event_ids(),
     })
 
 
@@ -192,15 +205,9 @@ async def history_page(request: Request):
 @router.get("/athlete-profile", response_class=HTMLResponse)
 async def athlete_profile_page(request: Request):
     """Профиль спортсмена со всеми его результатами."""
-    diploma_event_ids = [
-        d.db_event_id
-        for event in settings.EVENTS.values()
-        for d in event.distances
-        if d.diploma is not None and d.db_event_id is not None
-    ]
     return templates.TemplateResponse("krasmarafon/athlete-profile.html", {
         "request": request,
-        "diploma_event_ids": diploma_event_ids,
+        "diploma_event_ids": _diploma_event_ids(),
     })
 
 
