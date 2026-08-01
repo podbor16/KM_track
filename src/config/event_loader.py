@@ -59,6 +59,12 @@ class DiplomaConfig(BaseModel):
     height_px: int
     name_box: DiplomaBoxConfig    # блок ФИО + время
     ranks_box: DiplomaBoxConfig   # блок мест
+    # Цвет текста плейсхолдеров — фон плашки у каждого дизайна свой (тёмный/
+    # цветной у одних событий, светлый у других), единого цвета, читаемого
+    # везде, не существует. Дефолт #fff сохраняет поведение уже настроенных
+    # событий (women7 — тёмная плашка); светлым фонам (напр. dostigaya_tseli)
+    # нужно явно указать тёмный цвет в своём YAML.
+    text_color: str = "#fff"
 
 
 class DistanceConfig(BaseModel):

@@ -35,3 +35,4 @@ distances:
       height_px: 1280
       name_box: {top: 41.7, left: 8.9, width: 82.0, height: 15.9}
       ranks_box: {top: 60.6, left: 8.9, width: 82.0, height: 15.8}
+      text_color: "#1a1a1a"
