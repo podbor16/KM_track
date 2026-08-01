@@ -39,6 +39,14 @@
             top: {{ distance.diploma.ranks_box.top }}%; left: {{ distance.diploma.ranks_box.left }}%;
             width: {{ distance.diploma.ranks_box.width }}%; height: {{ distance.diploma.ranks_box.height }}%;
         }
+        {% if distance.diploma.distance_box %}
+        .diploma-slot--distance {
+            top: {{ distance.diploma.distance_box.top }}%; left: {{ distance.diploma.distance_box.left }}%;
+            width: {{ distance.diploma.distance_box.width }}%; height: {{ distance.diploma.distance_box.height }}%;
+            {% if distance.diploma.distance_box_bg %}background: {{ distance.diploma.distance_box_bg }};{% endif %}
+        }
+        .diploma-distance-row { display: flex; justify-content: space-between; width: 100%; padding: 0 8%; font-weight: 700; font-size: clamp(12px, 4.2cqw, 18px); }
+        {% endif %}
         .diploma-name { font-size: clamp(11px, 4.2cqw, 18px); font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
         .diploma-time { font-size: clamp(20px, 7.5cqw, 32px); font-weight: 800; margin-top: 4px; }
         .diploma-ranks { width: 100%; font-size: clamp(10px, 3.8cqw, 15px); padding: 0 8%; }
@@ -73,6 +81,11 @@
 </head>
 <body>
     <div class="diploma-card" id="diplomaCard">
+        {% if distance.diploma.distance_box %}
+        <div class="diploma-slot diploma-slot--distance">
+            <div class="diploma-distance-row"><span>Дистанция</span><span>{{ distance.distance }}</span></div>
+        </div>
+        {% endif %}
         <div class="diploma-slot diploma-slot--name">
             <div class="diploma-name">{{ (diploma.surname or '').upper() }} {{ (diploma.name or '').upper() }}</div>
             <div class="diploma-time">{{ diploma.time_display }}</div>
