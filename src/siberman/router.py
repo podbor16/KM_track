@@ -91,14 +91,23 @@ async def results_page(request: Request):
     )
 
 
-@router.get("/siberman/participant/{bib}", response_class=HTMLResponse)
-async def participant_page(request: Request, bib: str, year: int = 2025):
-    """Страница участника — данные подгружаются на клиенте из уже
-    существующего /api/siberman/results (тот же пул данных, что и у
-    /siberman/results), bib ищется среди individual/relay в JS."""
+async def _participant_response(request: Request, bib: str, year: int):
+    """Данные подгружаются на клиенте из уже существующего
+    /api/siberman/results (тот же пул данных, что и у результатов), bib
+    ищется среди individual/relay в JS."""
     return templates.TemplateResponse(
         "siberman/participant.html", {"request": request, "bib": bib, "year": year}
     )
+
+
+@router.get("/siberman/participant/{bib}", response_class=HTMLResponse)
+async def participant_page(request: Request, bib: str, year: int = 2025):
+    return await _participant_response(request, bib, year)
+
+
+@router.get("/participant/{bib}", response_class=HTMLResponse)
+async def participant_page_short(request: Request, bib: str, year: int = 2025):
+    return await _participant_response(request, bib, year)
 
 
 @router.get("/api/siberman/results")

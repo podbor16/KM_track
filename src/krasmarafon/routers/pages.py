@@ -136,7 +136,7 @@ async def root(request: Request):
         return templates.TemplateResponse("race_triatleta/index.html",
                                           {"request": request, "v": _get_deploy_version()})
     if domain == "siberman":
-        return templates.TemplateResponse("siberman/index.html", {"request": request})
+        return templates.TemplateResponse("siberman/results.html", {"request": request})
     return await _tracker_response(request)
 
 
@@ -238,21 +238,27 @@ async def race_analysis_page(request: Request):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    domain = getattr(request.state, "domain", "krasmarafon")
+    if domain == "siberman":
+        return templates.TemplateResponse("siberman/login.html", {"request": request, "error": None})
     return templates.TemplateResponse("krasmarafon/login.html", {"request": request, "error": None})
 
 
 @router.post("/login")
 async def login_submit(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
 ):
+    domain = getattr(request.state, "domain", "krasmarafon")
     creds_ok = (
         username == settings.ADMIN_USERNAME
         and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
     )
     if creds_ok:
         cookie_value = create_session_cookie(username)
-        response = RedirectResponse("/business-analytics", status_code=302)
+        redirect_target = "/admin" if domain == "siberman" else "/business-analytics"
+        response = RedirectResponse(redirect_target, status_code=302)
         response.set_cookie(
             COOKIE_NAME,
             cookie_value,
@@ -261,8 +267,9 @@ async def login_submit(
             samesite="lax",
         )
         return response
+    login_template = "siberman/login.html" if domain == "siberman" else "krasmarafon/login.html"
     return templates.TemplateResponse(
-        "krasmarafon/login.html",
+        login_template,
         {"request": {}, "error": "Неверный логин или пароль"},
         status_code=401,
     )
@@ -291,6 +298,9 @@ async def admin_page(request: Request, user=Depends(require_auth)):
         return user
     if "triatleta" in request.headers.get("host", ""):
         return RedirectResponse("/24h/admin")
+    domain = getattr(request.state, "domain", "krasmarafon")
+    if domain == "siberman":
+        return templates.TemplateResponse("siberman/admin.html", {"request": request})
     return templates.TemplateResponse("krasmarafon/admin.html", {"request": request})
 
 

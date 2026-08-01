@@ -13,7 +13,7 @@
 | Что это | Ссылка |
 |---|---|
 | 🗺️ Живой трекер участников на карте (Красноярский марафон) | [analytics.krasmarafon.ru](https://analytics.krasmarafon.ru) |
-| 🏊🚴🏃 Результаты и графики сверхдлинного триатлона Siberman (плавание + 421 км на велосипеде + бег) | [live.siberman515.com/siberman/results](https://live.siberman515.com/siberman/results) |
+| 🏊🚴🏃 Результаты и графики сверхдлинного триатлона Siberman (плавание + 421 км на велосипеде + бег) | [live.siberman515.com](https://live.siberman515.com) |
 | ⏱️ Результаты суточного забега Triatleta 24H | [live-race.triatleta.ru/24h](https://live-race.triatleta.ru/24h) |
 
 ---
