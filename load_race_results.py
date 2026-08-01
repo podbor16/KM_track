@@ -383,7 +383,7 @@ class RaceLoader:
         self.logger.info(f"📡 Запрос к Copernico API: {url}")
         try:
             import requests as _req
-            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 90))
+            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
             response.raise_for_status()
             data = response.json()
             self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
@@ -632,6 +632,15 @@ class RaceLoader:
         self.logger.info("="*70 + "\n")
 
         last_cache_reload = time.time()
+        # Copernico периодически "подтормаживает" ответы конкретно с этого
+        # VPS-IP (задокументировано ещё на "Весне" 2026-05-17, docs/reports/
+        # 2026-05-17-vesna-race-day-report.md, п.3 — whitelisting не сделан).
+        # Повтор сразу через interval (5с) после таймаута обычно попадает в
+        # то же самое "медленное окно" повторно (наблюдалось: 2 таймаута
+        # подряд каждые ~2 мин). Растущий backoff с потолком в 30с даёт
+        # окну на стороне Copernico время пройти, не отставая надолго от
+        # реального времени гонки при разовых сбоях.
+        consecutive_failures = 0
 
         try:
             while True:
@@ -648,9 +657,15 @@ class RaceLoader:
                 fetch_t = time.time() - t_fetch
 
                 if not runners:
-                    self.logger.warning("⚠️ Ошибка получения данных, повторим...")
-                    time.sleep(interval)
+                    consecutive_failures += 1
+                    backoff = min(interval + 10 * consecutive_failures, 30)
+                    self.logger.warning(
+                        f"⚠️ Ошибка получения данных (подряд: {consecutive_failures}), "
+                        f"повтор через {backoff}с..."
+                    )
+                    time.sleep(backoff)
                     continue
+                consecutive_failures = 0
 
                 t_calc = time.time()
                 updated_r, updated_s, kt_reads = self._update_existing(runners)
