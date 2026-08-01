@@ -31,6 +31,7 @@ def _fake_rows():
         'sex': 'female', 'race_status': 'Finished', 'category': 'Ж45',
         'time_clear_finish': timedelta(minutes=26, seconds=16),
         'rank_absolute_clean': 1, 'rank_sex_clean': 1, 'rank_category_clean': 1,
+        'rank_absolute': 1, 'rank_sex': 1, 'rank_category': 1,
     }]
 
 

@@ -5,7 +5,11 @@ from unittest.mock import patch
 from src.krasmarafon.services.diploma_service import get_diploma_data, format_finish_time
 
 
-def _row(bib, sex, status='Finished', time_s=None, rank_abs=1, rank_sex=1, rank_cat=1, category='Ж45'):
+def _row(bib, sex, status='Finished', time_s=None, rank_abs=1, rank_sex=1, rank_cat=1, category='Ж45',
+         rank_abs_gun=None, rank_sex_gun=None, rank_cat_gun=None):
+    """rank_abs/rank_sex/rank_cat — чистые (_clean) места, по умолчанию
+    используются и как официальные (gun), если *_gun не задан отдельно —
+    большинству тестов разница не важна, только test_..._uses_official_rank..."""
     return {
         'start_number': bib,
         'surname': 'Аристархова',
@@ -16,6 +20,9 @@ def _row(bib, sex, status='Finished', time_s=None, rank_abs=1, rank_sex=1, rank_
         'rank_absolute_clean': rank_abs,
         'rank_sex_clean': rank_sex,
         'rank_category_clean': rank_cat,
+        'rank_absolute': rank_abs_gun if rank_abs_gun is not None else rank_abs,
+        'rank_sex': rank_sex_gun if rank_sex_gun is not None else rank_sex,
+        'rank_category': rank_cat_gun if rank_cat_gun is not None else rank_cat,
         'category': category,
     }
 
@@ -109,6 +116,26 @@ def test_get_diploma_data_sex_label_is_gender_name_not_generic():
         data_m = get_diploma_data(event_id=1, bib='102')
     assert data_f['sex_label'] == 'Женщины'
     assert data_m['sex_label'] == 'Мужчины'
+
+
+def test_get_diploma_data_uses_official_rank_but_clean_time():
+    """Дипломы не для награждения (там место объявляют по официальному
+    gun-time), а для соцсетей участников — по решению пользователя
+    показываем ЧИСТОЕ время (net/clean), но ОФИЦИАЛЬНОЕ место
+    (rank_absolute/rank_sex/rank_category), а не _clean-варианты рангов,
+    чтобы место на дипломе совпадало с тем, что объявляет судья/сайт."""
+    rows = [_row(
+        '101', 'female', time_s=1576,
+        rank_abs=5, rank_sex=2, rank_cat=1,
+        rank_abs_gun=7, rank_sex_gun=3, rank_cat_gun=2,
+        category='мужчины до 49 лет',
+    )]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data['time_display'] == '26:16'
+    assert data['rank_absolute'] == 7
+    assert data['rank_sex'] == 3
+    assert data['rank_category'] == 2
 
 
 def test_get_diploma_data_shows_category_row_when_real_age_category():
