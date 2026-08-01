@@ -183,12 +183,24 @@ function durationToSeconds(duration) {
     if (!duration || duration === 'null' || duration === null) return 0;
     if (typeof duration === 'number') return duration;
 
-    const match = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return 0;
+    const str = String(duration);
+    if (str.startsWith('PT')) {
+        const match = str.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (!match) return 0;
+        return (parseInt(match[1] || 0) * 3600) +
+               (parseInt(match[2] || 0) * 60) +
+               parseInt(match[3] || 0);
+    }
 
-    return (parseInt(match[1] || 0) * 3600) +
-           (parseInt(match[2] || 0) * 60) +
-           parseInt(match[3] || 0);
+    // Обычный формат "H:MM:SS"/"M:SS" (как отдаёт time_clear_kt* с бэкенда —
+    // не ISO 8601, в отличие от isoTime выше). Без этой ветки durationToSeconds
+    // всегда возвращал 0 для таких строк, что молча ломало сортировку по
+    // местам на КТ в getKtRanks() (tracker-map.js) — стабильная сортировка
+    // с одинаковым "0" для всех оставляла исходный порядок массива вместо
+    // реального ранжирования по времени.
+    const parts = str.split(':').map(Number);
+    if (parts.length < 2 || parts.some(Number.isNaN)) return 0;
+    return parts.reduce((acc, p) => acc * 60 + p, 0);
 }
 
 function secondsToTime(totalSeconds) {
