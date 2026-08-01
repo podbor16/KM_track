@@ -629,9 +629,16 @@
 
     // Финальная сборка: жирный заголовок (2 строки), тело, DNF/DSQ-блок
     // (без разметки), курсивный футер со ссылками.
+    // ВАЖНО: двойные маркеры **bold**/__italic__, не одиночные *bold*/_italic_ —
+    // именно такой синтаксис Telegram-клиенты (Desktop/Web) автоматически
+    // конвертируют в реальное форматирование при ВСТАВКЕ обычного текста в
+    // поле ввода (не только при наборе). Одиночные маркеры (классический
+    // Markdown) при вставке не распознаются и остаются звёздочками как есть.
+    // Тот же приём уже используется и подтверждён рабочим на проде в
+    // генераторе постов суточной велогонки (templates/race_triatleta/tri_admin.html).
     function bcAssemble(title, header, body, dnfBlock) {
-        const footer = `_🔴 Полный лайв-трекер: ${BC_LIVE_URL}_\n_📡 Все площадки трансляции: ${BC_MEDIA_URL_PLACEHOLDER}_`;
-        return `*${title}*\n*${header}*\n\n${body}${dnfBlock}\n\n${footer}`;
+        const footer = `__🔴 Полный лайв-трекер: ${BC_LIVE_URL}__\n__📡 Все площадки трансляции: ${BC_MEDIA_URL_PLACEHOLDER}__`;
+        return `**${title}**\n**${header}**\n\n${body}${dnfBlock}\n\n${footer}`;
     }
 
     function bcBuildStagePost(data, stage, seq, category) {
