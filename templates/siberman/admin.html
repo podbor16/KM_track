@@ -168,6 +168,7 @@
                     <option value="M">Мужчины</option>
                     <option value="F">Женщины</option>
                     <option value="relay">Эстафеты</option>
+                    <option value="combined">Абсолют</option>
                 </select>
 
                 <button class="btn btn-primary" id="btn-bc-generate" style="margin-top:8px">Сгенерировать</button>
@@ -384,6 +385,15 @@
     bcOnModeChange(); // начальное состояние при загрузке страницы
 
     function bcCategoryRows(data, category) {
+        if (category === 'combined') {
+            // Абсолют — М+Ж+Э в одном пуле. Ключ префиксуем категорией: бибы
+            // личников и эстафетных команд заданы в независимых числовых
+            // рядах и могут совпадать, а ranksBySeq/gapsBySeq индексируются
+            // именно по key.
+            return ['M', 'F', 'relay'].flatMap(cat =>
+                bcCategoryRows(data, cat).map(r => ({ ...r, key: `${cat}:${r.key}`, _cat: cat }))
+            );
+        }
         if (category === 'relay') {
             return data.relay.map(t => {
                 const g = teamGapRow(t);
@@ -395,20 +405,40 @@
             .map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, _ind: r }));
     }
 
-    const BC_ROLE_WORD = { swim: 'плывёт', bike_day1: 'едет', bike_day2: 'едет', bike_combined: 'едет', run: 'бежит' };
     const BC_ROLE_MEMBER_STAGE = { swim: 'swim', bike_day1: 'bike', bike_day2: 'bike', bike_combined: 'bike', run: 'run' };
 
-    function bcDisplayName(row, category, stage) {
-        if (category !== 'relay') {
-            const p = row._ind;
-            return `${p.surname} ${p.name}`;
-        }
-        const team = row._team;
-        const roleWord = BC_ROLE_WORD[stage];
+    // "Фамилия Имя" текущего по этапу члена команды — используется в режиме
+    // "По этапу" (там команда представлена одним человеком, идущим сейчас
+    // этот конкретный этап).
+    function bcRelayCurrentMemberName(team, stage) {
         const memberStage = BC_ROLE_MEMBER_STAGE[stage];
         const member = team.members.find(m => m.relay_stage === memberStage);
-        const memberName = member ? `${member.surname} ${member.name}` : '';
-        return `${team.team_name} (${roleWord}: ${memberName})`;
+        return member ? `${member.surname} ${member.name}` : team.team_name;
+    }
+    // Фамилии всех трёх участников (swim→bike→run) — режимы "По всей гонке"/
+    // "По дням"/Абсолют, где показывается суммарный результат команды, а не
+    // прогресс одного конкретного этапа.
+    function bcRelayAllMembersSurnames(team) {
+        return ['swim', 'bike', 'run']
+            .map(st => team.members.find(m => m.relay_stage === st)?.surname)
+            .filter(Boolean)
+            .join(', ');
+    }
+
+    // mode: 'stage' — один текущий участник команды (по этапу); 'global'/
+    // 'day' — список фамилий всех троих (сумма этапов). category==='combined'
+    // (Абсолют) добавляет префикс [М]/[Ж]/[Э] — реальная категория строки
+    // берётся из row._cat, проставленного в bcCategoryRows.
+    function bcDisplayName(row, category, stage, mode) {
+        const realCategory = category === 'combined' ? row._cat : category;
+        const tagPrefix = category === 'combined' ? `[${BC_TAG[realCategory]}] ` : '';
+        if (realCategory !== 'relay') {
+            const p = row._ind;
+            return `${tagPrefix}${p.surname} ${p.name}`;
+        }
+        const team = row._team;
+        const inner = mode === 'stage' ? bcRelayCurrentMemberName(team, stage) : bcRelayAllMembersSurnames(team);
+        return `${tagPrefix}${team.team_name} (${inner})`;
     }
 
     // Сырое elapsed-время НА ЭТАПЕ (для строки "⏱️ ... на отметке") — не
@@ -426,15 +456,35 @@
         return seq <= STAGE_MAX_SEQ.bike_day1 ? 'bike_day1' : 'bike_day2';
     }
 
-    function bcRankEmoji(n) {
-        const keycaps = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
-        return n <= 9 ? keycaps[n] : `${n}.`;
+    // Медаль для топ-3, пусто для остальных мест.
+    function bcMedal(rank) {
+        return rank === 1 ? ' 🥇' : rank === 2 ? ' 🥈' : rank === 3 ? ' 🥉' : '';
     }
 
-    const BC_STAGE_TITLE = { swim: 'ПЛАВАНИЕ', bike_day1: 'ВЕЛО ДЕНЬ 1', bike_day2: 'ВЕЛО ДЕНЬ 2', bike_combined: 'ВЕЛО (ОБА ДНЯ)', run: 'БЕГ' };
+    // fmtGap возвращает '' для gapS<=0 (рассчитан на "гэп относительно
+    // лидера", который у неотстающих положителен) — но здесь 0 легитимен:
+    // участник получил ТОЧНО такое же время, что и предыдущий в списке
+    // (ничья). Пустая строка после "| " выглядела бы как обрыв текста, а не
+    // как ничья.
+    function bcGapText(gapS) {
+        return gapS === 0 ? '0:00' : fmtGap(gapS);
+    }
+
+    const BC_STAGE_TITLE = { swim: 'ПЛАВАНИЕ', bike_day1: 'ВЕЛОЭТАП', bike_day2: 'ВЕЛОЭТАП', bike_combined: 'ВЕЛОЭТАП', run: 'БЕГОВОЙ ЭТАП' };
     const BC_STAGE_TITLE_INLINE = { swim: 'Плавание', bike_day1: 'Вело День 1', bike_day2: 'Вело День 2', bike_combined: 'Вело (оба дня)', run: 'Бег' };
-    const BC_STAGE_EMOJI = { swim: { M: '🏊🏻‍♂️', F: '🏊🏻', relay: '🏊🏻‍♂️' }, bike_day1: '🚴', bike_day2: '🚴', bike_combined: '🚴', run: '🏃' };
-    const BC_CATEGORY_TITLE = { M: 'МУЖЧИНЫ', F: 'ЖЕНЩИНЫ', relay: 'ЭСТАФЕТЫ' };
+    const BC_STAGE_EMOJI = {
+        swim: { M: '🏊🏻‍♂️', F: '🏊🏻', relay: '🏊🏻‍♂️' },
+        bike_day1: { M: '🚴‍♂️', F: '🚴‍♀️', relay: '🚴‍♂️' },
+        bike_day2: { M: '🚴‍♂️', F: '🚴‍♀️', relay: '🚴‍♂️' },
+        bike_combined: { M: '🚴‍♂️', F: '🚴‍♀️', relay: '🚴‍♂️' },
+        run: { M: '🏃‍♂️', F: '🏃‍♀️', relay: '🏃‍♂️' },
+    };
+    const BC_CATEGORY_TITLE = { M: 'МУЖЧИНЫ', F: 'ЖЕНЩИНЫ', relay: 'ЭСТАФЕТЫ', combined: 'АБСОЛЮТ' };
+    const BC_TAG = { M: 'М', F: 'Ж', relay: 'Э' };
+    // Плейсхолдер — реальной ссылки на площадки трансляции пока нет; заведомо
+    // не похож на настоящий URL, чтобы не опубликовать выдуманную ссылку по ошибке.
+    const BC_MEDIA_URL_PLACEHOLDER = 'ССЫЛКА_НА_МЕДИА_TODO';
+    const BC_LIVE_URL = 'https://live.siberman515.com/siberman/results';
 
     function bcStageEmoji(stage, category) {
         const e = BC_STAGE_EMOJI[stage];
@@ -452,16 +502,6 @@
             .sort((a, b) => a.rank - b.rank);
     }
 
-    function bcGapWording(mode, category) {
-        if (mode === 'stage') {
-            return { leader: 'Преимущество над 2-м местом', trail: 'Отставание от лидера' };
-        }
-        return {
-            leader: 'Виртуальное преимущество над 2-м местом',
-            trail: category === 'relay' ? 'Отставание от лидеров' : 'Отставание от лидера',
-        };
-    }
-
     // Дистанции swim — дробные (1.3/2.6 км...), сайт везде показывает их с
     // русской запятой (см. CHECKPOINT_LABELS.swim: "1,3 км" — уже строка с
     // запятой), а не точкой — интерполяция числа в текст поста напрямую дала
@@ -470,53 +510,76 @@
         return String(km).replace('.', ',');
     }
 
-    // fmtGap возвращает '' для gapS<=0 (используется для гэпов, которые
-    // всегда положительны у неотстающих) — но здесь 0 — легитимный, пусть и
-    // редкий случай (участник получил ТОЧНО такое же время, что и лидер, на
-    // этой отметке). Пустая строка после "Отставание от лидера: " выглядела
-    // бы как баг, а не как "ничья" (тот же класс проблемы уже чинили для
-    // строки лидера — см. bcEntryText/bcBuildDayPost).
-    function bcGapOrZeroText(gapS) {
-        return gapS === 0 ? '0:00' : fmtGap(gapS);
-    }
-
-    // Строка "📊 ..." (преимущество лидера / отставание остальных) — общая
-    // для bcEntryText и bcBuildDayPost (раньше дублировалась дословно).
-    function bcGapLine(idx, list, wording, item) {
-        if (idx === 0) {
-            const second = list[1];
-            const advGap = second ? second.gap : null;
-            const advText = advGap == null ? '—' : (advGap === 0 ? '0:00' : fmtGap(advGap).replace(/^\+/, ''));
-            return `📊 ${wording.leader}: ${advText}`;
+    // Строка участника — компактный 2-строчный формат. Время/темп зависят
+    // от режима: "По этапу" показывает сырое время НА ЭТАПЕ + темп/скорость
+    // (осмысленны — все сравниваются в рамках одной дисциплины); "По всей
+    // гонке"/"По дням"/Абсолют показывают кумулятивное межэтапное время
+    // (globalProgress) без темпа — единицы темпа/скорости неоднородны на
+    // стыке дисциплин. Лидер (idx===0) не показывает отставание вообще.
+    function bcEntryText(item, idx, category, stage, seq, mode) {
+        const rank = idx + 1;
+        const name = bcDisplayName(item.row, category, stage, mode);
+        let timeLine;
+        if (mode === 'stage') {
+            const timeS = bcStageRawTime(item.row, stage, seq);
+            const distKm = bcDistKm(stage, seq);
+            const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
+            timeLine = `⏱️ ${fmtTime(timeS)} (${pace})`;
+        } else {
+            const timeS = globalProgress(item.row, stage, seq);
+            timeLine = `⏱️ ${fmtTime(timeS)}`;
         }
-        return `📊 ${wording.trail}: ${bcGapOrZeroText(item.gap)}`;
+        const gapSuffix = idx === 0 ? '' : ` | ${bcGapText(item.gap)}`;
+        return `${rank}. ${name}${bcMedal(rank)}\n${timeLine}${gapSuffix}`;
     }
 
-    function bcEntryText(item, idx, list, category, stage, seq, mode) {
-        const wording = bcGapWording(mode, category);
-        const name = bcDisplayName(item.row, category, stage);
-        const timeS = bcStageRawTime(item.row, stage, seq);
-        const distKm = bcDistKm(stage, seq);
-        const pace = avgPaceLabel(bcUnitStage(stage, seq), distKm, timeS);
-        const timeLinePrefix = mode === 'global' ? BC_STAGE_TITLE_INLINE[stage] : 'Время';
-        const timeLine = `⏱️ ${timeLinePrefix} на отметке ${bcFmtKm(distKm)} км: ${fmtTime(timeS)} (${pace})`;
-        const gapLine = bcGapLine(idx, list, wording, item);
-        return `${bcRankEmoji(idx + 1)} ${name}\n${timeLine}\n${gapLine}`;
+    // Уточнение в скобках после "N из M км" — круги для плавания/бега
+    // (lapLabel), день для вело (в title вело теперь всегда просто
+    // "ВЕЛОЭТАП", день указывается только здесь).
+    function bcCpParenSuffix(stage, seq) {
+        const laps = lapLabel(bcUnitStage(stage, seq), stage === 'bike_combined' ? (seq <= STAGE_MAX_SEQ.bike_day1 ? seq : seq - STAGE_MAX_SEQ.bike_day1) : seq);
+        if (laps) return ` (${laps})`;
+        if (stage === 'bike_day1') return ' (День 1)';
+        if (stage === 'bike_day2') return ' (День 2)';
+        if (stage === 'bike_combined') return seq <= STAGE_MAX_SEQ.bike_day1 ? ' (День 1)' : ' (День 2)';
+        return '';
     }
-
-    // suffix — конец предложения после "N из M км(N кругов)"; по умолчанию
-    // просто точка (режим "По этапу"), режим "По всей гонке" передаёт
-    // " этапа «Название».", чтобы получить одно связное предложение —
-    // раньше это делалось через .replace('.', ...) поверх готовой строки,
-    // что ЛОМАЛОСЬ на дробных дистанциях заплыва (нашёл бы первую точку в
-    // "1.3 км", а не точку в конце предложения) — суффикс теперь параметр,
-    // а не постобработка строки.
-    function bcCpHeaderLine(stage, seq, suffix) {
+    // Общий header "📍 Отметка: ..." — одинаковый для режимов "По этапу" и
+    // "По всей гонке" (кроме Абсолюта — см. bcAbsoluteHeaderLine).
+    function bcCpHeaderLine(stage, seq) {
         const distKm = bcDistKm(stage, seq);
         const totalKm = bcDistKm(stage, bcMaxSeq(stage));
-        const laps = lapLabel(bcUnitStage(stage, seq), stage === 'bike_combined' ? (seq <= STAGE_MAX_SEQ.bike_day1 ? seq : seq - STAGE_MAX_SEQ.bike_day1) : seq);
-        const lapsSuffix = laps ? ` (${laps})` : '';
-        return `📍 Контрольная точка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${lapsSuffix}${suffix ?? '.'}`;
+        return `📍 Отметка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${bcCpParenSuffix(stage, seq)}.`;
+    }
+
+    // Короткое имя дисциплины для header'а Абсолюта.
+    const BC_STAGE_SHORT = { swim: 'плавание', bike_day1: 'вело', bike_day2: 'вело', run: 'бег' };
+    const BC_REAL_STAGE_ORDER = ['swim', 'bike_day1', 'bike_day2', 'run'];
+    // Дисциплины, ПОЛНОСТЬЮ пройденные до текущего этапа — группируются по
+    // факту (плавание / вело суммарно день1+день2 / бег), не по дню, т.к.
+    // Абсолют сравнивает участников на разных РЕАЛЬНЫХ этапах гонки, а не
+    // внутри одного и того же, как остальные режимы.
+    function bcAbsolutePrevStages(stage) {
+        const before = BC_REAL_STAGE_ORDER.slice(0, BC_REAL_STAGE_ORDER.indexOf(stage));
+        const parts = [];
+        if (before.includes('swim')) parts.push({ km: CHECKPOINT_DIST_KM.swim[STAGE_MAX_SEQ.swim], label: 'плавание' });
+        const bikeDays = before.filter(s => s === 'bike_day1' || s === 'bike_day2');
+        if (bikeDays.length) {
+            const km = bikeDays.reduce((sum, s) => sum + CHECKPOINT_DIST_KM[s][STAGE_MAX_SEQ[s]], 0);
+            parts.push({ km, label: 'вело' });
+        }
+        return parts;
+    }
+    // Header Абсолюта — единственный подтверждённый примером: "135 из 145
+    // км вело (+ 10 км плавание)". Не проверено на реальных данных для
+    // этапа "Бег" (там 2 предыдущие группы сразу) — сверить вручную после
+    // деплоя.
+    function bcAbsoluteHeaderLine(stage, seq) {
+        const distKm = CHECKPOINT_DIST_KM[stage][seq];
+        const totalKm = CHECKPOINT_DIST_KM[stage][STAGE_MAX_SEQ[stage]];
+        const prev = bcAbsolutePrevStages(stage);
+        const prevSuffix = prev.length ? ` (${prev.map(p => `+ ${bcFmtKm(p.km)} км ${p.label}`).join(', ')})` : '';
+        return `📍 Отметка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км ${BC_STAGE_SHORT[stage]}${prevSuffix}.`;
     }
 
     // DNF/DSQ-участники категории, которых нет в ранжированном списке этой
@@ -534,7 +597,9 @@
         return `${BC_STAGE_TITLE_INLINE[stage]}, ${CHECKPOINT_LABELS[stage][pos.seq]}`;
     }
     function bcSimpleName(row, category) {
-        return category === 'relay' ? row._team.team_name : `${row._ind.surname} ${row._ind.name}`;
+        const realCategory = category === 'combined' ? row._cat : category;
+        const tagPrefix = category === 'combined' ? `[${BC_TAG[realCategory]}] ` : '';
+        return realCategory === 'relay' ? `${tagPrefix}${row._team.team_name}` : `${tagPrefix}${row._ind.surname} ${row._ind.name}`;
     }
     function bcDnfDsqBlock(rows, list, category) {
         const shown = new Set(list.map(item => item.row.key));
@@ -549,6 +614,26 @@
         return '\n\n' + blocks.join('\n\n');
     }
 
+    // Заголовок поста (title, строка 1) — зависит от категории и режима.
+    // Личный "по всей гонке" (mode==='global', category M/F) не подтверждён
+    // ни одним присланным примером — сохранена прежняя формулировка
+    // "ЛИЧНЫЙ ЗАЧЁТ" как разумный дефолт.
+    function bcPostTitle(mode, stage, category) {
+        if (category === 'combined') {
+            return mode === 'global' ? '🏆 АБСОЛЮТ. СУММА ЭТАПОВ. SIBERMAN 2026' : `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+        }
+        if (category === 'relay' && mode === 'global') return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
+        if (mode === 'global') return `${BC_CATEGORY_TITLE[category]}. ЛИЧНЫЙ ЗАЧЁТ. SIBERMAN 2026`;
+        return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+    }
+
+    // Финальная сборка: жирный заголовок (2 строки), тело, DNF/DSQ-блок
+    // (без разметки), курсивный футер со ссылками.
+    function bcAssemble(title, header, body, dnfBlock) {
+        const footer = `_🔴 Полный лайв-трекер: ${BC_LIVE_URL}_\n_📡 Все площадки трансляции: ${BC_MEDIA_URL_PLACEHOLDER}_`;
+        return `*${title}*\n*${header}*\n\n${body}${dnfBlock}\n\n${footer}`;
+    }
+
     function bcBuildStagePost(data, stage, seq, category) {
         const rows = bcCategoryRows(data, category);
         const maxSeq = bcMaxSeq(stage);
@@ -558,10 +643,10 @@
         const list = bcRankedList(rows, ranksBySeq, gapsBySeq, seq);
         if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
 
-        const title = `${BC_CATEGORY_TITLE[category]}. ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+        const title = bcPostTitle('stage', stage, category);
         const header = bcCpHeaderLine(stage, seq);
-        const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'stage')).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка на этапе:\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
+        const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'stage')).join('\n\n');
+        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
     }
 
     function bcBuildGlobalPost(data, stage, seq, category) {
@@ -572,11 +657,10 @@
         const list = bcRankedList(rows, ranksBySeq, gapsBySeq, seq);
         if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
 
-        const titleSuffix = category === 'relay' ? '' : '. ЛИЧНЫЙ ЗАЧЁТ';
-        const title = `${BC_CATEGORY_TITLE[category]}${titleSuffix}. SIBERMAN 2026`;
-        const header = bcCpHeaderLine(stage, seq, ` этапа «${BC_STAGE_TITLE[stage]}».`);
-        const body = list.map((item, idx) => bcEntryText(item, idx, list, category, stage, seq, 'global')).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка по сумме трёх дней гонки.\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
+        const title = bcPostTitle('global', stage, category);
+        const header = category === 'combined' ? bcAbsoluteHeaderLine(stage, seq) : bcCpHeaderLine(stage, seq);
+        const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'global')).join('\n\n');
+        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
     }
 
     const BC_DAY_CONFIG = {
@@ -593,16 +677,11 @@
         const list = bcRankedList(rows, ranksBySeq, gapsBySeq, maxSeq);
         if (list.length === 0) return 'Нет данных — этот день ещё не завершён ни для одного участника категории.';
 
-        const title = `${BC_CATEGORY_TITLE[category]}. ИТОГИ ДНЯ ${cfg.label}. SIBERMAN 2026`;
+        const catTitlePrefix = category === 'combined' ? '🏆 АБСОЛЮТ' : `${BC_CATEGORY_TITLE[category]}`;
+        const title = `${catTitlePrefix}. ИТОГИ ДНЯ ${cfg.label}. SIBERMAN 2026`;
         const header = `📍 Снапшот на конец дня ${cfg.label}.`;
-        const wording = { leader: 'Преимущество над 2-м местом', trail: category === 'relay' ? 'Отставание от лидеров' : 'Отставание от лидера' };
-        const body = list.map((item, idx) => {
-            const name = bcDisplayName(item.row, category, cfg.stage);
-            const gapLine = bcGapLine(idx, list, wording, item);
-            const timeS = globalProgress(item.row, cfg.stage, maxSeq);
-            return `${bcRankEmoji(idx + 1)} ${name}\n⏱️ Итоговое время: ${fmtTime(timeS)}\n${gapLine}`;
-        }).join('\n\n');
-        return `${title}\n${header}\n\nТекущая расстановка по сумме дня ${cfg.label} гонки:\n\n${body}${bcDnfDsqBlock(rows, list, category)}`;
+        const body = list.map((item, idx) => bcEntryText(item, idx, category, cfg.stage, maxSeq, 'day')).join('\n\n');
+        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
     }
 
     async function bcGenerate() {
