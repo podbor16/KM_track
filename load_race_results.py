@@ -463,9 +463,10 @@ class RaceLoader:
         self.logger.info(f"⏳ Загрузка существующих результатов в кэш...")
         try:
             self.cursor.execute(
-                """SELECT id, start_number, surname, name, birthday, sex, category, 
-                        race_status, time_gun_start, time_clear_start, time_gun_finish, 
-                        time_clear_finish, rank_absolute, rank_sex, rank_category, 
+                """SELECT id, start_number, surname, name, birthday, sex, category,
+                        race_status, time_gun_start, time_clear_start, time_gun_finish,
+                        time_clear_finish, time_gun_finish_ms, time_clear_finish_ms,
+                        rank_absolute, rank_sex, rank_category,
                         finish_pace_avg_gun, finish_pace_avg_clean,
                         time_clear_kt1, time_clear_kt2, time_clear_kt3,
                         time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7,
@@ -854,6 +855,15 @@ class RaceLoader:
                 changed_fields.append(f'race_status: "{existing.get("race_status")}" → "{race_status}"')
             if time_gun_finish != existing.get('time_gun_finish'):
                 changed_fields.append(f'time_gun_finish: {existing.get("time_gun_finish")} → {time_gun_finish}')
+            # Точные мс — нужны отдельно от time_gun_finish/time_clear_finish
+            # (усечённых до целой секунды), т.к. Copernico может уточнить
+            # мс-часть без пересечения границы секунды — тогда строковое
+            # HH:MM:SS не поменяется, а тай-брейк мест (_recalculate_ranks)
+            # всё равно должен подхватить новое значение.
+            if official_finish_ms != existing.get('time_gun_finish_ms'):
+                changed_fields.append(f'time_gun_finish_ms: {existing.get("time_gun_finish_ms")} → {official_finish_ms}')
+            if net_finish_ms != existing.get('time_clear_finish_ms'):
+                changed_fields.append(f'time_clear_finish_ms: {existing.get("time_clear_finish_ms")} → {net_finish_ms}')
             if finish_pace_avg_gun != existing.get('finish_pace_avg_gun'):
                 changed_fields.append(f'finish_pace_avg_gun: {existing.get("finish_pace_avg_gun")} → {finish_pace_avg_gun}')
             if finish_pace_avg_clean != existing.get('finish_pace_avg_clean'):
@@ -884,6 +894,7 @@ class RaceLoader:
                     result_id,
                     surname, name, birthdate, sex, category, race_status,
                     time_gun_start, time_clear_start, time_gun_finish, time_clear_finish,
+                    official_finish_ms, net_finish_ms,
                     finish_pace_avg_gun, finish_pace_avg_clean,
                     time_clear_kt1, time_clear_kt2, time_clear_kt3, time_clear_kt4, time_clear_kt5, time_clear_kt6, time_clear_kt7,
                     pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5, pace_avg_kt6, pace_avg_kt7,
@@ -906,6 +917,8 @@ class RaceLoader:
                 'time_clear_start': time_clear_start,
                 'time_gun_finish': time_gun_finish,
                 'time_clear_finish': time_clear_finish,
+                'time_gun_finish_ms': official_finish_ms,
+                'time_clear_finish_ms': net_finish_ms,
                 'finish_pace_avg_gun': finish_pace_avg_gun,
                 'finish_pace_avg_clean': finish_pace_avg_clean,
                 'time_clear_kt1': time_clear_kt1,
@@ -926,6 +939,7 @@ class RaceLoader:
                     ['id'],
                     ['surname', 'name', 'birthday', 'sex', 'category', 'race_status',
                      'time_gun_start', 'time_clear_start', 'time_gun_finish', 'time_clear_finish',
+                     'time_gun_finish_ms', 'time_clear_finish_ms',
                      'finish_pace_avg_gun', 'finish_pace_avg_clean',
                      'time_clear_kt1', 'time_clear_kt2', 'time_clear_kt3', 'time_clear_kt4',
                      'time_clear_kt5', 'time_clear_kt6', 'time_clear_kt7',
@@ -985,6 +999,19 @@ class RaceLoader:
                 ranks[rid] = ranks[valid[i - 1][0]]
         return ranks
 
+    @staticmethod
+    def _finish_sort_key(time_str: Optional[str], ms: Optional[int]) -> Optional[str]:
+        """'HH:MM:SS.ммм' — ключ для _assign_ranks с тай-брейком внутри одной
+        секунды. time_gun_finish/time_clear_finish хранят только целые секунды
+        (TIME-колонка + округление в milliseconds_to_time), поэтому без этого
+        тай-брейка двое финишировавших в одну секунду получали бы одно и то
+        же место, хотя Copernico различает их с точностью до мс. ms=None
+        (записи, ещё не обновлённые после этого фикса) → '.000' — то же
+        поведение, что было раньше."""
+        if not time_str:
+            return None
+        return f"{time_str}.{(ms % 1000) if ms is not None else 0:03d}"
+
     def _recalculate_ranks(self) -> None:
         """
         Пересчитывает все места для event_id:
@@ -997,7 +1024,8 @@ class RaceLoader:
         try:
             # --- Финишные места ---
             self.cursor.execute(
-                """SELECT id, sex, category, time_gun_finish, time_clear_finish
+                """SELECT id, sex, category, time_gun_finish, time_clear_finish,
+                          time_gun_finish_ms, time_clear_finish_ms
                    FROM results
                    WHERE event_id = %s AND race_status = 'Finished'
                    AND time_gun_finish IS NOT NULL""",
@@ -1008,8 +1036,21 @@ class RaceLoader:
             if not finished:
                 return
 
+            # Тай-брейк по мс внутри одной и той же целой секунды: time_gun_finish/
+            # time_clear_finish — TIME-колонки в MySQL, хранят только целые секунды
+            # (см. milliseconds_to_time), поэтому двое финишировавших в пределах
+            # одной секунды получали бы одинаковое место, хотя Copernico различает
+            # их с точностью до мс. _gun_key/_clean_key — тот же формат "HH:MM:SS",
+            # просто с добавленным ".ммм" — сравнение строкой работает как раньше,
+            # ничего не ломает для строк без ms (используется ".000" — то же
+            # поведение, что было до этого фикса).
+            for r in finished:
+                r['_gun_key'] = self._finish_sort_key(r['time_gun_finish'], r.get('time_gun_finish_ms'))
+                if r.get('time_clear_finish'):
+                    r['_clean_key'] = self._finish_sort_key(r['time_clear_finish'], r.get('time_clear_finish_ms'))
+
             # Официальные места (gun time)
-            abs_gun = self._assign_ranks(finished, 'time_gun_finish')
+            abs_gun = self._assign_ranks(finished, '_gun_key')
             sex_gun: Dict[str, Dict[int, int]] = {}
             cat_gun: Dict[str, Dict[int, int]] = {}
             abs_clean: Dict[int, int] = {}
@@ -1018,23 +1059,23 @@ class RaceLoader:
 
             for sex_val in set(r['sex'] for r in finished if r.get('sex')):
                 group = [r for r in finished if r.get('sex') == sex_val]
-                sex_gun[sex_val] = self._assign_ranks(group, 'time_gun_finish')
+                sex_gun[sex_val] = self._assign_ranks(group, '_gun_key')
 
             for cat_val in set(r['category'] for r in finished if r.get('category')):
                 group = [r for r in finished if r.get('category') == cat_val]
-                cat_gun[cat_val] = self._assign_ranks(group, 'time_gun_finish')
+                cat_gun[cat_val] = self._assign_ranks(group, '_gun_key')
 
             # Чистые места (clean time) — только если есть time_clear_finish
             with_clean = [r for r in finished if r.get('time_clear_finish')]
-            abs_clean = self._assign_ranks(with_clean, 'time_clear_finish')
+            abs_clean = self._assign_ranks(with_clean, '_clean_key')
 
             for sex_val in set(r['sex'] for r in with_clean if r.get('sex')):
                 group = [r for r in with_clean if r.get('sex') == sex_val]
-                sex_clean[sex_val] = self._assign_ranks(group, 'time_clear_finish')
+                sex_clean[sex_val] = self._assign_ranks(group, '_clean_key')
 
             for cat_val in set(r['category'] for r in with_clean if r.get('category')):
                 group = [r for r in with_clean if r.get('category') == cat_val]
-                cat_clean[cat_val] = self._assign_ranks(group, 'time_clear_finish')
+                cat_clean[cat_val] = self._assign_ranks(group, '_clean_key')
 
             # Bulk UPDATE ranks (один запрос вместо N)
             rank_batch = []
