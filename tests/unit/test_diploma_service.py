@@ -84,3 +84,30 @@ def test_get_diploma_data_handles_finished_with_missing_time():
         data = get_diploma_data(event_id=1, bib='101')
     assert data is not None
     assert data['time_display'] == '-'
+
+
+def test_get_diploma_data_hides_category_row_when_category_is_just_gender():
+    """У события без возрастных категорий (напр. 'Достигая цели') значение
+    'category' в БД — буквально 'Мужчины'/'Женщины', т.е. то же самое
+    разбиение, что и по полу. Показывать оба ряда ("Пол" и "Мужчины") с
+    одинаковым местом — дублирование, строку категории нужно скрыть."""
+    rows = [
+        _row('101', 'male', rank_sex=1, rank_cat=1, category='Мужчины'),
+        _row('102', 'male', rank_sex=2, rank_cat=2, category='Мужчины'),
+    ]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data['show_category_rank'] is False
+
+
+def test_get_diploma_data_shows_category_row_when_real_age_category():
+    """У события с настоящими возрастными категориями (напр. 'мужчины до
+    49 лет') строка категории несёт данные, которых нет в строке "Пол" —
+    показывать нужно."""
+    rows = [
+        _row('101', 'male', rank_sex=1, rank_cat=1, category='мужчины до 49 лет'),
+        _row('102', 'male', rank_sex=2, rank_cat=1, category='мужчины 50+'),
+    ]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data['show_category_rank'] is True

@@ -14,6 +14,18 @@ from src.analytics.db_results import get_race_results_by_event_id
 # (см. тот же список в templates/krasmarafon/athlete-profile.html:366).
 _FINISHED_STATUSES = {'finished', 'fifnished'}
 
+# У событий без возрастных категорий (напр. благотворительные забеги вроде
+# "Достигая цели") поле category в БД — буквально "Мужчины"/"Женщины", т.е.
+# то же самое разбиение, что и по полу. Показывать в этом случае и "Пол", и
+# "Категория" с одинаковым местом — дублирование; у событий с настоящими
+# возрастными категориями ("мужчины до 49 лет" и т.п.) category несёт
+# данные, которых нет в строке "Пол", и её нужно показывать.
+_GENDER_ONLY_CATEGORY_WORDS = {'мужчины', 'мужчина', 'женщины', 'женщина', 'м', 'ж'}
+
+
+def _is_gender_only_category(category: str) -> bool:
+    return category.strip().lower() in _GENDER_ONLY_CATEGORY_WORDS
+
 
 def format_finish_time(td: Optional[timedelta]) -> str:
     """timedelta → 'H:MM:SS' (или 'MM:SS', если меньше часа), '-' для None."""
@@ -46,6 +58,8 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
         return None
 
     sexes = {str(r.get('sex')).strip().lower() for r in rows if r.get('sex')}
+    categories = {str(r.get('category')).strip() for r in rows if r.get('category')}
+    show_category_rank = not all(_is_gender_only_category(c) for c in categories) if categories else False
 
     return {
         'surname': target.get('surname'),
@@ -56,4 +70,5 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
         'rank_sex': target.get('rank_sex_clean'),
         'rank_category': target.get('rank_category_clean'),
         'show_sex_rank': len(sexes) > 1,
+        'show_category_rank': show_category_rank,
     }
