@@ -250,11 +250,14 @@ function _circleWord(n) {
 // Двухстрочная ячейка "последняя КТ": "N км" + "m круг"/"Финиш" на второй
 // строке. Круг показывается только для плавания/бега (SWIM_LAP_SEQS/seq
 // напрямую) — у вело нет понятия круга, там на некруговых КТ только "N км".
-// На финише второй строкой всегда "Финиш", независимо от этапа.
-function lastCpTwoLineHtml(dbStage, seq) {
+// На финише второй строкой всегда "Финиш", независимо от этапа. prefix —
+// опционально, для "Дней" (results.html:renderRankedProgress), где сам
+// этап меняется от строки к строке (не зафиксирован, как на вкладках
+// этапов) — "Вело День 1, 135 км" вместо голого "135 км".
+function lastCpTwoLineHtml(dbStage, seq, prefix) {
     if (seq == null) return '—';
     const km = CHECKPOINT_DIST_KM[dbStage][seq];
-    const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
+    const kmLine = `<div>${prefix ? prefix + ', ' : ''}${String(km).replace('.', ',')} км</div>`;
     if (seq === STAGE_MAX_SEQ[dbStage]) return kmLine + '<div class="muted-sub">Финиш</div>';
     const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
     return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;
@@ -485,6 +488,20 @@ function currentStage(row, maxStage) {
         if (lastReached(row.cp, STAGE_ORDER[i])) return STAGE_ORDER[i];
     }
     return null;
+}
+
+// Статус ИМЕННО этого дня (не всей гонки) — по факту достижения последней
+// КТ дневного этапа maxStage, а не по общему row.status. DNF, случившийся
+// ПОСЛЕ этого дня (например, на беге в день 3), не должен помечать уже
+// пройденный день как не пройденный — тот же класс бага/фикса, что и
+// bikeCombinedStatus (results.html) для Свода вело, найдено пользователем
+// 2026-08-02 на Дащенко/Пушкарёве (DNF на беге, но "Итог 1/2 дня" внутри
+// показывал DNF, хотя вело-дни пройдены полностью). Без maxStage — status
+// как есть (не влияет на другие вызовы).
+function dayStatus(row, maxStage) {
+    if (!maxStage || row.status === 'active') return row.status;
+    const pos = lastReached(row.cp, maxStage);
+    return (pos && pos.seq === STAGE_MAX_SEQ[maxStage]) ? 'active' : row.status;
 }
 
 function computeOverallGaps(rows) {

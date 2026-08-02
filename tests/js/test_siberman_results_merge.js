@@ -1624,5 +1624,48 @@ check('render() — блок фильтров скрыт на вкладке "С
     assert.strictEqual(domStub('mainFiltersBar').style.display, '', 'на других вкладках фильтры должны быть видны');
 });
 
+// ── dayStatus()/renderDay1()/renderDay2() — DNF на более позднем этапе (беге)
+// не должен занулять уже пройденный вело-день (найдено пользователем
+// 2026-08-02 на Дащенко/Пушкарёве — тот же класс бага, что чинили для
+// Свода вело через bikeCombinedStatus) ──
+check('dayStatus — DNF по общей гонке (на беге), но День 1 (bike_day1) реально пройден — "active"', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const row = { status: 'dnf', cp: { bike_day1: { [maxSeqB1]: 5000 } } };
+    assert.strictEqual(sandbox.dayStatus(row, 'bike_day1'), 'active');
+});
+check('dayStatus — DNF реально НА этом дне (не дошёл до финиша bike_day1) — остаётся DNF', () => {
+    const row = { status: 'dnf', cp: { bike_day1: { 3: 3000 } } }; // не последняя КТ
+    assert.strictEqual(sandbox.dayStatus(row, 'bike_day1'), 'dnf');
+});
+check('dayStatus — без maxStage возвращает status как есть', () => {
+    assert.strictEqual(sandbox.dayStatus({ status: 'dnf', cp: {} }, undefined), 'dnf');
+});
+check('renderDay1() — участник с DNF на беге, но День 1 пройден полностью, показывает "Финиш", не DNF', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // Дащенко/Пушкарёв: status='dnf' (сошёл на беге), но день 1 (плавание+
+    // вело1) реально пройден — cp.bike_day1 дошёл до последней КТ.
+    const runner = mkTimerInd('1', {
+        status: 'dnf', gender: 'M', swim_s: 1000, bike1_s: 5000,
+        cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqB1]: 5000 } },
+    });
+    setRaceData([runner], [], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка участника не найдена: ${html}`);
+    assert.ok(!rowMatch[0].includes(' dnf"'), `строка не должна быть помечена как dnf: ${rowMatch[0]}`);
+    assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `статус должен быть "Финиш": ${rowMatch[0]}`);
+});
+check('renderDay1() — "Отметка" в две строки с названием этапа (как на вкладках этапов, п.3 v6)', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const runner = mkTimerInd('1', { gender: 'M', bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
+    setRaceData([runner], [], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('Вело 1, 145 км'), `ожидалась строка "Вело 1, 145 км": ${html.slice(0, 700)}`);
+    assert.ok(html.includes('muted-sub">Финиш'), `ожидалась вторая строка "Финиш": ${html.slice(0, 700)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
