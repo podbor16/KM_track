@@ -715,7 +715,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
-        <td class="r time-cell muted">${fmtTime(bikeCombinedTime(r))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedTime(r)), stageGaps.bikeCombined[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusBadge(r, null)}</td>
@@ -746,7 +746,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
-        <td class="r time-cell muted">${fmtTime(bikeCombinedTime(tr))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedTime(tr)), stageGaps.bikeCombined[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusCell}</td>
@@ -837,13 +837,14 @@ function renderOverall() {
     // интерполяция для ещё не финишировавших, здесь достаточно прямого
     // поля swim_s/bike1_s/...).
     const stageGapPool = [
-        ...individual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
-        ...relay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s }; }),
+        ...individual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, bikeCombined: bikeCombinedTime(r) })),
+        ...relay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s, bikeCombined: bikeCombinedTime(tr) }; }),
     ];
     const stageGaps = {
         swim: fieldGaps(stageGapPool, 'swim_s'),
         bike1: fieldGaps(stageGapPool, 'bike1_s'),
         bike2: fieldGaps(stageGapPool, 'bike2_s'),
+        bikeCombined: fieldGaps(stageGapPool, 'bikeCombined'),
         run: fieldGaps(stageGapPool, 'run_s'),
     };
 
@@ -902,7 +903,23 @@ function renderStage(stage) {
         return pos ? CHECKPOINT_DIST_KM[dbStage][pos.seq] : 0;
     };
 
-    const rows = sortByStatus(individual.map(withStageStatus), cfg.timeKey, stageProgressKm);
+    // r[cfg.timeKey] (напр. run_s) — время на ПОСЛЕДНЕЙ пройденной КТ, не
+    // обязательно финишной (см. compute_stage_totals/_last_cp в
+    // src/siberman/service.py: "последний не-None cumulative", а не
+    // "дошёл до финиша") — используется и для сошедших, чтобы показать их
+    // реальное время на месте, где они остановились. Для СОРТИРОВКИ этого
+    // недостаточно: два DNF с непустым timeKey сравнивались бы по этому
+    // "времени на последней точке" как по настоящему финишному времени,
+    // хотя одна КТ может быть намного раньше другой по дистанции (найдено
+    // пользователем 2026-08-02 на Дащенко/Пушкарёве — прошедший больше
+    // кругов оказывался ниже). Отдельное _sortTime — null, если стадия не
+    // пройдена ДО ФИНИШНОЙ КТ, независимо от того, заполнено ли timeKey.
+    const withSortTime = r => {
+        const pos = lastReached(r.cp, dbStage);
+        const finishedStage = !!pos && pos.seq === maxSeq;
+        return { ...r, _sortTime: finishedStage ? r[cfg.timeKey] : null };
+    };
+    const rows = sortByStatus(individual.map(withStageStatus).map(withSortTime), '_sortTime', stageProgressKm);
     let relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members
             .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))

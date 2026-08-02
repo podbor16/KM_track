@@ -1790,5 +1790,34 @@ check('renderBikeCombined() — два DNF, ни один не финиширо�
     assert.ok(html.indexOf('bib-cell">1<') < html.indexOf('bib-cell">2<'), `дальше проехавший (bib=1, КТ5) должен идти выше (bib=2, КТ2): ${html}`);
 });
 
+check('renderStage() — два DNF на беге, у ОБОИХ заполнено run_s ("время на последней КТ", не финиш) — сортировка всё равно по кругам, не по этому времени', () => {
+    // Реальный баг (2026-08-02, Дащенко/Пушкарёв): run_s = время на
+    // ПОСЛЕДНЕЙ пройденной КТ (см. compute_stage_totals/_last_cp в
+    // src/siberman/service.py), а не финишное — у обоих оно заполнено,
+    // но Дащенко (4 круга) имеет МЕНЬШЕЕ run_s, чем Пушкарёв (5 кругов,
+    // раз он дольше продержался на трассе) — сортировка по сырому run_s
+    // ставила её выше, хотя он прошёл больше.
+    const dashchenko = mkTimerInd('158', { status: 'dnf', gender: 'F', run_s: 13778, cp: { run: { 4: 13778 } } }); // 4 круга = 28 км
+    const pushkarev = mkTimerInd('36', { status: 'dnf', gender: 'M', run_s: 23321, cp: { run: { 5: 23321 } } }); // 5 кругов = 35 км
+    setRaceData([dashchenko, pushkarev], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">36<') < html.indexOf('bib-cell">158<'), `Пушкарёв (5 кругов) должен быть выше Дащенко (4 круга), несмотря на большее "сырое" run_s: ${html}`);
+});
+
+check('renderOverall() — колонка "Вело итого" несёт своё отставание (timeGapCell), как остальные этапы', () => {
+    const fast = mkTimerInd('1', { bike1_s: 9000, bike2_s: 8000, overall_s: 20000 }); // вело = 17000
+    const slow = mkTimerInd('2', { bike1_s: 9500, bike2_s: 8500, overall_s: 22000 }); // вело = 18000, +1000 от лидера
+    setRaceData([fast, slow], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=2 не найдена: ${html}`);
+    const expectedGap = vm.runInContext('fmtGap(1000)', sandbox);
+    assert.ok(rowMatch[0].includes(expectedGap), `под "Вело итого" у bib=2 должно быть отставание ${expectedGap}: ${rowMatch[0]}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
