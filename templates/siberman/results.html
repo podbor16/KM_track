@@ -801,9 +801,16 @@ function renderOverall() {
     // Эстафетная команда не имеет единого пола — при выбранном фильтре
     // пола команды в Финале не показываем вовсе (не "какого-то одного пола").
     const relay = _gender === 'all' ? filtered.relay : [];
+    // DNF/DSQ (общий статус гонки) не участвуют в расчёте отставаний нигде
+    // (ни как лидер, ни как получатель отставания) — показывают только своё
+    // сырое время, без "+X"/"Лидер" (запрошено пользователем 2026-08-02:
+    // Дащенко с DNF ошибочно получала "Лидер" в колонке "Бег" — её частичное
+    // время оказывалось меньше настоящих финишных времён активных бегунов).
+    const activeIndividual = individual.filter(r => r.status === 'active');
+    const activeRelay = relay.filter(t => teamGapRow(t).status === 'active');
     const overallGaps = computeOverallGaps([
-        ...individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
-        ...relay.map(teamGapRow),
+        ...activeIndividual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s })),
+        ...activeRelay.map(teamGapRow),
     ]);
     // Единое место по всей гонке (личники+эстафета) — среди ВИДИМЫХ строк
     // (individual/relay уже отфильтрованы по формату/полу выше), тот же
@@ -837,8 +844,8 @@ function renderOverall() {
     // интерполяция для ещё не финишировавших, здесь достаточно прямого
     // поля swim_s/bike1_s/...).
     const stageGapPool = [
-        ...individual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, bikeCombined: bikeCombinedTime(r) })),
-        ...relay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s, bikeCombined: bikeCombinedTime(tr) }; }),
+        ...activeIndividual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, bikeCombined: bikeCombinedTime(r) })),
+        ...activeRelay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s, bikeCombined: bikeCombinedTime(tr) }; }),
     ];
     const stageGaps = {
         swim: fieldGaps(stageGapPool, 'swim_s'),
@@ -888,10 +895,17 @@ function renderStage(stage) {
     // остальная логика (сортировка, бейдж статуса) отрабатывает как для
     // обычного DNF — включая getDnfStage/statusBadge, которые уже умеют
     // корректно показывать "Финишировал"/DNF/"Не стартовал" по этапам.
+    // _rawStatus сохраняет НАСТОЯЩИЙ статус (до "тихой" подмены) — нужен
+    // отдельно от status для отставаний (gapPool ниже): "тихий" DNF —
+    // просто "ещё не дошёл до финиша этого этапа" (может быть у реально
+    // активного участника прямо сейчас), а не настоящий DNF/DSQ, и не
+    // должен лишать его отставания. Настоящий DNF/DSQ (_rawStatus) —
+    // наоборот, не должен ничего получать, кроме своего времени (запрошено
+    // пользователем 2026-08-02).
     const withStageStatus = r => {
         const pos = lastReached(r.cp, dbStage);
         const silentDnf = r.status === 'active' && pos && pos.seq !== maxSeq;
-        return silentDnf ? { ...r, status: 'dnf' } : r;
+        return { ...r, _rawStatus: r.status, ...(silentDnf ? { status: 'dnf' } : {}) };
     };
 
     // "Сколько прошёл" на ЭТОМ этапе — тай-брейк для сортировки DNF-
@@ -953,9 +967,15 @@ function renderStage(stage) {
 
     // Отставание — общий пул личников этой роли + эстафетчиков той же роли,
     // т.к. они соревнуются на этапе вместе (как и старт вело-2 в задаче 2).
+    // Настоящий DNF/DSQ (_rawStatus) исключается из пула целиком — не
+    // просто "не кандидат в лидеры", а вообще без отставания (запрошено
+    // пользователем 2026-08-02: сошедшие показывают только своё время).
+    // "Тихий" DNF (ещё активный, просто не дошёл до финиша ЭТОГО этапа
+    // прямо сейчас) в исключение НЕ попадает — у него живое отставание
+    // работает как раньше (_rawStatus у него остаётся 'active').
     const gapPool = [
-        ...rows.map(r => ({ key: r.bib, cp: r.cp, status: r.status })),
-        ...relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status })),
+        ...rows.filter(r => r._rawStatus === 'active').map(r => ({ key: r.bib, cp: r.cp, status: 'active' })),
+        ...relayMembers.filter(m => m._rawStatus === 'active').map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: 'active' })),
     ];
     const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
 
@@ -1222,7 +1242,10 @@ function renderRankedProgress(getValue, options = {}) {
     }
     // status для ранжирования — ОБЩИЙ (rawStatus), не дневной (см. dayRankOptions выше).
     const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.rawStatus })));
-    const gaps = poolGap(entries);
+    // Отставание — только среди настоящих active (rawStatus) — DNF/DSQ не
+    // может быть лидером и не получает отставание, даже если этот
+    // конкретный день у него завершён (запрошено пользователем 2026-08-02).
+    const gaps = poolGap(entries.filter(e => e.rawStatus === 'active'));
     const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
@@ -1348,7 +1371,9 @@ function renderBikeCombined() {
     // Отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (rows уже в
     // форме {entry,v}, подходит для poolGap напрямую) — раньше на этой
     // вкладке колонки "Отставание" не было вовсе (п.3, v5, 2026-07-23).
-    const gaps = poolGap(rows);
+    // Только среди настоящих active (rawStatus) — DNF/DSQ не может быть
+    // лидером и не получает отставание (запрошено пользователем 2026-08-02).
+    const gaps = poolGap(rows.filter(r => r.rawStatus === 'active'));
     const showGenderCol = _gender === 'all';
 
     html += `<div class="table-wrap"><table>

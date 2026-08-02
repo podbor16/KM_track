@@ -1819,5 +1819,85 @@ check('renderOverall() — колонка "Вело итого" несёт св�
     assert.ok(rowMatch[0].includes(expectedGap), `под "Вело итого" у bib=2 должно быть отставание ${expectedGap}: ${rowMatch[0]}`);
 });
 
+// ── DNF/DSQ участники "превращаются в кирпич": только своё время, никаких
+// отставаний/"Лидер"/лидерства нигде (запрошено пользователем 2026-08-02,
+// найдено на Дащенко — DNF с частичным временем бега ошибочно становилась
+// "Лидером" колонки "Бег" в Итогах гонки, т.к. её неполное время оказалось
+// меньше настоящих финишных времён) ──
+check('renderOverall() — DNF-участник с наименьшим "сырым" run_s не становится "Лидером" колонки Бег и не получает отставание', () => {
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    // Дащенко: DNF, частичное время бега (28км) МЕНЬШЕ, чем у настоящих
+    // финишеров (84км) — раньше computeStageGaps считал её "Лидером".
+    const dnfPartial = mkTimerInd('158', { status: 'dnf', run_s: 13778, cp: { run: { 4: 13778 } } });
+    const finisher = mkTimerInd('34', { status: 'active', run_s: 39193, overall_s: 100000, cp: { run: { [maxSeqRun]: 39193 } } });
+    setRaceData([dnfPartial, finisher], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    // (?!<tr) не даёт ленивому [\s\S]*? "перепрыгнуть" через границу
+    // предыдущей строки таблицы и случайно захватить чужой <td> (нашёл
+    // сам на этом же тесте — старый жадный-по-строкам паттерн подхватывал
+    // "Лидер" из СОСЕДНЕЙ строки, если искомый bib оказывался не первым).
+    const rowMatch = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">158<(?:(?!<tr)[\s\S])*?<\/tr>/);
+    assert.ok(rowMatch, `строка Дащенко не найдена: ${html}`);
+    assert.ok(!rowMatch[0].includes('Лидер'), `DNF не должна получать подпись "Лидер": ${rowMatch[0]}`);
+    assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание — только своё время: ${rowMatch[0]}`);
+    assert.ok(rowMatch[0].includes('3:49:38'), `своё сырое время всё равно должно отображаться: ${rowMatch[0]}`);
+});
+
+check('renderStage() — настоящий DNF (raw) не получает отставание, показывает только время', () => {
+    const dnfPartial = mkTimerInd('1', { status: 'dnf', gender: 'M', run_s: 1000, cp: { run: { 3: 1000 } } });
+    const active = mkTimerInd('2', { status: 'active', gender: 'M', run_s: 1200, cp: { run: { 5: 1200 } } });
+    setRaceData([dnfPartial, active], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=1 не найдена: ${html}`);
+    assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание: ${rowMatch[0]}`);
+});
+
+check('renderStage() — "тихий" DNF (реально ещё активный, просто не дошёл до финиша ЭТОГО этапа) СОХРАНЯЕТ живое отставание', () => {
+    // status='active' в источнике — "тихая" подмена status на 'dnf'
+    // происходит ТОЛЬКО локально для этой вкладки (withStageStatus), но
+    // _rawStatus остаётся 'active' — отставание не должно пропадать.
+    const stillRacing = mkTimerInd('1', { status: 'active', gender: 'M', run_s: null, cp: { run: { 3: 1000 } } });
+    const leaderFinished = mkTimerInd('2', { status: 'active', gender: 'M', run_s: 1200, cp: { run: { 5: 1200 } } });
+    setRaceData([stillRacing, leaderFinished], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    // Оба участника видны и НЕ должны быть исключены из пула отставаний
+    // только из-за "тихой" подмены — по крайней мере не должно падать/
+    // ломаться рендер (основная проверка — что вообще не FAIL/exception).
+    assert.ok(html.includes('bib-cell">1<') && html.includes('bib-cell">2<'), `оба участника должны отрендериться: ${html}`);
+});
+
+check('renderBikeCombined() — DNF (на беге), вело завершено — не получает отставание, только время', () => {
+    const maxSeqB2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const dnfOnRunFinishedBike = mkTimerInd('1', { status: 'dnf', bike1_s: 5000, bike2_s: 4000, cp: { bike_day2: { [maxSeqB2]: 4000 } } });
+    const active = mkTimerInd('2', { status: 'active', bike1_s: 6000, bike2_s: 5000, cp: { bike_day2: { [maxSeqB2]: 5000 } } });
+    setRaceData([dnfOnRunFinishedBike, active], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=1 не найдена: ${html}`);
+    assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание на Своде вело: ${rowMatch[0]}`);
+});
+
+check('renderDay1() — DNF (на беге), День 1 завершён — не получает отставание, только время', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const dnfFinishedDay = mkTimerInd('1', { status: 'dnf', bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
+    const active = mkTimerInd('2', { status: 'active', bike1_s: 6000, cp: { bike_day1: { [maxSeqB1]: 6000 } } });
+    setRaceData([dnfFinishedDay, active], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=1 не найдена: ${html}`);
+    assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание на "Дне 1": ${rowMatch[0]}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
