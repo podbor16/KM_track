@@ -74,6 +74,28 @@ function sortByStatus(rows, timeKey) {
         return ta - tb;
     });
 }
+// Как sortByStatus, но для уже посчитанного значения в отдельном поле .v
+// (не именованное свойство строки) — используется там, где значение не
+// просто читается из объекта, а вычисляется (buildRankedEntries/
+// renderBikeCombined). rawStatus — ИМЕННО общий статус участника за всю
+// гонку, а не статус конкретного дня/этапа (dayStatus/bikeCombinedStatus,
+// которые решают только что показать в ячейке времени/статуса) — сошедший
+// позже (напр. на беге) должен "тонуть" вниз списка и блёкнуть, даже если
+// на ЭТОМ дне/этапе у него есть время и статус "Финиш" (найдено
+// пользователем 2026-08-02, тот же принцип, что уже работает на вкладке
+// "Плавание" через sortByStatus + statusBadge).
+function sortByRawStatus(items) {
+    return [...items].sort((a, b) => {
+        const aActive = a.rawStatus === 'active', bActive = b.rawStatus === 'active';
+        if (aActive !== bActive) return aActive ? -1 : 1;
+        if (!aActive) return 0;
+        if (a.v == null && b.v == null) return 0;
+        if (a.v == null) return 1;
+        if (b.v == null) return -1;
+        return a.v - b.v;
+    });
+}
+
 /* stageKey: null = Финал, иначе 'swim'|'bike1'|'bike2'|'run' */
 const STAGE_ORD = { swim: 0, bike1: 1, bike2: 2, run: 3 };
 function getDnfStage(r) {

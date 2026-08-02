@@ -1640,22 +1640,31 @@ check('dayStatus — DNF реально НА этом дне (не дошёл д
 check('dayStatus — без maxStage возвращает status как есть', () => {
     assert.strictEqual(sandbox.dayStatus({ status: 'dnf', cp: {} }, undefined), 'dnf');
 });
-check('renderDay1() — участник с DNF на беге, но День 1 пройден полностью, показывает "Финиш", не DNF', () => {
+check('renderDay1() — участник с DNF на беге, но День 1 пройден полностью: статус "Финиш", но строка блёклая и внизу (как на Плавании)', () => {
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     // Дащенко/Пушкарёв: status='dnf' (сошёл на беге), но день 1 (плавание+
-    // вело1) реально пройден — cp.bike_day1 дошёл до последней КТ.
-    const runner = mkTimerInd('1', {
-        status: 'dnf', gender: 'M', swim_s: 1000, bike1_s: 5000,
+    // вело1) реально пройден — cp.bike_day1 дошёл до последней КТ. Более
+    // быстрый (по времени) активный участник должен быть ВЫШЕ в списке,
+    // несмотря на большее day1Progress-время у DNF-участника не имеющее
+    // значения — сошедший всегда внизу (запрошено пользователем
+    // 2026-08-02: "блёклые внизу как на плавании").
+    const dnfButFinishedDay = mkTimerInd('1', {
+        status: 'dnf', gender: 'M', swim_s: 100, bike1_s: 200, // очень быстрый, но всё равно должен быть внизу
+        cp: { swim: { [maxSeqSwim]: 100 }, bike_day1: { [maxSeqB1]: 200 } },
+    });
+    const stillActive = mkTimerInd('2', {
+        status: 'active', gender: 'M', swim_s: 1000, bike1_s: 5000,
         cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqB1]: 5000 } },
     });
-    setRaceData([runner], [], Date.now());
+    setRaceData([dnfButFinishedDay, stillActive], [], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
     const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
     assert.ok(rowMatch, `строка участника не найдена: ${html}`);
-    assert.ok(!rowMatch[0].includes(' dnf"'), `строка не должна быть помечена как dnf: ${rowMatch[0]}`);
-    assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `статус должен быть "Финиш": ${rowMatch[0]}`);
+    assert.ok(rowMatch[0].includes(' dnf"'), `строка должна быть блёклой (dnf-класс), несмотря на "Финиш": ${rowMatch[0]}`);
+    assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `текст статуса должен быть "Финиш": ${rowMatch[0]}`);
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `активный участник (медленнее по времени) должен идти ВЫШЕ сошедшего: ${html}`);
 });
 check('renderDay1() — "Отметка" в две строки с названием этапа (как на вкладках этапов, п.3 v6)', () => {
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
@@ -1665,6 +1674,36 @@ check('renderDay1() — "Отметка" в две строки с назван�
     const html = domGetAppHtml();
     assert.ok(html.includes('Вело 1, 145 км'), `ожидалась строка "Вело 1, 145 км": ${html.slice(0, 700)}`);
     assert.ok(html.includes('muted-sub">Финиш'), `ожидалась вторая строка "Финиш": ${html.slice(0, 700)}`);
+});
+
+check('renderDay1() — сошедший (rawStatus=dnf) не получает номер места, даже показывая "Финиш"', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const dnfButFinishedDay = mkTimerInd('1', { status: 'dnf', gender: 'M', bike1_s: 200, cp: { bike_day1: { [maxSeqB1]: 200 } } });
+    setRaceData([dnfButFinishedDay], [], Date.now());
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка участника не найдена: ${html}`);
+    assert.ok(/rank-num[^>]*>—</.test(rowMatch[0]), `место должно быть прочерком (не ранжируется), несмотря на "Финиш": ${rowMatch[0]}`);
+});
+
+check('renderBikeCombined() — DNF на беге, вело пройдено полностью: "Финиш", но строка блёклая, внизу, без места', () => {
+    const maxSeqB2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const dnfOnRun = mkTimerInd('1', {
+        status: 'dnf', gender: 'M', bike1_s: 100, bike2_s: 100, // очень быстрый, но должен быть внизу
+        cp: { bike_day2: { [maxSeqB2]: 100 } },
+    });
+    const stillActive = mkTimerInd('2', { status: 'active', gender: 'M', bike1_s: 5000, bike2_s: 4000, cp: { bike_day2: { [maxSeqB2]: 4000 } } });
+    setRaceData([dnfOnRun, stillActive], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    assert.ok(rowMatch, `строка участника не найдена: ${html}`);
+    assert.ok(rowMatch[0].includes(' dnf"'), `строка должна быть блёклой: ${rowMatch[0]}`);
+    assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `текст статуса должен быть "Финиш": ${rowMatch[0]}`);
+    assert.ok(/rank-num[^>]*>—</.test(rowMatch[0]), `место должно быть прочерком (не ранжируется): ${rowMatch[0]}`);
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `активный участник должен идти выше сошедшего: ${html}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

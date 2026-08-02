@@ -1104,20 +1104,20 @@ function buildRankedEntries(individual, relay, getValue, maxStage) {
     const withVal = [
         ...individual.map(r => {
             const st = dayStatus(r, maxStage);
-            return { type: 'individual', entry: r, status: st, v: st === 'active' ? getValue(r) : null };
+            return { type: 'individual', entry: r, status: st, rawStatus: r.status, v: st === 'active' ? getValue(r) : null };
         }),
         ...relay.map(t => {
             const tr = teamGapRow(t);
             const st = dayStatus(tr, maxStage);
-            return { type: 'relay', entry: t, status: st, v: st === 'active' ? getValue(tr) : null };
+            return { type: 'relay', entry: t, status: st, rawStatus: tr.status, v: st === 'active' ? getValue(tr) : null };
         }),
     ];
-    return withVal.sort((a, b) => {
-        if (a.v == null && b.v == null) return 0;
-        if (a.v == null) return 1;
-        if (b.v == null) return -1;
-        return a.v - b.v;
-    });
+    // Сортировка по ОБЩЕМУ статусу гонки (rawStatus), не по дневному
+    // (status) — сошедший позже (напр. на беге) должен "тонуть" вниз
+    // списка, даже если этот конкретный день показывает время и "Финиш"
+    // (найдено пользователем 2026-08-02, тот же принцип, что и на
+    // вкладках этапов).
+    return sortByRawStatus(withVal);
 }
 
 // Отставание внутри произвольного пула entries (уже отсортированного по
@@ -1144,7 +1144,10 @@ function poolGap(entries) {
 // набора совпадают с видимым пулом при любом активном фильтре.
 function dayRankOptions(getValue, maxStage) {
     const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue, maxStage);
-    const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: e.v, status: e.status }));
+    // status для ранжирования — ОБЩИЙ (rawStatus), не дневной: сошедший
+    // позже не получает номер места по полу/формату, даже если этот
+    // конкретный день пройден полностью (тот же принцип, что на этапах).
+    const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: e.v, status: e.rawStatus }));
     return {
         genderRanks: {
             M: computeRanksByValue(rowsFor(e => e.type === 'individual' && e.entry.gender === 'M')),
@@ -1173,12 +1176,13 @@ function renderRankedProgress(getValue, options = {}) {
     const entries = buildRankedEntries(individual, relay, getValue, options.maxStage);
     // "Финишировало" для эстафетной карточки — дошли до конца ИМЕННО ЭТОГО
     // дня/снапшота (entries[].v уже несёт эту семантику через getValue),
-    // не общее overall_s всей гонки. dnfDsq — тоже день-специфичный статус
-    // (dayStatus), не общий статус команды (тот же фикс, что и для entries).
+    // не общее overall_s всей гонки. dnfDsq — ОБЩИЙ статус команды (как на
+    // вкладках этапов/Своде вело — карточка статистики считает реальный
+    // DNF/DSQ за гонку, не "не дошёл до конца именно этого дня").
     const relayStatsDay = {
         total: relay.length,
         finished: entries.filter(e => e.type === 'relay' && e.v != null).length,
-        dnfDsq: relay.filter(t => dayStatus(teamGapRow(t), options.maxStage) === 'dnf').length,
+        dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
     };
     let html = buildStats(individual, relayStatsDay, null);
     if (entries.length === 0) {
@@ -1186,13 +1190,14 @@ function renderRankedProgress(getValue, options = {}) {
         document.getElementById('app').innerHTML = html;
         return;
     }
-    const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.status })));
+    // status для ранжирования — ОБЩИЙ (rawStatus), не дневной (см. dayRankOptions выше).
+    const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.rawStatus })));
     const gaps = poolGap(entries);
     const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
-        const { type, entry, v } = item;
+        const { type, entry, v, rawStatus } = item;
         const hasVal = v != null;
         const genderRank = options.genderRanks && type === 'individual' ? options.genderRanks[entry.gender]?.[entry.bib] : null;
         const formatRank = options.formatRanks && type === 'relay' ? options.formatRanks[entry.bib] : null;
@@ -1216,7 +1221,8 @@ function renderRankedProgress(getValue, options = {}) {
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
-        html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+        // Блёклая строка — по ОБЩЕМУ статусу гонки (см. sortByRawStatus).
+        html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(showGenderCol, absRank, secondaryRank, secondaryBadge, rc)}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
@@ -1275,15 +1281,15 @@ function renderBikeCombined() {
     };
     let html = buildStats(individual, relayStatsBike, null);
 
-    const rows = [
-        ...individual.map(r => ({ isRelay: false, entry: r, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
-        ...riders.map(r => ({ isRelay: true, entry: r, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
-    ].sort((a, b) => {
-        if (a.v == null && b.v == null) return 0;
-        if (a.v == null) return 1;
-        if (b.v == null) return -1;
-        return a.v - b.v;
-    });
+    // rawStatus — общий статус ВСЕЙ гонки (не только вело) — сошедший
+    // позже (напр. на беге) должен "тонуть" вниз списка и блёкнуть, даже
+    // если вело он прошёл полностью (bikeCombinedStatus 'active' для этого
+    // случая) — тот же принцип, что уже на вкладках этапов (найдено
+    // пользователем 2026-08-02).
+    const rows = sortByRawStatus([
+        ...individual.map(r => ({ isRelay: false, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
+        ...riders.map(r => ({ isRelay: true, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
+    ]);
 
     if (rows.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
@@ -1294,9 +1300,10 @@ function renderBikeCombined() {
     // Ранг (абсолют + по полу) — среди ВИДИМЫХ строк (rows, уже
     // отфильтрованы по _fmt/_gender), не по полному ростеру года — тот же
     // откат, что и на вкладках этапов (запрошено пользователем 2026-07-23:
-    // "Место" не должно учитывать невидимых участников). status — именно
-    // вело-статус (bikeCombinedStatus), не общий гоночный (п.2 v6).
-    const rankPool = rows.map(({ isRelay, entry, v }) => ({ key: entry.bib, val: v, status: bikeCombinedStatus(entry), gender: entry.gender, isRelay }));
+    // "Место" не должно учитывать невидимых участников). status для
+    // ранжирования — ОБЩИЙ (rawStatus), как на вкладках этапов: сошедший
+    // позже не получает номер места, даже если вело показывает "Финиш".
+    const rankPool = rows.map(({ isRelay, entry, rawStatus, v }) => ({ key: entry.bib, val: v, status: rawStatus, gender: entry.gender, isRelay }));
     const absRanks = computeRanksByValue(rankPool);
     const genderRanks = {
         M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),
@@ -1310,7 +1317,7 @@ function renderBikeCombined() {
 
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
-    rows.forEach(({ isRelay, entry, v }) => {
+    rows.forEach(({ isRelay, entry, rawStatus, v }) => {
         const hasVal = v != null;
         const absRank = hasVal ? absRanks[entry.bib] : null;
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
@@ -1320,7 +1327,10 @@ function renderBikeCombined() {
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
-        html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${hasVal ? '' : ' dnf'}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+        // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
+        // на беге, "тонет" визуально даже если у него есть время и статус
+        // "Финиш" на вело — см. sortByRawStatus).
+        html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
