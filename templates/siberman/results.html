@@ -893,7 +893,16 @@ function renderStage(stage) {
         return silentDnf ? { ...r, status: 'dnf' } : r;
     };
 
-    const rows = sortByStatus(individual.map(withStageStatus), cfg.timeKey);
+    // "Сколько прошёл" на ЭТОМ этапе — тай-брейк для сортировки DNF-
+    // участников между собой, когда никто из сравниваемых не финишировал
+    // этап (запрошено пользователем 2026-08-02: кто прошёл дистанцию
+    // больше, тот выше).
+    const stageProgressKm = r => {
+        const pos = lastReached(r.cp, dbStage);
+        return pos ? CHECKPOINT_DIST_KM[dbStage][pos.seq] : 0;
+    };
+
+    const rows = sortByStatus(individual.map(withStageStatus), cfg.timeKey, stageProgressKm);
     let relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members
             .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
@@ -901,7 +910,9 @@ function renderStage(stage) {
         : [];
     // Сортировать эстафеты: сначала реально финишировавшие этап (по времени),
     // затем "тихие" DNF (есть частичное время, но не дошли до финиша), затем
-    // те, кто ещё не начал (нет данных вовсе).
+    // те, кто ещё не начал (нет данных вовсе). Внутри категории 1
+    // (частично прошли) — по дистанции последней КТ, кто дальше — выше
+    // (тот же тай-брейк, что и у личников, п. "блёклые внизу", 2026-08-02).
     relayMembers = relayMembers.sort((a, b) => {
         const catOf = m => {
             const pos = lastReached(m.cp, dbStage);
@@ -910,6 +921,7 @@ function renderStage(stage) {
         };
         const catA = catOf(a), catB = catOf(b);
         if (catA !== catB) return catA - catB;
+        if (catA === 1) return stageProgressKm(b) - stageProgressKm(a);
         const ta = a[cfg.timeKey], tb = b[cfg.timeKey];
         if (ta == null && tb == null) return 0;
         if (ta == null) return 1;
@@ -1104,20 +1116,21 @@ function buildRankedEntries(individual, relay, getValue, maxStage) {
     const withVal = [
         ...individual.map(r => {
             const st = dayStatus(r, maxStage);
-            return { type: 'individual', entry: r, status: st, rawStatus: r.status, v: st === 'active' ? getValue(r) : null };
+            return { type: 'individual', entry: r, status: st, rawStatus: r.status, v: st === 'active' ? getValue(r) : null, _cpRow: r };
         }),
         ...relay.map(t => {
             const tr = teamGapRow(t);
             const st = dayStatus(tr, maxStage);
-            return { type: 'relay', entry: t, status: st, rawStatus: tr.status, v: st === 'active' ? getValue(tr) : null };
+            return { type: 'relay', entry: t, status: st, rawStatus: tr.status, v: st === 'active' ? getValue(tr) : null, _cpRow: tr };
         }),
     ];
     // Сортировка по ОБЩЕМУ статусу гонки (rawStatus), не по дневному
     // (status) — сошедший позже (напр. на беге) должен "тонуть" вниз
     // списка, даже если этот конкретный день показывает время и "Финиш"
     // (найдено пользователем 2026-08-02, тот же принцип, что и на
-    // вкладках этапов).
-    return sortByRawStatus(withVal);
+    // вкладках этапов). Тай-брейк между такими "утонувшими" — по
+    // пройденной дистанции в гонке (dayProgressKm), кто дальше — выше.
+    return sortByRawStatus(withVal, item => dayProgressKm(item._cpRow, maxStage));
 }
 
 // Отставание внутри произвольного пула entries (уже отсортированного по
@@ -1286,10 +1299,16 @@ function renderBikeCombined() {
     // если вело он прошёл полностью (bikeCombinedStatus 'active' для этого
     // случая) — тот же принцип, что уже на вкладках этапов (найдено
     // пользователем 2026-08-02).
+    // Тай-брейк между "утонувшими" (rawStatus!=='active') без времени на
+    // Своде вело — по дистанции последней виртуальной КТ (bikeCombinedLastSeq),
+    // кто дальше — выше (запрошено пользователем 2026-08-02).
     const rows = sortByRawStatus([
         ...individual.map(r => ({ isRelay: false, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
         ...riders.map(r => ({ isRelay: true, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
-    ]);
+    ], item => {
+        const vseq = bikeCombinedLastSeq(item.entry.cp);
+        return vseq != null ? bikeCombinedDistKm(vseq) : 0;
+    });
 
     if (rows.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';

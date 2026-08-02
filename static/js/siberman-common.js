@@ -62,13 +62,24 @@ function rankClass(rank) {
 
 /* ──────────────── Статус ──────────────── */
 const STATUS_ORDER = { active: 0, dnf: 1, dsq: 2, dns: 3 };
-function sortByStatus(rows, timeKey) {
+// progressFn(row) — опционально, "сколько прошёл" (км/дистанция), только
+// как тай-брейк МЕЖДУ участниками одного НЕ-активного статуса (dnf-vs-dnf,
+// dsq-vs-dsq...), у которых нет времени именно на этом срезе (timeKey===
+// null у обоих) — кто прошёл больше, тот выше (запрошено пользователем
+// 2026-08-02: раньше такие пары не досортировывались вовсе и шли в
+// произвольном/исходном порядке). Если у обоих участников этого статуса
+// есть время на этом срезе (реально финишировали ИМЕННО его, несмотря на
+// DNF в целом по гонке) — сортируются как обычные, по времени. Для
+// активных участников поведение не меняется (только для DNF/DSQ/DNS
+// между собой, как и просил пользователь).
+function sortByStatus(rows, timeKey, progressFn) {
     return [...rows].sort((a, b) => {
         const sa = STATUS_ORDER[a.status] ?? 4, sb = STATUS_ORDER[b.status] ?? 4;
         if (sa !== sb) return sa - sb;
-        if (a.status !== 'active') return 0;
         const ta = a[timeKey], tb = b[timeKey];
-        if (ta == null && tb == null) return 0;
+        if (ta == null && tb == null) {
+            return (a.status !== 'active' && progressFn) ? progressFn(b) - progressFn(a) : 0;
+        }
         if (ta == null) return 1;
         if (tb == null) return -1;
         return ta - tb;
@@ -83,13 +94,15 @@ function sortByStatus(rows, timeKey) {
 // позже (напр. на беге) должен "тонуть" вниз списка и блёкнуть, даже если
 // на ЭТОМ дне/этапе у него есть время и статус "Финиш" (найдено
 // пользователем 2026-08-02, тот же принцип, что уже работает на вкладке
-// "Плавание" через sortByStatus + statusBadge).
-function sortByRawStatus(items) {
+// "Плавание" через sortByStatus + statusBadge). progressFn — тот же
+// тай-брейк между НЕ-активными без значения на этом срезе, см. sortByStatus.
+function sortByRawStatus(items, progressFn) {
     return [...items].sort((a, b) => {
         const aActive = a.rawStatus === 'active', bActive = b.rawStatus === 'active';
         if (aActive !== bActive) return aActive ? -1 : 1;
-        if (!aActive) return 0;
-        if (a.v == null && b.v == null) return 0;
+        if (a.v == null && b.v == null) {
+            return (!aActive && progressFn) ? progressFn(b) - progressFn(a) : 0;
+        }
         if (a.v == null) return 1;
         if (b.v == null) return -1;
         return a.v - b.v;
@@ -524,6 +537,18 @@ function dayStatus(row, maxStage) {
     if (!maxStage || row.status === 'active') return row.status;
     const pos = lastReached(row.cp, maxStage);
     return (pos && pos.seq === STAGE_MAX_SEQ[maxStage]) ? 'active' : row.status;
+}
+
+// "Сколько км в гонке прошёл" (ограничено maxStage, если задан) — для
+// сортировки DNF-участников МЕЖДУ СОБОЙ на "Днях", когда ни у кого из них
+// нет времени на этот день (никто из них его не завершил): кто дальше
+// продвинулся, тот выше (запрошено пользователем 2026-08-02) — тот же
+// принцип, что и STAGE_KM_OFFSET использует для оси графика "Позиция".
+function dayProgressKm(row, maxStage) {
+    const stage = currentStage(row, maxStage);
+    if (!stage) return 0;
+    const pos = lastReached(row.cp, stage);
+    return pos ? STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][pos.seq] : 0;
 }
 
 function computeOverallGaps(rows) {

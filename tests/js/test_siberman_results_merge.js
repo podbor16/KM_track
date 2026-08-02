@@ -1706,5 +1706,89 @@ check('renderBikeCombined() — DNF на беге, вело пройдено п�
     assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `активный участник должен идти выше сошедшего: ${html}`);
 });
 
+// ── Сортировка DNF-участников МЕЖДУ СОБОЙ (запрошено пользователем
+// 2026-08-02): на срезе, где оба финишировали — по времени, как обычно;
+// на срезе, где оба сошли (нет времени именно здесь) — по пройденной
+// дистанции, кто дальше — выше ──
+check('sortByStatus — два DNF, оба финишировали ЭТОТ срез (есть время) — сортируются по времени, как обычные', () => {
+    const rows = [
+        { bib: 'A', status: 'dnf', t: 500 },
+        { bib: 'B', status: 'dnf', t: 300 },
+    ];
+    const sorted = sandbox.sortByStatus(rows, 't');
+    assert.strictEqual(sorted[0].bib, 'B', `B быстрее (300с) должен быть первым: ${JSON.stringify(sorted)}`);
+});
+check('sortByStatus — два DNF, ни один не финишировал этот срез — по прогрессу (дальше = выше)', () => {
+    const rows = [
+        { bib: 'A', status: 'dnf', t: null },
+        { bib: 'B', status: 'dnf', t: null },
+    ];
+    const progressFn = r => ({ A: 5, B: 10 }[r.bib]);
+    const sorted = sandbox.sortByStatus(rows, 't', progressFn);
+    assert.strictEqual(sorted[0].bib, 'B', `B прошёл дальше (10 vs 5) — должен быть первым: ${JSON.stringify(sorted)}`);
+});
+check('sortByStatus — DNF с временем на этот срез выше DNF без времени (финишировавший всегда впереди не финишировавшего)', () => {
+    const rows = [
+        { bib: 'A', status: 'dnf', t: null },
+        { bib: 'B', status: 'dnf', t: 999 },
+    ];
+    const sorted = sandbox.sortByStatus(rows, 't', () => 100);
+    assert.strictEqual(sorted[0].bib, 'B', `B финишировал этот срез — должен быть выше A: ${JSON.stringify(sorted)}`);
+});
+check('sortByStatus — активные без времени НЕ используют progressFn (только для DNF между собой)', () => {
+    const rows = [
+        { bib: 'A', status: 'active', t: null },
+        { bib: 'B', status: 'active', t: null },
+    ];
+    const sorted = sandbox.sortByStatus(rows, 't', () => { throw new Error('progressFn не должен вызываться для активных'); });
+    assert.strictEqual(sorted.length, 2);
+});
+
+check('renderStage() — два DNF на одном этапе: финишировавший этап (со временем) выше не финишировавшего', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // A: DNF на бегу (позже), но заплыв реально финишировал — есть swim_s.
+    const finishedSwim = mkTimerInd('1', { status: 'dnf', gender: 'M', swim_s: 600, cp: { swim: { [maxSeqSwim]: 600 } } });
+    // B: DNF прямо на заплыве — нет swim_s, дошёл только до середины (seq=3).
+    const dnfOnSwim = mkTimerInd('2', { status: 'dnf', gender: 'M', swim_s: null, cp: { swim: { 3: 400 } } });
+    setRaceData([finishedSwim, dnfOnSwim], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">1<') < html.indexOf('bib-cell">2<'), `финишировавший заплыв (bib=1) должен идти выше сошедшего на заплыве (bib=2): ${html}`);
+});
+check('renderStage() — два DNF, оба сошли на этом этапе (нет времени) — кто дальше проплыл, тот выше', () => {
+    const relay = [
+        { bib: '1000', team_name: 'КомандаА', members: [{ relay_stage: 'swim', status: 'dnf', gender: 'M', swim_s: null, cp: { swim: { 2: 300 } } }] },
+        { bib: '1001', team_name: 'КомандаБ', members: [{ relay_stage: 'swim', status: 'dnf', gender: 'M', swim_s: null, cp: { swim: { 5: 700 } } }] },
+    ];
+    setRaceData([], relay, Date.now());
+    setState('relay', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">1001<') < html.indexOf('bib-cell">1000<'), `КомандаБ прошла дальше (КТ5 vs КТ2) — должна быть выше: ${html}`);
+});
+
+check('renderDay1() — два DNF, ни один не финишировал День 1 — кто дальше в гонке, тот выше', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // Оба DNF на вело1 (не дошли до финиша дня), но A уже проплыл больше.
+    const farther = mkTimerInd('1', { status: 'dnf', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { 2: 2000 } } });
+    const closer = mkTimerInd('2', { status: 'dnf', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { 1: 500 } } });
+    setRaceData([farther, closer], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">1<') < html.indexOf('bib-cell">2<'), `дальше продвинувшийся (bib=1) должен идти выше: ${html}`);
+});
+
+check('renderBikeCombined() — два DNF, ни один не финишировал вело — кто дальше проехал, тот выше', () => {
+    const farther = mkTimerInd('1', { status: 'dnf', bike1_s: null, bike2_s: null, cp: { bike_day1: { 5: 4000 }, bike_day2: {} } });
+    const closer = mkTimerInd('2', { status: 'dnf', bike1_s: null, bike2_s: null, cp: { bike_day1: { 2: 1000 }, bike_day2: {} } });
+    setRaceData([farther, closer], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">1<') < html.indexOf('bib-cell">2<'), `дальше проехавший (bib=1, КТ5) должен идти выше (bib=2, КТ2): ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
