@@ -1900,5 +1900,43 @@ check('renderDay1() — DNF (на беге), День 1 завершён — н�
     assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание на "Дне 1": ${rowMatch[0]}`);
 });
 
+// ── overallLastCpHtml() — двухстрочная "Отметка" на Итогах гонки, формат
+// отличается от lastCpTwoLineHtml: этап первой строкой, "N км (круг)"/
+// "N км (Финиш)" второй (запрошено пользователем 2026-08-02) ──
+check('overallLastCpHtml — плавание, круговая КТ — этап + "N км (m круг)" на одной строке', () => {
+    const html = sandbox.overallLastCpHtml('swim', 4); // seq4 = круг 2
+    assert.ok(html.includes('<div>Плавание</div>'), `ожидалось название этапа: ${html}`);
+    assert.ok(html.includes('5,2 км (2 круга)'), `ожидалось "5,2 км (2 круга)" на одной строке: ${html}`);
+});
+check('overallLastCpHtml — вело, промежуточная КТ — этап + "N км" без скобок', () => {
+    const html = sandbox.overallLastCpHtml('bike_day1', 2);
+    assert.ok(html.includes('<div>Вело 1</div>'), `ожидалось название этапа "Вело 1": ${html}`);
+    assert.ok(html.includes('10 км</div>'), `ожидалось "10 км" без скобок: ${html}`);
+});
+check('overallLastCpHtml — финиш — "N км (Финиш)" на одной строке, даже у вело', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const html = sandbox.overallLastCpHtml('bike_day1', maxSeqB1);
+    assert.ok(html.includes('145 км (Финиш)'), `ожидалось "145 км (Финиш)": ${html}`);
+});
+check('overallLastCpHtml — финиш бега — "84 км (Финиш)", не круг', () => {
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const html = sandbox.overallLastCpHtml('run', maxSeqRun);
+    assert.ok(html.includes('<div>Бег</div>'), `ожидалось название этапа "Бег": ${html}`);
+    assert.ok(html.includes('84 км (Финиш)'), `ожидалось "84 км (Финиш)": ${html}`);
+});
+check('overallLastCpHtml — нет этапа/КТ — прочерк', () => {
+    assert.strictEqual(sandbox.overallLastCpHtml(null, null), '—');
+    assert.strictEqual(sandbox.overallLastCpHtml('swim', null), '—');
+});
+check('renderOverall() — "Отметка" использует новый двухстрочный формат', () => {
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const runner = mkTimerInd('1', { bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
+    setRaceData([runner], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('<div>Вело 1</div><div class="muted-sub">145 км (Финиш)</div>'), `ожидался новый формат Отметки: ${html.slice(0, 900)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

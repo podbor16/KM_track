@@ -661,6 +661,20 @@ function getFiltered() {
 /* ──────────────── Render: Overall ──────────────── */
 const STAGE_LABEL_RU = { swim: 'Плавание', bike: 'Вело (оба дня)', bike_day1: 'Вело 1', bike_day2: 'Вело 2', run: 'Бег' };
 
+// Двухстрочная ячейка "Отметка" для Итогов гонки: название этапа первой
+// строкой (этап на Итогах меняется от строки к строке — не зафиксирован,
+// как на вкладках этапов), "N км (m круг)"/"N км (Финиш)" второй —
+// формат по запросу пользователя 2026-08-02 отличается от lastCpTwoLineHtml
+// (там круг/финиш на СВОЕЙ строке) — здесь km и круг/финиш в одной строке.
+function overallLastCpHtml(dbStage, seq) {
+    if (!dbStage || seq == null) return '—';
+    const km = CHECKPOINT_DIST_KM[dbStage][seq];
+    const isFinish = seq === STAGE_MAX_SEQ[dbStage];
+    const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
+    const suffix = isFinish ? ' (Финиш)' : lapN ? ` (${lapN} ${_circleWord(lapN)})` : '';
+    return `<div>${STAGE_LABEL_RU[dbStage]}</div><div class="muted-sub">${String(km).replace('.', ',')} км${suffix}</div>`;
+}
+
 // Место — генерик-рендерер колонок мест. show2=false → одна колонка
 // "Место"; show2=true → две колонки "Место"+secondaryLabel (пол/формат,
 // решает вызывающий код). secondaryBadge — HTML готового бейджа буквы
@@ -702,7 +716,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
     const rc = notFinished ? '' : rankClass(combinedRanks[r.bib]);
     const cur = currentStage(r);
     const pos = cur ? lastReached(r.cp, cur) : null;
-    const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
+    const lastCpCell = overallLastCpHtml(cur, pos?.seq);
     return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
@@ -733,7 +747,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     const rc = notFinished ? '' : rankClass(combinedRanks[team.bib]);
     const cur = currentStage(tr);
     const pos = cur ? lastReached(tr.cp, cur) : null;
-    const lastCpCell = pos ? `${STAGE_LABEL_RU[cur]}, ${CHECKPOINT_LABELS[cur][pos.seq]}` : '—';
+    const lastCpCell = overallLastCpHtml(cur, pos?.seq);
     const statusCell = teamStatusBadge(team);
     return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
