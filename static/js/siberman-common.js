@@ -285,14 +285,13 @@ function _circleWord(n) {
 // Двухстрочная ячейка "последняя КТ": "N км" + "m круг"/"Финиш" на второй
 // строке. Круг показывается только для плавания/бега (SWIM_LAP_SEQS/seq
 // напрямую) — у вело нет понятия круга, там на некруговых КТ только "N км".
-// На финише второй строкой всегда "Финиш", независимо от этапа. prefix —
-// опционально, для "Дней" (results.html:renderRankedProgress), где сам
-// этап меняется от строки к строке (не зафиксирован, как на вкладках
-// этапов) — "Вело День 1, 135 км" вместо голого "135 км".
-function lastCpTwoLineHtml(dbStage, seq, prefix) {
+// На финише второй строкой всегда "Финиш", независимо от этапа. Формат
+// одинаковый везде, включая "Дни" — без названия этапа (запрошено
+// пользователем 2026-08-02, идентично вкладкам этапов).
+function lastCpTwoLineHtml(dbStage, seq) {
     if (seq == null) return '—';
     const km = CHECKPOINT_DIST_KM[dbStage][seq];
-    const kmLine = `<div>${prefix ? prefix + ', ' : ''}${String(km).replace('.', ',')} км</div>`;
+    const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
     if (seq === STAGE_MAX_SEQ[dbStage]) return kmLine + '<div class="muted-sub">Финиш</div>';
     const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
     return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;

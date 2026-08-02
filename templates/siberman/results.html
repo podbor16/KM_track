@@ -1264,13 +1264,13 @@ function renderRankedProgress(getValue, options = {}) {
         // 'bike_day2' для Дня 1+2) — раньше могла показать этап "Бег",
         // если участник уже добежал до него, хотя вкладка про вело
         // (найдено пользователем 2026-08-02, п.1 v6). Двухстрочный формат
-        // (N км / круг или Финиш) — как на вкладках этапов (п.3 v6), с
-        // названием этапа первой строкой — на "Днях" этап меняется от
-        // строки к строке (не зафиксирован, как на вкладках этапов).
+        // (N км / круг или Финиш) — тот же, что на вкладках этапов (п.3 v6),
+        // без названия этапа (убрано по запросу пользователя 2026-08-02 —
+        // формулировка должна быть идентична этапам).
         const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
         const cur = currentStage(statusEntity, options.maxStage);
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
-        const lastCpCell = cur ? lastCpTwoLineHtml(cur, pos?.seq, STAGE_LABEL_RU[cur]) : '—';
+        const lastCpCell = cur ? lastCpTwoLineHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;

@@ -1666,13 +1666,14 @@ check('renderDay1() — участник с DNF на беге, но День 1 �
     assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `текст статуса должен быть "Финиш": ${rowMatch[0]}`);
     assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `активный участник (медленнее по времени) должен идти ВЫШЕ сошедшего: ${html}`);
 });
-check('renderDay1() — "Отметка" в две строки с названием этапа (как на вкладках этапов, п.3 v6)', () => {
+check('renderDay1() — "Отметка" в две строки, БЕЗ названия этапа — идентично вкладкам этапов (запрошено пользователем 2026-08-02)', () => {
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const runner = mkTimerInd('1', { gender: 'M', bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
     setRaceData([runner], [], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
-    assert.ok(html.includes('Вело 1, 145 км'), `ожидалась строка "Вело 1, 145 км": ${html.slice(0, 700)}`);
+    assert.ok(html.includes('<div>145 км</div>'), `ожидалась строка "145 км" без названия этапа: ${html.slice(0, 700)}`);
+    assert.ok(!html.includes('Вело 1,') && !html.includes('Вело 2,'), `названия этапа быть не должно: ${html.slice(0, 700)}`);
     assert.ok(html.includes('muted-sub">Финиш'), `ожидалась вторая строка "Финиш": ${html.slice(0, 700)}`);
 });
 
