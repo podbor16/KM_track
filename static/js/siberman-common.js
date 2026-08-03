@@ -122,6 +122,23 @@ function getDnfStage(r) {
     if (r.bike2_s == null) return 'bike2';
     return 'run';
 }
+// Статус УЧАСТНИКА ОТНОСИТЕЛЬНО КОНКРЕТНОГО ЭТАПА (stageKey) — не общий
+// статус всей гонки. DNF засчитывается ТОЛЬКО если участник сошёл ИМЕННО
+// на этом этапе; если сошёл РАНЬШЕ этого этапа — этот этап он успешно
+// финишировал ("active"); если сошёл ПОЗЖЕ — до этого этапа ещё не дошёл
+// ("dns"). dns/dsq/active не зависят от этапа, возвращаются как есть.
+// Используется и в statusBadge() (бейдж строки), и в buildStats()
+// (карточка индикаторов) — раньше индикаторы считали DNF по статусу ВСЕЙ
+// гонки одинаково на КАЖДОЙ вкладке (2026-08-03, п.1 v7, найдено
+// пользователем на реальном использовании).
+function stageRelativeStatus(r, stageKey) {
+    if (r.status !== 'dnf' || stageKey === null) return r.status;
+    const dnfStage = getDnfStage(r);
+    const diff = STAGE_ORD[stageKey] - STAGE_ORD[dnfStage];
+    if (diff < 0) return 'active';
+    if (diff === 0) return 'dnf';
+    return 'dns';
+}
 // Бейдж для АКТИВНОГО (не dnf/dsq/dns) участника на конкретном СРЕЗЕ
 // (этап/гонка/день/Свод вело) — три состояния в зависимости от прогресса
 // именно на этом срезе: ещё не начал (ни одной КТ среза) → "—" (не
@@ -138,17 +155,10 @@ function activeProgressBadge(pos, isFinished) {
     return '<span class="badge badge-notstarted">—</span>';
 }
 function statusBadge(r, stageKey) {
-    const s = r.status;
+    const s = stageRelativeStatus(r, stageKey);
     if (s === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (s === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
-    if (s === 'dnf') {
-        if (stageKey === null) return '<span class="badge badge-dnf">DNF</span>'; // Финал
-        const dnfStage = getDnfStage(r);
-        const diff = STAGE_ORD[stageKey] - STAGE_ORD[dnfStage];
-        if (diff < 0)  return '<span class="badge badge-fin">Финиш</span>';
-        if (diff === 0) return '<span class="badge badge-dnf">DNF</span>';
-        return '<span class="badge badge-dns">Не стартовал</span>';
-    }
+    if (s === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     // active
     if (stageKey === null) {
         const pos = racePos(r, null);

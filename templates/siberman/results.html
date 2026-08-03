@@ -597,11 +597,26 @@ function participantLink(bib) {
 // таблицах vs персонифицированные участники роли на этапах/Своде вело),
 // buildStats не пытается угадывать её единообразно (см. план 2026-07-23).
 // Карточка скрывается целиком, если её total === 0.
-function buildStats(individual, relayStats, stageKey) {
-    const finInd = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] != null : racePos(r, null)?.seq === STAGE_MAX_SEQ.run)).length;
-    const dnfCount = individual.filter(r => r.status === 'dnf').length;
+// maxStage — для "Дней" (граница дня) и Свода вело ('bike_day2', вся
+// объединённая дистанция) — статус личника считается ОТНОСИТЕЛЬНО ЭТОГО
+// СРЕЗА (dayStatus), а не всей гонки. Для вкладок этапов используется
+// stageKey (stageRelativeStatus) — та же логика, что и в бейдже строки
+// (statusBadge). Раньше DNF/финишировало на индикаторах считались по
+// статусу ВСЕЙ ГОНКИ одинаково на каждой вкладке (2026-08-03, п.1 v7,
+// найдено на реальном использовании — сошедший на беге показывал DNF
+// даже на вкладке "Плавание", которую честно финишировал).
+function buildStats(individual, relayStats, stageKey, maxStage) {
+    const relStatus = r => maxStage ? dayStatus(r, maxStage) : stageRelativeStatus(r, stageKey);
+    const isFinishedSlice = r => {
+        if (stageKey) return lastReached(r.cp, TAB_TO_DB_STAGE[stageKey])?.seq === STAGE_MAX_SEQ[TAB_TO_DB_STAGE[stageKey]];
+        const pos = racePos(r, maxStage ?? null);
+        if (maxStage) return pos?.stageIdx === STAGE_ORDER.indexOf(maxStage) && pos?.seq === STAGE_MAX_SEQ[maxStage];
+        return pos?.seq === STAGE_MAX_SEQ.run;
+    };
+    const finInd = individual.filter(r => relStatus(r) === 'active' && isFinishedSlice(r)).length;
+    const dnfCount = individual.filter(r => relStatus(r) === 'dnf').length;
     const dsqCount = individual.filter(r => r.status === 'dsq').length;
-    const dnsCount = individual.filter(r => r.status === 'dns').length;
+    const dnsCount = individual.filter(r => relStatus(r) === 'dns').length;
     const indDnfDsq = dnfCount + dsqCount;
     let html = `<div class="stats-v2">`;
     if (individual.length > 0) {
@@ -1006,7 +1021,7 @@ function renderStage(stage) {
     // независимо от фильтра пола, например неизменные "13 команд").
     const relayStatsStage = {
         total: relayMembers.length,
-        finished: relayMembers.filter(m => m[cfg.timeKey] != null).length,
+        finished: relayMembers.filter(m => lastReached(m.cp, dbStage)?.seq === maxSeq).length,
         dnfDsq: relayMembers.filter(m => m.status === 'dnf' || m.status === 'dsq').length,
     };
     let html = buildStats(individual, relayStatsStage, stage);
@@ -1196,17 +1211,21 @@ function renderRankedProgress(options = {}) {
     // renderOverall (запрошено пользователем 2026-08-02, п.7 v6).
     const relay = _gender === 'all' ? filtered.relay : [];
     const entries = buildRankedEntries(individual, relay, maxStage);
-    // "Финишировало" для эстафетной карточки — дошли до конца ИМЕННО ЭТОГО
-    // дня/снапшота (entries[].v уже несёт эту семантику), не общее
-    // overall_s всей гонки. dnfDsq — ОБЩИЙ статус команды (как на
-    // вкладках этапов/Своде вело — карточка статистики считает реальный
-    // DNF/DSQ за гонку, не "не дошёл до конца именно этого дня").
+    // "Финишировало" для эстафетной карточки — дошли до КОНЦА ИМЕННО ЭТОГО
+    // дня (проверка через _pos на границе maxStage, не "есть хоть какое-то
+    // v" — оно true с самого начала дня). dnfDsq — статус команды
+    // ОТНОСИТЕЛЬНО ЭТОГО ДНЯ (dayStatus), не общий статус за всю гонку:
+    // если DNF случился ПОЗЖЕ (например, бегун сошёл на дне 3) — день,
+    // который команда реально прошла, не должен считаться DNF (2026-08-03,
+    // п.1 v7 — раньше индикатор DNF на "Днях" не учитывал открытый день,
+    // это была осознанная РАЗВОРОТ-правка прежнего решения от 2026-07-23).
+    const isFinishedThisDay = e => e._pos && e._pos.stageIdx === STAGE_ORDER.indexOf(maxStage) && e._pos.seq === STAGE_MAX_SEQ[maxStage];
     const relayStatsDay = {
         total: relay.length,
-        finished: entries.filter(e => e.type === 'relay' && e.v != null).length,
-        dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
+        finished: entries.filter(e => e.type === 'relay' && isFinishedThisDay(e)).length,
+        dnfDsq: relay.filter(t => dayStatus(teamGapRow(t), maxStage) === 'dnf').length,
     };
-    let html = buildStats(individual, relayStatsDay, null);
+    let html = buildStats(individual, relayStatsDay, null, maxStage);
     if (entries.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
         document.getElementById('app').innerHTML = html;
@@ -1332,7 +1351,7 @@ function renderBikeCombined() {
         finished: withPos.filter(x => x.isRelay && x.pos != null && x.pos.seq === maxVseq).length,
         dnfDsq: riders.filter(r => r.status === 'dnf' || r.status === 'dsq').length,
     };
-    let html = buildStats(individual, relayStatsBike, null);
+    let html = buildStats(individual, relayStatsBike, null, 'bike_day2');
 
     // rawStatus — общий статус ВСЕЙ гонки (не только вело) — сошедший
     // позже (напр. на беге) должен "тонуть" вниз списка и блёкнуть, даже

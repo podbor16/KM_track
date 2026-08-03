@@ -2456,5 +2456,50 @@ check('renderDay1() — активный, ещё не начавший день 
     assert.ok(html.includes('badge-notstarted">—<'), `не начавший День 1 должен показывать "—": ${html}`);
 });
 
+// ── Индикаторы (buildStats) — DNF относительно ОТКРЫТОГО среза, не всей
+// гонки — п.1 v7, 2026-08-03: сошедший на более позднем этапе/дне должен
+// на уже пройденных вкладках по-прежнему считаться финишировавшим ──
+check('stageRelativeStatus() — DNF на более позднем этапе не портит статус более раннего', () => {
+    const dnfOnRun = { status: 'dnf', swim_s: 4000, bike1_s: 9000, bike2_s: 8000, run_s: null };
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnRun, 'swim'), 'active', 'Плавание должно быть финишировано');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnRun, 'bike1'), 'active', 'Вело1 должно быть финишировано');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnRun, 'run'), 'dnf', 'На Беге — реальный DNF');
+});
+check('stageRelativeStatus() — DNF на более раннем этапе делает более поздний "не стартован", не dnf', () => {
+    const dnfOnSwim = { status: 'dnf', swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'swim'), 'dnf', 'DNF именно на плавании');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'bike1'), 'dns', 'Вело1 даже не начато — "не стартовал", не DNF');
+});
+check('renderStage() — индикатор "DNF/DSQ" считает DNF только на ОТКРЫТОМ этапе, не на всей гонке', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const dnfOnRun = mkTimerInd('1', { status: 'dnf', swim_s: 4000, bike1_s: 9000, bike2_s: 8000, run_s: null, cp: { swim: { [maxSeqSwim]: 4000 } } });
+    setRaceData([dnfOnRun], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    let statsHtml = domGetAppHtml().match(/<div class="stats-v2">[\s\S]*?<\/div><\/div>/)[0];
+    assert.ok(statsHtml.includes('1 финишировало'), `на "Плавании" DNF-на-беге должен считаться финишировавшим: ${statsHtml}`);
+    assert.ok(statsHtml.includes('0 DNF/DSQ'), `на "Плавании" не должно быть DNF: ${statsHtml}`);
+    sandbox.renderStage('run');
+    statsHtml = domGetAppHtml().match(/<div class="stats-v2">[\s\S]*?<\/div><\/div>/)[0];
+    assert.ok(statsHtml.includes('1 DNF/DSQ'), `на "Беге" (где реально сошёл) должен считаться DNF: ${statsHtml}`);
+});
+check('renderDay1() — эстафетная команда с DNF на дне 3 (бег) считается финишировавшей на "Дне 1"', () => {
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const team = {
+        bib: '10', team_name: 'T10',
+        members: [
+            { relay_stage: 'swim', status: 'active', gender: 'M', cp: {}, swim_s: 4000 },
+            { relay_stage: 'bike', status: 'active', gender: 'M', cp: { bike_day1: { [maxSeqBike1]: 8500 } }, bike1_s: 4500, bike2_s: null },
+            { relay_stage: 'run', status: 'dnf', gender: 'M', cp: {}, run_s: null }, // сошёл на дне 3
+        ],
+    };
+    setRaceData([], [team], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const statsHtml = domGetAppHtml();
+    assert.ok(statsHtml.includes('1 финишировало'), `команда, реально прошедшая День 1, должна считаться финишировавшей, несмотря на DNF на дне 3: ${statsHtml}`);
+    assert.ok(!statsHtml.includes('1 DNF/DSQ'), `не должно быть DNF на "Дне 1" — DNF случился на дне 3: ${statsHtml}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
