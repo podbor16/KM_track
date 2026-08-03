@@ -1350,9 +1350,20 @@ function renderBikeCombined() {
     // пользователем 2026-07-23, п.9 — тот же класс бага, что и на этапах:
     // строки/статистика эстафеты не пересчитывались под фильтр пола).
     const riders = relay.map(bikeCombinedRelayRider).filter(Boolean).filter(r => _gender === 'all' || r.gender === _gender);
+
+    // pos — считается ОДИН раз на человека: и для "живого" времени/
+    // скорости (пока Свод вело не пройден целиком), и для сортировки/
+    // ранга/отставания (2026-08-03: раньше bikeCombinedTime() требовал
+    // ПОЛНОСТЬЮ пройденных обоих дней — всю первую половину гонки колонка
+    // "Время" была пустой у всех).
+    const withPos = [
+        ...individual.map(r => ({ isRelay: false, entry: r, rawStatus: r.status, pos: bikeCombinedStatus(r) === 'active' ? bikeCombinedLastPos(r) : null })),
+        ...riders.map(r => ({ isRelay: true, entry: r, rawStatus: r.status, pos: bikeCombinedStatus(r) === 'active' ? bikeCombinedLastPos(r) : null })),
+    ];
+    const maxVseq = STAGE_MAX_SEQ.bike_day1 + STAGE_MAX_SEQ.bike_day2;
     const relayStatsBike = {
         total: riders.length,
-        finished: riders.filter(r => r.status === 'active' && bikeCombinedTime(r) != null).length,
+        finished: withPos.filter(x => x.isRelay && x.pos != null && x.pos.seq === maxVseq).length,
         dnfDsq: riders.filter(r => r.status === 'dnf' || r.status === 'dsq').length,
     };
     let html = buildStats(individual, relayStatsBike, null);
@@ -1362,16 +1373,10 @@ function renderBikeCombined() {
     // если вело он прошёл полностью (bikeCombinedStatus 'active' для этого
     // случая) — тот же принцип, что уже на вкладках этапов (найдено
     // пользователем 2026-08-02).
-    // Тай-брейк между "утонувшими" (rawStatus!=='active') без времени на
-    // Своде вело — по дистанции последней виртуальной КТ (bikeCombinedLastSeq),
-    // кто дальше — выше (запрошено пользователем 2026-08-02).
-    const rows = sortByRawStatus([
-        ...individual.map(r => ({ isRelay: false, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
-        ...riders.map(r => ({ isRelay: true, entry: r, rawStatus: r.status, v: bikeCombinedStatus(r) === 'active' ? bikeCombinedTime(r) : null })),
-    ], item => {
-        const vseq = bikeCombinedLastSeq(item.entry.cp);
-        return vseq != null ? bikeCombinedDistKm(vseq) : 0;
-    });
+    // Тай-брейк между "утонувшими" (rawStatus!=='active') — по posSortKey
+    // (та же кросс-этапная модель "кто дальше — выше", что и на вкладках
+    // этапов, запрошено пользователем 2026-08-02).
+    const rows = sortByRawStatus(withPos, item => posSortKey(item.pos));
 
     if (rows.length === 0) {
         html += '<div class="empty">Нет данных для выбранного фильтра</div>';
@@ -1385,24 +1390,26 @@ function renderBikeCombined() {
     // "Место" не должно учитывать невидимых участников). status для
     // ранжирования — ОБЩИЙ (rawStatus), как на вкладках этапов: сошедший
     // позже не получает номер места, даже если вело показывает "Финиш".
-    const rankPool = rows.map(({ isRelay, entry, rawStatus, v }) => ({ key: entry.bib, val: v, status: rawStatus, gender: entry.gender, isRelay }));
+    const rankPool = rows.map(({ isRelay, entry, rawStatus, pos }) => ({ key: entry.bib, val: posSortKey(pos), status: rawStatus, gender: entry.gender, isRelay }));
     const absRanks = computeRanksByValue(rankPool);
     const genderRanks = {
         M: computeRanksByValue(rankPool.filter(x => x.gender === 'M')),
         F: computeRanksByValue(rankPool.filter(x => x.gender === 'F')),
     };
-    // Отставание — от лидера ТЕКУЩЕГО отфильтрованного пула (rows уже в
-    // форме {entry,v}, подходит для poolGap напрямую) — раньше на этой
-    // вкладке колонки "Отставание" не было вовсе (п.3, v5, 2026-07-23).
-    // Только среди настоящих active (rawStatus) — DNF/DSQ не может быть
-    // лидером и не получает отставание (запрошено пользователем 2026-08-02).
-    const gaps = poolGap(rows.filter(r => r.rawStatus === 'active'));
+    // Отставание — только среди настоящих active (rawStatus) — DNF/DSQ не
+    // может быть лидером и не получает отставание, от лидера ПРЯМО
+    // СЕЙЧАС, не обязательно финишировавшего (bikeCombinedGaps, Задача 2).
+    const gaps = bikeCombinedGaps(
+        rows.filter(r => r.rawStatus === 'active').map(({ entry }) => ({ key: entry.bib, entry, status: 'active' }))
+    );
     const showGenderCol = _gender === 'all';
 
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
-    rows.forEach(({ isRelay, entry, rawStatus, v }) => {
-        const hasVal = v != null;
+    rows.forEach(({ isRelay, entry, rawStatus, pos }) => {
+        const hasVal = pos != null;
+        const v = pos ? pos.value : null;
+        const distKm = pos ? bikeCombinedDistKm(pos.seq) : 0;
         const absRank = hasVal ? absRanks[entry.bib] : null;
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
         const rc = absRank != null ? rankClass(absRank) : '';
@@ -1419,7 +1426,7 @@ function renderBikeCombined() {
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
-            <td class="r muted">${hasVal ? fmtSpeed(421 / (v / 3600)) : '—'}</td>
+            <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
             <td>${progressStatusBadge(status, hasVal)}</td>
         </tr>`;

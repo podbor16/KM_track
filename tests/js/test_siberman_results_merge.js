@@ -80,6 +80,17 @@ vm.createContext(sandbox);
 vm.runInContext(commonJs, sandbox);
 vm.runInContext(inlineScript, sandbox);
 
+// Виртуальная КТ конца Дня 2 (Свода вело) — нужна фикстурам "финишировал
+// оба вело-дня" ниже (2026-08-03: renderBikeCombined перешёл на
+// bikeCombinedLastPos(), которая читает cp, а не bike1_s/bike2_s
+// напрямую — фикстуры, где заданы только bike1_s/bike2_s без cp, теперь
+// должны явно давать cp.bike_day2 на последней КТ, иначе bikeCombinedLastPos
+// вернёт null, будто участник вело вообще не начинал).
+const MAX_SEQ_BIKE_DAY2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+function finishedBikeCp(bike2_s) {
+    return { bike_day2: { [MAX_SEQ_BIKE_DAY2]: bike2_s } };
+}
+
 // let _gender/_fmt объявлены внутри исполненного скрипта — отдельная
 // лексическая привязка, sandbox._gender=... извне её не видит. Мутируем
 // через runInContext (тот же персистентный контекст).
@@ -626,7 +637,7 @@ function mkBikeRelay(bib, overrides) {
     return {
         bib, team_name: `Team${bib}`,
         members: [
-            { relay_stage: 'bike', status: overrides.status ?? 'active', surname: overrides.surname, name: overrides.name, gender: overrides.gender, bike1_s: overrides.bike1_s, bike2_s: overrides.bike2_s },
+            { relay_stage: 'bike', status: overrides.status ?? 'active', surname: overrides.surname, name: overrides.name, gender: overrides.gender, bike1_s: overrides.bike1_s, bike2_s: overrides.bike2_s, cp: overrides.cp ?? {} },
         ],
     };
 }
@@ -640,8 +651,8 @@ check('bikeCombinedRelayRider — реальные ФИО/пол велосип�
 });
 check('renderBikeCombined() — эстафетчик получает настоящее место по полу (не "—")', () => {
     setState('all', 'all');
-    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 })];
-    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200 })]; // заметно быстрее личника
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500, cp: finishedBikeCp(9500) })];
+    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200, cp: finishedBikeCp(200) })]; // заметно быстрее личника
     sandbox.__individual = individual;
     sandbox.__relay = relay;
     vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
@@ -660,8 +671,8 @@ check('renderBikeCombined() — эстафетчик получает насто
 });
 check('renderBikeCombined() — отставание встроено под временем (новая колонка, п.3 v5, 2026-07-23)', () => {
     setState('all', 'all');
-    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500 })]; // 14500с
-    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200 })]; // 300с — лидер
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 5000, bike2_s: 9500, cp: finishedBikeCp(9500) })]; // 14500с
+    const relay = [mkBikeRelay(1000, { surname: 'Быстров', name: 'Олег', gender: 'M', bike1_s: 100, bike2_s: 200, cp: finishedBikeCp(200) })]; // 300с — лидер
     sandbox.__individual = individual;
     sandbox.__relay = relay;
     vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
@@ -674,12 +685,12 @@ check('renderBikeCombined() фильтр "Эстафета"+Пол=Все — 2 
     const relay = [
         { bib: '1000', team_name: 'КомандаА', members: [
             { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 100, cp: {} },
-            { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 5000, bike2_s: 4000, cp: {} },
+            { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: 5000, bike2_s: 4000, cp: finishedBikeCp(4000) },
             { relay_stage: 'run', status: 'active', gender: 'M', run_s: 100, cp: {} },
         ] },
         { bib: '1001', team_name: 'КомандаБ', members: [
             { relay_stage: 'swim', status: 'active', gender: 'F', swim_s: 100, cp: {} },
-            { relay_stage: 'bike', status: 'active', gender: 'F', bike1_s: 6000, bike2_s: 5000, cp: {} },
+            { relay_stage: 'bike', status: 'active', gender: 'F', bike1_s: 6000, bike2_s: 5000, cp: finishedBikeCp(5000) },
             { relay_stage: 'run', status: 'active', gender: 'F', run_s: 100, cp: {} },
         ] },
     ];
@@ -693,8 +704,8 @@ check('renderBikeCombined() фильтр "Эстафета"+Пол=Все — 2 
     assert.ok(/rank-num[^>]*>1</.test(rowA), `КомандаА (9000с) быстрее КомандыБ (11000с) — место 1: ${rowA}`);
 });
 check('renderBikeCombined() — ранг среди ВИДИМЫХ строк, не по полному ростеру (откат 2026-07-23)', () => {
-    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100 })]; // 200с — самый быстрый, но невидим
-    const relay = [mkBikeRelay(1000, { surname: 'Средний', name: 'Иван', gender: 'M', bike1_s: 5000, bike2_s: 4000 })]; // 9000с
+    const individual = [mkIndProgress(1, { gender: 'M', bike1_s: 100, bike2_s: 100, cp: finishedBikeCp(100) })]; // 200с — самый быстрый, но невидим
+    const relay = [mkBikeRelay(1000, { surname: 'Средний', name: 'Иван', gender: 'M', bike1_s: 5000, bike2_s: 4000, cp: finishedBikeCp(4000) })]; // 9000с
     sandbox.__individual = individual;
     sandbox.__relay = relay;
     vm.runInContext('_data = { individual: __individual, relay: __relay };', sandbox);
@@ -1961,6 +1972,29 @@ check('renderBikeCombined() — два DNF, ни один не финиширо�
     sandbox.renderBikeCombined();
     const html = domGetAppHtml();
     assert.ok(html.indexOf('bib-cell">1<') < html.indexOf('bib-cell">2<'), `дальше проехавший (bib=1, КТ5) должен идти выше (bib=2, КТ2): ${html}`);
+});
+
+// ── Задача 6 (2026-08-03): "Свод вело" — живое время/место/отставание/
+// скорость ДО завершения обоих вело-дней (раньше bikeCombinedTime()
+// требовал ПОЛНОСТЬЮ пройденных обоих дней — колонка "Время" была пустой
+// всю первую половину гонки) ──
+check('renderBikeCombined() — живое "Время" показывается ДО завершения обоих дней (не "—")', () => {
+    const midDay1 = mkTimerInd('1', { status: 'active', swim_s: 0, cp: { bike_day1: { 3: 5000 } } }); // ещё в Дне 1
+    setRaceData([midDay1], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    const row = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(!/time-cell">\s*<span class="muted">—<\/span>/.test(row), `"Время" не должно быть пустым до конца обоих дней: ${row}`);
+});
+check('renderBikeCombined() — скорость считается от РЕАЛЬНО пройденной дистанции, не от полных 421 км, пока не финишировал', () => {
+    const midDay1 = mkTimerInd('1', { status: 'active', swim_s: 0, cp: { bike_day1: { 2: 3600 } } }); // 10 км за 1 час = 10 км/ч
+    setRaceData([midDay1], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    const row = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(row.includes('10,0 км/ч') || row.includes('10.0 км/ч'), `скорость должна считаться от 10 км (пройдено), не от 421 км: ${row}`);
 });
 
 check('renderStage() — два DNF на беге, у ОБОИХ заполнено run_s ("время на последней КТ", не финиш) — сортировка всё равно по кругам, не по этому времени', () => {
