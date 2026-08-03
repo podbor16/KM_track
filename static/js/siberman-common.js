@@ -422,7 +422,17 @@ function computeGlobalCheckpointRanks(rows, dbStage, maxSeq) {
 // времени (для строки "⏱️ Время на отметке"), не только место/гэп.
 function bikeCombinedRawCp(row, vseq) {
     const n1 = STAGE_MAX_SEQ.bike_day1;
-    if (vseq <= n1) return row.cp?.bike_day1?.[vseq];
+    if (vseq <= n1) {
+        const v1 = row.cp?.bike_day1?.[vseq];
+        // cp.bike_day1 — elapsed ОТ СТАРТА ГОНКИ (включает заплыв, см.
+        // convert_bike_times_to_elapsed в src/siberman/service.py) —
+        // "объединённое вело" 0..421 км должно быть БЕЗ заплыва, та же
+        // база, что и у bike1_s (bike1_abs - swim). Раньше день1 (эта
+        // ветка) и день2 (ветка ниже, явно без заплыва через bike1_s)
+        // считались в разных базах — нашли при переходе на live-время
+        // Свода вело (2026-08-03).
+        return v1 == null ? v1 : v1 - (row.swim_s ?? 0);
+    }
     const v2 = row.cp?.bike_day2?.[vseq - n1];
     return v2 == null ? null : (row.bike1_s ?? 0) + v2;
 }
@@ -479,6 +489,61 @@ function bikeCombinedLastCpHtml(cp) {
     const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
     const maxVseq = STAGE_MAX_SEQ.bike_day1 + STAGE_MAX_SEQ.bike_day2;
     return vseq === maxVseq ? kmLine + '<div class="muted-sub">Финиш</div>' : kmLine;
+}
+
+// Позиция на ОБЪЕДИНЁННОМ вело (день1+день2 как один этап 0..421 км) —
+// {seq: виртуальный seq, value: elapsed с начала вело, БЕЗ заплыва} —
+// нужна для live-времени/ранга/отставания Свода вело (2026-08-03,
+// раньше требовалось ПОЛНОСТЬЮ пройти оба дня — см. bikeCombinedTime,
+// удалена в этом плане). Аналог lastReached() для обычного этапа, но
+// через сквозную виртуальную нумерацию КТ.
+function bikeCombinedLastPos(row) {
+    const vseq = bikeCombinedLastSeq(row.cp);
+    if (vseq == null) return null;
+    const value = bikeCombinedRawCp(row, vseq);
+    return value == null ? null : { seq: vseq, value };
+}
+
+// Аналог valueAtOrBefore(), но через виртуальную нумерацию КТ Свода вело —
+// нужен bikeCombinedGaps(): лидер, уже уехавший вперёд, обычно НЕ имеет
+// сырого значения ТОЧНО на виртуальной КТ отстающего (например, лидер
+// давно в Дне 2, а из Дня 1 в его данных сохранён только финиш дня, а не
+// каждая промежуточная КТ) — нужно взять его последнее известное значение
+// НЕ ПОЗЖЕ этой виртуальной КТ, как это делает valueAtOrBefore для
+// обычного этапа в computeStageGaps. Если раньше этой КТ вообще нет
+// данных — значение лидера на этой точке неизвестно (не 0 — это было бы
+// заниженной оценкой и завысило бы итоговое отставание, поскольку
+// bikeCombinedGaps считает gap = follower.value - leaderVal); возвращаем
+// null, и вызывающая сторона (как и computeStageGaps) просто пропускает
+// отставание для этой записи, а не показывает фиктивное число.
+function _bikeCombinedValueAtOrBefore(entry, vseq) {
+    for (let s = vseq; s >= 1; s--) {
+        const v = bikeCombinedRawCp(entry, s);
+        if (v != null) return v;
+    }
+    return null;
+}
+
+// Отставание на Своде вело — та же модель, что computeStageGaps (лидер =
+// дальше всех продвинувшийся ПРЯМО СЕЙЧАС, не обязательно финишировавший
+// весь Свод вело), но через виртуальные КТ bikeCombinedRawCp/
+// bikeCombinedLastPos, а не прямой cp[stage][seq]. rows: [{key, entry,
+// status}] — entry несёт cp/swim_s/bike1_s, как ожидает bikeCombinedRawCp.
+function bikeCombinedGaps(rows) {
+    const withPos = rows
+        .map(r => ({ key: r.key, entry: r.entry, status: r.status ?? 'active', pos: bikeCombinedLastPos(r.entry) }))
+        .filter(r => r.pos);
+    if (withPos.length === 0) return {};
+    const candidates = withPos.filter(r => r.status === 'active');
+    if (candidates.length === 0) return {};
+    const leader = candidates.reduce((a, b) => (posSortKey(a.pos) <= posSortKey(b.pos) ? a : b));
+    const gaps = {};
+    withPos.forEach(r => {
+        if (r.key === leader.key) { gaps[r.key] = 0; return; }
+        const leaderVal = _bikeCombinedValueAtOrBefore(leader.entry, r.pos.seq);
+        if (leaderVal != null) gaps[r.key] = r.pos.value - leaderVal;
+    });
+    return gaps;
 }
 
 // То же самое, но возвращает МЕСТО (1,2,3...) внутри пула вместо gap —

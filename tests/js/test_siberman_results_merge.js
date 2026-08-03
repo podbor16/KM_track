@@ -1449,9 +1449,18 @@ check('buildStats() — карточка "Личников" скрыта, ког
 // ── bikeCombinedRawCp()/computeBikeCombinedCheckpointGaps()/bikeCombinedDistKm()/
 // bikeCombinedCheckpointLabel() — гэпы/дистанция/подписи для виртуальных КТ
 // «Вело (оба дня)», нужны генератору постов трансляции (Задача 6) ──
-check('bikeCombinedRawCp — виртуальный seq в пределах Дня 1 берёт cp.bike_day1 напрямую', () => {
-    const row = { cp: { bike_day1: { 3: 5000 }, bike_day2: {} }, bike1_s: 20000 };
-    assert.strictEqual(sandbox.bikeCombinedRawCp(row, 3), 5000, 'seq<=6 (День 1) — сырое значение cp.bike_day1');
+check('bikeCombinedRawCp — виртуальный seq в пределах Дня 1 вычитает заплыв (та же база, что у bike1_s)', () => {
+    // cp.bike_day1 хранится elapsed ОТ СТАРТА ГОНКИ (включает заплыв) —
+    // "объединённое вело" 0..421 км должно быть БЕЗ заплыва, как и
+    // bike1_s (bike1_abs - swim в compute_stage_totals). Раньше день1 и
+    // день2 считались в разных базах — нашли при проектировании live-времени
+    // Свода вело (2026-08-03).
+    const row = { cp: { bike_day1: { 3: 5000 }, bike_day2: {} }, bike1_s: 20000, swim_s: 800 };
+    assert.strictEqual(sandbox.bikeCombinedRawCp(row, 3), 4200, '5000 (elapsed от старта гонки) - 800 (заплыв) = 4200 (elapsed от старта вело)');
+});
+check('bikeCombinedRawCp — без swim_s (не указан) не ломается — ведёт себя как раньше (0 вычитается)', () => {
+    const row = { cp: { bike_day1: { 6: 18000 }, bike_day2: {} }, bike1_s: 18000 };
+    assert.strictEqual(sandbox.bikeCombinedRawCp(row, 6), 18000, 'без swim_s — вычитается 0, обратная совместимость с существующими фикстурами');
 });
 check('bikeCombinedRawCp — виртуальный seq в Дне 2 прибавляет bike1_s (итог Дня 1)', () => {
     const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox); // 6
@@ -1492,6 +1501,34 @@ check('bikeCombinedCheckpointLabel — подпись с пометкой дня
     const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     assert.ok(sandbox.bikeCombinedCheckpointLabel(3).includes('День 1'), 'КТ Дня 1 помечена "(День 1)"');
     assert.ok(sandbox.bikeCombinedCheckpointLabel(n1 + 2).includes('День 2'), 'КТ Дня 2 помечена "(День 2)"');
+});
+check('bikeCombinedLastPos — live-позиция на Дне 1 (без заплыва в value)', () => {
+    const row = { cp: { bike_day1: { 3: 5000 }, bike_day2: {} }, bike1_s: 20000, swim_s: 800 };
+    const pos = sandbox.bikeCombinedLastPos(row);
+    assert.strictEqual(pos.seq, 3);
+    assert.strictEqual(pos.value, 4200);
+});
+check('bikeCombinedLastPos — null, если вело ещё не начато', () => {
+    const row = { cp: { bike_day1: {}, bike_day2: {} } };
+    assert.strictEqual(sandbox.bikeCombinedLastPos(row), null);
+});
+check('bikeCombinedGaps — если у лидера нет ни одного сохранённого значения раньше виртуальной КТ отстающего, отставание не показывается (не фабрикуется из 0)', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    // У лидера в cp.bike_day1 сохранён ТОЛЬКО финиш дня (seq n1) — ни одной
+    // промежуточной КТ раньше viseq=4 отстающего нет, значит его значение
+    // "на или до" этой точки неизвестно → gaps.B не должен появиться вообще.
+    const ahead = { key: 'A', status: 'active', entry: { cp: { bike_day1: { [n1]: 18000 }, bike_day2: { 2: 3000 } }, bike1_s: 18000, swim_s: 0 } }; // в Дне 2
+    const behind = { key: 'B', status: 'active', entry: { cp: { bike_day1: { 4: 12000 }, bike_day2: {} }, bike1_s: null, swim_s: 0 } }; // ещё в Дне 1
+    const gaps = sandbox.bikeCombinedGaps([ahead, behind]);
+    assert.strictEqual(gaps.A, 0, 'A дальше всех — лидер, gap=0');
+    assert.strictEqual(gaps.B, undefined, `Нет данных лидера раньше КТ B → gap не фабрикуется: ${JSON.stringify(gaps)}`);
+});
+check('bikeCombinedGaps — если у лидера ЕСТЬ сохранённая промежуточная КТ раньше/на виртуальной КТ отстающего, отставание считается от неё точно', () => {
+    const ahead = { key: 'A', status: 'active', entry: { cp: { bike_day1: { 4: 10000, 6: 18000 }, bike_day2: { 2: 3000 } }, bike1_s: 18000, swim_s: 0 } }; // в Дне 2, но seq4 дня1 сохранён
+    const behind = { key: 'B', status: 'active', entry: { cp: { bike_day1: { 4: 12000 }, bike_day2: {} }, bike1_s: null, swim_s: 0 } }; // ещё в Дне 1, vseq=4
+    const gaps = sandbox.bikeCombinedGaps([ahead, behind]);
+    assert.strictEqual(gaps.A, 0, 'A дальше всех — лидер, gap=0');
+    assert.strictEqual(gaps.B, 2000, `Отставание B = 12000 - 10000 = 2000: ${JSON.stringify(gaps)}`);
 });
 
 // ── currentStage(row, maxStage) — п.1 v6, 2026-08-02: ограничение границей

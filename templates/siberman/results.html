@@ -1312,7 +1312,13 @@ function renderRankedProgress(getValue, options = {}) {
 function bikeCombinedRelayRider(team) {
     const m = team.members.find(x => x.relay_stage === 'bike');
     if (!m) return null;
-    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: m.cp };
+    // swim_s велосипедиста эстафеты — от ЕГО КОМАНДЫ (сам он не плавает),
+    // нужен bikeCombinedRawCp() для вычитания заплыва из cp.bike_day1
+    // (та же база, что у individual bike1_s) — без этого live-время
+    // Дня 1 у эстафетного велосипедиста было бы завышено на время
+    // заплыва команды (найдено 2026-08-03 при переходе на live-время).
+    const swimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: m.cp };
 }
 
 // Статус ИМЕННО вело-этапа (оба дня) — по факту достижения последней КТ
