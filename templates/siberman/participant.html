@@ -587,7 +587,7 @@ function renderIndividual(data, r) {
                 <span class="badge badge-individual">Лично</span>
                 ${statusBadge(r, null)}
             </div>
-            ${r.city ? `<div class="p-city">${r.city}</div>` : ''}
+            ${cityLabel(r) ? `<div class="p-city">${cityLabel(r)}</div>` : ''}
         </div>
         ${progressBarHtml(r)}
         <div class="stats-row">${overallStat}</div>

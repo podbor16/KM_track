@@ -2535,5 +2535,28 @@ check('readStateFromUrl() — fmt=relay в URL всегда приводит gen
     assert.strictEqual(vm.runInContext('_gender', sandbox), 'all', 'при эстафете пол должен сброситься на "все", даже если в URL было другое');
 });
 
+// ── cityLabel() — "Страна, Город" для иностранцев, просто "Город" для
+// россиян — п.3 v7, 2026-08-03 ──
+check('cityLabel() — россиянин показывает просто город', () => {
+    assert.strictEqual(sandbox.cityLabel({ city: 'Красноярск', country: 'Россия' }), 'Красноярск');
+});
+check('cityLabel() — без явного country (дефолт "Россия" на сервере) — тоже просто город', () => {
+    assert.strictEqual(sandbox.cityLabel({ city: 'Москва' }), 'Москва');
+});
+check('cityLabel() — иностранец показывает "Страна, Город"', () => {
+    assert.strictEqual(sandbox.cityLabel({ city: 'Алматы', country: 'Казахстан' }), 'Казахстан, Алматы');
+});
+check('cityLabel() — без города возвращает пустую строку, даже с указанной страной', () => {
+    assert.strictEqual(sandbox.cityLabel({ country: 'Казахстан' }), '');
+});
+check('renderStage() — иностранец показывает "Страна, Город" в ячейке участника', () => {
+    const foreigner = mkTimerInd('1', { status: 'active', swim_s: 1700, cp: { swim: { 4: 1700 } }, city: 'Алматы', country: 'Казахстан' });
+    setRaceData([foreigner], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('Казахстан, Алматы'), `должно быть "Страна, Город": ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

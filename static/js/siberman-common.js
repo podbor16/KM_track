@@ -45,6 +45,15 @@ function fmtSpeed(v) {
     if (v == null) return '—';
     return `${Number(v).toFixed(1)} км/ч`;
 }
+// Город участника — просто "Город" для россиян (country по умолчанию
+// "Россия" на сервере, парсер/миграция), "Страна, Город" для иностранцев
+// (запрошено пользователем 2026-08-03, п.3 v7). '', если города нет
+// вовсе — вызывающий код сам решает, показывать ли пустую строку.
+function cityLabel(r) {
+    if (!r.city) return '';
+    if (r.country && r.country !== 'Россия') return `${r.country}, ${r.city}`;
+    return r.city;
+}
 function genderBadge(g) {
     if (g === 'M') return '<span class="badge badge-m">М</span>';
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';

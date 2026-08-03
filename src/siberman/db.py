@@ -202,7 +202,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
         SELECT
-            p.id, p.bib, p.surname, p.name, p.gender, p.city, p.status,
+            p.id, p.bib, p.surname, p.name, p.gender, p.country, p.city, p.status,
             p.bike_day2_handicap_s AS bike2_start_s,
             o.total_s   AS overall_s,
             o.rank_overall, o.rank_gender AS overall_rank_g,
