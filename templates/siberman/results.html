@@ -931,23 +931,16 @@ function renderStage(stage) {
         return pos ? CHECKPOINT_DIST_KM[dbStage][pos.seq] : 0;
     };
 
-    // r[cfg.timeKey] (напр. run_s) — время на ПОСЛЕДНЕЙ пройденной КТ, не
-    // обязательно финишной (см. compute_stage_totals/_last_cp в
-    // src/siberman/service.py: "последний не-None cumulative", а не
-    // "дошёл до финиша") — используется и для сошедших, чтобы показать их
-    // реальное время на месте, где они остановились. Для СОРТИРОВКИ этого
-    // недостаточно: два DNF с непустым timeKey сравнивались бы по этому
-    // "времени на последней точке" как по настоящему финишному времени,
-    // хотя одна КТ может быть намного раньше другой по дистанции (найдено
-    // пользователем 2026-08-02 на Дащенко/Пушкарёве — прошедший больше
-    // кругов оказывался ниже). Отдельное _sortTime — null, если стадия не
-    // пройдена ДО ФИНИШНОЙ КТ, независимо от того, заполнено ли timeKey.
-    const withSortTime = r => {
-        const pos = lastReached(r.cp, dbStage);
-        const finishedStage = !!pos && pos.seq === maxSeq;
-        return { ...r, _sortTime: finishedStage ? r[cfg.timeKey] : null };
-    };
-    const rows = sortByStatus(individual.map(withStageStatus).map(withSortTime), '_sortTime', stageProgressKm);
+    // _sortTime — закодированный ключ "дальше+быстрее" (posSortKey), а не
+    // "сырое" время на последней КТ — иначе только что стартовавший этап
+    // (маленькое накопленное время) ошибочно обгонял бы того, кто прошёл
+    // намного дальше (2026-08-03, тестовый прогон живых данных). Работает
+    // одинаково для ещё бегущих и уже финишировавших — для финишировавших
+    // вырождается в обычное сравнение по времени, тай-брейк по дистанции
+    // для DNF-vs-DNF (stageProgressKm) больше не нужен отдельно —
+    // posSortKey уже включает дистанцию как первичный ключ.
+    const withSortTime = r => ({ ...r, _sortTime: posSortKey(lastReached(r.cp, dbStage)) });
+    const rows = sortByStatus(individual.map(withStageStatus).map(withSortTime), '_sortTime');
     let relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members
             .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
@@ -1010,8 +1003,18 @@ function renderStage(stage) {
     // не пересчитывалось, всё ещё учитывало невидимых эстафетчиков).
     // Данные о "невидимом" участнике не должны влиять на нумерацию мест
     // в таблице, где он не показан.
-    const visibleIndRows = rows.map(r => ({ key: r.bib, val: r[cfg.timeKey], status: r.status, gender: r.gender, isRelay: false }));
-    const visibleRelayRows = relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: m[cfg.timeKey], status: m.status, gender: m.gender, isRelay: true }));
+    // status: r._rawStatus (не r.status) — r.status здесь может быть "тихо"
+    // подменён withStageStatus на 'dnf' для ЛЮБОГО реально активного
+    // участника, который прямо сейчас ещё не дошёл до финишной КТ ЭТОГО
+    // этапа (например, буквально плывёт прямо сейчас) — это управляет
+    // бейджем/CSS-классом строки и остаётся как есть, но НЕ должно лишать
+    // его места в ранжировании: реально активный участник, лидирующий по
+    // live-прогрессу, обязан получать номер места, а не "—" (иначе вся
+    // "живая" сортировка этой задачи была бы бессмысленна — see: тест
+    // "место считается для АКТИВНЫХ мид-этапа", найдено 2026-08-03).
+    // Настоящий DNF/DSQ (_rawStatus не 'active') по-прежнему исключается.
+    const visibleIndRows = rows.map(r => ({ key: r.bib, val: posSortKey(lastReached(r.cp, dbStage)), status: r._rawStatus, gender: r.gender, isRelay: false }));
+    const visibleRelayRows = relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: posSortKey(lastReached(m.cp, dbStage)), status: m._rawStatus, gender: m.gender, isRelay: true }));
     const visibleStageRows = [...visibleIndRows, ...visibleRelayRows];
     const stageAbsRanks = computeRanksByValue(visibleStageRows);
     const stageGenderRanks = {

@@ -2034,6 +2034,22 @@ check('renderStage() — настоящий DNF (raw) не получает от
     assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание: ${rowMatch[0]}`);
 });
 
+check('renderStage() — настоящий DNF посреди этапа не получает номер места, несмотря на live-ранжирование по прогрессу', () => {
+    // status: 'dnf' задан ИЗНАЧАЛЬНО в исходных данных (не подменён локально
+    // withStageStatus, как в "тихом" DNF ниже) — участник реально сошёл на
+    // 3-м круге бега, но живое ранжирование по прогрессу не должно давать
+    // ему номер места, даже стоя рядом с активным лидером, ушедшим дальше.
+    const dnfMidStage = mkTimerInd('1', { status: 'dnf', gender: 'M', cp: { run: { 3: 1000 } } });
+    const activeLeader = mkTimerInd('2', { status: 'active', gender: 'M', cp: { run: { 5: 2000 } } });
+    setRaceData([dnfMidStage, activeLeader], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    const rowMatch = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/);
+    assert.ok(rowMatch, `строка bib=1 не найдена: ${html}`);
+    assert.ok(/rank-num[^>]*>—</.test(rowMatch[0]), `настоящий DNF не должен получать номер места, даже с live-ранжированием по прогрессу: ${rowMatch[0]}`);
+});
+
 check('renderStage() — "тихий" DNF (реально ещё активный, просто не дошёл до финиша ЭТОГО этапа) СОХРАНЯЕТ живое отставание', () => {
     // status='active' в источнике — "тихая" подмена status на 'dnf'
     // происходит ТОЛЬКО локально для этой вкладки (withStageStatus), но
@@ -2048,6 +2064,26 @@ check('renderStage() — "тихий" DNF (реально ещё активны�
     // только из-за "тихой" подмены — по крайней мере не должно падать/
     // ломаться рендер (основная проверка — что вообще не FAIL/exception).
     assert.ok(html.includes('bib-cell">1<') && html.includes('bib-cell">2<'), `оба участника должны отрендериться: ${html}`);
+});
+
+check('renderStage() — live: дальше пройденная КТ впереди, даже с меньшим "сырым" временем', () => {
+    const justStarted = mkTimerInd('1', { status: 'active', swim_s: 120, cp: { swim: { 1: 120 } } });   // 1,3 км за 2 мин
+    const farAlong = mkTimerInd('2', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } });    // 5,2 км за 23 мин
+    setRaceData([justStarted, farAlong], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `дальше проплывший (bib=2) должен идти выше: ${html}`);
+});
+check('renderStage() — live: место считается для АКТИВНЫХ мид-этапа, не только для финишировавших', () => {
+    const justStarted = mkTimerInd('1', { status: 'active', swim_s: 120, cp: { swim: { 1: 120 } } });
+    const farAlong = mkTimerInd('2', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } });
+    setRaceData([justStarted, farAlong], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    const row2 = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">2<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(/rank-num[^>]*>1</.test(row2), `лидирующий по прогрессу должен получить место 1: ${row2}`);
 });
 
 check('renderBikeCombined() — DNF (на беге), вело завершено — не получает отставание, только время', () => {
