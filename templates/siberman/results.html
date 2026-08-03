@@ -419,6 +419,7 @@
         [data-theme="dark"] .badge-individual { background: rgba(190,10,33,.28); }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
+        .badge-notstarted { background: rgba(120,120,130,.08); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
         .badge-fin  { background: rgba(34,197,94,.12);   color: #22c55e; }
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
@@ -1039,8 +1040,8 @@ function renderStage(stage) {
                 <span class="badge badge-individual">Лично</span>
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
-            <td class="muted">${lastCpCell}</td>
             <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
         </tr>`;
@@ -1064,12 +1065,10 @@ function renderStage(stage) {
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`])}</td>
-            <td class="muted">${lastCpCell}</td>
             <td class="r muted">${hasTime ? meta : '—'}</td>
+            <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td>${m.status !== 'active'
-                ? relayMemberStatusBadge(m)
-                : (pos && pos.seq === maxSeq ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>')}</td>
+            <td>${relayMemberStatusBadge(m, pos, maxSeq)}</td>
         </tr>`;
     };
 
@@ -1101,7 +1100,7 @@ function renderStage(stage) {
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th>
-        <th class="r">Время</th><th>Отметка</th><th class="r">${cfg.metaLbl}</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Отметка</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -1119,13 +1118,13 @@ function renderStage(stage) {
    позицией в отсортированном списке, одна колонка "Место" (при активном
    фильтре пола getFiltered() уже отдаёт только участников этого пола —
    позиция и так получается местом внутри пола). */
-function progressStatusBadge(status, hasValue) {
+function progressStatusBadge(status, pos, isFinished) {
     if (status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
     if (status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
-    // "Финишировал" (не "Пройден") — та же формулировка, что и статус-бейдж
-    // на Итогах/этапах (statusBadge()), для единого словаря по всему сайту.
-    return hasValue ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>';
+    // "Финиш"/"На трассе"/"—" (не начал) — тот же 3-состояний бейдж, что и
+    // на Этапах/Итогах (activeProgressBadge, siberman-common.js).
+    return activeProgressBadge(pos, isFinished);
 }
 
 // entries — единая форма для Итогов/Дней: v — живое накопленное время
@@ -1225,7 +1224,7 @@ function renderRankedProgress(options = {}) {
     const gaps = computeOverallGaps(gapPool, maxStage);
     const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v, rawStatus } = item;
         const hasVal = v != null;
@@ -1252,21 +1251,21 @@ function renderRankedProgress(options = {}) {
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         // "Финиш" в бейдже статуса — только если РЕАЛЬНО дошёл до конца
-        // ИМЕННО этого дня (item._pos на границе maxStage), а не просто
-        // "есть какое-то живое значение v" (hasVal — оно true с самого
-        // начала дня, как только появился хоть один чекпоинт, см.
-        // 2026-08-03, тестовый прогон: раньше "Финиш" показывался всем
-        // активным с первой же отметки дня).
-        const trulyFinishedDay = item._pos && item._pos.stageIdx === STAGE_ORDER.indexOf(maxStage) && item._pos.seq === STAGE_MAX_SEQ[maxStage];
+        // ИМЕННО этого дня (item._pos на границе maxStage), "—" — если ещё
+        // не начал день вовсе (item._pos===null), "На трассе" — где-то
+        // между (2026-08-03: раньше не различали "не начал" и "в
+        // процессе" — оба показывали "На трассе"/"Финиш" по одной и той
+        // же грубой проверке "есть ли какое-то значение").
+        const isFinishedDay = p => p.stageIdx === STAGE_ORDER.indexOf(maxStage) && p.seq === STAGE_MAX_SEQ[maxStage];
         // Блёклая строка — по ОБЩЕМУ статусу гонки (см. sortByRawStatus).
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(showGenderCol, absRank, secondaryRank, secondaryBadge, rc)}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
-            <td class="muted">${lastCpCell}</td>
             ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
-            <td>${progressStatusBadge(status, trulyFinishedDay)}</td>
+            <td class="muted">${lastCpCell}</td>
+            <td>${progressStatusBadge(status, item._pos, isFinishedDay)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
@@ -1386,11 +1385,10 @@ function renderBikeCombined() {
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
         // "Финиш" — только если РЕАЛЬНО дошёл до конца ОБОИХ вело-дней
-        // (421 км), а не просто "есть какое-то живое значение" (hasVal —
-        // оно true с первой же КТ вело-дня-1, см. 2026-08-03, тестовый
-        // прогон: раньше "Финиш" показывался всем активным велосипедистам
-        // с самого начала Дня 1).
-        const trulyFinishedBike = pos != null && pos.seq === maxVseq;
+        // (421 км), "—" — если ещё не начал вело вовсе (pos===null),
+        // "На трассе" — где-то между (2026-08-03: раньше не различали
+        // "не начал" и "в процессе").
+        const isFinishedBike = p => p.seq === maxVseq;
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
@@ -1401,7 +1399,7 @@ function renderBikeCombined() {
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
-            <td>${progressStatusBadge(status, trulyFinishedBike)}</td>
+            <td>${progressStatusBadge(status, pos, isFinishedBike)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';

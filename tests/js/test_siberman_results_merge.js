@@ -2403,5 +2403,58 @@ check('renderStage() — активный участник, ещё не нача
     assert.ok(!trOpenTag.includes('dnf'), `ещё не дошедший до ЭТОГО этапа активный участник не должен быть блёклым: ${trOpenTag}`);
 });
 
+// ── Новый статус "—" (не начал СРЕЗ) vs "На трассе" (начал, но не
+// закончил) vs "Финиш" (дошёл до конца) — п.5 v7, 2026-08-03: раньше
+// "не начал" и "в процессе" неразличимо показывали "На трассе" ──
+check('statusBadge() — активный, ещё не начавший этап (ни одной КТ), показывает "—", не "На трассе"', () => {
+    const notStarted = { status: 'active', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    assert.ok(sandbox.statusBadge(notStarted, 'bike1').includes('badge-notstarted">—<'), `должен быть "—": ${sandbox.statusBadge(notStarted, 'bike1')}`);
+});
+check('statusBadge() — активный, начавший этап, но не дошедший до конца, показывает "На трассе"', () => {
+    const midStage = { status: 'active', cp: { bike_day1: { 2: 5000 } } };
+    assert.ok(sandbox.statusBadge(midStage, 'bike1').includes('badge-live">На трассе<'), `должен быть "На трассе": ${sandbox.statusBadge(midStage, 'bike1')}`);
+});
+check('statusBadge() — активный, дошедший до финишной КТ этапа, показывает "Финиш"', () => {
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const finished = { status: 'active', cp: { bike_day1: { [maxSeqBike1]: 18000 } } };
+    assert.ok(sandbox.statusBadge(finished, 'bike1').includes('badge-fin">Финиш<'), `должен быть "Финиш": ${sandbox.statusBadge(finished, 'bike1')}`);
+});
+check('statusBadge() — активный, ещё не начавший ГОНКУ вовсе (stageKey=null, Итоги), показывает "—"', () => {
+    const notStarted = { status: 'active', cp: {} };
+    assert.ok(sandbox.statusBadge(notStarted, null).includes('badge-notstarted">—<'), `должен быть "—" на Итогах: ${sandbox.statusBadge(notStarted, null)}`);
+});
+check('teamStatusBadge() — эстафетная команда, ещё не начавшая гонку, показывает "—"', () => {
+    const team = { bib: '1', team_name: 'T', members: [
+        { relay_stage: 'swim', status: 'active', cp: {}, swim_s: null },
+        { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: null, bike2_s: null },
+        { relay_stage: 'run', status: 'active', cp: {}, run_s: null },
+    ]};
+    assert.ok(sandbox.teamStatusBadge(team).includes('badge-notstarted">—<'), `команда без единой отметки должна быть "—": ${sandbox.teamStatusBadge(team)}`);
+});
+check('renderStage() — активный, ещё не начавший этап, показывает "—" в статусе (не "На трассе")', () => {
+    const notStarted = mkTimerInd('1', { status: 'active', swim_s: 1700, cp: { swim: { 4: 1700 } } }); // плывёт, вело не начато
+    setRaceData([notStarted], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-notstarted">—<'), `на вкладке "Вело 1" участник, который ещё плывёт, должен показывать "—": ${html}`);
+});
+check('renderBikeCombined() — активный, ещё не начавший вело вовсе, показывает "—"', () => {
+    const notStarted = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 } } });
+    setRaceData([notStarted], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-notstarted">—<'), `не начавший вело должен показывать "—": ${html}`);
+});
+check('renderDay1() — активный, ещё не начавший день вовсе, показывает "—"', () => {
+    const notStarted = mkTimerInd('1', { status: 'active', cp: {} });
+    setRaceData([notStarted], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-notstarted">—<'), `не начавший День 1 должен показывать "—": ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

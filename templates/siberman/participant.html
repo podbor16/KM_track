@@ -93,6 +93,7 @@
         .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
+        .badge-notstarted { background: rgba(120,120,130,.08); color: var(--muted); }
         .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
         .badge-fin  { background: rgba(34,197,94,.12);   color: #22c55e; }
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
@@ -244,24 +245,19 @@ const STAGES = [
     { dbStage: 'run',       label: 'Бег',         dist: '84 км',  relayStage: 'run',  timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaFn: fmtPace,     metaKey: 'run_pace',   metaLbl: 'Темп' },
 ];
 
-// "Тихий" DNF (см. results.html/renderStage) — то же самое здесь, локально,
-// не мутируя переданный объект.
-function withStageStatus(r, dbStage) {
-    const pos = lastReached(r.cp, dbStage);
-    const silentDnf = r.status === 'active' && pos && pos.seq !== STAGE_MAX_SEQ[dbStage];
-    return silentDnf ? { ...r, status: 'dnf' } : r;
-}
-
 // Пул для gap/место на конкретном этапе — личники + эстафетчики этой роли,
 // БЕЗ фильтра (абсолютный пул, как вкладка этапа на /siberman/results с
-// фильтрами "Все"/"Все" по умолчанию).
+// фильтрами "Все"/"Все" по умолчанию). status берётся как есть, без
+// "тихой" подмены на dnf (была здесь раньше, отключена 2026-08-03 — тот
+// же фикс, что и в results.html/renderStage: на живой гонке она молча
+// опустошала пул отставаний для КАЖДОГО активного, ещё не финишировавшего
+// этап участника).
 function buildStageGapPool(data, dbStage, relayStage) {
     const indiv = data.individual
-        .map(r => withStageStatus(r, dbStage))
         .map(r => ({ key: r.bib, cp: r.cp, status: r.status, gender: r.gender, isRelay: false }));
     const relayMembers = data.relay.flatMap(t => t.members
         .filter(m => m.relay_stage === relayStage)
-        .map(m => withStageStatus({ ...m, _bib: t.bib }, dbStage)))
+        .map(m => ({ ...m, _bib: t.bib })))
         .map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status, gender: m.gender, isRelay: true }));
     return [...indiv, ...relayMembers];
 }
@@ -407,7 +403,6 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
 function stageSection(cfg, r, gapPool, overallGapPool) {
     const pos = lastReached(r.cp, cfg.dbStage);
     const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
-    const rStatus = withStageStatus(r, cfg.dbStage);
     const gaps = computeStageGaps(gapPool, cfg.dbStage);
     const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;
     const raceKey = r._bib ?? r.bib;
@@ -429,8 +424,8 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     // иначе "нет данных по плаванию" ложно трактуется как DNF на плавании
     // для велосипедиста/бегуна, у которых плавания попросту нет.
     const badge = r.relay_stage
-        ? (!pos && rStatus.status === 'active' ? '<span class="badge badge-live">На трассе</span>' : relayMemberStatusBadge(rStatus))
-        : statusBadge(rStatus, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage));
+        ? relayMemberStatusBadge(r, pos, STAGE_MAX_SEQ[cfg.dbStage])
+        : statusBadge(r, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage));
 
     return `<details class="stage" ${isCurrent ? 'open' : ''}>
         <summary>

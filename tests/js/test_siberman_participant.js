@@ -274,5 +274,19 @@ check('renderTeam() — "Итого команды" считается живь�
     assert.ok(!stats.includes('stat-val"></div><div class="stat-lbl">Итого команды'), `"Итого команды" должно показывать живое накопленное время: ${stats}`);
 });
 
+check('renderIndividual() — этап, который участник ещё не начал вовсе, показывает бейдж "—" (не "Финиш")', () => {
+    // Тот же баг, что и в results.html (withStageStatus, п.5 v7,
+    // 2026-08-03): раньше локальная копия withStageStatus в этом файле
+    // "тихо" подменяла статус на dnf для любого активного, ещё не
+    // финишировавшего этап участника — здесь проверяем итоговый бейдж
+    // конкретно этапа "Плавание" у того, кто ещё вообще не начал гонку.
+    const notStarted = { bib: 3, gender: 'M', status: 'active', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [notStarted], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, notStarted);
+    assert.ok(appEl.innerHTML.includes('badge-notstarted">—<'), `этап "Плавание" у ещё не стартовавшего должен показывать "—": ${appEl.innerHTML}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

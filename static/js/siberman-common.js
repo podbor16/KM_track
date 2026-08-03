@@ -122,6 +122,21 @@ function getDnfStage(r) {
     if (r.bike2_s == null) return 'bike2';
     return 'run';
 }
+// Бейдж для АКТИВНОГО (не dnf/dsq/dns) участника на конкретном СРЕЗЕ
+// (этап/гонка/день/Свод вело) — три состояния в зависимости от прогресса
+// именно на этом срезе: ещё не начал (ни одной КТ среза) → "—" (не
+// "На трассе" — раньше не различали "ещё не стартовал" и "уже в
+// процессе", 2026-08-03, запрошено пользователем); начал, но не дошёл до
+// конца среза → "На трассе"; дошёл до последней КТ среза → "Финиш".
+// pos — {seq,...}-подобный объект (или null) для ЭТОГО среза (например,
+// lastReached(cp, dbStage) для этапа, racePos(row, maxStage) для гонки/
+// дня, bikeCombinedLastPos(row) для Свода вело) — null означает "ещё не
+// начал". isFinished(pos) — предикат "это и есть последняя КТ среза".
+function activeProgressBadge(pos, isFinished) {
+    if (pos && isFinished(pos)) return '<span class="badge badge-fin">Финиш</span>';
+    if (pos) return '<span class="badge badge-live">На трассе</span>';
+    return '<span class="badge badge-notstarted">—</span>';
+}
 function statusBadge(r, stageKey) {
     const s = r.status;
     if (s === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
@@ -134,38 +149,32 @@ function statusBadge(r, stageKey) {
         if (diff === 0) return '<span class="badge badge-dnf">DNF</span>';
         return '<span class="badge badge-dns">Не стартовал</span>';
     }
-    // active — "Финиш" только если РЕАЛЬНО дошёл до последней КТ этапа, а
-    // не просто "есть хоть какое-то сырое время" (stageKey+'_s' заполняется
-    // ПРОГРЕССИВНО по мере прохождения каждой КТ, не только на финише —
-    // раньше это не проявлялось на архивных данных полностью законченной
-    // гонки, где "есть время" и "дошёл до финиша" совпадали; на живых
-    // частично заполненных данных — нет, см. 2026-08-03, тестовый прогон).
-    const hasTime = stageKey
-        ? lastReached(r.cp, TAB_TO_DB_STAGE[stageKey])?.seq === STAGE_MAX_SEQ[TAB_TO_DB_STAGE[stageKey]]
-        : r.overall_s != null;
-    return hasTime
-        ? '<span class="badge badge-fin">Финиш</span>'
-        : '<span class="badge badge-live">На трассе</span>';
+    // active
+    if (stageKey === null) {
+        const pos = racePos(r, null);
+        return activeProgressBadge(pos, p => p.stageIdx === STAGE_ORDER.indexOf('run') && p.seq === STAGE_MAX_SEQ.run);
+    }
+    const dbStage = TAB_TO_DB_STAGE[stageKey];
+    return activeProgressBadge(lastReached(r.cp, dbStage), p => p.seq === STAGE_MAX_SEQ[dbStage]);
 }
-function relayMemberStatusBadge(m) {
+function relayMemberStatusBadge(m, pos, maxSeq) {
     if (m.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     if (m.status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (m.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
-    return '<span class="badge badge-fin">Финиш</span>';
+    return activeProgressBadge(pos, p => p.seq === maxSeq);
 }
 // Статус ЭСТАФЕТНОЙ КОМАНДЫ целиком (не отдельного участника) — тот же
-// 3-состояний бейдж, что уже был у личников (statusBadge), но команда не
-// несёт своего "status" в API — используем упрощённый teamGapRow().status
-// (dnf любого члена → dnf команды) + реальную позицию в гонке (racePos) как
-// признак финиша — НЕ team.overall_s (это просто сумма любых уже готовых
-// времён трёх разных членов команды, растёт с первого же законченного
-// участка — становится ненулевым задолго до реального финиша всей
-// команды, см. 2026-08-03, тестовый прогон).
+// бейдж, что уже был у личников (statusBadge), но команда не несёт своего
+// "status" в API — используем упрощённый teamGapRow().status (dnf любого
+// члена → dnf команды) + реальную позицию в гонке (racePos), НЕ
+// team.overall_s (это просто сумма любых уже готовых времён трёх разных
+// членов команды, растёт с первого же законченного участка — становится
+// ненулевым задолго до реального финиша всей команды, см. 2026-08-03).
 function teamStatusBadge(team) {
     const tr = teamGapRow(team);
-    const notFinished = racePos(tr, null)?.seq !== STAGE_MAX_SEQ.run || tr.status !== 'active';
-    if (!notFinished) return '<span class="badge badge-fin">Финиш</span>';
-    return tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">На трассе</span>';
+    if (tr.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
+    if (tr.status !== 'active') return '<span class="badge badge-live">На трассе</span>';
+    return activeProgressBadge(racePos(tr, null), p => p.stageIdx === STAGE_ORDER.indexOf('run') && p.seq === STAGE_MAX_SEQ.run);
 }
 
 /* ──────────────── Этапы / контрольные точки ──────────────── */
