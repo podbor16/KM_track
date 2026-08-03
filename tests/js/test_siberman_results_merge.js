@@ -2361,5 +2361,31 @@ check('renderStage() — два реально активных участник
     assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `дальше проплывший (bib=2) должен идти выше по строкам таблицы: ${html}`);
 });
 
+check('renderStage() — при фильтре по полу эстафетчица, реально впереди по прогрессу, идёт ВЫШЕ личницы, а не отдельным блоком снизу', () => {
+    // Реальный баг (2026-08-03, тестовый прогон живых данных, фильтр
+    // "Женщины"): раньше "не финишировавшие" личники и эстафетчики просто
+    // СКЛЕИВАЛИСЬ двумя отдельными блоками (сначала все личники, потом все
+    // эстафетчики), а не сортировались вместе по live-позиции — эстафетчица-
+    // лидер оказывалась в самом низу таблицы, хотя была быстрее всех
+    // личниц. Баг был незаметен на архивных данных (там почти все успевали
+    // "финишировать" этот ранний этап), но на живой гонке, где никто ещё
+    // не финишировал, проявился максимально широко.
+    const soloSlower = mkTimerInd('158', { status: 'active', gender: 'F', swim_s: 1700, cp: { swim: { 4: 1700 } } });
+    const team = {
+        bib: '1048', team_name: 'Нас заставили',
+        members: [
+            { relay_stage: 'swim', status: 'active', gender: 'F', cp: { swim: { 4: 1234 } }, swim_s: 1234 }, // быстрее личницы, та же КТ
+            { relay_stage: 'bike', status: 'active', gender: 'M', cp: {}, bike1_s: null, bike2_s: null },
+            { relay_stage: 'run', status: 'active', gender: 'M', cp: {}, run_s: null },
+        ],
+    };
+    setRaceData([soloSlower], [team], Date.now());
+    setState('all', 'F');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">1048<') < html.indexOf('bib-cell">158<'),
+        `эстафетчица (быстрее, bib=1048) должна идти выше личницы (bib=158): ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

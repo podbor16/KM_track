@@ -930,50 +930,22 @@ function renderStage(stage) {
     // совпадает с status).
     const withStageStatus = r => ({ ...r, _rawStatus: r.status });
 
-    // "Сколько прошёл" на ЭТОМ этапе — тай-брейк для сортировки DNF-
-    // участников между собой, когда никто из сравниваемых не финишировал
-    // этап (запрошено пользователем 2026-08-02: кто прошёл дистанцию
-    // больше, тот выше).
-    const stageProgressKm = r => {
-        const pos = lastReached(r.cp, dbStage);
-        return pos ? CHECKPOINT_DIST_KM[dbStage][pos.seq] : 0;
-    };
-
     // _sortTime — закодированный ключ "дальше+быстрее" (posSortKey), а не
     // "сырое" время на последней КТ — иначе только что стартовавший этап
     // (маленькое накопленное время) ошибочно обгонял бы того, кто прошёл
     // намного дальше (2026-08-03, тестовый прогон живых данных). Работает
     // одинаково для ещё бегущих и уже финишировавших — для финишировавших
-    // вырождается в обычное сравнение по времени, тай-брейк по дистанции
-    // для DNF-vs-DNF (stageProgressKm) больше не нужен отдельно —
-    // posSortKey уже включает дистанцию как первичный ключ.
+    // вырождается в обычное сравнение по времени.
     const withSortTime = r => ({ ...r, _sortTime: posSortKey(lastReached(r.cp, dbStage)) });
     const rows = sortByStatus(individual.map(withStageStatus).map(withSortTime), '_sortTime');
-    let relayMembers = _fmt !== 'individual'
+    // Собственная сортировка здесь больше не нужна (была раньше, до
+    // 2026-08-03) — итоговый порядок строк личников+эстафетчиков вместе
+    // строится ниже, в orderedRows, единым posSortKey-сравнением.
+    const relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => t.members
             .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
             .map(m => withStageStatus({...m, _bib: t.bib, _team: t.team_name})))
         : [];
-    // Сортировать эстафеты: сначала реально финишировавшие этап (по времени),
-    // затем "тихие" DNF (есть частичное время, но не дошли до финиша), затем
-    // те, кто ещё не начал (нет данных вовсе). Внутри категории 1
-    // (частично прошли) — по дистанции последней КТ, кто дальше — выше
-    // (тот же тай-брейк, что и у личников, п. "блёклые внизу", 2026-08-02).
-    relayMembers = relayMembers.sort((a, b) => {
-        const catOf = m => {
-            const pos = lastReached(m.cp, dbStage);
-            if (!pos) return 2;
-            return pos.seq === maxSeq ? 0 : 1;
-        };
-        const catA = catOf(a), catB = catOf(b);
-        if (catA !== catB) return catA - catB;
-        if (catA === 1) return stageProgressKm(b) - stageProgressKm(a);
-        const ta = a[cfg.timeKey], tb = b[cfg.timeKey];
-        if (ta == null && tb == null) return 0;
-        if (ta == null) return 1;
-        if (tb == null) return -1;
-        return ta - tb;
-    });
 
     if (rows.length === 0 && relayMembers.length === 0) {
         document.getElementById('app').innerHTML = '<div class="empty">Нет данных</div>';
@@ -996,13 +968,6 @@ function renderStage(stage) {
 
     const showStart = stage === 'bike2';
 
-    // Присваиваем эстафетчикам, финишировавшим этап, собственный порядковый
-    // "Финишировал этап" — та же проверка, что раньше использовал ручной
-    // relayPos-счётчик; сам счётчик убран (см. ниже — единый ранг вместо него).
-    const relayMembersRanked = relayMembers.map(m => {
-        const pos = lastReached(m.cp, dbStage);
-        return { ...m, _finished: !!pos && pos.seq === maxSeq };
-    });
 
     // "Абсолют"/"По полу"/"Формат" — ранги СРЕДИ ВИДИМЫХ строк (rows +
     // relayMembers, уже отфильтрованы по текущим _fmt/_gender), не по
@@ -1102,39 +1067,30 @@ function renderStage(stage) {
         </tr>`;
     };
 
-    // Единый порядок: финишировавшие этот этап (личники + эстафетчики этой
-    // роли) перемежаются по времени, затем остальные (не финишировавшие
-    // личники — свой порядок sortByStatus, затем не финишировавшие
-    // эстафетчики) — без разделительной строки-заголовка "Эстафеты".
-    // "Финишировал" — РЕАЛЬНО дошёл до последней КТ этапа (lastReached),
-    // а не просто "есть какое-то сырое время" (r[cfg.timeKey] != null
-    // истинно с первой же пройденной КТ, не только на финише) — раньше
-    // эта проверка "маскировалась" уже убранной подменой status на 'dnf'
-    // (withStageStatus), из-за которой ни один реально активный участник
-    // сюда не попадал вовсе; без неё бага стала видна (2026-08-03).
-    const isTrulyFinishedStage = r => r.status === 'active' && lastReached(r.cp, dbStage)?.seq === maxSeq;
-    const rowsFinished = rows.filter(isTrulyFinishedStage);
-    const rowsRest = rows.filter(r => !isTrulyFinishedStage(r));
-    const relFinished = relayMembersRanked.filter(m => m._finished);
-    const relRest = relayMembersRanked.filter(m => !m._finished);
-
-    let orderedRows;
-    if (_fmt === 'all') {
-        const interleaved = [
-            ...rowsFinished.map(r => ({ type: 'individual', entry: r })),
-            ...relFinished.map(m => ({ type: 'relay', entry: m })),
-        ].sort((a, b) => a.entry[cfg.timeKey] - b.entry[cfg.timeKey]);
-        orderedRows = [
-            ...interleaved,
-            ...rowsRest.map(r => ({ type: 'individual', entry: r })),
-            ...relRest.map(m => ({ type: 'relay', entry: m })),
-        ];
-    } else {
-        orderedRows = [
-            ...rows.map(r => ({ type: 'individual', entry: r })),
-            ...relayMembersRanked.map(m => ({ type: 'relay', entry: m })),
-        ];
-    }
+    // Единый порядок: личники и эстафетчики этой роли сортируются ВМЕСТЕ
+    // по live-позиции на этапе (posSortKey), а не двумя отдельными
+    // склеенными блоками. Раньше "финишировавшие" (по сырому времени)
+    // одного типа перемежались с другим по времени, а "остальные" личники
+    // и эстафетчики просто СКЛЕИВАЛИСЬ друг за другом (сначала все
+    // личники, потом все эстафетчики) без реальной сортировки между
+    // типами. На архивных данных почти все успевали "финишировать" этот
+    // ранний этап, и блок "остальных" был коротким хвостом — баг был
+    // незаметен. На живой гонке, когда почти никто ещё не финишировал
+    // этап, это проявилось как "сначала ВСЕ личники, потом ВСЕ
+    // эстафетчики" независимо от реального прогресса (найдено
+    // пользователем 2026-08-03: лидер по прогрессу из эстафеты оказывался
+    // в самом низу таблицы). Статус-тир (активные впереди DNF/DSQ/DNS) —
+    // по rawStatus (истинный статус всей гонки, не "тихо" подменённый),
+    // сортировка внутри тира — по posSortKey (дальше по КТ — впереди, при
+    // равной КТ — быстрее); работает одинаково для ещё не
+    // финишировавших и уже финишировавших этап.
+    const orderedRows = sortByRawStatus(
+        [
+            ...rows.map(r => ({ type: 'individual', entry: r, rawStatus: r._rawStatus, cp: r.cp })),
+            ...relayMembers.map(m => ({ type: 'relay', entry: m, rawStatus: m._rawStatus, cp: m.cp })),
+        ],
+        item => posSortKey(lastReached(item.cp, dbStage))
+    ).map(({ type, entry }) => ({ type, entry }));
 
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
