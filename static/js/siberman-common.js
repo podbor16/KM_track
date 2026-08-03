@@ -332,22 +332,23 @@ function fmtGap(gapS) {
 
 // rows: [{key, cp, status?}] — вычисляет {key: gap_s} относительно лидера
 // пула (rows уже должны быть отфильтрованы по нужному разрезу: формат/пол/
-// роль). Лидером может быть только тот, кто реально ДОШЁЛ до последней КТ
-// этапа (pos.seq === maxSeq) — иначе сошедший на середине (без явной пометки
-// DNF в файле — status всё ещё 'active') всегда "выигрывал" бы по наименьшему
-// сырому времени, хотя прошёл меньше дистанции. Статус тоже проверяем — чтобы
-// явно дисквалифицированный/DNF не мог стать лидером, даже дойдя до финиша.
-// Gap при этом считается для всех, включая недошедших — от той же КТ,
-// которую они последней прошли.
+// роль). Статус проверяем — чтобы явно дисквалифицированный/DNF не мог стать
+// лидером, даже дойдя до финиша. Gap при этом считается для всех, включая
+// недошедших — от той же КТ, которую они последней прошли.
 function computeStageGaps(rows, dbStage) {
-    const maxSeq = STAGE_MAX_SEQ[dbStage];
     const withPos = rows
         .map(r => ({ key: r.key, cp: r.cp, status: r.status ?? 'active', pos: lastReached(r.cp, dbStage) }))
         .filter(r => r.pos);
     if (withPos.length === 0) return {};
-    const candidates = withPos.filter(r => r.status === 'active' && r.pos.seq === maxSeq);
+    // Лидер — участник, дальше всех продвинувшийся по этапу ПРЯМО СЕЙЧАС
+    // (posSortKey — дальше КТ всегда впереди), а не обязательно тот, кто
+    // уже дошёл до финиша этапа — иначе отставание оставалось бы пустым
+    // {} всю гонку, пока хоть кто-то не финиширует (найдено 2026-08-03 на
+    // тестовом прогоне живых данных). DNF/DSQ по-прежнему не может быть
+    // лидером (см. status-фильтр ниже).
+    const candidates = withPos.filter(r => r.status === 'active');
     if (candidates.length === 0) return {};
-    const leader = candidates.reduce((a, b) => (a.pos.value <= b.pos.value ? a : b));
+    const leader = candidates.reduce((a, b) => (posSortKey(a.pos) <= posSortKey(b.pos) ? a : b));
     const gaps = {};
     withPos.forEach(r => {
         if (r.key === leader.key) { gaps[r.key] = 0; return; }

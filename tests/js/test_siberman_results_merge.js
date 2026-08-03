@@ -1531,6 +1531,19 @@ check('bikeCombinedGaps — если у лидера ЕСТЬ сохранённ
     assert.strictEqual(gaps.B, 2000, `Отставание B = 12000 - 10000 = 2000: ${JSON.stringify(gaps)}`);
 });
 
+check('computeStageGaps — отставание считается ДО того, как кто-то финишировал этап (лидер = дальше всех прямо сейчас)', () => {
+    // У A есть свой сохранённый сплит на КТ1 (100с) — это НЕ тест "лидер без
+    // данных на КТ отстающего" (это отдельно покрыто bikeCombinedGaps, gap
+    // там не фабрикуется из воздуха), а тест именно на выбор ЛИДЕРА по
+    // live-прогрессу: A дальше всех (КТ4, 5,2 км), хотя его "сырое" время
+    // НА ЭТОЙ ЖЕ КТ4 (1380с) больше, чем "сырое" время B на КТ1 (120с).
+    const ahead = { key: 'A', status: 'active', cp: { swim: { 1: 100, 4: 1380 } } };  // 5,2 км
+    const behind = { key: 'B', status: 'active', cp: { swim: { 1: 120 } } };  // 1,3 км, но меньше "сырого" времени
+    const gaps = sandbox.computeStageGaps([ahead, behind], 'swim');
+    assert.strictEqual(gaps.A, 0, `A дальше всех — должен быть лидером с gap=0: ${JSON.stringify(gaps)}`);
+    assert.ok(gaps.B > 0, `B должен получить положительное отставание, а не остаться без записи: ${JSON.stringify(gaps)}`);
+});
+
 // ── currentStage(row, maxStage) — п.1 v6, 2026-08-02: ограничение границей
 // дня на вкладках "Дни" (раньше показывал этап "Бег", если участник уже
 // там отметился, хотя вкладка про вело) ──
@@ -1890,7 +1903,11 @@ check('renderStage() — настоящий DNF (raw) не получает от
     setState('all', 'all');
     sandbox.renderStage('run');
     const html = domGetAppHtml();
-    const rowMatch = html.match(/<tr[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    // (?!<tr) не даёт ленивому [\s\S]*? "перепрыгнуть" через границу строки
+    // bib=2 (теперь получает "Лидер" — этот фикс, 2026-08-03) и случайно
+    // захватить его time-gap-sub в матч для bib=1 (см. тот же приём выше,
+    // "renderOverall() — DNF-участник... не становится 'Лидером'").
+    const rowMatch = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/);
     assert.ok(rowMatch, `строка bib=1 не найдена: ${html}`);
     assert.ok(!rowMatch[0].includes('time-gap-sub'), `DNF не должна получать отставание: ${rowMatch[0]}`);
 });
