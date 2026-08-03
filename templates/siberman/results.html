@@ -917,26 +917,18 @@ function renderStage(stage) {
     const maxSeq = STAGE_MAX_SEQ[dbStage];
     const { individual, relay } = getFiltered();
 
-    // "Тихий" DNF на ЭТОМ этапе: participant.status==='active' в БД (в файле
-    // не было явной пометки DNF/ДНФ), но последняя пройденная КТ этапа —
-    // не финишная. Подменяем status на 'dnf' ТОЛЬКО в локальной копии для
-    // этой вкладки (не мутируя общие данные _data — на других вкладках/в
-    // Финале участник мог этот этап пройти полностью раньше). После подмены
-    // остальная логика (сортировка, бейдж статуса) отрабатывает как для
-    // обычного DNF — включая getDnfStage/statusBadge, которые уже умеют
-    // корректно показывать "Финишировал"/DNF/"Не стартовал" по этапам.
-    // _rawStatus сохраняет НАСТОЯЩИЙ статус (до "тихой" подмены) — нужен
-    // отдельно от status для отставаний (gapPool ниже): "тихий" DNF —
-    // просто "ещё не дошёл до финиша этого этапа" (может быть у реально
-    // активного участника прямо сейчас), а не настоящий DNF/DSQ, и не
-    // должен лишать его отставания. Настоящий DNF/DSQ (_rawStatus) —
-    // наоборот, не должен ничего получать, кроме своего времени (запрошено
-    // пользователем 2026-08-02).
-    const withStageStatus = r => {
-        const pos = lastReached(r.cp, dbStage);
-        const silentDnf = r.status === 'active' && pos && pos.seq !== maxSeq;
-        return { ...r, _rawStatus: r.status, ...(silentDnf ? { status: 'dnf' } : {}) };
-    };
+    // ОТКЛЮЧЕНО НА ВРЕМЯ ЖИВОЙ ГОНКИ (2026-08-03): раньше здесь была "тихая"
+    // подмена status на 'dnf' для любого participant.status==='active' в
+    // БД, кто ещё не дошёл до финишной КТ этапа — задумано для архивных
+    // данных (поймать того, кто молча сошёл, а организатор забыл явно
+    // пометить DNF в Excel). Во время ЖИВОЙ гонки это условие истинно
+    // почти для КАЖДОГО реально активного участника (он просто ещё не
+    // финишировал этап прямо сейчас) — подмена делала тусклыми/DNF-
+    // бейджами почти всех активных участников на этапах. Пока гонка идёт,
+    // доверяем только явному статусу из файла; _rawStatus сохранён для
+    // обратной совместимости с остальным кодом этой функции (сейчас всегда
+    // совпадает с status).
+    const withStageStatus = r => ({ ...r, _rawStatus: r.status });
 
     // "Сколько прошёл" на ЭТОМ этапе — тай-брейк для сортировки DNF-
     // участников между собой, когда никто из сравниваемых не финишировал
@@ -1104,7 +1096,9 @@ function renderStage(stage) {
             <td class="muted">${lastCpCell}</td>
             <td class="r muted">${hasTime ? meta : '—'}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td>${!hasTime && m.status === 'active' ? '<span class="badge badge-live">На трассе</span>' : relayMemberStatusBadge(m)}</td>
+            <td>${m.status !== 'active'
+                ? relayMemberStatusBadge(m)
+                : (pos && pos.seq === maxSeq ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>')}</td>
         </tr>`;
     };
 
@@ -1112,8 +1106,15 @@ function renderStage(stage) {
     // роли) перемежаются по времени, затем остальные (не финишировавшие
     // личники — свой порядок sortByStatus, затем не финишировавшие
     // эстафетчики) — без разделительной строки-заголовка "Эстафеты".
-    const rowsFinished = rows.filter(r => r[cfg.timeKey] != null && r.status === 'active');
-    const rowsRest = rows.filter(r => !(r[cfg.timeKey] != null && r.status === 'active'));
+    // "Финишировал" — РЕАЛЬНО дошёл до последней КТ этапа (lastReached),
+    // а не просто "есть какое-то сырое время" (r[cfg.timeKey] != null
+    // истинно с первой же пройденной КТ, не только на финише) — раньше
+    // эта проверка "маскировалась" уже убранной подменой status на 'dnf'
+    // (withStageStatus), из-за которой ни один реально активный участник
+    // сюда не попадал вовсе; без неё бага стала видна (2026-08-03).
+    const isTrulyFinishedStage = r => r.status === 'active' && lastReached(r.cp, dbStage)?.seq === maxSeq;
+    const rowsFinished = rows.filter(isTrulyFinishedStage);
+    const rowsRest = rows.filter(r => !isTrulyFinishedStage(r));
     const relFinished = relayMembersRanked.filter(m => m._finished);
     const relRest = relayMembersRanked.filter(m => !m._finished);
 
@@ -1288,6 +1289,13 @@ function renderRankedProgress(options = {}) {
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${entry.city ? `<span class="name-city">${entry.city}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
+        // "Финиш" в бейдже статуса — только если РЕАЛЬНО дошёл до конца
+        // ИМЕННО этого дня (item._pos на границе maxStage), а не просто
+        // "есть какое-то живое значение v" (hasVal — оно true с самого
+        // начала дня, как только появился хоть один чекпоинт, см.
+        // 2026-08-03, тестовый прогон: раньше "Финиш" показывался всем
+        // активным с первой же отметки дня).
+        const trulyFinishedDay = item._pos && item._pos.stageIdx === STAGE_ORDER.indexOf(maxStage) && item._pos.seq === STAGE_MAX_SEQ[maxStage];
         // Блёклая строка — по ОБЩЕМУ статусу гонки (см. sortByRawStatus).
         html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
             ${rankBodyCells(showGenderCol, absRank, secondaryRank, secondaryBadge, rc)}
@@ -1296,7 +1304,7 @@ function renderRankedProgress(options = {}) {
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="muted">${lastCpCell}</td>
             ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
-            <td>${progressStatusBadge(status, hasVal)}</td>
+            <td>${progressStatusBadge(status, trulyFinishedDay)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
@@ -1415,6 +1423,12 @@ function renderBikeCombined() {
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
+        // "Финиш" — только если РЕАЛЬНО дошёл до конца ОБОИХ вело-дней
+        // (421 км), а не просто "есть какое-то живое значение" (hasVal —
+        // оно true с первой же КТ вело-дня-1, см. 2026-08-03, тестовый
+        // прогон: раньше "Финиш" показывался всем активным велосипедистам
+        // с самого начала Дня 1).
+        const trulyFinishedBike = pos != null && pos.seq === maxVseq;
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
@@ -1425,7 +1439,7 @@ function renderBikeCombined() {
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
-            <td>${progressStatusBadge(status, hasVal)}</td>
+            <td>${progressStatusBadge(status, trulyFinishedBike)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';

@@ -134,8 +134,15 @@ function statusBadge(r, stageKey) {
         if (diff === 0) return '<span class="badge badge-dnf">DNF</span>';
         return '<span class="badge badge-dns">Не стартовал</span>';
     }
-    // active
-    const hasTime = stageKey ? r[stageKey + '_s'] != null : r.overall_s != null;
+    // active — "Финиш" только если РЕАЛЬНО дошёл до последней КТ этапа, а
+    // не просто "есть хоть какое-то сырое время" (stageKey+'_s' заполняется
+    // ПРОГРЕССИВНО по мере прохождения каждой КТ, не только на финише —
+    // раньше это не проявлялось на архивных данных полностью законченной
+    // гонки, где "есть время" и "дошёл до финиша" совпадали; на живых
+    // частично заполненных данных — нет, см. 2026-08-03, тестовый прогон).
+    const hasTime = stageKey
+        ? lastReached(r.cp, TAB_TO_DB_STAGE[stageKey])?.seq === STAGE_MAX_SEQ[TAB_TO_DB_STAGE[stageKey]]
+        : r.overall_s != null;
     return hasTime
         ? '<span class="badge badge-fin">Финиш</span>'
         : '<span class="badge badge-live">На трассе</span>';
@@ -149,10 +156,14 @@ function relayMemberStatusBadge(m) {
 // Статус ЭСТАФЕТНОЙ КОМАНДЫ целиком (не отдельного участника) — тот же
 // 3-состояний бейдж, что уже был у личников (statusBadge), но команда не
 // несёт своего "status" в API — используем упрощённый teamGapRow().status
-// (dnf любого члена → dnf команды) + team.overall_s как признак финиша.
+// (dnf любого члена → dnf команды) + реальную позицию в гонке (racePos) как
+// признак финиша — НЕ team.overall_s (это просто сумма любых уже готовых
+// времён трёх разных членов команды, растёт с первого же законченного
+// участка — становится ненулевым задолго до реального финиша всей
+// команды, см. 2026-08-03, тестовый прогон).
 function teamStatusBadge(team) {
     const tr = teamGapRow(team);
-    const notFinished = team.overall_s == null || tr.status !== 'active';
+    const notFinished = racePos(tr, null)?.seq !== STAGE_MAX_SEQ.run || tr.status !== 'active';
     if (!notFinished) return '<span class="badge badge-fin">Финиш</span>';
     return tr.status === 'dnf' ? '<span class="badge badge-dnf">DNF</span>' : '<span class="badge badge-live">На трассе</span>';
 }

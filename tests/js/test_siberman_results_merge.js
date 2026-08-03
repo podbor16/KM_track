@@ -2267,5 +2267,99 @@ check('renderOverall() — суб-колонки (Плав./Вело1/Вело2/
     assert.ok(!row1.includes('lead">Лидер'), `только начавший заплыв НЕ должен стать "Лидером" колонки Плав.: ${row1}`);
 });
 
+// ── Пост-деплой баги живой гонки (2026-08-03): "Финиш" показывался всем
+// активным участникам с первой же пройденной КТ (сырое поле не null =/=
+// реально дошёл до финиша), а "тихая" подмена status на 'dnf' (withStageStatus,
+// задумана 2026-08-02 для архивных данных — поймать молча сошедшего без
+// пометки DNF в Excel) на живой гонке ловила КАЖДОГО реально активного
+// участника и делала его тусклым. Оба механизма отключены/исправлены на
+// время живой гонки — статус теперь честно проверяет реальное достижение
+// финишной КТ (lastReached), а не наличие каких-либо данных ──
+check('renderStage() — активный участник посреди этапа показывает "На трассе", не "Финиш"', () => {
+    const midSwim = mkTimerInd('1', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } }); // 5,2 км, не финиш (10 км)
+    setRaceData([midSwim], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `посреди этапа должен быть статус "На трассе": ${html}`);
+    assert.ok(!html.includes('badge-fin">Финиш'), `не должно быть ложного "Финиш" посреди этапа: ${html}`);
+});
+check('renderStage() — активный участник посреди этапа НЕ блёклый (нет класса dnf)', () => {
+    const midSwim = mkTimerInd('1', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } });
+    setRaceData([midSwim], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    const row = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    const trOpenTag = row.match(/<tr class="([^"]*)"/)[1];
+    assert.ok(!trOpenTag.includes('dnf'), `активный участник посреди этапа не должен получать класс dnf: ${trOpenTag}`);
+});
+check('renderStage() — эстафетчик посреди этапа показывает "На трассе", не "Финиш"', () => {
+    const team = {
+        bib: '10', team_name: 'Команда 10',
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 4: 1380 } }, swim_s: 1380, gender: 'M', surname: 'Пловцов', name: 'Иван' },
+            { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: null, bike2_s: null, gender: 'M', surname: 'Велосипедов', name: 'Пётр' },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null, gender: 'M', surname: 'Бегунов', name: 'Сидор' },
+        ],
+    };
+    setRaceData([], [team], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `эстафетчик посреди этапа должен быть "На трассе": ${html}`);
+    assert.ok(!html.includes('badge-fin">Финиш'), `не должно быть ложного "Финиш" у эстафетчика посреди этапа: ${html}`);
+});
+check('renderOverall() — эстафетная команда посреди гонки показывает "На трассе", не "Финиш"', () => {
+    const team = {
+        bib: '10', team_name: 'Команда 10',
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 4: 1380 } }, swim_s: 1380, gender: 'M' },
+            { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: null, bike2_s: null, gender: 'M' },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null, gender: 'M' },
+        ],
+    };
+    setRaceData([], [team], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `команда посреди гонки (только 5,2 км заплыва) должна быть "На трассе": ${html}`);
+    assert.ok(!html.includes('badge-fin">Финиш'), `команда не должна получать "Финиш" только за то, что у одного члена есть частичное время: ${html}`);
+});
+check('renderBikeCombined() — активный посреди Дня 1 показывает "На трассе", не "Финиш"', () => {
+    const midDay1 = mkTimerInd('1', { status: 'active', swim_s: 0, cp: { bike_day1: { 2: 3600 } } });
+    setRaceData([midDay1], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `посреди Дня 1 должен быть статус "На трассе": ${html}`);
+    assert.ok(!html.includes('badge-fin">Финиш'), `не должно быть "Финиш" посреди Дня 1 (только 10 км из 421): ${html}`);
+});
+check('renderDay1() — активный посреди дня показывает "На трассе", не "Финиш"', () => {
+    const midDay1 = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4500 } } });
+    setRaceData([midDay1], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `посреди Дня 1 должен быть статус "На трассе": ${html}`);
+    assert.ok(!html.includes('badge-fin">Финиш'), `не должно быть "Финиш" посреди Дня 1: ${html}`);
+});
+check('renderStage() — два реально активных участника посреди этапа сортируются по прогрессу, не по сырому времени интерливинга', () => {
+    // Регресс, найденный при отключении "тихого DNF" (2026-08-03): раньше
+    // оба таких участника случайно проваливались в "rowsRest" (т.к. status
+    // был "тихо" подменён на dnf) и сохраняли верный порядок по _sortTime.
+    // После отключения подмены оба стали проходить фильтр "финишировавших"
+    // по сырому r[cfg.timeKey]!=null и пересортировывались НАПРЯМУЮ по
+    // сырому времени в interleaved-блоке — тот же класс бага, что и везде
+    // в этом плане, только в отдельном, не мигрированном месте.
+    const justStarted = mkTimerInd('1', { status: 'active', swim_s: 120, cp: { swim: { 1: 120 } } });
+    const farAlong = mkTimerInd('2', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } });
+    setRaceData([justStarted, farAlong], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `дальше проплывший (bib=2) должен идти выше по строкам таблицы: ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
