@@ -2486,6 +2486,54 @@ function render() {
     }
     else renderStage(_tab);
     autoScrollTabs();
+    syncUrlFromState();
+}
+
+/* ──────────────── Состояние в URL (сохранение таба/фильтров при
+   обновлении страницы) ──────────────── */
+// Раньше _tab/_bikeSubTab/_chartSubTab/_fmt/_gender жили только в
+// JS-переменных — обновление страницы (F5) сбрасывало их к дефолтам,
+// пользователь "перекидывался" на "Итоги гонки" со снятыми фильтрами
+// (2026-08-03, п.4 v7). Пишем текущее состояние в query-параметры при
+// каждом render() (history.replaceState — НЕ pushState, иначе кнопка
+// "назад" браузера шагала бы по каждому клику фильтра, а не по
+// осмысленным переходам) и читаем обратно при загрузке страницы.
+function syncUrlFromState() {
+    const params = new URLSearchParams();
+    params.set('tab', _tab);
+    if (_tab === 'bike') params.set('bikeSubTab', _bikeSubTab);
+    if (_tab === 'chart') params.set('chartSubTab', _chartSubTab);
+    if (_fmt !== 'all') params.set('fmt', _fmt);
+    if (_gender !== 'all') params.set('gender', _gender);
+    const qs = params.toString();
+    const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
+    if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
+}
+function readStateFromUrl() {
+    const params = new URLSearchParams(location.search);
+    const pick = (key, allowed, current) => {
+        const v = params.get(key);
+        return v && allowed.includes(v) ? v : current;
+    };
+    _tab = pick('tab', ['overall', 'swim', 'bike', 'run', 'day1', 'day2', 'chart', 'startlist'], _tab);
+    _bikeSubTab = pick('bikeSubTab', ['combined', 'bike1', 'bike2'], _bikeSubTab);
+    _chartSubTab = pick('chartSubTab', ['position', 'pace'], _chartSubTab);
+    _fmt = pick('fmt', ['all', 'individual', 'relay'], _fmt);
+    _gender = pick('gender', ['all', 'M', 'F'], _gender);
+    // Тот же инвариант, что и в click-обработчике фильтра формата — у
+    // эстафеты нет личного пола на командных вкладках, "Пол" должен
+    // остаться "Все" (защита от вручную собранного/устаревшего URL).
+    if (_fmt === 'relay') _gender = 'all';
+}
+// #tabs/#bikeSubTabs/фильтры формата и пола — статичная разметка в HTML
+// (не перерисовываются render()-ом), поэтому класс "active" нужно
+// проставить вручную под восстановленное из URL состояние ДО первого
+// render() — иначе кнопки визуально не совпадут с реально открытым табом.
+function syncStaticButtonClasses() {
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === _tab));
+    document.querySelectorAll('#bikeSubTabs .tab').forEach(t => t.classList.toggle('active', t.dataset.biketab === _bikeSubTab));
+    document.querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('active', b.dataset.fmt === _fmt));
+    document.querySelectorAll('[data-gender]').forEach(b => b.classList.toggle('active', b.dataset.gender === _gender));
 }
 
 /* ──────────────── Data loading ──────────────── */
@@ -2576,6 +2624,8 @@ document.querySelectorAll('[data-gender]').forEach(btn => {
     });
 });
 
+readStateFromUrl();
+syncStaticButtonClasses();
 loadYear(2025);
 </script>
 </body>

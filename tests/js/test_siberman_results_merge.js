@@ -70,6 +70,12 @@ const sandbox = {
     getComputedStyle: () => ({ getPropertyValue: () => '#6AABD7' }),
     Chart: ChartStub,
     window: {},
+    // Стаб для чтения/записи состояния таба/фильтров в URL (п.4 v7,
+    // 2026-08-03) — history.replaceState просто запоминает последний URL,
+    // location.search тесты не используют напрямую (стартуют с дефолтов).
+    URLSearchParams,
+    location: { pathname: '/', search: '', hash: '' },
+    history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
     // Тесты по умолчанию эмулируют десктоп с мышью (не мобильный виджет
     // выбора участников, не touch-специфичное отключение клика по линии) —
     // matches:false для любого запроса, если тесту не нужно другое.
@@ -2499,6 +2505,34 @@ check('renderDay1() — эстафетная команда с DNF на дне 3
     const statsHtml = domGetAppHtml();
     assert.ok(statsHtml.includes('1 финишировало'), `команда, реально прошедшая День 1, должна считаться финишировавшей, несмотря на DNF на дне 3: ${statsHtml}`);
     assert.ok(!statsHtml.includes('1 DNF/DSQ'), `не должно быть DNF на "Дне 1" — DNF случился на дне 3: ${statsHtml}`);
+});
+
+// ── Сохранение таба/фильтров в URL при обновлении страницы — п.4 v7,
+// 2026-08-03: раньше состояние жило только в JS-переменных, F5 сбрасывал
+// пользователя на "Итоги гонки" со снятыми фильтрами ──
+check('syncUrlFromState()/readStateFromUrl() — состояние переживает "обновление страницы"', () => {
+    setRaceData([], [], Date.now());
+    vm.runInContext(`_tab = 'run'; _fmt = 'relay'; _gender = 'all';`, sandbox);
+    sandbox.render();
+    assert.ok(sandbox.location.search.includes('tab=run'), `URL должен содержать tab=run: ${sandbox.location.search}`);
+    assert.ok(sandbox.location.search.includes('fmt=relay'), `URL должен содержать fmt=relay: ${sandbox.location.search}`);
+    // "Обновление страницы" — читаем состояние заново из того же URL.
+    vm.runInContext(`_tab = 'overall'; _fmt = 'all'; _gender = 'all';`, sandbox); // дефолты, как при чистой загрузке
+    sandbox.readStateFromUrl();
+    assert.strictEqual(vm.runInContext('_tab', sandbox), 'run', 'таб должен восстановиться');
+    assert.strictEqual(vm.runInContext('_fmt', sandbox), 'relay', 'формат должен восстановиться');
+});
+check('readStateFromUrl() — невалидное/незнакомое значение параметра игнорируется, остаётся дефолт', () => {
+    sandbox.location.search = '?tab=hacked&fmt=bogus';
+    vm.runInContext(`_tab = 'overall'; _fmt = 'all';`, sandbox);
+    sandbox.readStateFromUrl();
+    assert.strictEqual(vm.runInContext('_tab', sandbox), 'overall', 'невалидный tab должен быть проигнорирован');
+    assert.strictEqual(vm.runInContext('_fmt', sandbox), 'all', 'невалидный fmt должен быть проигнорирован');
+});
+check('readStateFromUrl() — fmt=relay в URL всегда приводит gender к "all" (тот же инвариант, что в клике)', () => {
+    sandbox.location.search = '?tab=swim&fmt=relay&gender=M';
+    sandbox.readStateFromUrl();
+    assert.strictEqual(vm.runInContext('_gender', sandbox), 'all', 'при эстафете пол должен сброситься на "все", даже если в URL было другое');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
