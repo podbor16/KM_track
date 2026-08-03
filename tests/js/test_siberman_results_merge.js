@@ -310,20 +310,142 @@ check('buildPositionDatasets — X учитывает STAGE_KM_OFFSET, Y = гл�
 // личники+эстафета вместе (п.14 задачи 2026-07-19: раньше личники (rank_overall
 // из БД) и эстафета (relayPos-счётчик в разметке) ранжировались раздельно,
 // что давало дублирующиеся места "1, 1, 2, 2..." при интерливинге ──
-check('computeCombinedOverallRanks — единая последовательность 1,2,3... без дублей', () => {
-    const individual = [mkInd(1, 22 * 3600), mkInd(2, 23 * 3600)];
-    const relay = [mkRelay(10, 22.2 * 3600)]; // между личником 1 и 2 по времени
+function mkFinishedRow(bib, totalS, status = 'active') {
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    return { bib, status, gender: 'M', swim_s: 0, bike1_s: 0, bike2_s: 0, run_s: status === 'active' ? totalS : null, cp: { run: { [maxSeqRun]: totalS } } };
+}
+function mkFinishedRelay(bib, totalS) {
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    return {
+        bib, team_name: `Team${bib}`,
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: {}, swim_s: 0 },
+            { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: 0, bike2_s: 0 },
+            { relay_stage: 'run', status: 'active', cp: { run: { [maxSeqRun]: totalS } }, run_s: totalS },
+        ],
+    };
+}
+check('computeCombinedOverallRanks — единая последовательность 1,2,3... без дублей (live, по racePos)', () => {
+    const individual = [mkFinishedRow(1, 22 * 3600), mkFinishedRow(2, 23 * 3600)];
+    const relay = [mkFinishedRelay(10, 22.2 * 3600)]; // между личником 1 и 2 по времени
     const rows = sandbox.combinedOverallRankRows(individual, relay);
-    const ranks = sandbox.computeCombinedOverallRanks(rows);
+    const ranks = sandbox.computeCombinedOverallRanks(rows, null);
     assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1, 10: 2, 2: 3 }));
 });
-
-check('computeCombinedOverallRanks — не финишировавшие (null/dnf) не получают место', () => {
-    const individual = [mkInd(1, 100), mkInd(2, null, 'dnf')];
-    const relay = [mkRelay(10, null)];
+check('computeCombinedOverallRanks — не финишировавшие (null прогресс/dnf) не получают место', () => {
+    const individual = [mkFinishedRow(1, 100), { bib: 2, status: 'dnf', gender: 'M', cp: {} }];
+    const relay = [{ bib: 10, team_name: 'Team10', members: [] }]; // без прогресса вовсе
     const rows = sandbox.combinedOverallRankRows(individual, relay);
-    const ranks = sandbox.computeCombinedOverallRanks(rows);
+    const ranks = sandbox.computeCombinedOverallRanks(rows, null);
     assert.strictEqual(JSON.stringify(ranks), JSON.stringify({ 1: 1 }));
+});
+check('computeCombinedOverallRanks — считает место ДО финиша всей гонки (live)', () => {
+    const a = { bib: 1, status: 'active', gender: 'M', swim_s: 4000, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4500 } } }; // уже на вело
+    const b = { bib: 2, status: 'active', gender: 'M', swim_s: null, cp: { swim: { 4: 1380 } } }; // ещё плывёт
+    const rows = sandbox.combinedOverallRankRows([a, b], []);
+    const ranks = sandbox.computeCombinedOverallRanks(rows, null);
+    assert.strictEqual(ranks[1], 1, `участник уже на вело должен быть 1-м местом: ${JSON.stringify(ranks)}`);
+    assert.strictEqual(ranks[2], 2, `участник ещё плывёт должен быть 2-м: ${JSON.stringify(ranks)}`);
+});
+
+// Регрессия на саму причину бага задачи 4: раньше место требовало overall_s
+// (полный финиш ВСЕЙ гонки), а до этого момента эстафета получала
+// незаслуженное преимущество через накапливающийся overall_s команды —
+// личник с бОльшим реальным прогрессом мог оказаться позади ещё не
+// финишировавшей эстафеты. Тест закрепляет: место — по racePos (реальная
+// точка на дистанции), НЕ по типу участника — проверено в обе стороны.
+check('computeCombinedOverallRanks — mid-race личник и mid-race эстафета вместе: место по прогрессу, не по типу', () => {
+    // Личник уже на вело (дальше), эстафета ещё плывёт (позади).
+    const soloOnBike = { bib: 1, status: 'active', gender: 'M', swim_s: 4000, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4500 } } };
+    const relayStillSwimming = {
+        bib: 10, team_name: 'Team10',
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 4: 1380 } }, swim_s: null },
+            { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: null, bike2_s: null },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null },
+        ],
+    };
+    let rows = sandbox.combinedOverallRankRows([soloOnBike], [relayStillSwimming]);
+    let ranks = sandbox.computeCombinedOverallRanks(rows, null);
+    assert.strictEqual(ranks[1], 1, `личник дальше (уже на вело) — должен быть 1-м: ${JSON.stringify(ranks)}`);
+    assert.strictEqual(ranks[10], 2, `эстафета ещё плывёт — должна быть 2-й: ${JSON.stringify(ranks)}`);
+
+    // Наоборот: эстафета уже на вело (дальше), личник ещё плывёт (позади) —
+    // то же преимущество не должно доставаться личнику просто по типу.
+    const soloStillSwimming = { bib: 2, status: 'active', gender: 'M', swim_s: null, cp: { swim: { 4: 1380 } } };
+    const relayOnBike = {
+        bib: 11, team_name: 'Team11',
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 7: 4000 } }, swim_s: 4000 },
+            { relay_stage: 'bike', status: 'active', cp: { bike_day1: { 2: 4500 } }, bike1_s: null, bike2_s: null },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null },
+        ],
+    };
+    rows = sandbox.combinedOverallRankRows([soloStillSwimming], [relayOnBike]);
+    ranks = sandbox.computeCombinedOverallRanks(rows, null);
+    assert.strictEqual(ranks[11], 1, `эстафета дальше (уже на вело) — должна быть 1-й: ${JSON.stringify(ranks)}`);
+    assert.strictEqual(ranks[2], 2, `личник ещё плывёт — должен быть 2-м: ${JSON.stringify(ranks)}`);
+});
+
+check('computeOverallGaps — отставание считается ДО того, как кто-то финишировал всю гонку', () => {
+    // ПРИМЕЧАНИЕ: cp.swim[4] у ahead добавлен сверх буквального текста плана —
+    // computeOverallGaps ищет значение лидера ТОЧНО на seq отстающего (без
+    // поиска "назад", как computeStageGaps), это поведение не менялось этой
+    // задачей. Без записи на этой же КТ лидер (уже уехавший на вело) не даёт
+    // сравнимого значения, и gap для B не проставляется вовсе — найдено
+    // реальным прогоном.
+    const ahead = { key: 'A', status: 'active', gender: 'M', swim_s: 4000, cp: { swim: { 4: 1200, 7: 4000 }, bike_day1: { 2: 4500 } } };
+    const behind = { key: 'B', status: 'active', gender: 'M', swim_s: null, cp: { swim: { 4: 1380 } } };
+    const gaps = sandbox.computeOverallGaps([ahead, behind]);
+    assert.strictEqual(gaps.A, 0, `A дальше всех — лидер, gap=0: ${JSON.stringify(gaps)}`);
+    assert.ok(gaps.B > 0, `B должен получить положительное отставание: ${JSON.stringify(gaps)}`);
+});
+check('computeOverallGaps — с maxStage ограничивается днём (переиспользуется на вкладках "Дни")', () => {
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    // ПРИМЕЧАНИЕ: cp.bike_day1[2] у finishedDay1 добавлен сверх буквального
+    // текста плана — та же причина, что и в тесте выше: без записи ТОЧНО на
+    // seq=2 (позиция midDay1) у лидера нет сравнимого значения, и gaps.B
+    // остаётся undefined вместо положительного отставания.
+    const finishedDay1 = { key: 'A', status: 'active', swim_s: 4000, bike1_s: 4500, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4300, [maxSeqBike1]: 8500 }, run: { 3: 20000 } } };
+    const midDay1 = { key: 'B', status: 'active', swim_s: 4200, cp: { swim: { 7: 4200 }, bike_day1: { 2: 5000 } } };
+    const gaps = sandbox.computeOverallGaps([finishedDay1, midDay1], 'bike_day1');
+    assert.strictEqual(gaps.A, 0, `A дальше всех В ПРЕДЕЛАХ ДНЯ 1 (бег из cp игнорируется) — лидер: ${JSON.stringify(gaps)}`);
+    assert.ok(gaps.B > 0);
+});
+check('computeOverallGaps — mid-race личник vs mid-race эстафета: лидер по прогрессу в обе стороны', () => {
+    // Сборка строк идентична реальному вызову в renderOverall()
+    // (results.html:825-828): teamGapRow(team) для эстафеты, {key, cp,
+    // status, ...} для личника — computeOverallGaps не должен отличать их.
+    // ПРИМЕЧАНИЕ: cp.swim[4] у лидера (уже на вело) добавлен сверх минимума —
+    // та же причина, что и в тесте "отставание считается ДО того, как кто-то
+    // финишировал" выше: computeOverallGaps ищет значение лидера ТОЧНО на seq
+    // отстающего, без записи на этой же КТ gap не проставляется вовсе.
+    const soloOnBike = { key: 1, cp: { swim: { 4: 1200, 7: 4000 }, bike_day1: { 2: 4500 } }, status: 'active', swim_s: 4000, bike1_s: null, bike2_s: null, run_s: null };
+    const relayStillSwimming = sandbox.teamGapRow({
+        bib: 10,
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 4: 1380 } }, swim_s: null },
+            { relay_stage: 'bike', status: 'active', cp: {}, bike1_s: null, bike2_s: null },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null },
+        ],
+    });
+    let gaps = sandbox.computeOverallGaps([soloOnBike, relayStillSwimming]);
+    assert.strictEqual(gaps[1], 0, `личник дальше (уже на вело) — лидер: ${JSON.stringify(gaps)}`);
+    assert.ok(gaps[10] > 0, `эстафета позади (ещё плывёт) — положительное отставание: ${JSON.stringify(gaps)}`);
+
+    // Наоборот: эстафета дальше (уже на вело) — лидер, личник ещё плывёт.
+    const soloStillSwimming = { key: 2, cp: { swim: { 4: 1380 } }, status: 'active', swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    const relayOnBike = sandbox.teamGapRow({
+        bib: 11,
+        members: [
+            { relay_stage: 'swim', status: 'active', cp: { swim: { 4: 1200, 7: 4000 } }, swim_s: 4000 },
+            { relay_stage: 'bike', status: 'active', cp: { bike_day1: { 2: 4500 } }, bike1_s: null, bike2_s: null },
+            { relay_stage: 'run', status: 'active', cp: {}, run_s: null },
+        ],
+    });
+    gaps = sandbox.computeOverallGaps([soloStillSwimming, relayOnBike]);
+    assert.strictEqual(gaps[11], 0, `эстафета дальше (уже на вело) — лидер: ${JSON.stringify(gaps)}`);
+    assert.ok(gaps[2] > 0, `личник позади (ещё плывёт) — положительное отставание: ${JSON.stringify(gaps)}`);
 });
 
 // ── computeAutoScrollTab() — п.1 задачи 2026-07-19 (визуальный скролл

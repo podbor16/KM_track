@@ -661,22 +661,27 @@ function dayProgressKm(row, maxStage) {
     return pos ? STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][pos.seq] : 0;
 }
 
-function computeOverallGaps(rows) {
+function computeOverallGaps(rows, maxStage) {
     const withPos = rows.map(r => {
-        const stage = currentStage(r);
+        const stage = currentStage(r, maxStage);
         if (!stage) return null;
-        const pos = lastReached(r.cp, stage);
-        const value = globalProgress(r, stage, pos.seq);
-        return value == null ? null : { key: r.key, cp: r.cp, row: r, status: r.status ?? 'active', stage, seq: pos.seq, value };
+        // racePos() пересчитывает currentStage() ещё раз внутри себя — та же
+        // дешёвая функция, дублирующий вызов не оптимизируется намеренно
+        // (см. её комментарий); stage оставлен отдельной переменной, т.к.
+        // racePos() не возвращает имя этапа, только его индекс.
+        const pos = racePos(r, maxStage);
+        return pos.value == null ? null : { key: r.key, cp: r.cp, row: r, status: r.status ?? 'active', stage, stageIdx: pos.stageIdx, seq: pos.seq, value: pos.value };
     }).filter(Boolean);
     if (withPos.length === 0) return {};
-    // Лидер — только среди тех, кто реально финишировал ВСЮ гонку (дошёл до
-    // последней КТ бега), тот же резон, что и в computeStageGaps: иначе
-    // сошедший рано (без явной пометки DNF) "выигрывал" бы по наименьшему
-    // сырому времени.
-    const candidates = withPos.filter(r => r.status === 'active' && r.stage === 'run' && r.seq === STAGE_MAX_SEQ.run);
+    // Лидер — участник, дальше всех продвинувшийся ПРЯМО СЕЙЧАС по всей
+    // гонке (или по "Дню", если maxStage задан) — та же живая модель, что
+    // и в computeStageGaps (2026-08-03): раньше "Отставание" в Итогах
+    // гонки оставалось пустым {} всю гонку до первого финишера 515 км.
+    const candidates = withPos.filter(r => r.status === 'active');
     if (candidates.length === 0) return {};
-    const leader = candidates.reduce((a, b) => (a.value <= b.value ? a : b));
+    // raceSortKey() читает только .stageIdx/.seq/.value — withPos-элементы
+    // уже содержат их напрямую, пересборка отдельного объекта не нужна.
+    const leader = candidates.reduce((a, b) => (raceSortKey(a) <= raceSortKey(b) ? a : b));
     const gaps = {};
     withPos.forEach(r => {
         if (r.key === leader.key) { gaps[r.key] = 0; return; }
@@ -709,14 +714,15 @@ function teamGapRow(team) {
 }
 
 // rows для computeCombinedOverallRanks — личники и эстафета в одной форме
-// {key, overall_s, status}. Личники (rank_overall) и эстафета (считается
-// на клиенте) раньше ранжировались раздельно — единого "абсолютного" места
-// по всей гонке (личники+эстафета вместе) не было нигде. Эта пара функций
-// его вводит.
+// {key, row, status}, где row — "виртуальный участник" (сырая строка
+// личника или teamGapRow() команды), пригодный для racePos()/raceSortKey.
+// Личники (rank_overall) и эстафета (считается на клиенте) раньше
+// ранжировались раздельно — единого "абсолютного" места по всей гонке
+// (личники+эстафета вместе) не было нигде. Эта пара функций его вводит.
 function combinedOverallRankRows(individual, relay) {
     return [
-        ...individual.map(r => ({ key: r.bib, overall_s: r.overall_s, status: r.status })),
-        ...relay.map(t => ({ key: t.bib, overall_s: t.overall_s, status: teamGapRow(t).status })),
+        ...individual.map(r => ({ key: r.bib, row: r, status: r.status })),
+        ...relay.map(t => ({ key: t.bib, row: teamGapRow(t), status: teamGapRow(t).status })),
     ];
 }
 
@@ -746,6 +752,12 @@ function computeRanksByValue(rows) {
     });
     return ranks;
 }
-function computeCombinedOverallRanks(rows) {
-    return computeRanksByValue(rows.map(r => ({ key: r.key, val: r.overall_s, status: r.status })));
+// Единое место по всей гонке (или по "Дню", если maxStage задан) —
+// личники+эстафета вместе, по ЖИВОЙ позиции в гонке (racePos/raceSortKey
+// — дальше по маршруту всегда впереди, сравнимо и до, и после финиша).
+// Раньше требовался overall_s — у личника null всю гонку до полного
+// финиша всех 4 этапов сразу (2026-08-03: места не считались вообще, ни
+// одного, пока никто не закончил гонку целиком).
+function computeCombinedOverallRanks(rows, maxStage) {
+    return computeRanksByValue(rows.map(r => ({ key: r.key, val: raceSortKey(racePos(r.row, maxStage)), status: r.status })));
 }
