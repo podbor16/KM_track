@@ -153,7 +153,8 @@ check('fmt=individual — эстафета не подмешивается', () 
     assert.strictEqual(merged[0].type, 'individual');
 });
 
-// ── buildRankedEntries()/bikeCombinedTime()/day1Progress()/day2Progress() ──
+// ── buildRankedEntries() — переиспользует racePos/raceSortKey (та же
+// модель, что и Итоги гонки, Задача 7), maxStage вместо getValue ──
 function mkIndProgress(bib, overrides = {}) {
     return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
 }
@@ -167,37 +168,21 @@ function mkRelayProgress(bib, membersOverrides) {
         ],
     };
 }
-
-check('buildRankedEntries — сортировка по значению, null (не дошедшие/dnf) — в хвост', () => {
+check('buildRankedEntries — сортировка по live-позиции (maxStage=bike_day1), null (не начали День 1/dnf) — в хвост', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const individual = [
-        mkIndProgress(1, { bike1_s: 100, bike2_s: 200 }),        // 300
-        mkIndProgress(2, { bike1_s: 50, bike2_s: null }),        // null (ещё не доехал день2)
-        mkIndProgress(3, { bike1_s: 40, bike2_s: 60, status: 'dnf' }), // dnf -> null несмотря на времена
+        mkIndProgress(1, { swim_s: 100, bike1_s: 200, cp: { swim: { 7: 100 }, bike_day1: { [n1]: 300 } } }),   // финишировал День 1: 300
+        mkIndProgress(2, { swim_s: 50, cp: { swim: { 7: 50 } } }),                                              // ещё плывёт (в рамках Дня 1)
+        mkIndProgress(3, { swim_s: 40, bike1_s: 60, status: 'dnf', cp: { swim: { 7: 40 }, bike_day1: { 2: 100 } } }), // dnf
     ];
-    const relay = [mkRelayProgress(10, { bike1_s: 30, bike2_s: 40 })]; // 70
-    const entries = sandbox.buildRankedEntries(individual, relay, sandbox.bikeCombinedTime);
+    const relay = [mkRelayProgress(10, { swim_s: 30, swimCp: { swim: { 7: 30 } }, bike1_s: 40, bikeCp: { bike_day1: { [n1]: 70 } } })]; // 70, финишировал День 1
+    const entries = sandbox.buildRankedEntries(individual, relay, 'bike_day1');
     const order = entries.map(e => e.entry.bib);
     assert.strictEqual(JSON.stringify(order), JSON.stringify([10, 1, 2, 3]), `expected [10,1,2,3], got [${order}]`);
     assert.strictEqual(entries[0].v, 70);
     assert.strictEqual(entries[1].v, 300);
-    assert.strictEqual(entries[2].v, null);
-});
-
-check('day1Progress/day2Progress используют globalProgress по STAGE_MAX_SEQ', () => {
-    // STAGE_MAX_SEQ объявлен как const внутри исполненного скрипта — та же
-    // лексическая изоляция, что и у _gender/_fmt, читаем через runInContext.
-    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
-    const maxSeqBike2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
-    const row = {
-        cp: {
-            bike_day1: { [maxSeqBike1]: 5000 },
-            bike_day2: { [maxSeqBike2]: 9000 },
-        },
-        swim_s: 1000, bike1_s: 4000, bike2_s: 8000, run_s: null,
-    };
-    assert.strictEqual(sandbox.day1Progress(row), 5000);
-    // bike_day2 elapsed отсчитывается от старта СВОЕГО этапа -> + swim_s + bike1_s
-    assert.strictEqual(sandbox.day2Progress(row), 1000 + 4000 + 9000);
+    assert.ok(entries[2].v > 0, 'участник 2 ещё плывёт — v = live-прогресс, не null');
+    assert.strictEqual(entries[3].v, null, 'dnf без активного статуса — v всегда null');
 });
 
 // ── Живой секундомер этапа: stageStartOffset()/stageIsPending()/computeActiveStageTimers() ──
@@ -1444,6 +1429,15 @@ check('renderRankedProgress() (Дни) — 2 колонки рангов как 
     assert.ok(!html.includes('Абсолют'), `отдельная колонка "Абсолют" не нужна (место уже абсолютное): ${html.slice(0,700)}`);
     assert.ok(html.includes('badge-fin">Финиш<'), `статус должен быть "Финиш" (унифицировано с Итогами/Этапами, п.6 v6): ${html}`);
 });
+check('renderDay1() — живое "Время" показывается ДО завершения Дня 1 (не "—")', () => {
+    const midDay1 = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4500 } } }); // ещё в Дне 1
+    setRaceData([midDay1], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const row = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(!/time-cell">\s*<span class="muted">—<\/span>/.test(row), `"Время" не должно быть пустым до конца Дня 1: ${row}`);
+});
 check('renderRankedProgress() (Дни) — отставание ПУЛ-ОТНОСИТЕЛЬНОЕ (от лидера текущего фильтра), не абсолютное (п.10 v5)', () => {
     setState('individual', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
@@ -1468,19 +1462,20 @@ check('renderRankedProgress() (Дни) — отставание ПУЛ-ОТНО�
     const expectedGap = vm.runInContext('fmtGap(1000)', sandbox); // 6000-5000
     assert.ok(slowRow[0].includes(expectedGap), `bib=2 отстаёт от bib=1 (видимый лидер) на ${expectedGap}, не от невидимой эстафеты: ${slowRow[0]}`);
 });
-check('poolGap — отставание внутри пула считается от лидера пула (наименьшее v)', () => {
+check('День 1 — отставание внутри пула считается от лидера пула (computeOverallGaps, вместо удалённой poolGap)', () => {
     setState('all', 'all');
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
-    // day1Progress = globalProgress(row, 'bike_day1', seq), которая читает
-    // row.cp.bike_day1[seq] — checkpoint обязателен, одного bike1_s
-    // недостаточно (bike1_s используется лишь для day2/run-этапов).
     const rowA = mkTimerInd('1', { gender: 'M', swim_s: 1000, bike1_s: 4000, cp: { bike_day1: { [maxSeqB1]: 4000 } } });
     const rowB = mkTimerInd('2', { gender: 'M', swim_s: 1000, bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
     setRaceData([rowA, rowB], [], Date.now());
-    const entries = sandbox.buildRankedEntries([rowA, rowB], [], vm.runInContext('day1Progress', sandbox));
-    const gaps = sandbox.poolGap(entries);
-    assert.strictEqual(gaps['1'], 0, `лидер (меньший v) — отставание 0: ${JSON.stringify(gaps)}`);
-    assert.strictEqual(gaps['2'], 1000, `отстающий — разница v: ${JSON.stringify(gaps)}`);
+    sandbox.renderDay1();
+    const html = domGetAppHtml();
+    const leaderRow = html.match(/<tr class="[^"]*"[^>]*>[\s\S]*?bib-cell">1<[\s\S]*?<\/tr>/);
+    const slowRow = html.match(/<tr class="[^"]*"[^>]*>[\s\S]*?bib-cell">2<[\s\S]*?<\/tr>/);
+    assert.ok(leaderRow && slowRow, `обе строки должны быть найдены: ${html}`);
+    assert.ok(leaderRow[0].includes('Лидер'), `лидер пула (меньший v) — "Лидер": ${leaderRow[0]}`);
+    const expectedGap = vm.runInContext('fmtGap(1000)', sandbox);
+    assert.ok(slowRow[0].includes(expectedGap), `отстающий — разница v: ${slowRow[0]}`);
 });
 check('День 1 — Место (абсолют) = ранг среди ВИДИМЫХ строк текущего фильтра, невидимая эстафета не "съедает" места (откат 2026-07-24)', () => {
     setState('individual', 'all');
@@ -1955,7 +1950,15 @@ check('renderDay1() — два DNF, ни один не финишировал Д
     // Оба DNF на вело1 (не дошли до финиша дня), но A уже проплыл больше.
     const farther = mkTimerInd('1', { status: 'dnf', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { 2: 2000 } } });
     const closer = mkTimerInd('2', { status: 'dnf', swim_s: 1000, cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { 1: 500 } } });
-    setRaceData([farther, closer], [], Date.now());
+    // Порядок входного массива нарочно ОБРАТНЫЙ ожидаемому результату
+    // (closer первым, farther вторым): старая (сломанная) логика — pos
+    // вычисляется только для 'active' статуса, оба DNF получают
+    // _pos=null — даёт sortByRawStatus неразличимые ключи, стабильная
+    // сортировка сохраняет порядок ВХОДА, и тест бы упал. Новая логика
+    // (racePos считается безусловно) обязана отсортировать по реальному
+    // прогрессу независимо от порядка входа — так тест дискриминирует
+    // старое/новое поведение, а не просто наследует порядок фикстуры.
+    setRaceData([closer, farther], [], Date.now());
     setState('all', 'all');
     sandbox.renderDay1();
     const html = domGetAppHtml();

@@ -649,18 +649,6 @@ function dayStatus(row, maxStage) {
     return (pos && pos.seq === STAGE_MAX_SEQ[maxStage]) ? 'active' : row.status;
 }
 
-// "Сколько км в гонке прошёл" (ограничено maxStage, если задан) — для
-// сортировки DNF-участников МЕЖДУ СОБОЙ на "Днях", когда ни у кого из них
-// нет времени на этот день (никто из них его не завершил): кто дальше
-// продвинулся, тот выше (запрошено пользователем 2026-08-02) — тот же
-// принцип, что и STAGE_KM_OFFSET использует для оси графика "Позиция".
-function dayProgressKm(row, maxStage) {
-    const stage = currentStage(row, maxStage);
-    if (!stage) return 0;
-    const pos = lastReached(row.cp, stage);
-    return pos ? STAGE_KM_OFFSET[stage] + CHECKPOINT_DIST_KM[stage][pos.seq] : 0;
-}
-
 function computeOverallGaps(rows, maxStage) {
     const withPos = rows.map(r => {
         const stage = currentStage(r, maxStage);

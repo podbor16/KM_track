@@ -1165,54 +1165,29 @@ function progressStatusBadge(status, hasValue) {
     return hasValue ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>';
 }
 
-function day1Progress(row) {
-    return globalProgress(row, 'bike_day1', STAGE_MAX_SEQ.bike_day1);
-}
-function day2Progress(row) {
-    return globalProgress(row, 'bike_day2', STAGE_MAX_SEQ.bike_day2);
-}
-
-// individual: getValue вызывается на самой строке участника (есть .cp,
-// .bike1_s и т.д.). relay: getValue вызывается на teamGapRow(team) —
-// том же "виртуальном участнике", что и в Итогах/Отставании. maxStage —
-// см. dayStatus(): гейтится статусом ИМЕННО этого дня, не всей гонки
-// (найдено пользователем 2026-08-02 — DNF на беге не должен занулять уже
-// пройденный вело-день). Без maxStage — status как есть (прежнее
-// поведение, используется в тестах вне контекста конкретного дня).
-function buildRankedEntries(individual, relay, getValue, maxStage) {
+// entries — единая форма для Итогов/Дней: v — живое накопленное время
+// гонки на текущей позиции, ОГРАНИЧЕННОЙ maxStage (racePos) — не
+// требует, чтобы день был пройден ДО КОНЦА (2026-08-03: раньше
+// day1Progress/day2Progress требовали точно финишную КТ дня — "Время"
+// оставалось пустым весь день, хотя "Отметка" уже показывала прогресс).
+// rawStatus (статус ВСЕЙ гонки) — для сортировки/подсветки/ранга/
+// отставания; status (dayStatus, статус ИМЕННО дня) — только для
+// бейджа/дисплея. _pos считается ВСЕГДА (не только для активных дня) —
+// нужен как тай-брейк между двумя DNF, ни один из которых не дошёл до
+// конца дня (кто дальше в гонке — выше, тот же принцип, что и на
+// вкладках этапов через posSortKey); v (отображаемое "Время") гейтится
+// dayStatus отдельно — сошедший на дне не должен показывать время.
+function buildRankedEntries(individual, relay, maxStage) {
+    const mk = (type, entry, row) => {
+        const st = dayStatus(row, maxStage);
+        const pos = racePos(row, maxStage);
+        return { type, entry, status: st, rawStatus: row.status, v: st === 'active' && pos ? pos.value : null, _pos: pos };
+    };
     const withVal = [
-        ...individual.map(r => {
-            const st = dayStatus(r, maxStage);
-            return { type: 'individual', entry: r, status: st, rawStatus: r.status, v: st === 'active' ? getValue(r) : null, _cpRow: r };
-        }),
-        ...relay.map(t => {
-            const tr = teamGapRow(t);
-            const st = dayStatus(tr, maxStage);
-            return { type: 'relay', entry: t, status: st, rawStatus: tr.status, v: st === 'active' ? getValue(tr) : null, _cpRow: tr };
-        }),
+        ...individual.map(r => mk('individual', r, r)),
+        ...relay.map(t => mk('relay', t, teamGapRow(t))),
     ];
-    // Сортировка по ОБЩЕМУ статусу гонки (rawStatus), не по дневному
-    // (status) — сошедший позже (напр. на беге) должен "тонуть" вниз
-    // списка, даже если этот конкретный день показывает время и "Финиш"
-    // (найдено пользователем 2026-08-02, тот же принцип, что и на
-    // вкладках этапов). Тай-брейк между такими "утонувшими" — по
-    // пройденной дистанции в гонке (dayProgressKm), кто дальше — выше.
-    return sortByRawStatus(withVal, item => dayProgressKm(item._cpRow, maxStage));
-}
-
-// Отставание внутри произвольного пула entries (уже отсортированного по
-// возрастанию v, как возвращает buildRankedEntries) — от лидера ЭТОГО пула
-// (наименьший v среди финишировавших). Простое вычитание — day1Progress/
-// day2Progress уже дают единое сравнимое число (не нужен checkpoint-based
-// computeOverallGaps). key — bib участника/команды.
-function poolGap(entries) {
-    const leader = entries.find(e => e.v != null);
-    if (!leader) return {};
-    const gaps = {};
-    entries.forEach(e => {
-        if (e.v != null) gaps[e.entry.bib] = e.v - leader.v;
-    });
-    return gaps;
+    return sortByRawStatus(withVal, item => raceSortKey(item._pos));
 }
 
 // genderRanks/formatRanks — по ПОЛНОМУ ростеру года. В отличие от absRanks
@@ -1222,12 +1197,16 @@ function poolGap(entries) {
 // личников ИЗ ЭТОГО пола, а formatRanks берёт всех эстафетчиков — состав
 // relay не зависит от фильтра пола (у команды нет общего пола), поэтому оба
 // набора совпадают с видимым пулом при любом активном фильтре.
-function dayRankOptions(getValue, maxStage) {
-    const allEntries = buildRankedEntries(_data.individual, _data.relay, getValue, maxStage);
+function dayRankOptions(maxStage) {
+    const allEntries = buildRankedEntries(_data.individual, _data.relay, maxStage);
     // status для ранжирования — ОБЩИЙ (rawStatus), не дневной: сошедший
     // позже не получает номер места по полу/формату, даже если этот
     // конкретный день пройден полностью (тот же принцип, что на этапах).
-    const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: e.v, status: e.rawStatus }));
+    // val — raceSortKey(_pos) (закодированный ключ), не сырое e.v — та же
+    // логика, что и сортировка выше (computeRanksByValue сравнивает val
+    // напрямую, сырые "живые" секунды между разными этапами гонки не
+    // сравнимы, см. шапку файла siberman-common.js).
+    const rowsFor = (pred) => allEntries.filter(pred).map(e => ({ key: e.entry.bib, val: raceSortKey(e._pos), status: e.rawStatus }));
     return {
         genderRanks: {
             M: computeRanksByValue(rowsFor(e => e.type === 'individual' && e.entry.gender === 'M')),
@@ -1246,17 +1225,18 @@ function dayRankOptions(getValue, maxStage) {
 // по полному ростеру года намеренно — не подтвердилось на практике. Число
 // колонок места и исключение эстафеты при фильтре пола — тот же критерий
 // showSecondaryRank(), что и на Итогах гонки (п.7 v6, 2026-08-02).
-function renderRankedProgress(getValue, options = {}) {
+function renderRankedProgress(options = {}) {
+    const maxStage = options.maxStage;
     const filtered = getFiltered();
     const individual = filtered.individual;
     // Эстафетная команда не имеет единого пола — при выбранном фильтре
     // пола команды на "Днях" не показываем вовсе, тот же приём, что и в
     // renderOverall (запрошено пользователем 2026-08-02, п.7 v6).
     const relay = _gender === 'all' ? filtered.relay : [];
-    const entries = buildRankedEntries(individual, relay, getValue, options.maxStage);
+    const entries = buildRankedEntries(individual, relay, maxStage);
     // "Финишировало" для эстафетной карточки — дошли до конца ИМЕННО ЭТОГО
-    // дня/снапшота (entries[].v уже несёт эту семантику через getValue),
-    // не общее overall_s всей гонки. dnfDsq — ОБЩИЙ статус команды (как на
+    // дня/снапшота (entries[].v уже несёт эту семантику), не общее
+    // overall_s всей гонки. dnfDsq — ОБЩИЙ статус команды (как на
     // вкладках этапов/Своде вело — карточка статистики считает реальный
     // DNF/DSQ за гонку, не "не дошёл до конца именно этого дня").
     const relayStatsDay = {
@@ -1270,12 +1250,16 @@ function renderRankedProgress(getValue, options = {}) {
         document.getElementById('app').innerHTML = html;
         return;
     }
-    // status для ранжирования — ОБЩИЙ (rawStatus), не дневной (см. dayRankOptions выше).
-    const absRanks = computeRanksByValue(entries.map(e => ({ key: e.entry.bib, val: e.v, status: e.rawStatus })));
-    // Отставание — только среди настоящих active (rawStatus) — DNF/DSQ не
-    // может быть лидером и не получает отставание, даже если этот
-    // конкретный день у него завершён (запрошено пользователем 2026-08-02).
-    const gaps = poolGap(entries.filter(e => e.rawStatus === 'active'));
+    // Место/отставание — та же живая cross-stage модель, что и в Итогах
+    // гонки (computeCombinedOverallRanks/computeOverallGaps), ограниченная
+    // "Днём" (maxStage) — единый код-путь вместо отдельной, менее полной
+    // реализации (poolGap, удалена).
+    const absRanks = computeCombinedOverallRanks(combinedOverallRankRows(individual, relay), maxStage);
+    const gapPool = entries.filter(e => e.rawStatus === 'active').map(e => {
+        const row = e.type === 'individual' ? e.entry : teamGapRow(e.entry);
+        return { key: e.entry.bib, cp: row.cp, status: 'active', swim_s: row.swim_s, bike1_s: row.bike1_s, bike2_s: row.bike2_s, run_s: row.run_s };
+    });
+    const gaps = computeOverallGaps(gapPool, maxStage);
     const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th>Отметка</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Статус</th></tr></thead><tbody>`;
@@ -1286,11 +1270,11 @@ function renderRankedProgress(getValue, options = {}) {
         const formatRank = options.formatRanks && type === 'relay' ? options.formatRanks[entry.bib] : null;
         const secondaryRank = type === 'individual' ? genderRank : formatRank;
         const secondaryBadge = type === 'individual' ? genderBadge(entry.gender) : formatBadge();
-        const absRank = hasVal ? absRanks[entry.bib] : null;
+        const absRank = absRanks[entry.bib];
         const rc = absRank != null ? rankClass(absRank) : '';
         const status = item.status;
         // "Последняя КТ" — тот же приём, что и в Итогах гонки, но
-        // ограничена границей дня (options.maxStage: 'bike_day1' для Дня 1,
+        // ограничена границей дня (maxStage: 'bike_day1' для Дня 1,
         // 'bike_day2' для Дня 1+2) — раньше могла показать этап "Бег",
         // если участник уже добежал до него, хотя вкладка про вело
         // (найдено пользователем 2026-08-02, п.1 v6). Двухстрочный формат
@@ -1298,7 +1282,7 @@ function renderRankedProgress(getValue, options = {}) {
         // без названия этапа (убрано по запросу пользователя 2026-08-02 —
         // формулировка должна быть идентична этапам).
         const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
-        const cur = currentStage(statusEntity, options.maxStage);
+        const cur = currentStage(statusEntity, maxStage);
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         const lastCpCell = cur ? lastCpTwoLineHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
@@ -1447,8 +1431,8 @@ function renderBikeCombined() {
     html += '</tbody></table></div>';
     document.getElementById('app').innerHTML = html;
 }
-function renderDay1() { renderRankedProgress(day1Progress, { ...dayRankOptions(day1Progress, 'bike_day1'), maxStage: 'bike_day1' }); }
-function renderDay2() { renderRankedProgress(day2Progress, { ...dayRankOptions(day2Progress, 'bike_day2'), maxStage: 'bike_day2' }); }
+function renderDay1() { renderRankedProgress({ ...dayRankOptions('bike_day1'), maxStage: 'bike_day1' }); }
+function renderDay2() { renderRankedProgress({ ...dayRankOptions('bike_day2'), maxStage: 'bike_day2' }); }
 
 /* ──────────────── Render: Графики (Темп/скорость, Позиция) ────────────────
    Форма по умолчанию — "spaghetti + hover-highlight" (эмфазис, не
