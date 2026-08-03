@@ -1938,5 +1938,52 @@ check('renderOverall() — "Отметка" использует новый дв
     assert.ok(html.includes('<div>Вело 1</div><div class="muted-sub">145 км (Финиш)</div>'), `ожидался новый формат Отметки: ${html.slice(0, 900)}`);
 });
 
+// ── posSortKey()/racePos()/raceSortKey() — единая модель live-положения
+// (2026-08-03, тестовый прогон на живых данных: сравнивать "сырое" время
+// напрямую между участниками на РАЗНЫХ КТ неверно — у только что
+// стартовавшего оно меньше, чем у прошедшего намного дальше) ──
+check('posSortKey — дальше по КТ всегда впереди, даже с бОльшим "сырым" временем', () => {
+    const farAlong = { seq: 5, value: 100 };
+    const justStarted = { seq: 2, value: 50 };
+    assert.ok(sandbox.posSortKey(farAlong) < sandbox.posSortKey(justStarted),
+        'дальше пройденная КТ должна давать МЕНЬШИЙ ключ (сортируется раньше)');
+});
+check('posSortKey — на одной КТ тай-брейк по времени (меньше время — раньше)', () => {
+    const faster = { seq: 5, value: 90 };
+    const slower = { seq: 5, value: 100 };
+    assert.ok(sandbox.posSortKey(faster) < sandbox.posSortKey(slower));
+});
+check('posSortKey — null при отсутствии позиции', () => {
+    assert.strictEqual(sandbox.posSortKey(null), null);
+});
+
+check('racePos — берёт позицию на ТЕКУЩЕМ этапе гонки, value = накопленное время гонки (globalProgress)', () => {
+    const row = { cp: { swim: {}, bike_day1: { 2: 4500 } }, swim_s: 4000 };
+    const pos = sandbox.racePos(row, null);
+    const stageOrder = vm.runInContext('STAGE_ORDER', sandbox);
+    assert.strictEqual(pos.stageIdx, stageOrder.indexOf('bike_day1'));
+    assert.strictEqual(pos.seq, 2);
+    assert.strictEqual(pos.value, 4500, 'bike_day1: globalProgress = сырое cp-значение (уже elapsed от старта гонки)');
+});
+check('racePos — maxStage ограничивает "Днём" (для вкладок Дни)', () => {
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const row = { cp: { swim: {}, bike_day1: { [maxSeqBike1]: 5000 }, run: { 3: 9000 } }, swim_s: 1000, bike1_s: 4000 };
+    const pos = sandbox.racePos(row, 'bike_day1');
+    const stageOrder = vm.runInContext('STAGE_ORDER', sandbox);
+    assert.strictEqual(pos.stageIdx, stageOrder.indexOf('bike_day1'), 'бег виден в cp, но maxStage=bike_day1 должен его игнорировать');
+    assert.strictEqual(pos.seq, maxSeqBike1);
+});
+check('racePos — null, если участник ещё не начал (ни одной КТ)', () => {
+    assert.strictEqual(sandbox.racePos({ cp: {} }, null), null);
+});
+
+check('raceSortKey — участник на более позднем этапе всегда впереди участника на более раннем, даже с меньшим value', () => {
+    const stageOrder = vm.runInContext('STAGE_ORDER', sandbox);
+    const onBike = { stageIdx: stageOrder.indexOf('bike_day1'), seq: 1, value: 200 };  // только начал вело, но уже на вело
+    const stillSwimming = { stageIdx: stageOrder.indexOf('swim'), seq: 6, value: 9000 }; // почти доплыл, но ещё плавание
+    assert.ok(sandbox.raceSortKey(onBike) < sandbox.raceSortKey(stillSwimming),
+        'участник, который уже НАЧАЛ вело, должен быть впереди того, кто ещё ЗАКАНЧИВАЕТ заплыв, несмотря на меньшее value');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

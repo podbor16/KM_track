@@ -94,18 +94,22 @@ function sortByStatus(rows, timeKey, progressFn) {
 // позже (напр. на беге) должен "тонуть" вниз списка и блёкнуть, даже если
 // на ЭТОМ дне/этапе у него есть время и статус "Финиш" (найдено
 // пользователем 2026-08-02, тот же принцип, что уже работает на вкладке
-// "Плавание" через sortByStatus + statusBadge). progressFn — тот же
-// тай-брейк между НЕ-активными без значения на этом срезе, см. sortByStatus.
-function sortByRawStatus(items, progressFn) {
+// "Плавание" через sortByStatus + statusBadge). keyFn(item) — ЗАКОДИРОВАННЫЙ
+// ключ прогресса (posSortKey/raceSortKey), а не сырое .v напрямую — с
+// новой live-моделью .v остаётся только для ОТОБРАЖЕНИЯ/расчёта отставания,
+// сравнивать между участниками на разных КТ по нему нельзя (см. шапку
+// файла, найдено 2026-08-03 на тестовом прогоне). keyFn сам решает, что
+// возвращать null для DNF/DSQ без прогресса — единая точка сравнения вместо
+// прежних отдельных .v и progressFn.
+function sortByRawStatus(items, keyFn) {
     return [...items].sort((a, b) => {
         const aActive = a.rawStatus === 'active', bActive = b.rawStatus === 'active';
         if (aActive !== bActive) return aActive ? -1 : 1;
-        if (a.v == null && b.v == null) {
-            return (!aActive && progressFn) ? progressFn(b) - progressFn(a) : 0;
-        }
-        if (a.v == null) return 1;
-        if (b.v == null) return -1;
-        return a.v - b.v;
+        const ka = keyFn(a), kb = keyFn(b);
+        if (ka == null && kb == null) return 0;
+        if (ka == null) return 1;
+        if (kb == null) return -1;
+        return ka - kb;
     });
 }
 
@@ -522,6 +526,47 @@ function currentStage(row, maxStage) {
         if (lastReached(row.cp, STAGE_ORDER[i])) return STAGE_ORDER[i];
     }
     return null;
+}
+
+// Кодирует "положение" {seq, value} (номер КТ + накопленное время НА
+// НЕЙ) в ОДНО число, пригодное для обычного числового сравнения a-b —
+// используется везде, где раньше сравнивали "сырое" время напрямую
+// (найдено 2026-08-03 на тестовом прогоне 2025 данных: участник, только
+// что стартовавший этап, имеет МЕНЬШЕЕ накопленное время, чем тот, кто
+// прошёл намного дальше — прямое сравнение ставило его "впереди").
+// COEF заведомо больше любого реалистичного числа секунд в гонке (515 км,
+// самый медленный участник — не больше нескольких суток = максимум
+// десятки тысяч секунд), поэтому разряд КТ никогда не "перетекает" в
+// разряд времени. Минус у seq — чтобы БОЛЬШАЯ КТ (дальше по дистанции)
+// давала МЕНЬШИЙ ключ (сортируется раньше при обычном возрастающем
+// сравнении). Вырождается в обычное сравнение по времени, когда оба
+// участника на одной КТ (в т.ч. оба финишировали — seq одинаковый максимум).
+const _POS_SORT_COEF = 1e7;
+function posSortKey(pos) {
+    return pos ? -pos.seq * _POS_SORT_COEF + pos.value : null;
+}
+
+// Положение участника В ГОНКЕ (кросс-этапное) — в отличие от posSortKey
+// одного этапа, здесь нужно сравнивать людей, которые могут быть на
+// РАЗНЫХ этапах гонки ПРЯМО СЕЙЧАС (кто на вело всегда впереди того, кто
+// ещё плывёт, независимо от "сырых" секунд). {stageIdx, seq, value}:
+// stageIdx — индекс этапа в STAGE_ORDER, seq — КТ внутри него, value —
+// накопленное время ГОНКИ на этой точке (globalProgress — уже сравнимо
+// между этапами, но ТОЛЬКО как тай-брейк при равном stageIdx+seq, не
+// само по себе — см. raceSortKey). maxStage — см. currentStage: ограничить
+// "Днём" на вкладках "Дни". null, если участник ещё не начал ни одной КТ.
+function racePos(row, maxStage) {
+    const stage = currentStage(row, maxStage);
+    if (!stage) return null;
+    const pos = lastReached(row.cp, stage);
+    return { stageIdx: STAGE_ORDER.indexOf(stage), seq: pos.seq, value: globalProgress(row, stage, pos.seq) };
+}
+
+// Как posSortKey, но для racePos() — сворачивает stageIdx в тот же
+// разряд, что и seq (индекс этапа 0..3, КТ до ~12 — максимум
+// stageIdx*100+seq = 312, тот же порядок величины, тот же COEF).
+function raceSortKey(pos) {
+    return pos ? posSortKey({ seq: pos.stageIdx * 100 + pos.seq, value: pos.value }) : null;
 }
 
 // Статус ИМЕННО этого дня (не всей гонки) — по факту достижения последней
