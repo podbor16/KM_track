@@ -236,5 +236,43 @@ check('rankStatHtml() — внутри блока лейбл идёт ПЕРЕД
     assert.ok(lblPos < gapPos, `лейбл должен идти раньше отставания: ${html}`);
 });
 
+check('renderIndividual() — живые "Итого"/"Место" видны ДО финиша всей гонки, а не только после (Задача 9, 2026-08-03)', () => {
+    // Не финишировал: плавание пройдено, на вело-дне 1 дошёл до 5-й КТ (не последней).
+    const liveRow = {
+        bib: 5, gender: 'M', status: 'active', overall_s: null, overall_rank_g: null,
+        swim_s: 1000, bike1_s: null, bike2_s: null, run_s: null,
+        cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { 5: 4000 } },
+    };
+    const data = {
+        individual: [liveRow, mkFinishedInd(2, 25000, 'M', 1)],
+        relay: [],
+    };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, liveRow);
+    const stats = statsRowHtml();
+    assert.ok(stats.includes('>Итого<'), `"Итого" должно быть видно ещё до финиша: ${stats}`);
+    assert.ok(stats.includes('Место (абсолют)'), `"Место (абсолют)" должно быть видно ещё до финиша: ${stats}`);
+    assert.ok(stats.includes('Место (по полу)'), `"Место (по полу)" должно быть видно ещё до финиша: ${stats}`);
+    assert.ok(stats.includes('Сейчас на этапе'), `"Сейчас на этапе" должно остаться до финиша: ${stats}`);
+    assert.ok(stats.includes('Отметка'), `"Отметка" должно остаться до финиша: ${stats}`);
+    // Живой участник (4000с накопленных на 5-й КТ вело) идёт впереди финишировавшего
+    // 25000с — единый ранг racePos/raceSortKey ставит "дальше по этапу" впереди "сырого" времени.
+    assert.ok(!stats.includes('>Отставание<'), `общего "Отставание" быть не должно — только stat-subgap внутри Место: ${stats}`);
+});
+
+check('renderTeam() — "Итого команды" считается живьём (racePos) до финиша, не только team.overall_s', () => {
+    const liveTeam = mkRelayTeam(2000, 'КомандаЖивая', 22000);
+    liveTeam.members[2].cp = { run: { 3: 300 } }; // бегун на 3-й КТ бега, не на финише
+    delete liveTeam.overall_s;
+    const data = { individual: [], relay: [liveTeam, mkRelayTeam(1000, 'КомандаФиниш', 22000)] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderTeam(data, liveTeam);
+    const stats = statsRowHtml();
+    assert.ok(!stats.includes('stat-val">NaN'), `"Итого команды" не должно быть NaN при отсутствии team.overall_s: ${stats}`);
+    assert.ok(!stats.includes('stat-val"></div><div class="stat-lbl">Итого команды'), `"Итого команды" должно показывать живое накопленное время: ${stats}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

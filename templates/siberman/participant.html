@@ -548,32 +548,37 @@ function renderIndividual(data, r) {
     const overallGaps = computeOverallGaps(overallGapPool);
     const trulyFinished = currentStage(r) === 'run' && lastReached(r.cp, 'run')?.seq === STAGE_MAX_SEQ.run;
 
-    let overallStat;
-    if (trulyFinished) {
-        const gap = fmtGap(overallGaps[r.bib]);
-        // Место (абсолют) — единый ранг личники+эстафета вместе (та же
-        // функция, что и в Итогах гонки на /siberman/results); место (по
-        // полу) — готовое DB-поле (пересчёт места по формату для личников
-        // не нужен, юзер попросил вернуть только эти два, см. итог п.6).
-        const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay));
-        const absRank = combinedRanks[r.bib];
-        // Отставание "по полу" — от лидера ТОЛЬКО среди личников своего пола
-        // (не готовое DB-поле — там только сам ранг, не отставание).
-        const genderGapPool = overallGapPool.filter(x => !x.isRelay && x.gender === r.gender);
-        const genderGap = fmtGap(computeOverallGaps(genderGapPool)[r.bib]);
-        overallStat = `
-            <div class="stat"><div class="stat-val">${fmtTime(r.overall_s)}</div><div class="stat-lbl">Итого</div></div>
-            ${rankStatHtml(r.overall_rank_g, genderGap, 'Место (по полу)')}
-            ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
-        `;
-    } else {
+    // Место/Итого — единая живая модель (racePos/computeCombinedOverallRanks),
+    // которая сходится с серверными overall_s/overall_rank_g РОВНО в момент
+    // истинного финиша — считаем её всегда, а не только для trulyFinished
+    // (2026-08-03: раньше "не финишировал" ветка вообще не показывала
+    // Итого/Место, хотя это ровно то, чего не хватало на живом прогоне).
+    const gap = fmtGap(overallGaps[r.bib]);
+    // Место (абсолют) — единый ранг личники+эстафета вместе (та же
+    // функция, что и в Итогах гонки на /siberman/results).
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay), null);
+    const absRank = combinedRanks[r.bib];
+    // Отставание "по полу" — от лидера ТОЛЬКО среди личников своего пола
+    // (не готовое DB-поле — там только сам ранг, не отставание).
+    const genderGapPool = overallGapPool.filter(x => !x.isRelay && x.gender === r.gender);
+    const genderGap = fmtGap(computeOverallGaps(genderGapPool)[r.bib]);
+    const liveTotal = racePos(r, null)?.value ?? null;
+    // Место (по полу) до финиша — своя живая модель, т.к. готовое DB-поле
+    // overall_rank_g доступно только после trulyFinished.
+    const genderRankRows = combinedOverallRankRows(data.individual.filter(x => x.gender === r.gender), []);
+    const genderRank = trulyFinished ? r.overall_rank_g : computeCombinedOverallRanks(genderRankRows, null)[r.bib];
+
+    let overallStat = `
+        <div class="stat"><div class="stat-val">${fmtTime(trulyFinished ? r.overall_s : liveTotal)}</div><div class="stat-lbl">Итого</div></div>
+        ${rankStatHtml(genderRank, genderGap, 'Место (по полу)')}
+        ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
+    `;
+    if (!trulyFinished) {
         const cur = currentStage(r);
         const pos = cur ? lastReached(r.cp, cur) : null;
-        const liveGap = fmtGap(overallGaps[r.bib]);
-        overallStat = cur && pos ? `
+        overallStat += cur && pos ? `
             <div class="stat"><div class="stat-val">${STAGES.find(s => s.dbStage === cur)?.label ?? cur}</div><div class="stat-lbl">Сейчас на этапе</div></div>
             <div class="stat"><div class="stat-val">${CHECKPOINT_LABELS[cur][pos.seq]}</div><div class="stat-lbl">Отметка</div></div>
-            ${liveGap ? `<div class="stat"><div class="stat-val">${liveGap}</div><div class="stat-lbl">Отставание</div></div>` : ''}
         ` : '';
     }
 
@@ -607,8 +612,8 @@ function renderTeam(data, team) {
     // Место (абсолют) — единый ранг личники+эстафета вместе; место (формат)
     // — ранг только среди эстафетных команд (своего рода "личное" место
     // команды в её формате, аналог "место по полу" у личников).
-    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay));
-    const relayFormatRanks = computeRanksByValue(data.relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay), null);
+    const relayFormatRanks = computeRanksByValue(data.relay.map(t => ({ key: t.bib, val: raceSortKey(racePos(teamGapRow(t), null)), status: teamGapRow(t).status })));
     const absRank = combinedRanks[team.bib];
     const formatRank = relayFormatRanks[team.bib];
     // Отставание "по формату" — от лидера ТОЛЬКО среди эстафетных команд
@@ -652,7 +657,7 @@ function renderTeam(data, team) {
         </div>
         ${progressBarHtml(teamRow)}
         <div class="stats-row">
-            <div class="stat"><div class="stat-val">${fmtTime(team.overall_s)}</div><div class="stat-lbl">Итого команды</div></div>
+            <div class="stat"><div class="stat-val">${fmtTime(racePos(teamRow, null)?.value ?? null)}</div><div class="stat-lbl">Итого команды</div></div>
             ${rankStatHtml(formatRank, formatGap, 'Место (формат)')}
             ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
         </div>
