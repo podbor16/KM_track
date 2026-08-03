@@ -2387,5 +2387,21 @@ check('renderStage() — при фильтре по полу эстафетчи�
         `эстафетчица (быстрее, bib=1048) должна идти выше личницы (bib=158): ${html}`);
 });
 
+check('renderStage() — активный участник, ещё не начавший ИМЕННО ЭТОТ этап (например, ещё плывёт на вкладке "Вело 1"), НЕ блёклый', () => {
+    // Реальный баг (2026-08-03): на живой гонке вообще у ВСЕХ участников
+    // noTime===true на этапах, до которых они ещё не дошли (например,
+    // все ещё плывут — вкладка "Вело 1" пуста у всех) — старое условие
+    // дименга (noTime || status!=='active') делало блёклыми абсолютно
+    // всех на такой вкладке, хотя они реально активны, просто ещё не
+    // дошли до НЕЁ (не то же самое, что реальный DNF/DSQ/DNS).
+    const stillSwimming = mkTimerInd('1', { status: 'active', swim_s: 1700, cp: { swim: { 4: 1700 } } });
+    setRaceData([stillSwimming], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    const trOpenTag = html.match(/<tr class="([^"]*)"/)?.[1] ?? html.match(/<tr>/)[0];
+    assert.ok(!trOpenTag.includes('dnf'), `ещё не дошедший до ЭТОГО этапа активный участник не должен быть блёклым: ${trOpenTag}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

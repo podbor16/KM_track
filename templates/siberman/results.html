@@ -1024,7 +1024,13 @@ function renderStage(stage) {
         const pos = lastReached(r.cp, dbStage);
         const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
-        return `<tr class="${rc}${(noTime || r.status !== 'active') ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+        // Блёклая строка — только по РЕАЛЬНОМУ статусу гонки (DNF/DSQ/DNS),
+        // не по "нет времени на этом этапе" (noTime): на живой гонке
+        // абсолютно у всех участников noTime===true на этапах, которые они
+        // ещё не начали (например, все ещё плывут — колонка "Вело 1"),
+        // и это НЕ повод их затемнять, они реально активны, просто ещё не
+        // дошли до этого этапа (2026-08-03, тестовый прогон живых данных).
+        return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
             <td class="name-cell"><div class="name-stack">
