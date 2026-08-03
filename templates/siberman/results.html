@@ -597,7 +597,7 @@ function participantLink(bib) {
 // buildStats не пытается угадывать её единообразно (см. план 2026-07-23).
 // Карточка скрывается целиком, если её total === 0.
 function buildStats(individual, relayStats, stageKey) {
-    const finInd = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] != null : r.overall_s != null)).length;
+    const finInd = individual.filter(r => r.status === 'active' && (stageKey ? r[stageKey+'_s'] != null : racePos(r, null)?.seq === STAGE_MAX_SEQ.run)).length;
     const dnfCount = individual.filter(r => r.status === 'dnf').length;
     const dsqCount = individual.filter(r => r.status === 'dsq').length;
     const dnsCount = individual.filter(r => r.status === 'dns').length;
@@ -635,19 +635,6 @@ function timeGapCell(timeStr, gapSeconds) {
     return `<span class="time-main">${timeStr}</span>${gapHtml}`;
 }
 
-// Простое отставание от минимума по прямому полю (не checkpoint-based, как
-// computeOverallGaps/computeStageGaps) — для "сырых" суммарных времён
-// этапа (swim_s/bike1_s/...), где интерполяция не нужна: участник либо
-// уже имеет значение поля, либо ещё не финишировал этап (тогда — прочерк,
-// не оценка). rows — [{bib, [key]: сек|null, ...}], возвращает {bib: gap}.
-function fieldGaps(rows, key) {
-    const vals = rows.map(r => r[key]).filter(v => v != null);
-    if (!vals.length) return {};
-    const min = Math.min(...vals);
-    const gaps = {};
-    rows.forEach(r => { if (r[key] != null) gaps[r.bib] = r[key] - min; });
-    return gaps;
-}
 /* ──────────────── Filter helpers ──────────────── */
 function getFiltered() {
     if (!_data) return { individual: [], relay: [] };
@@ -707,29 +694,36 @@ function overallSecondaryLabel() {
 // в остальных случаях — по явному запросу пользователя, п.7 v6, 2026-08-02).
 function showSecondaryRank() { return _gender === 'all' && _fmt !== 'relay'; }
 
-// stageGaps — {swim,bike1,bike2,run} каждая {bib: секунды} от fieldGaps()
-// по ПОЛНОМУ объединённому пулу личники+эстафета (см. renderOverall) — у
-// каждой временной колонки своё отставание (п.3, v5, 2026-07-23), не
-// только у итогового времени.
-function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
-    const notFinished = r.overall_s == null || r.status !== 'active';
-    const rc = notFinished ? '' : rankClass(combinedRanks[r.bib]);
+// stageGaps — {swim,bike1,bike2,run,bikeCombined} каждая {bib: секунды} от
+// computeStageGaps()/bikeCombinedGaps() по ПОЛНОМУ объединённому пулу
+// личники+эстафета (см. renderOverall) — у каждой временной колонки своё
+// отставание (п.3, v5, 2026-07-23), не только у итогового времени.
+function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGenderRanks, stageGaps) {
+    // "Итого" — живое накопленное время гонки на ТЕКУЩЕЙ позиции
+    // (racePos), а не серверное overall_s (которое null всю гонку до
+    // полного финиша всех 4 этапов) — сходится с overall_s ровно в
+    // момент финиша (globalProgress на последней КТ бега == сумме всех
+    // этапов). Считается и для DNF/DSQ (их собственное "застывшее" время
+    // — правило "кирпич", просто без отставания/лидерства, см. ниже).
+    const pos = racePos(r, null);
+    const liveTotal = pos ? pos.value : null;
+    const rc = r.status === 'active' && combinedRanks[r.bib] != null ? rankClass(combinedRanks[r.bib]) : '';
     const cur = currentStage(r);
-    const pos = cur ? lastReached(r.cp, cur) : null;
-    const lastCpCell = overallLastCpHtml(cur, pos?.seq);
-    return `<tr class="${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
-        ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], r.overall_rank_g, genderBadge(r.gender), rc)}
+    const cpPos = cur ? lastReached(r.cp, cur) : null;
+    const lastCpCell = overallLastCpHtml(cur, cpPos?.seq);
+    return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+        ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], combinedGenderRanks[r.gender]?.[r.bib], genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
         <td class="name-cell"><div class="name-stack">
             <span class="name-main">${r.surname} ${r.name}</span>
             ${r.city ? `<span class="name-city">${r.city}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(r.overall_s), overallGaps[r.bib])}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedTime(r)), stageGaps.bikeCombined[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(r)?.value ?? null), stageGaps.bikeCombined[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusBadge(r, null)}</td>
@@ -739,28 +733,30 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, stageGaps) {
 // Эстафета в Итогах гонки — ОДНА строка (название команды), как и у
 // личников, без развёрнутого списка участников по ролям (см. п.14
 // задачи 2026-07-19). formatRanks — новое: место среди только эстафетных
-// команд (computeRanksByValue по overall_s ТОЛЬКО эстафеты, полный ростер
-// года — не зависит от текущих фильтров, тот же принцип что combinedRanks).
+// команд (computeRanksByValue по live-позиции ТОЛЬКО эстафеты, полный
+// ростер года — не зависит от текущих фильтров, тот же принцип что
+// combinedRanks).
 function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, stageGaps) {
     const tr = teamGapRow(team);
-    const notFinished = team.overall_s == null || tr.status !== 'active';
-    const rc = notFinished ? '' : rankClass(combinedRanks[team.bib]);
+    const pos = racePos(tr, null);
+    const liveTotal = pos ? pos.value : null;
+    const rc = tr.status === 'active' && combinedRanks[team.bib] != null ? rankClass(combinedRanks[team.bib]) : '';
     const cur = currentStage(tr);
-    const pos = cur ? lastReached(tr.cp, cur) : null;
-    const lastCpCell = overallLastCpHtml(cur, pos?.seq);
+    const cpPos = cur ? lastReached(tr.cp, cur) : null;
+    const lastCpCell = overallLastCpHtml(cur, cpPos?.seq);
     const statusCell = teamStatusBadge(team);
-    return `<tr class="relay-row ${rc}${notFinished ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
+    return `<tr class="relay-row ${rc}${tr.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
         <td class="bib-cell">${team.bib}</td>
         <td class="name-cell"><div class="name-stack">
             <span class="name-main">${team.team_name}</span>
             <span class="badge badge-relay">Эстафета</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(team.overall_s), overallGaps[team.bib])}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedTime(tr)), stageGaps.bikeCombined[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(tr)?.value ?? null), stageGaps.bikeCombined[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusCell}</td>
@@ -772,7 +768,11 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
 // финишировавшие личники (свой порядок sortByStatus), затем команды без
 // результатов — в конце. Возвращает массив {type, entry}.
 function buildMergedOverallEntries(individual, relay) {
-    const indSorted = sortByStatus(individual, 'overall_s');
+    // _liveSortKey — закодированная live-позиция (raceSortKey), а не
+    // overall_s — иначе личники всю гонку оставались бы в исходном
+    // порядке (overall_s==null у всех до полного финиша), см. 2026-08-03.
+    const indWithKey = individual.map(r => ({ ...r, _liveSortKey: raceSortKey(racePos(r, null)) }));
+    const indSorted = sortByStatus(indWithKey, '_liveSortKey');
     if (_fmt !== 'all') {
         // Только один тип виден — смешивать нечего.
         return [
@@ -780,18 +780,19 @@ function buildMergedOverallEntries(individual, relay) {
             ...relay.map(t => ({ type: 'relay', entry: t })),
         ];
     }
-    const indFinished = indSorted.filter(r => r.overall_s != null && r.status === 'active');
-    const indRest = indSorted.filter(r => !(r.overall_s != null && r.status === 'active'));
-    const relFinished = relay.filter(t => t.overall_s != null).sort((a, b) => a.overall_s - b.overall_s);
-    const relRest = relay.filter(t => t.overall_s == null);
+    const indFinished = indSorted.filter(r => r._liveSortKey != null && r.status === 'active');
+    const indRest = indSorted.filter(r => !(r._liveSortKey != null && r.status === 'active'));
+    const relWithKey = relay.map(t => ({ t, tr: teamGapRow(t), key: raceSortKey(racePos(teamGapRow(t), null)) }));
+    const relFinished = relWithKey.filter(x => x.key != null && x.tr.status === 'active').sort((a, b) => a.key - b.key).map(x => x.t);
+    const relRest = relWithKey.filter(x => !(x.key != null && x.tr.status === 'active')).map(x => x.t);
 
     const interleaved = [
-        ...indFinished.map(r => ({ type: 'individual', entry: r })),
-        ...relFinished.map(t => ({ type: 'relay', entry: t })),
-    ].sort((a, b) => a.entry.overall_s - b.entry.overall_s);
+        ...indFinished.map(r => ({ type: 'individual', entry: r, _k: r._liveSortKey })),
+        ...relFinished.map(t => ({ type: 'relay', entry: t, _k: raceSortKey(racePos(teamGapRow(t), null)) })),
+    ].sort((a, b) => a._k - b._k);
 
     return [
-        ...interleaved,
+        ...interleaved.map(({ type, entry }) => ({ type, entry })),
         ...indRest.map(r => ({ type: 'individual', entry: r })),
         ...relRest.map(t => ({ type: 'relay', entry: t })),
     ];
@@ -834,14 +835,25 @@ function renderOverall() {
     // номера мест, вызывая пропуски 1,2,3,5,7...). Раньше считалось по
     // полному ростеру года независимо от фильтров — намеренно, чтобы место
     // не "плавало" при переключении фильтров, но это оказалось нежелательно.
-    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(individual, relay));
+    // Теперь считается через racePos/raceSortKey (живая позиция в гонке),
+    // а не через overall_s — иначе личники не получали место вообще, пока
+    // не финишируют ВСЮ гонку целиком (2026-08-03).
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(individual, relay), null);
+    // Место по полу внутри объединённого пула (личники+эстафета мужского/
+    // женского пола нет смысла — считаем только среди личников каждого
+    // пола) — раньше бралось из серверного r.overall_rank_g (тоже null до
+    // полного финиша), теперь тем же combinedRanks-примитивом на срезе по полу.
+    const combinedGenderRanks = {
+        M: computeCombinedOverallRanks(combinedOverallRankRows(individual.filter(r => r.gender === 'M'), []), null),
+        F: computeCombinedOverallRanks(combinedOverallRankRows(individual.filter(r => r.gender === 'F'), []), null),
+    };
     // Формат-ранг — место команды среди ТОЛЬКО эстафетных команд — тоже
     // среди видимых (relay уже пуст, если фильтр пола активен — тогда и
-    // сама колонка формата не отображается).
-    const relayFormatRanks = computeRanksByValue(relay.map(t => ({ key: t.bib, val: t.overall_s, status: teamGapRow(t).status })));
+    // сама колонка формата не отображается), тоже по живой позиции.
+    const relayFormatRanks = computeRanksByValue(relay.map(t => ({ key: t.bib, val: raceSortKey(racePos(teamGapRow(t), null)), status: teamGapRow(t).status })));
     const relayStats = {
         total: relay.length,
-        finished: relay.filter(t => t.overall_s != null).length,
+        finished: relay.filter(t => teamGapRow(t).status === 'active' && racePos(teamGapRow(t), null)?.seq === STAGE_MAX_SEQ.run).length,
         dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
     };
     let html = buildStats(individual, relayStats, null);
@@ -852,21 +864,25 @@ function renderOverall() {
         return;
     }
 
-    // Отставание по КАЖДОЙ временной колонке отдельно (п.3, v5, 2026-07-23)
-    // — простое вычитание от минимума среди финишировавших ЭТОТ конкретный
-    // сегмент (не checkpoint-based, как overallGaps — там нужна
-    // интерполяция для ещё не финишировавших, здесь достаточно прямого
-    // поля swim_s/bike1_s/...).
+    // Отставание по каждой временной колонке отдельно — та же живая
+    // checkpoint-based модель, что и общее "Итого" (computeStageGaps/
+    // bikeCombinedGaps), НЕ простое вычитание сырых полей (2026-08-03:
+    // раньше fieldGaps сравнивал swim_s/bike1_s/... напрямую — неверно
+    // для участников на РАЗНЫХ КТ, см. posSortKey).
     const stageGapPool = [
-        ...activeIndividual.map(r => ({ bib: r.bib, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, bikeCombined: bikeCombinedTime(r) })),
-        ...activeRelay.map(t => { const tr = teamGapRow(t); return { bib: t.bib, swim_s: tr.swim_s, bike1_s: tr.bike1_s, bike2_s: tr.bike2_s, run_s: tr.run_s, bikeCombined: bikeCombinedTime(tr) }; }),
+        ...activeIndividual.map(r => ({ key: r.bib, cp: r.cp, status: 'active' })),
+        ...activeRelay.map(t => ({ key: t.bib, cp: teamGapRow(t).cp, status: 'active' })),
+    ];
+    const bikeCombinedGapPool = [
+        ...activeIndividual.map(r => ({ key: r.bib, entry: r, status: 'active' })),
+        ...activeRelay.map(t => ({ key: t.bib, entry: teamGapRow(t), status: 'active' })),
     ];
     const stageGaps = {
-        swim: fieldGaps(stageGapPool, 'swim_s'),
-        bike1: fieldGaps(stageGapPool, 'bike1_s'),
-        bike2: fieldGaps(stageGapPool, 'bike2_s'),
-        bikeCombined: fieldGaps(stageGapPool, 'bikeCombined'),
-        run: fieldGaps(stageGapPool, 'run_s'),
+        swim: computeStageGaps(stageGapPool, 'swim'),
+        bike1: computeStageGaps(stageGapPool, 'bike_day1'),
+        bike2: computeStageGaps(stageGapPool, 'bike_day2'),
+        bikeCombined: bikeCombinedGaps(bikeCombinedGapPool),
+        run: computeStageGaps(stageGapPool, 'run'),
     };
 
     // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
@@ -875,7 +891,7 @@ function renderOverall() {
     html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD()}<tbody>`;
     merged.forEach(item => {
         html += item.type === 'individual'
-            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, stageGaps)
+            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, combinedGenderRanks, stageGaps)
             : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks, stageGaps);
     });
     html += '</tbody></table></div>';
@@ -1149,9 +1165,6 @@ function progressStatusBadge(status, hasValue) {
     return hasValue ? '<span class="badge badge-fin">Финиш</span>' : '<span class="badge badge-live">На трассе</span>';
 }
 
-function bikeCombinedTime(row) {
-    return (row.bike1_s != null && row.bike2_s != null) ? row.bike1_s + row.bike2_s : null;
-}
 function day1Progress(row) {
     return globalProgress(row, 'bike_day1', STAGE_MAX_SEQ.bike_day1);
 }

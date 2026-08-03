@@ -109,11 +109,21 @@ function check(name, fn) {
     }
 }
 
+// cp.run — единственный источник live-позиции для buildMergedOverallEntries
+// теперь (racePos/raceSortKey, не overall_s напрямую) — фикстуры кодируют
+// то же самое "финишное время" через КТ финиша бега, чтобы старые тесты
+// на порядок интерливинга остались осмысленными (2026-08-03, Задача 7).
 function mkInd(bib, overall_s, status = 'active') {
-    return { bib, overall_s, status, gender: 'M', cp: {} };
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const cp = overall_s != null ? { run: { [maxSeqRun]: overall_s } } : {};
+    return { bib, overall_s, status, gender: 'M', cp };
 }
 function mkRelay(bib, overall_s) {
-    return { bib, overall_s, team_name: `Team${bib}`, members: [] };
+    const maxSeqRun = vm.runInContext('STAGE_MAX_SEQ.run', sandbox);
+    const members = overall_s != null
+        ? [{ relay_stage: 'run', status: 'active', run_s: overall_s, cp: { run: { [maxSeqRun]: overall_s } } }]
+        : [];
+    return { bib, overall_s, team_name: `Team${bib}`, members };
 }
 
 check('интерливинг личников и эстафеты по overall_s (fmt=all)', () => {
@@ -157,11 +167,6 @@ function mkRelayProgress(bib, membersOverrides) {
         ],
     };
 }
-
-check('bikeCombinedTime — сумма bike1+bike2, null если этап не завершён', () => {
-    assert.strictEqual(sandbox.bikeCombinedTime({ bike1_s: 100, bike2_s: 200 }), 300);
-    assert.strictEqual(sandbox.bikeCombinedTime({ bike1_s: 100, bike2_s: null }), null);
-});
 
 check('buildRankedEntries — сортировка по значению, null (не дошедшие/dnf) — в хвост', () => {
     const individual = [
@@ -1503,7 +1508,7 @@ check('День 1 — Место (абсолют) = ранг среди ВИДИ
     assert.ok(!rankNums.includes('2'), `невидимая эстафета не должна давать место 2: rankNums=${JSON.stringify(rankNums)}, строка: ${rowMatch[0]}`);
 });
 
-// ── timeGapCell()/fieldGaps()/buildStats() — v5 п.2/3/4 фундамент (2026-07-23) ──
+// ── timeGapCell()/buildStats() — v5 п.2/3/4 фундамент (2026-07-23) ──
 check('timeGapCell() — время+0 отставание даёт "Лидер"', () => {
     const html = sandbox.timeGapCell('1:00:00', 0);
     assert.ok(html.includes('1:00:00'), `время должно быть в разметке: ${html}`);
@@ -1521,13 +1526,6 @@ check('timeGapCell() — время="—" даёт прочерк, gap игно�
 check('timeGapCell() — gap=null (не с чем сравнивать) — время без под-строки', () => {
     const html = sandbox.timeGapCell('1:00:00', null);
     assert.ok(html.includes('1:00:00') && !html.includes('time-gap-sub'), `не должно быть под-строки отставания: ${html}`);
-});
-check('fieldGaps() — отставание от минимума по прямому полю, null не участвует', () => {
-    const rows = [{ bib: 1, swim_s: 1000 }, { bib: 2, swim_s: 1200 }, { bib: 3, swim_s: null }];
-    const gaps = sandbox.fieldGaps(rows, 'swim_s');
-    assert.strictEqual(gaps[1], 0, `лидер — отставание 0: ${JSON.stringify(gaps)}`);
-    assert.strictEqual(gaps[2], 200, `отстающий — разница: ${JSON.stringify(gaps)}`);
-    assert.strictEqual(gaps[3], undefined, `без значения — не участвует: ${JSON.stringify(gaps)}`);
 });
 check('avgPaceLabel(swim) — темп на 100м из дистанции и времени', () => {
     // 2,6 км за 1500с → 1500/2.6=576.9 с/км → /10=57.7≈58с/100м → "0:58 /100м"
@@ -2014,8 +2012,14 @@ check('renderStage() — два DNF на беге, у ОБОИХ заполне�
 });
 
 check('renderOverall() — колонка "Вело итого" несёт своё отставание (timeGapCell), как остальные этапы', () => {
-    const fast = mkTimerInd('1', { bike1_s: 9000, bike2_s: 8000, overall_s: 20000 }); // вело = 17000
-    const slow = mkTimerInd('2', { bike1_s: 9500, bike2_s: 8500, overall_s: 22000 }); // вело = 18000, +1000 от лидера
+    // "Вело итого" теперь считается через bikeCombinedLastPos (checkpoint-
+    // based, живая позиция), не через сумму bike1_s+bike2_s напрямую —
+    // фикстура несёт cp.bike_day1/bike_day2 финиш, согласованный с
+    // bike1_s/bike2_s (2026-08-03, Задача 7: bikeCombinedTime удалена).
+    const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const maxSeqB2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const fast = mkTimerInd('1', { bike1_s: 9000, bike2_s: 8000, overall_s: 20000, cp: { bike_day1: { [maxSeqB1]: 9000 }, bike_day2: { [maxSeqB2]: 8000 } } }); // вело = 17000
+    const slow = mkTimerInd('2', { bike1_s: 9500, bike2_s: 8500, overall_s: 22000, cp: { bike_day1: { [maxSeqB1]: 9500 }, bike_day2: { [maxSeqB2]: 8500 } } }); // вело = 18000, +1000 от лидера
     setRaceData([fast, slow], [], Date.now());
     setState('all', 'all');
     sandbox.renderOverall();
@@ -2229,6 +2233,35 @@ check('raceSortKey — участник на более позднем этап�
     const stillSwimming = { stageIdx: stageOrder.indexOf('swim'), seq: 6, value: 9000 }; // почти доплыл, но ещё плавание
     assert.ok(sandbox.raceSortKey(onBike) < sandbox.raceSortKey(stillSwimming),
         'участник, который уже НАЧАЛ вело, должен быть впереди того, кто ещё ЗАКАНЧИВАЕТ заплыв, несмотря на меньшее value');
+});
+
+// ── Задача 7 (2026-08-03): renderOverall() — "Итого"/"Место" через живую
+// racePos/raceSortKey-модель, ОДИНАКОВО для личников и эстафеты (раньше
+// личник получал overall_s только на ПОЛНОМ финише всей гонки — все 4
+// этапа сразу, см. overall_results.total_s в src/siberman/db.py, — а
+// эстафета получала его нарастающим по любому готовому этапу любого члена
+// команды, service.py; из-за этого "Итого"/"Место" во время живой гонки
+// были пустыми только у личников) ──
+check('renderOverall() — live: "Итого" и "Место" считаются ДО финиша всей гонки (для личников тоже, не только эстафеты)', () => {
+    const ahead = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 }, bike_day1: { 2: 4500 } } });
+    const behind = mkTimerInd('2', { status: 'active', swim_s: null, cp: { swim: { 4: 1380 } } });
+    setRaceData([ahead, behind], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    const row1 = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(/rank-num[^>]*>1</.test(row1), `дальше прошедший должен получить место 1 (личник, ДО финиша всей гонки): ${row1}`);
+    assert.ok(!/time-cell"[^>]*>\s*<span class="muted">—<\/span>/.test(row1), `"Итого" не должно быть пустым: ${row1}`);
+});
+check('renderOverall() — суб-колонки (Плав./Вело1/Вело2/Бег) отставание считается по прогрессу, не по сырому времени напрямую', () => {
+    const justStarted = mkTimerInd('1', { status: 'active', cp: { swim: { 1: 120 } } });
+    const farAlong = mkTimerInd('2', { status: 'active', cp: { swim: { 4: 1380 } } });
+    setRaceData([justStarted, farAlong], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    const row1 = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">1<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(!row1.includes('lead">Лидер'), `только начавший заплыв НЕ должен стать "Лидером" колонки Плав.: ${row1}`);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
