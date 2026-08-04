@@ -99,12 +99,17 @@
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; }
         .badge-individual { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; }
+        /* Бейдж "N предыдущих финишей Siberman" (звезда + число) — рядом с
+           именем в шапке карточки, только личный зачёт (2026-08-05). */
+        .badge-star { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; display: inline-flex; align-items: center; gap: 3px; }
+        .badge-star img { width: 12px; height: 12px; display: block; }
         /* --red при одинаковой alpha даёт заметно менее контрастный фон на
            тёмном фоне, чем --blue — красные бейджи почти не видны в тёмной
            теме (запрошено пользователем 2026-07-23, тот же фикс что и в
            results.html). */
         [data-theme="dark"] .badge-f { background: rgba(190,10,33,.28); }
         [data-theme="dark"] .badge-individual { background: rgba(190,10,33,.28); }
+        [data-theme="dark"] .badge-star { background: rgba(190,10,33,.28); }
         .muted { color: var(--muted); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .rank-num { font-weight: 800; }
@@ -611,6 +616,7 @@ function renderIndividual(data, r) {
                 ${genderBadge(r.gender)}
                 <span class="badge badge-individual">Лично</span>
                 ${statusBadge(r, null)}
+                ${r.finish_count > 0 ? `<span class="badge badge-star" title="Количество финишей Siberman до этого года"><img src="/static/images/siberman/star.png" alt="">${r.finish_count}</span>` : ''}
             </div>
             ${cityLabel(r) ? `<div class="p-city">${cityLabel(r)}</div>` : ''}
         </div>

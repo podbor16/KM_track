@@ -3,6 +3,8 @@ import logging
 import mysql.connector
 from typing import Optional
 
+from src.siberman.finish_counts import get_prior_finish_count
+
 log = logging.getLogger(__name__)
 
 
@@ -259,6 +261,9 @@ def get_results_for_year(conn, race_year: int) -> dict:
         pid = p.pop("id")
         p["cp"] = cp_by_pid.get(pid, {})
         p["splits"] = split_by_pid.get(pid, {})
+        # Только личный зачёт (запрошено пользователем 2026-08-05) — у
+        # эстафетных команд свой "стаж" не считается.
+        p["finish_count"] = get_prior_finish_count(p["surname"], p["name"])
 
     # Эстафетные члены (все трое)
     cur.execute("""

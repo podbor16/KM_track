@@ -347,5 +347,33 @@ check('renderTeam() — эстафетный велосипедист: кома�
     assert.ok(section.includes('badge-live">На трассе'), `эстафетный велосипедист должен видеть финиш заплыва СВОЕЙ команды: ${section}`);
 });
 
+// ── Бейдж "N предыдущих финишей Siberman" (звезда) в шапке карточки —
+// только личный зачёт, только если finish_count > 0 (2026-08-05) ──
+check('renderIndividual() — finish_count > 0 показывает бейдж со звездой и числом', () => {
+    const r = { ...mkFinishedInd(1, 20000, 'M', 1), finish_count: 3 };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    assert.ok(appEl.innerHTML.includes('badge-star'), `ожидался бейдж badge-star: ${appEl.innerHTML.slice(0, 500)}`);
+    assert.ok(appEl.innerHTML.includes('>3</span>') || appEl.innerHTML.includes('star.png" alt="">3'), `ожидалось число 3 рядом со звездой: ${appEl.innerHTML.slice(0, 500)}`);
+});
+check('renderIndividual() — finish_count = 0 (первый раз) — бейдж со звездой не показывается', () => {
+    const r = { ...mkFinishedInd(1, 20000, 'M', 1), finish_count: 0 };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    assert.ok(!appEl.innerHTML.includes('badge-star'), `не должно быть бейджа звезды при finish_count=0: ${appEl.innerHTML.slice(0, 500)}`);
+});
+check('renderTeam() — бейдж со звездой не показывается у эстафетной команды (только личный зачёт)', () => {
+    const team = mkRelayTeam(1000, 'КомандаА', 22000);
+    const data = { individual: [], relay: [team] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderTeam(data, team);
+    assert.ok(!appEl.innerHTML.includes('badge-star'), `эстафета не должна показывать звезду: ${appEl.innerHTML.slice(0, 500)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
