@@ -156,6 +156,28 @@ def test_convert_bike_times_dnf_excluded_from_ranking():
     assert starts["2"] == BIKE_DAY2_BASE_START_S
 
 
+def test_convert_bike_times_partial_bike1_excluded_from_ranking():
+    # bib1 дошёл только до ПЕРВОЙ КТ вело-1 (seq=1, не финиш seq=6) — не
+    # должен получать расчётный старт дня 2 (найдено пользователем
+    # 2026-08-04: до фикса "_last_cp is not None" срабатывало на ЛЮБОЙ
+    # достигнутой КТ, а не только на финише — стартовый лист вело-2
+    # появлялся/заполнялся раньше времени, ещё до того как хоть кто-то
+    # реально финишировал вело-1).
+    participants = [
+        {"bib": "1", "format": "individual"},
+        {"bib": "2", "format": "individual"},
+    ]
+    cp = {
+        "1": {("swim", 7): 3600, ("bike_day1", 1): RACE_START_S + 3600 + 300},  # только 3 км, не финиш
+        "2": {("swim", 7): 3600, ("bike_day1", 6): RACE_START_S + 3600 + 1800},  # финишировал
+    }
+    result = _mk_result(participants, cp)
+    starts = convert_bike_times_to_elapsed(result, RACE_START_S)
+
+    assert "1" not in starts
+    assert starts["2"] == BIKE_DAY2_BASE_START_S
+
+
 def test_finished_stage_true_when_last_seq_present():
     cp = {("run", 12): 30000, ("run", 8): 20000}
     assert _finished_stage(cp, "run") is True

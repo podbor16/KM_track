@@ -156,7 +156,13 @@ def convert_bike_times_to_elapsed(result: ParseResult, race_start_s: int) -> dic
 
         swim_total = _last_cp(swim_cp, "swim")
         bike1_abs = _last_cp(bike_cp, "bike_day1")
-        if swim_total is not None and bike1_abs is not None:
+        # _finished_stage — а не просто "есть хоть одна КТ вело-1": до
+        # фикса рейдер, дошедший только до первой КТ (3 км), уже получал
+        # расчётный старт дня 2 и попадал в стартовый лист, хотя вело-1
+        # ещё в процессе у всех — стартовый лист должен появляться только
+        # после того, как кто-то РЕАЛЬНО финишировал вело-1 (найдено
+        # пользователем 2026-08-04 на живом тестовом прогоне).
+        if swim_total is not None and bike1_abs is not None and _finished_stage(bike_cp, "bike_day1"):
             rider_bike1_total[rider_key] = bike1_abs - swim_total
 
     ranks = rank_by(rider_bike1_total)

@@ -957,10 +957,21 @@ function renderStage(stage) {
     // Собственная сортировка здесь больше не нужна (была раньше, до
     // 2026-08-03) — итоговый порядок строк личников+эстафетчиков вместе
     // строится ниже, в orderedRows, единым posSortKey-сравнением.
+    // swimCp/bikeCp команды подмешиваются в cp эстафетчика ЭТОЙ роли —
+    // нужно только для stageHasStarted (STAGE_PRIOR_FINISH проверяет
+    // ПРЕДЫДУЩИЙ этап, а у велосипедиста/бегуна эстафеты своих КТ на нём
+    // нет, он не плыл/не крутил день 2 сам — это делал другой член команды).
     const relayMembers = _fmt !== 'individual'
-        ? relay.flatMap(t => t.members
-            .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
-            .map(m => withStageStatus({...m, _bib: t.bib, _team: t.team_name})))
+        ? relay.flatMap(t => {
+            const swimCp = t.members.find(x => x.relay_stage === 'swim')?.cp?.swim;
+            const bikeCp = t.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
+            return t.members
+                .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
+                .map(m => withStageStatus({
+                    ...m, _bib: t.bib, _team: t.team_name,
+                    cp: { ...m.cp, swim: m.cp?.swim ?? swimCp, bike_day2: m.cp?.bike_day2 ?? bikeCp },
+                }));
+        })
         : [];
 
     if (rows.length === 0 && relayMembers.length === 0) {
@@ -1048,6 +1059,7 @@ function renderStage(stage) {
         // уже применяемый для того же в генераторе постов трансляции
         // (найдено пользователем 2026-08-04).
         const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
         // Блёклая строка — только по РЕАЛЬНОМУ статусу гонки (DNF/DSQ/DNS),
         // не по "нет времени на этом этапе" (noTime): на живой гонке
@@ -1067,7 +1079,7 @@ function renderStage(stage) {
             <td class="r muted">${metaCell}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
-            <td>${statusBadge(r, stage)}</td>
+            <td>${statusBadge(r, stage, started)}</td>
         </tr>`;
     };
 
@@ -1079,6 +1091,7 @@ function renderStage(stage) {
         // не из серверного avg_pace_s/avg_speed_kmh (неверно для тех, кто
         // ещё не финишировал этап).
         const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
@@ -1094,7 +1107,7 @@ function renderStage(stage) {
             <td class="r muted">${meta}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
-            <td>${relayMemberStatusBadge(m, pos, maxSeq)}</td>
+            <td>${relayMemberStatusBadge(m, pos, maxSeq, started)}</td>
         </tr>`;
     };
 
@@ -1144,13 +1157,13 @@ function renderStage(stage) {
    позицией в отсортированном списке, одна колонка "Место" (при активном
    фильтре пола getFiltered() уже отдаёт только участников этого пола —
    позиция и так получается местом внутри пола). */
-function progressStatusBadge(status, pos, isFinished) {
+function progressStatusBadge(status, pos, isFinished, started) {
     if (status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
     if (status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     // "Финиш"/"На трассе"/"—" (не начал) — тот же 3-состояний бейдж, что и
     // на Этапах/Итогах (activeProgressBadge, siberman-common.js).
-    return activeProgressBadge(pos, isFinished);
+    return activeProgressBadge(pos, isFinished, started);
 }
 
 // entries — единая форма для Итогов/Дней: v — живое накопленное время
@@ -1316,8 +1329,11 @@ function bikeCombinedRelayRider(team) {
     // (та же база, что у individual bike1_s) — без этого live-время
     // Дня 1 у эстафетного велосипедиста было бы завышено на время
     // заплыва команды (найдено 2026-08-03 при переходе на live-время).
-    const swimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
-    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: m.cp };
+    const swimMember = team.members.find(x => x.relay_stage === 'swim');
+    const swimS = swimMember?.swim_s ?? null;
+    // cp.swim подмешан от пловца команды — нужен только stageHasStarted()
+    // (велосипедист сам не плавает, его собственный cp.swim пуст).
+    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: { ...m.cp, swim: m.cp?.swim ?? swimMember?.cp?.swim } };
 }
 
 // Статус ИМЕННО вело-этапа (оба дня) — по факту достижения последней КТ
@@ -1419,6 +1435,7 @@ function renderBikeCombined() {
         // "На трассе" — где-то между (2026-08-03: раньше не различали
         // "не начал" и "в процессе").
         const isFinishedBike = p => p.seq === maxVseq;
+        const started = stageHasStarted(entry, 'bike_day1', _raceStartEpoch, Date.now());
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
@@ -1429,7 +1446,7 @@ function renderBikeCombined() {
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
-            <td>${progressStatusBadge(status, pos, isFinishedBike)}</td>
+            <td>${progressStatusBadge(status, pos, isFinishedBike, started)}</td>
         </tr>`;
     });
     html += '</tbody></table></div>';
@@ -2462,10 +2479,23 @@ function autoScrollTabs() {
 }
 
 /* ──────────────── Main render ──────────────── */
+// Есть ли хоть один участник с расчётным стартом вело-2 (bike2_start_s
+// пишется сервером ТОЛЬКО тем, кто реально ФИНИШИРОВАЛ вело-1, см.
+// convert_bike_times_to_elapsed/_finished_stage в service.py) — таб
+// "День 2: Стартовый лист" не должен быть доступен в навигации, пока
+// список пуст (найдено пользователем 2026-08-04: до фикса таб был кликабелен
+// и показывал (иногда пустой, иногда преждевременный) список ещё до того,
+// как хоть кто-то финишировал вело-1).
+function startlistHasRiders() {
+    if (!_data) return false;
+    if (_data.individual.some(r => r.bike2_start_s != null)) return true;
+    return _data.relay.some(t => t.members.some(m => m.relay_stage === 'bike' && m.bike2_start_s != null));
+}
 function render() {
     if (!_data) return;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = '';
+    document.querySelector('#tabs [data-tab="startlist"]').style.display = startlistHasRiders() ? '' : 'none';
     // Скрыть фильтр пола при выборе Эстафеты
     const genderGroup = document.getElementById('genderGroup');
     const genderLabel = document.getElementById('genderLabel');

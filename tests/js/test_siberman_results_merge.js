@@ -2445,13 +2445,82 @@ check('renderStage() — активный, ещё не начавший этап
     const html = domGetAppHtml();
     assert.ok(html.includes('badge-notstarted">—<'), `на вкладке "Вело 1" участник, который ещё плывёт, должен показывать "—": ${html}`);
 });
-check('renderBikeCombined() — активный, ещё не начавший вело вовсе, показывает "—"', () => {
-    const notStarted = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 } } });
+check('renderBikeCombined() — активный, ещё даже не финишировавший заплыв, показывает "—"', () => {
+    // seq=4 (5,2 км) — не последняя КТ заплыва (7) — заплыв ещё не завершён,
+    // значит вело точно ещё не началось.
+    const notStarted = mkTimerInd('1', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } });
     setRaceData([notStarted], [], Date.now());
     setState('all', 'all');
     sandbox.renderBikeCombined();
     const html = domGetAppHtml();
-    assert.ok(html.includes('badge-notstarted">—<'), `не начавший вело должен показывать "—": ${html}`);
+    assert.ok(html.includes('badge-notstarted">—<'), `не финишировавший заплыв должен показывать "—" на вело: ${html}`);
+});
+// ── stageHasStarted(): "—"→"На трассе" должен переключаться по факту
+// завершения ПРЕДЫДУЩЕГО этапа (bike_day1 — после финиша заплыва,
+// bike_day2 — по личному расчётному старту, run — после финиша вело-2),
+// а не по наличию первой КТ ЭТОГО этапа — иначе "—" держится до первой
+// КТ, хотя участник уже реально в пути (найдено пользователем 2026-08-04) ──
+check('renderStage(\'bike1\') — финишировал заплыв, но ещё не дошёл до 3 км вело — "На трассе", не "—"', () => {
+    const r = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `финишировавший заплыв должен быть "На трассе" на вело-дне-1, даже без КТ: ${html}`);
+    assert.ok(!html.includes('badge-notstarted">—<'), `не должно быть "—": ${html}`);
+});
+check('renderBikeCombined() — финишировал заплыв, но ещё не дошёл до 3 км вело — "На трассе", не "—"', () => {
+    const r = mkTimerInd('1', { status: 'active', swim_s: 4000, cp: { swim: { 7: 4000 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderBikeCombined();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `финишировавший заплыв должен быть "На трассе" на Своде вело, даже без КТ: ${html}`);
+});
+check('renderStage(\'run\') — финишировал вело-2, но ещё не дошёл до 1 круга бега — "На трассе", не "—"', () => {
+    const n2 = vm.runInContext('STAGE_MAX_SEQ.bike_day2', sandbox);
+    const r = mkTimerInd('1', { status: 'active', bike2_s: 5000, cp: { bike_day2: { [n2]: 20000 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `финишировавший вело-2 должен быть "На трассе" на беге, даже без КТ: ${html}`);
+});
+check('renderStage(\'bike1\') — заплыв ЕЩЁ НЕ финиширован (частичный swim_s) — остаётся "—"', () => {
+    const r = mkTimerInd('1', { status: 'active', swim_s: 1380, cp: { swim: { 4: 1380 } } }); // 5,2 км, не финиш
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-notstarted">—<'), `незавершённый заплыв не должен давать "На трассе" на вело: ${html}`);
+});
+check('renderStage(\'bike2\') — время личного старта дня 2 уже прошло — "На трассе", не "—"', () => {
+    // race_start "вчера" (относительно теста) — расчётный старт дня 2
+    // (8:00 утра дня 2 + 0с для ранга 1) заведомо уже в прошлом.
+    const raceStartEpoch = Date.now() - 5 * 86400 * 1000;
+    const r = mkTimerInd('1', { status: 'active', bike1_s: 20000, bike2_start_s: 8 * 3600, cp: {} });
+    setRaceData([r], [], raceStartEpoch);
+    setState('all', 'all');
+    sandbox.renderStage('bike2');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `наступивший личный старт дня 2 должен давать "На трассе", даже без КТ: ${html}`);
+});
+check('renderStage(\'bike2\') — время личного старта дня 2 ещё НЕ наступило — остаётся "—"', () => {
+    const raceStartEpoch = Date.now() + 5 * 86400 * 1000; // "гонка" в будущем
+    const r = mkTimerInd('1', { status: 'active', bike1_s: 20000, bike2_start_s: 8 * 3600, cp: {} });
+    setRaceData([r], [], raceStartEpoch);
+    setState('all', 'all');
+    sandbox.renderStage('bike2');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-notstarted">—<'), `ещё не наступивший личный старт дня 2 не должен давать "На трассе": ${html}`);
+});
+check('renderStage(\'bike1\') — эстафетный велосипедист: команда финишировала заплыв — "На трассе" через swim КОМАНДЫ, не своё пустое cp.swim', () => {
+    const relay = [mkRelayProgress(10, { swim_s: 4000, swimCp: { swim: { 7: 4000 } }, bikeCp: {} })];
+    setRaceData([], relay, Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('badge-live">На трассе'), `эстафетный велосипедист должен видеть финиш заплыва СВОЕЙ команды: ${html}`);
 });
 check('renderDay1() — активный, ещё не начавший день вовсе, показывает "—"', () => {
     const notStarted = mkTimerInd('1', { status: 'active', cp: {} });
@@ -2616,6 +2685,26 @@ check('renderOverall() — лидер "Вело 1" совпадает с лид�
     // Прежде (баг) считался бы от "сырых" 1455/2561 → лидером выходил bib=2.
     assert.ok(row1.includes('lead">Лидер'), `bib=1 (net вело 561с — самое быстрое) должен быть "Лидером" где-то в строке (Вело1/Вело итого): ${row1}`);
     assert.ok(row2.includes('+6:34'), `bib=2 должен отставать в "Вело 1" на +6:34 от bib=1 по СЕТЕВОМУ времени: ${row2}`);
+});
+
+// ── startlistHasRiders() — таб "День 2: Стартовый лист" не должен быть
+// доступен, пока никто ещё не финишировал вело-1 (bike2_start_s пишется
+// сервером только финишировавшим вело-1, см. service.py fix 2026-08-04) ──
+check('startlistHasRiders() — никто ещё не получил расчётный старт дня 2 — false', () => {
+    const noStarts = mkTimerInd('1', { status: 'active', cp: { bike_day1: { 1: 300 } } }); // bike2_start_s отсутствует
+    setRaceData([noStarts], [], Date.now());
+    assert.strictEqual(sandbox.startlistHasRiders(), false);
+});
+check('startlistHasRiders() — есть личник с расчётным стартом дня 2 — true', () => {
+    const r = mkTimerInd('1', { status: 'active', bike2_start_s: 8 * 3600, cp: {} });
+    setRaceData([r], [], Date.now());
+    assert.strictEqual(sandbox.startlistHasRiders(), true);
+});
+check('startlistHasRiders() — есть эстафетный велосипедист с расчётным стартом дня 2 — true', () => {
+    const relay = [mkRelayProgress(10, { bike1_s: 5000, bikeCp: {} })];
+    relay[0].members.find(m => m.relay_stage === 'bike').bike2_start_s = 8 * 3600;
+    setRaceData([], relay, Date.now());
+    assert.strictEqual(sandbox.startlistHasRiders(), true);
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

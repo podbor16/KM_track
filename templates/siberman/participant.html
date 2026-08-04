@@ -283,6 +283,7 @@ function buildOverallGapPool(data) {
 // а не только на отдельном этапе.
 let _mode = 'race';
 let _rerender = null;
+let _raceStartEpoch = null; // мс, из data.race_start — для stageHasStarted() на Вело День 2
 
 function modeToggle() {
     return `<div class="mode-toggle">
@@ -415,12 +416,14 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     const swimRef = r.swim_s ?? r._teamSwimS ?? null;
     const pos = stagePos({ cp: r.cp, swim_s: swimRef }, cfg.dbStage);
     const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
+    // Вошёл ли участник в этап, даже без первой КТ (см. stageHasStarted).
+    const started = stageHasStarted(r, cfg.dbStage, _raceStartEpoch, Date.now());
     const gaps = computeStageGaps(gapPool, cfg.dbStage);
     const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;
     const raceKey = r._bib ?? r.bib;
     const gap = fmtGap(gaps[key]);
     const lap = pos ? lapLabel(cfg.dbStage, pos.seq) : null;
-    const isCurrent = pos && !finished;
+    const isCurrent = (pos || started) && !finished;
 
     let timeInfo;
     if (finished) {
@@ -436,8 +439,8 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     // иначе "нет данных по плаванию" ложно трактуется как DNF на плавании
     // для велосипедиста/бегуна, у которых плавания попросту нет.
     const badge = r.relay_stage
-        ? relayMemberStatusBadge(r, pos, STAGE_MAX_SEQ[cfg.dbStage])
-        : statusBadge(r, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage));
+        ? relayMemberStatusBadge(r, pos, STAGE_MAX_SEQ[cfg.dbStage], started)
+        : statusBadge(r, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage), started);
 
     return `<details class="stage" ${isCurrent ? 'open' : ''}>
         <summary>
@@ -635,6 +638,11 @@ function renderTeam(data, team) {
     };
 
     const teamSwimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+    // cp.swim/cp.bike_day2 команды — велосипедист/бегун сами не плыли/не
+    // ехали день 2, их собственный cp пуст на предыдущем этапе; нужны
+    // только stageHasStarted() (см. stageSection).
+    const teamSwimCp = team.members.find(x => x.relay_stage === 'swim')?.cp?.swim;
+    const teamBike2Cp = team.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
 
     const membersHtml = team.members.map(m => {
         const cfgs = memberStages[m.relay_stage] ?? [];
@@ -647,7 +655,10 @@ function renderTeam(data, team) {
                 </div>
                 <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
             </div>
-            ${cfgs.map(cfg => stageSection(cfg, { ...m, _bib: team.bib, _teamSwimS: teamSwimS }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
+            ${cfgs.map(cfg => stageSection(cfg, {
+                ...m, _bib: team.bib, _teamSwimS: teamSwimS,
+                cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
+            }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
             ${m.relay_stage === 'bike' ? combinedBikeSection(m.bike1_s, m.bike2_s) : ''}
         </div>`;
     }).join('');
@@ -681,6 +692,7 @@ async function load() {
         const resp = await fetch(`/api/siberman/results?year=${YEAR}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        _raceStartEpoch = data.race_start ? new Date(data.race_start).getTime() : null;
 
         const person = data.individual.find(r => r.bib === BIB);
         const team = data.relay.find(t => t.bib === BIB);

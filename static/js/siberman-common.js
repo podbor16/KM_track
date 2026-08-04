@@ -158,12 +158,16 @@ function stageRelativeStatus(r, stageKey) {
 // lastReached(cp, dbStage) для этапа, racePos(row, maxStage) для гонки/
 // дня, bikeCombinedLastPos(row) для Свода вело) — null означает "ещё не
 // начал". isFinished(pos) — предикат "это и есть последняя КТ среза".
-function activeProgressBadge(pos, isFinished) {
+// started — участник уже вошёл в этот срез, даже если ЕЩЁ НЕ дошёл до
+// первой КТ (иначе "—" держится до первой КТ этапа, хотя человек уже
+// реально в пути — заметный разрыв на "Вело День 1"/"Бег", найдено
+// пользователем 2026-08-04). См. stageHasStarted().
+function activeProgressBadge(pos, isFinished, started) {
     if (pos && isFinished(pos)) return '<span class="badge badge-fin">Финиш</span>';
-    if (pos) return '<span class="badge badge-live">На трассе</span>';
+    if (pos || started) return '<span class="badge badge-live">На трассе</span>';
     return '<span class="badge badge-notstarted">—</span>';
 }
-function statusBadge(r, stageKey) {
+function statusBadge(r, stageKey, started) {
     const s = stageRelativeStatus(r, stageKey);
     if (s === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (s === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
@@ -174,13 +178,13 @@ function statusBadge(r, stageKey) {
         return activeProgressBadge(pos, p => p.stageIdx === STAGE_ORDER.indexOf('run') && p.seq === STAGE_MAX_SEQ.run);
     }
     const dbStage = TAB_TO_DB_STAGE[stageKey];
-    return activeProgressBadge(lastReached(r.cp, dbStage), p => p.seq === STAGE_MAX_SEQ[dbStage]);
+    return activeProgressBadge(lastReached(r.cp, dbStage), p => p.seq === STAGE_MAX_SEQ[dbStage], started);
 }
-function relayMemberStatusBadge(m, pos, maxSeq) {
+function relayMemberStatusBadge(m, pos, maxSeq, started) {
     if (m.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
     if (m.status === 'dns') return '<span class="badge badge-dns">Не стартовал</span>';
     if (m.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
-    return activeProgressBadge(pos, p => p.seq === maxSeq);
+    return activeProgressBadge(pos, p => p.seq === maxSeq, started);
 }
 // Статус ЭСТАФЕТНОЙ КОМАНДЫ целиком (не отдельного участника) — тот же
 // бейдж, что уже был у личников (statusBadge), но команда не несёт своего
@@ -673,6 +677,39 @@ function stageAdjustedValue(row, dbStage, rawValue) {
 function stagePos(row, dbStage) {
     const pos = lastReached(row.cp, dbStage);
     return pos ? { seq: pos.seq, value: stageAdjustedValue(row, dbStage, pos.value) } : null;
+}
+
+// bike2_start_s — секунды ОТ ПОЛУНОЧИ дня 2 (расчётный личный старт по
+// рангу вело-дня-1, см. convert_bike_times_to_elapsed/BIKE_DAY2_BASE_START_S)
+// — переводим в абсолютный epoch (мс) для сравнения с "сейчас". День 2 —
+// календарные сутки СРАЗУ ПОСЛЕ дня старта гонки (двухдневная гонка).
+function bike2StartEpoch(raceStartEpoch, bike2StartS) {
+    if (raceStartEpoch == null || bike2StartS == null) return null;
+    const day1 = new Date(raceStartEpoch);
+    const day2Midnight = new Date(day1.getFullYear(), day1.getMonth(), day1.getDate() + 1).getTime();
+    return day2Midnight + bike2StartS * 1000;
+}
+
+// Вошёл ли участник в этап, даже если ЕЩЁ НЕ дошёл до первой КТ этого
+// этапа — иначе статус держится на "—" до первой КТ (например, 3 км
+// вело-дня-1), хотя участник уже реально едет (найдено пользователем
+// 2026-08-04). swim не входит сюда — масс-старт всей гонки, определяется
+// отдельно (не запрошено сейчас). bike_day1/run — предыдущий этап РЕАЛЬНО
+// завершён (последняя КТ, не просто "есть какое-то значение" — swim_s/
+// bike2_s заполняются уже на первой достигнутой КТ, см. compute_stage_totals
+// в service.py, а не только на финише). bike_day2 — у каждого участника
+// свой личный расчётный старт (bike2_start_s) — "начал", когда живое время
+// его прошло, вне зависимости от checkpoint-данных.
+const STAGE_PRIOR_FINISH = { bike_day1: 'swim', run: 'bike_day2' };
+function stageHasStarted(row, dbStage, raceStartEpoch, nowEpoch) {
+    if (dbStage === 'bike_day2') {
+        const epoch = bike2StartEpoch(raceStartEpoch, row.bike2_start_s);
+        return epoch != null && nowEpoch != null && nowEpoch >= epoch;
+    }
+    const priorStage = STAGE_PRIOR_FINISH[dbStage];
+    if (!priorStage) return false;
+    const priorPos = lastReached(row.cp, priorStage);
+    return !!(priorPos && priorPos.seq === STAGE_MAX_SEQ[priorStage]);
 }
 
 // Положение участника В ГОНКЕ (кросс-этапное) — в отличие от posSortKey

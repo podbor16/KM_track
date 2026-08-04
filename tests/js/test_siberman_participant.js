@@ -288,5 +288,60 @@ check('renderIndividual() — этап, который участник ещё �
     assert.ok(appEl.innerHTML.includes('badge-notstarted">—<'), `этап "Плавание" у ещё не стартовавшего должен показывать "—": ${appEl.innerHTML}`);
 });
 
+// ── stageHasStarted(): та же живая логика "—"→"На трассе", что и в
+// results.html (найдено пользователем 2026-08-04) — теперь и на карточке
+// участника. Секция этапа ищется по <summary>...</summary><...>Вело День 1
+function stageSectionHtml(label) {
+    const m = appEl.innerHTML.match(new RegExp(`<span class="stage-title">${label}</span>[\\s\\S]*?</details>`));
+    return m ? m[0] : '';
+}
+check('renderIndividual() — финишировал заплыв, но ещё не дошёл до 3 км вело-дня-1 — "На трассе", не "—"', () => {
+    const r = { bib: 3, gender: 'M', status: 'active', cp: { swim: { [maxSeqSwim]: 4000 } }, swim_s: 4000, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Вело День 1');
+    assert.ok(section.includes('badge-live">На трассе'), `финишировавший заплыв должен быть "На трассе" на вело-дне-1: ${section}`);
+});
+check('renderIndividual() — заплыв ещё НЕ финиширован (частичный swim_s) — вело-день-1 остаётся "—"', () => {
+    const r = { bib: 3, gender: 'M', status: 'active', cp: { swim: { 4: 1380 } }, swim_s: 1380, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Вело День 1');
+    assert.ok(section.includes('badge-notstarted">—<'), `незавершённый заплыв не должен давать "На трассе" на вело-дне-1: ${section}`);
+});
+check('renderIndividual() — личный старт дня 2 уже наступил — "На трассе" без КТ', () => {
+    const raceStartEpoch = Date.now() - 5 * 86400 * 1000;
+    sandbox.__data_raceStart = new Date(raceStartEpoch).toISOString();
+    vm.runInContext('_raceStartEpoch = new Date(__data_raceStart).getTime();', sandbox);
+    const r = { bib: 3, gender: 'M', status: 'active', cp: {}, swim_s: 4000, bike1_s: 20000, bike2_s: null, run_s: null, bike2_start_s: 8 * 3600 };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Вело День 2');
+    assert.ok(section.includes('badge-live">На трассе'), `наступивший личный старт дня 2 должен давать "На трассе": ${section}`);
+    vm.runInContext('_raceStartEpoch = null;', sandbox);
+});
+check('renderTeam() — эстафетный велосипедист: команда финишировала заплыв — "На трассе" через swim КОМАНДЫ', () => {
+    const team = {
+        bib: 1000, team_name: 'КомандаА', overall_s: null,
+        members: [
+            { relay_stage: 'swim', status: 'active', gender: 'M', swim_s: 4000, cp: { swim: { [maxSeqSwim]: 4000 } } },
+            { relay_stage: 'bike', status: 'active', gender: 'M', bike1_s: null, bike2_s: null, cp: {} },
+            { relay_stage: 'run', status: 'active', gender: 'M', run_s: null, cp: {} },
+        ],
+    };
+    const data = { individual: [], relay: [team] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderTeam(data, team);
+    const section = stageSectionHtml('Вело День 1');
+    assert.ok(section.includes('badge-live">На трассе'), `эстафетный велосипедист должен видеть финиш заплыва СВОЕЙ команды: ${section}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
