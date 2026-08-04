@@ -631,7 +631,6 @@ function buildStats(individual, relayStats, stageKey, maxStage) {
     const finInd = individual.filter(r => relStatus(r) === 'active' && isFinishedSlice(r)).length;
     const dnfCount = individual.filter(r => relStatus(r) === 'dnf').length;
     const dsqCount = individual.filter(r => r.status === 'dsq').length;
-    const dnsCount = individual.filter(r => relStatus(r) === 'dns').length;
     const indDnfDsq = dnfCount + dsqCount;
     let html = `<div class="stats-v2">`;
     if (individual.length > 0) {
@@ -649,7 +648,6 @@ function buildStats(individual, relayStats, stageKey, maxStage) {
         </div>`;
     }
     html += `</div>`;
-    if (dnsCount > 0) html += `<div class="stats"><div class="stat"><div class="stat-val">${dnsCount}</div><div class="stat-lbl">Не стартовали</div></div></div>`;
     return html;
 }
 

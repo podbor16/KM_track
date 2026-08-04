@@ -2540,10 +2540,21 @@ check('stageRelativeStatus() — DNF на более позднем этапе �
     assert.strictEqual(sandbox.stageRelativeStatus(dnfOnRun, 'bike1'), 'active', 'Вело1 должно быть финишировано');
     assert.strictEqual(sandbox.stageRelativeStatus(dnfOnRun, 'run'), 'dnf', 'На Беге — реальный DNF');
 });
-check('stageRelativeStatus() — DNF на более раннем этапе делает более поздний "не стартован", не dnf', () => {
+check('stageRelativeStatus() — DNF на более раннем этапе остаётся dnf на всех последующих (не "не стартовал")', () => {
+    // 2026-08-04: раньше более поздние этапы после DNF показывали "не
+    // стартовал" (dns) — вводило в заблуждение (сход необратим, участник
+    // не "ещё не начал", а уже сошёл) — теперь dnf держится на всех
+    // последующих этапах, "не стартовал" остаётся только для настоящего
+    // dns (участник, реально не стартовавший всю гонку).
     const dnfOnSwim = { status: 'dnf', swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
     assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'swim'), 'dnf', 'DNF именно на плавании');
-    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'bike1'), 'dns', 'Вело1 даже не начато — "не стартовал", не DNF');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'bike1'), 'dnf', 'Вело1 — тоже dnf, сход на плавании необратим');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfOnSwim, 'run'), 'dnf', 'Бег — тоже dnf');
+});
+check('stageRelativeStatus() — настоящий dns (не стартовал всю гонку) остаётся dns на любом этапе', () => {
+    const realDns = { status: 'dns', swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    assert.strictEqual(sandbox.stageRelativeStatus(realDns, 'swim'), 'dns');
+    assert.strictEqual(sandbox.stageRelativeStatus(realDns, 'run'), 'dns');
 });
 check('renderStage() — индикатор "DNF/DSQ" считает DNF только на ОТКРЫТОМ этапе, не на всей гонке', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
