@@ -293,6 +293,8 @@ function splitPaceValue(dbStage, seq, splitS) {
 // 10 (плавание) + 145 (вело1) = 155; 155 + 276 (вело2) = 431 (см. также
 // STAGE_LABEL_RU/STAGE_CFG в results.html и STAGE_DISTANCES_KM в service.py).
 const STAGE_KM_OFFSET = { swim: 0, bike_day1: 10, bike_day2: 155, run: 431 };
+// Полная дистанция гонки (км) — конец последнего этапа (Бег).
+const RACE_TOTAL_KM = STAGE_KM_OFFSET.run + CHECKPOINT_DIST_KM.run[STAGE_MAX_SEQ.run];
 
 // Пропорциональная ширина по X для графика "Позиция" и бегунка прохождения
 // КТ на странице участника — НЕ реальный километраж (тогда плавание

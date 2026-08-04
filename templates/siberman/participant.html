@@ -498,9 +498,15 @@ function progressBarHtml(row) {
     } else if (stage) {
         const pos = lastReached(row.cp, stage);
         const kmInStage = CHECKPOINT_DIST_KM[stage][pos.seq];
-        const stageLenKm = CHECKPOINT_DIST_KM[stage][STAGE_MAX_SEQ[stage]];
-        fillPct = kmToVirtualX(STAGE_KM_OFFSET[stage] + kmInStage);
-        chipText = `${kmInStage.toFixed(1)} / ${stageLenKm} км`;
+        const kmOverall = STAGE_KM_OFFSET[stage] + kmInStage;
+        fillPct = kmToVirtualX(kmOverall);
+        // Основной бегунок — прогресс по ВСЕЙ гонке (0-515 км), а не по
+        // текущему этапу (тот уже есть отдельно, у каждого этапа свой
+        // бегунок в stageProgressBarHtml — там N/M км этапа, здесь трогать
+        // не нужно). Раньше здесь тоже показывались км этапа — путало,
+        // выглядело так, будто участник на 3 из 145 км ВСЕЙ гонки, а не
+        // вело-дня-1 (найдено пользователем 2026-08-04).
+        chipText = `${kmOverall.toFixed(1)} / ${RACE_TOTAL_KM} км`;
         activeStageKey = stage;
     }
     const isBikeActive = activeStageKey === 'bike_day1' || activeStageKey === 'bike_day2';

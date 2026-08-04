@@ -115,7 +115,11 @@ check('progressBarHtml() — не стартовал: маркер на 0%, чи
     assert.ok(!html.includes('pb-inline-chip'), `чип не должен показываться для не стартовавшего: ${html}`);
 });
 
-check('progressBarHtml() — активен на Вело День 2: чип "km / len км", маркер на позиции', () => {
+check('progressBarHtml() — активен на Вело День 2: чип "km / 515 км" (прогресс ПО ВСЕЙ гонке, не по этапу), маркер на позиции', () => {
+    // 2026-08-04: раньше основной бегунок карточки показывал чип с
+    // километражем ЭТАПА ("119.0 / 276 км") — путало (выглядело так, будто
+    // участник на 119 из 276 км всей гонки). Теперь — прогресс по всей
+    // дистанции (0-515 км), этапный чип остаётся только у stageProgressBarHtml.
     const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const row = {
         bib: 1, gender: 'M', status: 'active',
@@ -123,8 +127,8 @@ check('progressBarHtml() — активен на Вело День 2: чип "km
         cp: { swim: { [maxSeqSwim]: 1000 }, bike_day1: { [maxSeqBike1]: 10000 }, bike_day2: { 3: 400 } },
     };
     const html = sandbox.progressBarHtml(row);
-    // CHECKPOINT_DIST_KM.bike_day2[3] = 119 км, длина этапа = 276 км
-    assert.ok(html.includes('119.0 / 276 км'), `ожидался чип "119.0 / 276 км": ${html}`);
+    // STAGE_KM_OFFSET.bike_day2 (155) + CHECKPOINT_DIST_KM.bike_day2[3] (119) = 274 км из 515
+    assert.ok(html.includes('274.0 / 515 км'), `ожидался чип "274.0 / 515 км": ${html}`);
     const expectedX = vm.runInContext('kmToVirtualX(STAGE_KM_OFFSET.bike_day2 + CHECKPOINT_DIST_KM.bike_day2[3])', sandbox);
     assert.ok(html.includes(`left:${expectedX}%`), `маркер должен быть на ${expectedX}%: ${html}`);
 });
