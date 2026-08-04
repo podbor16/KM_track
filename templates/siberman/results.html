@@ -142,6 +142,21 @@
         }
         .tab:hover { color: var(--text); }
         .tab.active { color: var(--red); border-bottom-color: var(--red); }
+        /* Индикатор "здесь сейчас гонка" (computeAutoScrollTab) — независим
+           от .active (какую вкладку выбрал пользователь): пульсирующая
+           точка перед названием, тот же синий, что и бейдж "На трассе"
+           (--blue). На мобильных табы уезжают за экран и до них докручивает
+           autoScrollTabs() — точка там просто дублирует то же сообщение;
+           на десктопе все табы и так помещаются в строку, скроллить нечего,
+           и точка — единственный визуальный сигнал (запрошено пользователем
+           2026-08-04).
+           */
+        .tab-live::before {
+            content: ''; display: inline-block; width: 6px; height: 6px;
+            border-radius: 50%; background: var(--blue); margin-right: 6px;
+            vertical-align: middle; animation: tabLivePulse 1.6s ease-in-out infinite;
+        }
+        @keyframes tabLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
         .tab .tab-dist { font-size: 10px; font-weight: 400; opacity: .7; margin-left: 4px; }
         /* "Итоги гонки" всегда виден слева при автоскролле #tabs до
            активного этапа (п.10, 2026-07-22) — порядок табов не меняется,
@@ -2449,11 +2464,15 @@ function tickStageTimers() {
     });
 }
 
-/* ──────────────── Автоскролл табов до активного этапа ────────────────
-   Только визуальный скролл панели #tabs — НЕ переключает активную
-   вкладку (пользователь остаётся там, где кликнул/где был по умолчанию,
-   т.е. на «Итоги гонки»). Табы по дням и график не участвуют. Переиспользует
-   stageIsPending()/stageStartOffset() из секундомера этапа выше. */
+/* ──────────────── Автоскролл + live-индикатор табов до активного этапа ────
+   Только визуальный эффект панели #tabs — НЕ переключает активную вкладку
+   (пользователь остаётся там, где кликнул/где был по умолчанию, т.е. на
+   «Итоги гонки»). Два независимых сигнала одного и того же вычисленного
+   таба: скролл (полезен на мобильных, где табы уезжают за экран) и
+   пульсирующая точка .tab-live (нужна на десктопе, где все табы и так
+   помещаются в строку и скроллить нечего, 2026-08-04). Табы по дням и
+   график не участвуют. Переиспользует stageIsPending()/stageStartOffset()
+   из секундомера этапа выше. */
 function computeAutoScrollTab() {
     if (!_data) return null;
     if (stageIsPending('swim')) return 'swim';
@@ -2472,6 +2491,11 @@ function computeAutoScrollTab() {
 let _lastAutoScrollTab = null;
 function autoScrollTabs() {
     const target = computeAutoScrollTab();
+    // Визуальный акцент (.tab-live, пульсирующая точка) — обновляется на
+    // КАЖДОМ рендере независимо от скролла ниже: на десктопе табы обычно
+    // и так все видны (нечего скроллить), точка — единственный сигнал,
+    // где сейчас гонка (запрошено пользователем 2026-08-04).
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('tab-live', !!target && t.dataset.tab === target));
     if (!target || target === _lastAutoScrollTab) return;
     _lastAutoScrollTab = target;
     const el = document.querySelector(`#tabs [data-tab="${target}"]`);
