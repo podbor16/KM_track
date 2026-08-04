@@ -89,6 +89,25 @@
                 <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
             </div>
 
+            <div class="card">
+                <h2>Расписание Вело Дня 2 / Бега</h2>
+                <p style="font-size:13px;color:#555;margin:0 0 12px">
+                    Управляет тем, какой этап на публичной странице считается
+                    "текущим" (пульсирующая точка на табе, автоскролл) — Вело
+                    День 1 не задаётся отдельно: он становится активным сразу
+                    по факту первого финиша заплыва, а не по расписанию.
+                    Пустое поле — переключение по времени для этого этапа
+                    отключено (публичная страница останется на предыдущем).
+                </p>
+                <label>Год</label>
+                <input type="number" id="stage-starts-year" value="2025" min="2020" max="2030" style="width:120px">
+                <label>Старт Вело Дня 2 (по красноярскому времени)</label>
+                <input type="datetime-local" id="bike2-start-input" step="1" style="width:220px">
+                <label>Старт Бега (по красноярскому времени)</label>
+                <input type="datetime-local" id="run-start-input" step="1" style="width:220px">
+                <button class="btn btn-primary" id="btn-save-stage-starts" style="margin-top:8px">Сохранить расписание</button>
+            </div>
+
             <div class="card" id="errors-card" style="display:none">
                 <h2>⚠ Ошибки и предупреждения в файле</h2>
                 <ul id="errors-list" style="margin:0;padding-left:20px;font-size:13px;color:#c0392b;line-height:1.6"></ul>
@@ -120,25 +139,6 @@
 
             <div class="card" id="apply-card" style="display:none">
                 <button class="btn btn-success" id="btn-apply">Применить в БД</button>
-            </div>
-
-            <div class="card">
-                <h2>Расписание Вело Дня 2 / Бега</h2>
-                <p style="font-size:13px;color:#555;margin:0 0 12px">
-                    Управляет тем, какой этап на публичной странице считается
-                    "текущим" (пульсирующая точка на табе, автоскролл) — Вело
-                    День 1 не задаётся отдельно: он становится активным сразу
-                    по факту первого финиша заплыва, а не по расписанию.
-                    Пустое поле — переключение по времени для этого этапа
-                    отключено (публичная страница останется на предыдущем).
-                </p>
-                <label>Год</label>
-                <input type="number" id="stage-starts-year" value="2025" min="2020" max="2030" style="width:120px">
-                <label>Старт Вело Дня 2 (по красноярскому времени)</label>
-                <input type="datetime-local" id="bike2-start-input" step="1" style="width:220px">
-                <label>Старт Бега (по красноярскому времени)</label>
-                <input type="datetime-local" id="run-start-input" step="1" style="width:220px">
-                <button class="btn btn-primary" id="btn-save-stage-starts" style="margin-top:8px">Сохранить расписание</button>
             </div>
 
             <div class="card">
