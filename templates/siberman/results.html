@@ -2500,6 +2500,12 @@ function tickStageTimers() {
    из секундомера этапа выше. */
 function computeAutoScrollTab() {
     if (!_data) return null;
+    // Фактическое время старта ещё не наступило — нечего подсвечивать
+    // (stageIsPending('swim') был бы true уже из одной загрузки ростера
+    // без единой отметки — участники "active", просто ещё никто не
+    // финишировал заплыв — тот же нюанс, что уже поймали в
+    // computeStageTimerState(), 2026-08-04, но забыли применить здесь).
+    if (_raceStartEpoch && Date.now() < _raceStartEpoch) return null;
     if (stageIsPending('swim')) return 'swim';
     if (stageIsPending('bike_day1')) return 'bike';
     // Вело1 закрыт, вело2 ещё не начался (никто не вошёл) — целимся в

@@ -465,6 +465,16 @@ check('computeOverallGaps — mid-race личник vs mid-race эстафета
 
 // ── computeAutoScrollTab() — п.1 задачи 2026-07-19 (визуальный скролл
 // табов до активного этапа, независимо от секундомера) ──
+check('computeAutoScrollTab — race_start ещё в будущем (ростер загружен, отметок нет) -> null, не "swim"', () => {
+    // 2026-08-04: загрузили участников на будущий год, гонка не началась —
+    // stageIsPending('swim') было true уже из одного факта "все активны и
+    // никто не финишировал заплыв" (тот же нюанс, что уже поймали в
+    // computeStageTimerState() для секундомера, но забыли применить здесь) —
+    // таб "Плавание" ошибочно подсвечивался пульсирующей точкой как "живой".
+    const notStarted = mkTimerInd(1, { cp: {} });
+    setRaceData([notStarted], [], Date.now() + 3600 * 1000);
+    assert.strictEqual(sandbox.computeAutoScrollTab(), null);
+});
 check('computeAutoScrollTab — плавание ещё активно -> swim', () => {
     const stillSwimming = mkTimerInd(1, { cp: { swim: { 1: 500 } } });
     setRaceData([stillSwimming], [], Date.now());
