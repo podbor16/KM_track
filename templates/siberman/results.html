@@ -759,10 +759,9 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
         ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], combinedGenderRanks[r.gender]?.[r.bib], genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
         <td class="name-cell"><div class="name-stack">
-            <span class="name-main">${r.surname} ${r.name}</span>
+            <span class="name-main">${r.surname} ${r.name} ${finishStarBadge(r)}</span>
             ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
-            ${finishStarBadge(r)}
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
@@ -1100,10 +1099,9 @@ function renderStage(stage) {
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
             <td class="name-cell"><div class="name-stack">
-                <span class="name-main">${r.surname} ${r.name}</span>
+                <span class="name-main">${r.surname} ${r.name} ${finishStarBadge(r)}</span>
                 ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
                 <span class="badge badge-individual">Лично</span>
-                ${finishStarBadge(r)}
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
             <td class="r muted">${metaCell}</td>
@@ -1324,7 +1322,7 @@ function renderRankedProgress(options = {}) {
         // с 0 на каждом этапе внутри дня (найдено пользователем 2026-08-04).
         const lastCpCell = cur ? cumulativeLastCpHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>${finishStarBadge(entry)}`
+            ? `<span class="name-main">${entry.surname} ${entry.name} ${finishStarBadge(entry)}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         // "Финиш" в бейдже статуса — только если РЕАЛЬНО дошёл до конца
         // ИМЕННО этого дня (item._pos на границе maxStage), "—" — если ещё
@@ -1459,8 +1457,8 @@ function renderBikeCombined() {
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
         const rc = absRank != null ? rankClass(absRank) : '';
         const subLine = isRelay ? entry.team_name : cityLabel(entry);
-        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : `<span class="badge badge-individual">Лично</span>${finishStarBadge(entry)}`;
-        const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
+        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Лично</span>';
+        const nameCell = `<span class="name-main">${entry.surname} ${entry.name} ${isRelay ? '' : finishStarBadge(entry)}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
         // "Финиш" — только если РЕАЛЬНО дошёл до конца ОБОИХ вело-дней
