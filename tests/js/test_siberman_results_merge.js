@@ -256,6 +256,14 @@ check('computeStageTimerState — «Следующий этап Вело Ден�
     assert.strictEqual(state.label, 'Вело День 2');
 });
 
+check('computeStageTimerState — race_start ещё в будущем — обратный отсчёт до старта, не "День 1"', () => {
+    // 2026-08-04: раньше это ушло бы в "День 1"-таймер (naive Date.now()-start
+    // на будущий race_start), найдено на реальных тестовых данных со
+    // стартом "прошлого года" по системным часам.
+    setRaceData([], [], Date.now() + 3600 * 1000);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'countdown');
+});
 check('computeStageTimerState — «Гонка завершена», когда все закончили бег (dnf/финиш)', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
@@ -1848,15 +1856,26 @@ check('renderDay1() — участник с DNF на беге, но День 1 �
     assert.ok(rowMatch[0].includes('badge-fin">Финиш<'), `текст статуса должен быть "Финиш": ${rowMatch[0]}`);
     assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">1<'), `активный участник (медленнее по времени) должен идти ВЫШЕ сошедшего: ${html}`);
 });
-check('renderDay1() — "Отметка" в две строки, БЕЗ названия этапа — идентично вкладкам этапов (запрошено пользователем 2026-08-02)', () => {
+check('renderDay1() — "Отметка" в две строки, БЕЗ названия этапа, км НАКОПЛЕННЫЕ (не с нуля на этапе)', () => {
+    // 2026-08-04: "Отметка" на "Днях" должна расти к границе дня (155/431 км),
+    // а не начинаться заново с 0 на каждом этапе внутри дня — финиш
+    // вело-дня-1 (145 км в рамках этапа) = 155 км накопленных (10 км
+    // заплыва + 145 км вело), это и есть граница "Дня 1".
     const maxSeqB1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const runner = mkTimerInd('1', { gender: 'M', bike1_s: 5000, cp: { bike_day1: { [maxSeqB1]: 5000 } } });
     setRaceData([runner], [], Date.now());
     sandbox.renderDay1();
     const html = domGetAppHtml();
-    assert.ok(html.includes('<div>145 км</div>'), `ожидалась строка "145 км" без названия этапа: ${html.slice(0, 700)}`);
+    assert.ok(html.includes('<div>155 км</div>'), `ожидалась строка "155 км" (накоплено, не 145): ${html.slice(0, 700)}`);
     assert.ok(!html.includes('Вело 1,') && !html.includes('Вело 2,'), `названия этапа быть не должно: ${html.slice(0, 700)}`);
     assert.ok(html.includes('muted-sub">Финиш'), `ожидалась вторая строка "Финиш": ${html.slice(0, 700)}`);
+});
+check('renderDay2() — "Отметка" накопленная: 51 км вело-дня-2 показывается как 206 км (155 день1 + 51)', () => {
+    const runner = mkTimerInd('1', { gender: 'M', bike1_s: 20000, bike2_s: null, cp: { bike_day1: { [vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox)]: 20000 }, bike_day2: { 1: 300 } } });
+    setRaceData([runner], [], Date.now());
+    sandbox.renderDay2();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('<div>206 км</div>'), `ожидалась строка "206 км" (155+51), получили: ${html.slice(0, 900)}`);
 });
 
 check('renderDay1() — сошедший (rawStatus=dnf) не получает номер места, даже показывая "Финиш"', () => {

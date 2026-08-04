@@ -52,6 +52,17 @@ def set_race_start(conn, race_year: int, race_start) -> None:
     )
 
 
+def get_latest_race_year(conn) -> Optional[int]:
+    """Последний (по номеру) год с загруженными данными — публичная
+    страница результатов больше не даёт выбор года руками (убран
+    year-select, 2026-08-04): год, за который есть данные в race_config
+    (задаётся в админке при загрузке), выбирается автоматически."""
+    cur = conn.cursor()
+    cur.execute("SELECT race_year FROM race_config ORDER BY race_year DESC LIMIT 1")
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def clear_race_year(conn, race_year: int) -> None:
     """Удалить всех участников (и каскадно все связанные данные) за год."""
     cur = conn.cursor()
@@ -288,4 +299,4 @@ def get_results_for_year(conn, race_year: int) -> dict:
 
     race_start = get_race_start(conn, race_year)
 
-    return {"individual": individual, "relay": relay_list, "race_start": race_start}
+    return {"individual": individual, "relay": relay_list, "race_start": race_start, "race_year": race_year}

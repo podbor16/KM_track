@@ -125,8 +125,12 @@
         .stat-subgap { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
         .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
-        /* ── Бегунок прохождения КТ (п.12) ── */
-        .pb-outer { padding: 4px 18px 18px; }
+        /* ── Бегунок прохождения КТ (п.12) ──
+           .pb-inline-chip торчит на top:-24px над .pb-track-wrap — верхнего
+           паддинга .pb-outer (было 4px) не хватало, чип наезжал на текст
+           строки над ним (заголовок этапа/время/бейдж в summary, найдено
+           пользователем 2026-08-04). 28px — высота чипа (~18px) + запас. */
+        .pb-outer { padding: 28px 18px 18px; }
         .pb-track-wrap { position: relative; }
         .pb-track { position: relative; height: 10px; border-radius: 5px; overflow: hidden; display: flex; background: var(--bg3); }
         .pb-seg { height: 100%; }
@@ -196,7 +200,7 @@
             .p-name { font-size: 17px; }
             .p-bib, .p-team { font-size: 12px; }
             .p-city { font-size: 11px; }
-            .pb-outer { padding: 4px 14px 14px; }
+            .pb-outer { padding: 25px 14px 14px; }
             .pb-inline-chip { font-size: 10px; padding: 2px 6px; top: -21px; }
             .pb-stage-labels { font-size: 10px; }
             .stat { padding: 6px 10px; min-width: 76px; }

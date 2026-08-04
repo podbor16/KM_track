@@ -100,11 +100,6 @@
         [data-theme="light"] .logo-img--light { display: block; }
         .header-spacer { flex: 1; }
         .header-controls { display: flex; align-items: center; gap: 10px; }
-        .year-select {
-            background: var(--bg3); border: 1px solid var(--border);
-            color: var(--text); padding: 6px 10px; border-radius: var(--radius);
-            font-size: 13px; cursor: pointer;
-        }
         .theme-btn {
             background: var(--bg3); border: 1px solid var(--border);
             color: var(--text); width: 34px; height: 34px; border-radius: var(--radius);
@@ -165,20 +160,19 @@
         .tabs-bar--sub { padding: 0 20px; background: var(--bg); }
         .tabs-bar--sub .tab { padding: 8px 14px; font-size: 11px; }
 
-        /* ── Живой секундомер этапа(ов) ── */
-        .stage-timers {
-            display: flex; gap: 10px; flex-wrap: wrap;
-            padding: 10px 20px; background: var(--bg3);
-            border-bottom: 1px solid var(--border);
-        }
+        /* ── Живой секундомер этапа(ов) — теперь инлайн в шапке, на месте
+           убранного year-select (2026-08-04), а не отдельной полосой на
+           всю ширину. ── */
+        .stage-timers { display: flex; gap: 8px; }
         .stage-timer {
-            display: flex; align-items: baseline; gap: 8px;
-            background: var(--bg2); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 6px 14px;
+            display: flex; align-items: baseline; gap: 6px;
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 6px 12px;
         }
-        .stage-timer-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
-        .stage-timer-val { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red); }
-        .stage-timer--static .stage-timer-val { color: var(--text); font-size: 15px; }
+        .stage-timer-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+        .stage-timer-val { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red); }
+        .stage-timer--static .stage-timer-val { color: var(--text); font-size: 13px; }
+        .stage-timer--countdown .stage-timer-val { color: var(--blue); }
 
         /* ── График ── */
         .chart-card {
@@ -399,6 +393,20 @@
            блока, а не прижимается к верху. */
         .name-stack { min-height: 82px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px; }
 
+        /* Колонка "Участник" закреплена слева при горизонтальном скролле
+           широких таблиц (много КТ/колонок мест — на мобильных особенно) —
+           иначе теряется из виду, для какого участника показаны данные
+           (запрошено пользователем 2026-08-04). Колонки левее (Место/№)
+           уезжают под неё — тот же приём, что уже у .tab-pinned. Фон
+           подобран под КАЖДОЕ состояние строки (hover/эстафета), иначе
+           сквозь закреплённую ячейку было бы видно уехавшие соседние
+           колонки/несовпадающий фон.*/
+        th.name-cell, td.name-cell { position: sticky; left: 0; box-shadow: 1px 0 0 var(--border); }
+        th.name-cell { z-index: 2; background: var(--bg3); }
+        td.name-cell { z-index: 1; background: var(--bg2); }
+        tbody tr:hover td.name-cell { background: var(--bg3); }
+        tbody tr.relay-row td.name-cell { background: color-mix(in srgb, var(--blue) 14%, var(--bg2)); }
+
         /* Ранговая подсветка (rank-1/2/3) полностью убрана — сначала лидер
            (2026-07-22, "и так понятно, что человек первый"), затем и top-2/3
            тоже (запрошено пользователем 2026-07-23). Место видно в колонке
@@ -468,8 +476,11 @@
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         @media (max-width: 640px) {
-            .header { padding: 10px 14px; }
+            .header { padding: 10px 14px; flex-wrap: wrap; row-gap: 8px; }
             .logo-img { height: 32px; }
+            .stage-timer { padding: 4px 8px; gap: 4px; }
+            .stage-timer-lbl { font-size: 9px; }
+            .stage-timer-val { font-size: 13px; }
             .tabs-bar { padding: 0 14px 0 0; }
             .tab-pinned { padding-left: 14px; }
             .tab { padding: 10px 12px; font-size: 12px; }
@@ -496,10 +507,6 @@
             .stat-card .stat-sub2 { font-size: 10px; }
             .tabs-bar--sub { padding: 0 14px; }
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
-            .stage-timers { padding: 8px 14px; gap: 8px; }
-            .stage-timer { padding: 5px 10px; }
-            .stage-timer-lbl { font-size: 10px; }
-            .stage-timer-val { font-size: 15px; }
         }
     </style>
 </head>
@@ -513,15 +520,13 @@
     </div>
     <div class="header-spacer"></div>
     <div class="header-controls">
-        <select class="year-select" id="yearSelect" onchange="loadYear(this.value)">
-            <option value="2025">2025</option>
-        </select>
+        <!-- Год больше не выбирается вручную (2026-08-04) — здесь теперь
+             живой секундомер этапа (или обратный отсчёт до старта, пока
+             гонка не началась), см. renderStageTimers(). -->
+        <div class="stage-timers" id="stageTimers" style="display:none"></div>
         <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
     </div>
 </div>
-
-<!-- ── Живой секундомер этапа(ов) ── -->
-<div class="stage-timers" id="stageTimers" style="display:none"></div>
 
 <!-- ── Tabs ── -->
 <div class="tabs-bar" id="tabs">
@@ -828,7 +833,7 @@ function buildMergedOverallEntries(individual, relay) {
 }
 
 const OVERALL_TABLE_HEAD = () => `<thead><tr>
-    ${rankHeaderCells(showSecondaryRank(), overallSecondaryLabel())}<th class="r">№</th><th>Участник</th>
+    ${rankHeaderCells(showSecondaryRank(), overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th>
     <th class="r">Итого</th>
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
@@ -1151,7 +1156,7 @@ function renderStage(stage) {
 
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
-        ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th>
+        ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th>
         <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Отметка</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
@@ -1280,7 +1285,7 @@ function renderRankedProgress(options = {}) {
     const gaps = computeOverallGaps(gapPool, maxStage);
     const showGenderCol = showSecondaryRank();
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th>Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v, rawStatus } = item;
         const hasVal = v != null;
@@ -1302,7 +1307,10 @@ function renderRankedProgress(options = {}) {
         const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
         const cur = currentStage(statusEntity, maxStage);
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
-        const lastCpCell = cur ? lastCpTwoLineHtml(cur, pos?.seq) : '—';
+        // cumulativeLastCpHtml — не lastCpTwoLineHtml: "Отметка" на "Днях"
+        // должна расти к границе ДНЯ (155/431 км), а не начинаться заново
+        // с 0 на каждом этапе внутри дня (найдено пользователем 2026-08-04).
+        const lastCpCell = cur ? cumulativeLastCpHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
             ? `<span class="name-main">${entry.surname} ${entry.name}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
@@ -1430,7 +1438,7 @@ function renderBikeCombined() {
     const showGenderCol = _gender === 'all';
 
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th>Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, rawStatus, pos }) => {
         const hasVal = pos != null;
         const v = pos ? pos.value : null;
@@ -2332,12 +2340,12 @@ function renderStartlist() {
 
     let html = `<div class="section-hdr">Расчётный старт вело-2 (по рангу вело-1, топ-5 — интервал 3 мин, далее 1 мин)</div>`;
     html += `<div class="table-wrap"><table>
-    <thead><tr><th>Порядок<br>старта</th><th class="r">№</th><th>Участник</th><th>Пол</th><th class="r">Время<br>старта</th></tr></thead><tbody>`;
+    <thead><tr><th>Порядок<br>старта</th><th class="r">№</th><th class="name-cell">Участник</th><th>Пол</th><th class="r">Время<br>старта</th></tr></thead><tbody>`;
     riders.forEach((r, i) => {
         html += `<tr>
             <td><span class="rank-num">${i + 1}</span></td>
             <td class="bib-cell">${r.bib}</td>
-            <td>
+            <td class="name-cell">
                 <span class="name-main">${r.name}</span>
                 ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
             </td>
@@ -2420,6 +2428,12 @@ const WIDGET_STAGES = [
 // закрыт, этот ещё нет) или, если все элементы закрыты, гонка завершена.
 function computeStageTimerState() {
     if (!_raceStartEpoch || !_data) return null;
+    // Фактическое время старта ещё не наступило — обратный отсчёт до гонки
+    // (2026-08-04, запрошено пользователем: раньше секундомер День 1 сразу
+    // считал "прошедшее" время от race_start, даже если та дата ещё в
+    // будущем — с любым будущим race_start это ушло бы в отрицательные/
+    // абсурдные значения при наивном Date.now()-start).
+    if (Date.now() < _raceStartEpoch) return { type: 'countdown', startEpoch: _raceStartEpoch };
     for (const s of WIDGET_STAGES) {
         const off = s.startOffset();
         if (off == null) return { type: 'next', label: s.label };
@@ -2437,7 +2451,13 @@ function renderStageTimers() {
         return;
     }
     el.style.display = '';
-    if (state.type === 'timer') {
+    if (state.type === 'countdown') {
+        el.innerHTML = `<div class="stage-timer stage-timer--countdown" data-countdown="${state.startEpoch}">
+            <span class="stage-timer-lbl">До старта</span>
+            <span class="stage-timer-val">00:00:00</span>
+        </div>`;
+        tickStageTimers();
+    } else if (state.type === 'timer') {
         el.innerHTML = `<div class="stage-timer" data-start="${state.startEpoch}">
             <span class="stage-timer-lbl">${state.label}</span>
             <span class="stage-timer-val">00:00:00</span>
@@ -2459,6 +2479,13 @@ function tickStageTimers() {
     document.querySelectorAll('.stage-timer[data-start]').forEach(el => {
         const elapsed = Math.max(0, Math.floor((Date.now() - Number(el.dataset.start)) / 1000));
         el.querySelector('.stage-timer-val').textContent = fmtTime(elapsed);
+    });
+    document.querySelectorAll('.stage-timer[data-countdown]').forEach(el => {
+        const remaining = Math.max(0, Math.floor((Number(el.dataset.countdown) - Date.now()) / 1000));
+        el.querySelector('.stage-timer-val').textContent = fmtTime(remaining);
+        // Отсчёт дошёл до нуля — гонка стартовала, пересчитываем состояние
+        // целиком (следующий тик уже не должен быть countdown).
+        if (remaining === 0) renderStageTimers();
     });
 }
 
@@ -2600,16 +2627,22 @@ function syncStaticButtonClasses() {
 }
 
 /* ──────────────── Data loading ──────────────── */
-async function loadYear(year) {
-    _year = year;
+// Год больше не выбирается вручную (year-select убран, 2026-08-04) —
+// первая загрузка не передаёт year вовсе, сервер сам берёт последний год
+// с данными (тот, что реально загружен в админке, см. get_latest_race_year);
+// _year фиксируется из ответа (data.race_year) и используется дальше для
+// поллинга/ссылок на карточки участников — сессия не "переключит" год сама
+// по себе, даже если админ загрузит новый, пока страница открыта.
+async function loadResults() {
     document.getElementById('loading').style.display = '';
     document.getElementById('app').style.display = 'none';
     try {
-        const resp = await fetch(`/api/siberman/results?year=${year}`);
+        const resp = await fetch('/api/siberman/results');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const raw = await resp.text();
         _lastDataJson = raw;
         _data = JSON.parse(raw);
+        _year = _data.race_year;
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         render();
         renderStageTimers();
@@ -2689,7 +2722,7 @@ document.querySelectorAll('[data-gender]').forEach(btn => {
 
 readStateFromUrl();
 syncStaticButtonClasses();
-loadYear(2025);
+loadResults();
 </script>
 </body>
 </html>

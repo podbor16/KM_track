@@ -350,6 +350,21 @@ function lastCpTwoLineHtml(dbStage, seq) {
     return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;
 }
 
+// Как lastCpTwoLineHtml, но км — НАКОПЛЕННЫЕ по всей гонке (+ STAGE_KM_OFFSET),
+// а не в рамках текущего этапа — нужно на "Днях" (Итог 1/2 дня), где
+// "Отметка" должна отражать прогресс к границе ДНЯ (155/431 км), а не
+// заново с нуля на каждом этапе внутри дня (найдено пользователем
+// 2026-08-04: на "Итог 2 дней" показывалось "51 км" вместо "206 км" =
+// 155 (день 1 целиком) + 51 (прогресс на вело-дне-2 к этой КТ)).
+function cumulativeLastCpHtml(dbStage, seq) {
+    if (seq == null) return '—';
+    const km = STAGE_KM_OFFSET[dbStage] + CHECKPOINT_DIST_KM[dbStage][seq];
+    const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
+    if (seq === STAGE_MAX_SEQ[dbStage]) return kmLine + '<div class="muted-sub">Финиш</div>';
+    const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
+    return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;
+}
+
 function lastReached(cp, stage) {
     // {seq, value} последней непустой КТ этапа для участника, либо null
     if (!cp || !cp[stage]) return null;

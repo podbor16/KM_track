@@ -2,6 +2,7 @@ import pickle
 import logging
 import tempfile
 import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -11,7 +12,9 @@ from src.siberman.parser import parse_excel
 from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
-from src.siberman.db import get_siberman_connection, get_results_for_year, set_race_start
+from src.siberman.db import (
+    get_siberman_connection, get_results_for_year, set_race_start, get_latest_race_year,
+)
 from src.core.auth import api_require_auth
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -89,11 +92,18 @@ async def participant_page(request: Request, bib: str, year: int = 2025):
 
 
 @router.get("/api/siberman/results")
-async def api_results(year: int = 2025):
+async def api_results(year: Optional[int] = None):
+    # year не передан — публичная страница больше не даёт выбор года руками
+    # (year-select убран, 2026-08-04): используем последний год с данными
+    # (задаётся тем, что реально загружено в админке).
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
+        if year is None:
+            year = get_latest_race_year(conn)
+            if year is None:
+                raise HTTPException(status_code=404, detail="Нет загруженных данных ни за один год")
         data = get_results_for_year(conn, year)
     finally:
         conn.close()
