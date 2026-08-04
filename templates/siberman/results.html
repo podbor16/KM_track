@@ -886,8 +886,8 @@ function renderOverall() {
     // раньше fieldGaps сравнивал swim_s/bike1_s/... напрямую — неверно
     // для участников на РАЗНЫХ КТ, см. posSortKey).
     const stageGapPool = [
-        ...activeIndividual.map(r => ({ key: r.bib, cp: r.cp, status: 'active' })),
-        ...activeRelay.map(t => ({ key: t.bib, cp: teamGapRow(t).cp, status: 'active' })),
+        ...activeIndividual.map(r => ({ key: r.bib, cp: r.cp, swim_s: r.swim_s, status: 'active' })),
+        ...activeRelay.map(t => ({ key: t.bib, cp: teamGapRow(t).cp, swim_s: teamGapRow(t).swim_s, status: 'active' })),
     ];
     const bikeCombinedGapPool = [
         ...activeIndividual.map(r => ({ key: r.bib, entry: r, status: 'active' })),
