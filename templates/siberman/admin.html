@@ -78,34 +78,33 @@
             <div class="msg msg-success" id="msg-success"></div>
 
             <div class="card">
-                <h2>1. Загрузить файл Excel</h2>
+                <h2>Расписание этапов</h2>
                 <label>Год гонки</label>
                 <input type="number" id="race-year" value="2025" min="2020" max="2030" style="width:120px">
-                <label>Дата и время старта гонки (день 1, плавание, по красноярскому времени)</label>
+                <label>Старт Дня 1 / Плавания (по красноярскому времени)</label>
                 <input type="datetime-local" id="race-start" step="1" style="width:220px" required>
-                <p class="race-start-hint">Подставлено из сохранённого старта года — меняйте только если старт реально сдвинулся (экстренная правка).</p>
-                <label>Файл (.xlsx)</label>
-                <input type="file" id="file-input" accept=".xlsx,.xls">
-                <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
-            </div>
-
-            <div class="card">
-                <h2>Расписание Вело Дня 2 / Бега</h2>
-                <p style="font-size:13px;color:#555;margin:0 0 12px">
-                    Управляет тем, какой этап на публичной странице считается
-                    "текущим" (пульсирующая точка на табе, автоскролл) — Вело
-                    День 1 не задаётся отдельно: он становится активным сразу
-                    по факту первого финиша заплыва, а не по расписанию.
-                    Пустое поле — переключение по времени для этого этапа
-                    отключено (публичная страница останется на предыдущем).
-                </p>
-                <label>Год</label>
-                <input type="number" id="stage-starts-year" value="2025" min="2020" max="2030" style="width:120px">
+                <p class="race-start-hint">Подставлено из сохранённого старта года — меняйте только если старт реально сдвинулся (экстренная правка). Сохраняется вместе с загрузкой файла ниже, отдельной кнопки не требует.</p>
                 <label>Старт Вело Дня 2 (по красноярскому времени)</label>
                 <input type="datetime-local" id="bike2-start-input" step="1" style="width:220px">
                 <label>Старт Бега (по красноярскому времени)</label>
                 <input type="datetime-local" id="run-start-input" step="1" style="width:220px">
-                <button class="btn btn-primary" id="btn-save-stage-starts" style="margin-top:8px">Сохранить расписание</button>
+                <p style="font-size:13px;color:#555;margin:4px 0 0">
+                    Вело День 2 / Бег управляют тем, какой этап на публичной
+                    странице считается "текущим" (пульсирующая точка на табе,
+                    автоскролл) — Вело День 1 не задаётся отдельно: он
+                    становится активным сразу по факту первого финиша
+                    заплыва, а не по расписанию. Пустое поле — переключение
+                    по времени для этого этапа отключено (страница останется
+                    на предыдущем).
+                </p>
+                <button class="btn btn-primary" id="btn-save-stage-starts" style="margin-top:8px">Сохранить старт Вело-2/Бега</button>
+            </div>
+
+            <div class="card">
+                <h2>1. Загрузить файл Excel</h2>
+                <label>Файл (.xlsx)</label>
+                <input type="file" id="file-input" accept=".xlsx,.xls">
+                <button class="btn btn-primary" id="btn-upload">Загрузить и проверить</button>
             </div>
 
             <div class="card" id="errors-card" style="display:none">
@@ -226,7 +225,7 @@
     // (см. ниже) вызываются ПОСЛЕ и перезаписывают полем то, что реально
     // сохранено в БД для этого года — localStorage только затычка для
     // значений, ещё не отправленных на сервер.
-    const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'stage-starts-year', 'bike2-start-input', 'run-start-input', 'startlist-year'];
+    const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'bike2-start-input', 'run-start-input', 'startlist-year'];
     const UPLOAD_TAB_STORAGE_PREFIX = 'siberman_admin_upload_';
     UPLOAD_TAB_PERSIST_IDS.forEach(id => {
         const el = $(id);
@@ -251,13 +250,12 @@
             }
         } catch (e) { /* нет сохранённого старта года — оставляем поле пустым для первого ввода */ }
     }
-    $('race-year').addEventListener('change', prefillRaceStart);
-    prefillRaceStart();
-
     // Расписание Вело Дня 2 / Бега — независимо от race_start, читается/
-    // сохраняется отдельной парой полей (см. router.py /admin/stage-starts).
+    // сохраняется отдельной парой полей (см. router.py /admin/stage-starts),
+    // но год общий с полем выше (race-year, объединено в один блок
+    // "Расписание этапов" — запрошено пользователем 2026-08-04).
     async function prefillStageStarts() {
-        const year = $('stage-starts-year').value;
+        const year = $('race-year').value;
         try {
             const r = await fetch(`/api/siberman/results?year=${year}`);
             if (!r.ok) return;
@@ -266,12 +264,13 @@
             $('run-start-input').value = data.run_start ? data.run_start.slice(0, 19) : '';
         } catch (e) { /* нет сохранённого расписания года — оставляем поля пустыми */ }
     }
-    $('stage-starts-year').addEventListener('change', prefillStageStarts);
+    $('race-year').addEventListener('change', () => { prefillRaceStart(); prefillStageStarts(); });
+    prefillRaceStart();
     prefillStageStarts();
 
     $('btn-save-stage-starts').addEventListener('click', async () => {
         hideMsg();
-        const year = $('stage-starts-year').value;
+        const year = $('race-year').value;
         const params = new URLSearchParams({
             race_year: year,
             bike2_start: $('bike2-start-input').value,
