@@ -194,11 +194,13 @@ check('buildRankedEntries — сортировка по live-позиции (max
 // ── Живой секундомер этапа: stageStartOffset()/stageIsPending()/computeActiveStageTimers() ──
 // _data/_raceStartEpoch объявлены как let внутри исполненного скрипта —
 // та же лексическая изоляция, что и _gender/_fmt (см. setState выше).
-function setRaceData(individual, relay, raceStartEpoch) {
+function setRaceData(individual, relay, raceStartEpoch, bike2StartEpoch = null, runStartEpoch = null) {
     sandbox.__individual = individual;
     sandbox.__relay = relay;
     sandbox.__raceStartEpoch = raceStartEpoch;
-    vm.runInContext('_data = { individual: __individual, relay: __relay }; _raceStartEpoch = __raceStartEpoch;', sandbox);
+    sandbox.__bike2StartEpoch = bike2StartEpoch;
+    sandbox.__runStartEpoch = runStartEpoch;
+    vm.runInContext('_data = { individual: __individual, relay: __relay }; _raceStartEpoch = __raceStartEpoch; _bike2StartEpoch = __bike2StartEpoch; _runStartEpoch = __runStartEpoch;', sandbox);
 }
 function mkTimerInd(bib, overrides = {}) {
     return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
@@ -488,16 +490,15 @@ check('computeAutoScrollTab — плавание закрыто, вело1 ак�
     assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
 });
 
-check('computeAutoScrollTab — вело1 закрыт, вело2 не начался -> startlist', () => {
-    // "Вело1 закрыт" при "вело2 не начался" данными представимо только через
-    // сход ДО вело1 (dnf во время/после плавания, bike1_s так и не
-    // проставлен) — иначе bike1_s сам по себе уже означал бы "вошёл в вело2"
-    // (см. stageEntryOffset/STAGE_PRIOR_KEYS, тот же нюанс что и в тесте
-    // computeStageTimerState выше).
+check('computeAutoScrollTab — заплыв закрыт, вело-2/бег ещё не наступили -> bike (не "startlist")', () => {
+    // 2026-08-04, второй раунд: раньше это была отдельная вкладка "startlist"
+    // (расчётный список вело-2) — теперь индикатор просто остаётся на "bike"
+    // (там же живёт вело-день-1), пока реально не наступит вело-2/бег —
+    // не убегает вперёд к этапу без данных.
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const a = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
     setRaceData([a], [], Date.now());
-    assert.strictEqual(sandbox.computeAutoScrollTab(), 'startlist');
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
 });
 
 check('computeAutoScrollTab — вело2 активно -> bike', () => {
@@ -511,9 +512,10 @@ check('computeAutoScrollTab — вело2 активно -> bike', () => {
     assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
 });
 
-check('computeAutoScrollTab — бег ещё не начался (никто не вошёл) -> run', () => {
-    // Аналогично — bike2_s не проставлен (сошёл во время вело2, не завершив),
-    // иначе он сам по себе означал бы "вошёл в бег".
+check('computeAutoScrollTab — вело-2 идёт, бег по факту ещё не наступил -> bike (не убегает вперёд на "run")', () => {
+    // 2026-08-04, второй раунд: раньше "никто не вошёл в бег" сразу же
+    // указывало на вкладку "Бег" (там пока пусто) — теперь индикатор
+    // остаётся на "bike", пока бег реально/по расписанию не наступит.
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
     const a = mkTimerInd(1, {
@@ -522,7 +524,7 @@ check('computeAutoScrollTab — бег ещё не начался (никто н
         swim_s: 3000, bike1_s: 9000,
     });
     setRaceData([a], [], Date.now());
-    assert.strictEqual(sandbox.computeAutoScrollTab(), 'run');
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
 });
 
 check('computeAutoScrollTab — бег активен -> run', () => {
@@ -548,6 +550,55 @@ check('computeAutoScrollTab — гонка полностью завершена
     });
     setRaceData([a], [], Date.now());
     assert.strictEqual(sandbox.computeAutoScrollTab(), 'overall');
+});
+
+// ── computeAutoScrollState().live — первый финиш заплыва делает ОБА таба
+// (Плавание+Вело) "живыми" одновременно, скролл при этом держится на
+// Плавании, пока оно не закроется целиком (2026-08-04, второй раунд) ──
+check('computeAutoScrollState — первый финишер заплыва: live=[swim,bike], но scroll=swim (второй ещё плывёт)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const finished = mkTimerInd(1, { cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const stillSwimming = mkTimerInd(2, { cp: { swim: { 1: 500 } } });
+    setRaceData([finished, stillSwimming], [], Date.now());
+    const state = sandbox.computeAutoScrollState();
+    // JSON.stringify — не deepStrictEqual: массив создан внутри vm-песочницы,
+    // у него другой Array-конструктор (другой "realm"), чем у host-процесса,
+    // deepStrictEqual считает их разными объектами при идентичном содержимом.
+    assert.strictEqual(JSON.stringify(Array.from(state.live).sort()), JSON.stringify(['bike', 'swim']));
+    assert.strictEqual(state.scroll, 'swim');
+});
+check('computeAutoScrollState — никто ещё не финишировал заплыв: live=[swim] только', () => {
+    const stillSwimming = mkTimerInd(1, { cp: { swim: { 1: 500 } } });
+    setRaceData([stillSwimming], [], Date.now());
+    assert.strictEqual(JSON.stringify(Array.from(sandbox.computeAutoScrollState().live)), JSON.stringify(['swim']));
+});
+
+// ── Расписание Вело Дня 2 / Бега из админки (bike2StartEpoch/runStartEpoch) —
+// переключение по ВРЕМЕНИ, даже если данных по новому этапу ещё нет ──
+check('computeAutoScrollTab — заплыв закрыт, время вело-2 из админки ещё не наступило -> bike, не переключается раньше времени', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const a = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    setRaceData([a], [], Date.now(), Date.now() + 3600 * 1000);
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
+});
+check('computeAutoScrollTab — заплыв закрыт, время вело-2 из админки уже наступило -> тоже bike (тот же топ-таб, но переключение состоялось)', () => {
+    // Вело-2 живёт на том же топ-табе "bike" (Вело), что и вело-1 — время
+    // из админки здесь влияет на runHasStarted-гейт дальше, не на сам
+    // результат этого шага; проверяем, что при наступившем времени вело-2,
+    // но НЕ наступившем времени бега, индикатор остаётся на "bike" (не run).
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const a = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    setRaceData([a], [], Date.now(), Date.now() - 1000, Date.now() + 3600 * 1000);
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'bike');
+});
+check('computeAutoScrollTab — время бега из админки наступило, но данных по бегу ещё нет -> run (переключается СРАЗУ по времени)', () => {
+    // Участник активен, заплыв финиширован (иначе завис бы на "swim"),
+    // данных по бегу — вообще никаких: переключение на "run" всё равно
+    // должно состояться, раз время уже наступило.
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const a = mkTimerInd(1, { status: 'active', swim_s: 3000, cp: { swim: { [maxSeqSwim]: 3000 } } });
+    setRaceData([a], [], Date.now(), Date.now() - 3600 * 1000, Date.now() - 1000);
+    assert.strictEqual(sandbox.computeAutoScrollTab(), 'run');
 });
 
 // ── kmToVirtualX()/virtualXToKm() — пропорциональный X графика «Позиция»

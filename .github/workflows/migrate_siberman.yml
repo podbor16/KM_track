@@ -35,6 +35,9 @@ jobs:
             # Add race_config (абсолютное время старта гонки — для live-секундомера этапов)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/004_race_config.sql
 
+            # Add bike2_start/run_start (расписание Вело Дня 2/Бега, задаётся в админке)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/005_stage_starts.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

@@ -14,6 +14,7 @@ from src.siberman.service import (
 )
 from src.siberman.db import (
     get_siberman_connection, get_results_for_year, set_race_start, get_latest_race_year,
+    set_stage_starts,
 )
 from src.core.auth import api_require_auth
 
@@ -116,9 +117,31 @@ async def api_results(year: Optional[int] = None):
     data["individual"] = [_clean_row(r) for r in data["individual"]]
     for team in data["relay"]:
         team["members"] = [_clean_row(m) for m in team["members"]]
-    if data.get("race_start") is not None:
-        data["race_start"] = data["race_start"].isoformat()
+    for key in ("race_start", "bike2_start", "run_start"):
+        if data.get(key) is not None:
+            data[key] = data[key].isoformat()
     return JSONResponse(data)
+
+
+@router.post("/api/siberman/admin/stage-starts")
+async def set_stage_starts_endpoint(race_year: int = 2025, bike2_start: str = "", run_start: str = "",
+                                     user: str = Depends(api_require_auth)):
+    """Расписание Вело Дня 2 / Бега — независимо от race_start (Дня 1),
+    задаётся отдельно и в любой момент (не обязательно при загрузке файла).
+    Пустая строка — снять время (расписание ещё не решено)."""
+    try:
+        b2 = _parse_race_start(bike2_start) if bike2_start else None
+        rn = _parse_race_start(run_start) if run_start else None
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    conn = get_siberman_connection()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        set_stage_starts(conn, race_year, b2, rn)
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 @router.post("/api/siberman/admin/upload")

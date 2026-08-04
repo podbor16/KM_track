@@ -579,6 +579,11 @@ let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
 let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
+// Расписание Вело Дня 2 / Бега (задаётся в админке, необязательно) —
+// используется ТОЛЬКО индикатором активного таба (computeAutoScrollTab/
+// computeAutoScrollLiveTabs), не влияет на статусы/секундомер выше.
+let _bike2StartEpoch = null;
+let _runStartEpoch = null;
 // Сериализованный снимок последних загруженных данных — refreshData()
 // перерисовывает страницу (и графики) ТОЛЬКО когда данные реально
 // изменились, а не на каждый тик поллинга (иначе Chart.js пересоздаётся
@@ -2492,44 +2497,71 @@ function tickStageTimers() {
 /* ──────────────── Автоскролл + live-индикатор табов до активного этапа ────
    Только визуальный эффект панели #tabs — НЕ переключает активную вкладку
    (пользователь остаётся там, где кликнул/где был по умолчанию, т.е. на
-   «Итоги гонки»). Два независимых сигнала одного и того же вычисленного
-   таба: скролл (полезен на мобильных, где табы уезжают за экран) и
-   пульсирующая точка .tab-live (нужна на десктопе, где все табы и так
-   помещаются в строку и скроллить нечего, 2026-08-04). Табы по дням и
-   график не участвуют. Переиспользует stageIsPending()/stageStartOffset()
-   из секундомера этапа выше. */
+   «Итоги гонки»). Два независимых сигнала одного вычисленного состояния:
+   скролл (полезен на мобильных, где табы уезжают за экран) и пульсирующая
+   точка .tab-live (нужна на десктопе, где все табы и так помещаются в
+   строку и скроллить нечего, 2026-08-04).
+
+   Границы этапов (2026-08-04, второй раунд — раньше переход между этапами
+   определялся ТОЛЬКО тем, что данные предыдущего этапа "закрыты", из-за
+   чего индикатор мог указать на этап, где ещё вообще нет данных, пока
+   реальное время до него не дошло):
+     Плавание   — масс-старт (race_start), закрывается когда не осталось
+                  активных недоплывших (stageIsPending).
+     Вело День 1 — начинается по ФАКТУ первого финиша заплыва (не по
+                  расписанию — у него нет единого времени старта, каждый
+                  входит сразу по своему финишу заплыва), поэтому в момент
+                  первого финиша ОБА таба (Плавание+Вело) "живые"
+                  одновременно, но автоскролл ещё держится на Плавании,
+                  пока оно не закроется полностью.
+     Вело День 2 — по расписанию (bike2HasStarted): если админ задал время
+                  в админке — по нему; если нет — прежнее поведение (по
+                  факту первого входа в вело-2).
+     Бег         — аналогично, по расписанию (runHasStarted) или по факту.
+   Переиспользует stageIsPending()/stageStartOffset() из секундомера этапа
+   выше. */
+function anyoneFinishedSwim() {
+    return stageParticipantRows('swim').some(r => lastReached(r.cp, 'swim')?.seq === STAGE_MAX_SEQ.swim);
+}
+function bike2HasStarted() {
+    if (_bike2StartEpoch != null) return Date.now() >= _bike2StartEpoch;
+    return stageStartOffset('bike_day2') != null;
+}
+function runHasStarted() {
+    if (_runStartEpoch != null) return Date.now() >= _runStartEpoch;
+    return stageStartOffset('run') != null;
+}
+function computeAutoScrollState() {
+    if (!_data || !_raceStartEpoch || Date.now() < _raceStartEpoch) return { live: [], scroll: null };
+    if (stageIsPending('swim')) {
+        const live = anyoneFinishedSwim() ? ['swim', 'bike'] : ['swim'];
+        return { live, scroll: 'swim' };
+    }
+    // Заплыв закрыт целиком — минимум Вело День 1 уже идёт. Пока не
+    // наступило (по расписанию/факту) ни Вело День 2, ни Бег — остаёмся
+    // на едином табе "Вело" (там и живут оба дня), не убегая вперёд.
+    if (!bike2HasStarted() || !runHasStarted()) return { live: ['bike'], scroll: 'bike' };
+    if (stageIsPending('run')) return { live: ['run'], scroll: 'run' };
+    return { live: ['overall'], scroll: 'overall' }; // гонка полностью завершена
+}
+// Только цель скролла — сохранён отдельной функцией (не только полем
+// объекта) ради обратной совместимости вызовов/тестов.
 function computeAutoScrollTab() {
-    if (!_data) return null;
-    // Фактическое время старта ещё не наступило — нечего подсвечивать
-    // (stageIsPending('swim') был бы true уже из одной загрузки ростера
-    // без единой отметки — участники "active", просто ещё никто не
-    // финишировал заплыв — тот же нюанс, что уже поймали в
-    // computeStageTimerState(), 2026-08-04, но забыли применить здесь).
-    if (_raceStartEpoch && Date.now() < _raceStartEpoch) return null;
-    if (stageIsPending('swim')) return 'swim';
-    if (stageIsPending('bike_day1')) return 'bike';
-    // Вело1 закрыт, вело2 ещё не начался (никто не вошёл) — целимся в
-    // расчётный стартовый лист вело-2, единственная "промежуточная" вкладка.
-    if (stageStartOffset('bike_day2') == null) return 'startlist';
-    if (stageIsPending('bike_day2')) return 'bike';
-    // Вело2 закрыт, бег ещё не начался — специальной вкладки-ожидания нет,
-    // целимся сразу в «Бег» (он и станет активным этапом, когда войдут).
-    if (stageStartOffset('run') == null) return 'run';
-    if (stageIsPending('run')) return 'run';
-    return 'overall'; // гонка полностью завершена
+    return computeAutoScrollState().scroll;
 }
 
 let _lastAutoScrollTab = null;
 function autoScrollTabs() {
-    const target = computeAutoScrollTab();
+    const state = computeAutoScrollState();
     // Визуальный акцент (.tab-live, пульсирующая точка) — обновляется на
     // КАЖДОМ рендере независимо от скролла ниже: на десктопе табы обычно
     // и так все видны (нечего скроллить), точка — единственный сигнал,
-    // где сейчас гонка (запрошено пользователем 2026-08-04).
-    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('tab-live', !!target && t.dataset.tab === target));
-    if (!target || target === _lastAutoScrollTab) return;
-    _lastAutoScrollTab = target;
-    const el = document.querySelector(`#tabs [data-tab="${target}"]`);
+    // где сейчас гонка (2026-08-04). Может гореть на НЕСКОЛЬКИХ табах
+    // одновременно (Плавание+Вело в момент первого финиша заплыва).
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('tab-live', state.live.includes(t.dataset.tab)));
+    if (!state.scroll || state.scroll === _lastAutoScrollTab) return;
+    _lastAutoScrollTab = state.scroll;
+    const el = document.querySelector(`#tabs [data-tab="${state.scroll}"]`);
     if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
 
@@ -2650,6 +2682,8 @@ async function loadResults() {
         _data = JSON.parse(raw);
         _year = _data.race_year;
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
+        _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
+        _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
         render();
         renderStageTimers();
     } catch(e) {
@@ -2677,6 +2711,8 @@ async function refreshData() {
         _lastDataJson = raw;
         _data = JSON.parse(raw);
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
+        _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
+        _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
         render();
         renderStageTimers();
     } catch(e) { /* сеть моргнула — подождём следующего цикла поллинга */ }

@@ -52,6 +52,26 @@ def set_race_start(conn, race_year: int, race_start) -> None:
     )
 
 
+def get_stage_starts(conn, race_year: int) -> dict:
+    """Расписание Вело Дня 2 и Бега (задаётся в админке отдельно от
+    race_start) — None, если ещё не сохранено для этого года. Плавание и
+    Вело День 1 своего расписания не хранят (см. 005_stage_starts.sql)."""
+    cur = conn.cursor()
+    cur.execute("SELECT bike2_start, run_start FROM race_config WHERE race_year=%s", (race_year,))
+    row = cur.fetchone()
+    return {"bike2_start": row[0] if row else None, "run_start": row[1] if row else None}
+
+
+def set_stage_starts(conn, race_year: int, bike2_start, run_start) -> None:
+    """Требует уже существующую строку race_config (race_start сохраняется
+    раньше, при апруве загрузки) — обновляет расписание на месте."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE race_config SET bike2_start=%s, run_start=%s WHERE race_year=%s",
+        (bike2_start, run_start, race_year)
+    )
+
+
 def get_latest_race_year(conn) -> Optional[int]:
     """Последний (по номеру) год с загруженными данными — публичная
     страница результатов больше не даёт выбор года руками (убран
@@ -298,5 +318,9 @@ def get_results_for_year(conn, race_year: int) -> dict:
     relay_list.sort(key=lambda t: (t["overall_s"] is None, t["overall_s"] or 0, t["bib"]))
 
     race_start = get_race_start(conn, race_year)
+    stage_starts = get_stage_starts(conn, race_year)
 
-    return {"individual": individual, "relay": relay_list, "race_start": race_start, "race_year": race_year}
+    return {
+        "individual": individual, "relay": relay_list, "race_start": race_start, "race_year": race_year,
+        "bike2_start": stage_starts["bike2_start"], "run_start": stage_starts["run_start"],
+    }
