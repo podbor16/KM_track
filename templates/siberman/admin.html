@@ -217,6 +217,24 @@
         btn.classList.add('admin-tab--active');
     }
 
+    // Запоминаем последние введённые значения полей ТОЛЬКО вкладки "Загрузка
+    // результатов" в localStorage — чтобы не вбивать год/время старта заново
+    // при каждой перезагрузке страницы админки (запрошено пользователем
+    // 2026-08-04). "Трансляция" не участвует — там значения зависят от
+    // текущего выбранного поста, запоминать их не нужно. Восстановление —
+    // здесь же, сразу; серверные prefillRaceStart()/prefillStageStarts()
+    // (см. ниже) вызываются ПОСЛЕ и перезаписывают полем то, что реально
+    // сохранено в БД для этого года — localStorage только затычка для
+    // значений, ещё не отправленных на сервер.
+    const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'stage-starts-year', 'bike2-start-input', 'run-start-input', 'startlist-year'];
+    const UPLOAD_TAB_STORAGE_PREFIX = 'siberman_admin_upload_';
+    UPLOAD_TAB_PERSIST_IDS.forEach(id => {
+        const el = $(id);
+        const saved = localStorage.getItem(UPLOAD_TAB_STORAGE_PREFIX + id);
+        if (saved) el.value = saved;
+        el.addEventListener('input', () => localStorage.setItem(UPLOAD_TAB_STORAGE_PREFIX + id, el.value));
+    });
+
     // Дата/время старта гонки нужно вводить только один раз (при первой
     // загрузке результатов года) — дальше подставляется уже сохранённое
     // значение (запрошено пользователем 2026-07-24, раньше приходилось
