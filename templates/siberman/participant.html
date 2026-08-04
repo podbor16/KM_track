@@ -128,6 +128,8 @@
         .stat { background: var(--bg3); border-radius: var(--radius); padding: 8px 14px; min-width: 90px; }
         .stat-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
         .stat-subgap { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+        .stat-subgap.record { color: #b8860b; }
+        [data-theme="dark"] .stat-subgap.record { color: #e0b23c; }
         .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
 
         /* ── Бегунок прохождения КТ (п.12) ──
@@ -184,6 +186,8 @@
         .stage-spacer { flex: 1; }
         .stage-time { font-weight: 700; font-variant-numeric: tabular-nums; }
         .stage-gap { font-size: 12px; color: var(--muted); }
+        .stage-record { padding: 0 18px 12px; font-size: 12px; font-weight: 700; color: #b8860b; }
+        [data-theme="dark"] .stage-record { color: #e0b23c; }
         .stage-lap { font-size: 11px; color: var(--blue); font-weight: 600; }
 
         .cp-table { width: 100%; border-collapse: collapse; }
@@ -293,6 +297,7 @@ function buildOverallGapPool(data) {
 let _mode = 'race';
 let _rerender = null;
 let _raceStartEpoch = null; // мс, из data.race_start — для stageHasStarted() на Вело День 2
+let _recordsIndex = {}; // "column_key:category" → запись, buildRecordsIndex(data.records), 2026-08-05
 
 function modeToggle() {
     return `<div class="mode-toggle">
@@ -451,6 +456,12 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
         ? relayMemberStatusBadge(r, pos, STAGE_MAX_SEQ[cfg.dbStage], started)
         : statusBadge(r, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage), started);
 
+    // Рекорд Siberman хранится только для 'swim'/'run' на этапных секциях
+    // (Вело1/Вело2 порознь рекорда не имеют — только объединённый
+    // "Вело итого", см. combinedBikeSection), 2026-08-05.
+    const recordColumn = { swim: 'swim', run: 'run' }[cfg.dbStage];
+    const recordCats = recordColumn ? recordCategoriesFor(_recordsIndex, recordColumn, r.surname, r.name) : [];
+
     return `<details class="stage" ${isCurrent ? 'open' : ''}>
         <summary>
             <span class="stage-title">${cfg.label}</span>
@@ -461,17 +472,19 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
             ${timeInfo}
             ${badge}
         </summary>
+        ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
         ${stageBody(cfg.dbStage, r, gapPool, key, overallGapPool, raceKey)}
     </details>`;
 }
 
 // "Велоэтап (общ.)" — сумма вело день 1 + день 2, без своей ранжировки/КТ
 // (это агрегат для удобства чтения, не отдельный этап гонки с местом).
-function combinedBikeSection(b1, b2) {
+function combinedBikeSection(r, b1, b2) {
     if (b1 == null && b2 == null) return '';
     const bothKnown = b1 != null && b2 != null;
     const total = bothKnown ? b1 + b2 : null;
     const avgSpeed = bothKnown ? (145 + 276) / (total / 3600) : null;
+    const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name);
     return `<details class="stage">
         <summary>
             <span class="stage-title">Велоэтап (общ.)</span>
@@ -479,6 +492,7 @@ function combinedBikeSection(b1, b2) {
             <span class="stage-spacer"></span>
             ${total != null ? `<span class="stage-time">${fmtTime(total)}</span>` : ''}
         </summary>
+        ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
         <table class="cp-table">
             <thead><tr><th>Этап</th><th class="r">Время</th></tr></thead>
             <tbody>
@@ -593,8 +607,9 @@ function renderIndividual(data, r) {
     const genderRankRows = combinedOverallRankRows(data.individual.filter(x => x.gender === r.gender), []);
     const genderRank = trulyFinished ? r.overall_rank_g : computeCombinedOverallRanks(genderRankRows, null)[r.bib];
 
+    const overallRecordCats = recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name);
     let overallStat = `
-        <div class="stat"><div class="stat-val">${fmtTime(trulyFinished ? r.overall_s : liveTotal)}</div><div class="stat-lbl">Итого</div></div>
+        <div class="stat"><div class="stat-val">${fmtTime(trulyFinished ? r.overall_s : liveTotal)}</div><div class="stat-lbl">Итого</div>${overallRecordCats.length ? `<div class="stat-subgap record">🏆 ${recordLabelText(overallRecordCats)}</div>` : ''}</div>
         ${rankStatHtml(genderRank, genderGap, 'Место (по полу)')}
         ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
     `;
@@ -624,7 +639,7 @@ function renderIndividual(data, r) {
         <div class="stats-row">${overallStat}</div>
         ${modeToggle()}
         ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
-        ${combinedBikeSection(r.bike1_s, r.bike2_s)}
+        ${combinedBikeSection(r, r.bike1_s, r.bike2_s)}
         ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
     </div>`;
     document.getElementById('app').innerHTML = html;
@@ -675,7 +690,7 @@ function renderTeam(data, team) {
                 ...m, _bib: team.bib, _teamSwimS: teamSwimS,
                 cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
             }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
-            ${m.relay_stage === 'bike' ? combinedBikeSection(m.bike1_s, m.bike2_s) : ''}
+            ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
         </div>`;
     }).join('');
 
@@ -709,6 +724,7 @@ async function load() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         _raceStartEpoch = data.race_start ? new Date(data.race_start).getTime() : null;
+        _recordsIndex = buildRecordsIndex(data.records);
 
         const person = data.individual.find(r => r.bib === BIB);
         const team = data.relay.find(t => t.bib === BIB);

@@ -85,6 +85,38 @@ def get_latest_race_year(conn) -> Optional[int]:
     return row[0] if row else None
 
 
+def get_all_records(conn) -> list[dict]:
+    """Все рекорды Siberman (не привязаны к году) — для отдачи на
+    публичную страницу, см. 006_records.sql."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT column_key, category, best_s, holder_name, holder_team, year_set FROM siberman_records")
+    return cur.fetchall()
+
+
+def maybe_update_record(conn, column_key: str, category: str, candidate_s: int,
+                         holder_name: str, holder_team: Optional[str], year: int) -> bool:
+    """Если candidate_s быстрее сохранённого (или рекорда для этой пары
+    column_key/category ещё нет) — записывает новый рекорд. Возвращает
+    True, если рекорд обновлён/создан."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT best_s FROM siberman_records WHERE column_key=%s AND category=%s",
+        (column_key, category)
+    )
+    row = cur.fetchone()
+    if row is not None and row[0] <= candidate_s:
+        return False
+    cur.execute(
+        """INSERT INTO siberman_records (column_key, category, best_s, holder_name, holder_team, year_set)
+           VALUES (%s, %s, %s, %s, %s, %s)
+           ON DUPLICATE KEY UPDATE
+               best_s=VALUES(best_s), holder_name=VALUES(holder_name),
+               holder_team=VALUES(holder_team), year_set=VALUES(year_set)""",
+        (column_key, category, candidate_s, holder_name, holder_team, year)
+    )
+    return True
+
+
 def clear_race_year(conn, race_year: int) -> None:
     """Удалить всех участников (и каскадно все связанные данные) за год."""
     cur = conn.cursor()

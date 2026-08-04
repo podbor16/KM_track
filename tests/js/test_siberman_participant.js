@@ -375,5 +375,27 @@ check('renderTeam() — бейдж со звездой не показывает
     assert.ok(!appEl.innerHTML.includes('badge-star'), `эстафета не должна показывать звезду: ${appEl.innerHTML.slice(0, 500)}`);
 });
 
+// ── Рекорды Siberman (2026-08-05) — "🏆 Рекорд: ..." у "Итого" и в
+// секции этапа, если ИМЕННО этот участник — держатель ──
+check('renderIndividual() — показывает "🏆 Рекорд" у "Итого", если участник держит рекорд "overall"', () => {
+    const r = { ...mkFinishedInd(1, 20000, 'M', 1), surname: 'Иванов', name: 'Пётр' };
+    const data = { individual: [r], relay: [] };
+    vm.runInContext(`_recordsIndex = buildRecordsIndex([{column_key:'overall',category:'absolute',best_s:20000,holder_name:'Иванов Пётр'}]);`, sandbox);
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    assert.ok(appEl.innerHTML.includes('🏆 Абсолют'), `ожидался бейдж рекорда: ${appEl.innerHTML.slice(0, 600)}`);
+    vm.runInContext(`_recordsIndex = {};`, sandbox);
+});
+check('renderIndividual() — без записи в индексе рекордов бейдж не показывается', () => {
+    const r = { ...mkFinishedInd(1, 20000, 'M', 1), surname: 'Иванов', name: 'Пётр' };
+    const data = { individual: [r], relay: [] };
+    vm.runInContext(`_recordsIndex = {};`, sandbox);
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    assert.ok(!appEl.innerHTML.includes('stage-record') && !appEl.innerHTML.includes('🏆'), `не должно быть значка рекорда: ${appEl.innerHTML.slice(0, 600)}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

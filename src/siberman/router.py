@@ -14,7 +14,7 @@ from src.siberman.service import (
 )
 from src.siberman.db import (
     get_siberman_connection, get_results_for_year, set_race_start, get_latest_race_year,
-    set_stage_starts,
+    set_stage_starts, get_all_records,
 )
 from src.core.auth import api_require_auth
 
@@ -106,6 +106,7 @@ async def api_results(year: Optional[int] = None):
             if year is None:
                 raise HTTPException(status_code=404, detail="Нет загруженных данных ни за один год")
         data = get_results_for_year(conn, year)
+        data["records"] = get_all_records(conn)
     finally:
         conn.close()
     # Конвертируем Decimal → float для JSON-сериализации

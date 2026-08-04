@@ -62,6 +62,43 @@ function finishStarBadge(r) {
     if (!(r.finish_count > 0)) return '';
     return `<span class="badge badge-star" title="Количество финишей Siberman до этого года"><img src="/static/images/siberman/star.png" alt="">${r.finish_count}</span>`;
 }
+/* ──────────────── Рекорды Siberman ────────────────
+   siberman_records (не привязана к году) — 4 колонки (overall/swim/
+   bike_total/run), до 5 категорий каждая. Кандидатом на ЛЮБОЙ рекорд
+   может быть только тот, кто реально дошёл до конца ВСЕЙ гонки —
+   проверяется и обновляется сервером (_update_records в service.py) на
+   каждый apply; фронт только ОТОБРАЖАЕТ уже посчитанное состояние.
+   Сопоставление "эта строка = держатель рекорда" — по нормализованному
+   имени (surname+name), той же техникой, что и finishStarBadge/
+   finish_counts — нет ID-связи с историческими рекордсменами, которых
+   может не быть в текущем ростере года (2026-08-05). */
+const RECORD_CATEGORY_LABEL = {
+    absolute: 'Абсолют', male: 'М', female: 'Ж',
+    male_individual: 'М (л)', female_individual: 'Ж (л)',
+};
+const RECORD_CATEGORIES = ['absolute', 'male', 'female', 'male_individual', 'female_individual'];
+function buildRecordsIndex(records) {
+    const idx = {};
+    (records || []).forEach(r => { idx[`${r.column_key}:${r.category}`] = r; });
+    return idx;
+}
+function _normPersonName(s) {
+    return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+// Категории, которые ИМЕННО ЭТА строка (личник или конкретный член
+// эстафеты — у него личное имя, не название команды) держит на колонке
+// columnKey ПРЯМО СЕЙЧАС.
+function recordCategoriesFor(recordsIndex, columnKey, surname, name) {
+    const key = _normPersonName(`${surname} ${name}`);
+    if (!key) return [];
+    return RECORD_CATEGORIES.filter(cat => {
+        const rec = recordsIndex[`${columnKey}:${cat}`];
+        return rec && _normPersonName(rec.holder_name) === key;
+    });
+}
+function recordLabelText(cats) {
+    return cats.map(c => RECORD_CATEGORY_LABEL[c] ?? c).join(', ');
+}
 function genderBadge(g) {
     if (g === 'M') return '<span class="badge badge-m">М</span>';
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';

@@ -38,6 +38,9 @@ jobs:
             # Add bike2_start/run_start (расписание Вело Дня 2/Бега, задаётся в админке)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/005_stage_starts.sql
 
+            # Add siberman_records (рекорды гонки + seed-данные)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/006_records.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

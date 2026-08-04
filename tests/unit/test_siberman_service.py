@@ -1,9 +1,10 @@
 import pytest
+from unittest.mock import patch
 from src.siberman.parser import ParseResult
 from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
-    _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ,
+    _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ, _update_records,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
@@ -202,3 +203,95 @@ def test_swim_lap_seqs_covers_exactly_four_laps_ending_at_max_seq():
 def test_swim_lap_seqs_excludes_turn_checkpoints():
     # seq 1,3,5 — развороты на середине круга, не входят в счётчик кругов
     assert set(SWIM_LAP_SEQS) == {2, 4, 6, 7}
+
+
+def _mk_pr(race_year, participants):
+    r = ParseResult(race_year=race_year)
+    r.participants = participants
+    return r
+
+
+def test_update_records_individual_finisher_writes_broad_and_individual_categories():
+    result = _mk_pr(2026, [
+        {"bib": "1", "format": "individual", "surname": "Иванов", "name": "Пётр", "gender": "M"},
+    ])
+    cp_key_to_pid = {"1": 100}
+    pid_totals = {100: {"swim": 8000, "bike_day1": 30000, "bike_day2": 50000, "run": 20000, "overall": 108000}}
+    pid_meta = {100: {"status": "active", "format": "individual", "gender": "M", "relay_stage": "none"}}
+    with patch("src.siberman.service.maybe_update_record") as m:
+        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, {}, [100])
+    calls = {(c.args[1], c.args[2]): c.args for c in m.call_args_list}
+    # "overall" — только absolute + _individual (никогда "male"/"female" без "_individual")
+    assert ("overall", "absolute") in calls
+    assert ("overall", "male_individual") in calls
+    assert ("overall", "male") not in calls
+    assert ("overall", "female_individual") not in calls
+    # Этапные колонки — обе категории (широкая + личная)
+    for column in ("swim", "bike_total", "run"):
+        assert (column, "absolute") in calls
+        assert (column, "male") in calls
+        assert (column, "male_individual") in calls
+        assert (column, "female") not in calls
+    # Значения: candidate_s (args[3]), holder_name (args[4]), holder_team (args[5] — None для личника)
+    assert calls[("swim", "absolute")][3] == 8000
+    assert calls[("bike_total", "absolute")][3] == 30000 + 50000
+    assert calls[("run", "absolute")][3] == 20000
+    assert calls[("overall", "absolute")][4] == "Иванов Пётр"
+    assert calls[("overall", "absolute")][5] is None
+
+
+def test_update_records_relay_team_writes_broad_categories_only_no_overall():
+    result = _mk_pr(2026, [
+        {"bib": "10", "_cp_key": "10:swim", "format": "relay", "relay_stage": "swim", "relay_team_name": "КомандаА", "surname": "Смирнова", "name": "Анна", "gender": "F"},
+        {"bib": "10", "_cp_key": "10:bike", "format": "relay", "relay_stage": "bike", "relay_team_name": "КомандаА", "surname": "Кузнецов", "name": "Олег", "gender": "M"},
+        {"bib": "10", "_cp_key": "10:run", "format": "relay", "relay_stage": "run", "relay_team_name": "КомандаА", "surname": "Попова", "name": "Вера", "gender": "F"},
+    ])
+    cp_key_to_pid = {"10:swim": 200, "10:bike": 201, "10:run": 202}
+    pid_totals = {
+        200: {"swim": 7000},
+        201: {"bike_day1": 25000, "bike_day2": 45000},
+        202: {"run": 18000},
+    }
+    pid_meta = {
+        200: {"status": "active", "format": "relay", "gender": "F", "relay_stage": "swim"},
+        201: {"status": "active", "format": "relay", "gender": "M", "relay_stage": "bike"},
+        202: {"status": "active", "format": "relay", "gender": "F", "relay_stage": "run"},
+    }
+    relay_by_bib = {"10": {"swim": 200, "bike": 201, "run": 202}}
+    with patch("src.siberman.service.maybe_update_record") as m:
+        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, relay_by_bib, [])
+    calls = {(c.args[1], c.args[2]): c.args for c in m.call_args_list}
+    # Эстафета никогда не пишет "overall" (личное достижение, не сумма троих)
+    assert not any(k[0] == "overall" for k in calls)
+    # "..._individual" не пишется эстафете — только absolute + широкая гендерная
+    assert ("swim", "absolute") in calls
+    assert ("swim", "female") in calls
+    assert ("swim", "female_individual") not in calls
+    assert calls[("swim", "absolute")][3] == 7000
+    assert calls[("swim", "absolute")][4] == "Смирнова Анна"
+    assert calls[("swim", "absolute")][5] == "КомандаА"
+    assert ("bike_total", "male") in calls
+    assert calls[("bike_total", "absolute")][3] == 25000 + 45000
+    assert ("run", "female") in calls
+    assert calls[("run", "absolute")][3] == 18000
+
+
+def test_update_records_relay_team_incomplete_member_skips_whole_team():
+    # Бегун сошёл (dnf) — команда не финишировала целиком, ни один из
+    # троих не может претендовать на рекорд, даже уже проплывший заплыв.
+    result = _mk_pr(2026, [
+        {"bib": "10", "_cp_key": "10:swim", "format": "relay", "relay_stage": "swim", "relay_team_name": "КомандаБ", "surname": "А", "name": "Б", "gender": "M"},
+        {"bib": "10", "_cp_key": "10:bike", "format": "relay", "relay_stage": "bike", "relay_team_name": "КомандаБ", "surname": "В", "name": "Г", "gender": "M"},
+        {"bib": "10", "_cp_key": "10:run", "format": "relay", "relay_stage": "run", "relay_team_name": "КомандаБ", "surname": "Д", "name": "Е", "gender": "M"},
+    ])
+    cp_key_to_pid = {"10:swim": 300, "10:bike": 301, "10:run": 302}
+    pid_totals = {300: {"swim": 7500}, 301: {"bike_day1": 26000, "bike_day2": 46000}, 302: {"run": None}}
+    pid_meta = {
+        300: {"status": "active", "format": "relay", "gender": "M", "relay_stage": "swim"},
+        301: {"status": "active", "format": "relay", "gender": "M", "relay_stage": "bike"},
+        302: {"status": "dnf", "format": "relay", "gender": "M", "relay_stage": "run"},
+    }
+    relay_by_bib = {"10": {"swim": 300, "bike": 301, "run": 302}}
+    with patch("src.siberman.service.maybe_update_record") as m:
+        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, relay_by_bib, [])
+    m.assert_not_called()

@@ -353,6 +353,11 @@
            "колонка Время" + отдельная "колонка Отставание" (п.3/4, v5). */
         .time-gap-sub { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
         .time-gap-sub.lead { color: var(--red); }
+        /* Рекорд (2026-08-05) — золотой акцент, отличимый от красного
+           "Лидер" и серого отставания; работает и как замена "Лидер"
+           (class lead+record вместе), и как отдельная третья строка. */
+        .time-gap-sub.record { color: #b8860b; font-weight: 700; }
+        [data-theme="dark"] .time-gap-sub.record { color: #e0b23c; }
 
         /* ── Table ── */
         .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
@@ -589,6 +594,10 @@ let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь 
 // computeAutoScrollLiveTabs), не влияет на статусы/секундомер выше.
 let _bike2StartEpoch = null;
 let _runStartEpoch = null;
+// Индекс рекордов "column_key:category" → запись, построен из
+// _data.records (buildRecordsIndex, siberman-common.js) при каждой
+// загрузке/обновлении данных (2026-08-05).
+let _recordsIndex = {};
 // Сериализованный снимок последних загруженных данных — refreshData()
 // перерисовывает страницу (и графики) ТОЛЬКО когда данные реально
 // изменились, а не на каждый тик поллинга (иначе Chart.js пересоздаётся
@@ -670,13 +679,23 @@ function buildStats(individual, relayStats, stageKey, maxStage) {
 // 2026-07-23. timeStr — уже отформатированная строка (fmtTime/'—'),
 // gapSeconds — секунды отставания от лидера пула, null если сравнивать
 // не с чем (участник не дошёл/лидер).
-function timeGapCell(timeStr, gapSeconds) {
+// recordCats — категории рекорда (recordCategoriesFor), которые держит
+// ИМЕННО этот участник на этой колонке, или undefined/[] — без рекорда.
+// Лидер+рекордсмен → "Рекорд: ..." ВМЕСТО "Лидер" (не рядом); рекордсмен
+// без лидерства → "Рекорд: ..." ТРЕТЬЕЙ строкой под отставанием (запрошено
+// пользователем 2026-08-05).
+function timeGapCell(timeStr, gapSeconds, recordCats) {
     if (timeStr === '—' || timeStr == null) return '<span class="muted">—</span>';
-    if (gapSeconds == null) return `<span class="time-main">${timeStr}</span>`;
-    const gapHtml = gapSeconds === 0
-        ? '<span class="time-gap-sub lead">Лидер</span>'
-        : `<span class="time-gap-sub">${fmtGap(gapSeconds)}</span>`;
-    return `<span class="time-main">${timeStr}</span>${gapHtml}`;
+    const hasRecord = recordCats && recordCats.length > 0;
+    const recordLine = hasRecord ? `<span class="time-gap-sub record">🏆 ${recordLabelText(recordCats)}</span>` : '';
+    if (gapSeconds == null) return `<span class="time-main">${timeStr}</span>${recordLine}`;
+    if (gapSeconds === 0) {
+        const leadHtml = hasRecord
+            ? `<span class="time-gap-sub lead record">🏆 ${recordLabelText(recordCats)}</span>`
+            : '<span class="time-gap-sub lead">Лидер</span>';
+        return `<span class="time-main">${timeStr}</span>${leadHtml}`;
+    }
+    return `<span class="time-main">${timeStr}</span><span class="time-gap-sub">${fmtGap(gapSeconds)}</span>${recordLine}`;
 }
 
 /* ──────────────── Filter helpers ──────────────── */
@@ -763,12 +782,12 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
             ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib], recordCategoriesFor(_recordsIndex, 'swim', r.surname, r.name))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(r)?.value ?? null), stageGaps.bikeCombined[r.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(r)?.value ?? null), stageGaps.bikeCombined[r.bib], recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib], recordCategoriesFor(_recordsIndex, 'run', r.surname, r.name))}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusBadge(r, null)}</td>
     </tr>`;
@@ -784,6 +803,13 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     const tr = teamGapRow(team);
     const pos = racePos(tr, null);
     const liveTotal = pos ? pos.value : null;
+    // Рекорд каждого столбца принадлежит КОНКРЕТНОМУ члену команды (у
+    // разных этапов — разные люди), не команде целиком — "гонка" (overall)
+    // у эстафеты не считается вовсе (это личное достижение, см. service.py
+    // _update_records, 2026-08-05).
+    const swimM = team.members.find(m => m.relay_stage === 'swim');
+    const bikeM = team.members.find(m => m.relay_stage === 'bike');
+    const runM = team.members.find(m => m.relay_stage === 'run');
     const rc = tr.status === 'active' && combinedRanks[team.bib] != null ? rankClass(combinedRanks[team.bib]) : '';
     const cur = currentStage(tr);
     const cpPos = cur ? lastReached(tr.cp, cur) : null;
@@ -797,11 +823,11 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
             <span class="badge badge-relay">Эстафета</span>
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib], swimM ? recordCategoriesFor(_recordsIndex, 'swim', swimM.surname, swimM.name) : [])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(tr)?.value ?? null), stageGaps.bikeCombined[team.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(tr)?.value ?? null), stageGaps.bikeCombined[team.bib], bikeM ? recordCategoriesFor(_recordsIndex, 'bike_total', bikeM.surname, bikeM.name) : [])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib], runM ? recordCategoriesFor(_recordsIndex, 'run', runM.surname, runM.name) : [])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusCell}</td>
     </tr>`;
@@ -944,6 +970,10 @@ function renderOverall() {
 }
 
 /* ──────────────── Render: Stage ──────────────── */
+// Рекорд Siberman хранится только для 4 колонок (см. 006_records.sql):
+// 'overall'/'swim'/'bike_total'/'run' — Вело1/Вело2 порознь рекорда не
+// имеют (только объединённый "Вело итого", см. Свод вело).
+const STAGE_TO_RECORD_COLUMN = { swim: 'swim', run: 'run' };
 const STAGE_CFG = {
     // rank/rank_g из БД (per-этап, только личники) больше не используются
     // для отображения "Место"/"По полу" — заменены единым computeRanksByValue
@@ -1088,6 +1118,10 @@ function renderStage(stage) {
         // (найдено пользователем 2026-08-04).
         const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
+        // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
+        // отдельно, только по объединённому "Вело итого" — см. Свод вело).
+        const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
+        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, r.surname, r.name) : [];
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
         // Блёклая строка — только по РЕАЛЬНОМУ статусу гонки (DNF/DSQ/DNS),
         // не по "нет времени на этом этапе" (noTime): на живой гонке
@@ -1103,7 +1137,7 @@ function renderStage(stage) {
                 ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
                 <span class="badge badge-individual">Лично</span>
             </div></td>
-            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib], recordCats)}</td>
             <td class="r muted">${metaCell}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
@@ -1120,6 +1154,8 @@ function renderStage(stage) {
         // ещё не финишировал этап).
         const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
+        const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
+        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name) : [];
         const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
@@ -1131,7 +1167,7 @@ function renderStage(stage) {
                 <span class="name-city">${m._team}</span>
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
-            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`])}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`], recordCats)}</td>
             <td class="r muted">${meta}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
@@ -1467,6 +1503,7 @@ function renderBikeCombined() {
         // "не начал" и "в процессе").
         const isFinishedBike = p => p.seq === maxVseq;
         const started = stageHasStarted(entry, 'bike_day1', _raceStartEpoch, Date.now());
+        const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', entry.surname, entry.name);
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
@@ -1474,7 +1511,7 @@ function renderBikeCombined() {
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
-            <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib], recordCats)}</td>
             <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
             <td>${progressStatusBadge(status, pos, isFinishedBike, started)}</td>
@@ -2689,6 +2726,7 @@ async function loadResults() {
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
         _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
+        _recordsIndex = buildRecordsIndex(_data.records);
         render();
         renderStageTimers();
     } catch(e) {
@@ -2718,6 +2756,7 @@ async function refreshData() {
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
         _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
+        _recordsIndex = buildRecordsIndex(_data.records);
         render();
         renderStageTimers();
     } catch(e) { /* сеть моргнула — подождём следующего цикла поллинга */ }

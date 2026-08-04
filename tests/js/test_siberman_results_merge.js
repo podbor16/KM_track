@@ -200,7 +200,7 @@ function setRaceData(individual, relay, raceStartEpoch, bike2StartEpoch = null, 
     sandbox.__raceStartEpoch = raceStartEpoch;
     sandbox.__bike2StartEpoch = bike2StartEpoch;
     sandbox.__runStartEpoch = runStartEpoch;
-    vm.runInContext('_data = { individual: __individual, relay: __relay }; _raceStartEpoch = __raceStartEpoch; _bike2StartEpoch = __bike2StartEpoch; _runStartEpoch = __runStartEpoch;', sandbox);
+    vm.runInContext('_data = { individual: __individual, relay: __relay }; _raceStartEpoch = __raceStartEpoch; _bike2StartEpoch = __bike2StartEpoch; _runStartEpoch = __runStartEpoch; _recordsIndex = {};', sandbox);
 }
 function mkTimerInd(bib, overrides = {}) {
     return { bib, status: 'active', gender: 'M', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null, ...overrides };
@@ -2820,6 +2820,45 @@ check('renderOverall() — эстафетная команда не получа
     setState('all', 'all');
     sandbox.renderOverall();
     assert.ok(!domGetAppHtml().includes('badge-star'), 'эстафета не должна показывать звезду');
+});
+
+// ── Рекорды Siberman (2026-08-05) — "Рекорд" вместо "Лидер" у лидера-
+// рекордсмена, третьей строкой у рекордсмена без лидерства ──
+function setRecordsIndex(records) {
+    sandbox.__records = records;
+    vm.runInContext('_recordsIndex = buildRecordsIndex(__records);', sandbox);
+}
+check('renderOverall() — лидер, который держит рекорд "overall", показывает "Рекорд" ВМЕСТО "Лидер"', () => {
+    const r = { ...mkInd('1', 100000), surname: 'Иванов', name: 'Пётр' };
+    setRaceData([r], [], Date.now());
+    setRecordsIndex([{ column_key: 'overall', category: 'absolute', best_s: 71429, holder_name: 'Иванов Пётр' }]);
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('record">🏆 Абсолют'), `ожидался "Рекорд" в колонке Итого: ${html}`);
+    assert.ok(!html.includes('lead">Лидер'), `"Лидер" не должен показываться вместо рекорда: ${html}`);
+});
+check('renderStage(\'swim\') — рекордсмен без лидерства показывает "Рекорд" ТРЕТЬЕЙ строкой под отставанием', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    // bib=1 — лидер этапа (быстрее), bib=2 — держит женский рекорд, но
+    // отстаёт от bib=1 по времени (не лидер).
+    const leader = mkTimerInd('1', { surname: 'Быстров', name: 'Олег', gender: 'M', swim_s: 8000, cp: { swim: { [maxSeqSwim]: 8000 } } });
+    const recordHolder = mkTimerInd('2', { surname: 'Петрова', name: 'Анна', gender: 'F', swim_s: 8500, cp: { swim: { [maxSeqSwim]: 8500 } } });
+    setRaceData([leader, recordHolder], [], Date.now());
+    setRecordsIndex([{ column_key: 'swim', category: 'female', best_s: 9330, holder_name: 'Петрова Анна' }]);
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    const row2 = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">2<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
+    assert.ok(row2.includes('time-gap-sub">+') && row2.includes('record">🏆 Ж<'), `ожидалась отдельная строка отставания И строка "Рекорд: Ж": ${row2}`);
+});
+check('renderOverall() — без записи в индексе рекордов поведение не меняется (обычный "Лидер")', () => {
+    const r = { ...mkInd('1', 100000), surname: 'Иванов', name: 'Пётр' };
+    setRaceData([r], [], Date.now());
+    setRecordsIndex([]);
+    setState('all', 'all');
+    sandbox.renderOverall();
+    assert.ok(domGetAppHtml().includes('lead">Лидер'), 'без рекорда должен остаться обычный "Лидер"');
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
