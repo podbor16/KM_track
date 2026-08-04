@@ -439,12 +439,16 @@ function _checkpointRanksByValueFn(rows, valueFn, maxSeq) {
 // Отставание/место НА КАЖДОЙ отдельной КТ, "на этапе" — сравнение только
 // внутри текущего этапа (не учитывает результаты прошлых этапов). Точное
 // совпадение seq (не valueAtOrBefore — та функция для "гэпа относительно
-// финальной позиции"). gap===0 у лидера точки.
+// финальной позиции"). gap===0 у лидера точки. stageAdjustedValue —
+// та же поправка на заплыв для bike_day1, что и в computeStageGaps/
+// stagePos (rows должны нести swim_s) — иначе "на этапе" для Вело 1
+// сравнивало бы сырое время от старта гонки (найдено пользователем
+// 2026-08-04, тот же класс бага на графике "Позиция" и в постах трансляции).
 function computeCheckpointGaps(rows, dbStage, maxSeq) {
-    return _checkpointGapsByValueFn(rows, (r, seq) => r.cp?.[dbStage]?.[seq], maxSeq);
+    return _checkpointGapsByValueFn(rows, (r, seq) => stageAdjustedValue(r, dbStage, r.cp?.[dbStage]?.[seq]), maxSeq);
 }
 function computeCheckpointRanks(rows, dbStage, maxSeq) {
-    return _checkpointRanksByValueFn(rows, (r, seq) => r.cp?.[dbStage]?.[seq], maxSeq);
+    return _checkpointRanksByValueFn(rows, (r, seq) => stageAdjustedValue(r, dbStage, r.cp?.[dbStage]?.[seq]), maxSeq);
 }
 
 // То же самое, но "в гонке" — сравнение по СОВОКУПНОМУ времени гонки на

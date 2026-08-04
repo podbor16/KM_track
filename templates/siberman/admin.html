@@ -454,7 +454,12 @@
     // значения зависит только показ времени/темпа, а РАНГ считается отдельно
     // через globalProgress — см. bcBuildStagePost/bcBuildGlobalPost).
     function bcStageRawTime(row, stage, seq) {
-        return stage === 'bike_combined' ? bikeCombinedRawCp(row, seq) : row.cp?.[stage]?.[seq];
+        // stageAdjustedValue — та же поправка на заплыв для bike_day1, что
+        // и в results.html/participant.html (cp.bike_day1 хранит elapsed
+        // ОТ СТАРТА ГОНКИ) — иначе пост "По этапу" показывал бы завышенное
+        // время/скорость (найдено пользователем 2026-08-04).
+        if (stage === 'bike_combined') return bikeCombinedRawCp(row, seq);
+        return stageAdjustedValue(row, stage, row.cp?.[stage]?.[seq]);
     }
     // dbStage для форматирования единиц (avgPaceLabel/fmtSpeed и т.п.) —
     // виртуальный "bike_combined" сам по себе не единица измерения, нужно
