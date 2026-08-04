@@ -2798,5 +2798,29 @@ check('startlistHasRiders() — есть эстафетный велосипед
     assert.strictEqual(sandbox.startlistHasRiders(), true);
 });
 
+// ── finishStarBadge() на табах результатов (не только карточка участника) —
+// только личный зачёт, только finish_count > 0 (2026-08-05) ──
+check('renderOverall() — показывает бейдж со звездой у личника с finish_count > 0', () => {
+    const r = mkTimerInd('1', { status: 'active', finish_count: 5, cp: {} });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    assert.ok(domGetAppHtml().includes('badge-star'), 'ожидался бейдж badge-star в Итогах гонки');
+});
+check('renderStage() — не показывает бейдж со звездой у личника с finish_count = 0', () => {
+    const r = mkTimerInd('1', { status: 'active', finish_count: 0, swim_s: 1380, cp: { swim: { 4: 1380 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    assert.ok(!domGetAppHtml().includes('badge-star'), 'не должно быть бейджа звезды при finish_count=0');
+});
+check('renderOverall() — эстафетная команда не получает бейдж звезды (только личный зачёт)', () => {
+    const relay = [mkRelayProgress(10, { swim_s: 3000, swimCp: { swim: { 7: 3000 } } })];
+    setRaceData([], relay, Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    assert.ok(!domGetAppHtml().includes('badge-star'), 'эстафета не должна показывать звезду');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

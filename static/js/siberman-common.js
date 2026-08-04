@@ -54,6 +54,14 @@ function cityLabel(r) {
     if (r.country && r.country !== 'Россия') return `${r.country}, ${r.city}`;
     return r.city;
 }
+// Бейдж "N предыдущих финишей Siberman" (звезда) — только личный зачёт
+// (r.finish_count пишется сервером только для individual, см. db.py), и
+// только если > 0 (новички звезду не получают). Общий для карточки
+// участника и всех табов результатов (2026-08-05).
+function finishStarBadge(r) {
+    if (!(r.finish_count > 0)) return '';
+    return `<span class="badge badge-star" title="Количество финишей Siberman до этого года"><img src="/static/images/siberman/star.png" alt="">${r.finish_count}</span>`;
+}
 function genderBadge(g) {
     if (g === 'M') return '<span class="badge badge-m">М</span>';
     if (g === 'F') return '<span class="badge badge-f">Ж</span>';

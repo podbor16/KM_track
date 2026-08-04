@@ -616,7 +616,7 @@ function renderIndividual(data, r) {
                 ${genderBadge(r.gender)}
                 <span class="badge badge-individual">Лично</span>
                 ${statusBadge(r, null)}
-                ${r.finish_count > 0 ? `<span class="badge badge-star" title="Количество финишей Siberman до этого года"><img src="/static/images/siberman/star.png" alt="">${r.finish_count}</span>` : ''}
+                ${finishStarBadge(r)}
             </div>
             ${cityLabel(r) ? `<div class="p-city">${cityLabel(r)}</div>` : ''}
         </div>

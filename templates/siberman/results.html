@@ -440,6 +440,11 @@
            2026-07-23: бейджи должны быть равнозначны по контрасту). */
         [data-theme="dark"] .badge-f { background: rgba(190,10,33,.28); }
         [data-theme="dark"] .badge-individual { background: rgba(190,10,33,.28); }
+        /* Бейдж "N предыдущих финишей Siberman" (звезда) — рядом с "Лично"
+           на всех табах результатов, только личный зачёт (2026-08-05). */
+        .badge-star { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; }
+        .badge-star img { width: 12px; height: 12px; display: block; }
+        [data-theme="dark"] .badge-star { background: rgba(190,10,33,.28); }
         .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
         .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
         .badge-notstarted { background: rgba(120,120,130,.08); color: var(--muted); }
@@ -757,6 +762,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
             <span class="name-main">${r.surname} ${r.name}</span>
             ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
+            ${finishStarBadge(r)}
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib])}</td>
@@ -1097,6 +1103,7 @@ function renderStage(stage) {
                 <span class="name-main">${r.surname} ${r.name}</span>
                 ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
                 <span class="badge badge-individual">Лично</span>
+                ${finishStarBadge(r)}
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
             <td class="r muted">${metaCell}</td>
@@ -1317,7 +1324,7 @@ function renderRankedProgress(options = {}) {
         // с 0 на каждом этапе внутри дня (найдено пользователем 2026-08-04).
         const lastCpCell = cur ? cumulativeLastCpHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>`
+            ? `<span class="name-main">${entry.surname} ${entry.name}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>${finishStarBadge(entry)}`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         // "Финиш" в бейдже статуса — только если РЕАЛЬНО дошёл до конца
         // ИМЕННО этого дня (item._pos на границе maxStage), "—" — если ещё
@@ -1452,7 +1459,7 @@ function renderBikeCombined() {
         const genderRank = hasVal ? genderRanks[entry.gender]?.[entry.bib] : null;
         const rc = absRank != null ? rankClass(absRank) : '';
         const subLine = isRelay ? entry.team_name : cityLabel(entry);
-        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Лично</span>';
+        const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : `<span class="badge badge-individual">Лично</span>${finishStarBadge(entry)}`;
         const nameCell = `<span class="name-main">${entry.surname} ${entry.name}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
@@ -2330,7 +2337,7 @@ function renderStartlist() {
     let riders = [];
     riders = riders.concat(individual
         .filter(r => r.bike2_start_s != null)
-        .map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, city: cityLabel(r), gender: r.gender, start_s: r.bike2_start_s })));
+        .map(r => ({ bib: r.bib, name: `${r.surname} ${r.name}`, city: cityLabel(r), gender: r.gender, start_s: r.bike2_start_s, star: finishStarBadge(r) })));
     relay.forEach(team => {
         team.members.filter(m => m.relay_stage === 'bike' && m.bike2_start_s != null).forEach(m => {
             riders.push({ bib: team.bib, name: `${m.surname} ${m.name}`, city: team.team_name, gender: m.gender, start_s: m.bike2_start_s });
@@ -2351,7 +2358,7 @@ function renderStartlist() {
             <td><span class="rank-num">${i + 1}</span></td>
             <td class="bib-cell">${r.bib}</td>
             <td class="name-cell">
-                <span class="name-main">${r.name}</span>
+                <span class="name-main">${r.name}</span>${r.star || ''}
                 ${r.city ? `<br><span class="name-city">${r.city}</span>` : ''}
             </td>
             <td>${genderBadge(r.gender)}</td>
