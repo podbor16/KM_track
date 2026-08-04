@@ -375,8 +375,10 @@ function fmtGap(gapS) {
 // лидером, даже дойдя до финиша. Gap при этом считается для всех, включая
 // недошедших — от той же КТ, которую они последней прошли.
 function computeStageGaps(rows, dbStage) {
+    // rows: [{key, cp, swim_s, status}] — swim_s нужен только для
+    // dbStage==='bike_day1' (см. stagePos/stageAdjustedValue).
     const withPos = rows
-        .map(r => ({ key: r.key, cp: r.cp, status: r.status ?? 'active', pos: lastReached(r.cp, dbStage) }))
+        .map(r => ({ key: r.key, cp: r.cp, swim_s: r.swim_s, status: r.status ?? 'active', pos: stagePos(r, dbStage) }))
         .filter(r => r.pos);
     if (withPos.length === 0) return {};
     // Лидер — участник, дальше всех продвинувшийся по этапу ПРЯМО СЕЙЧАС
@@ -391,7 +393,7 @@ function computeStageGaps(rows, dbStage) {
     const gaps = {};
     withPos.forEach(r => {
         if (r.key === leader.key) { gaps[r.key] = 0; return; }
-        const leaderVal = valueAtOrBefore(leader.cp, dbStage, r.pos.seq);
+        const leaderVal = stageAdjustedValue(leader, dbStage, valueAtOrBefore(leader.cp, dbStage, r.pos.seq));
         if (leaderVal != null) gaps[r.key] = r.pos.value - leaderVal;
     });
     return gaps;
@@ -649,6 +651,24 @@ function currentStage(row, maxStage) {
 const _POS_SORT_COEF = 1e7;
 function posSortKey(pos) {
     return pos ? -pos.seq * _POS_SORT_COEF + pos.value : null;
+}
+
+// cp.bike_day1 хранит elapsed ОТ СТАРТА ГОНКИ (включает заплыв, см.
+// convert_bike_times_to_elapsed) — для сравнения "внутри вело-дня-1"
+// (сортировка/место/отставание/скорость на вкладке "Вело День 1") нужно
+// сетевое время БЕЗ заплыва, та же база, что и у серверного bike1_s
+// (bike1_abs - swim, compute_stage_totals) и уже используется для
+// "объединённого вело" в bikeCombinedRawCp. Раньше вкладка "Вело День 1"
+// сравнивала сырые (не сетевые) значения — участник с быстрым заплывом
+// получал заниженную позицию/скорость на вело, даже опережая по факту
+// (найдено пользователем 2026-08-04).
+function stageAdjustedValue(row, dbStage, rawValue) {
+    if (rawValue == null || dbStage !== 'bike_day1') return rawValue;
+    return rawValue - (row.swim_s ?? 0);
+}
+function stagePos(row, dbStage) {
+    const pos = lastReached(row.cp, dbStage);
+    return pos ? { seq: pos.seq, value: stageAdjustedValue(row, dbStage, pos.value) } : null;
 }
 
 // Положение участника В ГОНКЕ (кросс-этапное) — в отличие от posSortKey

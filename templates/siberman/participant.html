@@ -254,11 +254,17 @@ const STAGES = [
 // этап участника).
 function buildStageGapPool(data, dbStage, relayStage) {
     const indiv = data.individual
-        .map(r => ({ key: r.bib, cp: r.cp, status: r.status, gender: r.gender, isRelay: false }));
-    const relayMembers = data.relay.flatMap(t => t.members
-        .filter(m => m.relay_stage === relayStage)
-        .map(m => ({ ...m, _bib: t.bib })))
-        .map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: m.status, gender: m.gender, isRelay: true }));
+        .map(r => ({ key: r.bib, cp: r.cp, swim_s: r.swim_s, status: r.status, gender: r.gender, isRelay: false }));
+    // swim_s велосипедиста эстафеты — его собственная stage_totals-строка
+    // пуста (сам он не плавает); для computeStageGaps на bike_day1 нужен
+    // swim ЕГО КОМАНДЫ, та же база, что уже используется для "объединённого
+    // вело" (bikeCombinedRawCp) и для сплита первой КТ выше (swimRef).
+    const relayMembers = data.relay.flatMap(t => {
+        const teamSwimS = t.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+        return t.members
+            .filter(m => m.relay_stage === relayStage)
+            .map(m => ({ key: `${t.bib}:${m.relay_stage}`, cp: m.cp, swim_s: m.swim_s ?? teamSwimS, status: m.status, gender: m.gender, isRelay: true }));
+    });
     return [...indiv, ...relayMembers];
 }
 
@@ -401,7 +407,13 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
 }
 
 function stageSection(cfg, r, gapPool, overallGapPool) {
-    const pos = lastReached(r.cp, cfg.dbStage);
+    // cp.bike_day1 хранит elapsed ОТ СТАРТА ГОНКИ (включает заплыв) — для
+    // "живого" времени/отставания на самой вкладке этапа нужна сетевая
+    // база без заплыва (см. stagePos в siberman-common.js); у велосипедиста
+    // эстафеты используем swim КОМАНДЫ (_teamSwimS), т.к. своего заплыва
+    // у него нет (найдено пользователем 2026-08-04).
+    const swimRef = r.swim_s ?? r._teamSwimS ?? null;
+    const pos = stagePos({ cp: r.cp, swim_s: swimRef }, cfg.dbStage);
     const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
     const gaps = computeStageGaps(gapPool, cfg.dbStage);
     const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;

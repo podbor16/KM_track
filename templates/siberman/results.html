@@ -952,7 +952,7 @@ function renderStage(stage) {
     // намного дальше (2026-08-03, тестовый прогон живых данных). Работает
     // одинаково для ещё бегущих и уже финишировавших — для финишировавших
     // вырождается в обычное сравнение по времени.
-    const withSortTime = r => ({ ...r, _sortTime: posSortKey(lastReached(r.cp, dbStage)) });
+    const withSortTime = r => ({ ...r, _sortTime: posSortKey(stagePos(r, dbStage)) });
     const rows = sortByStatus(individual.map(withStageStatus).map(withSortTime), '_sortTime');
     // Собственная сортировка здесь больше не нужна (была раньше, до
     // 2026-08-03) — итоговый порядок строк личников+эстафетчиков вместе
@@ -977,8 +977,8 @@ function renderStage(stage) {
     // прямо сейчас) в исключение НЕ попадает — у него живое отставание
     // работает как раньше (_rawStatus у него остаётся 'active').
     const gapPool = [
-        ...rows.filter(r => r._rawStatus === 'active').map(r => ({ key: r.bib, cp: r.cp, status: 'active' })),
-        ...relayMembers.filter(m => m._rawStatus === 'active').map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, status: 'active' })),
+        ...rows.filter(r => r._rawStatus === 'active').map(r => ({ key: r.bib, cp: r.cp, swim_s: r.swim_s, status: 'active' })),
+        ...relayMembers.filter(m => m._rawStatus === 'active').map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, swim_s: m.swim_s, status: 'active' })),
     ];
     const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
 
@@ -1002,8 +1002,8 @@ function renderStage(stage) {
     // "живая" сортировка этой задачи была бы бессмысленна — see: тест
     // "место считается для АКТИВНЫХ мид-этапа", найдено 2026-08-03).
     // Настоящий DNF/DSQ (_rawStatus не 'active') по-прежнему исключается.
-    const visibleIndRows = rows.map(r => ({ key: r.bib, val: posSortKey(lastReached(r.cp, dbStage)), status: r._rawStatus, gender: r.gender, isRelay: false }));
-    const visibleRelayRows = relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: posSortKey(lastReached(m.cp, dbStage)), status: m._rawStatus, gender: m.gender, isRelay: true }));
+    const visibleIndRows = rows.map(r => ({ key: r.bib, val: posSortKey(stagePos(r, dbStage)), status: r._rawStatus, gender: r.gender, isRelay: false }));
+    const visibleRelayRows = relayMembers.map(m => ({ key: `${m._bib}:${m.relay_stage}`, val: posSortKey(stagePos(m, dbStage)), status: m._rawStatus, gender: m.gender, isRelay: true }));
     const visibleStageRows = [...visibleIndRows, ...visibleRelayRows];
     const stageAbsRanks = computeRanksByValue(visibleStageRows);
     const stageGenderRanks = {
@@ -1037,8 +1037,17 @@ function renderStage(stage) {
         const t = r[cfg.timeKey];
         const noTime = t == null;
         const rc = noTime ? '' : rankClass(stageAbsRanks[r.bib]);
-        const pos = lastReached(r.cp, dbStage);
+        const pos = stagePos(r, dbStage);
         const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
+        // Темп/скорость — из ЖИВОЙ позиции (пройденная дистанция / сетевое
+        // время до неё), а не из серверного r[cfg.metaKey]: то поле
+        // (avg_pace_s/avg_speed_kmh) считается как "дистанция ВСЕГО этапа
+        // / total_s" — корректно только для уже финишировавших, а на живой
+        // гонке total_s почти всегда лишь ЧАСТЬ дистанции, что даёт
+        // абсурдные значения (напр. 900+ км/ч на вело), см. avgPaceLabel,
+        // уже применяемый для того же в генераторе постов трансляции
+        // (найдено пользователем 2026-08-04).
+        const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
         // Блёклая строка — только по РЕАЛЬНОМУ статусу гонки (DNF/DSQ/DNS),
         // не по "нет времени на этом этапе" (noTime): на живой гонке
@@ -1055,7 +1064,7 @@ function renderStage(stage) {
                 <span class="badge badge-individual">Лично</span>
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib])}</td>
-            <td class="r muted">${noTime ? '—' : cfg.metaFn(r[cfg.metaKey])}</td>
+            <td class="r muted">${metaCell}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage)}</td>
@@ -1065,9 +1074,11 @@ function renderStage(stage) {
     const buildRelayStageRow = m => {
         const t = m[cfg.timeKey];
         const key = `${m._bib}:${m.relay_stage}`;
-        const meta = cfg.metaFn(stage === 'swim' ? m.swim_pace : stage === 'bike1' ? m.bike1_speed : stage === 'bike2' ? m.bike2_speed : m.run_pace);
-        const hasTime = t != null;
-        const pos = lastReached(m.cp, dbStage);
+        const pos = stagePos(m, dbStage);
+        // См. buildIndividualStageRow — темп/скорость из живой позиции,
+        // не из серверного avg_pace_s/avg_speed_kmh (неверно для тех, кто
+        // ещё не финишировал этап).
+        const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
@@ -1080,7 +1091,7 @@ function renderStage(stage) {
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`])}</td>
-            <td class="r muted">${hasTime ? meta : '—'}</td>
+            <td class="r muted">${meta}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
             <td>${relayMemberStatusBadge(m, pos, maxSeq)}</td>
@@ -1109,7 +1120,7 @@ function renderStage(stage) {
             ...rows.map(r => ({ type: 'individual', entry: r, rawStatus: r._rawStatus, cp: r.cp })),
             ...relayMembers.map(m => ({ type: 'relay', entry: m, rawStatus: m._rawStatus, cp: m.cp })),
         ],
-        item => posSortKey(lastReached(item.cp, dbStage))
+        item => posSortKey(stagePos(item.entry, dbStage))
     ).map(({ type, entry }) => ({ type, entry }));
 
     html += `<div class="table-wrap"><table class="stage-table">
