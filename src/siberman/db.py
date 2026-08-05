@@ -96,9 +96,8 @@ def set_copernico_run_enabled(conn, race_year: int, enabled: bool) -> None:
 
 
 def get_latest_race_year(conn) -> Optional[int]:
-    """Последний (по номеру) год с загруженными данными — используется
-    ТЕСТОВОЙ страницей (/siberman/test, ?latest=1), чтобы сразу видеть
-    свежезалитый тестовый год, не трогая настройку публичного года."""
+    """Последний (по номеру) год с загруженными данными — фолбэк для
+    get_public_race_year(), если публичный год ещё ни разу не задан явно."""
     cur = conn.cursor()
     cur.execute("SELECT race_year FROM race_config ORDER BY race_year DESC LIMIT 1")
     row = cur.fetchone()
@@ -107,11 +106,10 @@ def get_latest_race_year(conn) -> Optional[int]:
 
 def get_public_race_year(conn) -> Optional[int]:
     """Год, который показывается на ПУБЛИЧНОЙ странице результатов — не
-    обязательно последний загруженный (2026-08-05: тестовые данные под
-    новым годом на /siberman/test не должны утекать на прод). Явно
-    задаётся через set_public_race_year() в админке; если ещё ни разу не
-    задан — откат на "последний год" (см. 007_public_year.sql: миграция
-    сама помечает текущий последний год публичным при накатке)."""
+    обязательно последний загруженный. Явно задаётся через
+    set_public_race_year() в админке; если ещё ни разу не задан — откат
+    на "последний год" (см. 007_public_year.sql: миграция сама помечает
+    текущий последний год публичным при накатке)."""
     cur = conn.cursor()
     cur.execute("SELECT race_year FROM race_config WHERE is_public=1 ORDER BY race_year DESC LIMIT 1")
     row = cur.fetchone()

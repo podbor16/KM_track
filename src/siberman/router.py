@@ -13,7 +13,7 @@ from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
 from src.siberman.db import (
-    get_siberman_connection, get_results_for_year, set_race_start, get_latest_race_year,
+    get_siberman_connection, get_results_for_year, set_race_start,
     get_public_race_year, set_public_race_year, set_stage_starts, get_all_records,
     get_copernico_run_enabled, set_copernico_run_enabled,
 )
@@ -93,38 +93,16 @@ async def participant_page(request: Request, bib: str, year: int = 2025):
     )
 
 
-# ── Тестовая копия публичной страницы (results_test.html/participant_test.html) —
-# отдельные шаблоны, тот же /api/siberman/results (те же данные), чтобы
-# фичи/фиксы можно было проверить вживую, не трогая продовые шаблоны, и
-# только потом переносить готовое в results.html/participant.html
-# (запрошено пользователем 2026-08-05).
-@router.get("/siberman/test", response_class=HTMLResponse)
-async def results_test_page(request: Request):
-    return templates.TemplateResponse("siberman/results_test.html", {"request": request})
-
-
-@router.get("/siberman/test/participant/{bib}", response_class=HTMLResponse)
-async def participant_test_page(request: Request, bib: str, year: int = 2025):
-    return templates.TemplateResponse(
-        "siberman/participant_test.html", {"request": request, "bib": bib, "year": year}
-    )
-
-
 @router.get("/api/siberman/results")
-async def api_results(year: Optional[int] = None, latest: bool = False):
-    # year не передан:
-    #   latest=1 (тестовая страница /siberman/test) — последний загруженный
-    #     год, чтобы сразу видеть свежий тестовый прогон.
-    #   иначе (публичная страница) — год, явно помеченный публичным в
-    #     админке (get_public_race_year) — НЕ обязательно последний
-    #     загруженный, иначе тестовые данные под новым годом утекали бы на
-    #     прод (2026-08-05).
+async def api_results(year: Optional[int] = None):
+    # year не передан — год, явно помеченный публичным в админке
+    # (get_public_race_year), НЕ обязательно последний загруженный.
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
         if year is None:
-            year = get_latest_race_year(conn) if latest else get_public_race_year(conn)
+            year = get_public_race_year(conn)
             if year is None:
                 raise HTTPException(status_code=404, detail="Нет загруженных данных ни за один год")
         data = get_results_for_year(conn, year)
@@ -170,9 +148,7 @@ async def set_stage_starts_endpoint(race_year: int = 2025, bike2_start: str = ""
 @router.post("/api/siberman/admin/set-public-year")
 async def set_public_year_endpoint(race_year: int, user: str = Depends(api_require_auth)):
     """Какой год показывать на публичной странице (/) — независимо от
-    того, какой год последним загружали (см. get_public_race_year).
-    Тестовые прогоны под новым годом (/siberman/test) не переключают
-    публичную, пока это явно не сделано здесь."""
+    того, какой год последним загружали (см. get_public_race_year)."""
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
