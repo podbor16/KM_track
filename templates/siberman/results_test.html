@@ -1198,7 +1198,8 @@ function renderStage(stage) {
             ...rows.map(r => ({ type: 'individual', entry: r, rawStatus: r._rawStatus, cp: r.cp })),
             ...relayMembers.map(m => ({ type: 'relay', entry: m, rawStatus: m._rawStatus, cp: m.cp })),
         ],
-        item => posSortKey(stagePos(item.entry, dbStage))
+        item => posSortKey(stagePos(item.entry, dbStage)),
+        item => item.entry.bib ?? item.entry._bib
     ).map(({ type, entry }) => ({ type, entry }));
 
     html += `<div class="table-wrap"><table class="stage-table">
