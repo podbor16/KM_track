@@ -113,28 +113,37 @@ def get_all_records(conn) -> list[dict]:
     return cur.fetchall()
 
 
-def maybe_update_record(conn, column_key: str, category: str, candidate_s: int,
-                         holder_name: str, holder_team: Optional[str], year: int) -> bool:
-    """Если candidate_s быстрее сохранённого (или рекорда для этой пары
-    column_key/category ещё нет) — записывает новый рекорд. Возвращает
-    True, если рекорд обновлён/создан."""
+def write_best_record(conn, column_key: str, category: str,
+                       candidates: list[tuple[int, str, Optional[str]]], race_year: int) -> None:
+    """ПОЛНЫЙ пересчёт (не инкрементальное "побил — не побил") — best_s/
+    holder_*/year_set выставляются заново на каждый apply как минимум
+    среди НЕИЗМЕННОГО исторического baseline_* (см. 007/008 миграции) и
+    переданных ЖИВЫХ кандидатов этого года. Если прошлый рекордсмен года
+    с тех пор сошёл (dnf/dsq) — он просто не попадёт в candidates на этот
+    раз, и результат "откатится" сам собой к следующему подходящему или к
+    baseline (2026-08-05, второй раунд: рекорд должен быть виден в
+    live-режиме, а не только после финиша всей гонки, и пропадать при
+    DNF — инкрементальное сравнение этого не умеет, нужен пересчёт).
+    Молча ничего не делает, если для этой пары (column_key, category) нет
+    строки baseline (значит, эта категория не отслеживается)."""
     cur = conn.cursor()
     cur.execute(
-        "SELECT best_s FROM siberman_records WHERE column_key=%s AND category=%s",
+        "SELECT baseline_s, baseline_holder_name, baseline_holder_team, baseline_year_set "
+        "FROM siberman_records WHERE column_key=%s AND category=%s",
         (column_key, category)
     )
     row = cur.fetchone()
-    if row is not None and row[0] <= candidate_s:
-        return False
+    if row is None:
+        return
+    best_s, holder_name, holder_team, year_set = row
+    for value, name, team in candidates:
+        if value < best_s:
+            best_s, holder_name, holder_team, year_set = value, name, team, race_year
     cur.execute(
-        """INSERT INTO siberman_records (column_key, category, best_s, holder_name, holder_team, year_set)
-           VALUES (%s, %s, %s, %s, %s, %s)
-           ON DUPLICATE KEY UPDATE
-               best_s=VALUES(best_s), holder_name=VALUES(holder_name),
-               holder_team=VALUES(holder_team), year_set=VALUES(year_set)""",
-        (column_key, category, candidate_s, holder_name, holder_team, year)
+        "UPDATE siberman_records SET best_s=%s, holder_name=%s, holder_team=%s, year_set=%s "
+        "WHERE column_key=%s AND category=%s",
+        (best_s, holder_name, holder_team, year_set, column_key, category)
     )
-    return True
 
 
 def clear_race_year(conn, race_year: int) -> None:

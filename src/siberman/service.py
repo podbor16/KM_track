@@ -8,7 +8,7 @@ from typing import Optional
 from src.siberman.db import (
     get_siberman_connection, get_checkpoints, clear_race_year,
     upsert_participant, upsert_checkpoint_time, upsert_transition,
-    upsert_stage_total, upsert_overall_result, maybe_update_record,
+    upsert_stage_total, upsert_overall_result, write_best_record,
 )
 from src.siberman.parser import ParseResult
 
@@ -263,17 +263,23 @@ def build_bike_day2_starts(result: ParseResult, starts: dict[str, int]) -> list[
     return rows
 
 
-def _update_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_totals: dict,
-                     pid_meta: dict, relay_by_bib: dict, race_finishers: list) -> None:
-    """Проверяет и обновляет рекорды Siberman (siberman_records) по только
-    что посчитанным итогам. Кандидатом на ЛЮБОЙ рекорд может быть только
-    тот, кто реально дошёл до конца ВСЕЙ гонки (все 4 этапа) — даже если
-    сравнивается его время только на одном сегменте (решение 2026-08-05:
-    сошедший позже не может претендовать даже на рекорд уже пройденного
-    им сегмента). 'male'/'female' — категория считает и эстафетчиков (у
-    них есть реальный личный пол на этапе), '..._individual' — только
-    личный зачёт. Эстафета не участвует в column_key='overall' (это
-    личное достижение одного человека, не суммы трёх разных людей)."""
+def _recompute_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_totals: dict,
+                        pid_meta: dict, pid_cp_times: dict, relay_by_bib: dict) -> None:
+    """Пересчитывает рекорды Siberman (siberman_records) ЖИВЬЁМ на каждый
+    apply. Кандидатом на рекорд КОНКРЕТНОЙ колонки становится любой, кто
+    реально финишировал именно ЭТОТ сегмент (не обязательно всю гонку) и
+    сейчас НЕ dnf/dsq — рекорд должен быть виден в live-режиме, а не
+    только после финиша всей гонки; если участник позже получает dnf, на
+    следующем apply он выпадает из кандидатов и рекорд автоматически
+    "откатывается" к следующему подходящему (или к историческому
+    baseline) — решение 2026-08-05, второй раунд, после первоначального
+    "только полный финишер". 'overall' — колонка-исключение: требует
+    финиша ВСЕЙ гонки (не просто сегмента) и недоступна эстафете (личное
+    достижение одного человека, не сумма троих). 'male'/'female' считает
+    и эстафетчиков (у них есть реальный личный пол на этапе),
+    '..._individual' — только личный зачёт. Полный пересчёт (не
+    инкрементальное сравнение "побил — не побил") делает откат возможным
+    без доп. состояния — см. write_best_record() в db.py."""
     pid_to_participant = {}
     for p in result.participants:
         cp_key = p.get("_cp_key", p["bib"])
@@ -292,49 +298,74 @@ def _update_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_totals: 
             return []
         return [base, f"{base}_individual"] if individual else [base]
 
-    year = result.race_year
+    # candidates[(column_key, category)] = [(value, holder_name, holder_team), ...]
+    candidates: dict[tuple[str, str], list[tuple[int, str, Optional[str]]]] = {}
 
-    for pid in race_finishers:
+    def add(column_key: str, category: str, value: Optional[int], name: str, team: Optional[str]) -> None:
+        if value is None:
+            return
+        candidates.setdefault((column_key, category), []).append((value, name, team))
+
+    def add_stage(column_key: str, value: Optional[int], name: str, team: Optional[str],
+                  gender: str, individual: bool) -> None:
+        add(column_key, "absolute", value, name, team)
+        for cat in gender_cats(gender, individual):
+            add(column_key, cat, value, name, team)
+
+    # --- Личники — по каждой колонке своя проверка ФИНИША СЕГМЕНТА, не всей гонки ---
+    for pid, meta in pid_meta.items():
+        if meta["format"] != "individual" or meta["status"] != "active":
+            continue
         p = pid_to_participant.get(pid)
         if p is None:
             continue
         name = f"{p['surname']} {p['name']}"
         totals = pid_totals[pid]
-        maybe_update_record(conn, "overall", "absolute", totals["overall"], name, None, year)
-        for cat in gender_cats(p["gender"], individual=True):
-            if cat.endswith("_individual"):
-                maybe_update_record(conn, "overall", cat, totals["overall"], name, None, year)
-        for column_key, value in (("swim", totals.get("swim")), ("bike_total", bike_total_for(pid)), ("run", totals.get("run"))):
-            if value is None:
-                continue
-            maybe_update_record(conn, column_key, "absolute", value, name, None, year)
-            for cat in gender_cats(p["gender"], individual=True):
-                maybe_update_record(conn, column_key, cat, value, name, None, year)
+        cp_times = pid_cp_times.get(pid, {})
 
+        if all(_finished_stage(cp_times, s) for s in ("swim", "bike_day1", "bike_day2", "run")):
+            add("overall", "absolute", totals["overall"], name, None)
+            for cat in gender_cats(p["gender"], individual=True):
+                if cat.endswith("_individual"):
+                    add("overall", cat, totals["overall"], name, None)
+
+        if _finished_stage(cp_times, "swim"):
+            add_stage("swim", totals.get("swim"), name, None, p["gender"], True)
+        if _finished_stage(cp_times, "bike_day1") and _finished_stage(cp_times, "bike_day2"):
+            add_stage("bike_total", bike_total_for(pid), name, None, p["gender"], True)
+        if _finished_stage(cp_times, "run"):
+            add_stage("run", totals.get("run"), name, None, p["gender"], True)
+
+    # --- Эстафеты — по каждой роли свой участник, свой статус, свой финиш сегмента ---
     for bib, roles in relay_by_bib.items():
         swim_pid, bike_pid, run_pid = roles.get("swim"), roles.get("bike"), roles.get("run")
-        if not (swim_pid and bike_pid and run_pid):
-            continue
-        # Команда финишировала целиком — все трое активны и реально дошли
-        # до конца СВОЕГО этапа (тот же критерий, что и race_finishers,
-        # но для трёх разных людей одной команды).
-        if not all(pid_meta.get(pid, {}).get("status") == "active" for pid in (swim_pid, bike_pid, run_pid)):
-            continue
-        swim_total = pid_totals.get(swim_pid, {}).get("swim")
-        bike_total = bike_total_for(bike_pid)
-        run_total = pid_totals.get(run_pid, {}).get("run")
-        if swim_total is None or bike_total is None or run_total is None:
-            continue
-        team_p = pid_to_participant.get(swim_pid) or pid_to_participant.get(bike_pid) or pid_to_participant.get(run_pid)
+        team_p = (pid_to_participant.get(swim_pid) or pid_to_participant.get(bike_pid)
+                  or pid_to_participant.get(run_pid))
         team_name = team_p.get("relay_team_name") if team_p else None
-        for column_key, value, pid in (("swim", swim_total, swim_pid), ("bike_total", bike_total, bike_pid), ("run", run_total, run_pid)):
-            p = pid_to_participant.get(pid)
-            if p is None:
-                continue
-            name = f"{p['surname']} {p['name']}"
-            maybe_update_record(conn, column_key, "absolute", value, name, team_name, year)
-            for cat in gender_cats(p["gender"], individual=False):
-                maybe_update_record(conn, column_key, cat, value, name, team_name, year)
+
+        if swim_pid and pid_meta.get(swim_pid, {}).get("status") == "active" \
+                and _finished_stage(pid_cp_times.get(swim_pid, {}), "swim"):
+            p = pid_to_participant.get(swim_pid)
+            if p:
+                add_stage("swim", pid_totals[swim_pid].get("swim"),
+                          f"{p['surname']} {p['name']}", team_name, p["gender"], False)
+        if bike_pid and pid_meta.get(bike_pid, {}).get("status") == "active" \
+                and _finished_stage(pid_cp_times.get(bike_pid, {}), "bike_day1") \
+                and _finished_stage(pid_cp_times.get(bike_pid, {}), "bike_day2"):
+            p = pid_to_participant.get(bike_pid)
+            if p:
+                add_stage("bike_total", bike_total_for(bike_pid),
+                          f"{p['surname']} {p['name']}", team_name, p["gender"], False)
+        if run_pid and pid_meta.get(run_pid, {}).get("status") == "active" \
+                and _finished_stage(pid_cp_times.get(run_pid, {}), "run"):
+            p = pid_to_participant.get(run_pid)
+            if p:
+                add_stage("run", pid_totals[run_pid].get("run"),
+                          f"{p['surname']} {p['name']}", team_name, p["gender"], False)
+        # Эстафета не участвует в column_key='overall'.
+
+    for (column_key, category), items in candidates.items():
+        write_best_record(conn, column_key, category, items, result.race_year)
 
 
 def apply_to_db(result: ParseResult) -> dict:
@@ -494,7 +525,7 @@ def apply_to_db(result: ParseResult) -> dict:
                 rank_relay=None,
             )
 
-        _update_records(conn, result, cp_key_to_pid, pid_totals, pid_meta, relay_by_bib, race_finishers)
+        _recompute_records(conn, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
 
         return {
             "ok":               True,

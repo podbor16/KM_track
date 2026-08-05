@@ -4,7 +4,7 @@ from src.siberman.parser import ParseResult
 from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
-    _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ, _update_records,
+    _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ, _recompute_records,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
@@ -211,16 +211,28 @@ def _mk_pr(race_year, participants):
     return r
 
 
-def test_update_records_individual_finisher_writes_broad_and_individual_categories():
+def _finish_cp(stage):
+    return {(stage, STAGE_MAX_SEQ[stage]): 1}
+
+
+def _full_finish_cp():
+    cp = {}
+    for s in ("swim", "bike_day1", "bike_day2", "run"):
+        cp.update(_finish_cp(s))
+    return cp
+
+
+def test_recompute_records_individual_full_finisher_writes_broad_and_individual_categories():
     result = _mk_pr(2026, [
         {"bib": "1", "format": "individual", "surname": "Иванов", "name": "Пётр", "gender": "M"},
     ])
     cp_key_to_pid = {"1": 100}
     pid_totals = {100: {"swim": 8000, "bike_day1": 30000, "bike_day2": 50000, "run": 20000, "overall": 108000}}
     pid_meta = {100: {"status": "active", "format": "individual", "gender": "M", "relay_stage": "none"}}
-    with patch("src.siberman.service.maybe_update_record") as m:
-        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, {}, [100])
-    calls = {(c.args[1], c.args[2]): c.args for c in m.call_args_list}
+    pid_cp_times = {100: _full_finish_cp()}
+    with patch("src.siberman.service.write_best_record") as m:
+        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+    calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     # "overall" — только absolute + _individual (никогда "male"/"female" без "_individual")
     assert ("overall", "absolute") in calls
     assert ("overall", "male_individual") in calls
@@ -232,15 +244,54 @@ def test_update_records_individual_finisher_writes_broad_and_individual_categori
         assert (column, "male") in calls
         assert (column, "male_individual") in calls
         assert (column, "female") not in calls
-    # Значения: candidate_s (args[3]), holder_name (args[4]), holder_team (args[5] — None для личника)
-    assert calls[("swim", "absolute")][3] == 8000
-    assert calls[("bike_total", "absolute")][3] == 30000 + 50000
-    assert calls[("run", "absolute")][3] == 20000
-    assert calls[("overall", "absolute")][4] == "Иванов Пётр"
-    assert calls[("overall", "absolute")][5] is None
+    # candidates — список [(value, name, team)]
+    assert calls[("swim", "absolute")] == [(8000, "Иванов Пётр", None)]
+    assert calls[("bike_total", "absolute")] == [(30000 + 50000, "Иванов Пётр", None)]
+    assert calls[("run", "absolute")] == [(20000, "Иванов Пётр", None)]
 
 
-def test_update_records_relay_team_writes_broad_categories_only_no_overall():
+def test_recompute_records_individual_live_mid_race_only_finished_segments_are_candidates():
+    # 2026-08-05, второй раунд: рекорд должен быть виден LIVE — участник
+    # ещё бежит бег (гонка не завершена), но уже реально финишировал
+    # заплыв и вело-2 — должен быть кандидатом на swim/bike_total, но НЕ
+    # на overall/run (они ещё не пройдены).
+    result = _mk_pr(2026, [
+        {"bib": "1", "format": "individual", "surname": "Иванов", "name": "Пётр", "gender": "M"},
+    ])
+    cp_key_to_pid = {"1": 100}
+    pid_totals = {100: {"swim": 8000, "bike_day1": 30000, "bike_day2": 50000, "run": None, "overall": None}}
+    pid_meta = {100: {"status": "active", "format": "individual", "gender": "M", "relay_stage": "none"}}
+    cp = {}
+    cp.update(_finish_cp("swim"))
+    cp.update(_finish_cp("bike_day1"))
+    cp.update(_finish_cp("bike_day2"))
+    pid_cp_times = {100: cp}
+    with patch("src.siberman.service.write_best_record") as m:
+        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+    calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
+    assert ("swim", "absolute") in calls
+    assert ("bike_total", "absolute") in calls
+    assert ("overall", "absolute") not in calls
+    assert ("run", "absolute") not in calls
+
+
+def test_recompute_records_individual_dnf_excluded_even_for_already_finished_segments():
+    # Финишировал заплыв реально быстро, но потом сошёл (dnf) — не
+    # кандидат вообще ни на что, даже на уже пройденный заплыв (решение
+    # пользователя: dnf убирает упоминание рекорда).
+    result = _mk_pr(2026, [
+        {"bib": "1", "format": "individual", "surname": "Иванов", "name": "Пётр", "gender": "M"},
+    ])
+    cp_key_to_pid = {"1": 100}
+    pid_totals = {100: {"swim": 8000, "bike_day1": None, "bike_day2": None, "run": None, "overall": None}}
+    pid_meta = {100: {"status": "dnf", "format": "individual", "gender": "M", "relay_stage": "none"}}
+    pid_cp_times = {100: _finish_cp("swim")}
+    with patch("src.siberman.service.write_best_record") as m:
+        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+    m.assert_not_called()
+
+
+def test_recompute_records_relay_team_writes_broad_categories_only_no_overall():
     result = _mk_pr(2026, [
         {"bib": "10", "_cp_key": "10:swim", "format": "relay", "relay_stage": "swim", "relay_team_name": "КомандаА", "surname": "Смирнова", "name": "Анна", "gender": "F"},
         {"bib": "10", "_cp_key": "10:bike", "format": "relay", "relay_stage": "bike", "relay_team_name": "КомандаА", "surname": "Кузнецов", "name": "Олег", "gender": "M"},
@@ -257,28 +308,33 @@ def test_update_records_relay_team_writes_broad_categories_only_no_overall():
         201: {"status": "active", "format": "relay", "gender": "M", "relay_stage": "bike"},
         202: {"status": "active", "format": "relay", "gender": "F", "relay_stage": "run"},
     }
+    pid_cp_times = {
+        200: _finish_cp("swim"),
+        201: {**_finish_cp("bike_day1"), **_finish_cp("bike_day2")},
+        202: _finish_cp("run"),
+    }
     relay_by_bib = {"10": {"swim": 200, "bike": 201, "run": 202}}
-    with patch("src.siberman.service.maybe_update_record") as m:
-        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, relay_by_bib, [])
-    calls = {(c.args[1], c.args[2]): c.args for c in m.call_args_list}
+    with patch("src.siberman.service.write_best_record") as m:
+        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+    calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     # Эстафета никогда не пишет "overall" (личное достижение, не сумма троих)
     assert not any(k[0] == "overall" for k in calls)
     # "..._individual" не пишется эстафете — только absolute + широкая гендерная
     assert ("swim", "absolute") in calls
     assert ("swim", "female") in calls
     assert ("swim", "female_individual") not in calls
-    assert calls[("swim", "absolute")][3] == 7000
-    assert calls[("swim", "absolute")][4] == "Смирнова Анна"
-    assert calls[("swim", "absolute")][5] == "КомандаА"
+    assert calls[("swim", "absolute")] == [(7000, "Смирнова Анна", "КомандаА")]
     assert ("bike_total", "male") in calls
-    assert calls[("bike_total", "absolute")][3] == 25000 + 45000
+    assert calls[("bike_total", "absolute")] == [(25000 + 45000, "Кузнецов Олег", "КомандаА")]
     assert ("run", "female") in calls
-    assert calls[("run", "absolute")][3] == 18000
+    assert calls[("run", "absolute")] == [(18000, "Попова Вера", "КомандаА")]
 
 
-def test_update_records_relay_team_incomplete_member_skips_whole_team():
-    # Бегун сошёл (dnf) — команда не финишировала целиком, ни один из
-    # троих не может претендовать на рекорд, даже уже проплывший заплыв.
+def test_recompute_records_relay_team_partial_completion_is_evaluated_per_role():
+    # 2026-08-05, второй раунд: бегун сошёл (dnf) — но пловец и
+    # велосипедист СВОИ этапы реально прошли и всё ещё активны, значит
+    # команда всё же кандидат на swim/bike_total (не только на "команда
+    # финишировала целиком", как было раньше) — просто НЕ на run.
     result = _mk_pr(2026, [
         {"bib": "10", "_cp_key": "10:swim", "format": "relay", "relay_stage": "swim", "relay_team_name": "КомандаБ", "surname": "А", "name": "Б", "gender": "M"},
         {"bib": "10", "_cp_key": "10:bike", "format": "relay", "relay_stage": "bike", "relay_team_name": "КомандаБ", "surname": "В", "name": "Г", "gender": "M"},
@@ -291,7 +347,15 @@ def test_update_records_relay_team_incomplete_member_skips_whole_team():
         301: {"status": "active", "format": "relay", "gender": "M", "relay_stage": "bike"},
         302: {"status": "dnf", "format": "relay", "gender": "M", "relay_stage": "run"},
     }
+    pid_cp_times = {
+        300: _finish_cp("swim"),
+        301: {**_finish_cp("bike_day1"), **_finish_cp("bike_day2")},
+        302: {},
+    }
     relay_by_bib = {"10": {"swim": 300, "bike": 301, "run": 302}}
-    with patch("src.siberman.service.maybe_update_record") as m:
-        _update_records(None, result, cp_key_to_pid, pid_totals, pid_meta, relay_by_bib, [])
-    m.assert_not_called()
+    with patch("src.siberman.service.write_best_record") as m:
+        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+    calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
+    assert ("swim", "absolute") in calls
+    assert ("bike_total", "absolute") in calls
+    assert not any(k[0] == "run" for k in calls)

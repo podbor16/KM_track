@@ -44,6 +44,9 @@ jobs:
             # Add is_public (какой год показывать на публичной странице)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/007_public_year.sql
 
+            # Add baseline_* (живые рекорды с откатом при DNF)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/008_records_live.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"
