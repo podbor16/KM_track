@@ -222,6 +222,10 @@ def _full_finish_cp():
     return cp
 
 
+def _pid_to_participant(participants, cp_key_to_pid):
+    return {cp_key_to_pid[p.get("_cp_key", p["bib"])]: p for p in participants}
+
+
 def test_recompute_records_individual_full_finisher_writes_broad_and_individual_categories():
     result = _mk_pr(2026, [
         {"bib": "1", "format": "individual", "surname": "Иванов", "name": "Пётр", "gender": "M"},
@@ -231,7 +235,7 @@ def test_recompute_records_individual_full_finisher_writes_broad_and_individual_
     pid_meta = {100: {"status": "active", "format": "individual", "gender": "M", "relay_stage": "none"}}
     pid_cp_times = {100: _full_finish_cp()}
     with patch("src.siberman.service.write_best_record") as m:
-        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+        _recompute_records(None, result.race_year, _pid_to_participant(result.participants, cp_key_to_pid), pid_totals, pid_meta, pid_cp_times, {})
     calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     # "overall" — только absolute + _individual (никогда "male"/"female" без "_individual")
     assert ("overall", "absolute") in calls
@@ -267,7 +271,7 @@ def test_recompute_records_individual_live_mid_race_only_finished_segments_are_c
     cp.update(_finish_cp("bike_day2"))
     pid_cp_times = {100: cp}
     with patch("src.siberman.service.write_best_record") as m:
-        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+        _recompute_records(None, result.race_year, _pid_to_participant(result.participants, cp_key_to_pid), pid_totals, pid_meta, pid_cp_times, {})
     calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     assert ("swim", "absolute") in calls
     assert ("bike_total", "absolute") in calls
@@ -287,7 +291,7 @@ def test_recompute_records_individual_dnf_excluded_even_for_already_finished_seg
     pid_meta = {100: {"status": "dnf", "format": "individual", "gender": "M", "relay_stage": "none"}}
     pid_cp_times = {100: _finish_cp("swim")}
     with patch("src.siberman.service.write_best_record") as m:
-        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, {})
+        _recompute_records(None, result.race_year, _pid_to_participant(result.participants, cp_key_to_pid), pid_totals, pid_meta, pid_cp_times, {})
     m.assert_not_called()
 
 
@@ -315,7 +319,7 @@ def test_recompute_records_relay_team_writes_broad_categories_only_no_overall():
     }
     relay_by_bib = {"10": {"swim": 200, "bike": 201, "run": 202}}
     with patch("src.siberman.service.write_best_record") as m:
-        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+        _recompute_records(None, result.race_year, _pid_to_participant(result.participants, cp_key_to_pid), pid_totals, pid_meta, pid_cp_times, relay_by_bib)
     calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     # Эстафета никогда не пишет "overall" (личное достижение, не сумма троих)
     assert not any(k[0] == "overall" for k in calls)
@@ -354,7 +358,7 @@ def test_recompute_records_relay_team_partial_completion_is_evaluated_per_role()
     }
     relay_by_bib = {"10": {"swim": 300, "bike": 301, "run": 302}}
     with patch("src.siberman.service.write_best_record") as m:
-        _recompute_records(None, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+        _recompute_records(None, result.race_year, _pid_to_participant(result.participants, cp_key_to_pid), pid_totals, pid_meta, pid_cp_times, relay_by_bib)
     calls = {(c.args[1], c.args[2]): c.args[3] for c in m.call_args_list}
     assert ("swim", "absolute") in calls
     assert ("bike_total", "absolute") in calls

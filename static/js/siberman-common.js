@@ -312,6 +312,16 @@ const CHECKPOINT_DIST_KM = {
     run: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, (i + 1) * 7])),
 };
 
+// Субметки бега "-500м до круга" (Copernico live, задача 6 Live v2, seq
+// 101..112 — см. миграцию 009). ВНЕ диапазона 1..STAGE_MAX_SEQ.run,
+// поэтому невидимы для lastReached()/currentStage()/finish-детекции по
+// конструкции (те функции идут только 1..STAGE_MAX_SEQ) — участвуют
+// ТОЛЬКО в колонке "Последняя отметка" через lastReachedIncludingSubmarks().
+const RUN_SUBMARK_SEQS = Array.from({ length: 12 }, (_, i) => 100 + i + 1);
+for (const seq of RUN_SUBMARK_SEQS) {
+    CHECKPOINT_DIST_KM.run[seq] = (seq - 100) * 7 - 0.5;
+}
+
 // Общая развилка единиц измерения по этапу — плавание темп/100м, вело
 // скорость км/ч, бег темп/км. Общий примитив для splitPaceLabel (сплит
 // между соседними КТ) и avgPaceLabel (средний темп от старта этапа до КТ,
@@ -409,6 +419,11 @@ function lastCpTwoLineHtml(dbStage, seq) {
     const km = CHECKPOINT_DIST_KM[dbStage][seq];
     const kmLine = `<div>${String(km).replace('.', ',')} км</div>`;
     if (seq === STAGE_MAX_SEQ[dbStage]) return kmLine + '<div class="muted-sub">Финиш</div>';
+    if (dbStage === 'run' && seq > 100) {
+        // Субметка "-500м до круга" — seq не равен реальному номеру круга.
+        const lap = seq - 100;
+        return kmLine + `<div class="muted-sub">${lap} ${_circleWord(lap)} (-500м)</div>`;
+    }
     const lapN = dbStage === 'swim' ? SWIM_LAP_SEQS[seq] : dbStage === 'run' ? seq : null;
     return lapN ? kmLine + `<div class="muted-sub">${lapN} ${_circleWord(lapN)}</div>` : kmLine;
 }
@@ -436,6 +451,25 @@ function lastReached(cp, stage) {
         if (v != null) return { seq, value: v };
     }
     return null;
+}
+
+// Как lastReached(), но для 'run' дополнительно учитывает субметки "-500м
+// до круга" (Copernico, seq 101..112) — выбор ПО РАССТОЯНИЮ, а не по seq
+// (субметки идут "вперемешку" с круговыми хронологически, а не после них
+// по номеру). Используется ТОЛЬКО в колонке "Последняя отметка" на
+// вкладке "Бег" — везде остальном (ранги/статус/currentStage/finish) —
+// как и раньше, lastReached() без субметок.
+function lastReachedIncludingSubmarks(cp, stage) {
+    if (stage !== 'run') return lastReached(cp, stage);
+    if (!cp || !cp[stage]) return null;
+    let best = null;
+    for (const seq of [...Array.from({ length: STAGE_MAX_SEQ.run }, (_, i) => i + 1), ...RUN_SUBMARK_SEQS]) {
+        const v = cp[stage][seq];
+        if (v == null) continue;
+        const km = CHECKPOINT_DIST_KM.run[seq];
+        if (best == null || km > best.km) best = { seq, value: v, km };
+    }
+    return best ? { seq: best.seq, value: best.value } : null;
 }
 
 function valueAtOrBefore(cp, stage, seq) {

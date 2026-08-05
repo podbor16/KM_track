@@ -1111,7 +1111,10 @@ function renderStage(stage) {
         const noTime = t == null;
         const rc = noTime ? '' : rankClass(stageAbsRanks[r.bib]);
         const pos = stagePos(r, dbStage);
-        const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
+        // "Отметка" на "Бег" учитывает субметки Copernico "-500м до круга"
+        // — везде остальном (ранги/темп/статус) остаётся круговой pos.
+        const lastCpPos = dbStage === 'run' ? lastReachedIncludingSubmarks(r.cp, dbStage) : pos;
+        const lastCpCell = lastCpTwoLineHtml(dbStage, lastCpPos?.seq);
         // Темп/скорость — из ЖИВОЙ позиции (пройденная дистанция / сетевое
         // время до неё), а не из серверного r[cfg.metaKey]: то поле
         // (avg_pace_s/avg_speed_kmh) считается как "дистанция ВСЕГО этапа
@@ -1160,7 +1163,8 @@ function renderStage(stage) {
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
         const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name) : [];
-        const lastCpCell = lastCpTwoLineHtml(dbStage, pos?.seq);
+        const lastCpPos = dbStage === 'run' ? lastReachedIncludingSubmarks(m.cp, dbStage) : pos;
+        const lastCpCell = lastCpTwoLineHtml(dbStage, lastCpPos?.seq);
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
         return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">

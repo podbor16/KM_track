@@ -15,6 +15,7 @@ from src.siberman.service import (
 from src.siberman.db import (
     get_siberman_connection, get_results_for_year, set_race_start, get_latest_race_year,
     get_public_race_year, set_public_race_year, set_stage_starts, get_all_records,
+    get_copernico_run_enabled, set_copernico_run_enabled,
 )
 from src.core.auth import api_require_auth
 
@@ -180,6 +181,37 @@ async def set_public_year_endpoint(race_year: int, user: str = Depends(api_requi
     finally:
         conn.close()
     return {"ok": True}
+
+
+@router.get("/api/siberman/admin/copernico-run-status")
+async def copernico_run_status_endpoint(race_year: int, user: str = Depends(api_require_auth)):
+    """Текущее состояние тумблера live-опроса Copernico для бегового этапа
+    (задача 6 Live v2) — сам poller-процесс отдельно, это только флаг,
+    который apply_copernico_snapshot() проверяет перед записью."""
+    conn = get_siberman_connection()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        enabled = get_copernico_run_enabled(conn, race_year)
+    finally:
+        conn.close()
+    return {"race_year": race_year, "enabled": enabled}
+
+
+@router.post("/api/siberman/admin/copernico-run-toggle")
+async def copernico_run_toggle_endpoint(race_year: int, enabled: bool, user: str = Depends(api_require_auth)):
+    """Включить/выключить запись live-данных Copernico для бегового этапа
+    без остановки самого poller-процесса — не трогает apply_to_db/
+    clear_race_year (Excel-путь), выключатель только для отдельного
+    copernico_run.py::apply_copernico_snapshot()."""
+    conn = get_siberman_connection()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        set_copernico_run_enabled(conn, race_year, enabled)
+    finally:
+        conn.close()
+    return {"ok": True, "race_year": race_year, "enabled": enabled}
 
 
 @router.post("/api/siberman/admin/upload")

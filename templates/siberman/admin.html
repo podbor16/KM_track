@@ -119,6 +119,22 @@
             </div>
 
             <div class="card">
+                <h2>Copernico live (бег)</h2>
+                <p style="font-size:13px;color:#555;margin:0 0 12px">
+                    Разрешить записи в БД от live-опроса Copernico для
+                    бегового этапа (copernico_run_poller.py). Сам процесс
+                    опроса это НЕ останавливает/запускает — только
+                    разрешает или блокирует запись. Выключено по
+                    умолчанию.
+                </p>
+                <label>Год</label>
+                <input type="number" id="copernico-run-year" value="2025" min="2020" max="2030" style="width:120px">
+                <p id="copernico-run-status" style="font-size:12px;color:#555;margin:8px 0"></p>
+                <button class="btn btn-success" id="btn-copernico-run-enable">Включить</button>
+                <button class="btn" id="btn-copernico-run-disable">Выключить</button>
+            </div>
+
+            <div class="card">
                 <h2>1. Загрузить файл Excel</h2>
                 <label>Файл (.xlsx)</label>
                 <input type="file" id="file-input" accept=".xlsx,.xls">
@@ -340,6 +356,40 @@
             showErr(e.message);
         }
     });
+
+    // Copernico live (бег) — переключатель записи от poller-процесса
+    // (copernico_run_poller.py), не сам процесс (задача 6 Live v2,
+    // запрошено пользователем 2026-08-05: "как мне выключить поллер, если
+    // это будет необходимо").
+    async function prefillCopernicoRunStatus() {
+        const year = $('copernico-run-year').value;
+        try {
+            const r = await fetch(`/api/siberman/admin/copernico-run-status?race_year=${year}`);
+            if (!r.ok) return;
+            const data = await r.json();
+            $('copernico-run-status').textContent = data.enabled
+                ? `Сейчас включено для года ${year}.`
+                : `Сейчас выключено для года ${year}.`;
+        } catch (e) { /* нет строки race_config для года — оставляем пусто */ }
+    }
+    $('copernico-run-year').addEventListener('change', prefillCopernicoRunStatus);
+    prefillCopernicoRunStatus();
+
+    async function setCopernicoRunEnabled(enabled) {
+        hideMsg();
+        const year = $('copernico-run-year').value;
+        try {
+            const r = await fetch(`/api/siberman/admin/copernico-run-toggle?race_year=${year}&enabled=${enabled}`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+            showOk(enabled ? `Copernico live включён для года ${year}.` : `Copernico live выключен для года ${year}.`);
+            prefillCopernicoRunStatus();
+        } catch (e) {
+            showErr(e.message);
+        }
+    }
+    $('btn-copernico-run-enable').addEventListener('click', () => setCopernicoRunEnabled(true));
+    $('btn-copernico-run-disable').addEventListener('click', () => setCopernicoRunEnabled(false));
 
     $('btn-upload').addEventListener('click', async () => {
         const file = $('file-input').files[0];

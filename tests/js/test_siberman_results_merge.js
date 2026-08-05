@@ -1803,6 +1803,45 @@ check('lastCpTwoLineHtml — seq=null даёт прочерк', () => {
     assert.strictEqual(sandbox.lastCpTwoLineHtml('run', null), '—');
 });
 
+// ── lastReachedIncludingSubmarks()/lastCpTwoLineHtml() субметки — задача 6
+// Live v2, Copernico "-500м до круга" (seq 101..112) ──
+check('lastCpTwoLineHtml — бег, субметка "-500м до круга" — km + "N круг (-500м)"', () => {
+    const html = sandbox.lastCpTwoLineHtml('run', 101); // 6.5 км, круг 1
+    assert.ok(html.includes('6,5 км'), `ожидалась дистанция 6,5 км: ${html}`);
+    assert.ok(html.includes('1 круг') && html.includes('-500м'), `ожидался "1 круг (-500м)": ${html}`);
+});
+check('lastCpTwoLineHtml — бег, последняя субметка (круг 12) — НЕ "Финиш" (это не seq=12)', () => {
+    const html = sandbox.lastCpTwoLineHtml('run', 112); // 83.5 км, круг 12, но не финиш
+    assert.ok(html.includes('83,5 км'), `ожидалась дистанция 83,5 км: ${html}`);
+    assert.ok(!html.includes('Финиш'), `субметка перед финишем не должна показывать "Финиш": ${html}`);
+});
+check('lastReachedIncludingSubmarks — субметка позже последнего круга побеждает по расстоянию', () => {
+    const cp = { run: { 8: 30000, 109: 31000 } }; // круг 8 (56км) + субметка круга 9 (62.5км)
+    const pos = sandbox.lastReachedIncludingSubmarks(cp, 'run');
+    assert.strictEqual(pos.seq, 109, `должна победить субметка 109 (62.5км) как более дальняя: ${JSON.stringify(pos)}`);
+    assert.strictEqual(pos.value, 31000);
+});
+check('lastReachedIncludingSubmarks — круговая КТ побеждает более раннюю субметку', () => {
+    const cp = { run: { 101: 5000, 1: 6000 } }; // субметка круга 1 (6.5км) + сам круг 1 (7км)
+    const pos = sandbox.lastReachedIncludingSubmarks(cp, 'run');
+    assert.strictEqual(pos.seq, 1, `круг 1 (7км) дальше субметки (6.5км): ${JSON.stringify(pos)}`);
+});
+check('lastReachedIncludingSubmarks — не влияет на другие этапы (делегирует в lastReached)', () => {
+    const cp = { swim: { 4: 1000 } };
+    const pos = sandbox.lastReachedIncludingSubmarks(cp, 'swim');
+    assert.strictEqual(pos.seq, 4);
+});
+check('lastReachedIncludingSubmarks — пусто, если нет ни круговых, ни субметок', () => {
+    assert.strictEqual(sandbox.lastReachedIncludingSubmarks({ run: {} }, 'run'), null);
+});
+check('lastReachedIncludingSubmarks — субметки НЕ влияют на lastReached (finish-детекция не меняется)', () => {
+    // Участник дошёл только до субметки 112 (83.5км, почти финиш) — обычный
+    // lastReached() (используется для "финишировал?"/ранги/статус) должен
+    // остаться null, а не решить, что seq=12 (финиш) достигнут.
+    const cp = { run: { 112: 40000 } };
+    assert.strictEqual(sandbox.lastReached(cp, 'run'), null);
+});
+
 // ── bikeCombinedLastSeq()/bikeCombinedLastCpHtml() — Отметка на Своде вело
 // (п.3 v6, колонки раньше не было вовсе) ──
 check('bikeCombinedLastSeq — приоритет дня 2 над днём 1, если есть данные обоих', () => {

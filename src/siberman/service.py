@@ -263,7 +263,7 @@ def build_bike_day2_starts(result: ParseResult, starts: dict[str, int]) -> list[
     return rows
 
 
-def _recompute_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_totals: dict,
+def _recompute_records(conn, race_year: int, pid_to_participant: dict, pid_totals: dict,
                         pid_meta: dict, pid_cp_times: dict, relay_by_bib: dict) -> None:
     """Пересчитывает рекорды Siberman (siberman_records) ЖИВЬЁМ на каждый
     apply. Кандидатом на рекорд КОНКРЕТНОЙ колонки становится любой, кто
@@ -279,13 +279,12 @@ def _recompute_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_total
     и эстафетчиков (у них есть реальный личный пол на этапе),
     '..._individual' — только личный зачёт. Полный пересчёт (не
     инкрементальное сравнение "побил — не побил") делает откат возможным
-    без доп. состояния — см. write_best_record() в db.py."""
-    pid_to_participant = {}
-    for p in result.participants:
-        cp_key = p.get("_cp_key", p["bib"])
-        pid = cp_key_to_pid.get(cp_key)
-        if pid is not None:
-            pid_to_participant[pid] = p
+    без доп. состояния — см. write_best_record() в db.py.
+
+    `pid_to_participant` — участник по participant_id (минимум surname/
+    name/relay_team_name), общий источник и для Excel-пути (apply_to_db),
+    и для live-обновлений Copernico (copernico_run.py) — см.
+    recompute_totals_ranks_records()."""
 
     def bike_total_for(pid: int) -> Optional[int]:
         t = pid_totals.get(pid, {})
@@ -365,7 +364,115 @@ def _recompute_records(conn, result: ParseResult, cp_key_to_pid: dict, pid_total
         # Эстафета не участвует в column_key='overall'.
 
     for (column_key, category), items in candidates.items():
-        write_best_record(conn, column_key, category, items, result.race_year)
+        write_best_record(conn, column_key, category, items, race_year)
+
+
+def recompute_totals_ranks_records(conn, race_year: int, participants: list[dict],
+                                    pid_cp_times: dict[int, dict]) -> None:
+    """Пересчитать stage_totals/overall_results/рекорды из уже записанных
+    checkpoint_times — общая точка для ОБОИХ источников данных: Excel-путь
+    (apply_to_db, полный пересчёт после clear_race_year) и live-обновления
+    Copernico (copernico_run.py, точечный upsert без clear_race_year) —
+    чтобы не дублировать логику ранжирования между ними.
+
+    `participants` — список словарей минимум с id/bib/gender/format/
+    relay_stage/status/surname/name/relay_team_name (для Excel-пути — это
+    result.participants + "id"=pid; для Copernico — свежепрочитанные из
+    БД участники года). `pid_cp_times` — participant_id → dict
+    {(stage,seq): cumulative_s}."""
+    pid_totals: dict[int, dict] = {}
+    pid_meta:   dict[int, dict] = {}
+    pid_to_participant: dict[int, dict] = {}
+    for p in participants:
+        pid = p["id"]
+        cp_times = pid_cp_times.get(pid, {})
+        st = compute_stage_totals(cp_times)
+        pid_totals[pid] = {**st, "overall": compute_overall(st)}
+        pid_meta[pid] = {"gender": p["gender"], "format": p["format"],
+                          "relay_stage": p.get("relay_stage", "none"),
+                          "status": p.get("status", "active")}
+        pid_to_participant[pid] = p
+
+    # Для relay bike-члена: bike_day1 = bike1_abs_finish - swim_total команды
+    relay_by_bib: dict[str, dict[str, int]] = {}
+    for p in participants:
+        if p["format"] == "relay":
+            relay_by_bib.setdefault(p["bib"], {})[p.get("relay_stage", "none")] = p["id"]
+
+    for bib, stage_pids in relay_by_bib.items():
+        swim_pid = stage_pids.get("swim")
+        bike_pid = stage_pids.get("bike")
+        if swim_pid and bike_pid:
+            swim_total = pid_totals.get(swim_pid, {}).get("swim")
+            bike_cp = pid_cp_times.get(bike_pid, {})
+            bike1_abs = _last_cp(bike_cp, "bike_day1")
+            if bike1_abs is not None and swim_total is not None:
+                pid_totals[bike_pid]["bike_day1"] = bike1_abs - swim_total
+
+    indiv_all = [pid for pid, m in pid_meta.items() if m["format"] == "individual"]
+    # Ранги только для активных финишёров; DNF/DNS/DSQ → rank=None
+    indiv  = [pid for pid in indiv_all if pid_meta[pid].get("status") == "active"]
+    male   = [pid for pid in indiv if pid_meta[pid]["gender"] == "M"]
+    female = [pid for pid in indiv if pid_meta[pid]["gender"] == "F"]
+
+    for stage in ("swim", "bike_day1", "bike_day2", "run"):
+        # Место присваивается только тем, кто реально ДОШЁЛ до финиша
+        # этапа (последняя КТ этапа не None).
+        finishers = [pid for pid in indiv if _finished_stage(pid_cp_times.get(pid, {}), stage)]
+        finishers_m = [pid for pid in finishers if pid in male]
+        finishers_f = [pid for pid in finishers if pid in female]
+        s_ranks = rank_by({pid: pid_totals[pid][stage] for pid in finishers})
+        g_ranks = {
+            **rank_by({pid: pid_totals[pid][stage] for pid in finishers_m}),
+            **rank_by({pid: pid_totals[pid][stage] for pid in finishers_f}),
+        }
+        for pid in indiv_all:
+            total_s = pid_totals[pid][stage]
+            pace, speed = compute_metrics(stage, total_s)
+            upsert_stage_total(
+                conn, pid, stage, total_s,
+                rank_stage=s_ranks.get(pid),   # None для DNF
+                rank_gender=g_ranks.get(pid),  # None для DNF
+                avg_pace_s=pace,
+                avg_speed_kmh=speed,
+            )
+
+    # Сохранить stage_totals для relay (без ранжирования)
+    relay_pids = [pid for pid, m in pid_meta.items() if m["format"] == "relay"]
+    for pid in relay_pids:
+        for stage in ("swim", "bike_day1", "bike_day2", "run"):
+            total_s = pid_totals[pid].get(stage)
+            if total_s is not None:
+                pace, speed = compute_metrics(stage, total_s)
+                upsert_stage_total(
+                    conn, pid, stage, total_s,
+                    rank_stage=None, rank_gender=None,
+                    avg_pace_s=pace, avg_speed_kmh=speed,
+                )
+
+    # Место в абсолютном зачёте — только тем, кто реально финишировал
+    # ВСЕ 4 этапа (та же причина, что и для места по этапам).
+    race_finishers = [
+        pid for pid in indiv
+        if all(_finished_stage(pid_cp_times.get(pid, {}), s) for s in ("swim", "bike_day1", "bike_day2", "run"))
+    ]
+    race_finishers_m = [pid for pid in race_finishers if pid in male]
+    race_finishers_f = [pid for pid in race_finishers if pid in female]
+    o_ranks = rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers})
+    go_ranks = {
+        **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_m}),
+        **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_f}),
+    }
+    for pid in indiv_all:
+        upsert_overall_result(
+            conn, pid,
+            total_s=pid_totals[pid]["overall"],
+            rank_overall=o_ranks.get(pid),   # None для DNF
+            rank_gender=go_ranks.get(pid),   # None для DNF
+            rank_relay=None,
+        )
+
+    _recompute_records(conn, race_year, pid_to_participant, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
 
 
 def apply_to_db(result: ParseResult) -> dict:
@@ -425,107 +532,16 @@ def apply_to_db(result: ParseResult) -> dict:
             for zone, dur in result.transitions.get(cp_key, {}).items():
                 upsert_transition(conn, pid, zone, dur)
 
-        # --- Вычислить тоталы и ранги ---
-        pid_totals: dict[int, dict] = {}
-        pid_meta:   dict[int, dict] = {}
+        # --- Пересчитать тоталы/ранги/рекорды (общая функция с live-путём Copernico) ---
+        participants_meta: list[dict] = []
         pid_cp_times: dict[int, dict] = {}
         for p in result.participants:
             cp_key = p.get("_cp_key", p["bib"])
             pid = cp_key_to_pid[cp_key]
-            cp_times = result.checkpoint_times.get(cp_key, {})
-            st = compute_stage_totals(cp_times)
-            pid_totals[pid] = {**st, "overall": compute_overall(st)}
-            pid_meta[pid]   = {"gender": p["gender"], "format": p["format"],
-                               "relay_stage": p.get("relay_stage", "none"),
-                               "status": p.get("status", "active")}
-            pid_cp_times[pid] = cp_times
+            participants_meta.append({**p, "id": pid})
+            pid_cp_times[pid] = result.checkpoint_times.get(cp_key, {})
 
-        # Для relay bike-члена: bike_day1 = bike1_abs_finish - swim_total команды
-        relay_by_bib: dict[str, dict[str, int]] = {}
-        for p in result.participants:
-            if p["format"] == "relay":
-                bib = p["bib"]
-                rs  = p.get("relay_stage", "none")
-                if bib not in relay_by_bib:
-                    relay_by_bib[bib] = {}
-                relay_by_bib[bib][rs] = cp_key_to_pid[p.get("_cp_key", bib)]
-
-        for bib, stage_pids in relay_by_bib.items():
-            swim_pid = stage_pids.get("swim")
-            bike_pid = stage_pids.get("bike")
-            if swim_pid and bike_pid:
-                swim_total = pid_totals.get(swim_pid, {}).get("swim")
-                bike_cp = result.checkpoint_times.get(f"{bib}:bike", {})
-                bike1_abs = _last_cp(bike_cp, "bike_day1")
-                if bike1_abs is not None and swim_total is not None:
-                    pid_totals[bike_pid]["bike_day1"] = bike1_abs - swim_total
-
-        indiv_all = [pid for pid, m in pid_meta.items() if m["format"] == "individual"]
-        # Ранги только для активных финишёров; DNF/DNS/DSQ → rank=None
-        indiv  = [pid for pid in indiv_all if pid_meta[pid].get("status") == "active"]
-        male   = [pid for pid in indiv if pid_meta[pid]["gender"] == "M"]
-        female = [pid for pid in indiv if pid_meta[pid]["gender"] == "F"]
-
-        for stage in ("swim", "bike_day1", "bike_day2", "run"):
-            # Место присваивается только тем, кто реально ДОШЁЛ до финиша
-            # этапа (последняя КТ этапа не None) — иначе сошедший на середине
-            # (без явной пометки DNF в файле) попадал бы в зачёт со своим
-            # неполным (и потому заниженным) временем и мог "занять" 1 место.
-            finishers = [pid for pid in indiv if _finished_stage(pid_cp_times[pid], stage)]
-            finishers_m = [pid for pid in finishers if pid in male]
-            finishers_f = [pid for pid in finishers if pid in female]
-            s_ranks = rank_by({pid: pid_totals[pid][stage] for pid in finishers})
-            g_ranks = {
-                **rank_by({pid: pid_totals[pid][stage] for pid in finishers_m}),
-                **rank_by({pid: pid_totals[pid][stage] for pid in finishers_f}),
-            }
-            for pid in indiv_all:
-                total_s = pid_totals[pid][stage]
-                pace, speed = compute_metrics(stage, total_s)
-                upsert_stage_total(
-                    conn, pid, stage, total_s,
-                    rank_stage=s_ranks.get(pid),   # None для DNF
-                    rank_gender=g_ranks.get(pid),  # None для DNF
-                    avg_pace_s=pace,
-                    avg_speed_kmh=speed,
-                )
-
-        # Сохранить stage_totals для relay (без ранжирования)
-        relay_pids = [pid for pid, m in pid_meta.items() if m["format"] == "relay"]
-        for pid in relay_pids:
-            for stage in ("swim", "bike_day1", "bike_day2", "run"):
-                total_s = pid_totals[pid].get(stage)
-                if total_s is not None:
-                    pace, speed = compute_metrics(stage, total_s)
-                    upsert_stage_total(
-                        conn, pid, stage, total_s,
-                        rank_stage=None, rank_gender=None,
-                        avg_pace_s=pace, avg_speed_kmh=speed,
-                    )
-
-        # Место в абсолютном зачёте — только тем, кто реально финишировал
-        # ВСЕ 4 этапа (та же причина, что и для места по этапам).
-        race_finishers = [
-            pid for pid in indiv
-            if all(_finished_stage(pid_cp_times[pid], s) for s in ("swim", "bike_day1", "bike_day2", "run"))
-        ]
-        race_finishers_m = [pid for pid in race_finishers if pid in male]
-        race_finishers_f = [pid for pid in race_finishers if pid in female]
-        o_ranks = rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers})
-        go_ranks = {
-            **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_m}),
-            **rank_by({pid: pid_totals[pid]["overall"] for pid in race_finishers_f}),
-        }
-        for pid in indiv_all:
-            upsert_overall_result(
-                conn, pid,
-                total_s=pid_totals[pid]["overall"],
-                rank_overall=o_ranks.get(pid),   # None для DNF
-                rank_gender=go_ranks.get(pid),   # None для DNF
-                rank_relay=None,
-            )
-
-        _recompute_records(conn, result, cp_key_to_pid, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+        recompute_totals_ranks_records(conn, result.race_year, participants_meta, pid_cp_times)
 
         return {
             "ok":               True,

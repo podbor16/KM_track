@@ -1,0 +1,43 @@
+description: >
+  Siberman Ultra Triathlon 2026, беговой этап (день 3). 12 кругов по 7 км.
+  На каждый круг — 2 отсечки: "-500м" (X-0.5 км) и конец круга (X км),
+  кроме 12-го круга, где вместо "84km" — спец-поле :::finish:::.
+  Поля верифицированы 2026-08-05 живым fetch (44 участника, все notstarted).
+
+race_id: siberman-2026
+login: podbor250718@gmail.com
+preset: siberman2026
+event: "DAY 3"
+
+fields:
+  bib: dorsal              # ЧИСЛО (не строка, в отличие от tri_24h/km_* пресетов) — нужен str()
+  gender: gender            # 'male'/'female'
+  category: category        # 'Мужчины' / 'Женщины' / 'Эстафета'
+  status: status             # 'notstarted' до старта; словарь как в load_race_results.py:convert_status()
+
+# Для личников (category != relay.category_value) surname/name — обычная
+# раздельная раскладка, как во всех остальных пресетах.
+relay:
+  category_value: "Эстафета"
+  team_name_field: surname   # ⚠ ИНВЕРСИЯ: для эстафеты surname = название команды
+  runner_name_field: name    # ⚠ ФИО бегуна ЦЕЛИКОМ ("Фамилия Имя") в одном поле name
+                              # — делить по ПЕРВОМУ пробелу на surname/name.
+                              # team-поле самого Copernico всегда пустое, не использовать.
+
+# gunTime (per-runner top-level поле) — НЕНАДЁЖНО как точка отсчёта: у всех
+# участников одинаковое значение-заглушка ("2025-08-09T01:30:00.988Z",
+# дата из прошлого года). Используем race_config.run_start (уже
+# существующее поле, админ выставляет вручную) как единственную точку
+# отсчёта cumulative_s = timestamp − run_start.
+
+laps:
+  count: 12
+  lap_km: 7.0
+  # 12 круговых отметок (конец круга, X = 7,14,...,77 — 12-й круг см. finish_field)
+  boundary_field_pattern: "times.official_{km}km"
+  # 12 субметок "-500м до круга" (X = 6.5,13.5,...,83.5) — не входят в
+  # STAGE_MAX_SEQ/подсчёт кругов, только для колонки "Последняя отметка"
+  # (seq 101..112 в checkpoints, sub_mark=TRUE, см. миграцию 009).
+  submark_field_pattern: "times.official_{km}km"
+  # 12-й круг (84 км) отдаётся под спец-полем :::finish::: вместо "84km"
+  finish_field: "times.official_:::finish:::"

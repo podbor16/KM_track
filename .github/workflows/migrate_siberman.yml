@@ -47,6 +47,12 @@ jobs:
             # Add baseline_* (живые рекорды с откатом при DNF)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/008_records_live.sql
 
+            # Seed checkpoints 2026 + субметки бега "-500м до круга" (Copernico live, задача 6 Live v2)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/009_run_submarks.sql
+
+            # Переключатель записи live-данных Copernico для бегового этапа (админка)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/010_copernico_run_toggle.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

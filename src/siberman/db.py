@@ -74,6 +74,27 @@ def set_stage_starts(conn, race_year: int, bike2_start, run_start) -> None:
     )
 
 
+def get_copernico_run_enabled(conn, race_year: int) -> bool:
+    """Флаг live-опроса Copernico для бегового этапа (задача 6 Live v2) —
+    проверяется в apply_copernico_snapshot() перед записью, управляется
+    из админки. False (в т.ч. если для года ещё нет строки race_config),
+    если явно не включён."""
+    cur = conn.cursor()
+    cur.execute("SELECT copernico_run_enabled FROM race_config WHERE race_year=%s", (race_year,))
+    row = cur.fetchone()
+    return bool(row[0]) if row else False
+
+
+def set_copernico_run_enabled(conn, race_year: int, enabled: bool) -> None:
+    """Требует уже существующую строку race_config (см. set_stage_starts) —
+    обновляет флаг на месте."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE race_config SET copernico_run_enabled=%s WHERE race_year=%s",
+        (enabled, race_year)
+    )
+
+
 def get_latest_race_year(conn) -> Optional[int]:
     """Последний (по номеру) год с загруженными данными — используется
     ТЕСТОВОЙ страницей (/siberman/test, ?latest=1), чтобы сразу видеть
@@ -258,6 +279,31 @@ def get_participants_with_stage_totals(conn, race_year: int,
         params
     )
     return cur.fetchall()
+
+
+def get_participants_for_year(conn, race_year: int) -> list[dict]:
+    """Все участники года плоским списком (без JOIN на stage_totals) — для
+    recompute_totals_ranks_records()/copernico_run.py, где нужен просто
+    id+bib+gender+format+relay_stage+status+surname+name+relay_team_name."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, bib, surname, name, gender, format, relay_team_name, "
+        "relay_stage, status, dnf_stage "
+        "FROM participants WHERE race_year=%s",
+        (race_year,)
+    )
+    return cur.fetchall()
+
+
+def update_participant_status(conn, participant_id: int, status: str, dnf_stage: Optional[str]) -> None:
+    """Точечное обновление статуса участника (например, из live-опроса
+    Copernico) — в отличие от upsert_participant, не требует полного
+    словаря участника."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE participants SET status=%s, dnf_stage=%s WHERE id=%s",
+        (status, dnf_stage, participant_id)
+    )
 
 
 def get_checkpoint_times_for_year(
