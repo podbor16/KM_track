@@ -126,13 +126,27 @@ const STATUS_ORDER = { active: 0, dnf: 1, dsq: 2, dns: 3 };
 // DNF в целом по гонке) — сортируются как обычные, по времени. Для
 // активных участников поведение не меняется (только для DNF/DSQ/DNS
 // между собой, как и просил пользователь).
+// bib — VARCHAR в БД (относится и к личникам, и к эстафетным командам),
+// без численного сравнения "10" оказался бы раньше "9" (лексикографически).
+// Нужен как fallback-сортировка ДО того, как на срезе появилось хоть одно
+// реальное время — до этого live-ключ (posSortKey/raceSortKey/_liveSortKey)
+// у ВСЕХ участников null, и без явного тай-брейка порядок строк был бы
+// "как пришло с сервера" — неопределённый для зрителя (запрошено
+// пользователем 2026-08-05: "сортировка по возрастанию стартовых номеров"
+// до первой реальной отметки на срезе, дальше — обычная сортировка по месту).
+function bibCompare(a, b) {
+    const na = parseInt(a, 10), nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    return String(a).localeCompare(String(b));
+}
 function sortByStatus(rows, timeKey, progressFn) {
     return [...rows].sort((a, b) => {
         const sa = STATUS_ORDER[a.status] ?? 4, sb = STATUS_ORDER[b.status] ?? 4;
         if (sa !== sb) return sa - sb;
         const ta = a[timeKey], tb = b[timeKey];
         if (ta == null && tb == null) {
-            return (a.status !== 'active' && progressFn) ? progressFn(b) - progressFn(a) : 0;
+            if (a.status !== 'active' && progressFn) return progressFn(b) - progressFn(a);
+            return bibCompare(a.bib, b.bib);
         }
         if (ta == null) return 1;
         if (tb == null) return -1;
@@ -155,12 +169,16 @@ function sortByStatus(rows, timeKey, progressFn) {
 // файла, найдено 2026-08-03 на тестовом прогоне). keyFn сам решает, что
 // возвращать null для DNF/DSQ без прогресса — единая точка сравнения вместо
 // прежних отдельных .v и progressFn.
-function sortByRawStatus(items, keyFn) {
+// bibFn(item) — по умолчанию читает entry.bib напрямую; переопределяется
+// там, где bib эстафетчика лежит в другом поле (_bib, а не entry.bib —
+// см. renderStage()/relayMembers, где entry — сырой объект члена команды,
+// не команда целиком).
+function sortByRawStatus(items, keyFn, bibFn = item => item.entry?.bib) {
     return [...items].sort((a, b) => {
         const aActive = a.rawStatus === 'active', bActive = b.rawStatus === 'active';
         if (aActive !== bActive) return aActive ? -1 : 1;
         const ka = keyFn(a), kb = keyFn(b);
-        if (ka == null && kb == null) return 0;
+        if (ka == null && kb == null) return bibCompare(bibFn(a), bibFn(b));
         if (ka == null) return 1;
         if (kb == null) return -1;
         return ka - kb;

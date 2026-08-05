@@ -470,6 +470,24 @@
         return document.querySelector(`input[name="${name}"]:checked`).value;
     }
 
+    // Запоминаем последний выбор вкладки "Трансляция" в localStorage —
+    // чтобы не выставлять год/режим/этап/КТ/категорию заново при каждой
+    // генерации поста (запрошено пользователем 2026-08-05, тот же приём,
+    // что уже применён на вкладке "Загрузка результатов"). bc-stage/bc-cp
+    // заполняются ДИНАМИЧЕСКИ (зависят от режима/этапа) — восстанавливаем
+    // сохранённое значение СРАЗУ после перезаполнения списка, а не при
+    // обычной загрузке страницы, иначе выбор потерялся бы при смене режима.
+    const BC_STORAGE_PREFIX = 'siberman_admin_bc_';
+    const bcSaveField = id => localStorage.setItem(BC_STORAGE_PREFIX + id, $(id).value);
+    const bcLoadField = id => localStorage.getItem(BC_STORAGE_PREFIX + id);
+    const bcSaveRadio = name => localStorage.setItem(BC_STORAGE_PREFIX + name, radioValue(name));
+    const bcRestoreRadio = name => {
+        const saved = localStorage.getItem(BC_STORAGE_PREFIX + name);
+        if (!saved) return;
+        const el = document.querySelector(`input[name="${name}"][value="${saved}"]`);
+        if (el) el.checked = true;
+    };
+
     function bcPopulateStageOptions() {
         const mode = radioValue('bc-mode');
         const sel = $('bc-stage');
@@ -480,6 +498,8 @@
             opt.textContent = label;
             sel.appendChild(opt);
         });
+        const savedStage = bcLoadField('bc-stage');
+        if (savedStage && [...sel.options].some(o => o.value === savedStage)) sel.value = savedStage;
         bcPopulateCpOptions();
     }
     function bcPopulateCpOptions() {
@@ -493,6 +513,8 @@
             opt.textContent = bcCpLabel(stage, seq);
             sel.appendChild(opt);
         }
+        const savedCp = bcLoadField('bc-cp');
+        if (savedCp && [...sel.options].some(o => o.value === savedCp)) sel.value = savedCp;
     }
     function bcOnModeChange() {
         const mode = radioValue('bc-mode');
@@ -502,9 +524,24 @@
         if (mode !== 'day') bcPopulateStageOptions();
     }
 
+    // Восстановление ДО первого bcOnModeChange() — год/режим/день/категория
+    // не зависят друг от друга, восстанавливаются сразу; этап/КТ — внутри
+    // bcPopulateStageOptions()/bcPopulateCpOptions() (см. выше).
+    if (bcLoadField('bc-year')) $('bc-year').value = bcLoadField('bc-year');
+    bcRestoreRadio('bc-mode');
+    bcRestoreRadio('bc-category');
+    if (bcLoadField('bc-day')) $('bc-day').value = bcLoadField('bc-day');
+
+    $('bc-year').addEventListener('input', () => bcSaveField('bc-year'));
+    $('bc-day').addEventListener('change', () => bcSaveField('bc-day'));
+    $('bc-stage').addEventListener('change', () => bcSaveField('bc-stage'));
+    $('bc-cp').addEventListener('change', () => bcSaveField('bc-cp'));
+    document.querySelectorAll('input[name="bc-mode"]').forEach(r => r.addEventListener('change', () => bcSaveRadio('bc-mode')));
+    document.querySelectorAll('input[name="bc-category"]').forEach(r => r.addEventListener('change', () => bcSaveRadio('bc-category')));
+
     document.querySelectorAll('input[name="bc-mode"]').forEach(r => r.addEventListener('change', bcOnModeChange));
     $('bc-stage').addEventListener('change', bcPopulateCpOptions);
-    bcOnModeChange(); // начальное состояние при загрузке страницы
+    bcOnModeChange(); // начальное состояние при загрузке страницы (учитывает восстановленный bc-mode)
 
     function bcCategoryRows(data, category) {
         if (category === 'combined') {
@@ -608,10 +645,7 @@
     };
     const BC_CATEGORY_TITLE = { M: 'МУЖЧИНЫ', F: 'ЖЕНЩИНЫ', relay: 'ЭСТАФЕТЫ', combined: 'АБСОЛЮТ' };
     const BC_TAG = { M: 'М', F: 'Ж', relay: 'Э' };
-    // Плейсхолдер — реальной ссылки на площадки трансляции пока нет; заведомо
-    // не похож на настоящий URL, чтобы не опубликовать выдуманную ссылку по ошибке.
-    const BC_MEDIA_URL_PLACEHOLDER = 'ССЫЛКА_НА_МЕДИА_TODO';
-    const BC_LIVE_URL = 'live.siberman515.com';
+    const BC_FOOTER = '👉 все ссылки на лайв-результаты и трансляцию: siberman515.com/live';
 
     function bcStageEmoji(stage, category) {
         const e = BC_STAGE_EMOJI[stage];
@@ -764,8 +798,7 @@
     // Тот же приём уже используется и подтверждён рабочим на проде в
     // генераторе постов суточной велогонки (templates/race_triatleta/tri_admin.html).
     function bcAssemble(title, header, body, dnfBlock) {
-        const footer = `__🔴 Полный лайв-трекер: ${BC_LIVE_URL}__\n__📡 Все площадки трансляции: ${BC_MEDIA_URL_PLACEHOLDER}__`;
-        return `**${title}**\n**${header}**\n\n${body}${dnfBlock}\n\n${footer}`;
+        return `**${title}**\n**${header}**\n\n${body}${dnfBlock}\n\n${BC_FOOTER}`;
     }
 
     function bcBuildStagePost(data, stage, seq, category) {

@@ -2861,5 +2861,42 @@ check('renderOverall() — без записи в индексе рекордо�
     assert.ok(domGetAppHtml().includes('lead">Лидер'), 'без рекорда должен остаться обычный "Лидер"');
 });
 
+// ── Сортировка по номеру ЧИСЛЕННО (не лексикографически) до первой
+// реальной отметки на срезе — bib это VARCHAR в БД, "10" раньше "9" без
+// этого (2026-08-05) ──
+check('bibCompare — численное сравнение, не строковое', () => {
+    assert.ok(sandbox.bibCompare('2', '10') < 0, '"2" должен идти раньше "10" (численно)');
+    assert.ok(sandbox.bibCompare('10', '2') > 0, '"10" должен идти позже "2" (численно)');
+    assert.strictEqual(sandbox.bibCompare('5', '5'), 0);
+});
+check('renderStage(\'swim\') — никто ещё не начал этап -> сортировка по номеру, "2" раньше "10"', () => {
+    const a = mkTimerInd('10', { cp: {} });
+    const b = mkTimerInd('2', { cp: {} });
+    setRaceData([a, b], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">10<'), `bib=2 должен идти раньше bib=10 (численно, не лексикографически): ${html}`);
+});
+check('renderOverall() — никто ещё не начал гонку -> сортировка по номеру, "2" раньше "10"', () => {
+    const a = mkTimerInd('10', { cp: {} });
+    const b = mkTimerInd('2', { cp: {} });
+    setRaceData([a, b], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">2<') < html.indexOf('bib-cell">10<'), `bib=2 должен идти раньше bib=10 (численно): ${html}`);
+});
+check('renderStage(\'swim\') — как только у кого-то появилась реальная отметка, сортировка снова по месту (не по номеру)', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const started = mkTimerInd('10', { swim_s: 500, cp: { swim: { 1: 500 } } }); // реально начал этап
+    const notStarted = mkTimerInd('2', { cp: {} }); // ещё не начал
+    setRaceData([started, notStarted], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('swim');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">10<') < html.indexOf('bib-cell">2<'), `реально начавший (bib=10) должен идти выше ещё не начавшего (bib=2), несмотря на номер: ${html}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
