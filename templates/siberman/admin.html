@@ -224,22 +224,29 @@
     const showOk  = msg => { $('msg-success').textContent = msg; $('msg-success').style.display='block'; $('msg-error').style.display='none'; };
     const hideMsg = () => { $('msg-error').style.display='none'; $('msg-success').style.display='none'; };
 
+    const ADMIN_TAB_STORAGE_KEY = 'siberman_admin_active_tab';
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
         $('tab-' + name).style.display = '';
         btn.classList.add('admin-tab--active');
+        localStorage.setItem(ADMIN_TAB_STORAGE_KEY, name);
     }
 
-    // Запоминаем последние введённые значения полей ТОЛЬКО вкладки "Загрузка
-    // результатов" в localStorage — чтобы не вбивать год/время старта заново
-    // при каждой перезагрузке страницы админки (запрошено пользователем
-    // 2026-08-04). "Трансляция" не участвует — там значения зависят от
-    // текущего выбранного поста, запоминать их не нужно. Восстановление —
-    // здесь же, сразу; серверные prefillRaceStart()/prefillStageStarts()
-    // (см. ниже) вызываются ПОСЛЕ и перезаписывают полем то, что реально
-    // сохранено в БД для этого года — localStorage только затычка для
-    // значений, ещё не отправленных на сервер.
+    // Запоминаем последние введённые значения полей — чтобы не вбивать
+    // год/время старта/выбор поста заново при каждой перезагрузке страницы
+    // админки (запрошено пользователем 2026-08-04, расширено 2026-08-05 —
+    // теперь и активная вкладка, и поля "Трансляции" тоже запоминаются, не
+    // только "Загрузка результатов"). Восстановление — здесь же, сразу;
+    // серверные prefillRaceStart()/prefillStageStarts() (см. ниже)
+    // вызываются ПОСЛЕ и перезаписывают полем то, что реально сохранено в
+    // БД для этого года — localStorage только затычка для значений, ещё не
+    // отправленных на сервер.
+    const savedTab = localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+    if (savedTab) {
+        const btn = document.querySelector(`.admin-tab[onclick*="'${savedTab}'"]`);
+        if (btn) switchTab(savedTab, btn);
+    }
     const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'bike2-start-input', 'run-start-input', 'startlist-year'];
     const UPLOAD_TAB_STORAGE_PREFIX = 'siberman_admin_upload_';
     UPLOAD_TAB_PERSIST_IDS.forEach(id => {
