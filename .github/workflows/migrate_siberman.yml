@@ -41,6 +41,9 @@ jobs:
             # Add siberman_records (рекорды гонки + seed-данные)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/006_records.sql
 
+            # Add is_public (какой год показывать на публичной странице)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/007_public_year.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

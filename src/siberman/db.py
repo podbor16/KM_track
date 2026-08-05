@@ -75,14 +75,34 @@ def set_stage_starts(conn, race_year: int, bike2_start, run_start) -> None:
 
 
 def get_latest_race_year(conn) -> Optional[int]:
-    """Последний (по номеру) год с загруженными данными — публичная
-    страница результатов больше не даёт выбор года руками (убран
-    year-select, 2026-08-04): год, за который есть данные в race_config
-    (задаётся в админке при загрузке), выбирается автоматически."""
+    """Последний (по номеру) год с загруженными данными — используется
+    ТЕСТОВОЙ страницей (/siberman/test, ?latest=1), чтобы сразу видеть
+    свежезалитый тестовый год, не трогая настройку публичного года."""
     cur = conn.cursor()
     cur.execute("SELECT race_year FROM race_config ORDER BY race_year DESC LIMIT 1")
     row = cur.fetchone()
     return row[0] if row else None
+
+
+def get_public_race_year(conn) -> Optional[int]:
+    """Год, который показывается на ПУБЛИЧНОЙ странице результатов — не
+    обязательно последний загруженный (2026-08-05: тестовые данные под
+    новым годом на /siberman/test не должны утекать на прод). Явно
+    задаётся через set_public_race_year() в админке; если ещё ни разу не
+    задан — откат на "последний год" (см. 007_public_year.sql: миграция
+    сама помечает текущий последний год публичным при накатке)."""
+    cur = conn.cursor()
+    cur.execute("SELECT race_year FROM race_config WHERE is_public=1 ORDER BY race_year DESC LIMIT 1")
+    row = cur.fetchone()
+    return row[0] if row else get_latest_race_year(conn)
+
+
+def set_public_race_year(conn, race_year: int) -> None:
+    """Ровно один год публичный одновременно — снимаем флаг со всех
+    остальных."""
+    cur = conn.cursor()
+    cur.execute("UPDATE race_config SET is_public=0 WHERE race_year<>%s", (race_year,))
+    cur.execute("UPDATE race_config SET is_public=1 WHERE race_year=%s", (race_year,))
 
 
 def get_all_records(conn) -> list[dict]:

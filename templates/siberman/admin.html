@@ -101,6 +101,21 @@
             </div>
 
             <div class="card">
+                <h2>Публичный год</h2>
+                <p style="font-size:13px;color:#555;margin:0 0 12px">
+                    Какой год показывается на ПУБЛИЧНОЙ странице результатов
+                    (/) — независимо от того, какой год вы сейчас загружаете
+                    здесь или тестируете на /siberman/test. Тестовые прогоны
+                    под новым годом не переключают публичную сами по себе,
+                    пока это явно не сделано тут.
+                </p>
+                <label>Год</label>
+                <input type="number" id="public-year-input" value="2025" min="2020" max="2030" style="width:120px">
+                <button class="btn btn-primary" id="btn-set-public-year" style="margin-top:8px">Сделать публичным</button>
+                <p id="public-year-status" style="font-size:12px;color:#555;margin-top:8px"></p>
+            </div>
+
+            <div class="card">
                 <h2>1. Загрузить файл Excel</h2>
                 <label>Файл (.xlsx)</label>
                 <input type="file" id="file-input" accept=".xlsx,.xls">
@@ -281,6 +296,36 @@
             const data = await r.json();
             if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
             showOk('Расписание сохранено.');
+        } catch (e) {
+            showErr(e.message);
+        }
+    });
+
+    // Публичный год — независим от race-year выше (тем годом можно
+    // тестировать, пока публичная страница остаётся на другом, см.
+    // get_public_race_year в db.py, запрошено пользователем 2026-08-05).
+    async function prefillPublicYear() {
+        try {
+            const r = await fetch('/api/siberman/results');
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.race_year != null) {
+                $('public-year-input').value = data.race_year;
+                $('public-year-status').textContent = `Сейчас публичный год: ${data.race_year}.`;
+            }
+        } catch (e) { /* нет данных ни за один год — оставляем дефолт */ }
+    }
+    prefillPublicYear();
+
+    $('btn-set-public-year').addEventListener('click', async () => {
+        hideMsg();
+        const year = $('public-year-input').value;
+        try {
+            const r = await fetch(`/api/siberman/admin/set-public-year?race_year=${year}`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+            showOk(`Публичной сделан год ${year}.`);
+            prefillPublicYear();
         } catch (e) {
             showErr(e.message);
         }

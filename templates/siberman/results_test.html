@@ -2708,17 +2708,22 @@ function syncStaticButtonClasses() {
 }
 
 /* ──────────────── Data loading ──────────────── */
-// Год больше не выбирается вручную (year-select убран, 2026-08-04) —
-// первая загрузка не передаёт year вовсе, сервер сам берёт последний год
-// с данными (тот, что реально загружен в админке, см. get_latest_race_year);
-// _year фиксируется из ответа (data.race_year) и используется дальше для
-// поллинга/ссылок на карточки участников — сессия не "переключит" год сама
-// по себе, даже если админ загрузит новый, пока страница открыта.
+// Тестовая страница (в отличие от публичной, см. results.html) НЕ
+// привязана к публичному году: ?year=N в адресе — явный выбор года для
+// теста (полезно, когда тестовый год численно МЕНЬШЕ реального публичного,
+// например реальная гонка уже 2026, а тестовые прогоны идут под 2025) —
+// без ?year= берётся ПОСЛЕДНИЙ загруженный (latest=1 → get_latest_race_year),
+// как раньше. _year фиксируется из ответа (data.race_year) и используется
+// дальше для поллинга/ссылок на карточки участников — сессия не
+// "переключит" год сама по себе, даже если админ загрузит новый, пока
+// страница открыта.
 async function loadResults() {
     document.getElementById('loading').style.display = '';
     document.getElementById('app').style.display = 'none';
     try {
-        const resp = await fetch('/api/siberman/results');
+        const explicitYear = new URLSearchParams(location.search).get('year');
+        const query = explicitYear ? `year=${encodeURIComponent(explicitYear)}` : 'latest=1';
+        const resp = await fetch(`/api/siberman/results?${query}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const raw = await resp.text();
         _lastDataJson = raw;
