@@ -92,6 +92,23 @@ async def participant_page(request: Request, bib: str, year: int = 2025):
     )
 
 
+# ── Тестовая копия публичной страницы (results_test.html/participant_test.html) —
+# отдельные шаблоны, тот же /api/siberman/results (те же данные), чтобы
+# фичи/фиксы можно было проверить вживую, не трогая продовые шаблоны, и
+# только потом переносить готовое в results.html/participant.html
+# (запрошено пользователем 2026-08-05).
+@router.get("/siberman/test", response_class=HTMLResponse)
+async def results_test_page(request: Request):
+    return templates.TemplateResponse("siberman/results_test.html", {"request": request})
+
+
+@router.get("/siberman/test/participant/{bib}", response_class=HTMLResponse)
+async def participant_test_page(request: Request, bib: str, year: int = 2025):
+    return templates.TemplateResponse(
+        "siberman/participant_test.html", {"request": request, "bib": bib, "year": year}
+    )
+
+
 @router.get("/api/siberman/results")
 async def api_results(year: Optional[int] = None):
     # year не передан — публичная страница больше не даёт выбор года руками

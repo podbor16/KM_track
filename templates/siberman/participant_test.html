@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siberman — Участник {{ bib }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Фирменный шрифт (Onest) ── */
+        /* Зарегистрированы только 2 реальных начертания (Light/ExtraBold).
+           Остальные font-weight в этом файле (600-900 — табы/бейджи/числа)
+           резолвятся браузером в ExtraBold по алгоритму CSS Fonts Level 4
+           fallback-подбора (ищет вверх от запрошенного веса), а обычный
+           текст (unset/400) — в Light (тот же алгоритм для диапазона
+           [400,500] сначала ищет вверх до 500, не находит, затем вниз —
+           попадает на 300). Поэтому НЕ нужно расставлять font-weight:300
+           по всем обычным текстовым элементам вручную. */
+        @font-face {
+            font-family: 'Onest';
+            src: url('/static/fonts/siberman/Onest-Light.ttf') format('truetype');
+            font-weight: 300;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Onest';
+            src: url('/static/fonts/siberman/Onest-ExtraBold.ttf') format('truetype');
+            font-weight: 800;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        :root {
+            --navy:   #003D62;
+            --red:    #BE0A21;
+            --blue:   #6AABD7;
+            --white:  #FFFFFF;
+            --radius: 8px;
+        }
+        [data-theme="dark"] {
+            --bg:       #071622;
+            --bg2:      #0c2035;
+            --bg3:      #112840;
+            --border:   rgba(106,171,215,.18);
+            --text:     #e4eef6;
+            --muted:    #7aaabf;
+            --header-bg:var(--bg2);
+            --dnf-op:   .45;
+        }
+        [data-theme="light"] {
+            --bg:       #f0f5f9;
+            --bg2:      #FFFFFF;
+            --bg3:      #e4eef6;
+            --border:   #b8d5e8;
+            --text:     var(--navy);
+            --muted:    #4f7f9b;
+            --header-bg:var(--white);
+            --dnf-op:   .4;
+        }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            font-size: 14px; line-height: 1.5;
+        }
+        .header {
+            background: var(--header-bg); border-bottom: 3px solid var(--red);
+            padding: 14px 20px; display: flex; align-items: center; gap: 16px;
+        }
+        .logo-block { display: flex; align-items: center; }
+        .logo-img { height: 30px; width: auto; display: none; }
+        [data-theme="dark"] .logo-img--dark { display: block; }
+        [data-theme="light"] .logo-img--light { display: block; }
+        .header-spacer { flex: 1; }
+        .back-link {
+            color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .back-link:hover { color: var(--text); }
+        .theme-btn {
+            background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+            width: 34px; height: 34px; border-radius: var(--radius); cursor: pointer;
+            font-size: 16px; display: flex; align-items: center; justify-content: center;
+        }
+        .content { padding: 20px; max-width: 780px; margin: 0 auto 48px; }
+        .empty, .loading { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 15px; }
+        .loading::before { content: ''; display: block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: .3px; }
+        .badge-m { background: rgba(0,61,98,.15); color: var(--navy); }
+        [data-theme="dark"] .badge-m { background: rgba(106,171,215,.15); color: var(--blue); }
+        .badge-f { background: rgba(190,10,33,.1); color: var(--red); }
+        .badge-dnf  { background: rgba(190,10,33,.12);   color: var(--red); }
+        .badge-dns  { background: rgba(120,120,130,.12); color: var(--muted); }
+        .badge-notstarted { background: rgba(120,120,130,.08); color: var(--muted); }
+        .badge-dsq  { background: rgba(130,80,200,.12);  color: #a78bfa; }
+        .badge-fin  { background: rgba(34,197,94,.12);   color: #22c55e; }
+        .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
+        .badge-relay { background: rgba(106,171,215,.15); color: var(--blue); font-weight: 700; }
+        .badge-individual { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; }
+        /* Бейдж "N предыдущих финишей Siberman" (звезда + число) — рядом с
+           именем в шапке карточки, только личный зачёт (2026-08-05). */
+        .badge-star { background: rgba(190,10,33,.15); color: var(--red); font-weight: 700; display: inline-flex; align-items: center; gap: 3px; }
+        .badge-star img { width: 12px; height: 12px; display: block; }
+        /* --red при одинаковой alpha даёт заметно менее контрастный фон на
+           тёмном фоне, чем --blue — красные бейджи почти не видны в тёмной
+           теме (запрошено пользователем 2026-07-23, тот же фикс что и в
+           results.html). */
+        [data-theme="dark"] .badge-f { background: rgba(190,10,33,.28); }
+        [data-theme="dark"] .badge-individual { background: rgba(190,10,33,.28); }
+        [data-theme="dark"] .badge-star { background: rgba(190,10,33,.28); }
+        .muted { color: var(--muted); }
+        .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
+        .rank-num { font-weight: 800; }
+        .rank-sub { font-size: 10px; color: var(--muted); display: block; }
+
+        /* ── Card ── */
+        .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+        .card-hdr { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+        .card-hdr-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .p-bib { font-size: 13px; font-weight: 700; color: var(--muted); }
+        .p-name { font-size: 20px; font-weight: 800; }
+        .p-city { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .p-team { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+        .stats-row { display: flex; gap: 12px; padding: 14px 18px; flex-wrap: wrap; }
+        .stat { background: var(--bg3); border-radius: var(--radius); padding: 8px 14px; min-width: 90px; }
+        .stat-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .stat-subgap { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+        .stat-subgap.record { color: #b8860b; }
+        [data-theme="dark"] .stat-subgap.record { color: #e0b23c; }
+        .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+
+        /* ── Бегунок прохождения КТ (п.12) ──
+           .pb-inline-chip торчит на top:-24px над .pb-track-wrap — верхнего
+           паддинга .pb-outer (было 4px) не хватало, чип наезжал на текст
+           строки над ним (заголовок этапа/время/бейдж в summary, найдено
+           пользователем 2026-08-04). 28px — высота чипа (~18px) + запас. */
+        .pb-outer { padding: 28px 18px 18px; }
+        .pb-track-wrap { position: relative; }
+        .pb-track { position: relative; height: 10px; border-radius: 5px; overflow: hidden; display: flex; background: var(--bg3); }
+        .pb-seg { height: 100%; }
+        .pb-seg.swim { width: 20%; background: rgba(106,171,215,.28); }
+        .pb-seg.bike { width: 50%; background: rgba(234,179,8,.25); }
+        .pb-seg.run  { width: 30%; background: rgba(34,197,94,.22); }
+        .pb-fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--red); opacity: .85; }
+        .pb-boundary { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.3); }
+        .pb-marker-dot { position: absolute; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg2); border: 2px solid var(--red); transform: translateX(-5px); }
+        .pb-inline-chip { position: absolute; top: -24px; transform: translateX(-50%); background: var(--red); color: #fff; padding: 3px 8px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+        /* Флажки старта/финиша (п.7, 2026-07-23) — внутри track-wrap (не
+           .pb-track, у которой overflow:hidden обрежет их), на 0%/100%,
+           над треком — не пересекаются с самим треком/сегментами. */
+        .pb-flag { position: absolute; top: -13px; font-size: 11px; line-height: 1; }
+        .pb-flag-start { left: 0; }
+        .pb-flag-finish { right: 0; }
+        .pb-stage-labels { display: flex; margin-top: 6px; font-size: 11px; color: var(--muted); }
+        .pb-stage-labels span.swim { width: 20%; }
+        .pb-stage-labels span.bike { width: 50%; }
+        .pb-stage-labels span.run  { width: 30%; }
+        .pb-stage-labels span.active { color: var(--text); font-weight: 700; }
+
+        .mode-toggle { display: flex; gap: 6px; padding: 0 18px 14px; }
+        .mode-btn {
+            padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+            background: transparent; color: var(--muted); font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all .15s;
+        }
+        .mode-btn:hover { color: var(--text); border-color: var(--text); }
+        .mode-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+        /* ── Accordion (нативные details/summary) ── */
+        details.stage { border-top: 1px solid var(--border); }
+        details.stage summary {
+            list-style: none; cursor: pointer; padding: 12px 18px;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+        details.stage summary::-webkit-details-marker { display: none; }
+        details.stage summary::before {
+            content: '▸'; color: var(--muted); font-size: 12px; transition: transform .15s;
+            width: 12px; display: inline-block;
+        }
+        details.stage[open] summary::before { transform: rotate(90deg); }
+        .stage-title { font-weight: 700; font-size: 14px; }
+        .stage-dist { font-size: 11px; color: var(--muted); }
+        .stage-spacer { flex: 1; }
+        .stage-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .stage-gap { font-size: 12px; color: var(--muted); }
+        .stage-record { padding: 0 18px 12px; font-size: 12px; font-weight: 700; color: #b8860b; }
+        [data-theme="dark"] .stage-record { color: #e0b23c; }
+        .stage-lap { font-size: 11px; color: var(--blue); font-weight: 600; }
+
+        .cp-table { width: 100%; border-collapse: collapse; }
+        .cp-table th {
+            padding: 6px 18px; text-align: left; font-size: 10px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+            border-bottom: 1px solid var(--border); background: var(--bg3);
+        }
+        .cp-table th.r, .cp-table td.r { text-align: right; }
+        .cp-table td { padding: 7px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
+        .cp-table tr:last-child td { border-bottom: none; }
+        .cp-table tr.pending td { color: var(--muted); opacity: .6; }
+
+        @media (max-width: 640px) {
+            .header { padding: 10px 14px; }
+            .logo-img { height: 24px; }
+            .content { padding: 14px; }
+            .card-hdr, .stats-row { padding: 12px 14px; }
+            .p-name { font-size: 17px; }
+            .p-bib, .p-team { font-size: 12px; }
+            .p-city { font-size: 11px; }
+            .pb-outer { padding: 25px 14px 14px; }
+            .pb-inline-chip { font-size: 10px; padding: 2px 6px; top: -21px; }
+            .pb-stage-labels { font-size: 10px; }
+            .stat { padding: 6px 10px; min-width: 76px; }
+            .stat-val { font-size: 15px; }
+            .stat-lbl { font-size: 9px; }
+            .mode-toggle { padding: 0 14px 12px; }
+            .mode-btn { padding: 4px 11px; font-size: 11px; }
+            details.stage summary { padding: 10px 14px; }
+            .stage-title { font-size: 13px; }
+            .stage-dist, .stage-gap, .stage-lap { font-size: 10px; }
+            .cp-table th, .cp-table td { padding: 6px 10px; }
+            .cp-table th { font-size: 9px; }
+            .cp-table td { font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <a class="back-link" href="/siberman/test?year={{ year }}">← Результаты (ТЕСТ)</a>
+    <div class="header-spacer"></div>
+    <div class="logo-block">
+        <img class="logo-img logo-img--dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon">
+        <img class="logo-img logo-img--light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon">
+    </div>
+    <div class="header-spacer"></div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
+</div>
+
+<div class="content">
+    <div class="loading" id="loading"></div>
+    <div id="app" style="display:none"></div>
+</div>
+
+<script src="/static/js/siberman-common.js?v={{ v }}"></script>
+<script>
+siInitTheme();
+
+const BIB = {{ bib|tojson }};
+const YEAR = {{ year }};
+
+const STAGES = [
+    { dbStage: 'swim',      label: 'Плавание',    dist: '10 км',  relayStage: 'swim', timeKey: 'swim_s',  rankKey: 'swim_rank',  rankGKey: 'swim_rank_g',  metaFn: fmtPace100m, metaKey: 'swim_pace',  metaLbl: 'Темп' },
+    { dbStage: 'bike_day1', label: 'Вело День 1', dist: '145 км', relayStage: 'bike', timeKey: 'bike1_s', rankKey: 'bike1_rank', rankGKey: 'bike1_rank_g', metaFn: fmtSpeed,    metaKey: 'bike1_speed', metaLbl: 'Скорость' },
+    { dbStage: 'bike_day2', label: 'Вело День 2', dist: '276 км', relayStage: 'bike', timeKey: 'bike2_s', rankKey: 'bike2_rank', rankGKey: 'bike2_rank_g', metaFn: fmtSpeed,    metaKey: 'bike2_speed', metaLbl: 'Скорость' },
+    { dbStage: 'run',       label: 'Бег',         dist: '84 км',  relayStage: 'run',  timeKey: 'run_s',   rankKey: 'run_rank',   rankGKey: 'run_rank_g',   metaFn: fmtPace,     metaKey: 'run_pace',   metaLbl: 'Темп' },
+];
+
+// Пул для gap/место на конкретном этапе — личники + эстафетчики этой роли,
+// БЕЗ фильтра (абсолютный пул, как вкладка этапа на /siberman/results с
+// фильтрами "Все"/"Все" по умолчанию). status берётся как есть, без
+// "тихой" подмены на dnf (была здесь раньше, отключена 2026-08-03 — тот
+// же фикс, что и в results.html/renderStage: на живой гонке она молча
+// опустошала пул отставаний для КАЖДОГО активного, ещё не финишировавшего
+// этап участника).
+function buildStageGapPool(data, dbStage, relayStage) {
+    const indiv = data.individual
+        .map(r => ({ key: r.bib, cp: r.cp, swim_s: r.swim_s, status: r.status, gender: r.gender, isRelay: false }));
+    // swim_s велосипедиста эстафеты — его собственная stage_totals-строка
+    // пуста (сам он не плавает); для computeStageGaps на bike_day1 нужен
+    // swim ЕГО КОМАНДЫ, та же база, что уже используется для "объединённого
+    // вело" (bikeCombinedRawCp) и для сплита первой КТ выше (swimRef).
+    const relayMembers = data.relay.flatMap(t => {
+        const teamSwimS = t.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+        return t.members
+            .filter(m => m.relay_stage === relayStage)
+            .map(m => ({ key: `${t.bib}:${m.relay_stage}`, cp: m.cp, swim_s: m.swim_s ?? teamSwimS, status: m.status, gender: m.gender, isRelay: true }));
+    });
+    return [...indiv, ...relayMembers];
+}
+
+function buildOverallGapPool(data) {
+    return [
+        ...data.individual.map(r => ({ key: r.bib, cp: r.cp, status: r.status, swim_s: r.swim_s, bike1_s: r.bike1_s, bike2_s: r.bike2_s, run_s: r.run_s, gender: r.gender, isRelay: false })),
+        ...data.relay.map(t => ({ ...teamGapRow(t), gender: null, isRelay: true })),
+    ];
+}
+
+/* ──────────────── Переключатель "На этапе" / "В гонке" ──────────────── */
+// "На этапе" — место/отставание на КТ считаются только внутри текущего
+// этапа (кто быстрее прошёл именно этот отрезок). "В гонке" — по
+// совокупному времени гонки на момент этой КТ (прошлые полные этапы +
+// прогресс на текущем) — так видно, как менялась позиция в общем зачёте,
+// а не только на отдельном этапе.
+let _mode = 'race';
+let _rerender = null;
+let _raceStartEpoch = null; // мс, из data.race_start — для stageHasStarted() на Вело День 2
+let _recordsIndex = {}; // "column_key:category" → запись, buildRecordsIndex(data.records), 2026-08-05
+
+function modeToggle() {
+    return `<div class="mode-toggle">
+        <button class="mode-btn ${_mode === 'race' ? 'active' : ''}" onclick="_mode='race'; _rerender();">Гонка</button>
+        <button class="mode-btn ${_mode === 'stage' ? 'active' : ''}" onclick="_mode='stage'; _rerender();">Этап</button>
+    </div>`;
+}
+
+// Бегунок ВНУТРИ одного этапа (0-100% этого этапа, не всей гонки 0-515км) —
+// та же вёрстка, что и общий progressBarHtml(), но без сегментов
+// swim/bike/run (один сплошной этап) и без глобального kmToVirtualX/
+// STAGE_KM_OFFSET (запрошено пользователем 2026-07-23, п.8 — при раскрытии
+// аккордеона этапа виден прогресс именно по нему, не по всей гонке).
+function stageProgressBarHtml(dbStage, r) {
+    const stageLenKm = CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]];
+    const pos = lastReached(r.cp, dbStage);
+    let fillPct = 0, chipText = null;
+    if (pos) {
+        const kmInStage = CHECKPOINT_DIST_KM[dbStage][pos.seq];
+        fillPct = (kmInStage / stageLenKm) * 100;
+        chipText = pos.seq === STAGE_MAX_SEQ[dbStage] ? 'Финиш' : `${kmInStage.toFixed(1)} / ${stageLenKm} км`;
+    }
+    const chipPct = Math.min(94, Math.max(6, fillPct));
+    return `
+    <div class="pb-outer">
+        <div class="pb-track-wrap">
+            <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+            <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+            ${chipText != null ? `<div class="pb-inline-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
+            <div class="pb-track">
+                <div class="pb-fill" style="width:${fillPct}%"></div>
+            </div>
+            <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+        </div>
+    </div>`;
+}
+
+// Порядок колонок (задача 2026-07-19 п.4, колонка "Формат" убрана
+// 2026-07-22 п.2 — тип виден в бейдже у ФИО в шапке карточки, дублировать
+// на каждой строке КТ избыточно): Общее время → [личники: Место(пол) →
+// Отставание(пол)] → Место(формат) → Отставание(формат) → Место(абсолют) →
+// Отставание(абсолют). Три независимых пары место+отставание — каждая
+// относительно лидера СВОЕГО пула (пол/формат/весь пул), а не одно общее
+// отставание в конце, как было раньше.
+function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
+    const maxSeq = STAGE_MAX_SEQ[dbStage];
+    const isRace = _mode === 'race';
+    // "На этапе" — пул/ключ/функции по этапу (как раньше). "В гонке" — тот
+    // же пул, что и в сводной статистике (личники + эстафетные команды как
+    // единое целое), функции сравнивают по совокупному времени гонки
+    // (globalProgress), не по сырому cp этапа.
+    const pool = isRace ? overallGapPool : gapPool;
+    const key = isRace ? raceKey : myKey;
+    const gapsFn = isRace ? computeGlobalCheckpointGaps : computeCheckpointGaps;
+    const ranksFn = isRace ? computeGlobalCheckpointRanks : computeCheckpointRanks;
+
+    const isRelayRow = !!r.relay_stage;
+
+    const absRanks = ranksFn(pool, dbStage, maxSeq);
+    const absGaps = gapsFn(pool, dbStage, maxSeq);
+    const formatPool = pool.filter(x => x.isRelay === isRelayRow);
+    const formatRanks = ranksFn(formatPool, dbStage, maxSeq);
+    const formatGaps = gapsFn(formatPool, dbStage, maxSeq);
+    let genderRanks = {}, genderGaps = {};
+    if (!isRelayRow) {
+        const genderPool = pool.filter(x => !x.isRelay && x.gender === r.gender);
+        genderRanks = ranksFn(genderPool, dbStage, maxSeq);
+        genderGaps = gapsFn(genderPool, dbStage, maxSeq);
+    }
+
+    // {место, отставание} для одного пула на конкретной КТ — '—' если
+    // участник ещё не дошёл до этой КТ.
+    const poolCell = (ranks, gaps, seq, pending) => {
+        if (pending) return { rank: '—', gap: '—' };
+        const rank = ranks[seq]?.[key] ?? '—';
+        const g = gaps[seq]?.[key];
+        const gap = g == null ? '—' : g === 0 ? '<span class="badge badge-fin">Лидер</span>' : fmtGap(g);
+        return { rank, gap };
+    };
+
+    let rows = '';
+    for (let seq = 1; seq <= maxSeq; seq++) {
+        const cum = r.cp?.[dbStage]?.[seq];
+        const split = r.splits?.[dbStage]?.[seq];
+        const pending = cum == null;
+        const abs = poolCell(absRanks, absGaps, seq, pending);
+        const fmtC = poolCell(formatRanks, formatGaps, seq, pending);
+        const gen = !isRelayRow ? poolCell(genderRanks, genderGaps, seq, pending) : null;
+        // КТ bike_day1 seq=1: split_s в БД = cumulative_s самой КТ (нет seq=0,
+        // от которого вычесть), а cumulative_s bike_day1 считается от старта
+        // ГОНКИ (единый таймер со swim), не от старта вело — значит "сплит"
+        // на первой точке содержит время всего плавания впридачу. Вычитаем
+        // его только для расчёта темпа/скорости, саму колонку "Сплит" не
+        // трогаем (устоявшееся поведение "последней отсечки" на других вкладках).
+        const swimRef = r.swim_s ?? r._teamSwimS ?? null;
+        const paceSplit = (dbStage === 'bike_day1' && seq === 1 && split != null && swimRef != null)
+            ? split - swimRef
+            : split;
+        const paceCell = paceSplit != null ? splitPaceLabel(dbStage, seq, paceSplit) : '—';
+
+        rows += `<tr class="${pending ? 'pending' : ''}">
+            <td>${CHECKPOINT_LABELS[dbStage][seq]}</td>
+            <td class="r time-cell">${split != null ? fmtTime(split) : '—'}</td>
+            <td class="r muted">${paceCell}</td>
+            <td class="r time-cell">${cum != null ? fmtTime(cum) : '—'}</td>
+            ${gen ? `<td class="r">${gen.rank}</td><td class="r">${gen.gap}</td>` : ''}
+            <td class="r">${fmtC.rank}</td>
+            <td class="r">${fmtC.gap}</td>
+            <td class="r">${abs.rank}</td>
+            <td class="r">${abs.gap}</td>
+        </tr>`;
+    }
+    return `${stageProgressBarHtml(dbStage, r)}<div style="overflow-x:auto"><table class="cp-table">
+        <thead><tr>
+            <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
+            ${!isRelayRow ? '<th class="r">Место (пол)</th><th class="r">Отставание (пол)</th>' : ''}
+            <th class="r">Место (формат)</th><th class="r">Отставание (формат)</th>
+            <th class="r">Место (абсолют)</th><th class="r">Отставание (абсолют)</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function stageSection(cfg, r, gapPool, overallGapPool) {
+    // cp.bike_day1 хранит elapsed ОТ СТАРТА ГОНКИ (включает заплыв) — для
+    // "живого" времени/отставания на самой вкладке этапа нужна сетевая
+    // база без заплыва (см. stagePos в siberman-common.js); у велосипедиста
+    // эстафеты используем swim КОМАНДЫ (_teamSwimS), т.к. своего заплыва
+    // у него нет (найдено пользователем 2026-08-04).
+    const swimRef = r.swim_s ?? r._teamSwimS ?? null;
+    const pos = stagePos({ cp: r.cp, swim_s: swimRef }, cfg.dbStage);
+    const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
+    // Вошёл ли участник в этап, даже без первой КТ (см. stageHasStarted).
+    const started = stageHasStarted(r, cfg.dbStage, _raceStartEpoch, Date.now());
+    const gaps = computeStageGaps(gapPool, cfg.dbStage);
+    const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;
+    const raceKey = r._bib ?? r.bib;
+    const gap = fmtGap(gaps[key]);
+    const lap = pos ? lapLabel(cfg.dbStage, pos.seq) : null;
+    const isCurrent = (pos || started) && !finished;
+
+    let timeInfo;
+    if (finished) {
+        timeInfo = `<span class="stage-time">${fmtTime(r[cfg.timeKey])}</span>`;
+    } else if (pos) {
+        timeInfo = `<span class="muted" style="font-size:12px">${CHECKPOINT_LABELS[cfg.dbStage][pos.seq]}</span> <span class="stage-time">${fmtTime(pos.value)}</span>`;
+    } else {
+        timeInfo = '';
+    }
+
+    // getDnfStage/statusBadge предполагают личника со всеми 4 этапами —
+    // для эстафетчика (только 1-2 своих этапа) нужен relayMemberStatusBadge,
+    // иначе "нет данных по плаванию" ложно трактуется как DNF на плавании
+    // для велосипедиста/бегуна, у которых плавания попросту нет.
+    const badge = r.relay_stage
+        ? relayMemberStatusBadge(r, pos, STAGE_MAX_SEQ[cfg.dbStage], started)
+        : statusBadge(r, Object.keys(TAB_TO_DB_STAGE).find(k => TAB_TO_DB_STAGE[k] === cfg.dbStage), started);
+
+    // Рекорд Siberman хранится только для 'swim'/'run' на этапных секциях
+    // (Вело1/Вело2 порознь рекорда не имеют — только объединённый
+    // "Вело итого", см. combinedBikeSection), 2026-08-05.
+    const recordColumn = { swim: 'swim', run: 'run' }[cfg.dbStage];
+    const recordCats = recordColumn ? recordCategoriesFor(_recordsIndex, recordColumn, r.surname, r.name) : [];
+
+    return `<details class="stage" ${isCurrent ? 'open' : ''}>
+        <summary>
+            <span class="stage-title">${cfg.label}</span>
+            <span class="stage-dist">${cfg.dist}</span>
+            ${lap ? `<span class="stage-lap">${lap}</span>` : ''}
+            <span class="stage-spacer"></span>
+            ${gap ? `<span class="stage-gap">${gap}</span>` : ''}
+            ${timeInfo}
+            ${badge}
+        </summary>
+        ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
+        ${stageBody(cfg.dbStage, r, gapPool, key, overallGapPool, raceKey)}
+    </details>`;
+}
+
+// "Велоэтап (общ.)" — сумма вело день 1 + день 2, без своей ранжировки/КТ
+// (это агрегат для удобства чтения, не отдельный этап гонки с местом).
+function combinedBikeSection(r, b1, b2) {
+    if (b1 == null && b2 == null) return '';
+    const bothKnown = b1 != null && b2 != null;
+    const total = bothKnown ? b1 + b2 : null;
+    const avgSpeed = bothKnown ? (145 + 276) / (total / 3600) : null;
+    const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name);
+    return `<details class="stage">
+        <summary>
+            <span class="stage-title">Велоэтап (общ.)</span>
+            <span class="stage-dist">421 км</span>
+            <span class="stage-spacer"></span>
+            ${total != null ? `<span class="stage-time">${fmtTime(total)}</span>` : ''}
+        </summary>
+        ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
+        <table class="cp-table">
+            <thead><tr><th>Этап</th><th class="r">Время</th></tr></thead>
+            <tbody>
+                <tr><td>Вело День 1 (145 км)</td><td class="r time-cell">${fmtTime(b1)}</td></tr>
+                <tr><td>Вело День 2 (276 км)</td><td class="r time-cell">${fmtTime(b2)}</td></tr>
+                <tr><td style="font-weight:700">Итого (421 км)</td><td class="r time-cell" style="font-weight:700">${fmtTime(total)}</td></tr>
+                ${avgSpeed != null ? `<tr><td>Средняя скорость</td><td class="r time-cell">${fmtSpeed(avgSpeed)}</td></tr>` : ''}
+            </tbody>
+        </table>
+    </details>`;
+}
+
+// Бегунок прохождения КТ (п.12 бэклога) — единая полоса 0→515 км на
+// виртуальных пропорциях (POSITION_X_SEGMENTS/kmToVirtualX из
+// siberman-common.js — те же, что использует график "Позиция"). Работает
+// одинаково для личников и команд — оба несут cp/swim_s/bike1_s/bike2_s/
+// run_s в одинаковой форме (у команды — через teamGapRow()).
+function progressBarHtml(row) {
+    const stage = currentStage(row);
+    const finished = stage === 'run' && lastReached(row.cp, 'run')?.seq === STAGE_MAX_SEQ.run;
+    let fillPct = 0, chipText = null, activeStageKey = null;
+    if (finished) {
+        fillPct = 100;
+        chipText = 'Финиш';
+        activeStageKey = 'run';
+    } else if (stage) {
+        const pos = lastReached(row.cp, stage);
+        const kmInStage = CHECKPOINT_DIST_KM[stage][pos.seq];
+        const kmOverall = STAGE_KM_OFFSET[stage] + kmInStage;
+        fillPct = kmToVirtualX(kmOverall);
+        // Основной бегунок — прогресс по ВСЕЙ гонке (0-515 км), а не по
+        // текущему этапу (тот уже есть отдельно, у каждого этапа свой
+        // бегунок в stageProgressBarHtml — там N/M км этапа, здесь трогать
+        // не нужно). Раньше здесь тоже показывались км этапа — путало,
+        // выглядело так, будто участник на 3 из 145 км ВСЕЙ гонки, а не
+        // вело-дня-1 (найдено пользователем 2026-08-04).
+        chipText = `${kmOverall.toFixed(1)} / ${RACE_TOTAL_KM} км`;
+        activeStageKey = stage;
+    }
+    const isBikeActive = activeStageKey === 'bike_day1' || activeStageKey === 'bike_day2';
+    const b1 = kmToVirtualX(10), b2 = kmToVirtualX(155), b3 = kmToVirtualX(431);
+    // Чип центрируется через translateX(-50%) на позиции fillPct — у самого
+    // края полосы (участник только стартовал/почти финишировал) это уводит
+    // текст за пределы карточки (.card имеет overflow:hidden). Позицию ЧИПА
+    // зажимаем в безопасный диапазон отдельно от маркера/заливки, которые
+    // остаются на истинном fillPct.
+    const chipPct = Math.min(94, Math.max(6, fillPct));
+    return `
+    <div class="pb-outer">
+        <div class="pb-track-wrap">
+            <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+            <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+            ${chipText != null ? `<div class="pb-inline-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
+            <div class="pb-track">
+                <div class="pb-seg swim"></div>
+                <div class="pb-seg bike"></div>
+                <div class="pb-seg run"></div>
+                <div class="pb-fill" style="width:${fillPct}%"></div>
+                <div class="pb-boundary" style="left:${b1}%"></div>
+                <div class="pb-boundary" style="left:${b2}%;opacity:.5"></div>
+                <div class="pb-boundary" style="left:${b3}%"></div>
+            </div>
+            <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+        </div>
+        <div class="pb-stage-labels">
+            <span class="swim${activeStageKey === 'swim' ? ' active' : ''}">Плавание</span>
+            <span class="bike${isBikeActive ? ' active' : ''}">Вело</span>
+            <span class="run${activeStageKey === 'run' ? ' active' : ''}">Бег</span>
+        </div>
+    </div>`;
+}
+
+// Индикатор "место + своё отставание" одним блоком — отставание мельче и
+// менее акцентировано, второй строкой под местом (п.3, 2026-07-22): у
+// личников это пара (по полу, по абсолюту), у команд — (по формату, по
+// абсолюту), каждое отставание считается ОТНОСИТЕЛЬНО ЛИДЕРА СВОЕГО ПУЛА
+// (не общее отставание в конце, как было раньше).
+function rankStatHtml(rank, gap, label) {
+    if (rank == null) return '';
+    return `<div class="stat">
+        <div class="stat-val">${rank}</div>
+        <div class="stat-lbl">${label}</div>
+        ${gap ? `<div class="stat-subgap">${gap}</div>` : ''}
+    </div>`;
+}
+
+function renderIndividual(data, r) {
+    const overallGapPool = buildOverallGapPool(data);
+    // overallGapPool уже объединяет личников и эстафету (buildOverallGapPool),
+    // так что computeOverallGaps здесь считает отставание ОТ ЛИДЕРА ПО
+    // АБСОЛЮТУ (весь пул) — сразу за общим временем (п.6 задачи 2026-07-19).
+    const overallGaps = computeOverallGaps(overallGapPool);
+    const trulyFinished = currentStage(r) === 'run' && lastReached(r.cp, 'run')?.seq === STAGE_MAX_SEQ.run;
+
+    // Место/Итого — единая живая модель (racePos/computeCombinedOverallRanks),
+    // которая сходится с серверными overall_s/overall_rank_g РОВНО в момент
+    // истинного финиша — считаем её всегда, а не только для trulyFinished
+    // (2026-08-03: раньше "не финишировал" ветка вообще не показывала
+    // Итого/Место, хотя это ровно то, чего не хватало на живом прогоне).
+    const gap = fmtGap(overallGaps[r.bib]);
+    // Место (абсолют) — единый ранг личники+эстафета вместе (та же
+    // функция, что и в Итогах гонки на /siberman/results).
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay), null);
+    const absRank = combinedRanks[r.bib];
+    // Отставание "по полу" — от лидера ТОЛЬКО среди личников своего пола
+    // (не готовое DB-поле — там только сам ранг, не отставание).
+    const genderGapPool = overallGapPool.filter(x => !x.isRelay && x.gender === r.gender);
+    const genderGap = fmtGap(computeOverallGaps(genderGapPool)[r.bib]);
+    const liveTotal = racePos(r, null)?.value ?? null;
+    // Место (по полу) до финиша — своя живая модель, т.к. готовое DB-поле
+    // overall_rank_g доступно только после trulyFinished.
+    const genderRankRows = combinedOverallRankRows(data.individual.filter(x => x.gender === r.gender), []);
+    const genderRank = trulyFinished ? r.overall_rank_g : computeCombinedOverallRanks(genderRankRows, null)[r.bib];
+
+    const overallRecordCats = recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name);
+    let overallStat = `
+        <div class="stat"><div class="stat-val">${fmtTime(trulyFinished ? r.overall_s : liveTotal)}</div><div class="stat-lbl">Итого</div>${overallRecordCats.length ? `<div class="stat-subgap record">🏆 ${recordLabelText(overallRecordCats)}</div>` : ''}</div>
+        ${rankStatHtml(genderRank, genderGap, 'Место (по полу)')}
+        ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
+    `;
+    if (!trulyFinished) {
+        const cur = currentStage(r);
+        const pos = cur ? lastReached(r.cp, cur) : null;
+        overallStat += cur && pos ? `
+            <div class="stat"><div class="stat-val">${STAGES.find(s => s.dbStage === cur)?.label ?? cur}</div><div class="stat-lbl">Сейчас на этапе</div></div>
+            <div class="stat"><div class="stat-val">${CHECKPOINT_LABELS[cur][pos.seq]}</div><div class="stat-lbl">Отметка</div></div>
+        ` : '';
+    }
+
+    const html = `
+    <div class="card">
+        <div class="card-hdr">
+            <div class="card-hdr-top">
+                <span class="p-bib">№${r.bib}</span>
+                <span class="p-name">${r.surname} ${r.name}</span>
+                ${genderBadge(r.gender)}
+                <span class="badge badge-individual">Лично</span>
+                ${statusBadge(r, null)}
+                ${finishStarBadge(r)}
+            </div>
+            ${cityLabel(r) ? `<div class="p-city">${cityLabel(r)}</div>` : ''}
+        </div>
+        ${progressBarHtml(r)}
+        <div class="stats-row">${overallStat}</div>
+        ${modeToggle()}
+        ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
+        ${combinedBikeSection(r, r.bike1_s, r.bike2_s)}
+        ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
+    </div>`;
+    document.getElementById('app').innerHTML = html;
+}
+
+function renderTeam(data, team) {
+    const overallGapPool = buildOverallGapPool(data);
+    const overallGaps = computeOverallGaps(overallGapPool);
+    const teamRow = teamGapRow(team);
+    const gap = fmtGap(overallGaps[team.bib]);
+    // Место (абсолют) — единый ранг личники+эстафета вместе; место (формат)
+    // — ранг только среди эстафетных команд (своего рода "личное" место
+    // команды в её формате, аналог "место по полу" у личников).
+    const combinedRanks = computeCombinedOverallRanks(combinedOverallRankRows(data.individual, data.relay), null);
+    const relayFormatRanks = computeRanksByValue(data.relay.map(t => ({ key: t.bib, val: raceSortKey(racePos(teamGapRow(t), null)), status: teamGapRow(t).status })));
+    const absRank = combinedRanks[team.bib];
+    const formatRank = relayFormatRanks[team.bib];
+    // Отставание "по формату" — от лидера ТОЛЬКО среди эстафетных команд
+    // (аналог "по полу" у личников).
+    const formatGapPool = overallGapPool.filter(x => x.isRelay);
+    const formatGap = fmtGap(computeOverallGaps(formatGapPool)[team.bib]);
+
+    const memberStages = {
+        swim: STAGES.filter(s => s.relayStage === 'swim'),
+        bike: STAGES.filter(s => s.relayStage === 'bike'),
+        run:  STAGES.filter(s => s.relayStage === 'run'),
+    };
+
+    const teamSwimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+    // cp.swim/cp.bike_day2 команды — велосипедист/бегун сами не плыли/не
+    // ехали день 2, их собственный cp пуст на предыдущем этапе; нужны
+    // только stageHasStarted() (см. stageSection).
+    const teamSwimCp = team.members.find(x => x.relay_stage === 'swim')?.cp?.swim;
+    const teamBike2Cp = team.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
+
+    const membersHtml = team.members.map(m => {
+        const cfgs = memberStages[m.relay_stage] ?? [];
+        return `
+        <div class="card" style="margin-bottom:12px">
+            <div class="card-hdr">
+                <div class="card-hdr-top">
+                    <span class="p-name" style="font-size:16px">${m.surname} ${m.name}</span>
+                    ${genderBadge(m.gender)}
+                </div>
+                <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
+            </div>
+            ${cfgs.map(cfg => stageSection(cfg, {
+                ...m, _bib: team.bib, _teamSwimS: teamSwimS,
+                cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
+            }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
+            ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
+        </div>`;
+    }).join('');
+
+    const html = `
+    <div class="card">
+        <div class="card-hdr">
+            <div class="card-hdr-top">
+                <span class="p-bib">№${team.bib}</span>
+                <span class="p-name">${team.team_name}</span>
+                <span class="badge badge-relay">Эстафета</span>
+                ${teamStatusBadge(team)}
+            </div>
+        </div>
+        ${progressBarHtml(teamRow)}
+        <div class="stats-row">
+            <div class="stat"><div class="stat-val">${fmtTime(racePos(teamRow, null)?.value ?? null)}</div><div class="stat-lbl">Итого команды</div></div>
+            ${rankStatHtml(formatRank, formatGap, 'Место (формат)')}
+            ${rankStatHtml(absRank, gap, 'Место (абсолют)')}
+        </div>
+        ${modeToggle()}
+    </div>
+    ${membersHtml}`;
+    document.getElementById('app').innerHTML = html;
+}
+
+async function load() {
+    document.getElementById('loading').style.display = '';
+    document.getElementById('app').style.display = 'none';
+    try {
+        const resp = await fetch(`/api/siberman/results?year=${YEAR}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        _raceStartEpoch = data.race_start ? new Date(data.race_start).getTime() : null;
+        _recordsIndex = buildRecordsIndex(data.records);
+
+        const person = data.individual.find(r => r.bib === BIB);
+        const team = data.relay.find(t => t.bib === BIB);
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('app').style.display = '';
+
+        if (person) {
+            _rerender = () => renderIndividual(data, person);
+            _rerender();
+        } else if (team) {
+            _rerender = () => renderTeam(data, team);
+            _rerender();
+        } else {
+            document.getElementById('app').innerHTML = '<div class="empty">Участник не найден</div>';
+        }
+    } catch (e) {
+        document.getElementById('loading').textContent = 'Ошибка загрузки: ' + e.message;
+    }
+}
+
+load();
+</script>
+</body>
+</html>
