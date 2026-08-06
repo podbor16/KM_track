@@ -826,6 +826,24 @@
         return `📍 Отметка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${bcCpParenSuffix(stage, seq)}.`;
     }
 
+    // Header для личных категорий (М/Ж/Э) в режиме "По всей гонке" — в
+    // отличие от bcCpHeaderLine (используется и в "По этапу") показывает уже
+    // пройденную дистанцию предыдущих этапов, как у Абсолюта (bcAbsolutePrevStages),
+    // и переносит "День N" из суффикса в скобках в префикс перед "Отметка"
+    // (запрошено пользователем 2026-08-06 — раньше "По всей гонке" для
+    // вело/бега не показывало прогресс по всей гонке, только текущий этап).
+    // Плавание — первый этап, предыдущих нет, там остаётся суффикс с кругом.
+    function bcGlobalHeaderLine(stage, seq) {
+        const distKm = bcDistKm(stage, seq);
+        const totalKm = bcDistKm(stage, bcMaxSeq(stage));
+        const dayPrefix = stage === 'bike_day1' ? 'День 1. ' : stage === 'bike_day2' ? 'День 2. ' : '';
+        const prev = bcAbsolutePrevStages(stage);
+        const suffix = prev.length
+            ? ` (${prev.map(p => `+ ${bcFmtKm(p.km)} км ${p.label}`).join(', ')})`
+            : bcCpParenSuffix(stage, seq);
+        return `📍${dayPrefix}Отметка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${suffix}.`;
+    }
+
     // Короткое имя дисциплины для header'а Абсолюта.
     const BC_STAGE_SHORT = { swim: 'плавание', bike_day1: 'вело', bike_day2: 'вело', run: 'бег' };
     const BC_REAL_STAGE_ORDER = ['swim', 'bike_day1', 'bike_day2', 'run'];
@@ -938,7 +956,7 @@
         if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
 
         const title = bcPostTitle('global', stage, category);
-        const header = category === 'combined' ? bcAbsoluteHeaderLine(stage, seq) : bcCpHeaderLine(stage, seq);
+        const header = category === 'combined' ? bcAbsoluteHeaderLine(stage, seq) : bcGlobalHeaderLine(stage, seq);
         const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'global')).join('\n\n');
         return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
     }
