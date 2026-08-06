@@ -351,8 +351,15 @@
         .stats-v2 { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
         /* Поиск участника (номер/фамилия, с начала) — под индикаторами, не
            фильтр: места/ранги не пересчитываются, только скролл к первому
-           совпадению в уже отрисованной таблице, без подсветки (2026-08-06). */
+           совпадению в уже отрисованной таблице + короткая вспышка строки
+           (2026-08-06). */
         .search-bar { margin-bottom: 16px; }
+        /* Вспышка строки после прыжка — недолгая (~0.5с), не постоянная
+           подсветка (та мешала — запрошено пользователем убрать раньше).
+           transition висит на самой tr (не только на .search-flash) —
+           иначе снятие класса не анимировалось бы плавным затуханием. */
+        #app tbody tr { transition: background-color .5s ease; }
+        #app tbody tr.search-flash { background-color: rgba(190, 10, 33, .25); }
         /* Закрепляется сверху экрана ТОЛЬКО на время автоматического
            скролла к найденной строке (см. applyParticipantSearch) — чтобы
            поле не пропало с экрана раньше, чем виден результат прыжка.
@@ -769,13 +776,21 @@ function applyParticipantSearch() {
     const bar = document.querySelector('.search-bar');
     if (bar) bar.classList.add('search-bar--pinned');
     first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const unpin = () => { if (bar) bar.classList.remove('search-bar--pinned'); };
+    // После того как прыжок реально завершился (не во время самого
+    // скролла) — открепляем поле поиска И вспыхиваем строкой участника на
+    // ~0.5с (не постоянная подсветка — та мешала, уже убирали раньше по
+    // просьбе пользователя; теперь именно короткая вспышка, 2026-08-06).
+    const afterJump = () => {
+        if (bar) bar.classList.remove('search-bar--pinned');
+        first.classList.add('search-flash');
+        setTimeout(() => first.classList.remove('search-flash'), 500);
+    };
     if ('onscrollend' in window) {
-        window.addEventListener('scrollend', unpin, { once: true });
+        window.addEventListener('scrollend', afterJump, { once: true });
     } else {
         // Safari и т.п. без scrollend — фиксированная пауза чуть больше
         // типичной длительности smooth-скролла на расстояние одной таблицы.
-        setTimeout(unpin, 800);
+        setTimeout(afterJump, 800);
     }
 }
 
