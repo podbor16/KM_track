@@ -71,6 +71,27 @@ function mkRelayTeam(bib, teamName, overallS) {
     };
 }
 
+check('stageBody() — Сплит/Общее время bike_day1 для эстафетного велосипедиста относительно СВОЕГО старта (после T1 пловца), не от старта гонки', () => {
+    // 2026-08-06, найдено на живой гонке: cumulative_s bike_day1 в БД —
+    // elapsed от старта ГОНКИ (единый таймер со swim), не от старта вело
+    // конкретного велосипедиста — команда 1061, пловец финишировал за
+    // 2:50:05 (10205с), велосипедист достиг 3км в raw 2:56:32 (10592с) от
+    // старта гонки — реальное время НА вело всего 0:06:27 (387с), но
+    // карточка показывала raw "2:56:32" в "Общее время".
+    vm.runInContext(`_mode = 'stage';`, sandbox);
+    const r = {
+        relay_stage: 'bike', gender: 'M', status: 'active',
+        swim_s: null, _teamSwimS: 10205,
+        cp: { bike_day1: { 1: 10592, 2: 11155 } },
+        splits: { bike_day1: { 1: 10592, 2: 563 } },
+    };
+    const rowsHtml = sandbox.stageBody('bike_day1', r, [], 'X', [], 'X');
+    assert.ok(rowsHtml.includes('0:06:27'), `ожидался relative "Сплит"/"Общее время" 0:06:27 на 3км: ${rowsHtml}`);
+    assert.ok(rowsHtml.includes('0:15:50'), `ожидалось relative "Общее время" 0:15:50 на 10км: ${rowsHtml}`);
+    assert.ok(!rowsHtml.includes('2:56:32'), `сырое (не relative) "2:56:32" не должно попадать в вывод: ${rowsHtml}`);
+    assert.ok(!rowsHtml.includes('3:05:55'), `сырое (не relative) "3:05:55" не должно попадать в вывод: ${rowsHtml}`);
+});
+
 check('renderIndividual() финишировавший — Место (абсолют) + Место (по полу), без дублей мест', () => {
     const data = {
         individual: [

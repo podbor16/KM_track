@@ -389,23 +389,27 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         const abs = poolCell(absRanks, absGaps, seq, pending);
         const fmtC = poolCell(formatRanks, formatGaps, seq, pending);
         const gen = !isRelayRow ? poolCell(genderRanks, genderGaps, seq, pending) : null;
-        // КТ bike_day1 seq=1: split_s в БД = cumulative_s самой КТ (нет seq=0,
-        // от которого вычесть), а cumulative_s bike_day1 считается от старта
-        // ГОНКИ (единый таймер со swim), не от старта вело — значит "сплит"
-        // на первой точке содержит время всего плавания впридачу. Вычитаем
-        // его только для расчёта темпа/скорости, саму колонку "Сплит" не
-        // трогаем (устоявшееся поведение "последней отсечки" на других вкладках).
+        // cumulative_s bike_day1 в БД считается от старта ГОНКИ (единый
+        // таймер со swim), не от старта вело-этапа участника/команды — для
+        // эстафетного велосипедиста (стартует позже, после T1 своего
+        // пловца) это давало абсурдные "Сплит"/"Общее время" (например,
+        // "2:56:32" на 3 км вместо реальных ~6 минут — 2026-08-06, найдено
+        // на живой гонке). Вычитаем swimRef из ОБЕИХ колонок — split(seq=1)
+        // == cum(seq=1) (нет seq=0, от которого вычесть), split(seq>1) не
+        // меняется при вычитании (одна и та же константа сокращается в
+        // разности cum(seq)-cum(seq-1)), поэтому реально трогает только
+        // cum-колонку целиком и первую строку split.
         const swimRef = r.swim_s ?? r._teamSwimS ?? null;
-        const paceSplit = (dbStage === 'bike_day1' && seq === 1 && split != null && swimRef != null)
-            ? split - swimRef
-            : split;
-        const paceCell = paceSplit != null ? splitPaceLabel(dbStage, seq, paceSplit) : '—';
+        const isBikeDay1WithSwim = dbStage === 'bike_day1' && swimRef != null;
+        const cumDisplay = (isBikeDay1WithSwim && cum != null) ? cum - swimRef : cum;
+        const splitDisplay = (isBikeDay1WithSwim && seq === 1 && split != null) ? split - swimRef : split;
+        const paceCell = splitDisplay != null ? splitPaceLabel(dbStage, seq, splitDisplay) : '—';
 
         rows += `<tr class="${pending ? 'pending' : ''}">
             <td>${CHECKPOINT_LABELS[dbStage][seq]}</td>
-            <td class="r time-cell">${split != null ? fmtTime(split) : '—'}</td>
+            <td class="r time-cell">${splitDisplay != null ? fmtTime(splitDisplay) : '—'}</td>
             <td class="r muted">${paceCell}</td>
-            <td class="r time-cell">${cum != null ? fmtTime(cum) : '—'}</td>
+            <td class="r time-cell">${cumDisplay != null ? fmtTime(cumDisplay) : '—'}</td>
             ${gen ? `<td class="r">${gen.rank}</td><td class="r">${gen.gap}</td>` : ''}
             <td class="r">${fmtC.rank}</td>
             <td class="r">${fmtC.gap}</td>
