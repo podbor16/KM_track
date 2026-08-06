@@ -2664,12 +2664,18 @@ function computeStageTimerState() {
     // абсурдные значения при наивном Date.now()-start).
     if (Date.now() < _raceStartEpoch) return { type: 'countdown', label: 'До старта', startEpoch: _raceStartEpoch };
     for (const s of WIDGET_STAGES) {
+        // Плановое время следующего дня проверяем ПЕРВЫМ, до off/pending —
+        // иначе как только хотя бы ОДИН участник финиширует предыдущий день
+        // (off у своего личного "входа" в следующий становится не-null),
+        // виджет переключался на тикающий elapsed-секундомер от его
+        // времени входа вместо обратного отсчёта до планового старта —
+        // даже если по расписанию день ещё не начался (найдено пользователем
+        // 2026-08-06 на живой гонке: "Вело День 2" считало не туда, до
+        // полуночи вместо 08:00 07.08 — та же причина ждала и "Бег").
+        const sched = s.scheduledEpoch();
+        if (sched != null && Date.now() < sched) return { type: 'countdown', label: s.label, startEpoch: sched };
         const off = s.startOffset();
-        if (off == null) {
-            const sched = s.scheduledEpoch();
-            if (sched != null && Date.now() < sched) return { type: 'countdown', label: s.label, startEpoch: sched };
-            return { type: 'next', label: s.label };
-        }
+        if (off == null) return { type: 'next', label: s.label };
         if (s.pending()) return { type: 'timer', label: s.label, startEpoch: _raceStartEpoch + off * 1000 };
     }
     return { type: 'done' };

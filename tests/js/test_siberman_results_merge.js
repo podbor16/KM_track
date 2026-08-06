@@ -275,6 +275,30 @@ check('computeStageTimerState — день 1 закрыт, известно ПЛ
     assert.strictEqual(state.label, 'Вело День 2');
     assert.strictEqual(state.startEpoch, scheduledBike2);
 });
+check('computeStageTimerState — кто-то УЖЕ финишировал день 1 (личный "вход" в вело-день-2 известен), но плановый старт ещё впереди — всё равно обратный отсчёт, не elapsed-секундомер', () => {
+    // Реальный баг с продакшна (найдено пользователем 2026-08-06, "Вело День 2"
+    // 07.08 08:00, а отсчёт шёл до полуночи): как только ПЕРВЫЙ участник
+    // реально финиширует день 1 (swim_s+bike1_s оба не null), stageStartOffset
+    // ('bike_day2') перестаёт быть null — старая версия проверки (off==null
+    // до sched) в этот момент уже пропускала ветку с плановым временем и
+    // уходила в elapsed-таймер от личного времени входа этого финишера,
+    // ИГНОРИРУЯ то, что по расписанию день ещё не начался. Правильно —
+    // плановое время должно иметь приоритет, пока оно не наступило,
+    // независимо от того, есть ли уже "личный вход" у кого-то.
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const finishedDay1 = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 9000 } },
+        swim_s: 3000, bike1_s: 9000,
+    });
+    const now = Date.now();
+    const scheduledBike2 = now + 5 * 3600 * 1000; // через 5 часов, ещё не наступило
+    setRaceData([finishedDay1], [], now - 20000, scheduledBike2, null);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'countdown', `ожидался обратный отсчёт до планового старта, получили: ${JSON.stringify(state)}`);
+    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.startEpoch, scheduledBike2);
+});
 check('computeStageTimerState — день 1 закрыт, плановое время вело-дня-2 УЖЕ ПРОШЛО — статичный текст, не отрицательный отсчёт', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const dnfAfterSwim = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
