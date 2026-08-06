@@ -283,7 +283,7 @@
         const btn = document.querySelector(`.admin-tab[onclick*="'${savedTab}'"]`);
         if (btn) switchTab(savedTab, btn);
     }
-    const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'bike2-start-input', 'run-start-input', 'startlist-year'];
+    const UPLOAD_TAB_PERSIST_IDS = ['race-year', 'race-start', 'bike2-start-input', 'run-start-input', 'startlist-year', 'copernico-run-year', 'gsheet-year'];
     const UPLOAD_TAB_STORAGE_PREFIX = 'siberman_admin_upload_';
     UPLOAD_TAB_PERSIST_IDS.forEach(id => {
         const el = $(id);
