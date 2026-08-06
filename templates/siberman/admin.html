@@ -120,11 +120,9 @@
             <div class="card">
                 <h2>Copernico live (бег)</h2>
                 <p style="font-size:13px;color:#555;margin:0 0 12px">
-                    Разрешить записи в БД от live-опроса Copernico для
-                    бегового этапа (copernico_run_poller.py). Сам процесс
-                    опроса это НЕ останавливает/запускает — только
-                    разрешает или блокирует запись. Выключено по
-                    умолчанию.
+                    Включает live-опрос Copernico для бегового этапа —
+                    без SSH, кнопка запускает/останавливает опрос
+                    напрямую. Выключено по умолчанию.
                 </p>
                 <label>Год</label>
                 <input type="number" id="copernico-run-year" value="2025" min="2020" max="2030" style="width:120px">
@@ -138,10 +136,11 @@
                 <p style="font-size:13px;color:#555;margin:0 0 12px">
                     Альтернатива ручной загрузке Excel-файла ниже — таблица
                     должна быть открыта по ссылке («Все, у кого есть
-                    ссылка» → «Читатель»). Пока включено, отдельный процесс
-                    (google_sheet_poller.py) сам подтягивает изменения — не
-                    запускайте одновременно обычную загрузку Excel для
-                    этого же года, она перезапишет всех участников заново.
+                    ссылка» → «Читатель»). Кнопка запускает/останавливает
+                    опрос напрямую, без SSH — изменения подтягиваются
+                    автоматически, пока включено. Не запускайте
+                    одновременно обычную загрузку Excel для этого же года
+                    — она перезапишет всех участников заново.
                 </p>
                 <label>Год</label>
                 <input type="number" id="gsheet-year" value="2025" min="2020" max="2030" style="width:120px">
@@ -375,10 +374,8 @@
         }
     });
 
-    // Copernico live (бег) — переключатель записи от poller-процесса
-    // (copernico_run_poller.py), не сам процесс (задача 6 Live v2,
-    // запрошено пользователем 2026-08-05: "как мне выключить поллер, если
-    // это будет необходимо").
+    // Copernico live (бег) — задача 6 Live v2. Запускает/останавливает
+    // встроенный лидер-цикл в app.py напрямую (2026-08-06), без SSH.
     async function prefillCopernicoRunStatus() {
         const year = $('copernico-run-year').value;
         try {
@@ -409,9 +406,8 @@
     $('btn-copernico-run-enable').addEventListener('click', () => setCopernicoRunEnabled(true));
     $('btn-copernico-run-disable').addEventListener('click', () => setCopernicoRunEnabled(false));
 
-    // Live-синхронизация из Google Таблицы — переключатель записи от
-    // poller-процесса (google_sheet_poller.py), не сам процесс, тот же
-    // принцип, что и Copernico live выше.
+    // Live-синхронизация из Google Таблицы — тот же принцип, что и
+    // Copernico live выше (встроенный лидер-цикл, без SSH).
     async function prefillGsheetStatus() {
         const year = $('gsheet-year').value;
         try {

@@ -232,6 +232,78 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[SSE] startlist_watcher error: {_e}")
             await asyncio.sleep(15)
 
+    async def _siberman_copernico_run_poller():
+        """Лидер-воркер: опрашивает Copernico для бегового этапа Siberman.
+        Задача крутится всегда — реальный fetch+apply происходит только
+        для года(ов) с race_config.copernico_run_enabled=1. Кнопки
+        "Включить"/"Выключить" в админке (POST .../copernico-run-toggle)
+        полностью управляют этим циклом — отдельного запуска процесса не
+        требуется (2026-08-06: раньше поллер был отдельным CLI-скриптом,
+        запускаемым вручную по SSH — copernico_run_poller.py оставлен как
+        fallback для локальной отладки без Redis)."""
+        from src.siberman.db import get_siberman_connection
+        from src.siberman.copernico_run import apply_copernico_snapshot, fetch_run_snapshot, load_preset_config
+        preset_path = BASE_DIR / "config" / "copernico" / "siberman2026.yaml"
+        cfg = load_preset_config(str(preset_path))
+
+        def _run_cycle_sync() -> None:
+            conn = get_siberman_connection()
+            if conn is None:
+                return
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT race_year FROM race_config WHERE copernico_run_enabled=1")
+                years = [row[0] for row in cur.fetchall()]
+                if not years:
+                    return
+                runners = fetch_run_snapshot(cfg)
+                if not runners:
+                    return
+                for year in years:
+                    apply_copernico_snapshot(conn, year, runners, cfg)
+            finally:
+                conn.close()
+
+        while True:
+            try:
+                current = await redis_client.get("tracker:leader")
+                if current and current.decode() == worker_id:
+                    await asyncio.get_event_loop().run_in_executor(None, _run_cycle_sync)
+            except Exception as _e:
+                settings.logger.warning(f"[siberman] copernico_run_poller error: {_e}")
+            await asyncio.sleep(20)
+
+    async def _siberman_google_sheet_poller():
+        """Лидер-воркер: синхронизирует Siberman с Google Таблицей для
+        года(ов) с race_config.google_sheet_sync_enabled=1 — см.
+        google_sheet_sync.py. Управляется кнопками "Включить"/"Выключить"
+        в админке, без отдельного запуска процесса (google_sheet_poller.py
+        оставлен как CLI-fallback для локальной отладки без Redis)."""
+        from src.siberman.db import get_siberman_connection
+        from src.siberman.google_sheet_sync import sync_google_sheet
+
+        def _run_cycle_sync() -> None:
+            conn = get_siberman_connection()
+            if conn is None:
+                return
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT race_year FROM race_config WHERE google_sheet_sync_enabled=1")
+                years = [row[0] for row in cur.fetchall()]
+                for year in years:
+                    sync_google_sheet(conn, year)
+            finally:
+                conn.close()
+
+        while True:
+            try:
+                current = await redis_client.get("tracker:leader")
+                if current and current.decode() == worker_id:
+                    await asyncio.get_event_loop().run_in_executor(None, _run_cycle_sync)
+            except Exception as _e:
+                settings.logger.warning(f"[siberman] google_sheet_poller error: {_e}")
+            await asyncio.sleep(20)
+
     async def _redis_notification_subscriber():
         """Все воркеры: получают уведомления из Redis, рассылают через NotificationHub."""
         while True:
@@ -263,10 +335,13 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_results_watcher()),
             asyncio.create_task(_startlist_watcher()),
             asyncio.create_task(_redis_notification_subscriber()),
+            asyncio.create_task(_siberman_copernico_run_poller()),
+            asyncio.create_task(_siberman_google_sheet_poller()),
         ]
         settings.logger.info(
             "[SSE] Background tasks started: tracker_broadcast, redis_tracker_subscriber, "
-            "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher"
+            "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher, "
+            "siberman_copernico_run_poller, siberman_google_sheet_poller"
         )
     else:
         settings.logger.warning("[SSE] Redis unavailable — SSE tasks skipped (DEBUG mode)")

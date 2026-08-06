@@ -163,9 +163,8 @@ async def set_public_year_endpoint(race_year: int, user: str = Depends(api_requi
 
 @router.get("/api/siberman/admin/copernico-run-status")
 async def copernico_run_status_endpoint(race_year: int, user: str = Depends(api_require_auth)):
-    """Текущее состояние тумблера live-опроса Copernico для бегового этапа
-    (задача 6 Live v2) — сам poller-процесс отдельно, это только флаг,
-    который apply_copernico_snapshot() проверяет перед записью."""
+    """Текущее состояние live-опроса Copernico для бегового этапа (задача
+    6 Live v2)."""
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
@@ -178,10 +177,16 @@ async def copernico_run_status_endpoint(race_year: int, user: str = Depends(api_
 
 @router.post("/api/siberman/admin/copernico-run-toggle")
 async def copernico_run_toggle_endpoint(race_year: int, enabled: bool, user: str = Depends(api_require_auth)):
-    """Включить/выключить запись live-данных Copernico для бегового этапа
-    без остановки самого poller-процесса — не трогает apply_to_db/
-    clear_race_year (Excel-путь), выключатель только для отдельного
-    copernico_run.py::apply_copernico_snapshot()."""
+    """Включить/выключить live-опрос Copernico для бегового этапа.
+    Встроенный лидер-цикл в app.py (lifespan) крутится всегда во всех
+    воркерах и на каждой итерации сам проверяет этот флаг — "Включить"
+    здесь буквально запускает опрос, "Выключить" его останавливает, без
+    отдельного процесса/SSH (2026-08-06). Не трогает apply_to_db/
+    clear_race_year (Excel-путь) — источники независимы, см.
+    copernico_run.py::apply_copernico_snapshot(). Отдельный CLI-скрипт
+    (copernico_run_poller.py) остаётся как fallback для локальной
+    отладки без Redis — не запускать его одновременно с продовым
+    приложением (двойной опрос)."""
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
@@ -195,9 +200,7 @@ async def copernico_run_toggle_endpoint(race_year: int, enabled: bool, user: str
 @router.get("/api/siberman/admin/google-sheet-status")
 async def google_sheet_status_endpoint(race_year: int, user: str = Depends(api_require_auth)):
     """Текущие настройки live-синхронизации из Google Таблицы (альтернатива
-    Excel, переключается в админке) — сам poller-процесс отдельно, здесь
-    только сохранённый ID таблицы и флаг, которые google_sheet_sync.py
-    проверяет перед применением."""
+    Excel, переключается в админке)."""
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
@@ -211,11 +214,15 @@ async def google_sheet_status_endpoint(race_year: int, user: str = Depends(api_r
 @router.post("/api/siberman/admin/google-sheet-toggle")
 async def google_sheet_toggle_endpoint(race_year: int, enabled: bool, sheet_url: str = "",
                                         user: str = Depends(api_require_auth)):
-    """Включить/выключить live-синхронизацию из Google Таблицы без
-    остановки самого poller-процесса — не трогает apply_to_db/
-    clear_race_year (Excel-путь), выключатель только для отдельного
-    google_sheet_sync.py::sync_google_sheet(). sheet_url — полная ссылка
-    или голый ID; при enabled=True обязателен (свой либо уже сохранённый
+    """Включить/выключить live-синхронизацию из Google Таблицы. Встроенный
+    лидер-цикл в app.py (lifespan) крутится всегда и сам проверяет этот
+    флаг — "Включить" запускает опрос, "Выключить" останавливает, без
+    отдельного процесса/SSH (2026-08-06). Не трогает apply_to_db/
+    clear_race_year (Excel-путь) — источники независимы. Отдельный
+    CLI-скрипт (google_sheet_poller.py) остаётся как fallback для
+    локальной отладки без Redis — не запускать его одновременно с
+    продовым приложением (двойной опрос). sheet_url — полная ссылка или
+    голый ID; при enabled=True обязателен (свой либо уже сохранённый
     ранее — если не передан, используется текущий из БД)."""
     conn = get_siberman_connection()
     if conn is None:
