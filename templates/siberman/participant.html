@@ -229,6 +229,10 @@
         .cp-pinned { position: sticky; left: 0; box-shadow: 1px 0 0 var(--border); }
         .cp-table th.cp-pinned { background: var(--bg3); }
         .cp-table td.cp-pinned { background: var(--bg2); }
+        /* Прогноз (см. .forecast-cell в results.html — тот же цвет/смысл,
+           отдельные файлы без общего CSS, поэтому дублируется). */
+        .forecast-cell { color: #b8860b; }
+        [data-theme="dark"] .forecast-cell { color: #e0b23c; }
 
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
@@ -384,6 +388,11 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     const ranksFn = isRace ? computeGlobalCheckpointRanks : computeCheckpointRanks;
 
     const isRelayRow = !!r.relay_stage;
+    // Последняя достигнутая позиция — нужна для прогноза будущих КТ (см.
+    // ниже). Та же формула swimRef, что stageSection() уже использует для
+    // этой же строки — velosipedист эстафеты сам не плавает, для него
+    // swim_s пуст, берём swim КОМАНДЫ (_teamSwimS).
+    const pos = stagePos({ cp: r.cp, swim_s: r.swim_s ?? r._teamSwimS ?? null }, dbStage);
 
     const absRanks = ranksFn(pool, dbStage, maxSeq);
     const absGaps = gapsFn(pool, dbStage, maxSeq);
@@ -430,12 +439,23 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         const cumDisplay = (isBikeDay1WithSwim && cum != null) ? cum - swimRef : cum;
         const splitDisplay = (isBikeDay1WithSwim && seq === 1 && split != null) ? split - swimRef : split;
         const paceCell = splitDisplay != null ? splitPaceLabel(dbStage, seq, splitDisplay) : '—';
+        // Прогноз "Общего времени" для ещё не пройденной КТ (pending) — от
+        // текущей позиции (pos), экстраполированной на дистанцию ЭТОЙ
+        // строки (не только ближайшей будущей — все future-строки получают
+        // свой прогноз). Только для реально активных (не DNF/DSQ/DNS) —
+        // иначе прогноз обещал бы финиш тому, кто уже сошёл.
+        const forecastS = (pending && pos && r.status === 'active')
+            ? forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
+            : null;
+        const cumCell = cumDisplay != null
+            ? fmtTime(cumDisplay)
+            : (forecastS != null ? `<span class="forecast-cell">~${fmtTime(forecastS)}</span>` : '—');
 
         rows += `<tr class="${pending ? 'pending' : ''}">
             <td class="cp-pinned">${CHECKPOINT_LABELS[dbStage][seq]}</td>
             <td class="r time-cell">${splitDisplay != null ? fmtTime(splitDisplay) : '—'}</td>
             <td class="r muted">${paceCell}</td>
-            <td class="r time-cell">${cumDisplay != null ? fmtTime(cumDisplay) : '—'}</td>
+            <td class="r time-cell">${cumCell}</td>
             ${gen ? `<td class="r">${gen.rank}</td><td class="r">${gen.gap}</td>` : ''}
             <td class="r">${fmtC.rank}</td>
             <td class="r">${fmtC.gap}</td>
