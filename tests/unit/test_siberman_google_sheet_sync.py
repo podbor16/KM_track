@@ -84,27 +84,56 @@ def test_sync_unchanged_content_skips_parse_and_apply(mock_cfg, mock_fetch, mock
     mock_set_hash.assert_not_called()
 
 
+@patch("src.siberman.google_sheet_sync.convert_bike_times_to_elapsed")
+@patch("src.siberman.google_sheet_sync.get_race_start")
 @patch("src.siberman.google_sheet_sync.apply_parse_result_upsert")
 @patch("src.siberman.google_sheet_sync.parse_excel")
 @patch("src.siberman.google_sheet_sync.set_google_sheet_last_hash")
 @patch("src.siberman.google_sheet_sync.fetch_sheet_xlsx")
 @patch("src.siberman.google_sheet_sync.get_google_sheet_config")
 def test_sync_changed_content_parses_and_applies_then_updates_hash(
-    mock_cfg, mock_fetch, mock_set_hash, mock_parse, mock_apply,
+    mock_cfg, mock_fetch, mock_set_hash, mock_parse, mock_apply, mock_race_start, mock_convert,
 ):
+    import datetime
     mock_cfg.return_value = {"sheet_id": "SHEET_ID", "enabled": True, "last_hash": "old-hash"}
     mock_fetch.return_value = b"new-bytes"
+    mock_race_start.return_value = datetime.datetime(2026, 8, 8, 8, 0, 0)
     parsed = ParseResult(race_year=2026, participants=[{"bib": "1"}], errors=[])
     mock_parse.return_value = parsed
+    mock_convert.return_value = {"1": 3600}
     mock_apply.return_value = {"ok": True, "participants": 1, "checkpoint_times": 0}
 
     conn = _mk_conn()
     result = sync_google_sheet(conn, 2026)
 
     mock_parse.assert_called_once_with(b"new-bytes", 2026)
+    # race_start=08:00:00 -> 28800с — astronomical bike-время конвертируется
+    # в elapsed ДО записи в БД (2026-08-06: без этого шага cumulative_s
+    # писался как "секунды от полуночи", давая огромные "часы этапа").
+    mock_convert.assert_called_once_with(parsed, 28800)
+    assert parsed.handicaps == {"1": 3600}
     mock_apply.assert_called_once_with(conn, parsed)
     import hashlib
     expected_hash = hashlib.sha256(b"new-bytes").hexdigest()
     mock_set_hash.assert_called_once_with(conn, 2026, expected_hash)
     assert result["changed"] is True
     assert result["participants"] == 1
+
+
+@patch("src.siberman.google_sheet_sync.get_race_start")
+@patch("src.siberman.google_sheet_sync.apply_parse_result_upsert")
+@patch("src.siberman.google_sheet_sync.parse_excel")
+@patch("src.siberman.google_sheet_sync.fetch_sheet_xlsx")
+@patch("src.siberman.google_sheet_sync.get_google_sheet_config")
+def test_sync_changed_content_without_race_start_returns_error_without_applying(
+    mock_cfg, mock_fetch, mock_parse, mock_apply, mock_race_start,
+):
+    mock_cfg.return_value = {"sheet_id": "SHEET_ID", "enabled": True, "last_hash": "old-hash"}
+    mock_fetch.return_value = b"new-bytes"
+    mock_race_start.return_value = None
+
+    result = sync_google_sheet(_mk_conn(), 2026)
+
+    assert result["ok"] is False
+    mock_parse.assert_not_called()
+    mock_apply.assert_not_called()

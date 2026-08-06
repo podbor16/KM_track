@@ -30,9 +30,9 @@ from typing import Optional
 
 import requests
 
-from src.siberman.db import get_google_sheet_config, set_google_sheet_last_hash
+from src.siberman.db import get_google_sheet_config, set_google_sheet_last_hash, get_race_start
 from src.siberman.parser import parse_excel
-from src.siberman.service import apply_parse_result_upsert
+from src.siberman.service import apply_parse_result_upsert, convert_bike_times_to_elapsed
 
 log = logging.getLogger(__name__)
 
@@ -88,9 +88,26 @@ def sync_google_sheet(conn, race_year: int) -> dict:
     if sheet_hash == cfg["last_hash"]:
         return {"ok": True, "enabled": True, "changed": False}
 
+    race_start_dt = get_race_start(conn, race_year)
+    if race_start_dt is None:
+        log.warning(f"race_config.race_start не задан для {race_year} — пропускаю синхронизацию Google-таблицы")
+        return {"ok": False, "error": "race_start not set"}
+    race_start_s = race_start_dt.hour * 3600 + race_start_dt.minute * 60 + race_start_dt.second
+
     result = parse_excel(xlsx_bytes, race_year)
     if result.errors:
         log.warning(f"Google-таблица {race_year}: {len(result.errors)} ошибок парсинга — применяю, что распозналось")
+
+    # Вело День 1 в таблице заполняется АСТРОНОМИЧЕСКИМ временем (как на
+    # часах у судьи), не elapsed — без этого шага apply_parse_result_upsert
+    # писал бы в БД сырые "секунды от полуночи" как cumulative_s, отсюда
+    # огромные "часы этапа"/мизерная скорость на публичной странице
+    # (2026-08-06, найдено на реальных данных: 10:56:32 введено на 3 км
+    # вело → показывало 8+ часов на этапе). Мутирует result.checkpoint_times
+    # in place; bike_day2_starts идёт в result.handicaps — то же самое, что
+    # делает upload_excel() для обычного Excel-пути (router.py).
+    bike_day2_starts = convert_bike_times_to_elapsed(result, race_start_s)
+    result.handicaps = bike_day2_starts
 
     apply_result = apply_parse_result_upsert(conn, result)
     set_google_sheet_last_hash(conn, race_year, sheet_hash)
