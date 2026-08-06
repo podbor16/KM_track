@@ -134,6 +134,25 @@
             </div>
 
             <div class="card">
+                <h2>Live-синхронизация из Google Таблицы</h2>
+                <p style="font-size:13px;color:#555;margin:0 0 12px">
+                    Альтернатива ручной загрузке Excel-файла ниже — таблица
+                    должна быть открыта по ссылке («Все, у кого есть
+                    ссылка» → «Читатель»). Пока включено, отдельный процесс
+                    (google_sheet_poller.py) сам подтягивает изменения — не
+                    запускайте одновременно обычную загрузку Excel для
+                    этого же года, она перезапишет всех участников заново.
+                </p>
+                <label>Год</label>
+                <input type="number" id="gsheet-year" value="2025" min="2020" max="2030" style="width:120px">
+                <label>Ссылка на Google Таблицу</label>
+                <input type="text" id="gsheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;max-width:480px">
+                <p id="gsheet-status" style="font-size:12px;color:#555;margin:8px 0"></p>
+                <button class="btn btn-success" id="btn-gsheet-enable">Включить</button>
+                <button class="btn" id="btn-gsheet-disable">Выключить</button>
+            </div>
+
+            <div class="card">
                 <h2>1. Загрузить файл Excel</h2>
                 <label>Файл (.xlsx)</label>
                 <input type="file" id="file-input" accept=".xlsx,.xls">
@@ -389,6 +408,45 @@
     }
     $('btn-copernico-run-enable').addEventListener('click', () => setCopernicoRunEnabled(true));
     $('btn-copernico-run-disable').addEventListener('click', () => setCopernicoRunEnabled(false));
+
+    // Live-синхронизация из Google Таблицы — переключатель записи от
+    // poller-процесса (google_sheet_poller.py), не сам процесс, тот же
+    // принцип, что и Copernico live выше.
+    async function prefillGsheetStatus() {
+        const year = $('gsheet-year').value;
+        try {
+            const r = await fetch(`/api/siberman/admin/google-sheet-status?race_year=${year}`);
+            if (!r.ok) return;
+            const data = await r.json();
+            if (data.sheet_id && !$('gsheet-url').value) {
+                $('gsheet-url').value = `https://docs.google.com/spreadsheets/d/${data.sheet_id}/edit`;
+            }
+            $('gsheet-status').textContent = data.enabled
+                ? `Сейчас включено для года ${year} (таблица: ${data.sheet_id || '—'}).`
+                : `Сейчас выключено для года ${year}.`;
+        } catch (e) { /* нет строки race_config для года — оставляем пусто */ }
+    }
+    $('gsheet-year').addEventListener('change', prefillGsheetStatus);
+    prefillGsheetStatus();
+
+    async function setGsheetEnabled(enabled) {
+        hideMsg();
+        const year = $('gsheet-year').value;
+        const sheetUrl = $('gsheet-url').value.trim();
+        try {
+            const params = new URLSearchParams({ race_year: year, enabled: String(enabled) });
+            if (sheetUrl) params.set('sheet_url', sheetUrl);
+            const r = await fetch(`/api/siberman/admin/google-sheet-toggle?${params}`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+            showOk(enabled ? `Синхронизация с Google Таблицей включена для года ${year}.` : `Синхронизация выключена для года ${year}.`);
+            prefillGsheetStatus();
+        } catch (e) {
+            showErr(e.message);
+        }
+    }
+    $('btn-gsheet-enable').addEventListener('click', () => setGsheetEnabled(true));
+    $('btn-gsheet-disable').addEventListener('click', () => setGsheetEnabled(false));
 
     $('btn-upload').addEventListener('click', async () => {
         const file = $('file-input').files[0];

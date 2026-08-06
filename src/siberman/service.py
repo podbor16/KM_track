@@ -475,6 +475,76 @@ def recompute_totals_ranks_records(conn, race_year: int, participants: list[dict
     _recompute_records(conn, race_year, pid_to_participant, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
 
 
+def apply_parse_result_upsert(conn, result: ParseResult) -> dict:
+    """То же самое, что делает apply_to_db() ПОСЛЕ clear_race_year() —
+    upsert участников/checkpoint_times/transitions без удаления (id
+    участников стабилен между вызовами, см. upsert_participant() —
+    ON DUPLICATE KEY UPDATE). Используется live-синхронизацией из Google
+    Таблицы (google_sheet_sync.py) по тем же причинам, что и Copernico
+    (copernico_run.py): полный clear_race_year() коммитится немедленно
+    (autocommit=True) — на каждом цикле опроса публичная страница на долю
+    секунды показывала бы пустую таблицу. apply_to_db() (ручная Excel-
+    загрузка) НЕ тронута — сознательно оставлена с полным пересозданием
+    (единственная потеря upsert-режима: участник, полностью УДАЛЁННЫЙ из
+    таблицы, не убирается из БД сам собой — принятый компромисс).
+
+    Принимает уже открытое соединение (вызывающий код сам решает,
+    коммитить/закрывать) — в отличие от apply_to_db(), которое управляет
+    соединением самостоятельно."""
+    checkpoints = get_checkpoints(conn, result.race_year)
+    cp_id_map: dict[tuple[str, int], int] = {
+        (row["stage"], row["seq"]): row["id"] for row in checkpoints
+    }
+
+    cp_key_to_pid: dict[str, int] = {}
+    upserted_parts = 0
+    upserted_times = 0
+
+    for p in result.participants:
+        pid = upsert_participant(conn, p)
+        cp_key = p.get("_cp_key", p["bib"])
+        cp_key_to_pid[cp_key] = pid
+        upserted_parts += 1
+
+        handicap = result.handicaps.get(cp_key)
+        if handicap is not None:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE participants SET bike_day2_handicap_s=%s WHERE id=%s",
+                (handicap, pid),
+            )
+
+        cp_times = result.checkpoint_times.get(cp_key, {})
+        for (stage, seq), cumulative_s in cp_times.items():
+            cp_id = cp_id_map.get((stage, seq))
+            if cp_id is None:
+                log.warning(f"No checkpoint for stage={stage} seq={seq}")
+                continue
+            prev_cum = cp_times.get((stage, seq - 1))
+            split_s: Optional[int] = None
+            if cumulative_s is not None and prev_cum is not None:
+                split_s = cumulative_s - prev_cum
+            elif cumulative_s is not None and seq == 1:
+                split_s = cumulative_s
+            upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, split_s)
+            upserted_times += 1
+
+        for zone, dur in result.transitions.get(cp_key, {}).items():
+            upsert_transition(conn, pid, zone, dur)
+
+    participants_meta: list[dict] = []
+    pid_cp_times: dict[int, dict] = {}
+    for p in result.participants:
+        cp_key = p.get("_cp_key", p["bib"])
+        pid = cp_key_to_pid[cp_key]
+        participants_meta.append({**p, "id": pid})
+        pid_cp_times[pid] = result.checkpoint_times.get(cp_key, {})
+
+    recompute_totals_ranks_records(conn, result.race_year, participants_meta, pid_cp_times)
+
+    return {"ok": True, "participants": upserted_parts, "checkpoint_times": upserted_times}
+
+
 def apply_to_db(result: ParseResult) -> dict:
     """
     Записать ParseResult в БД:

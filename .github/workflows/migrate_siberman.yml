@@ -53,6 +53,9 @@ jobs:
             # Переключатель записи live-данных Copernico для бегового этапа (админка)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/010_copernico_run_toggle.sql
 
+            # Live-синхронизация из Google Таблицы (альтернатива Excel, переключается в админке)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/011_google_sheet_sync.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

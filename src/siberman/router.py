@@ -16,7 +16,9 @@ from src.siberman.db import (
     get_siberman_connection, get_results_for_year, set_race_start,
     get_public_race_year, set_public_race_year, set_stage_starts, get_all_records,
     get_copernico_run_enabled, set_copernico_run_enabled,
+    get_google_sheet_config, set_google_sheet_config,
 )
+from src.siberman.google_sheet_sync import extract_sheet_id
 from src.core.auth import api_require_auth
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -188,6 +190,47 @@ async def copernico_run_toggle_endpoint(race_year: int, enabled: bool, user: str
     finally:
         conn.close()
     return {"ok": True, "race_year": race_year, "enabled": enabled}
+
+
+@router.get("/api/siberman/admin/google-sheet-status")
+async def google_sheet_status_endpoint(race_year: int, user: str = Depends(api_require_auth)):
+    """Текущие настройки live-синхронизации из Google Таблицы (альтернатива
+    Excel, переключается в админке) — сам poller-процесс отдельно, здесь
+    только сохранённый ID таблицы и флаг, которые google_sheet_sync.py
+    проверяет перед применением."""
+    conn = get_siberman_connection()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        cfg = get_google_sheet_config(conn, race_year)
+    finally:
+        conn.close()
+    return {"race_year": race_year, **cfg}
+
+
+@router.post("/api/siberman/admin/google-sheet-toggle")
+async def google_sheet_toggle_endpoint(race_year: int, enabled: bool, sheet_url: str = "",
+                                        user: str = Depends(api_require_auth)):
+    """Включить/выключить live-синхронизацию из Google Таблицы без
+    остановки самого poller-процесса — не трогает apply_to_db/
+    clear_race_year (Excel-путь), выключатель только для отдельного
+    google_sheet_sync.py::sync_google_sheet(). sheet_url — полная ссылка
+    или голый ID; при enabled=True обязателен (свой либо уже сохранённый
+    ранее — если не передан, используется текущий из БД)."""
+    conn = get_siberman_connection()
+    if conn is None:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        if sheet_url:
+            sheet_id = extract_sheet_id(sheet_url)
+        else:
+            sheet_id = get_google_sheet_config(conn, race_year)["sheet_id"]
+        if enabled and not sheet_id:
+            raise HTTPException(status_code=422, detail="Укажите ссылку на Google Таблицу")
+        set_google_sheet_config(conn, race_year, sheet_id, enabled)
+    finally:
+        conn.close()
+    return {"ok": True, "race_year": race_year, "sheet_id": sheet_id, "enabled": enabled}
 
 
 @router.post("/api/siberman/admin/upload")

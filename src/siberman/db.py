@@ -95,6 +95,40 @@ def set_copernico_run_enabled(conn, race_year: int, enabled: bool) -> None:
     )
 
 
+def get_google_sheet_config(conn, race_year: int) -> dict:
+    """Настройки live-синхронизации из Google-таблицы (альтернатива Excel,
+    переключается в админке) — см. миграцию 011."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT google_sheet_id, google_sheet_sync_enabled, google_sheet_last_hash "
+        "FROM race_config WHERE race_year=%s",
+        (race_year,)
+    )
+    row = cur.fetchone()
+    if row is None:
+        return {"sheet_id": None, "enabled": False, "last_hash": None}
+    return {"sheet_id": row[0], "enabled": bool(row[1]), "last_hash": row[2]}
+
+
+def set_google_sheet_config(conn, race_year: int, sheet_id: Optional[str], enabled: bool) -> None:
+    """Требует уже существующую строку race_config (см. set_stage_starts)."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE race_config SET google_sheet_id=%s, google_sheet_sync_enabled=%s WHERE race_year=%s",
+        (sheet_id, enabled, race_year)
+    )
+
+
+def set_google_sheet_last_hash(conn, race_year: int, sheet_hash: Optional[str]) -> None:
+    """Хэш последнего ПРИМЕНЁННОГО содержимого .xlsx-экспорта — переживает
+    рестарт поллер-процесса, чтобы не переприменять неизменившиеся данные."""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE race_config SET google_sheet_last_hash=%s WHERE race_year=%s",
+        (sheet_hash, race_year)
+    )
+
+
 def get_latest_race_year(conn) -> Optional[int]:
     """Последний (по номеру) год с загруженными данными — фолбэк для
     get_public_race_year(), если публичный год ещё ни разу не задан явно."""
