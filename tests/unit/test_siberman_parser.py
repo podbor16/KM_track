@@ -270,3 +270,17 @@ def test_invalid_gender_reports_error_with_coordinate_and_defaults_to_male():
     assert "E2" in result.errors[0]
     assert "Мужской" in result.errors[0]
     assert result.participants[0]["gender"] == "M"
+
+
+def test_bib_as_float_normalized_to_integer_string():
+    # Google Sheets при экспорте в .xlsx отдаёт числовые ячейки как float
+    # (50.0), даже когда в самой таблице виден просто "50" — Excel обычно
+    # даёт int напрямую через openpyxl. Без нормализации bib="50.0" не
+    # совпадал бы с уже существующим участником в БД (UNIQUE race_year+
+    # bib+relay_stage) на live-синхронизации — задваивал участников на
+    # каждом цикле (2026-08-06, найдено на реальных данных).
+    row = ["Лично", 50.0, "Жуков", "Александр", "М", "0:24:00"]
+    data = _build_workbook(BASIC_HEADERS, row)
+    result = parse_excel(data, 2026)
+    assert result.errors == []
+    assert result.participants[0]["bib"] == "50"

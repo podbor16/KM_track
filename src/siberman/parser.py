@@ -269,6 +269,15 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
             coord = row_cells[first_ci].coordinate
             result.errors.append(f"{coord}: в строке есть данные, но не заполнен номер участника — строка пропущена")
             continue
+        # Google Sheets при экспорте в .xlsx отдаёт числовые ячейки как
+        # float даже для целых номеров (Excel обычно даёт int напрямую) —
+        # без нормализации bib_raw=50.0 превращался бы в "50.0" (не "50")
+        # и не совпадал с уже существующим участником в БД (UNIQUE
+        # race_year+bib+relay_stage) — на каждом цикле live-синхронизации
+        # создавал НОВУЮ строку вместо апдейта существующей, участники
+        # задваивались (2026-08-06, найдено на реальных данных).
+        if isinstance(bib_raw, float) and bib_raw.is_integer():
+            bib_raw = int(bib_raw)
         bib = str(bib_raw).strip()
 
         def _cell(f: str, default: str = "", _row=row) -> str:
