@@ -258,6 +258,34 @@ check('computeStageTimerState — «Следующий этап Вело Ден�
     assert.strictEqual(state.label, 'Вело День 2');
 });
 
+check('computeStageTimerState — день 1 закрыт, известно ПЛАНОВОЕ время старта вело-дня-2 (в будущем) — обратный отсчёт, не статичный текст', () => {
+    // Запрошено пользователем 2026-08-06: раньше после закрытия дня 1
+    // виджет всегда показывал статичный "Следующий этап: Вело День 2" —
+    // теперь, если известно плановое время старта (bike2_start в конфиге,
+    // не по факту прихода участника), должен тикать обратный отсчёт до него.
+    // Лейбл — просто название этапа, без "Следующий этап"/"До начала"
+    // (запрошено пользователем: излишне, название + отсчёт достаточно).
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const dnfAfterSwim = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const now = Date.now();
+    const scheduledBike2 = now + 2 * 3600 * 1000; // через 2 часа
+    setRaceData([dnfAfterSwim], [], now - 100000, scheduledBike2, null);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'countdown');
+    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.startEpoch, scheduledBike2);
+});
+check('computeStageTimerState — день 1 закрыт, плановое время вело-дня-2 УЖЕ ПРОШЛО — статичный текст, не отрицательный отсчёт', () => {
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const dnfAfterSwim = mkTimerInd(1, { status: 'dnf', cp: { swim: { [maxSeqSwim]: 3000 } }, swim_s: 3000 });
+    const now = Date.now();
+    const pastScheduled = now - 3600 * 1000; // час назад — расписание уже "просрочено"
+    setRaceData([dnfAfterSwim], [], now - 100000, pastScheduled, null);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'next');
+    assert.strictEqual(state.label, 'Вело День 2');
+});
+
 check('computeStageTimerState — race_start ещё в будущем — обратный отсчёт до старта, не "День 1"', () => {
     // 2026-08-04: раньше это ушло бы в "День 1"-таймер (naive Date.now()-start
     // на будущий race_start), найдено на реальных тестовых данных со
@@ -2990,6 +3018,36 @@ check('forecastTime() — target_dist == dist_so_far возвращает то �
     assert.strictEqual(sandbox.forecastTime(72, 8368, 72), 8368);
 });
 
+// ── fmtClock() / forecastCellHtml() — астрономический прогноз, вторая
+// строка в скобках под "~ЧЧ:ММ:СС" (2026-08-06). Date.now() мокается ЧЕРЕЗ
+// vm.runInContext (не прямым sandbox.Date.now=...) — сборка globalThis.Date
+// в контексте vm иначе не видна снаружи до первого runInContext-вызова.
+// new Date(y,m,d,h,mi,s) конструируется в локальной таймзоне ЭТОГО же
+// процесса, что и getHours()/getMinutes() внутри sandbox (общая система) —
+// тест детерминирован независимо от того, в каком часовом поясе он запущен.
+check('fmtClock() — секунды до события + "сейчас" → часы:минуты:секунды по местному времени', () => {
+    const fixedNow = new Date(2026, 0, 1, 10, 0, 0).getTime();
+    vm.runInContext(`Date.now = () => ${fixedNow};`, sandbox);
+    // 8484с = 2ч21м24с → 10:00:00 + 2:21:24 = 12:21:24.
+    assert.strictEqual(sandbox.fmtClock(8484), '12:21:24');
+    vm.runInContext('Date.now = () => (new Date()).getTime();', sandbox);
+});
+check('fmtClock() — remainingS=null возвращает null', () => {
+    assert.strictEqual(sandbox.fmtClock(null), null);
+});
+check('forecastCellHtml() — две строки: "~ЧЧ:ММ:СС" и "(ЧЧ:ММ:СС)" астрономического времени', () => {
+    const fixedNow = new Date(2026, 0, 1, 10, 0, 0).getTime();
+    vm.runInContext(`Date.now = () => ${fixedNow};`, sandbox);
+    // forecastTime(72, 8368, 145) = 16852с (см. тест forecastTime() выше).
+    // remaining = 16852 - 8368 = 8484с → 10:00:00 + 2:21:24 = 12:21:24.
+    const html = sandbox.forecastCellHtml(72, 8368, 145);
+    assert.strictEqual(html, '<span class="forecast-cell">~4:40:52</span><span class="forecast-clock">(12:21:24)</span>');
+    vm.runInContext('Date.now = () => (new Date()).getTime();', sandbox);
+});
+check('forecastCellHtml() — недостаточно данных (dist_so_far=0) возвращает пустую строку', () => {
+    assert.strictEqual(sandbox.forecastCellHtml(0, 100, 145), '');
+});
+
 // ── renderStage() — колонка "Прогноз финиша" (2026-08-06) ──
 check('renderStage(\'bike1\') — активный участник посреди этапа показывает "~" прогноз финиша', () => {
     // pos: seq=3 (72 км), value=8368с (2:19:28). Прогноз на 145 км
@@ -3006,6 +3064,10 @@ check('renderStage(\'bike1\') — активный участник посред
     sandbox.renderStage('bike1');
     const html = domGetAppHtml();
     assert.ok(html.includes('forecast-cell">~4:40:52<'), `ожидался прогноз ~4:40:52: ${html}`);
+    // Вторая строка — астрономическое время в скобках (не мокаем Date.now
+    // здесь, точное значение зависит от реального времени теста — важен
+    // только формат "(ЧЧ:ММ:СС)").
+    assert.ok(/forecast-clock">\(\d{2}:\d{2}:\d{2}\)</.test(html), `ожидалась вторая строка "(ЧЧ:ММ:СС)" астрономического времени: ${html}`);
 });
 check('renderStage(\'bike1\') — финишировавший этап НЕ показывает прогноз (ячейка пустая)', () => {
     const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
@@ -3054,6 +3116,92 @@ check('renderStage(\'bike1\') — заголовок таблицы содерж
     const cpIdx = html.indexOf('>Отметка<');
     assert.ok(speedIdx > -1 && forecastIdx > speedIdx && cpIdx > forecastIdx,
         `ожидался порядок колонок Скорость → Прогноз финиша → Отметка: speedIdx=${speedIdx} forecastIdx=${forecastIdx} cpIdx=${cpIdx}`);
+});
+
+// ── Колонка "Прогноз финиша" ЦЕЛИКОМ (не только пустая ячейка) скрыта,
+// пока этап не начался, и снова скрыта, когда все активные финишировали
+// (2026-08-06) ──
+check('renderStage(\'bike1\') — этап ещё НИ У КОГО не начался: колонка "Прогноз финиша" отсутствует целиком', () => {
+    const r1 = mkTimerInd('9', { swim_s: null, bike1_s: null, cp: {} });
+    const r2 = mkTimerInd('10', { swim_s: null, bike1_s: null, cp: {} });
+    setRaceData([r1, r2], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('Прогноз финиша'), `колонка не должна рендериться, пока никто не начал этап: ${html}`);
+});
+check('renderStage(\'bike1\') — ВСЕ активные финишировали этап: колонка "Прогноз финиша" снова скрыта целиком', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const r1 = mkTimerInd('9', { swim_s: 0, bike1_s: 9000, cp: { bike_day1: { [n1]: 9000 } } });
+    const r2 = mkTimerInd('10', { swim_s: 0, bike1_s: 9500, cp: { bike_day1: { [n1]: 9500 } } });
+    setRaceData([r1, r2], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('Прогноз финиша'), `колонка должна скрыться, когда все активные финишировали: ${html}`);
+});
+check('renderStage(\'bike1\') — один финишировал, другой ещё в процессе: колонка "Прогноз финиша" ОСТАЁТСЯ видна', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const finished = mkTimerInd('9', { swim_s: 0, bike1_s: 9000, cp: { bike_day1: { [n1]: 9000 } } });
+    const active = mkTimerInd('10', { swim_s: 0, bike1_s: 8368, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    setRaceData([finished, active], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('Прогноз финиша'), `колонка должна остаться, пока не ВСЕ активные финишировали: ${html}`);
+    const activeRow = html.slice(html.indexOf('bib-cell">10<'));
+    assert.ok(activeRow.includes('forecast-cell'), `у ещё активного (10) должен быть виден прогноз: ${activeRow}`);
+});
+check('renderStage(\'bike1\') — DNF не мешает скрыть колонку, если ВСЕ ОСТАЛЬНЫЕ активные финишировали', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const finished = mkTimerInd('9', { swim_s: 0, bike1_s: 9000, cp: { bike_day1: { [n1]: 9000 } } });
+    const dnf = mkTimerInd('11', { status: 'dnf', swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    setRaceData([finished, dnf], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('Прогноз финиша'), `DNF не должен считаться "ещё не финишировавшим" — колонка должна скрыться: ${html}`);
+});
+
+// ── Строка поиска участника (номер/фамилия) — под индикаторами, не
+// фильтр (2026-08-06). document.querySelectorAll в этом тест-харнессе —
+// заглушка (всегда []), поэтому подсветку/скролл (реальный DOM) здесь не
+// проверить — тестируем то, что можно: разметку input'а в HTML-строке,
+// позицию (после ".stats-v2"), и что ввод (onParticipantSearchInput)
+// переживает следующий рендер (значение вшито в html, не живёт в DOM).
+check('buildStats() — строка поиска участника присутствует и стоит СРАЗУ ПОСЛЕ .stats-v2', () => {
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: {} });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('id="participantSearch"') && html.includes('class="search-input"'),
+        `ожидался инпут поиска участника: ${html}`);
+    const statsCloseIdx = html.indexOf('</div>', html.indexOf('class="stats-v2"'));
+    const searchIdx = html.indexOf('search-bar');
+    assert.ok(searchIdx > -1 && searchIdx > statsCloseIdx,
+        `строка поиска должна идти сразу после блока индикаторов: statsCloseIdx=${statsCloseIdx} searchIdx=${searchIdx}`);
+});
+check('onParticipantSearchInput() — введённое значение сохраняется в поле при следующем рендере (не сбрасывается поллингом)', () => {
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: {} });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    sandbox.onParticipantSearchInput('88');
+    sandbox.renderStage('bike1'); // имитация повторного рендера (poll/смена фильтра)
+    const html = domGetAppHtml();
+    assert.ok(html.includes('value="88"'), `значение "88" должно сохраниться после повторного рендера: ${html}`);
+    sandbox.onParticipantSearchInput(''); // сброс, чтобы не аффектить следующие тесты
+});
+check('onParticipantSearchInput() — спецсимволы в запросе экранируются, не ломают HTML', () => {
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: {} });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.onParticipantSearchInput('Иванов "Заяц"');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('value="Иванов &quot;Заяц&quot;"'), `кавычки должны быть экранированы: ${html}`);
+    sandbox.onParticipantSearchInput(''); // сброс, чтобы не аффектить следующие тесты
 });
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

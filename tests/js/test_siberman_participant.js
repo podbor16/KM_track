@@ -451,6 +451,9 @@ check('renderIndividual() — будущие КТ показывают "~" пр�
     const section = stageSectionHtml('Вело День 1');
     assert.ok(section.includes('forecast-cell">~2:00:00<'), `ожидался прогноз ~2:00:00 на 72 км: ${section}`);
     assert.ok(section.includes('forecast-cell">~4:01:40<'), `ожидался прогноз ~4:01:40 на финиш (145 км): ${section}`);
+    // Вторая строка — астрономическое время в скобках (формат, не точное
+    // значение — зависит от реального времени запуска теста).
+    assert.ok(/forecast-clock">\(\d{2}:\d{2}:\d{2}\)</.test(section), `ожидалась вторая строка "(ЧЧ:ММ:СС)" астрономического времени: ${section}`);
     // Строка с прогнозом всё равно "pending" — Сплит/Темп остаются "—".
     const row72 = section.slice(section.indexOf('72 км'));
     assert.ok(row72.slice(0, 200).includes('>—<'), `Сплит/Темп у будущей КТ должны остаться "—": ${row72.slice(0, 200)}`);

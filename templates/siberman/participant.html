@@ -233,6 +233,8 @@
            отдельные файлы без общего CSS, поэтому дублируется). */
         .forecast-cell { color: #b8860b; }
         [data-theme="dark"] .forecast-cell { color: #e0b23c; }
+        .forecast-clock { display: block; font-size: 10px; color: #b8860b; }
+        [data-theme="dark"] .forecast-clock { color: #e0b23c; }
 
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
@@ -444,12 +446,12 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         // строки (не только ближайшей будущей — все future-строки получают
         // свой прогноз). Только для реально активных (не DNF/DSQ/DNS) —
         // иначе прогноз обещал бы финиш тому, кто уже сошёл.
-        const forecastS = (pending && pos && r.status === 'active')
-            ? forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
-            : null;
+        const forecastHtml = (pending && pos && r.status === 'active')
+            ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
+            : '';
         const cumCell = cumDisplay != null
             ? fmtTime(cumDisplay)
-            : (forecastS != null ? `<span class="forecast-cell">~${fmtTime(forecastS)}</span>` : '—');
+            : (forecastHtml || '—');
 
         rows += `<tr class="${pending ? 'pending' : ''}">
             <td class="cp-pinned">${CHECKPOINT_LABELS[dbStage][seq]}</td>

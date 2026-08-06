@@ -349,6 +349,18 @@
            (DNF/DSQ) (запрошено пользователем 2026-07-23, п.2 v5 — заменяет
            набор разрозненных плашек Участников/Финишировали/Эстафет/DNF). */
         .stats-v2 { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        /* Поиск участника (номер/фамилия) — под индикаторами, не фильтр:
+           места/ранги не пересчитываются, только подсветка строки в уже
+           отрисованной таблице (2026-08-06). */
+        .search-bar { margin-bottom: 16px; }
+        .search-input {
+            width: 100%; max-width: 320px; padding: 8px 14px; border-radius: 20px;
+            border: 1px solid var(--border); background: var(--bg2); color: var(--text);
+            font-family: inherit; font-size: 13px;
+        }
+        .search-input::placeholder { color: var(--muted); }
+        .search-input:focus { outline: none; border-color: var(--blue); }
+        tr.search-hit { outline: 2px solid var(--red); outline-offset: -2px; }
         .stat-card {
             background: var(--bg2); border: 1px solid var(--border);
             border-radius: var(--radius); padding: 10px 18px; min-width: 130px;
@@ -473,6 +485,11 @@
            смыслом "рекорд" (2026-08-06). */
         .forecast-cell { color: #b8860b; }
         [data-theme="dark"] .forecast-cell { color: #e0b23c; }
+        /* Астрономическое время прогноза — вторая строка в скобках под
+           основным ("~ЧЧ:ММ:СС") значением, тот же паттерн, что
+           .time-gap-sub под .time-main (2026-08-06). */
+        .forecast-clock { display: block; font-size: 10px; color: #b8860b; }
+        [data-theme="dark"] .forecast-clock { color: #e0b23c; }
         .muted-sub { font-size: 11px; color: var(--muted); }
 
         /* Stage icon dots in overall table */
@@ -687,7 +704,56 @@ function buildStats(individual, relayStats, stageKey, maxStage) {
         </div>`;
     }
     html += `</div>`;
+    html += searchBarHtml();
     return html;
+}
+
+// Строка поиска участника по номеру/фамилии — под индикаторами (запрошено
+// пользователем 2026-08-06). НЕ фильтр: места/ранги считаются как обычно
+// по активным фильтрам формата/пола, поиск только подсвечивает совпавшие
+// строки уже отрисованной таблицы и прокручивает к первой — искать и
+// сравнивать позиции участника в общем контексте это разные задачи, поиск
+// не должен искажать второе ради первого. _searchQuery переживает
+// перерисовку (poll каждые 20с/смена фильтра/таба) — значение вшито в
+// html при каждой сборке buildStats(), а не хранится в живом DOM-инпуте.
+let _searchQuery = '';
+function escapeAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+function searchBarHtml() {
+    return `<div class="search-bar">
+        <input type="text" class="search-input" id="participantSearch" placeholder="Поиск по номеру или фамилии…"
+            autocomplete="off" value="${escapeAttr(_searchQuery)}" oninput="onParticipantSearchInput(this.value)">
+    </div>`;
+}
+// Совпадение — номер СОВПАДАЕТ ЦЕЛИКОМ (не подстрокой: иначе "1" подсветил
+// бы номера 1,10,11,21...) ИЛИ фамилия/имя содержит запрос подстрокой.
+function onParticipantSearchInput(value) {
+    _searchQuery = value;
+    applyParticipantSearch();
+}
+// shouldScroll=false при вызове из render() (live-поллинг каждые 20с/смена
+// фильтра) — там подсветку нужно восстановить (innerHTML стирает классы),
+// но прокрутка к результату НЕ нужна: пользователь мог уже сам проскроллить
+// читать что-то другое, дёргать его вид каждые 20с было бы навязчиво.
+// Прокрутка — только по реальному вводу в поле (onParticipantSearchInput).
+function applyParticipantSearch(shouldScroll = true) {
+    const q = _searchQuery.trim().toLowerCase();
+    const rows = document.querySelectorAll('#app tbody tr');
+    let first = null;
+    rows.forEach(tr => {
+        tr.classList.remove('search-hit');
+        if (!q) return;
+        const bibCell = tr.querySelector('.bib-cell');
+        const nameCell = tr.querySelector('.name-cell');
+        const bib = bibCell ? bibCell.textContent.trim().toLowerCase() : '';
+        const name = nameCell ? nameCell.textContent.trim().toLowerCase() : '';
+        if ((bib && bib === q) || (name && name.includes(q))) {
+            tr.classList.add('search-hit');
+            if (!first) first = tr;
+        }
+    });
+    if (first && shouldScroll) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Время + отставание в одной ячейке (не отдельной колонкой) — п.3/4 v5,
@@ -1065,6 +1131,22 @@ function renderStage(stage) {
         return;
     }
 
+    // Колонка "Прогноз финиша" целиком (не только пустая ячейка) скрыта,
+    // пока этап ещё вообще не начался (ни у кого нет ни одной КТ — до
+    // первого прогноза колонка бессмысленна и просто визуальный шум), и
+    // снова скрыта, когда ВСЕ реально активные (не DNF/DSQ/DNS) участники
+    // уже финишировали этап (тогда всем ячейкам всё равно быть пустыми —
+    // запрошено пользователем 2026-08-06, до этого колонка оставалась
+    // видимой, но пустой, в обоих случаях). DNF/DSQ не участвуют в проверке
+    // "все финишировали" — они никогда не финишируют, иначе колонка
+    // никогда бы не скрывалась при живом DNF на этапе.
+    const allStageEntries = [...rows, ...relayMembers];
+    const anyStageStarted = allStageEntries.some(r => !!stagePos(r, dbStage));
+    const allActiveFinished = allStageEntries
+        .filter(r => r._rawStatus === 'active')
+        .every(r => stagePos(r, dbStage)?.seq === maxSeq);
+    const showForecastColumn = anyStageStarted && !allActiveFinished;
+
     // Отставание — общий пул личников этой роли + эстафетчиков той же роли,
     // т.к. они соревнуются на этапе вместе (как и старт вело-2 в задаче 2).
     // Настоящий DNF/DSQ (_rawStatus) исключается из пула целиком — не
@@ -1158,7 +1240,7 @@ function renderStage(stage) {
         // пустая даже у явно активных "На трассе"). "Финиш" определяем так
         // же, как statusBadge/activeProgressBadge — pos.seq===maxSeq.
         const forecastCell = (pos && pos.seq !== maxSeq && r.status === 'active')
-            ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
+            ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq])
             : '';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
         // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
@@ -1182,7 +1264,7 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib], recordCats)}</td>
             <td class="r muted">${metaCell}</td>
-            <td class="r">${forecastCell}</td>
+            ${showForecastColumn ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage, started)}</td>
@@ -1200,7 +1282,7 @@ function renderStage(stage) {
         // См. buildIndividualStageRow — тот же прогноз, та же поправка на
         // t/noTime (не сигнализирует "не финишировал", см. комментарий там).
         const forecastCell = (pos && pos.seq !== maxSeq && m.status === 'active')
-            ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
+            ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq])
             : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
@@ -1219,7 +1301,7 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`], recordCats)}</td>
             <td class="r muted">${meta}</td>
-            <td class="r">${forecastCell}</td>
+            ${showForecastColumn ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
             <td>${relayMemberStatusBadge(m, pos, maxSeq, started)}</td>
@@ -1255,7 +1337,7 @@ function renderStage(stage) {
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th>
-        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th class="r">Прогноз финиша</th><th>Отметка</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th>${showForecastColumn ? '<th class="r">Прогноз финиша</th>' : ''}<th>Отметка</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
@@ -2515,16 +2597,26 @@ function stageIsPending(dbStage) {
 // (см. комментарий выше), bike_day2/run идут по отдельности как раньше.
 // startOffset() === null значит "ещё не начался" (никто не вошёл), pending()
 // значит "кто-то ещё активен внутри".
+// scheduledEpoch — плановое время старта СЛЕДУЮЩЕГО дня (не по факту
+// прихода первого участника, а по расписанию оргов, см. _bike2StartEpoch/
+// _runStartEpoch) — используется ТОЛЬКО для обратного отсчёта после того,
+// как предыдущий день уже полностью закрыт (никого не осталось на
+// трассе), см. computeStageTimerState. У "День 1" его нет — это самый
+// первый день, для него уже есть отдельный отсчёт до _raceStartEpoch.
 const WIDGET_STAGES = [
-    { label: 'День 1', startOffset: () => 0, pending: () => stageIsPending('swim') || stageIsPending('bike_day1') },
-    { label: 'Вело День 2', startOffset: () => stageStartOffset('bike_day2'), pending: () => stageIsPending('bike_day2') },
-    { label: 'Бег', startOffset: () => stageStartOffset('run'), pending: () => stageIsPending('run') },
+    { label: 'День 1', startOffset: () => 0, pending: () => stageIsPending('swim') || stageIsPending('bike_day1'), scheduledEpoch: () => null },
+    { label: 'Вело День 2', startOffset: () => stageStartOffset('bike_day2'), pending: () => stageIsPending('bike_day2'), scheduledEpoch: () => _bike2StartEpoch },
+    { label: 'Бег', startOffset: () => stageStartOffset('run'), pending: () => stageIsPending('run'), scheduledEpoch: () => _runStartEpoch },
 ];
 
 // Идём по WIDGET_STAGES по порядку: первый ещё не закрытый элемент и есть
 // текущее состояние виджета — тикающий секундомер (уже начался и кто-то
-// внутри активен), "следующий этап" (ещё не начался — предыдущий день уже
-// закрыт, этот ещё нет) или, если все элементы закрыты, гонка завершена.
+// внутри активен), обратный отсчёт до планового старта следующего дня
+// (предыдущий день закрыт — никого не осталось на трассе, — и известно
+// плановое время старта следующего, оно ещё не наступило, запрошено
+// пользователем 2026-08-06), просто "следующий этап" статичным текстом
+// (плановое время неизвестно или уже прошло, а по факту ещё никто не
+// стартовал) или, если все элементы закрыты, гонка завершена.
 function computeStageTimerState() {
     if (!_raceStartEpoch || !_data) return null;
     // Фактическое время старта ещё не наступило — обратный отсчёт до гонки
@@ -2532,10 +2624,14 @@ function computeStageTimerState() {
     // считал "прошедшее" время от race_start, даже если та дата ещё в
     // будущем — с любым будущим race_start это ушло бы в отрицательные/
     // абсурдные значения при наивном Date.now()-start).
-    if (Date.now() < _raceStartEpoch) return { type: 'countdown', startEpoch: _raceStartEpoch };
+    if (Date.now() < _raceStartEpoch) return { type: 'countdown', label: 'До старта', startEpoch: _raceStartEpoch };
     for (const s of WIDGET_STAGES) {
         const off = s.startOffset();
-        if (off == null) return { type: 'next', label: s.label };
+        if (off == null) {
+            const sched = s.scheduledEpoch();
+            if (sched != null && Date.now() < sched) return { type: 'countdown', label: s.label, startEpoch: sched };
+            return { type: 'next', label: s.label };
+        }
         if (s.pending()) return { type: 'timer', label: s.label, startEpoch: _raceStartEpoch + off * 1000 };
     }
     return { type: 'done' };
@@ -2552,7 +2648,7 @@ function renderStageTimers() {
     el.style.display = '';
     if (state.type === 'countdown') {
         el.innerHTML = `<div class="stage-timer stage-timer--countdown" data-countdown="${state.startEpoch}">
-            <span class="stage-timer-lbl">До старта</span>
+            <span class="stage-timer-lbl">${state.label}</span>
             <span class="stage-timer-val">00:00:00</span>
         </div>`;
         tickStageTimers();
@@ -2707,6 +2803,7 @@ function render() {
         else renderPositionChart();
     }
     else renderStage(_tab);
+    applyParticipantSearch(false);
     autoScrollTabs();
     syncUrlFromState();
 }

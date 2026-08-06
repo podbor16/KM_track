@@ -376,6 +376,36 @@ function forecastTime(distSoFarKm, elapsedS, targetDistKm) {
     return Math.round(elapsedS * (targetDistKm / distSoFarKm));
 }
 
+// Астрономическое (по часам) время прогноза — вторая строка рядом с
+// forecastTime()-прогнозом в скобках, 2026-08-06. remainingS — сколько ещё
+// секунд идти ДО прогнозируемой точки (forecastS - elapsedSoFar, т.е. уже
+// "сколько осталось" от прогноза, а не сам прогноз целиком) — плюс "сейчас"
+// даёт момент по часам, когда участник должен там оказаться. Этапы гонки
+// не переходят за полночь (лимит прохождения на каждый), поэтому только
+// часы:минуты:секунды, без даты. Локальное время браузера зрителя — то же
+// самое, что и остальные "живые" часы на этой странице (никакого сравнения
+// часовых поясов на сервере нет).
+function fmtClock(remainingS) {
+    if (remainingS == null) return null;
+    const d = new Date(Date.now() + remainingS * 1000);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+// Готовая разметка ячейки прогноза — "~ЧЧ:ММ:СС" первой строкой + "(ЧЧ:ММ:СС)"
+// астрономического времени второй (2026-08-06) — общая для results.html
+// (колонка "Прогноз финиша") и participant.html (колонка "Общее время" для
+// будущих КТ), чтобы формат не разошёлся между двумя файлами. CSS-классы
+// .forecast-cell/.forecast-clock объявлены в каждом файле отдельно (нет
+// общего стиля на сайте), но сама разметка — отсюда, из одного места.
+// '' (не null), если forecastTime() не смог посчитать — вызывающий код сам
+// решает, чем заменить пустую строку (обычно '' или '—').
+function forecastCellHtml(distSoFarKm, elapsedS, targetDistKm) {
+    const fs = forecastTime(distSoFarKm, elapsedS, targetDistKm);
+    if (fs == null) return '';
+    const clock = fmtClock(fs - elapsedS);
+    return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clock})</span>`;
+}
+
 // То же самое, но возвращает ЧИСЛО (не форматированную строку) для графика:
 // плавание — сек/100м, вело — км/ч, бег — сек/км. null, если сплит
 // отсутствует или дистанция сплита нулевая (не должно случаться, но КТ
