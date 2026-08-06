@@ -455,6 +455,17 @@ check('renderIndividual() — будущие КТ показывают "~" пр�
     const row72 = section.slice(section.indexOf('72 км'));
     assert.ok(row72.slice(0, 200).includes('>—<'), `Сплит/Темп у будущей КТ должны остаться "—": ${row72.slice(0, 200)}`);
 });
+check('renderIndividual() — DNF с частичным прогрессом: пройденная КТ показывает реальное время, будущие остаются "—" без прогноза', () => {
+    const r = { bib: 3, gender: 'M', status: 'dnf', cp: { bike_day1: { 1: 500, 2: 1000 } }, swim_s: 0, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'stage';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Вело День 1');
+    const row10 = section.slice(section.indexOf('10 км'), section.indexOf('72 км'));
+    assert.ok(row10.includes('>16:40<') || row10.includes('0:16:40'), `у DNF пройденная КТ (10 км, 1000с) должна показывать реальное время: ${row10}`);
+    assert.ok(!section.includes('forecast-cell'), `у DNF не должно быть прогноза ни на одной будущей КТ: ${section}`);
+});
 check('renderIndividual() — этап ещё не начат вовсе: все будущие КТ остаются "—" без прогноза', () => {
     const r = { bib: 3, gender: 'M', status: 'active', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
     const data = { individual: [r], relay: [] };
