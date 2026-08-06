@@ -85,7 +85,12 @@
             width: 34px; height: 34px; border-radius: var(--radius); cursor: pointer;
             font-size: 16px; display: flex; align-items: center; justify-content: center;
         }
-        .content { padding: 20px; max-width: 780px; margin: 0 auto 48px; }
+        /* max-width поднят с 780 до 1200 (2026-08-06) — карточка КТ (9-10
+           колонок) не помещалась и требовала горизонтального скролла даже
+           на десктопе, в отличие от таблиц results.html (там у .content
+           вообще нет max-width). Имя/статы/бегунок — компактные flex-блоки,
+           от лишней ширины контейнера не ломаются, просто больше воздуха. */
+        .content { padding: 20px; max-width: 1200px; margin: 0 auto 48px; }
         .empty, .loading { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 15px; }
         .loading::before { content: ''; display: block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -184,6 +189,14 @@
             width: 12px; display: inline-block;
         }
         details.stage[open] summary::before { transform: rotate(90deg); }
+        /* Раньше время/отставание/темп были в одной flex-wrap строке с
+           заголовком/бейджем — на мобилке (узкий summary) это ломалось на
+           непредсказуемые 2-3 строки. Теперь фиксированные 2 строки: 1) title/
+           dist/круги/бейдж, 2) отставание/время/темп — бейдж всегда в конце
+           первой строки, остальное всегда вместе во второй (запрошено
+           пользователем 2026-08-06). */
+        .stage-summary-rows { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+        .stage-row1, .stage-row2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .stage-title { font-weight: 700; font-size: 14px; }
         .stage-dist { font-size: 11px; color: var(--muted); }
         .stage-spacer { flex: 1; }
@@ -194,6 +207,10 @@
         [data-theme="dark"] .stage-record { color: #e0b23c; }
         .stage-lap { font-size: 11px; color: var(--blue); font-weight: 600; }
 
+        /* .table-wrap — тот же паттерн, что в results.html: скролл только
+           когда таблица реально не помещается (мобилка/узкий экран), на
+           десктопе (после расширения .content) видна целиком без скролла. */
+        .table-wrap { overflow-x: auto; }
         .cp-table { width: 100%; border-collapse: collapse; }
         .cp-table th {
             padding: 6px 18px; text-align: left; font-size: 10px; color: var(--muted);
@@ -204,6 +221,13 @@
         .cp-table td { padding: 7px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
         .cp-table tr:last-child td { border-bottom: none; }
         .cp-table tr.pending td { color: var(--muted); opacity: .6; }
+        /* Колонка "Отметка" зафиксирована слева при горизонтальном скролле
+           (мобилка) — тот же приём, что th.name-cell/td.name-cell в
+           results.html, чтобы всегда было видно, к какой КТ относится
+           строка (запрошено пользователем 2026-08-06). */
+        .cp-pinned { position: sticky; left: 0; box-shadow: 1px 0 0 var(--border); }
+        .cp-table th.cp-pinned { background: var(--bg3); }
+        .cp-table td.cp-pinned { background: var(--bg2); }
 
         @media (max-width: 640px) {
             .header { padding: 10px 14px; }
@@ -407,7 +431,7 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         const paceCell = splitDisplay != null ? splitPaceLabel(dbStage, seq, splitDisplay) : '—';
 
         rows += `<tr class="${pending ? 'pending' : ''}">
-            <td>${CHECKPOINT_LABELS[dbStage][seq]}</td>
+            <td class="cp-pinned">${CHECKPOINT_LABELS[dbStage][seq]}</td>
             <td class="r time-cell">${splitDisplay != null ? fmtTime(splitDisplay) : '—'}</td>
             <td class="r muted">${paceCell}</td>
             <td class="r time-cell">${cumDisplay != null ? fmtTime(cumDisplay) : '—'}</td>
@@ -418,9 +442,9 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             <td class="r">${abs.gap}</td>
         </tr>`;
     }
-    return `${stageProgressBarHtml(dbStage, r)}<div style="overflow-x:auto"><table class="cp-table">
+    return `${stageProgressBarHtml(dbStage, r)}<div class="table-wrap"><table class="cp-table">
         <thead><tr>
-            <th>Контрольная точка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
+            <th class="cp-pinned">Отметка</th><th class="r">Сплит</th><th class="r">Темп/скорость</th><th class="r">Общее время</th>
             ${!isRelayRow ? '<th class="r">Место (пол)</th><th class="r">Отставание (пол)</th>' : ''}
             <th class="r">Место (формат)</th><th class="r">Отставание (формат)</th>
             <th class="r">Место (абсолют)</th><th class="r">Отставание (абсолют)</th>
@@ -478,14 +502,20 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
 
     return `<details class="stage" ${isCurrent ? 'open' : ''}>
         <summary>
-            <span class="stage-title">${cfg.label}</span>
-            <span class="stage-dist">${cfg.dist}</span>
-            ${lap ? `<span class="stage-lap">${lap}</span>` : ''}
-            <span class="stage-spacer"></span>
-            ${gap ? `<span class="stage-gap">${gap}</span>` : ''}
-            ${timeInfo}
-            ${paceLabel ? `<span class="stage-pace">${paceLabel}</span>` : ''}
-            ${badge}
+            <div class="stage-summary-rows">
+                <div class="stage-row1">
+                    <span class="stage-title">${cfg.label}</span>
+                    <span class="stage-dist">${cfg.dist}</span>
+                    ${lap ? `<span class="stage-lap">${lap}</span>` : ''}
+                    <span class="stage-spacer"></span>
+                    ${badge}
+                </div>
+                <div class="stage-row2">
+                    ${gap ? `<span class="stage-gap">${gap}</span>` : ''}
+                    ${timeInfo}
+                    ${paceLabel ? `<span class="stage-pace">${paceLabel}</span>` : ''}
+                </div>
+            </div>
         </summary>
         ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
         ${stageBody(cfg.dbStage, r, gapPool, key, overallGapPool, raceKey)}
