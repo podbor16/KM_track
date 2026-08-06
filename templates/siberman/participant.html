@@ -206,6 +206,7 @@
         .stage-record { padding: 0 18px 12px; font-size: 12px; font-weight: 700; color: #b8860b; }
         [data-theme="dark"] .stage-record { color: #e0b23c; }
         .stage-lap { font-size: 11px; color: var(--blue); font-weight: 600; }
+        .stage-lastcp { font-size: 11px; }
 
         /* .table-wrap — тот же паттерн, что в results.html: скролл только
            когда таблица реально не помещается (мобилка/узкий экран), на
@@ -247,7 +248,7 @@
             .mode-btn { padding: 4px 11px; font-size: 11px; }
             details.stage summary { padding: 10px 14px; }
             .stage-title { font-size: 13px; }
-            .stage-dist, .stage-gap, .stage-lap, .stage-pace { font-size: 10px; }
+            .stage-dist, .stage-gap, .stage-lap, .stage-pace, .stage-lastcp { font-size: 10px; }
             .cp-table th, .cp-table td { padding: 6px 10px; }
             .cp-table th { font-size: 9px; }
             .cp-table td { font-size: 11px; }
@@ -477,11 +478,16 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     // (Вело День 1/Вело День 2 считаются независимо, не суммарно).
     const paceLabel = pos ? avgPaceLabel(cfg.dbStage, CHECKPOINT_DIST_KM[cfg.dbStage][pos.seq], pos.value) : null;
 
+    // Последняя отметка (например "72 км (разворот)") — в первой строке,
+    // после кругов и перед бейджем статуса (запрошено пользователем
+    // 2026-08-06), только пока этап не пройден целиком (у финиша своя
+    // подпись — бейдж "Финиш").
+    const lastCpLabel = (!finished && pos) ? CHECKPOINT_LABELS[cfg.dbStage][pos.seq] : null;
     let timeInfo;
     if (finished) {
         timeInfo = `<span class="stage-time">${fmtTime(r[cfg.timeKey])}</span>`;
     } else if (pos) {
-        timeInfo = `<span class="muted" style="font-size:12px">${CHECKPOINT_LABELS[cfg.dbStage][pos.seq]}</span> <span class="stage-time">${fmtTime(pos.value)}</span>`;
+        timeInfo = `<span class="stage-time">${fmtTime(pos.value)}</span>`;
     } else {
         timeInfo = '';
     }
@@ -507,6 +513,7 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
                     <span class="stage-title">${cfg.label}</span>
                     <span class="stage-dist">${cfg.dist}</span>
                     ${lap ? `<span class="stage-lap">${lap}</span>` : ''}
+                    ${lastCpLabel ? `<span class="stage-lastcp muted">${lastCpLabel}</span>` : ''}
                     <span class="stage-spacer"></span>
                     ${badge}
                 </div>
