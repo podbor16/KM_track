@@ -1028,14 +1028,27 @@ function renderStage(stage) {
     // нужно только для stageHasStarted (STAGE_PRIOR_FINISH проверяет
     // ПРЕДЫДУЩИЙ этап, а у велосипедиста/бегуна эстафеты своих КТ на нём
     // нет, он не плыл/не крутил день 2 сам — это делал другой член команды).
+    // swim_s команды подмешивается так же — велосипедист эстафеты сам не
+    // плавает, его собственный swim_s пуст, а stageAdjustedValue()/
+    // computeStageGaps() на вкладке "Вело День 1" вычитают именно его,
+    // чтобы получить сетевое время без заплыва (та же поправка уже была
+    // в bikeCombinedRelayRider для "Вело Итого", но не здесь — из-за
+    // этого на вкладке "Вело День 1" велосипедист эстафеты сортировался
+    // и получал отставание по сырому времени "от старта гонки" (с
+    // заплывом команды внутри), тогда как колонка "Время" показывала уже
+    // корректно посчитанный на бэкенде bike1_s — отсюда лидер по
+    // фактическому времени оказывался ниже в таблице, чем более медленный
+    // участник (найдено пользователем 2026-08-06 на живой гонке).
     const relayMembers = _fmt !== 'individual'
         ? relay.flatMap(t => {
-            const swimCp = t.members.find(x => x.relay_stage === 'swim')?.cp?.swim;
+            const swimMember = t.members.find(x => x.relay_stage === 'swim');
+            const swimCp = swimMember?.cp?.swim;
+            const swimS = swimMember?.swim_s;
             const bikeCp = t.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
             return t.members
                 .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
                 .map(m => withStageStatus({
-                    ...m, _bib: t.bib, _team: t.team_name,
+                    ...m, _bib: t.bib, _team: t.team_name, swim_s: m.swim_s ?? swimS,
                     cp: { ...m.cp, swim: m.cp?.swim ?? swimCp, bike_day2: m.cp?.bike_day2 ?? bikeCp },
                 }));
         })
@@ -1056,7 +1069,7 @@ function renderStage(stage) {
     // работает как раньше (_rawStatus у него остаётся 'active').
     const gapPool = [
         ...rows.filter(r => r._rawStatus === 'active').map(r => ({ key: r.bib, cp: r.cp, swim_s: r.swim_s, status: 'active' })),
-        ...relayMembers.filter(m => m._rawStatus === 'active').map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, swim_s: m.swim_s, status: 'active' })),
+        ...relayMembers.filter(m => m._rawStatus === 'active').map(m => ({ key: `${m._bib}:${m.relay_stage}`, cp: m.cp, swim_s: m.swim_s ?? swimS, status: 'active' })),
     ];
     const gaps = computeStageGaps(gapPool, TAB_TO_DB_STAGE[stage]);
 

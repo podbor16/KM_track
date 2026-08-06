@@ -2808,6 +2808,22 @@ check('renderStage(\'bike1\') — скорость считается от се�
     assert.ok(html.includes('19.3 км/ч'), `ожидалась скорость ~19.3 км/ч (3 км / 561с), получили: ${html}`);
     assert.ok(!html.includes('930'), `не должно быть раздутой "сырой" скорости: ${html}`);
 });
+check('renderStage(\'bike1\') — эстафетный велосипедист сортируется по сетевому времени вело (без заплыва СВОЕЙ команды), не по сырому "от старта гонки"', () => {
+    // Команда 10: долгий заплыв команды (5000с), но быстрое вело (net 100с) — raw cp=5100.
+    // Личник 201: короткий заплыв (100с), медленное вело (net 900с) — raw cp=1000.
+    // Велосипедист эстафеты сам не плавает — его собственный swim_s пуст, вычитать
+    // нужно swim_s КОМАНДЫ (найдено пользователем 2026-08-06 на живой гонке: "Вело
+    // Итого" сортировал верно через bikeCombinedRelayRider, а "Вело День 1" — нет,
+    // т.к. relayMembers в renderStage() не подмешивал swim_s команды, только cp.swim).
+    const relay = [mkRelayProgress(10, { swim_s: 5000, swimCp: { swim: { 7: 5000 } }, bikeCp: { bike_day1: { 1: 5100 } } })];
+    const individual = [mkTimerInd('201', { swim_s: 100, bike1_s: 900, cp: { bike_day1: { 1: 1000 } } })];
+    setRaceData(individual, relay, Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.indexOf('bib-cell">10<') < html.indexOf('bib-cell">201<'),
+        `быстрый по сетевому времени вело (10, net=100с) должен идти выше медленного (201, net=900с): ${html}`);
+});
 
 // ── renderOverall() — "Лидер" в суб-колонке "Вело 1" должен совпадать с
 // "Вело итого": stageGapPool для computeStageGaps не нёс swim_s, поэтому
