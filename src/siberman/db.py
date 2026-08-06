@@ -374,7 +374,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
         SELECT
-            p.id, p.bib, p.surname, p.name, p.gender, p.country, p.city, p.status,
+            p.id, p.bib, p.surname, p.name, p.gender, p.country, p.city, p.status, p.dnf_stage,
             p.bike_day2_handicap_s AS bike2_start_s,
             o.total_s   AS overall_s,
             o.rank_overall, o.rank_gender AS overall_rank_g,
@@ -407,7 +407,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
     # Эстафетные члены (все трое)
     cur.execute("""
         SELECT
-            p.id, p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status,
+            p.id, p.bib, p.relay_team_name, p.relay_stage, p.surname, p.name, p.gender, p.status, p.dnf_stage,
             p.bike_day2_handicap_s AS bike2_start_s,
             sw.total_s AS swim_s,  sw.avg_pace_s AS swim_pace,
             b1.total_s AS bike1_s, b1.avg_speed_kmh AS bike1_speed,
@@ -439,6 +439,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
             "name": row["name"],
             "gender": row["gender"],
             "status": row["status"],
+            "dnf_stage": row["dnf_stage"],
             "bike2_start_s": row["bike2_start_s"],
             "cp": cp_by_pid.get(row["id"], {}),
             "splits": split_by_pid.get(row["id"], {}),

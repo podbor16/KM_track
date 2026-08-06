@@ -187,8 +187,20 @@ function sortByRawStatus(items, keyFn, bibFn = item => item.entry?.bib) {
 
 /* stageKey: null = Финал, иначе 'swim'|'bike1'|'bike2'|'run' */
 const STAGE_ORD = { swim: 0, bike1: 1, bike2: 2, run: 3 };
+const DB_STAGE_TO_KEY = { swim: 'swim', bike_day1: 'bike1', bike_day2: 'bike2', run: 'run' };
 function getDnfStage(r) {
-    // Этап, на котором произошёл DNF = первый этап без финишного времени
+    // Берём РЕАЛЬНЫЙ этап DNF из БД (participants.dnf_stage, API отдаёт
+    // как r.dnf_stage) — раньше здесь была эвристика "первый этап без
+    // финишного времени (*_s == null)", которая ошибалась для участника,
+    // сошедшего НЕ на финише этапа, а на промежуточной КТ: swim_s в этом
+    // случае берётся как "время на последней ДОСТИГНУТОЙ КТ" (см.
+    // compute_stage_totals в service.py), а не null — эвристика решала,
+    // что плавание пройдено, и сдвигала DNF на следующий этап (2026-08-06,
+    // найдено на реальных данных: сошедший на 2,6км из 10км заплыва
+    // показывал "На трассе" вместо DNF на вкладке "Плавание").
+    if (r.dnf_stage && DB_STAGE_TO_KEY[r.dnf_stage]) return DB_STAGE_TO_KEY[r.dnf_stage];
+    // Фолбэк на старую эвристику — на случай отсутствия dnf_stage в ответе
+    // API (не должно происходить после фикса, оставлено для устойчивости).
     if (r.swim_s  == null) return 'swim';
     if (r.bike1_s == null) return 'bike1';
     if (r.bike2_s == null) return 'bike2';

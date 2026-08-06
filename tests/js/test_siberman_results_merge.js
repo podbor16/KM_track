@@ -2675,6 +2675,24 @@ check('stageRelativeStatus() — настоящий dns (не стартовал
     assert.strictEqual(sandbox.stageRelativeStatus(realDns, 'swim'), 'dns');
     assert.strictEqual(sandbox.stageRelativeStatus(realDns, 'run'), 'dns');
 });
+check('getDnfStage()/stageRelativeStatus() — DNF на ПРОМЕЖУТОЧНОЙ (не финишной) КТ этапа не путается с DNF следующего этапа', () => {
+    // 2026-08-06, найдено на реальных данных: сошедший на 2,6км из 10км
+    // заплыва (swim_s = время на ПОСЛЕДНЕЙ ДОСТИГНУТОЙ, не финишной КТ —
+    // compute_stage_totals берёт last_cp, не только финиш) показывал "На
+    // трассе" на вкладке "Плавание" вместо DNF — старая эвристика
+    // getDnfStage() ("первый этап без *_s") видела swim_s != null и
+    // ошибочно решала, что плавание пройдено, сдвигая DNF на bike1.
+    // Теперь используется реальный r.dnf_stage из API (participants.dnf_stage).
+    const dnfMidSwim = { status: 'dnf', dnf_stage: 'swim', swim_s: 4840, bike1_s: null, bike2_s: null, run_s: null };
+    assert.strictEqual(sandbox.getDnfStage(dnfMidSwim), 'swim', 'dnf_stage=swim должен маппиться в ключ "swim"');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfMidSwim, 'swim'), 'dnf', 'Плавание — реальный DNF, не "На трассе"');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfMidSwim, 'bike1'), 'dnf', 'Вело1 — тоже dnf (сход необратим)');
+
+    const dnfMidBike1 = { status: 'dnf', dnf_stage: 'bike_day1', swim_s: 4840, bike1_s: 3000, bike2_s: null, run_s: null };
+    assert.strictEqual(sandbox.getDnfStage(dnfMidBike1), 'bike1', 'dnf_stage=bike_day1 должен маппиться в ключ "bike1"');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfMidBike1, 'swim'), 'active', 'Плавание успешно пройдено');
+    assert.strictEqual(sandbox.stageRelativeStatus(dnfMidBike1, 'bike1'), 'dnf', 'Вело1 — реальный DNF');
+});
 check('renderStage() — индикатор "DNF/DSQ" считает DNF только на ОТКРЫТОМ этапе, не на всей гонке', () => {
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const dnfOnRun = mkTimerInd('1', { status: 'dnf', swim_s: 4000, bike1_s: 9000, bike2_s: 8000, run_s: null, cp: { swim: { [maxSeqSwim]: 4000 } } });
