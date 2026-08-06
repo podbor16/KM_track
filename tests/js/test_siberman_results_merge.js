@@ -2995,7 +2995,12 @@ check('renderStage(\'bike1\') — активный участник посред
     // pos: seq=3 (72 км), value=8368с (2:19:28). Прогноз на 145 км
     // (STAGE_MAX_SEQ.bike_day1=6 → 145км) — та же арифметика, что в Task 1:
     // round(8368*145/72) = 16852с = 4:40:52.
-    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    // bike1_s=8368 (НЕ null) — на реальных данных r[cfg.timeKey] заполняется
+    // уже на первой достигнутой КТ (compute_stage_totals), а не только на
+    // финише; фикстура с bike1_s:null не поймала бы регрессию, из-за
+    // которой прогноз был пуст у ВСЕХ активных участников (найдено
+    // пользователем 2026-08-06 на живой гонке сразу после деплоя).
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: 8368, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
     setRaceData([r], [], Date.now());
     setState('all', 'all');
     sandbox.renderStage('bike1');
@@ -3022,7 +3027,7 @@ check('renderStage(\'bike1\') — ещё не начавший этап НЕ п�
     assert.ok(!row.includes('forecast-cell'), `у не начавшего этап не должно быть прогноза: ${row}`);
 });
 check('renderStage(\'bike1\') — DNF посреди этапа НЕ показывает прогноз, даже с частичным прогрессом', () => {
-    const r = mkTimerInd('9', { status: 'dnf', swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    const r = mkTimerInd('9', { status: 'dnf', swim_s: 0, bike1_s: 8368, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
     setRaceData([r], [], Date.now());
     setState('all', 'all');
     sandbox.renderStage('bike1');
@@ -3031,7 +3036,7 @@ check('renderStage(\'bike1\') — DNF посреди этапа НЕ показ�
     assert.ok(!row.includes('forecast-cell'), `у DNF не должно быть прогноза: ${row}`);
 });
 check('renderStage(\'bike1\') — эстафетный велосипедист посреди этапа показывает "~" прогноз финиша', () => {
-    const relay = [mkRelayProgress(10, { swim_s: 0, swimCp: {}, bike1_s: null, bikeCp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } })];
+    const relay = [mkRelayProgress(10, { swim_s: 0, swimCp: {}, bike1_s: 8368, bikeCp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } })];
     setRaceData([], relay, Date.now());
     setState('all', 'all');
     sandbox.renderStage('bike1');

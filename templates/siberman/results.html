@@ -1149,9 +1149,15 @@ function renderStage(stage) {
         // (найдено пользователем 2026-08-04).
         const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         // Прогноз финиша этапа — только для реально активных, ещё не
-        // финишировавших этап (noTime===true И r.status==='active'); пустая
-        // ячейка (не "—") во всех остальных случаях — см. дизайн-спеку.
-        const forecastCell = (pos && noTime && r.status === 'active')
+        // финишировавших этап. НЕ noTime (t==null) — r[cfg.timeKey]
+        // (bike1_s/run_s/...) заполняется УЖЕ НА ПЕРВОЙ достигнутой КТ
+        // (compute_stage_totals, см. также avg_speed_kmh-баг 2026-08-06),
+        // а не только на финише — noTime было бы false почти для всех
+        // активных мид-этапа участников, скрывая прогноз практически у
+        // всех (найдено пользователем 2026-08-06 на живой гонке: колонка
+        // пустая даже у явно активных "На трассе"). "Финиш" определяем так
+        // же, как statusBadge/activeProgressBadge — pos.seq===maxSeq.
+        const forecastCell = (pos && pos.seq !== maxSeq && r.status === 'active')
             ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
             : '';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
@@ -1191,9 +1197,9 @@ function renderStage(stage) {
         // не из серверного avg_pace_s/avg_speed_kmh (неверно для тех, кто
         // ещё не финишировал этап).
         const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
-        // См. buildIndividualStageRow — тот же прогноз, тот же критерий
-        // видимости (только реально активный, ещё не финишировавший этап).
-        const forecastCell = (pos && t == null && m.status === 'active')
+        // См. buildIndividualStageRow — тот же прогноз, та же поправка на
+        // t/noTime (не сигнализирует "не финишировал", см. комментарий там).
+        const forecastCell = (pos && pos.seq !== maxSeq && m.status === 'active')
             ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
             : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
