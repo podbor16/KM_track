@@ -2971,5 +2971,24 @@ check('renderStage(\'swim\') — как только у кого-то появи
     assert.ok(html.indexOf('bib-cell">10<') < html.indexOf('bib-cell">2<'), `реально начавший (bib=10) должен идти выше ещё не начавшего (bib=2), несмотря на номер: ${html}`);
 });
 
+// ── forecastTime() — линейная экстраполяция средней скорости с начала
+// этапа (прогноз финиша этапа / прогноз времени на будущей КТ), 2026-08-06 ──
+check('forecastTime() — линейная экстраполяция: 72 км за 2:19:28 → прогноз на 145 км, округлён до целых секунд', () => {
+    // 2:19:28 = 8368с. 8368 * (145/72) = 16852.222...с → round → 16852с = 4:40:52.
+    // Округление обязательно: fmtTime() делает `s % 60` без Math.floor для
+    // секунд — на нецелом s это дало бы "52.222222" в строке времени.
+    const s = sandbox.forecastTime(72, 8368, 145);
+    assert.strictEqual(s, 16852);
+});
+check('forecastTime() — dist_so_far=0 возвращает null (деление на ноль)', () => {
+    assert.strictEqual(sandbox.forecastTime(0, 100, 145), null);
+});
+check('forecastTime() — elapsedS=null возвращает null (ещё нет данных)', () => {
+    assert.strictEqual(sandbox.forecastTime(72, null, 145), null);
+});
+check('forecastTime() — target_dist == dist_so_far возвращает то же elapsedS (экстраполяция "в ноль")', () => {
+    assert.strictEqual(sandbox.forecastTime(72, 8368, 72), 8368);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
