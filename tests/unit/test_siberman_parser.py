@@ -106,6 +106,38 @@ def test_relay_uses_dedicated_team_and_member_columns():
     assert run["gender"] == "M"
 
 
+DNF_INDIVIDUAL_HEADERS = [
+    "Формат", "Номер", "Фамилия", "Имя", "Пол",
+    "Плавание: разворот 1 (1,3 км)", "Плавание: 1 круг (2,6 км)", "Финиш 10 км",
+]
+
+
+def test_individual_dnf_stage_set_to_stage_of_incomplete_finish_checkpoint():
+    # 2026-08-06, живая гонка: организатор помечает сход "DNF" в Excel/Google
+    # Sheets — parse_excel раньше ставил только status='dnf', dnf_stage
+    # оставался NULL в БД навсегда (заполнялся только из Copernico-опроса,
+    # см. copernico_run.py). Без dnf_stage getDnfStage() на фронтенде падал
+    # на старую эвристику "первый этап без total_s", которая неверно решала,
+    # что участник, дошедший до промежуточной КТ плавания, уже проплыл этап
+    # целиком — вкладка "Плавание" показывала "На трассе" вместо DNF.
+    # Дошёл до 1 круга (2,6 км), не дошёл до финиша 10 км → dnf_stage='swim'.
+    row = ["Лично", "177", "Ширяев", "Денис", "М", "0:03:06", "0:06:12", "DNF"]
+    data = _build_workbook(DNF_INDIVIDUAL_HEADERS, row)
+    result = parse_excel(data, 2026)
+    p = result.participants[0]
+    assert p["status"] == "dnf"
+    assert p["dnf_stage"] == "swim"
+
+
+def test_individual_active_participant_has_no_dnf_stage():
+    row = ["Лично", "178", "Петров", "Пётр", "М", "0:03:06", "0:06:12", "0:20:00"]
+    data = _build_workbook(DNF_INDIVIDUAL_HEADERS, row)
+    result = parse_excel(data, 2026)
+    p = result.participants[0]
+    assert p["status"] == "active"
+    assert p["dnf_stage"] is None
+
+
 def test_relay_member_gender_defaults_to_male_when_column_missing():
     headers = ["Формат", "Номер", "Название команды", "Пловец", "Велосипедист", "Бегун", "3 км"]
     row = ["Эстафета", "502", "Тест", "Иванов Иван", "Петров Пётр", "Сидоров Семён", "0:05:00"]

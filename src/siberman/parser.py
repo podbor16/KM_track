@@ -91,6 +91,28 @@ PARTICIPANT_COL_MAP: dict[str, str] = {
 T1_COL = "t1"
 T2_COL = "t2"
 
+# Порядок этапов гонки + номер финишной КТ каждого — для определения
+# dnf_stage (см. _compute_dnf_stage).
+_STAGE_ORDER = ["swim", "bike_day1", "bike_day2", "run"]
+_STAGE_FINISH_SEQ = {
+    stage: max(seq for (st, seq) in CHECKPOINT_COL_MAP.values() if st == stage)
+    for stage in _STAGE_ORDER
+}
+
+
+def _compute_dnf_stage(cp_times: dict[tuple[str, int], Optional[int]]) -> Optional[str]:
+    """Этап, на котором участник сошёл — первый по порядку гонки этап, у
+    которого нет отметки на его ФИНИШНОЙ КТ (не "первый этап без итогового
+    времени", как раньше в getDnfStage(): участник, сошедший на
+    промежуточной КТ, всё равно имеет "итоговое время" — время последней
+    достигнутой точки, — эта эвристика ошибочно засчитывала такой этап как
+    пройденный, см. 36859f0). None, если все финишные КТ заполнены (не
+    должно случиться при status='dnf', оставлено на всякий случай)."""
+    for stage in _STAGE_ORDER:
+        if cp_times.get((stage, _STAGE_FINISH_SEQ[stage])) is None:
+            return stage
+    return None
+
 
 @dataclass
 class ParseResult:
@@ -363,6 +385,7 @@ def parse_excel(file_bytes: bytes, race_year: int) -> ParseResult:
                 "country":   _cell("country", "Россия"), "city": _cell("city"),
                 "format":    "individual",
                 "status":    "dnf" if has_dnf else "active",
+                "dnf_stage": _compute_dnf_stage(cp_times) if has_dnf else None,
                 "_cp_key":   bib,
             })
             result.checkpoint_times[bib] = cp_times
