@@ -338,6 +338,26 @@ check('renderIndividual() — заплыв ещё НЕ финиширован (�
     const section = stageSectionHtml('Вело День 1');
     assert.ok(section.includes('badge-notstarted">—<'), `незавершённый заплыв не должен давать "На трассе" на вело-дне-1: ${section}`);
 });
+check('renderIndividual() — средняя скорость/темп на этапе появляется слева от бейджа после первой отметки', () => {
+    // seq=2 → 2.6 км (CHECKPOINT_DIST_KM.swim[2]), value=2600с → 2600/2.6=1000 сек/км
+    // → fmtPace100m(1000) = "1:40 /100м" (запрошено пользователем 2026-08-06).
+    const r = { bib: 3, gender: 'M', status: 'active', cp: { swim: { 1: 1200, 2: 2600 } }, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Плавание');
+    assert.ok(section.includes('stage-pace">1:40 /100м<'), `ожидался темп "1:40 /100м" в секции Плавание: ${section}`);
+});
+check('renderIndividual() — этап без единой отметки НЕ показывает среднюю скорость/темп', () => {
+    const r = { bib: 3, gender: 'M', status: 'active', cp: {}, swim_s: null, bike1_s: null, bike2_s: null, run_s: null };
+    const data = { individual: [r], relay: [] };
+    appEl.innerHTML = '';
+    vm.runInContext(`_mode = 'race';`, sandbox);
+    sandbox.renderIndividual(data, r);
+    const section = stageSectionHtml('Плавание');
+    assert.ok(!section.includes('stage-pace'), `без единой отметки не должно быть темпа/скорости: ${section}`);
+});
 check('renderIndividual() — личный старт дня 2 уже наступил — "На трассе" без КТ', () => {
     const raceStartEpoch = Date.now() - 5 * 86400 * 1000;
     sandbox.__data_raceStart = new Date(raceStartEpoch).toISOString();

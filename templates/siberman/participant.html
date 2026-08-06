@@ -189,6 +189,7 @@
         .stage-spacer { flex: 1; }
         .stage-time { font-weight: 700; font-variant-numeric: tabular-nums; }
         .stage-gap { font-size: 12px; color: var(--muted); }
+        .stage-pace { font-size: 12px; color: var(--muted); }
         .stage-record { padding: 0 18px 12px; font-size: 12px; font-weight: 700; color: #b8860b; }
         [data-theme="dark"] .stage-record { color: #e0b23c; }
         .stage-lap { font-size: 11px; color: var(--blue); font-weight: 600; }
@@ -222,7 +223,7 @@
             .mode-btn { padding: 4px 11px; font-size: 11px; }
             details.stage summary { padding: 10px 14px; }
             .stage-title { font-size: 13px; }
-            .stage-dist, .stage-gap, .stage-lap { font-size: 10px; }
+            .stage-dist, .stage-gap, .stage-lap, .stage-pace { font-size: 10px; }
             .cp-table th, .cp-table td { padding: 6px 10px; }
             .cp-table th { font-size: 9px; }
             .cp-table td { font-size: 11px; }
@@ -445,6 +446,12 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     const gap = fmtGap(gaps[key]);
     const lap = pos ? lapLabel(cfg.dbStage, pos.seq) : null;
     const isCurrent = (pos || started) && !finished;
+    // Средняя скорость/темп на этапе — от старта этапа до текущей позиции
+    // (или до финиша, если этап пройден целиком), появляется только после
+    // первой отметки на этапе (pos truthy) — запрошено пользователем
+    // 2026-08-06, слева от бейджа статуса, отдельно для каждого этапа
+    // (Вело День 1/Вело День 2 считаются независимо, не суммарно).
+    const paceLabel = pos ? avgPaceLabel(cfg.dbStage, CHECKPOINT_DIST_KM[cfg.dbStage][pos.seq], pos.value) : null;
 
     let timeInfo;
     if (finished) {
@@ -477,6 +484,7 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
             <span class="stage-spacer"></span>
             ${gap ? `<span class="stage-gap">${gap}</span>` : ''}
             ${timeInfo}
+            ${paceLabel ? `<span class="stage-pace">${paceLabel}</span>` : ''}
             ${badge}
         </summary>
         ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
