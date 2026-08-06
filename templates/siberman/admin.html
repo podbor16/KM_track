@@ -837,11 +837,13 @@
         const distKm = bcDistKm(stage, seq);
         const totalKm = bcDistKm(stage, bcMaxSeq(stage));
         const dayPrefix = stage === 'bike_day1' ? 'День 1. ' : stage === 'bike_day2' ? 'День 2. ' : '';
+        const stageLabel = BC_STAGE_SHORT[stage];
+        const stagePrefix = stageLabel ? `${stageLabel[0].toUpperCase()}${stageLabel.slice(1)} ` : '';
         const prev = bcAbsolutePrevStages(stage);
         const suffix = prev.length
             ? ` (${prev.map(p => `+ ${bcFmtKm(p.km)} км ${p.label}`).join(', ')})`
             : bcCpParenSuffix(stage, seq);
-        return `📍${dayPrefix}Отметка: ${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${suffix}.`;
+        return `📍${dayPrefix}Отметка: ${stagePrefix}${bcFmtKm(distKm)} из ${bcFmtKm(totalKm)} км${suffix}.`;
     }
 
     // Короткое имя дисциплины для header'а Абсолюта.
