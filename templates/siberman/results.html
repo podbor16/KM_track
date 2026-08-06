@@ -349,10 +349,20 @@
            (DNF/DSQ) (запрошено пользователем 2026-07-23, п.2 v5 — заменяет
            набор разрозненных плашек Участников/Финишировали/Эстафет/DNF). */
         .stats-v2 { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-        /* Поиск участника (номер/фамилия) — под индикаторами, не фильтр:
-           места/ранги не пересчитываются, только подсветка строки в уже
-           отрисованной таблице (2026-08-06). */
+        /* Поиск участника (номер/фамилия, с начала) — под индикаторами, не
+           фильтр: места/ранги не пересчитываются, только скролл к первому
+           совпадению в уже отрисованной таблице, без подсветки (2026-08-06). */
         .search-bar { margin-bottom: 16px; }
+        /* Закрепляется сверху экрана ТОЛЬКО на время автоматического
+           скролла к найденной строке (см. applyParticipantSearch) — чтобы
+           поле не пропало с экрана раньше, чем виден результат прыжка.
+           Открепляется сразу после — обычный скролл пользователя дальше
+           уносит поле как обычно, оно НЕ остаётся закреплённым постоянно
+           (уточнено пользователем 2026-08-06). */
+        .search-bar--pinned {
+            position: sticky; top: 0; z-index: 5;
+            background: var(--bg); padding: 10px 0; margin: 0 0 16px;
+        }
         .search-input {
             width: 100%; max-width: 320px; padding: 8px 14px; border-radius: 20px;
             border: 1px solid var(--border); background: var(--bg2); color: var(--text);
@@ -360,7 +370,6 @@
         }
         .search-input::placeholder { color: var(--muted); }
         .search-input:focus { outline: none; border-color: var(--blue); }
-        tr.search-hit { outline: 2px solid var(--red); outline-offset: -2px; }
         .stat-card {
             background: var(--bg2); border: 1px solid var(--border);
             border-radius: var(--radius); padding: 10px 18px; min-width: 130px;
@@ -726,34 +735,48 @@ function searchBarHtml() {
             autocomplete="off" value="${escapeAttr(_searchQuery)}" oninput="onParticipantSearchInput(this.value)">
     </div>`;
 }
-// Совпадение — номер СОВПАДАЕТ ЦЕЛИКОМ (не подстрокой: иначе "1" подсветил
-// бы номера 1,10,11,21...) ИЛИ фамилия/имя содержит запрос подстрокой.
+// Совпадение — НАЧАЛО номера ИЛИ НАЧАЛО фамилии (только .name-main, не имя
+// и не весь .name-cell с городом/бейджами — запрошено пользователем
+// 2026-08-06: раньше срабатывало и на имя, и на подстроку в любом месте,
+// а не только с начала). Никакой подсветки — только скролл к первому
+// совпадению (тоже запрошено, было "криво").
 function onParticipantSearchInput(value) {
     _searchQuery = value;
     applyParticipantSearch();
 }
-// shouldScroll=false при вызове из render() (live-поллинг каждые 20с/смена
-// фильтра) — там подсветку нужно восстановить (innerHTML стирает классы),
-// но прокрутка к результату НЕ нужна: пользователь мог уже сам проскроллить
-// читать что-то другое, дёргать его вид каждые 20с было бы навязчиво.
-// Прокрутка — только по реальному вводу в поле (onParticipantSearchInput).
-function applyParticipantSearch(shouldScroll = true) {
+// Поле закрепляется (.search-bar--pinned) ТОЛЬКО на время самого
+// автоматического скролла к найденной строке — иначе прыжок мог унести
+// поле поиска за пределы экрана раньше, чем пользователь успеет увидеть
+// результат. Открепляется сразу по его завершении — обычный скролл
+// пользователя ПОСЛЕ этого работает как всегда, поле НЕ остаётся
+// закреплённым постоянно (уточнено пользователем 2026-08-06).
+function applyParticipantSearch() {
     const q = _searchQuery.trim().toLowerCase();
+    if (!q) return;
     const rows = document.querySelectorAll('#app tbody tr');
     let first = null;
-    rows.forEach(tr => {
-        tr.classList.remove('search-hit');
-        if (!q) return;
+    for (const tr of rows) {
         const bibCell = tr.querySelector('.bib-cell');
-        const nameCell = tr.querySelector('.name-cell');
+        const nameCell = tr.querySelector('.name-main');
         const bib = bibCell ? bibCell.textContent.trim().toLowerCase() : '';
         const name = nameCell ? nameCell.textContent.trim().toLowerCase() : '';
-        if ((bib && bib === q) || (name && name.includes(q))) {
-            tr.classList.add('search-hit');
-            if (!first) first = tr;
+        if ((bib && bib.startsWith(q)) || (name && name.startsWith(q))) {
+            first = tr;
+            break;
         }
-    });
-    if (first && shouldScroll) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (!first) return;
+    const bar = document.querySelector('.search-bar');
+    if (bar) bar.classList.add('search-bar--pinned');
+    first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const unpin = () => { if (bar) bar.classList.remove('search-bar--pinned'); };
+    if ('onscrollend' in window) {
+        window.addEventListener('scrollend', unpin, { once: true });
+    } else {
+        // Safari и т.п. без scrollend — фиксированная пауза чуть больше
+        // типичной длительности smooth-скролла на расстояние одной таблицы.
+        setTimeout(unpin, 800);
+    }
 }
 
 // Время + отставание в одной ячейке (не отдельной колонкой) — п.3/4 v5,
@@ -2803,7 +2826,6 @@ function render() {
         else renderPositionChart();
     }
     else renderStage(_tab);
-    applyParticipantSearch(false);
     autoScrollTabs();
     syncUrlFromState();
 }
