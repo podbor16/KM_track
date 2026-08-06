@@ -192,7 +192,17 @@ def compute_metrics(stage: str, total_s: Optional[int]) -> tuple[Optional[int], 
         return None, None
     dist = STAGE_DISTANCES_KM[stage]
     if stage in BIKE_STAGES:
-        return None, round(dist / (total_s / 3600), 2)
+        speed = dist / (total_s / 3600)
+        # avg_speed_kmh — DECIMAL(5,2) в БД (потолок 999.99). Формула берёт
+        # ПОЛНУЮ дистанцию этапа, не фактически пройденную — на ПРОМЕЖУТОЧНОМ
+        # (не финишном) чекпоинте total_s мал относительно dist, что даёт
+        # абсурдно завышенную "если бы проехал всю дистанцию за это время"
+        # скорость. Без ограничения переполняет столбец и роняет ВЕСЬ
+        # recompute_totals_ranks_records (падает посередине — ни один
+        # участник дальше по циклу не получает обновлённые totals/ранги,
+        # не только виновник) — 2026-08-06, живая гонка: SQL error 1264
+        # валил пересчёт на каждом цикле опроса Google Sheets.
+        return None, round(min(speed, 999.99), 2)
     return round(total_s / dist), None
 
 

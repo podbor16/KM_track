@@ -5,9 +5,28 @@ from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
     _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ, _recompute_records,
+    compute_metrics,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
+
+
+def test_compute_metrics_bike_finished_gives_reasonable_speed():
+    pace, speed = compute_metrics("bike_day1", 5 * 3600)  # 145км за 5ч
+    assert pace is None
+    assert speed == 29.0
+
+
+def test_compute_metrics_bike_intermediate_checkpoint_clamps_instead_of_overflowing_db():
+    # avg_speed_kmh — DECIMAL(5,2) в БД (потолок 999.99). Формула считает
+    # ПОЛНУЮ дистанцию этапа (145км) делённую на total_s — на промежуточном
+    # (не финишном) чекпоинте total_s мал относительно всей дистанции,
+    # давая абсурдную "скорость" (2026-08-06, живая гонка: 950с на 3 км —
+    # 145/(950/3600) ≈ 549 км/ч уже близко к лимиту, а для более раннего/
+    # мелкого total_s легко превышает 999.99 и роняет SQL-запись).
+    pace, speed = compute_metrics("bike_day1", 10)  # 10 секунд на старте вело1
+    assert pace is None
+    assert speed == 999.99
 
 
 def test_format_seconds_full():
