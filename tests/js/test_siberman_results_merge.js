@@ -2990,5 +2990,66 @@ check('forecastTime() — target_dist == dist_so_far возвращает то �
     assert.strictEqual(sandbox.forecastTime(72, 8368, 72), 8368);
 });
 
+// ── renderStage() — колонка "Прогноз финиша" (2026-08-06) ──
+check('renderStage(\'bike1\') — активный участник посреди этапа показывает "~" прогноз финиша', () => {
+    // pos: seq=3 (72 км), value=8368с (2:19:28). Прогноз на 145 км
+    // (STAGE_MAX_SEQ.bike_day1=6 → 145км) — та же арифметика, что в Task 1:
+    // round(8368*145/72) = 16852с = 4:40:52.
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('forecast-cell">~4:40:52<'), `ожидался прогноз ~4:40:52: ${html}`);
+});
+check('renderStage(\'bike1\') — финишировавший этап НЕ показывает прогноз (ячейка пустая)', () => {
+    const n1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: 9000, cp: { bike_day1: { [n1]: 9000 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    const row = html.slice(html.indexOf('bib-cell">9<'));
+    assert.ok(!row.includes('forecast-cell'), `у финишировавшего не должно быть прогноза: ${row}`);
+});
+check('renderStage(\'bike1\') — ещё не начавший этап НЕ показывает прогноз (ячейка пустая)', () => {
+    const r = mkTimerInd('9', { swim_s: null, bike1_s: null, cp: {} });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    const row = html.slice(html.indexOf('bib-cell">9<'));
+    assert.ok(!row.includes('forecast-cell'), `у не начавшего этап не должно быть прогноза: ${row}`);
+});
+check('renderStage(\'bike1\') — DNF посреди этапа НЕ показывает прогноз, даже с частичным прогрессом', () => {
+    const r = mkTimerInd('9', { status: 'dnf', swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    const row = html.slice(html.indexOf('bib-cell">9<'));
+    assert.ok(!row.includes('forecast-cell'), `у DNF не должно быть прогноза: ${row}`);
+});
+check('renderStage(\'bike1\') — эстафетный велосипедист посреди этапа показывает "~" прогноз финиша', () => {
+    const relay = [mkRelayProgress(10, { swim_s: 0, swimCp: {}, bike1_s: null, bikeCp: { bike_day1: { 1: 100, 2: 200, 3: 8368 } } })];
+    setRaceData([], relay, Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    assert.ok(html.includes('forecast-cell">~4:40:52<'), `у эстафетного велосипедиста посреди этапа должен быть прогноз ~4:40:52: ${html}`);
+});
+check('renderStage(\'bike1\') — заголовок таблицы содержит "Прогноз финиша" между "Скорость" и "Отметка"', () => {
+    const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100 } } });
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('bike1');
+    const html = domGetAppHtml();
+    const speedIdx = html.indexOf('>Скорость<');
+    const forecastIdx = html.indexOf('>Прогноз финиша<');
+    const cpIdx = html.indexOf('>Отметка<');
+    assert.ok(speedIdx > -1 && forecastIdx > speedIdx && cpIdx > forecastIdx,
+        `ожидался порядок колонок Скорость → Прогноз финиша → Отметка: speedIdx=${speedIdx} forecastIdx=${forecastIdx} cpIdx=${cpIdx}`);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

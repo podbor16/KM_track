@@ -467,6 +467,12 @@
         .badge-live { background: rgba(106,171,215,.15); color: var(--blue); }
         .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
         .muted { color: var(--muted); }
+        /* Прогноз финиша этапа (results.html) — тот же тёплый акцент, что
+           уже используется для "🏆 Рекорд" (.time-gap-sub.record выше по
+           файлу), отдельным классом, чтобы не путать смысл "прогноз" со
+           смыслом "рекорд" (2026-08-06). */
+        .forecast-cell { color: #b8860b; }
+        [data-theme="dark"] .forecast-cell { color: #e0b23c; }
         .muted-sub { font-size: 11px; color: var(--muted); }
 
         /* Stage icon dots in overall table */
@@ -1142,6 +1148,12 @@ function renderStage(stage) {
         // уже применяемый для того же в генераторе постов трансляции
         // (найдено пользователем 2026-08-04).
         const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        // Прогноз финиша этапа — только для реально активных, ещё не
+        // финишировавших этап (noTime===true И r.status==='active'); пустая
+        // ячейка (не "—") во всех остальных случаях — см. дизайн-спеку.
+        const forecastCell = (pos && noTime && r.status === 'active')
+            ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
+            : '';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
         // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
         // отдельно, только по объединённому "Вело итого" — см. Свод вело).
@@ -1164,6 +1176,7 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib], recordCats)}</td>
             <td class="r muted">${metaCell}</td>
+            <td class="r">${forecastCell}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(r.bike2_start_s)}</td>` : ''}
             <td>${statusBadge(r, stage, started)}</td>
@@ -1178,6 +1191,11 @@ function renderStage(stage) {
         // не из серверного avg_pace_s/avg_speed_kmh (неверно для тех, кто
         // ещё не финишировал этап).
         const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        // См. buildIndividualStageRow — тот же прогноз, тот же критерий
+        // видимости (только реально активный, ещё не финишировавший этап).
+        const forecastCell = (pos && t == null && m.status === 'active')
+            ? `<span class="forecast-cell">~${fmtTime(forecastTime(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq]))}</span>`
+            : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
         const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name) : [];
@@ -1195,6 +1213,7 @@ function renderStage(stage) {
             </div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`], recordCats)}</td>
             <td class="r muted">${meta}</td>
+            <td class="r">${forecastCell}</td>
             <td class="muted">${lastCpCell}</td>
             ${showStart ? `<td class="r muted">${fmtTime(m.bike2_start_s)}</td>` : ''}
             <td>${relayMemberStatusBadge(m, pos, maxSeq, started)}</td>
@@ -1230,7 +1249,7 @@ function renderStage(stage) {
     html += `<div class="table-wrap"><table class="stage-table">
     <thead><tr>
         ${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th>
-        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th>Отметка</th>
+        <th class="r">Время</th><th class="r">${cfg.metaLbl}</th><th class="r">Прогноз финиша</th><th>Отметка</th>
         ${showStart ? '<th class="r">Старт вело-2</th>' : ''}
         <th>Статус</th>
     </tr></thead><tbody>`;
