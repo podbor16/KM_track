@@ -434,6 +434,21 @@ function forecastCellHtml(distSoFarKm, elapsedS, targetDistKm) {
     return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clock})</span>`;
 }
 
+// Аналог forecastCellHtml, но с возможностью передать baseEpoch для абсолютного времени
+function forecastCellWithBase(distSoFarKm, elapsedS, targetDistKm, baseEpoch) {
+    const fs = forecastTime(distSoFarKm, elapsedS, targetDistKm);
+    if (fs == null) return '';
+    let clockStr;
+    if (baseEpoch != null) {
+        const absTime = baseEpoch + fs * 1000;
+        const d = new Date(absTime);
+        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    } else {
+        clockStr = fmtClock(fs - elapsedS);
+    }
+    return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clockStr})</span>`;
+}
+
 // Возвращает готовую HTML-ячейку с прогнозом (аналогично forecastCellHtml)
 function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
     const fs = forecastFromLastSegment(passedPoints, targetDist);

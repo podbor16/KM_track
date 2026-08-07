@@ -1277,8 +1277,13 @@ function renderStage(stage) {
         // всех (найдено пользователем 2026-08-06 на живой гонке: колонка
         // пустая даже у явно активных "На трассе"). "Финиш" определяем так
         // же, как statusBadge/activeProgressBadge — pos.seq===maxSeq.
+        let baseEpoch = null;
+        if (dbStage === 'bike_day2' && r.bike2_start_s != null) {
+            const epoch = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
+            if (epoch != null) baseEpoch = epoch;
+        }
         const forecastCell = (pos && pos.seq !== maxSeq && r.status === 'active')
-            ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq])
+            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
         // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
