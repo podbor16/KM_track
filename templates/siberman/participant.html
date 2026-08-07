@@ -439,9 +439,11 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
 
     let rows = '';
     // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
+    // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
     let baseEpoch = null;
     if (dbStage === 'bike_day2') {
-        const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
+        const startS = r.bike2_start_s ?? r._teamBike2Start ?? null;
+        const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, startS);
         if (bike2StartEpochMs != null) {
             baseEpoch = bike2StartEpochMs;
         }
@@ -783,23 +785,23 @@ function renderTeam(data, team) {
     const teamBike2Cp = team.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
 
     const membersHtml = team.members.map(m => {
-        const cfgs = memberStages[m.relay_stage] ?? [];
-        return `
-        <div class="card" style="margin-bottom:12px">
-            <div class="card-hdr">
-                <div class="card-hdr-top">
-                    <span class="p-name" style="font-size:16px">${m.surname} ${m.name}</span>
-                    ${genderBadge(m.gender)}
-                </div>
-                <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
+    const cfgs = memberStages[m.relay_stage] ?? [];
+    return `
+    <div class="card" style="margin-bottom:12px">
+        <div class="card-hdr">
+            <div class="card-hdr-top">
+                <span class="p-name" style="font-size:16px">${m.surname} ${m.name}</span>
+                ${genderBadge(m.gender)}
             </div>
-            ${cfgs.map(cfg => stageSection(cfg, {
-                ...m, _bib: team.bib, _teamSwimS: teamSwimS,
-                cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
-            }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
-            ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
-        </div>`;
-    }).join('');
+            <div class="p-team">${({swim:'Плавание', bike:'Велосипед', run:'Бег'})[m.relay_stage] ?? m.relay_stage}</div>
+        </div>
+        ${cfgs.map(cfg => stageSection(cfg, {
+            ...m, _bib: team.bib, _teamSwimS: teamSwimS, _teamBike2Start: team.bike2_start_s,
+            cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
+        }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
+        ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
+    </div>`;
+}).join('');
 
     const html = `
     <div class="card">
