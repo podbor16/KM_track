@@ -442,10 +442,12 @@ function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
     const last = sorted[sorted.length - 1];
     let clockStr;
     if (baseEpoch != null) {
-        const absTime = baseEpoch + (fs - last.time) * 1000;
+        // Для Вело Дня 2: baseEpoch — время старта участника, fs — прогноз от старта этапа
+        const absTime = baseEpoch + fs * 1000;
         const d = new Date(absTime);
         clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
     } else {
+        // Для остальных этапов — относительно текущего времени
         clockStr = fmtClock(fs - last.time);
     }
     return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clockStr})</span>`;

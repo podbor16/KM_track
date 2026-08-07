@@ -438,6 +438,14 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     };
 
     let rows = '';
+    // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
+    let baseEpoch = null;
+    if (dbStage === 'bike_day2') {
+        const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
+        if (bike2StartEpochMs != null) {
+            baseEpoch = bike2StartEpochMs;
+        }
+    }
     for (let seq = 1; seq <= maxSeq; seq++) {
         const cum = r.cp?.[dbStage]?.[seq];
         const split = r.splits?.[dbStage]?.[seq];
@@ -468,14 +476,7 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         /*const forecastHtml = (pending && pos && r.status === 'active')
             ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
             : '';*/
-        // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
-        let baseEpoch = null;
-        if (dbStage === 'bike_day2') {
-            const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
-            if (bike2StartEpochMs != null) {
-                baseEpoch = bike2StartEpochMs;
-            }
-        }
+        
 
         const forecastHtml = (pending && pos && r.status === 'active' && passedPoints.length > 0)
             ? forecastCellFromPassedPoints(passedPoints, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch)
