@@ -923,7 +923,10 @@
 
     function bcPostTitle(mode, stage, category) {
     if (category === 'combined') {
-        // ВРЕМЕННАЯ ПРАВКА: всегда показываем этап, а не "СУММА ЭТАПОВ"
+        if (mode === 'global') {
+            return `🏆 АБСОЛЮТ. СУММА ЭТАПОВ. SIBERMAN 2026`;
+        }
+        // для stage и day используем этап (для day заголовок отдельно, но здесь не используется)
         return `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
     }
     if (category === 'relay' && mode === 'global') return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
@@ -944,7 +947,8 @@
         return `**${title}**\n**${header}**\n\n${body}${dnfBlock}\n\n${BC_FOOTER}`;
     }*/
 
-    function bcAssemble(title, header, body) {
+    // ---- Сборка поста (убран DNF) ----
+function bcAssemble(title, header, body) {
     // ВРЕМЕННАЯ ПРАВКА: убран параметр dnfBlock
     return `**${title}**\n**${header}**\n\n${body}\n\n${BC_FOOTER}`;
 }
@@ -966,6 +970,7 @@
     }
 
 
+    // ---- Режим "По всей гонке" (кумулятивное время, заголовок "СУММА ЭТАПОВ" для Абсолюта) ----
     function bcBuildGlobalPost(data, stage, seq, category) {
         const rows = bcCategoryRows(data, category);
         const maxSeq = STAGE_MAX_SEQ[stage];
@@ -975,10 +980,12 @@
         if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
 
         const title = bcPostTitle('global', stage, category);
-        const header = category === 'combined' ? bcAbsoluteHeaderLine(stage, seq) : bcGlobalHeaderLine(stage, seq);
+        // ВРЕМЕННАЯ ПРАВКА: используем простой заголовок без доп. дистанций (только текущая КТ + день/круги)
+        const header = bcCpHeaderLine(stage, seq);
+        // mode='global' – в bcEntryText будет использоваться globalProgress (кумулятивное время)
         const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'global')).join('\n\n');
         //return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
-        return bcAssemble(title, header, body);  // dnfBlock убран
+        return bcAssemble(title, header, body);
     }
 
     const BC_DAY_CONFIG = {
