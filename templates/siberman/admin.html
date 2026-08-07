@@ -912,14 +912,24 @@
     // Личный "по всей гонке" (mode==='global', category M/F) не подтверждён
     // ни одним присланным примером — сохранена прежняя формулировка
     // "ЛИЧНЫЙ ЗАЧЁТ" как разумный дефолт.
-    function bcPostTitle(mode, stage, category) {
+    /*function bcPostTitle(mode, stage, category) {
         if (category === 'combined') {
             return mode === 'global' ? '🏆 АБСОЛЮТ. СУММА ЭТАПОВ. SIBERMAN 2026' : `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
         }
         if (category === 'relay' && mode === 'global') return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
         if (mode === 'global') return `${BC_CATEGORY_TITLE[category]}. ЛИЧНЫЙ ЗАЧЁТ. SIBERMAN 2026`;
         return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+    }*/
+
+    function bcPostTitle(mode, stage, category) {
+    if (category === 'combined') {
+        // ВРЕМЕННАЯ ПРАВКА: всегда показываем этап, а не "СУММА ЭТАПОВ"
+        return `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
     }
+    if (category === 'relay' && mode === 'global') return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
+    if (mode === 'global') return `${BC_CATEGORY_TITLE[category]}. ЛИЧНЫЙ ЗАЧЁТ. SIBERMAN 2026`;
+    return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+}
 
     // Финальная сборка: жирный заголовок (2 строки), тело, DNF/DSQ-блок
     // (без разметки), курсивный футер со ссылками.
@@ -930,9 +940,14 @@
     // Markdown) при вставке не распознаются и остаются звёздочками как есть.
     // Тот же приём уже используется и подтверждён рабочим на проде в
     // генераторе постов суточной велогонки (templates/race_triatleta/tri_admin.html).
-    function bcAssemble(title, header, body, dnfBlock) {
+    /*function bcAssemble(title, header, body, dnfBlock) {
         return `**${title}**\n**${header}**\n\n${body}${dnfBlock}\n\n${BC_FOOTER}`;
-    }
+    }*/
+
+    function bcAssemble(title, header, body) {
+    // ВРЕМЕННАЯ ПРАВКА: убран параметр dnfBlock
+    return `**${title}**\n**${header}**\n\n${body}\n\n${BC_FOOTER}`;
+}
 
     function bcBuildStagePost(data, stage, seq, category) {
         const rows = bcCategoryRows(data, category);
@@ -946,8 +961,10 @@
         const title = bcPostTitle('stage', stage, category);
         const header = bcCpHeaderLine(stage, seq);
         const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'stage')).join('\n\n');
-        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        //return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        return bcAssemble(title, header, body);  // dnfBlock убран
     }
+
 
     function bcBuildGlobalPost(data, stage, seq, category) {
         const rows = bcCategoryRows(data, category);
@@ -960,7 +977,8 @@
         const title = bcPostTitle('global', stage, category);
         const header = category === 'combined' ? bcAbsoluteHeaderLine(stage, seq) : bcGlobalHeaderLine(stage, seq);
         const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'global')).join('\n\n');
-        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        //return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        return bcAssemble(title, header, body);  // dnfBlock убран
     }
 
     const BC_DAY_CONFIG = {
@@ -981,10 +999,11 @@
         const title = `${catTitlePrefix}. ИТОГИ ДНЯ ${cfg.label}. SIBERMAN 2026`;
         const header = `📍 Снапшот на конец дня ${cfg.label}.`;
         const body = list.map((item, idx) => bcEntryText(item, idx, category, cfg.stage, maxSeq, 'day')).join('\n\n');
-        return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        //return bcAssemble(title, header, body, bcDnfDsqBlock(rows, list, category));
+        return bcAssemble(title, header, body);  // dnfBlock убран
     }
 
-    async function bcGenerate() {
+    /*async function bcGenerate() {
         const btn = $('btn-bc-generate');
         const resultCard = $('bc-result-card');
         const ta = $('bc-post-preview');
@@ -1013,7 +1032,41 @@
         } finally {
             btn.textContent = 'Сгенерировать';
         }
+    }*/
+
+    async function bcGenerate() {
+    const btn = $('btn-bc-generate');
+    const resultCard = $('bc-result-card');
+    const ta = $('bc-post-preview');
+    btn.textContent = 'Генерирую…';
+    resultCard.style.display = 'none';
+    try {
+        const year = $('bc-year').value;
+        const r = await fetch(`/api/siberman/results?year=${year}`);
+        if (!r.ok) throw new Error('Не удалось загрузить данные');
+        const data = await r.json();
+        const mode = radioValue('bc-mode');
+        const category = radioValue('bc-category');
+        let text;
+        if (mode === 'stage') {
+            text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+        } else if (mode === 'global') {
+            // ВРЕМЕННАЯ ПРАВКА: для всех категорий используем формат "по этапу"
+            text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+        } else { // day
+            const cfg = BC_DAY_CONFIG[$('bc-day').value];
+            const maxSeq = STAGE_MAX_SEQ[cfg.stage];
+            text = bcBuildStagePost(data, cfg.stage, maxSeq, category);
+        }
+        ta.value = text;
+        resultCard.style.display = '';
+    } catch (e) {
+        ta.value = 'Ошибка: ' + e.message;
+        resultCard.style.display = '';
+    } finally {
+        btn.textContent = 'Сгенерировать';
     }
+}
     $('btn-bc-generate').addEventListener('click', bcGenerate);
 
     $('btn-bc-copy').addEventListener('click', async () => {
