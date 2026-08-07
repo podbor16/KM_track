@@ -1058,12 +1058,9 @@ function bcAssemble(title, header, body) {
         if (mode === 'stage') {
             text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
         } else if (mode === 'global') {
-            // ВРЕМЕННАЯ ПРАВКА: для всех категорий используем формат "по этапу"
-            text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+            text = bcBuildGlobalPost(data, $('bc-stage').value, Number($('bc-cp').value), category);
         } else { // day
-            const cfg = BC_DAY_CONFIG[$('bc-day').value];
-            const maxSeq = STAGE_MAX_SEQ[cfg.stage];
-            text = bcBuildStagePost(data, cfg.stage, maxSeq, category);
+            text = bcBuildDayPost(data, $('bc-day').value, category);
         }
         ta.value = text;
         resultCard.style.display = '';
