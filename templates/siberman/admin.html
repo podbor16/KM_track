@@ -922,15 +922,25 @@
     }*/
 
     function bcPostTitle(mode, stage, category) {
-    if (category === 'combined') {
-        if (mode === 'global') {
-            return `🏆 АБСОЛЮТ. СУММА ЭТАПОВ. SIBERMAN 2026`;
+    // ---- РЕЖИМ "ПО ВСЕЙ ГОНКЕ" ----
+    if (mode === 'global') {
+        if (category === 'combined') {
+            return '🏆 АБСОЛЮТ. СУММА ЭТАПОВ. SIBERMAN 2026';
         }
-        // для stage и day используем этап (для day заголовок отдельно, но здесь не используется)
+        if (category === 'relay') {
+            return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
+        }
+        // для мужчин и женщин
+        const title = BC_CATEGORY_TITLE[category] || category;
+        return `${title}. ЛИЧНЫЙ ЗАЧЁТ. СУММА ЭТАПОВ. SIBERMAN 2026`;
+    }
+    // ---- РЕЖИМ "ПО ЭТАПУ" (оставляем как было) ----
+    if (category === 'combined') {
         return `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
     }
-    if (category === 'relay' && mode === 'global') return '🏆 ЭСТАФЕТЫ. СУММА ЭТАПОВ. SIBERMAN 2026';
-    if (mode === 'global') return `${BC_CATEGORY_TITLE[category]}. ЛИЧНЫЙ ЗАЧЁТ. SIBERMAN 2026`;
+    if (category === 'relay') {
+        return `🏆 ЭСТАФЕТЫ ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+    }
     return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
 }
 
