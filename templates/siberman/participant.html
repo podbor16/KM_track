@@ -478,7 +478,8 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             : '';*/
         
 
-        const forecastHtml = (pending && pos && r.status === 'active' && passedPoints.length > 0)
+        const isNextCheckpoint = (pos && seq === pos.seq + 1);
+        const forecastHtml = (pending && pos && r.status === 'active' && passedPoints.length > 0 && isNextCheckpoint)
             ? forecastCellFromPassedPoints(passedPoints, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch)
             : '';
         const cumCell = cumDisplay != null
