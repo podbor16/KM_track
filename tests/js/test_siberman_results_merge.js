@@ -255,7 +255,7 @@ check('computeStageTimerState — «Следующий этап Вело Ден�
     setRaceData([dnfAfterSwim], [], now - 100000);
     const state = sandbox.computeStageTimerState();
     assert.strictEqual(state.type, 'next');
-    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.label, 'День 2');
 });
 
 check('computeStageTimerState — день 1 закрыт, известно ПЛАНОВОЕ время старта вело-дня-2 (в будущем) — обратный отсчёт, не статичный текст', () => {
@@ -272,7 +272,7 @@ check('computeStageTimerState — день 1 закрыт, известно ПЛ
     setRaceData([dnfAfterSwim], [], now - 100000, scheduledBike2, null);
     const state = sandbox.computeStageTimerState();
     assert.strictEqual(state.type, 'countdown');
-    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.label, 'День 2');
     assert.strictEqual(state.startEpoch, scheduledBike2);
 });
 check('computeStageTimerState — кто-то УЖЕ финишировал день 1 (личный "вход" в вело-день-2 известен), но плановый старт ещё впереди — всё равно обратный отсчёт, не elapsed-секундомер', () => {
@@ -296,7 +296,7 @@ check('computeStageTimerState — кто-то УЖЕ финишировал де
     setRaceData([finishedDay1], [], now - 20000, scheduledBike2, null);
     const state = sandbox.computeStageTimerState();
     assert.strictEqual(state.type, 'countdown', `ожидался обратный отсчёт до планового старта, получили: ${JSON.stringify(state)}`);
-    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.label, 'День 2');
     assert.strictEqual(state.startEpoch, scheduledBike2);
 });
 check('computeStageTimerState — день 1 закрыт, плановое время вело-дня-2 УЖЕ ПРОШЛО — статичный текст, не отрицательный отсчёт', () => {
@@ -307,7 +307,30 @@ check('computeStageTimerState — день 1 закрыт, плановое вр
     setRaceData([dnfAfterSwim], [], now - 100000, pastScheduled, null);
     const state = sandbox.computeStageTimerState();
     assert.strictEqual(state.type, 'next');
-    assert.strictEqual(state.label, 'Вело День 2');
+    assert.strictEqual(state.label, 'День 2');
+});
+check('computeStageTimerState — плановое время дня 2 УЖЕ ПРОШЛО, кто-то ещё активен — тикающий секундомер ОТ ПЛАНОВОГО СТАРТА, не от личного времени входа финишера дня 1', () => {
+    // Реальный баг с продакшна (найдено пользователем 2026-08-07, второй
+    // день только начался, а таймер сразу показал ~17 часов): старый якорь
+    // `_raceStartEpoch + off*1000` — это время, когда САМЫЙ БЫСТРЫЙ участник
+    // закончил день 1 (off), а не момент реального старта дня 2. Если день 1
+    // у лидера занял, скажем, 17 часов, таймер "Дня 2" сразу после его
+    // планового старта показывал бы ~17ч вместо ~0. Правильный якорь —
+    // plannedEpoch (bike2_start), когда он уже наступил.
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const maxSeqBike1 = vm.runInContext('STAGE_MAX_SEQ.bike_day1', sandbox);
+    // Лидер финишировал день 1 за 17 часов (61200с) от старта гонки.
+    const finishedDay1 = mkTimerInd(1, {
+        cp: { swim: { [maxSeqSwim]: 3000 }, bike_day1: { [maxSeqBike1]: 61200 } },
+        swim_s: 3000, bike1_s: 58200,
+    });
+    const raceStart = Date.now() - 18 * 3600 * 1000; // гонка началась 18ч назад
+    const scheduledBike2 = raceStart + 17.5 * 3600 * 1000; // плановый старт дня 2 — 30 мин назад
+    setRaceData([finishedDay1], [], raceStart, scheduledBike2, null);
+    const state = sandbox.computeStageTimerState();
+    assert.strictEqual(state.type, 'timer', `ожидался тикающий секундомер: ${JSON.stringify(state)}`);
+    assert.strictEqual(state.label, 'День 2');
+    assert.strictEqual(state.startEpoch, scheduledBike2, `якорь таймера должен быть плановым стартом дня 2, не временем входа финишера дня 1: ${JSON.stringify(state)}`);
 });
 
 check('computeStageTimerState — race_start ещё в будущем — обратный отсчёт до старта, не "День 1"', () => {

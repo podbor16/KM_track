@@ -2641,10 +2641,13 @@ function stageIsPending(dbStage) {
 // как предыдущий день уже полностью закрыт (никого не осталось на
 // трассе), см. computeStageTimerState. У "День 1" его нет — это самый
 // первый день, для него уже есть отдельный отсчёт до _raceStartEpoch.
+// label — просто "День N" (не название этапа) — запрошено пользователем
+// 2026-08-07: виджет над таблицей про КАЛЕНДАРНЫЙ день гонки, а не про то,
+// каким этапом он занят.
 const WIDGET_STAGES = [
     { label: 'День 1', startOffset: () => 0, pending: () => stageIsPending('swim') || stageIsPending('bike_day1'), scheduledEpoch: () => null },
-    { label: 'Вело День 2', startOffset: () => stageStartOffset('bike_day2'), pending: () => stageIsPending('bike_day2'), scheduledEpoch: () => _bike2StartEpoch },
-    { label: 'Бег', startOffset: () => stageStartOffset('run'), pending: () => stageIsPending('run'), scheduledEpoch: () => _runStartEpoch },
+    { label: 'День 2', startOffset: () => stageStartOffset('bike_day2'), pending: () => stageIsPending('bike_day2'), scheduledEpoch: () => _bike2StartEpoch },
+    { label: 'День 3', startOffset: () => stageStartOffset('run'), pending: () => stageIsPending('run'), scheduledEpoch: () => _runStartEpoch },
 ];
 
 // Идём по WIDGET_STAGES по порядку: первый ещё не закрытый элемент и есть
@@ -2676,7 +2679,17 @@ function computeStageTimerState() {
         if (sched != null && Date.now() < sched) return { type: 'countdown', label: s.label, startEpoch: sched };
         const off = s.startOffset();
         if (off == null) return { type: 'next', label: s.label };
-        if (s.pending()) return { type: 'timer', label: s.label, startEpoch: _raceStartEpoch + off * 1000 };
+        // Тикающий секундомер — от НАЧАЛА ДНЯ, не от личного времени входа
+        // конкретного (обычно самого быстрого) участника. У Дня 1 своего
+        // планового времени нет (sched===null, off всегда 0) — якорь
+        // race_start эквивалентен ему. У Дня 2/3 плановое время (sched)
+        // ЕСТЬ и уже прошло на этом шаге (иначе сработала бы countdown-
+        // ветка выше) — используем именно его, не race_start+off (тот был
+        // временем входа ПЕРВОГО финишировавшего предыдущий день, а не
+        // стартом текущего — из-за этого таймер "Дня 2" показывал ~17
+        // часов сразу после его реального старта, найдено пользователем
+        // 2026-08-07 на живой гонке).
+        if (s.pending()) return { type: 'timer', label: s.label, startEpoch: sched ?? (_raceStartEpoch + off * 1000) };
     }
     return { type: 'done' };
 }
