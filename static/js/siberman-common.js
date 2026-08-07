@@ -376,6 +376,34 @@ function forecastTime(distSoFarKm, elapsedS, targetDistKm) {
     return Math.round(elapsedS * (targetDistKm / distSoFarKm));
 }
 
+// Прогноз времени по скорости последнего отрезка
+// passedPoints: массив объектов {dist: км, time: сек} (от начала этапа), отсортированный по dist
+// targetDist: км (от начала этапа)
+// Возвращает число (сек) или null, если невозможно
+function forecastFromLastSegment(passedPoints, targetDist) {
+    if (!passedPoints || passedPoints.length === 0) return null;
+    const sorted = [...passedPoints].sort((a, b) => a.dist - b.dist);
+    const last = sorted[sorted.length - 1];
+    let speedKmPerSec;
+    if (sorted.length >= 2) {
+        const prev = sorted[sorted.length - 2];
+        const dDist = last.dist - prev.dist;
+        const dTime = last.time - prev.time;
+        if (dDist <= 0 || dTime <= 0) return null;
+        speedKmPerSec = dDist / dTime;
+    } else {
+        // Только одна точка – скорость от старта
+        if (last.dist <= 0 || last.time <= 0) return null;
+        speedKmPerSec = last.dist / last.time;
+    }
+    const remainingDist = targetDist - last.dist;
+    if (remainingDist <= 0) return null;
+    const additionalTime = remainingDist / speedKmPerSec;
+    return Math.round(last.time + additionalTime);
+}
+
+
+
 // Астрономическое (по часам) время прогноза — вторая строка рядом с
 // forecastTime()-прогнозом в скобках, 2026-08-06. remainingS — сколько ещё
 // секунд идти ДО прогнозируемой точки (forecastS - elapsedSoFar, т.е. уже
@@ -403,6 +431,16 @@ function forecastCellHtml(distSoFarKm, elapsedS, targetDistKm) {
     const fs = forecastTime(distSoFarKm, elapsedS, targetDistKm);
     if (fs == null) return '';
     const clock = fmtClock(fs - elapsedS);
+    return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clock})</span>`;
+}
+
+// Возвращает готовую HTML-ячейку с прогнозом (аналогично forecastCellHtml)
+function forecastCellFromPassedPoints(passedPoints, targetDist) {
+    const fs = forecastFromLastSegment(passedPoints, targetDist);
+    if (fs == null) return '';
+    const sorted = [...passedPoints].sort((a, b) => a.dist - b.dist);
+    const last = sorted[sorted.length - 1];
+    const clock = fmtClock(fs - last.time);
     return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clock})</span>`;
 }
 

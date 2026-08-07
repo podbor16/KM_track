@@ -394,7 +394,26 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     // ниже). Та же формула swimRef, что stageSection() уже использует для
     // этой же строки — velosipedист эстафеты сам не плавает, для него
     // swim_s пуст, берём swim КОМАНДЫ (_teamSwimS).
+    //const pos = stagePos({ cp: r.cp, swim_s: r.swim_s ?? r._teamSwimS ?? null }, dbStage);
     const pos = stagePos({ cp: r.cp, swim_s: r.swim_s ?? r._teamSwimS ?? null }, dbStage);
+
+    // Сбор пройденных точек для прогноза по последнему отрезку
+    let passedPoints = [];
+    if (pos) {
+        const swimRef = r.swim_s ?? r._teamSwimS ?? null;
+        for (let s = 1; s <= pos.seq; s++) {
+            const val = r.cp?.[dbStage]?.[s];
+            if (val != null) {
+                let timeVal = val;
+                // Для bike_day1 время в БД включает заплыв – вычитаем его
+                if (dbStage === 'bike_day1' && swimRef != null) {
+                    timeVal = val - swimRef;
+                }
+                const dist = CHECKPOINT_DIST_KM[dbStage][s];
+                passedPoints.push({ dist, time: timeVal });
+            }
+        }
+    }
 
     const absRanks = ranksFn(pool, dbStage, maxSeq);
     const absGaps = gapsFn(pool, dbStage, maxSeq);
@@ -446,8 +465,11 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         // строки (не только ближайшей будущей — все future-строки получают
         // свой прогноз). Только для реально активных (не DNF/DSQ/DNS) —
         // иначе прогноз обещал бы финиш тому, кто уже сошёл.
-        const forecastHtml = (pending && pos && r.status === 'active')
+        /*const forecastHtml = (pending && pos && r.status === 'active')
             ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
+            : '';*/
+        const forecastHtml = (pending && pos && r.status === 'active' && passedPoints.length > 0)
+            ? forecastCellFromPassedPoints(passedPoints, CHECKPOINT_DIST_KM[dbStage][seq])
             : '';
         const cumCell = cumDisplay != null
             ? fmtTime(cumDisplay)
