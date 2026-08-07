@@ -469,8 +469,16 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq])
             : '';*/
         const forecastHtml = (pending && pos && r.status === 'active' && passedPoints.length > 0)
-            ? forecastCellFromPassedPoints(passedPoints, CHECKPOINT_DIST_KM[dbStage][seq])
+            ? forecastCellFromPassedPoints(passedPoints, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch)
             : '';
+        // Вычисляем baseEpoch для этапа bike_day2 (гандикап)
+        let baseEpoch = null;
+        if (dbStage === 'bike_day2') {
+            const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
+            if (bike2StartEpochMs != null) {
+                baseEpoch = bike2StartEpochMs;
+            }
+        }
         const cumCell = cumDisplay != null
             ? fmtTime(cumDisplay)
             : (forecastHtml || '—');

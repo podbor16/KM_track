@@ -435,13 +435,20 @@ function forecastCellHtml(distSoFarKm, elapsedS, targetDistKm) {
 }
 
 // Возвращает готовую HTML-ячейку с прогнозом (аналогично forecastCellHtml)
-function forecastCellFromPassedPoints(passedPoints, targetDist) {
+function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
     const fs = forecastFromLastSegment(passedPoints, targetDist);
     if (fs == null) return '';
     const sorted = [...passedPoints].sort((a, b) => a.dist - b.dist);
     const last = sorted[sorted.length - 1];
-    const clock = fmtClock(fs - last.time);
-    return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clock})</span>`;
+    let clockStr;
+    if (baseEpoch != null) {
+        const absTime = baseEpoch + (fs - last.time) * 1000;
+        const d = new Date(absTime);
+        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    } else {
+        clockStr = fmtClock(fs - last.time);
+    }
+    return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clockStr})</span>`;
 }
 
 // То же самое, но возвращает ЧИСЛО (не форматированную строку) для графика:
