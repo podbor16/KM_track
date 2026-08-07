@@ -46,7 +46,7 @@ CHECKPOINT_COL_MAP: dict[tuple[str, int], tuple[str, int]] = {
     ("финиш 145 км", 0):    ("bike_day1", 6),
     # Вело день 2
     ("51 км", 0):           ("bike_day2", 1),
-    ("85 км", 0):           ("bike_day2", 2),
+    ("83 км", 0):           ("bike_day2", 2),
     ("119 км", 0):          ("bike_day2", 3),
     ("160 км", 0):          ("bike_day2", 4),   # "160 км (СШГЭС)" — startswith
     ("190 км", 0):          ("bike_day2", 5),   # "190 км Кольцо Саяногорск" — startswith
