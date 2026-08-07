@@ -1150,19 +1150,23 @@ function renderStage(stage) {
     // фактическому времени оказывался ниже в таблице, чем более медленный
     // участник (найдено пользователем 2026-08-06 на живой гонке).
     const relayMembers = _fmt !== 'individual'
-        ? relay.flatMap(t => {
-            const swimMember = t.members.find(x => x.relay_stage === 'swim');
-            const swimCp = swimMember?.cp?.swim;
-            const swimS = swimMember?.swim_s;
-            const bikeCp = t.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
-            return t.members
-                .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
-                .map(m => withStageStatus({
-                    ...m, _bib: t.bib, _team: t.team_name, swim_s: m.swim_s ?? swimS,
-                    cp: { ...m.cp, swim: m.cp?.swim ?? swimCp, bike_day2: m.cp?.bike_day2 ?? bikeCp },
-                }));
-        })
-        : [];
+    ? relay.flatMap(t => {
+        const swimMember = t.members.find(x => x.relay_stage === 'swim');
+        const swimCp = swimMember?.cp?.swim;
+        const swimS = swimMember?.swim_s;
+        const bikeCp = t.members.find(x => x.relay_stage === 'bike')?.cp?.bike_day2;
+        return t.members
+            .filter(m => m.relay_stage === cfg.relayStage && (_gender === 'all' || m.gender === _gender))
+            .map(m => withStageStatus({
+                ...m,
+                _bib: t.bib,
+                _team: t.team_name,
+                swim_s: m.swim_s ?? swimS,
+                bike2_start_s: m.bike2_start_s ?? t.bike2_start_s, // <-- добавить
+                cp: { ...m.cp, swim: m.cp?.swim ?? swimCp, bike_day2: m.cp?.bike_day2 ?? bikeCp },
+            }));
+    })
+    : [];
 
     if (rows.length === 0 && relayMembers.length === 0) {
         document.getElementById('app').innerHTML = '<div class="empty">Нет данных</div>';
@@ -1324,8 +1328,13 @@ function renderStage(stage) {
         const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
         // См. buildIndividualStageRow — тот же прогноз, та же поправка на
         // t/noTime (не сигнализирует "не финишировал", см. комментарий там).
+        let baseEpoch = null;
+        if (dbStage === 'bike_day2' && m.bike2_start_s != null) {
+            const epoch = bike2StartEpoch(_raceStartEpoch, m.bike2_start_s);
+            if (epoch != null) baseEpoch = epoch;
+        }
         const forecastCell = (pos && pos.seq !== maxSeq && m.status === 'active')
-            ? forecastCellHtml(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq])
+            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
