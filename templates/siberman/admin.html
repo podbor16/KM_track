@@ -215,6 +215,7 @@
                 <div class="radio-group" id="bc-mode-group">
                     <label class="radio-option"><input type="radio" name="bc-mode" value="stage" checked> По этапу</label>
                     <label class="radio-option"><input type="radio" name="bc-mode" value="global"> По всей гонке</label>
+                    <label class="radio-option"><input type="radio" name="bc-mode" value="global-forecast"> По всей гонке (с прогнозом)</label>
                     <label class="radio-option"><input type="radio" name="bc-mode" value="day"> По дням</label>
                 </div>
 
@@ -565,6 +566,11 @@
     const BC_STAGE_OPTIONS_BY_MODE = {
         stage:  [['swim', 'Плавание'], ['bike_day1', 'Вело День 1'], ['bike_day2', 'Вело День 2'], ['bike_combined', 'Вело (оба дня)'], ['run', 'Бег']],
         global: [['swim', 'Плавание'], ['bike_day1', 'Вело День 1'], ['bike_day2', 'Вело День 2'], ['run', 'Бег']],
+        // "По всей гонке (с прогнозом)" существует ТОЛЬКО для Бега — прогноз
+        // финиша ВСЕЙ ГОНКИ (не только текущего этапа) имеет смысл считать
+        // лишь на последнем этапе, где уже известны реальные результаты
+        // плавания/вело1/вело2 (запрошено пользователем 2026-08-08).
+        'global-forecast': [['run', 'Бег']],
     };
 
     function bcMaxSeq(stage) {
@@ -790,7 +796,7 @@
     // гонке"/"По дням"/Абсолют показывают кумулятивное межэтапное время
     // (globalProgress) без темпа — единицы темпа/скорости неоднородны на
     // стыке дисциплин. Лидер (idx===0) не показывает отставание вообще.
-    function bcEntryText(item, idx, category, stage, seq, mode) {
+    function bcEntryText(item, idx, category, stage, seq, mode, runStartEpoch) {
         const rank = idx + 1;
         const name = bcDisplayName(item.row, category, stage, mode);
         let timeLine;
@@ -805,15 +811,20 @@
         }
         const gapSuffix = idx === 0 ? '' : ` | ${bcGapText(item.gap)}`;
         // Темп бегового этапа (отдельной курсивной строкой) — только для
-        // поста "По всей гонке" на этапе "Бег": время гонки там кумулятивное
-        // (globalProgress, включает плавание+вело), из него темп бега не
-        // виден — берём отдельно elapsed ТОЛЬКО по бегу (bcStageRawTime,
-        // та же логика, что использует режим "По этапу"), запрошено
-        // пользователем 2026-08-08.
+        // поста "По всей гонке"/"По всей гонке (с прогнозом)" на этапе
+        // "Бег": время гонки там кумулятивное (globalProgress, включает
+        // плавание+вело), из него темп бега не виден — берём отдельно
+        // elapsed ТОЛЬКО по бегу (bcStageRawTime, та же логика, что
+        // использует режим "По этапу"), запрошено пользователем 2026-08-08.
         const paceLine = (mode !== 'stage' && stage === 'run')
             ? bcRunPaceLine(bcStageRawTime(item.row, stage, seq), bcDistKm(stage, seq))
             : '';
-        return `${rank}. ${name}${bcMedal(rank)}\n${timeLine}${gapSuffix}${paceLine}`;
+        // Прогноз финиша ВСЕЙ ГОНКИ — только у режима "По всей гонке (с
+        // прогнозом)", под темпом (запрошено пользователем 2026-08-08).
+        const forecastLine = (mode === 'global-forecast')
+            ? bcRaceForecastLine(item.row, stage, seq, runStartEpoch)
+            : '';
+        return `${rank}. ${name}${bcMedal(rank)}\n${timeLine}${gapSuffix}${paceLine}${forecastLine}`;
     }
     // "Темп бегового этапа М:СС мин/км" курсивом — тот же расчёт, что
     // avgPaceLabel для run (сек/км), но с суффиксом "мин/км" вместо "/км"
@@ -823,6 +834,36 @@
         const paceS = Math.round(timeS / distKm);
         const pace = `${Math.floor(paceS / 60)}:${String(paceS % 60).padStart(2, '0')} мин/км`;
         return `\n__Темп бега: ${pace}__`;
+    }
+    // Прогноз финиша ВСЕЙ ГОНКИ (не только Бега) — база экстраполяции строго
+    // беговая (тот же метод, что уже используется в results.html для
+    // "Итогов гонки", см. stageForecastCell), плавание+вело1+вело2 уже
+    // пройдены целиком к этому моменту и добавляются как prefix.
+    // baseEpoch — run_start (МАСС-старт Бега, ОДИН и тот же на всех
+    // участников) — НЕ считается через swim_s+bike1_s+bike2_s текущей
+    // строки: эти поля пересчитываются бэкендом на каждый живой опрос и
+    // могут незаметно "гулять" между опросами, что даёт дрейфующий
+    // прогноз даже без новой отметки на самом Беге (найдено и исправлено
+    // на results.html 2026-08-08, см. Obsidian
+    // astronomical-forecast-clock-drifts-without-fixed-epoch-anchor —
+    // тот же баг здесь означал бы то же самое). prefixedForecastCellWithBase
+    // возвращает готовую HTML-разметку (используется в results.html) — этот
+    // пост же plain-текст, поэтому значения из неё извлекаются регуляркой,
+    // а не дублируется формула.
+    function bcRaceForecastLine(row, stage, seq, runStartEpoch) {
+        if (row.status !== 'active' || runStartEpoch == null) return '';
+        const timeS = bcStageRawTime(row, stage, seq);
+        const distKm = bcDistKm(stage, seq);
+        if (timeS == null || !(distKm > 0)) return '';
+        const prefixS = (row.swim_s ?? 0) + (row.bike1_s ?? 0) + (row.bike2_s ?? 0);
+        const targetKm = CHECKPOINT_DIST_KM.run[STAGE_MAX_SEQ.run];
+        const cell = prefixedForecastCellWithBase(prefixS, distKm, timeS, targetKm, runStartEpoch);
+        if (!cell) return '';
+        const fm = cell.match(/forecast-cell">([^<]*)</);
+        const clockm = cell.match(/forecast-clock">\(([^<]*)\)</);
+        if (!fm) return '';
+        const clockPart = clockm ? ` (${clockm[1]})` : '';
+        return `\n__Прогноз финиша: ${fm[1]}${clockPart}__`;
     }
 
     // Уточнение в скобках после "N из M км" — круги для плавания/бега
@@ -1020,6 +1061,29 @@ function bcAssemble(title, header, body) {
         return bcAssemble(title, header, body);
     }
 
+    // ---- Режим "По всей гонке (с прогнозом)" — тот же пост, что "По всей
+    // гонке" на Беге (кумулятивное время + курсивный темп бега), плюс под
+    // темпом ещё одна курсивная строка — прогноз финиша ВСЕЙ ГОНКИ
+    // (запрошено пользователем 2026-08-08). Существует ТОЛЬКО для этапа
+    // "Бег" (см. BC_STAGE_OPTIONS_BY_MODE['global-forecast']) — прогноз
+    // финиша гонки целиком не имеет смысла ни на каком другом этапе, там
+    // ещё не пройдены все предыдущие дисциплины.
+    function bcBuildGlobalForecastPost(data, seq, category) {
+        const stage = 'run';
+        const rows = bcCategoryRows(data, category);
+        const maxSeq = STAGE_MAX_SEQ[stage];
+        const ranksBySeq = computeGlobalCheckpointRanks(rows, stage, maxSeq);
+        const gapsBySeq = computeGlobalCheckpointGaps(rows, stage, maxSeq);
+        const list = bcRankedList(rows, ranksBySeq, gapsBySeq, seq);
+        if (list.length === 0) return 'Нет данных для выбранной КТ (никто из категории ещё её не прошёл).';
+
+        const title = bcPostTitle('global', stage, category);
+        const header = bcCpHeaderLine(stage, seq);
+        const runStartEpoch = data.run_start ? new Date(data.run_start).getTime() : null;
+        const body = list.map((item, idx) => bcEntryText(item, idx, category, stage, seq, 'global-forecast', runStartEpoch)).join('\n\n');
+        return bcAssemble(title, header, body);
+    }
+
     const BC_DAY_CONFIG = {
         day1:      { stage: 'bike_day1', label: '1' },
         day1plus2: { stage: 'bike_day2', label: '1+2' },
@@ -1091,6 +1155,8 @@ function bcAssemble(title, header, body) {
             text = bcBuildStagePost(data, $('bc-stage').value, Number($('bc-cp').value), category);
         } else if (mode === 'global') {
             text = bcBuildGlobalPost(data, $('bc-stage').value, Number($('bc-cp').value), category);
+        } else if (mode === 'global-forecast') {
+            text = bcBuildGlobalForecastPost(data, Number($('bc-cp').value), category);
         } else { // day
             text = bcBuildDayPost(data, $('bc-day').value, category);
         }
