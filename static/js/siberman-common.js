@@ -449,6 +449,31 @@ function forecastCellWithBase(distSoFarKm, elapsedS, targetDistKm, baseEpoch) {
     return `<span class="forecast-cell">~${fmtTime(fs)}</span><span class="forecast-clock">(${clockStr})</span>`;
 }
 
+// Прогноз для сводных вкладок (Итоги гонки/Итог 1 дня/Итог 2 дней/Свод
+// вело) — прогресс/скорость считаются ТОЛЬКО по текущему (последнему)
+// этапу/дню (та же формула forecastTime, тот же distSoFarKm/elapsedS в
+// пределах ЭТОГО этапа), а к отображаемому ИТОГО добавляется уже
+// пройденное время предыдущих этапов (prefixS) — иначе прогноз тянул бы
+// среднюю скорость по всей гонке разом, бессмысленную при смене
+// дисциплины (плавание/вело/бег идут с разной скоростью). Часы (в
+// скобках) — та же семантика, что у forecastCellWithBase: "сейчас +
+// оставшееся [на текущем этапе] время", либо абсолютное время от
+// baseEpoch (личный старт вело-2), если передан.
+function prefixedForecastCellWithBase(prefixS, distSoFarKm, elapsedS, targetDistKm, baseEpoch) {
+    const fs = forecastTime(distSoFarKm, elapsedS, targetDistKm);
+    if (fs == null) return '';
+    const totalS = prefixS + fs;
+    let clockStr;
+    if (baseEpoch != null) {
+        const absTime = baseEpoch + fs * 1000;
+        const d = new Date(absTime);
+        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    } else {
+        clockStr = fmtClock(fs - elapsedS);
+    }
+    return `<span class="forecast-cell">~${fmtTime(totalS)}</span><span class="forecast-clock">(${clockStr})</span>`;
+}
+
 // Возвращает готовую HTML-ячейку с прогнозом (аналогично forecastCellHtml)
 function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
     const fs = forecastFromLastSegment(passedPoints, targetDist);
@@ -1034,6 +1059,10 @@ function teamGapRow(team) {
         },
         swim_s: bySwim?.swim_s, bike1_s: byBike?.bike1_s,
         bike2_s: byBike?.bike2_s, run_s: byRun?.run_s,
+        // Личный расчётный старт вело-2 велосипедиста команды — нужен для
+        // точных "часов" прогноза финиша на Дне 2/Своде вело (та же
+        // причина, что и у личников, см. bike2StartEpoch).
+        bike2_start_s: byBike?.bike2_start_s,
         // Команда считается активной, пока хотя бы её текущий "рабочий" член
         // не сошёл — упрощение: DNF любого члена трактуем как DNF команды.
         status: team.members.some(m => m.status === 'dnf') ? 'dnf' : 'active',

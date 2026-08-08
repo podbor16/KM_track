@@ -883,11 +883,50 @@ function overallSecondaryLabel() {
 // в остальных случаях — по явному запросу пользователя, п.7 v6, 2026-08-02).
 function showSecondaryRank() { return _gender === 'all' && _fmt !== 'relay'; }
 
+/* ──────────────── Прогноз финиша на сводных вкладках ────────────────
+   Итоги гонки/Итог 1 дня/Итог 2 дней/Свод вело — в отличие от вкладок
+   отдельных этапов (results.html:1300), где прогноз считается прямо по
+   cp[dbStage], здесь row — уже "виртуальный" объединённый участник
+   (сырая строка личника ИЛИ teamGapRow(team)/bikeCombinedRelayRider(team)
+   для эстафеты), поэтому row.cp/.swim_s/.bike1_s/.bike2_s/.status уже в
+   единой форме независимо от формата — см. dayForecastCell docs ниже.
+   dbStage — этап, чей ЖИВОЙ прогресс используется как база экстраполяции
+   (тот, на котором участник находится ПРЯМО СЕЙЧАС): 'bike_day1' для Дня 1,
+   'bike_day2' для Дня 2/Свода вело, 'run' для Итогов гонки — считать
+   прогноз по средней скорости ВСЕЙ гонки бессмысленно (плавание/вело/бег
+   идут с разной скоростью), поэтому экстраполируем только текущую
+   дисциплину, а уже пройденные этапы добавляем как prefixS (см.
+   prefixedForecastCellWithBase, siberman-common.js). */
+function stageForecastCell(row, dbStage, prefixS, baseEpoch) {
+    if (!row || row.status !== 'active') return '';
+    const pos = stagePos(row, dbStage);
+    if (!pos || pos.seq === STAGE_MAX_SEQ[dbStage]) return '';
+    const distKm = CHECKPOINT_DIST_KM[dbStage][pos.seq];
+    const targetKm = CHECKPOINT_DIST_KM[dbStage][STAGE_MAX_SEQ[dbStage]];
+    return prefixedForecastCellWithBase(prefixS, distKm, pos.value, targetKm, baseEpoch);
+}
+// Видимость колонки "Прогноз финиша" на сводных вкладках — тот же принцип,
+// что и на вкладках этапов (showForecastColumn, results.html:1197): скрыта,
+// пока НИКТО ещё не достиг первой КТ gateStage (до этого прогнозировать
+// нечего — запрошено пользователем 2026-08-08, разный gateStage для разных
+// вкладок: 'run' для Итогов гонки, 'bike_day1' для Дня 1, 'bike_day2' для
+// Дня 2/Свода вело), и снова скрыта, когда ВСЕ реально активные участники
+// уже прошли gateStage целиком (тогда всем ячейкам всё равно быть
+// пустыми). rows — [{cp, status}], уже единая форма (личник или
+// teamGapRow(team)).
+function showStageForecastColumn(rows, gateStage) {
+    const anyStarted = rows.some(r => !!lastReached(r.cp, gateStage));
+    const allActiveFinished = rows
+        .filter(r => r.status === 'active')
+        .every(r => lastReached(r.cp, gateStage)?.seq === STAGE_MAX_SEQ[gateStage]);
+    return anyStarted && !allActiveFinished;
+}
+
 // stageGaps — {swim,bike1,bike2,run,bikeCombined} каждая {bib: секунды} от
 // computeStageGaps()/bikeCombinedGaps() по ПОЛНОМУ объединённому пулу
 // личники+эстафета (см. renderOverall) — у каждой временной колонки своё
 // отставание (п.3, v5, 2026-07-23), не только у итогового времени.
-function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGenderRanks, stageGaps) {
+function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGenderRanks, stageGaps, showForecast) {
     // "Итого" — живое накопленное время гонки на ТЕКУЩЕЙ позиции
     // (racePos), а не серверное overall_s (которое null всю гонку до
     // полного финиша всех 4 этапов) — сходится с overall_s ровно в
@@ -900,6 +939,9 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
     const cur = currentStage(r);
     const cpPos = cur ? lastReached(r.cp, cur) : null;
     const lastCpCell = overallLastCpHtml(cur, cpPos?.seq);
+    // Прогноз финиша ГОНКИ ЦЕЛИКОМ — база экстраполяции строго беговая
+    // (см. stageForecastCell), plavanie+вело1+вело2 добавлены как prefixS.
+    const forecastCell = showForecast ? stageForecastCell(r, 'run', (r.swim_s ?? 0) + (r.bike1_s ?? 0) + (r.bike2_s ?? 0), null) : '';
     return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], combinedGenderRanks[r.gender]?.[r.bib], genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
@@ -909,6 +951,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
             <span class="badge badge-individual">Лично</span>
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name))}</td>
+        ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib], recordCategoriesFor(_recordsIndex, 'swim', r.surname, r.name))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
@@ -925,7 +968,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
 // команд (computeRanksByValue по live-позиции ТОЛЬКО эстафеты, полный
 // ростер года — не зависит от текущих фильтров, тот же принцип что
 // combinedRanks).
-function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, stageGaps) {
+function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, stageGaps, showForecast) {
     const tr = teamGapRow(team);
     const pos = racePos(tr, null);
     const liveTotal = pos ? pos.value : null;
@@ -941,6 +984,9 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     const cpPos = cur ? lastReached(tr.cp, cur) : null;
     const lastCpCell = overallLastCpHtml(cur, cpPos?.seq);
     const statusCell = teamStatusBadge(team);
+    // См. buildIndividualOverallRow — та же формула, tr уже несёт
+    // swim_s/bike1_s/bike2_s объединённые из соответствующих членов команды.
+    const forecastCell = showForecast ? stageForecastCell(tr, 'run', (tr.swim_s ?? 0) + (tr.bike1_s ?? 0) + (tr.bike2_s ?? 0), null) : '';
     return `<tr class="relay-row ${rc}${tr.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
         <td class="bib-cell">${team.bib}</td>
@@ -949,6 +995,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
             <span class="badge badge-relay">Эстафета</span>
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
+        ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib], swimM ? recordCategoriesFor(_recordsIndex, 'swim', swimM.surname, swimM.name) : [])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
@@ -994,9 +1041,15 @@ function buildMergedOverallEntries(individual, relay) {
     ];
 }
 
-const OVERALL_TABLE_HEAD = () => `<thead><tr>
+// showForecast — ИСКЛЮЧЕНИЕ из общего расположения колонки (перед
+// "Отметка" на остальных сводных вкладках, см. renderRankedProgress/
+// renderBikeCombined): здесь колонка сразу после "Итого" (запрошено
+// пользователем 2026-08-08 — прогноз финиша ГОНКИ логичнее видеть рядом
+// с итоговым временем, а не в конце строки).
+const OVERALL_TABLE_HEAD = (showForecast) => `<thead><tr>
     ${rankHeaderCells(showSecondaryRank(), overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th>
     <th class="r">Итого</th>
+    ${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
     <th class="r">🚴 Вело 2</th>
@@ -1081,14 +1134,21 @@ function renderOverall() {
         run: computeStageGaps(stageGapPool, 'run'),
     };
 
+    // Прогноз финиша гонки — виден только после первой КТ на Беге (раньше
+    // прогнозировать финиш ВСЕЙ гонки нечем, см. showStageForecastColumn),
+    // скрыт снова, когда все реально активные участники добежали
+    // (запрошено пользователем 2026-08-08).
+    const raceForecastRows = [...individual, ...relay.map(teamGapRow)];
+    const showForecast = showStageForecastColumn(raceForecastRows, 'run');
+
     // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
     // один тип) — личники и эстафета теперь однородные строки одной таблицы.
     const merged = buildMergedOverallEntries(individual, relay);
-    html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD()}<tbody>`;
+    html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD(showForecast)}<tbody>`;
     merged.forEach(item => {
         html += item.type === 'individual'
-            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, combinedGenderRanks, stageGaps)
-            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks, stageGaps);
+            ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, combinedGenderRanks, stageGaps, showForecast)
+            : buildRelayOverallRow(item.entry, overallGaps, combinedRanks, relayFormatRanks, stageGaps, showForecast);
     });
     html += '</tbody></table></div>';
 
@@ -1540,8 +1600,20 @@ function renderRankedProgress(options = {}) {
     });
     const gaps = computeOverallGaps(gapPool, maxStage);
     const showGenderCol = showSecondaryRank();
+    // Прогноз финиша Дня — виден только после первой КТ maxStage (Дня 1 —
+    // Вело День 1, Дня 2 — Вело День 2, запрошено пользователем 2026-08-08:
+    // до первой отметки ЭТОГО дня прогнозировать нечем — предыдущие этапы
+    // дня уже пройдены целиком и не дают текущей скорости).
+    const dayForecastRows = [...individual, ...relay.map(teamGapRow)];
+    const showForecast = showStageForecastColumn(dayForecastRows, maxStage);
+    // prefixS — уже пройденное до начала maxStage: для Дня 1 это заплыв,
+    // для Дня 2 — заплыв + Вело День 1 (см. stageForecastCell). baseEpoch —
+    // только у Дня 2 (личный расчётный старт вело-2, та же причина, что и
+    // на вкладке "Вело День 2").
+    const dayForecastPrefixS = row => maxStage === 'bike_day1' ? (row.swim_s ?? 0) : (row.swim_s ?? 0) + (row.bike1_s ?? 0);
+    const dayForecastBaseEpoch = row => maxStage === 'bike_day2' ? bike2StartEpoch(_raceStartEpoch, row.bike2_start_s) : null;
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
         const { type, entry, v, rawStatus } = item;
         const hasVal = v != null;
@@ -1561,6 +1633,9 @@ function renderRankedProgress(options = {}) {
         // без названия этапа (убрано по запросу пользователя 2026-08-02 —
         // формулировка должна быть идентична этапам).
         const statusEntity = type === 'individual' ? entry : teamGapRow(entry);
+        const forecastCell = showForecast
+            ? stageForecastCell(statusEntity, maxStage, dayForecastPrefixS(statusEntity), dayForecastBaseEpoch(statusEntity))
+            : '';
         const cur = currentStage(statusEntity, maxStage);
         const pos = cur ? lastReached(statusEntity.cp, cur) : null;
         // cumulativeLastCpHtml — не lastCpTwoLineHtml: "Отметка" на "Днях"
@@ -1584,6 +1659,7 @@ function renderRankedProgress(options = {}) {
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib])}</td>
             ${options.speedFn ? `<td class="r muted">${hasVal ? fmtSpeed(options.speedFn(v)) : '—'}</td>` : ''}
+            ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${lastCpCell}</td>
             <td>${progressStatusBadge(status, item._pos, isFinishedDay)}</td>
         </tr>`;
@@ -1610,7 +1686,7 @@ function bikeCombinedRelayRider(team) {
     const swimS = swimMember?.swim_s ?? null;
     // cp.swim подмешан от пловца команды — нужен только stageHasStarted()
     // (велосипедист сам не плавает, его собственный cp.swim пуст).
-    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, cp: { ...m.cp, swim: m.cp?.swim ?? swimMember?.cp?.swim } };
+    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, bike2_start_s: m.bike2_start_s, cp: { ...m.cp, swim: m.cp?.swim ?? swimMember?.cp?.swim } };
 }
 
 // Статус ИМЕННО вело-этапа (оба дня) — по факту достижения последней КТ
@@ -1693,8 +1769,16 @@ function renderBikeCombined() {
     );
     const showGenderCol = _gender === 'all';
 
+    // Прогноз финиша Свода вело — виден только после первой КТ Вело Дня 2
+    // (запрошено пользователем 2026-08-08, тот же критерий, что у "Итог
+    // 2 дней" — до Дня 2 нет собственной скорости этого дня для базы
+    // экстраполяции). prefixS — только Вело День 1 (bike1_s), БЕЗ заплыва:
+    // "Время" на этой вкладке уже bike-only (см. bikeCombinedLastPos).
+    const bikeForecastRows = [...individual, ...riders];
+    const showForecast = showStageForecastColumn(bikeForecastRows, 'bike_day2');
+
     html += `<div class="table-wrap"><table>
-    <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th><th class="r">Скорость</th><th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
+    <thead><tr>${rankHeaderCells(showGenderCol, 'Место (пол)')}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th><th class="r">Скорость</th>${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     rows.forEach(({ isRelay, entry, rawStatus, pos }) => {
         const hasVal = pos != null;
         const v = pos ? pos.value : null;
@@ -1714,6 +1798,9 @@ function renderBikeCombined() {
         const isFinishedBike = p => p.seq === maxVseq;
         const started = stageHasStarted(entry, 'bike_day1', _raceStartEpoch, Date.now());
         const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', entry.surname, entry.name);
+        const forecastCell = showForecast
+            ? stageForecastCell(entry, 'bike_day2', entry.bike1_s ?? 0, bike2StartEpoch(_raceStartEpoch, entry.bike2_start_s))
+            : '';
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
@@ -1723,6 +1810,7 @@ function renderBikeCombined() {
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
             <td class="r time-cell">${timeGapCell(fmtTime(v), gaps[entry.bib], recordCats)}</td>
             <td class="r muted">${hasVal ? fmtSpeed(distKm / (v / 3600)) : '—'}</td>
+            ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${bikeCombinedLastCpHtml(entry.cp)}</td>
             <td>${progressStatusBadge(status, pos, isFinishedBike, started)}</td>
         </tr>`;
