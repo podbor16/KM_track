@@ -1865,19 +1865,45 @@ function paceValueLabel(dbStage, v) {
 
 /* ──────────────── Мультивыбор для сравнения (п.7.2/п.8) ────────────────
    Без ограничения на число участников (снято по просьбе пользователя
-   2026-07-19) — категориальная палитра из 4 цветов (валидирована skill'ом
-   dataviz на "all-pairs" сравнение) переиспользуется по кругу для 5-го и
-   далее участника; цвет закреплён за конкретным bib по ПОРЯДКУ выбора (не
-   по позиции в отфильтрованном списке) — не "перекрашивает выживших", когда
-   другой участник добавляется/убирается из сравнения. */
+   2026-07-19). Полная категориальная палитра dataviz-skill'а (8 цветов,
+   документированный порядок) — ΔE-проверена валидатором на реальных
+   поверхностях сайта (--bg2: #FFFFFF светлая / #0c2035 тёмная), все 6
+   проверок проходят в adjacent-режиме (легенда с именами всегда видна —
+   это и есть требуемая "secondary encoding" для CVD-порога 6-8, тот же
+   компромисс, что этот график уже принял раньше с 4 цветами). Раньше
+   было только 4 цвета — на реальной гонке живые эстафеты (10 команд)
+   визуально повторялись каждые 4 линии (запрошено пользователем
+   2026-08-08, скриншот реальной страницы).
+   Для 9-го участника и далее — тот же набор 8 цветов вторым проходом со
+   штрихом (borderDash), т.е. composite encoding (цвет × стиль линии)
+   вместо выдумывания цветов сверх валидированного набора — 16 слотов
+   суммарно. Дальше 16 — повтор по кругу (никто не отличит 17+ линий по
+   одному только цвету, легенда/hover остаются точным источником истины).
+   Цвет/штрих закреплены за bib ДЕТЕРМИНИРОВАННО (хэш bib, не порядок
+   выбора) — раньше цвет зависел от позиции в _chartSelectedBibs, и
+   из-за splice() при снятии выбора кого-то ИЗ СЕРЕДИНЫ массива менял
+   цвет всем, кто шёл ПОСЛЕ него — тот же участник мог получить РАЗНЫЙ
+   цвет между сессиями. Хэш даёт тому же участнику один и тот же цвет
+   всегда, независимо от порядка/сессии. */
 const CHART_COMPARE_COLORS = {
-    light: ['#2a78d6', '#008300', '#e87ba4', '#eda100'],
-    dark:  ['#3987e5', '#008300', '#d55181', '#c98500'],
+    light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+    dark:  ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
 };
-function chartCompareColor(slotIdx) {
+const CHART_COMPARE_DASH = [[], [7, 4]]; // сплошная / штрих — второй проход по 8 цветам
+// djb2-хэш bib → стабильный индекс слота (0..15) — тот же участник ВСЕГДА
+// получает тот же цвет/штрих, не зависит от порядка выбора или сессии.
+function chartColorSlot(bib) {
+    const s = String(bib);
+    let hash = 5381;
+    for (let i = 0; i < s.length; i++) hash = ((hash * 33) ^ s.charCodeAt(i)) >>> 0;
+    const total = CHART_COMPARE_COLORS.light.length * CHART_COMPARE_DASH.length;
+    return hash % total;
+}
+function chartCompareColor(bib) {
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
     const palette = CHART_COMPARE_COLORS[theme];
-    return palette[slotIdx % palette.length];
+    const slot = chartColorSlot(bib);
+    return { color: palette[slot % palette.length], dash: CHART_COMPARE_DASH[Math.floor(slot / palette.length)] };
 }
 function chartToggleSelect(bib) {
     const idx = _chartSelectedBibs.indexOf(bib);
@@ -2034,10 +2060,11 @@ function attachChartSelectAllHandler() {
         render();
     });
 }
-function buildCompareDataset(d, color) {
+function buildCompareDataset(d, style) {
+    const { color, dash } = style;
     return {
         _bib: d._bib, label: d._name, data: d.data,
-        borderColor: color, backgroundColor: color,
+        borderColor: color, backgroundColor: color, borderDash: dash,
         borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6,
         pointBackgroundColor: color, pointBorderColor: cssVar('--bg2'), pointBorderWidth: 1.5,
         tension: 0.15, spanGaps: true,
@@ -2347,7 +2374,7 @@ function renderPaceChart() {
     const isCompare = _chartSelectedBibs.length > 0;
     const chartDatasets = isCompare
         ? datasets.filter(d => _chartSelectedBibs.includes(d._bib))
-            .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
+            .map(d => buildCompareDataset(d, chartCompareColor(d._bib)))
         : datasets.map(d => buildSpaghettiDataset(d, accent, context));
     const ctx = document.getElementById('sibermanPaceChart').getContext('2d');
     _paceChart = new Chart(ctx, {
@@ -2571,7 +2598,7 @@ function renderPositionChart() {
     const virtualDatasets = _chartStage ? datasets : datasets.map(withVirtualX);
     const chartDatasets = isCompare
         ? virtualDatasets.filter(d => _chartSelectedBibs.includes(d._bib))
-            .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
+            .map(d => buildCompareDataset(d, chartCompareColor(d._bib)))
         : virtualDatasets.map(d => buildSpaghettiDataset(d, accent, context));
     // Диапазон оси Y — по ФАКТИЧЕСКИ отображаемым линиям (при сравнении —
     // только выбранные участники), а не по всему полю; иначе при выборе
