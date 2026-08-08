@@ -822,7 +822,7 @@
         if (timeS == null || !(distKm > 0)) return '';
         const paceS = Math.round(timeS / distKm);
         const pace = `${Math.floor(paceS / 60)}:${String(paceS % 60).padStart(2, '0')} мин/км`;
-        return `\n__Темп бегового этапа: ${pace}__`;
+        return `\n__Темп бега: ${pace}__`;
     }
 
     // Уточнение в скобках после "N из M км" — круги для плавания/бега
