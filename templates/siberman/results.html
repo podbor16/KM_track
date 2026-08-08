@@ -2421,11 +2421,11 @@ function renderPositionChart() {
     // (оба дня)" сразу после Плавания, до раздельных Вело 1/Вело 2.
     const positionStageOptions = [
         { key: 'all', label: 'Вся гонка' },
-        { key: 'swim', label: STAGE_LABEL_RU.swim },
-        { key: 'bike', label: STAGE_LABEL_RU.bike },
-        { key: 'bike_day1', label: STAGE_LABEL_RU.bike_day1 },
-        { key: 'bike_day2', label: STAGE_LABEL_RU.bike_day2 },
-        { key: 'run', label: STAGE_LABEL_RU.run },
+        { key: 'swim', label: chartStageLabel('swim') },
+        { key: 'bike', label: chartStageLabel('bike') },
+        { key: 'bike_day1', label: chartStageLabel('bike_day1') },
+        { key: 'bike_day2', label: chartStageLabel('bike_day2') },
+        { key: 'run', label: chartStageLabel('run') },
     ];
     document.getElementById('app').innerHTML = `
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
@@ -2438,7 +2438,7 @@ function renderPositionChart() {
             ${chartSidebarHtml(datasets, true)}
             <div class="chart-main">
                 <div class="chart-mode-switch-row">${chartModeSwitchHtml()}</div>
-                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_chartStage ? `Место на этапе «${STAGE_LABEL_RU[_chartStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
+                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_chartStage ? `Место на этапе «${chartStageLabel(_chartStage)}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
                 <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
             </div>
         </div></div>`;
