@@ -1740,6 +1740,15 @@ const PACE_STAGE_LABEL = { swim: 'Плавание', bike: 'Вело (оба д�
 // ключи "Темп" (bike1/bike2) и обратно — см. _chartStage выше.
 const PACE_STAGE_ALIAS = { bike_day1: 'bike1', bike_day2: 'bike2' };
 const PACE_STAGE_UNALIAS = { bike1: 'bike_day1', bike2: 'bike_day2' };
+// Единый источник названий этапов для графиков (Позиция и Темп) — раньше
+// график "Позиция" брал короткие "Вело 1"/"Вело 2" из STAGE_LABEL_RU
+// (нужны там же и для компактной ячейки "Отметка" в таблице итогов, поэтому
+// сам STAGE_LABEL_RU не трогаем), из-за чего названия этапов расходились
+// между двумя графиками (найдено пользователем 2026-08-08).
+function chartStageLabel(key) {
+    if (key == null) return 'Вся гонка';
+    return PACE_STAGE_LABEL[PACE_STAGE_ALIAS[key] ?? key] ?? STAGE_LABEL_RU[key];
+}
 function paceValueLabel(dbStage, v) {
     if (v == null) return '—';
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(v);
@@ -2465,11 +2474,18 @@ function renderPositionChart() {
     const rangeMinRank = Math.min(...displayedRanks);
     const rangeMaxRank = Math.max(...displayedRanks);
     const rankSpan = rangeMaxRank - rangeMinRank + 1;
-    // В режиме "Вся гонка" (!_chartStage) сверху ещё рисуются подписи
-    // границ этапов (stageBoundaryPlugin) — при маленьком диапазоне мест
-    // (сравнение узкой группы) запаса в 2 места не хватало, подписи почти
-    // прилипали к верхней линии (найдено пользователем 2026-07-23, п.6 v5).
-    const topBufferMin = _chartStage ? 2 : 4;
+    // Раньше здесь стоял topBufferMin=4 специально под режим "Вся гонка" —
+    // резервировал место В ДАННЫХ оси Y под подписи границ этапов
+    // (stageBoundaryPlugin), чтобы текст не прилипал к верхней линии
+    // (2026-07-23, п.6 v5). При маленьком диапазоне мест (сравнение узкой
+    // группы, например 4 участницы) фиксированный буфер в единицах ранга
+    // становился НЕПРОПОРЦИОНАЛЬНО огромным — почти всё поле графика по
+    // вертикали превращалось в пустоту над единственной линией (найдено
+    // пользователем 2026-08-08). Подписи границ теперь рисуются В ОТСТУПЕ
+    // канваса (см. fillText ниже, chartArea.top МИНУС смещение, а не плюс)
+    // — больше не конкурируют за место с данными, буфер снова маленький
+    // и одинаковый для обоих режимов.
+    const topBufferMin = 2;
     const yAxisMin = rangeMinRank - Math.max(topBufferMin, Math.round(rankSpan * 0.15));
     const yAxisMax = rangeMaxRank + Math.max(1, Math.round(rankSpan * 0.08));
 
@@ -2491,7 +2507,12 @@ function renderPositionChart() {
                 ctx.moveTo(x, chartArea.top);
                 ctx.lineTo(x, chartArea.bottom);
                 ctx.stroke();
-                if (label) ctx.fillText(label, x + 4, chartArea.top + 12);
+                // Подпись рисуется НАД областью данных (в зоне layout.padding.top),
+                // а не поверх неё — иначе при маленьком диапазоне мест (узкая
+                // группа участников) приходилось резервировать под неё лишний
+                // буфер в самих данных оси Y, из-за чего появлялся непропорционально
+                // большой пустой отступ над верхней линией (2026-08-08).
+                if (label) ctx.fillText(label, x + 4, chartArea.top - 10);
             });
             ctx.restore();
         },
@@ -2723,9 +2744,25 @@ function computeStageTimerState() {
     return { type: 'done' };
 }
 
+// Подпись текущего состояния виджета — чтобы отличать "ничего не
+// изменилось" (просто тикнула секунда) от "day/тип реально сменился"
+// (2026-08-08: renderStageTimers() раньше вызывался только при реальном
+// изменении данных с сервера (dataChanged в refreshData) — если между
+// поллами тело ответа API не менялось (например, после закрытия Вело Дня
+// 1 и до начала Бега никто не проходил новых КТ), состояние виджета
+// замораживалось на последнем вычисленном — секундомер "День 1" тикал
+// бесконечно, даже когда по расписанию давно наступил День 2/День 3,
+// т.к. computeStageTimerState() зависит от текущего времени (Date.now()),
+// а не только от данных, и просто не пересчитывался).
+let _lastTimerStateKey = null;
+function timerStateKey(state) {
+    return state ? `${state.type}:${state.label}:${state.startEpoch ?? ''}` : null;
+}
+
 function renderStageTimers() {
     const el = document.getElementById('stageTimers');
     const state = computeStageTimerState();
+    _lastTimerStateKey = timerStateKey(state);
     if (!state) {
         el.style.display = 'none';
         el.innerHTML = '';
@@ -2757,6 +2794,15 @@ function renderStageTimers() {
 }
 
 function tickStageTimers() {
+    // Пересчитываем состояние на каждый тик (не только когда сервер
+    // прислал новые данные) — переключение дня/типа виджета зависит от
+    // текущего времени, а не только от _data (см. комментарий у
+    // _lastTimerStateKey). Перерисовываем DOM только если состояние
+    // реально сменилось — не на каждую секунду.
+    if (timerStateKey(computeStageTimerState()) !== _lastTimerStateKey) {
+        renderStageTimers();
+        return;
+    }
     document.querySelectorAll('.stage-timer[data-start]').forEach(el => {
         const elapsed = Math.max(0, Math.floor((Date.now() - Number(el.dataset.start)) / 1000));
         el.querySelector('.stage-timer-val').textContent = fmtTime(elapsed);
