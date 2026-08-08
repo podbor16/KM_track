@@ -332,6 +332,7 @@ function buildOverallGapPool(data) {
 let _mode = 'race';
 let _rerender = null;
 let _raceStartEpoch = null; // мс, из data.race_start — для stageHasStarted() на Вело День 2
+let _runStartEpoch = null; // мс, из data.run_start — масс-старт Бега, якорь астрономического прогноза
 let _recordsIndex = {}; // "column_key:category" → запись, buildRecordsIndex(data.records), 2026-08-05
 
 function modeToggle() {
@@ -419,15 +420,35 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
     };
 
     let rows = '';
-    // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
-    // Вычисляем baseEpoch для этапа bike_day2 (гандикап) — должно быть ДО forecastHtml
+    // Якорь для АСТРОНОМИЧЕСКОГО прогноза (часы в скобках у "~ЧЧ:ММ:СС") —
+    // ФИКСИРОВАННЫЙ момент старта dbStage, а НЕ "сейчас" (Date.now()).
+    // Раньше здесь baseEpoch считался ТОЛЬКО для bike_day2 — на остальных
+    // этапах (Плавание/Вело1/Бег) оставался null, и forecastCellWithBase/
+    // prefixedForecastCellWithBase проваливались в fmtClock(fs-elapsedS) =
+    // Date.now()+remaining — remaining неизменен между реальными КТ, а
+    // Date.now() растёт с каждым ре-рендером, поэтому прогноз "уезжал"
+    // вперёд на каждое обновление (тот же баг, что нашли и закрыли на
+    // results.html 2026-08-08, см. Obsidian
+    // astronomical-forecast-clock-drifts-without-fixed-epoch-anchor — тот
+    // же фикс нужен и здесь). Три модели старта — swim: масс-старт гонки
+    // (race_start); bike_day1: ЛИЧНЫЙ вход сразу по факту финиша заплыва
+    // (race_start + swimRef); bike_day2: расчётный личный старт
+    // (bike2_start_s/гандикап, как уже было); run: МАСС-старт этапа
+    // (_runStartEpoch — один и тот же на всех, НЕ считается через
+    // swim_s+bike1_s+bike2_s текущей строки — эти поля живые и "гуляют"
+    // между пересчётами бэкенда, что дало ВТОРОЙ, более тонкий раунд того
+    // же дрейф-бага на results.html).
     let baseEpoch = null;
-    if (dbStage === 'bike_day2') {
+    if (dbStage === 'run') {
+        baseEpoch = _runStartEpoch;
+    } else if (dbStage === 'bike_day2') {
         const startS = r.bike2_start_s ?? r._teamBike2Start ?? null;
-        const bike2StartEpochMs = bike2StartEpoch(_raceStartEpoch, startS);
-        if (bike2StartEpochMs != null) {
-            baseEpoch = bike2StartEpochMs;
-        }
+        baseEpoch = bike2StartEpoch(_raceStartEpoch, startS);
+    } else if (dbStage === 'bike_day1') {
+        const swimEntry = r.swim_s ?? r._teamSwimS ?? null;
+        baseEpoch = (_raceStartEpoch != null && swimEntry != null) ? _raceStartEpoch + swimEntry * 1000 : null;
+    } else {
+        baseEpoch = _raceStartEpoch;
     }
     // "Общее время" в табе "Гонка" — накопительное С НАЧАЛА ГОНКИ (сумма
     // прошлых ПОЛНЫХ этапов + прогресс на текущем), не время в рамках
@@ -872,6 +893,7 @@ async function load() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         _raceStartEpoch = data.race_start ? new Date(data.race_start).getTime() : null;
+        _runStartEpoch = data.run_start ? new Date(data.run_start).getTime() : null;
         _recordsIndex = buildRecordsIndex(data.records);
 
         const person = data.individual.find(r => r.bib === BIB);
