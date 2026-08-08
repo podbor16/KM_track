@@ -941,7 +941,7 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
     const lastCpCell = overallLastCpHtml(cur, cpPos?.seq);
     // Прогноз финиша ГОНКИ ЦЕЛИКОМ — база экстраполяции строго беговая
     // (см. stageForecastCell), plavanie+вело1+вело2 добавлены как prefixS.
-    const forecastCell = showForecast ? stageForecastCell(r, 'run', (r.swim_s ?? 0) + (r.bike1_s ?? 0) + (r.bike2_s ?? 0), null) : '';
+    const forecastCell = showForecast ? stageForecastCell(r, 'run', (r.swim_s ?? 0) + (r.bike1_s ?? 0) + (r.bike2_s ?? 0), stageStartEpochFor(r, 'run')) : '';
     return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], combinedGenderRanks[r.gender]?.[r.bib], genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
@@ -986,7 +986,7 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     const statusCell = teamStatusBadge(team);
     // См. buildIndividualOverallRow — та же формула, tr уже несёт
     // swim_s/bike1_s/bike2_s объединённые из соответствующих членов команды.
-    const forecastCell = showForecast ? stageForecastCell(tr, 'run', (tr.swim_s ?? 0) + (tr.bike1_s ?? 0) + (tr.bike2_s ?? 0), null) : '';
+    const forecastCell = showForecast ? stageForecastCell(tr, 'run', (tr.swim_s ?? 0) + (tr.bike1_s ?? 0) + (tr.bike2_s ?? 0), stageStartEpochFor(tr, 'run')) : '';
     return `<tr class="relay-row ${rc}${tr.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
         <td class="bib-cell">${team.bib}</td>
@@ -1362,11 +1362,7 @@ function renderStage(stage) {
         // всех (найдено пользователем 2026-08-06 на живой гонке: колонка
         // пустая даже у явно активных "На трассе"). "Финиш" определяем так
         // же, как statusBadge/activeProgressBadge — pos.seq===maxSeq.
-        let baseEpoch = null;
-        if (dbStage === 'bike_day2' && r.bike2_start_s != null) {
-            const epoch = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
-            if (epoch != null) baseEpoch = epoch;
-        }
+        const baseEpoch = stageStartEpochFor(r, dbStage);
         const forecastCell = (lastCpPos && lastCpPos.seq !== maxSeq && r.status === 'active')
             ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
@@ -1419,11 +1415,7 @@ function renderStage(stage) {
         const meta = lastCpPos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value) : '—';
         // См. buildIndividualStageRow — тот же прогноз, та же поправка на
         // t/noTime (не сигнализирует "не финишировал", см. комментарий там).
-        let baseEpoch = null;
-        if (dbStage === 'bike_day2' && m.bike2_start_s != null) {
-            const epoch = bike2StartEpoch(_raceStartEpoch, m.bike2_start_s);
-            if (epoch != null) baseEpoch = epoch;
-        }
+        const baseEpoch = stageStartEpochFor(m, dbStage);
         const forecastCell = (lastCpPos && lastCpPos.seq !== maxSeq && m.status === 'active')
             ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
@@ -1617,11 +1609,11 @@ function renderRankedProgress(options = {}) {
     const dayForecastRows = [...individual, ...relay.map(teamGapRow)];
     const showForecast = showStageForecastColumn(dayForecastRows, maxStage);
     // prefixS — уже пройденное до начала maxStage: для Дня 1 это заплыв,
-    // для Дня 2 — заплыв + Вело День 1 (см. stageForecastCell). baseEpoch —
-    // только у Дня 2 (личный расчётный старт вело-2, та же причина, что и
-    // на вкладке "Вело День 2").
+    // для Дня 2 — заплыв + Вело День 1 (см. stageForecastCell) — тот же
+    // офф-сет, что и у stageStartEpochFor (астрономический якорь), просто
+    // в секундах, а не epoch-миллисекундах.
     const dayForecastPrefixS = row => maxStage === 'bike_day1' ? (row.swim_s ?? 0) : (row.swim_s ?? 0) + (row.bike1_s ?? 0);
-    const dayForecastBaseEpoch = row => maxStage === 'bike_day2' ? bike2StartEpoch(_raceStartEpoch, row.bike2_start_s) : null;
+    const dayForecastBaseEpoch = row => stageStartEpochFor(row, maxStage);
     html += `<div class="table-wrap"><table>
     <thead><tr>${rankHeaderCells(showGenderCol, overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th><th class="r">Время</th>${options.speedFn ? '<th class="r">Скорость</th>' : ''}${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}<th>Отметка</th><th>Статус</th></tr></thead><tbody>`;
     entries.forEach(item => {
@@ -1809,7 +1801,7 @@ function renderBikeCombined() {
         const started = stageHasStarted(entry, 'bike_day1', _raceStartEpoch, Date.now());
         const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', entry.surname, entry.name);
         const forecastCell = showForecast
-            ? stageForecastCell(entry, 'bike_day2', entry.bike1_s ?? 0, bike2StartEpoch(_raceStartEpoch, entry.bike2_start_s))
+            ? stageForecastCell(entry, 'bike_day2', entry.bike1_s ?? 0, stageStartEpochFor(entry, 'bike_day2'))
             : '';
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
@@ -2771,6 +2763,32 @@ function stageEntryOffset(row, dbStage) {
     const keys = STAGE_PRIOR_KEYS[dbStage];
     if (keys.some(k => row[k] == null)) return null;
     return keys.reduce((sum, k) => sum + row[k], 0);
+}
+
+// Якорь для АСТРОНОМИЧЕСКОГО прогноза финиша (часы в скобках рядом с
+// "~ЧЧ:ММ:СС") — ФИКСИРОВАННЫЙ момент реального входа участника в dbStage
+// (race_start + stageEntryOffset), а НЕ "сейчас" (Date.now()). Раньше
+// forecastCellWithBase/prefixedForecastCellWithBase почти везде получали
+// baseEpoch===null (кроме Вело Дня 2) и считали часы как
+// fmtClock(fs-elapsedS) = Date.now()+remaining — remaining неизменен
+// между реальными КТ, а Date.now() растёт с каждым ре-рендером, из-за чего
+// предсказанное время финиша БЕСКОНЕЧНО дрейфовало вперёд вместе с
+// текущим временем вместо того, чтобы оставаться неизменным до следующей
+// реальной отметки (найдено пользователем 2026-08-08: "прогноз
+// пересчитывается с каждым обновлением страницы"). С фиксированным
+// baseEpoch часы = baseEpoch + fs*1000 — не зависят от момента рендера,
+// меняются, только когда участник реально проходит следующую КТ (fs
+// пересчитан по новым данным). Вело День 2 — единственное исключение с
+// СВОИМ якорем (bike2_start_s, расчётный личный старт с учётом хендикапа/
+// ночного перерыва) — не совпадает с "race_start + сумма предыдущих
+// этапов" общей формулы.
+function stageStartEpochFor(row, dbStage) {
+    if (dbStage === 'bike_day2') {
+        return row.bike2_start_s != null ? bike2StartEpoch(_raceStartEpoch, row.bike2_start_s) : null;
+    }
+    if (_raceStartEpoch == null) return null;
+    const off = stageEntryOffset(row, dbStage);
+    return off != null ? _raceStartEpoch + off * 1000 : null;
 }
 
 // Момент начала этапа в целом = вход САМОГО БЫСТРОГО дошедшего участника.
