@@ -183,6 +183,34 @@ def test_apply_snapshot_dnf_status_maps_to_dnf_run_and_updates(
 @patch("src.siberman.copernico_run.get_stage_starts")
 @patch("src.siberman.copernico_run.upsert_checkpoint_time")
 @patch("src.siberman.copernico_run.update_participant_status")
+def test_apply_snapshot_does_not_clear_dnf_from_earlier_stage_when_run_status_is_notstarted(
+    mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
+    mock_cp_times, mock_recompute, mock_run_enabled,
+):
+    """Регрессия 2026-08-08: Copernico отдаёт статус ТОЛЬКО по бегу —
+    "notstarted" для всех, кто ещё не финишировал бег, в т.ч. для тех, кто
+    сошёл на плавании/вело. Такой снапшот не должен затирать уже
+    проставленный dnf/dsq обратно в active."""
+    mock_stage_starts.return_value = {"run_start": datetime.datetime(2026, 8, 8, 8, 30, 0), "bike2_start": None}
+    mock_checkpoints.return_value = [{"stage": "run", "seq": 1, "id": 5001}]
+    mock_participants.return_value = [
+        {"id": 900, "bib": "156", "relay_stage": "none", "status": "dnf", "dnf_stage": "bike_day1"},
+    ]
+    runners = [{"dorsal": 156, "category": "Мужчины", "status": "notstarted"}]
+
+    apply_copernico_snapshot(_mk_conn(), 2026, runners, CFG)
+
+    mock_update_status.assert_not_called()
+
+
+@patch("src.siberman.copernico_run.get_copernico_run_enabled", return_value=True)
+@patch("src.siberman.copernico_run.recompute_totals_ranks_records")
+@patch("src.siberman.copernico_run.get_checkpoint_times_for_year", return_value=({}, {}))
+@patch("src.siberman.copernico_run.get_participants_for_year")
+@patch("src.siberman.copernico_run.get_checkpoints")
+@patch("src.siberman.copernico_run.get_stage_starts")
+@patch("src.siberman.copernico_run.upsert_checkpoint_time")
+@patch("src.siberman.copernico_run.update_participant_status")
 def test_apply_snapshot_no_run_start_configured_returns_error_without_writes(
     mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
     mock_cp_times, mock_recompute, mock_run_enabled,

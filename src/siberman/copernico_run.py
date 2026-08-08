@@ -188,6 +188,14 @@ def apply_copernico_snapshot(conn, race_year: int, runners: list[dict], cfg: dic
             mapped = STATUS_MAP.get(str(raw_status).strip().lower())
             if mapped is not None:
                 new_status, dnf_stage = mapped
+                # Copernico отдаёт статус ТОЛЬКО по беговому этапу — "notstarted"
+                # для всех, кто ещё не финишировал бег, даже если участник уже
+                # сошёл на плавании/вело. Без этой проверки такой снапшот тут же
+                # затирал уже проставленный dnf/dsq обратно в active (баг,
+                # найден пользователем 2026-08-08 в день бегового этапа).
+                already_dnf = participant["status"] in ("dnf", "dsq")
+                if already_dnf and new_status == "active":
+                    continue
                 if new_status != participant["status"] or dnf_stage != participant.get("dnf_stage"):
                     update_participant_status(conn, pid, new_status, dnf_stage)
                     status_updates += 1
