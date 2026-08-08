@@ -3,7 +3,7 @@ import logging
 import mysql.connector
 from typing import Optional
 
-from src.siberman.finish_counts import get_prior_finish_count
+from src.siberman.finish_counts import get_finish_count
 
 log = logging.getLogger(__name__)
 
@@ -366,10 +366,39 @@ def get_checkpoint_times_for_year(
     return cumulative, splits
 
 
+def get_finished_years_by_name(conn) -> dict[str, set[int]]:
+    """"фамилия имя" (нормализовано) -> множество ГОДОВ ИЗ БД, где личник с
+    таким именем реально дошёл до финиша бега (последняя круговая КТ,
+    seq=12, не считая live-субметок Copernico seq>100 — см. миграцию 009).
+    Только личный зачёт (get_finish_count тоже только для личников) — по
+    ВСЕМ годам сразу, не только race_year, т.к. вызывающий код (get_finish_count)
+    сам решает, какие из этих годов "прошлые" относительно года, который
+    сейчас смотрят (запрошено пользователем 2026-08-08 — раньше число
+    финишей было единой статичной цифрой, не учитывающей ГОД просмотра:
+    архив 2025 показывал то же число, что и текущий 2026, хотя для
+    участника, финишировавшего оба года, в 2025 корректно должно быть на
+    1 меньше)."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT DISTINCT p.race_year, p.surname, p.name
+        FROM participants p
+        JOIN checkpoint_times ct ON ct.participant_id = p.id
+        JOIN checkpoints c ON c.id = ct.checkpoint_id
+        WHERE p.format='individual' AND p.status='active'
+          AND c.stage='run' AND c.seq=12 AND ct.cumulative_s IS NOT NULL
+    """)
+    result: dict[str, set[int]] = {}
+    for row in cur.fetchall():
+        key = " ".join(f"{row['surname']} {row['name']}".split()).lower()
+        result.setdefault(key, set()).add(row["race_year"])
+    return result
+
+
 def get_results_for_year(conn, race_year: int) -> dict:
     """Вернуть все результаты за год для публичной страницы."""
     cur = conn.cursor(dictionary=True)
     cp_by_pid, split_by_pid = get_checkpoint_times_for_year(conn, race_year)
+    finished_years_by_name = get_finished_years_by_name(conn)
 
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
@@ -402,7 +431,7 @@ def get_results_for_year(conn, race_year: int) -> dict:
         p["splits"] = split_by_pid.get(pid, {})
         # Только личный зачёт (запрошено пользователем 2026-08-05) — у
         # эстафетных команд свой "стаж" не считается.
-        p["finish_count"] = get_prior_finish_count(p["surname"], p["name"])
+        p["finish_count"] = get_finish_count(p["surname"], p["name"], race_year, finished_years_by_name)
 
     # Эстафетные члены (все трое)
     cur.execute("""
