@@ -429,6 +429,17 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
             baseEpoch = bike2StartEpochMs;
         }
     }
+    // "Общее время" в табе "Гонка" — накопительное С НАЧАЛА ГОНКИ (сумма
+    // прошлых ПОЛНЫХ этапов + прогресс на текущем), не время в рамках
+    // этапа — та же семантика, что уже используют globalProgress()-based
+    // Место/Отставание при этом переключателе (запрошено пользователем
+    // 2026-08-08). raceRow — с team-подстановкой: у эстафетчика swim_s/
+    // bike1_s/bike2_s заполнены ТОЛЬКО за его собственный этап (сервер
+    // отдаёт stage_totals по his participant_id) — на секции ЧУЖОГО для
+    // него этапа (напр. run-этап у бегуна не знает bike1_s байкера
+    // команды) нужны агрегаты команды (_teamBike1S/_teamBike2S, та же
+    // идея, что уже есть у _teamSwimS).
+    const raceRow = { cp: r.cp, swim_s: r.swim_s ?? r._teamSwimS ?? null, bike1_s: r.bike1_s ?? r._teamBike1S ?? null, bike2_s: r.bike2_s ?? r._teamBike2S ?? null };
     for (let seq = 1; seq <= maxSeq; seq++) {
         const cum = r.cp?.[dbStage]?.[seq];
         const split = r.splits?.[dbStage]?.[seq];
@@ -445,10 +456,15 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         // == cum(seq=1) (нет seq=0, от которого вычесть), split(seq>1) не
         // меняется при вычитании (одна и та же константа сокращается в
         // разности cum(seq)-cum(seq-1)), поэтому реально трогает только
-        // cum-колонку целиком и первую строку split.
+        // cum-колонку целиком и первую строку split. Актуально ТОЛЬКО для
+        // "Этапа" — "Гонка" считает cumDisplay целиком через globalProgress
+        // (см. ниже), которая для bike_day1 уже возвращает raw-значение
+        // напрямую (оно и так race-cumulative, заплыв уже внутри).
         const swimRef = r.swim_s ?? r._teamSwimS ?? null;
         const isBikeDay1WithSwim = dbStage === 'bike_day1' && swimRef != null;
-        const cumDisplay = (isBikeDay1WithSwim && cum != null) ? cum - swimRef : cum;
+        const cumDisplay = isRace
+            ? globalProgress(raceRow, dbStage, seq)
+            : (isBikeDay1WithSwim && cum != null) ? cum - swimRef : cum;
         const splitDisplay = (isBikeDay1WithSwim && seq === 1 && split != null) ? split - swimRef : split;
         const paceCell = splitDisplay != null ? splitPaceLabel(dbStage, seq, splitDisplay) : '—';
         // Прогноз "Общего времени" для БЛИЖАЙШЕЙ следующей ещё не пройденной
@@ -456,10 +472,17 @@ function stageBody(dbStage, r, gapPool, myKey, overallGapPool, raceKey) {
         // скорости последнего отрезка — по решению директора трассы
         // 2026-08-08, откат от версии на скорости последнего сплита).
         // Только для реально активных (не DNF/DSQ/DNS) — иначе прогноз
-        // обещал бы финиш тому, кто уже сошёл.
+        // обещал бы финиш тому, кто уже сошёл. В "Гонке" прогноз тоже
+        // должен быть race-cumulative (иначе маленькое "предсказанное"
+        // число смотрелось бы сломанным сразу под большими накопленными
+        // цифрами выше) — prefixS = разница между race-cumulative и
+        // stage-only значением НА ПОСЛЕДНЕЙ известной позиции (тот же
+        // приём, что stageForecastCell в results.html).
         const isNextCheckpoint = (pos && seq === pos.seq + 1);
         const forecastHtml = (pending && pos && r.status === 'active' && isNextCheckpoint)
-            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch)
+            ? (isRace
+                ? prefixedForecastCellWithBase(globalProgress(raceRow, dbStage, pos.seq) - pos.value, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch)
+                : forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][seq], baseEpoch))
             : '';
         const cumCell = cumDisplay != null
             ? fmtTime(cumDisplay)
@@ -499,10 +522,20 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     const finished = !!pos && pos.seq === STAGE_MAX_SEQ[cfg.dbStage];
     // Вошёл ли участник в этап, даже без первой КТ (см. stageHasStarted).
     const started = stageHasStarted(r, cfg.dbStage, _raceStartEpoch, Date.now());
+    const isRace = _mode === 'race';
+    // "Этап" — отставание/время В РАМКАХ этапа (как раньше). "Гонка" —
+    // отставание/время НАКОПИТЕЛЬНОЕ с начала гонки (тот же переключатель,
+    // что уже управляет Место/Отставание в таблице КТ — stageBody — теперь
+    // применяется и к сводной строке в шапке аккордеона, запрошено
+    // пользователем 2026-08-08 сразу за фиксом "Общего времени").
+    // computeOverallGaps — тот же примитив, что и "Итог N дня" на
+    // results.html: гэп от лидера на ГОНОЧНОЙ позиции, ограниченной этим
+    // этапом (не даёт заглянуть в этапы ПОСЛЕ текущего).
     const gaps = computeStageGaps(gapPool, cfg.dbStage);
+    const raceGaps = isRace ? computeOverallGaps(overallGapPool, cfg.dbStage) : null;
     const key = r._bib ? `${r._bib}:${r.relay_stage}` : r.bib;
     const raceKey = r._bib ?? r.bib;
-    const gap = fmtGap(gaps[key]);
+    const gap = isRace ? fmtGap(raceGaps[raceKey]) : fmtGap(gaps[key]);
     const lap = pos ? lapLabel(cfg.dbStage, pos.seq) : null;
     const isCurrent = (pos || started) && !finished;
     // Средняя скорость/темп на этапе — от старта этапа до текущей позиции
@@ -517,11 +550,18 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     // 2026-08-06), только пока этап не пройден целиком (у финиша своя
     // подпись — бейдж "Финиш").
     const lastCpLabel = (!finished && pos) ? CHECKPOINT_LABELS[cfg.dbStage][pos.seq] : null;
+    // raceRow — та же team-подстановка, что и в stageBody (см. её
+    // комментарий) — нужна, чтобы globalProgress() у эстафетчика видел
+    // предыдущие этапы КОМАНДЫ, а не пустые собственные swim_s/bike1_s/
+    // bike2_s (заполнены только за его личный этап).
+    const raceRow = { cp: r.cp, swim_s: r.swim_s ?? r._teamSwimS ?? null, bike1_s: r.bike1_s ?? r._teamBike1S ?? null, bike2_s: r.bike2_s ?? r._teamBike2S ?? null };
     let timeInfo;
     if (finished) {
-        timeInfo = `<span class="stage-time">${fmtTime(r[cfg.timeKey])}</span>`;
+        const t = isRace ? globalProgress(raceRow, cfg.dbStage, STAGE_MAX_SEQ[cfg.dbStage]) : r[cfg.timeKey];
+        timeInfo = `<span class="stage-time">${fmtTime(t)}</span>`;
     } else if (pos) {
-        timeInfo = `<span class="stage-time">${fmtTime(pos.value)}</span>`;
+        const t = isRace ? globalProgress(raceRow, cfg.dbStage, pos.seq) : pos.value;
+        timeInfo = `<span class="stage-time">${fmtTime(t)}</span>`;
     } else {
         timeInfo = '';
     }
@@ -755,6 +795,15 @@ function renderTeam(data, team) {
     };
 
     const teamSwimS = team.members.find(x => x.relay_stage === 'swim')?.swim_s ?? null;
+    // Агрегаты вело КОМАНДЫ (не личные, у swim-/run-роли эти поля пусты —
+    // сервер отдаёт stage_totals только по СОБСТВЕННОМУ participant_id) —
+    // нужны для race-cumulative "Общего времени"/отставания на секциях
+    // "чужих" этапов (напр. бегуну команды для globalProgress('run', ...)
+    // нужны bike1_s/bike2_s ВЕЛОСИПЕДИСТА, не свои пустые), см.
+    // stageBody/stageSection raceRow. Тот же велосипедист один и тот же
+    // на bike_day1 и bike_day2, поэтому одно и то же m.
+    const teamBike1S = team.members.find(x => x.relay_stage === 'bike')?.bike1_s ?? null;
+    const teamBike2S = team.members.find(x => x.relay_stage === 'bike')?.bike2_s ?? null;
     // cp.swim/cp.bike_day2 команды — велосипедист/бегун сами не плыли/не
     // ехали день 2, их собственный cp пуст на предыдущем этапе; нужны
     // только stageHasStarted() (см. stageSection).
@@ -774,6 +823,7 @@ function renderTeam(data, team) {
         </div>
         ${cfgs.map(cfg => stageSection(cfg, {
             ...m, _bib: team.bib, _teamSwimS: teamSwimS, _teamBike2Start: team.bike2_start_s,
+            _teamBike1S: teamBike1S, _teamBike2S: teamBike2S,
             cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
         }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
         ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
