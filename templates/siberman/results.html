@@ -652,8 +652,15 @@ let _recordsIndex = {};
 // каждые 20с даже без изменений — видимое "дёрганье" графика, п.1 2026-07-22).
 let _lastDataJson = null;
 let _chartSubTab = 'position';
-let _paceStage = 'swim';
-let _positionStage = null; // null = "Вся гонка"; иначе один из STAGE_ORDER
+// Общий выбор этапа для ОБОИХ режимов графика (Позиция/Темп) — раньше были
+// два независимых _paceStage/_positionStage, и переключение режима сбрасывало
+// выбор (на "Плавание" в Темпе, на "Вся гонка" в Позиции), даже если этап уже
+// был выбран в другом режиме (запрошено пользователем 2026-08-08). Вокабуляр —
+// как у "Позиция" (null/'swim'/'bike'/'bike_day1'/'bike_day2'/'run'): это
+// надмножество вокабуляра "Темп" (там нет null/"Вся гонка", а bike_day1/2
+// называются короче — bike1/bike2, см. PACE_STAGE_ALIAS/PACE_STAGE_UNALIAS
+// ниже, у renderPaceChart).
+let _chartStage = null; // null = "Вся гонка" (для Темпа резолвится в 'swim')
 let _paceChart = null;
 let _positionChart = null;
 // Мультивыбор для сравнения на графике (п.7.2/п.8) — объявлены на верхнем
@@ -1729,6 +1736,10 @@ function fmtSecClock(s) {
 }
 const STAGE_UNIT_TITLE = { swim: 'Темп, /100 м', bike: 'Скорость, км/ч', bike1: 'Скорость, км/ч', bike2: 'Скорость, км/ч', run: 'Темп, /км' };
 const PACE_STAGE_LABEL = { swim: 'Плавание', bike: 'Вело (оба дня)', bike1: 'Вело День 1', bike2: 'Вело День 2', run: 'Бег' };
+// Перевод вокабуляра общего _chartStage (bike_day1/bike_day2) в короткие
+// ключи "Темп" (bike1/bike2) и обратно — см. _chartStage выше.
+const PACE_STAGE_ALIAS = { bike_day1: 'bike1', bike_day2: 'bike2' };
+const PACE_STAGE_UNALIAS = { bike1: 'bike_day1', bike2: 'bike_day2' };
 function paceValueLabel(dbStage, v) {
     if (v == null) return '—';
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(v);
@@ -2172,12 +2183,16 @@ function attachChartModeSwitchHandler() {
 }
 
 function renderPaceChart() {
+    // Общий _chartStage (null/bike_day1/bike_day2) → вокабуляр "Темпа"
+    // (swim по умолчанию вместо null — у "Темпа" нет "Вся гонка"; bike1/
+    // bike2 вместо bike_day1/bike_day2, см. PACE_STAGE_ALIAS).
+    const paceStage = _chartStage == null ? 'swim' : (PACE_STAGE_ALIAS[_chartStage] ?? _chartStage);
     // "Вело (оба дня)" — bike_day1 как эталон единиц (км/ч, без инверсии Y)
     // для форматирования/тултипа; сама шкала X считается отдельно ниже
     // (0-421 км на весь объединённый велоэтап, не 0-145 одного дня).
-    const isBikeCombined = _paceStage === 'bike';
-    const dbStage = isBikeCombined ? 'bike_day1' : TAB_TO_DB_STAGE[_paceStage];
-    const datasets = buildPaceDatasets(_paceStage);
+    const isBikeCombined = paceStage === 'bike';
+    const dbStage = isBikeCombined ? 'bike_day1' : TAB_TO_DB_STAGE[paceStage];
+    const datasets = buildPaceDatasets(paceStage);
     _lastChartDatasets = datasets;
     // Ранее выбранные для сравнения участники могли "выпасть" из текущего
     // списка при смене фильтра формата/пола (getFiltered() внутри
@@ -2189,7 +2204,7 @@ function renderPaceChart() {
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="paceStageGroup">
-                ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === _paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
+                ${Object.keys(PACE_STAGE_LABEL).map(s => `<button class="filter-btn${s === paceStage ? ' active' : ''}" data-pacestage="${s}">${PACE_STAGE_LABEL[s]}</button>`).join('')}
             </div>
         </div>
         <div class="chart-card"><div class="chart-layout">
@@ -2201,7 +2216,7 @@ function renderPaceChart() {
             </div>
         </div></div>`;
     document.querySelectorAll('#paceStageGroup [data-pacestage]').forEach(btn => {
-        btn.addEventListener('click', () => { _paceStage = btn.dataset.pacestage; renderPaceChart(); });
+        btn.addEventListener('click', () => { _chartStage = PACE_STAGE_UNALIAS[btn.dataset.pacestage] ?? btn.dataset.pacestage; renderPaceChart(); });
     });
     attachChartModeSwitchHandler();
     attachChartSidebarHandlers();
@@ -2260,7 +2275,7 @@ function renderPaceChart() {
                     // рисуется ровно на границе области графика и визуально
                     // "обрезается" (найдено пользователем 2026-07-19).
                     grace: '8%',
-                    title: { display: true, text: STAGE_UNIT_TITLE[_paceStage], color: cssVar('--muted') },
+                    title: { display: true, text: STAGE_UNIT_TITLE[paceStage], color: cssVar('--muted') },
                     ticks: { color: cssVar('--muted'), callback: v => (dbStage === 'bike_day1' || dbStage === 'bike_day2') ? v.toFixed(0) : fmtSecClock(v) },
                     grid: { color: cssVar('--border') },
                 },
@@ -2389,7 +2404,7 @@ function buildPositionDatasets(stage) {
 }
 
 function renderPositionChart() {
-    const datasets = buildPositionDatasets(_positionStage);
+    const datasets = buildPositionDatasets(_chartStage);
     _lastChartDatasets = datasets;
     const visibleBibs = new Set(datasets.map(d => d._bib));
     _chartSelectedBibs = _chartSelectedBibs.filter(bib => visibleBibs.has(bib));
@@ -2407,19 +2422,19 @@ function renderPositionChart() {
         <div class="filters" style="padding:0 0 12px;border-bottom:none;background:transparent">
             <span class="filter-label">Этап:</span>
             <div class="filter-group" id="positionStageGroup">
-                ${positionStageOptions.map(o => `<button class="filter-btn${(o.key === 'all' ? _positionStage === null : o.key === _positionStage) ? ' active' : ''}" data-positionstage="${o.key}">${o.label}</button>`).join('')}
+                ${positionStageOptions.map(o => `<button class="filter-btn${(o.key === 'all' ? _chartStage === null : o.key === _chartStage) ? ' active' : ''}" data-positionstage="${o.key}">${o.label}</button>`).join('')}
             </div>
         </div>
         <div class="chart-card"><div class="chart-layout">
             ${chartSidebarHtml(datasets, true)}
             <div class="chart-main">
                 <div class="chart-mode-switch-row">${chartModeSwitchHtml()}</div>
-                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_positionStage ? `Место на этапе «${STAGE_LABEL_RU[_positionStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
+                <div class="chart-hint">${_chartSelectedBibs.length ? 'Сравнение выбранных участников — снимите отметку слева, чтобы вернуться к общему виду' : (_chartStage ? `Место на этапе «${STAGE_LABEL_RU[_chartStage]}» на каждой пройденной КТ. Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения` : 'Место в общем зачёте на каждой пройденной КТ по всей дистанции (0–515 км). Наведите/коснитесь линии, чтобы увидеть участника, либо выберите нескольких слева для сравнения')}</div>
                 <div class="chart-canvas-wrap chart-canvas-wrap--position"><canvas id="sibermanPositionChart"></canvas></div>
             </div>
         </div></div>`;
     document.querySelectorAll('#positionStageGroup [data-positionstage]').forEach(btn => {
-        btn.addEventListener('click', () => { _positionStage = btn.dataset.positionstage === 'all' ? null : btn.dataset.positionstage; renderPositionChart(); });
+        btn.addEventListener('click', () => { _chartStage = btn.dataset.positionstage === 'all' ? null : btn.dataset.positionstage; renderPositionChart(); });
     });
     attachChartModeSwitchHandler();
     attachChartSidebarHandlers();
@@ -2429,15 +2444,15 @@ function renderPositionChart() {
         document.querySelector('.chart-canvas-wrap').innerHTML = '<div class="empty">Нет данных для графика</div>';
         return;
     }
-    const positionStageMaxKm = _positionStage === 'bike'
+    const positionStageMaxKm = _chartStage === 'bike'
         ? CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1] + CHECKPOINT_DIST_KM.bike_day2[STAGE_MAX_SEQ.bike_day2]
-        : (_positionStage ? CHECKPOINT_DIST_KM[_positionStage][STAGE_MAX_SEQ[_positionStage]] : 100);
+        : (_chartStage ? CHECKPOINT_DIST_KM[_chartStage][STAGE_MAX_SEQ[_chartStage]] : 100);
     const accent = cssVar('--red');
     const context = cssVar('--chart-context');
     const isCompare = _chartSelectedBibs.length > 0;
     // В per-stage режиме X уже реальный км этапа — виртуальное преобразование
     // (kmToVirtualX/withVirtualX) применимо только к графику "вся гонка".
-    const virtualDatasets = _positionStage ? datasets : datasets.map(withVirtualX);
+    const virtualDatasets = _chartStage ? datasets : datasets.map(withVirtualX);
     const chartDatasets = isCompare
         ? virtualDatasets.filter(d => _chartSelectedBibs.includes(d._bib))
             .map(d => buildCompareDataset(d, chartCompareColor(_chartSelectedBibs.indexOf(d._bib))))
@@ -2450,11 +2465,11 @@ function renderPositionChart() {
     const rangeMinRank = Math.min(...displayedRanks);
     const rangeMaxRank = Math.max(...displayedRanks);
     const rankSpan = rangeMaxRank - rangeMinRank + 1;
-    // В режиме "Вся гонка" (!_positionStage) сверху ещё рисуются подписи
+    // В режиме "Вся гонка" (!_chartStage) сверху ещё рисуются подписи
     // границ этапов (stageBoundaryPlugin) — при маленьком диапазоне мест
     // (сравнение узкой группы) запаса в 2 места не хватало, подписи почти
     // прилипали к верхней линии (найдено пользователем 2026-07-23, п.6 v5).
-    const topBufferMin = _positionStage ? 2 : 4;
+    const topBufferMin = _chartStage ? 2 : 4;
     const yAxisMin = rangeMinRank - Math.max(topBufferMin, Math.round(rankSpan * 0.15));
     const yAxisMax = rangeMaxRank + Math.max(1, Math.round(rankSpan * 0.08));
 
@@ -2482,7 +2497,7 @@ function renderPositionChart() {
         },
     };
 
-    const formatHoverPoint = _positionStage
+    const formatHoverPoint = _chartStage
         ? (x, y) => `${x.toFixed(1)} км: место ${y}`
         : (x, y) => `${virtualXToKm(x).toFixed(1)} км: место ${y}`;
 
@@ -2490,7 +2505,7 @@ function renderPositionChart() {
     _positionChart = new Chart(ctx, {
         type: 'line',
         data: { datasets: chartDatasets },
-        plugins: [...(_positionStage ? [] : [stageBoundaryPlugin]), activeLineLabelPlugin],
+        plugins: [...(_chartStage ? [] : [stageBoundaryPlugin]), activeLineLabelPlugin],
         options: {
             responsive: true, maintainAspectRatio: false,
             // Больше отступа сверху, чем у графика Темп/скорость — иначе
@@ -2502,15 +2517,15 @@ function renderPositionChart() {
                 legend: { display: isCompare, position: 'top', labels: { color: cssVar('--text'), boxWidth: 12, font: { size: 11 } } },
                 // См. комментарий в renderPaceChart — одна плашка вместо двух.
                 tooltip: isCompare
-                    ? { callbacks: { label(item) { const km = _positionStage ? item.parsed.x : virtualXToKm(item.parsed.x); return `${item.dataset.label} — ${km.toFixed(1)} км: место ${item.parsed.y}`; } } }
+                    ? { callbacks: { label(item) { const km = _chartStage ? item.parsed.x : virtualXToKm(item.parsed.x); return `${item.dataset.label} — ${km.toFixed(1)} км: место ${item.parsed.y}`; } } }
                     : { enabled: false },
             },
             scales: {
                 x: {
                     type: 'linear', min: 0,
                     max: positionStageMaxKm,
-                    title: { display: true, text: _positionStage ? 'Километраж этапа' : 'Километраж гонки', color: cssVar('--muted') },
-                    ticks: { color: cssVar('--muted'), stepSize: _positionStage ? undefined : 10, callback: v => _positionStage ? v.toFixed(0) : Math.round(virtualXToKm(v)) },
+                    title: { display: true, text: _chartStage ? 'Километраж этапа' : 'Километраж гонки', color: cssVar('--muted') },
+                    ticks: { color: cssVar('--muted'), stepSize: _chartStage ? undefined : 10, callback: v => _chartStage ? v.toFixed(0) : Math.round(virtualXToKm(v)) },
                     grid: { color: cssVar('--border') },
                 },
                 y: {

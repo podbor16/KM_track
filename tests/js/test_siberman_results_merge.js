@@ -873,7 +873,7 @@ check('renderPaceChart() — ранее выбранный участник, в�
     setState('all', 'all');
     const individual = [mkSwimRow(1, 'M'), mkSwimRow(2, 'F')];
     sandbox.__individual = individual;
-    vm.runInContext('_data = { individual: __individual, relay: [] }; _paceStage = "swim"; _chartSelectedBibs = [1, 2];', sandbox);
+    vm.runInContext('_data = { individual: __individual, relay: [] }; _chartStage = "swim"; _chartSelectedBibs = [1, 2];', sandbox);
     // Переключаем фильтр на "только женщины" — участник 1 (M) должен выпасть.
     vm.runInContext('_gender = "F";', sandbox);
     sandbox.renderPaceChart();
@@ -900,7 +900,7 @@ check('Мультивыбор со СТРОКОВЫМ bib (как в реаль�
     setState('all', 'all');
     const individual = [mkSwimRow('9999', 'M'), mkSwimRow('144', 'M')]; // bib строками, как в prod JSON
     sandbox.__individual = individual;
-    vm.runInContext('_data = { individual: __individual, relay: [] }; _paceStage = "swim"; _chartSelectedBibs = [];', sandbox);
+    vm.runInContext('_data = { individual: __individual, relay: [] }; _chartStage = "swim"; _chartSelectedBibs = [];', sandbox);
     sandbox.renderPaceChart();
     const datasets = sandbox.buildPaceDatasets('swim');
     assert.strictEqual(typeof datasets[0]._bib, 'string', 'd._bib должен остаться строкой (как bib из API)');
@@ -942,7 +942,7 @@ check('renderPaceChart(bike) — ось X охватывает весь объе
         splits: { bike_day1: { 1: 2600, 2: 500 }, bike_day2: { 1: 700 } },
     });
     setRaceData([row], [], Date.now());
-    vm.runInContext(`_paceStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
     const bike1Max = vm.runInContext('CHECKPOINT_DIST_KM.bike_day1[STAGE_MAX_SEQ.bike_day1]', sandbox);
@@ -958,7 +958,7 @@ check('renderPaceChart — ось Y использует grace (запас на�
     setState('all', 'all');
     const row = mkTimerInd(1, { splits: { swim: { 1: 300 } } });
     setRaceData([row], [], Date.now());
-    vm.runInContext(`_paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
     assert.strictEqual(chart.config.options.scales.y.grace, '8%');
@@ -1010,7 +1010,7 @@ check('renderPaceChart() режим по умолчанию — встроенн
     setState('all', 'all');
     const row = mkTimerInd(1, { splits: { swim: { 1: 300 } } });
     setRaceData([row], [], Date.now());
-    vm.runInContext(`_paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
     assert.strictEqual(chart.config.options.plugins.tooltip.enabled, false, 'встроенный тултип должен быть отключён вне режима сравнения');
@@ -1029,7 +1029,7 @@ check('renderPaceChart() режим сравнения — встроенный 
     setState('all', 'all');
     const row = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
     setRaceData([row], [], Date.now());
-    vm.runInContext(`_paceStage = 'swim';`, sandbox);
+    vm.runInContext(`_chartStage = 'swim';`, sandbox);
     sandbox.chartToggleSelect('1');
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
@@ -1084,18 +1084,46 @@ check('renderPositionChart() per-stage — ось X фиксированная �
     setState('all', 'all');
     const rowA = mkTimerInd('1', { cp: { run: { 1: 500, 2: 1000 } } });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'run'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     assert.strictEqual(chart.config.options.scales.x.max, 84, 'CHECKPOINT_DIST_KM.run[12] = 84 — вся длина этапа, как у графика Темп/скорость, а не только пройденная часть');
     assert.ok(!chart.config.plugins.some(p => p.id === 'stageBoundaries'), 'границы этапов не рисуются в per-stage режиме');
+});
+// ── Общий _chartStage — переключение режима графика (Позиция/Темп) не
+// сбрасывает выбранный этап (2026-08-08, раньше были два независимых
+// _paceStage/_positionStage — переключение режима "сбрасывало" выбор) ──
+check('renderPositionChart() → renderPaceChart() — выбранный "Бег" в Позиции остаётся выбранным после переключения на Темп', () => {
+    setState('all', 'all');
+    const rowA = mkTimerInd('1', { cp: { run: { 1: 500 } } });
+    setRaceData([rowA], [], Date.now());
+    vm.runInContext(`_chartStage = 'run'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPositionChart();
+    sandbox.renderPaceChart();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('class="filter-btn active" data-pacestage="run"'),
+        `после переключения на "Темп" должен остаться выбран "Бег": ${html}`);
+});
+check('renderPaceChart() → renderPositionChart() — выбранный "Вело День 1" (bike1) в Темпе остаётся "bike_day1" после переключения на Позицию', () => {
+    setState('all', 'all');
+    const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
+    const rowA = mkTimerInd('1', { cp: { swim: { [maxSeqSwim]: 300 }, bike_day1: { 1: 100 } }, swim_s: 300 });
+    setRaceData([rowA], [], Date.now());
+    // Клик по "Вело День 1" в Темпе переводит короткий ключ 'bike1' в
+    // общий _chartStage через PACE_STAGE_UNALIAS → 'bike_day1'.
+    vm.runInContext(`_chartStage = 'bike_day1'; _chartSelectedBibs = [];`, sandbox);
+    sandbox.renderPaceChart();
+    sandbox.renderPositionChart();
+    const html = domGetAppHtml();
+    assert.ok(html.includes('class="filter-btn active" data-positionstage="bike_day1"'),
+        `после переключения на "Позицию" должен остаться выбран "Вело День 1": ${html}`);
 });
 check('renderPositionChart() без выбранного этапа — прежнее поведение (виртуальная ось 0-100, stageBoundaries на месте)', () => {
     setState('all', 'all');
     const maxSeqSwim = vm.runInContext('STAGE_MAX_SEQ.swim', sandbox);
     const rowA = mkTimerInd('1', { cp: { swim: { [maxSeqSwim]: 300 } }, swim_s: 300 });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_positionStage = null; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = null; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     assert.strictEqual(chart.config.options.scales.x.max, 100);
@@ -1105,7 +1133,7 @@ check('attachSpaghettiHover formatPoint per-stage — текст без пере
     setState('all', 'all');
     const rowA = mkTimerInd('1', { cp: { run: { 1: 500 } } });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_positionStage = 'run'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'run'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     // Курсор ровно на реальной КТ (x=7 км, ChartStub.scales — 1px=1 единица) —
@@ -1136,11 +1164,11 @@ check('buildPositionDatasets(\'bike\') — единый вело-этап 421к�
     assert.strictEqual(a.data[0].x, 0, 'экстраполяция до x=0');
     assert.ok(a.data.some(p => p.x > bike1MaxKm), `ожидались точки дня2 за пределами дня1 (>${bike1MaxKm} км): ${JSON.stringify(a.data)}`);
 });
-check('renderPositionChart() _positionStage=\'bike\' — ось X на весь объединённый велоэтап (421 км), без stageBoundaries', () => {
+check('renderPositionChart() _chartStage=\'bike\' — ось X на весь объединённый велоэтап (421 км), без stageBoundaries', () => {
     setState('all', 'all');
     const rowA = mkTimerInd('1', { bike1_s: 9000, cp: { bike_day1: { 1: 3000 }, bike_day2: { 1: 200 } } });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_positionStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'bike'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     assert.strictEqual(chart.config.options.scales.x.max, 421, 'CHECKPOINT_DIST_KM.bike_day1[6] + bike_day2[8] = 145 + 276 = 421');
@@ -1166,7 +1194,7 @@ check('attachChartSelectAllHandler — клик "Выбрать всех" доб
     const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
     const rowB = mkTimerInd('2', { splits: { swim: { 1: 400 } } });
     setRaceData([rowA, rowB], [], Date.now());
-    vm.runInContext(`_paceStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_chartStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const btn = domStub('chartSelectAllToggle');
     btn._handlers.click[0]();
@@ -1177,7 +1205,7 @@ check('attachChartSelectAllHandler — повторный клик, когда �
     setState('all', 'all');
     const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_paceStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = ['1'];`, sandbox);
+    vm.runInContext(`_chartStage = 'swim'; _chartSearchQuery = ''; _chartSelectedBibs = ['1'];`, sandbox);
     sandbox.renderPaceChart();
     const btn = domStub('chartSelectAllToggle');
     btn._handlers.click[0]();
@@ -1201,7 +1229,7 @@ check('renderPositionChart() — диапазон оси Y компактный 
     // только тех, кто занял места 1-2 (лучшая пара).
     const rows = Array.from({ length: 10 }, (_, i) => mkTimerInd(String(i + 1), { cp: { swim: { [maxSeqSwim]: 300 + i } }, swim_s: 300 + i }));
     setRaceData(rows, [], Date.now());
-    vm.runInContext(`_positionStage = null; _chartSelectedBibs = ['1', '2'];`, sandbox);
+    vm.runInContext(`_chartStage = null; _chartSelectedBibs = ['1', '2'];`, sandbox);
     sandbox.renderPositionChart();
     const chart = vm.runInContext('_positionChart', sandbox);
     const yScale = chart.config.options.scales.y;
@@ -1340,7 +1368,7 @@ check('attachSpaghettiClick — клик по линии добавляет bib 
     // _tab/_chartSubTab выставлены на 'chart'/'pace' — иначе render() внутри
     // attachSpaghettiClick пойдёт по умолчанию в renderOverall() (default
     // _tab='overall') и не пересоздаст _paceChart по-настоящему.
-    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _chartStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
     // Датасет '1' — единственная точка на x=0 (splitPaceValue), см. buildPaceDatasets;
@@ -1364,7 +1392,7 @@ check('attachSpaghettiClick — клик мимо всех линий не ме�
     setState('all', 'all');
     const rowA = mkTimerInd('1', { splits: { swim: { 1: 300 } } });
     setRaceData([rowA], [], Date.now());
-    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _paceStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
+    vm.runInContext(`_tab = 'chart'; _chartSubTab = 'pace'; _chartStage = 'swim'; _chartSelectedBibs = [];`, sandbox);
     sandbox.renderPaceChart();
     const chart = vm.runInContext('_paceChart', sandbox);
     chart.options.onClick.call(chart, { x: 99999, y: 99999 });

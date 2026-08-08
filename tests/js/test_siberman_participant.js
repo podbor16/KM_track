@@ -439,10 +439,14 @@ check('renderIndividual() — без записи в индексе рекорд
 });
 
 // ── stageBody() — прогноз в колонке "Общее время" для будущих КТ (2026-08-06) ──
-check('renderIndividual() — будущие КТ показывают "~" прогноз в "Общее время", "Сплит"/"Темп" остаются "—"', () => {
-    // pos: seq=2 (10 км), value=1000с. Прогноз на seq=3 (72 км, bike_day1):
-    // 1000 * (72/10) = 7200с = 2:00:00. Прогноз на финиш (seq=6, 145 км):
-    // 1000 * (145/10) = 14500с = 4:01:40.
+check('renderIndividual() — ТОЛЬКО ближайшая следующая КТ показывает "~" прогноз (по средней скорости этапа), дальние остаются "—"', () => {
+    // pos: seq=2 (10 км), value=1000с. Прогноз считается по средней
+    // скорости ЭТАПА (forecastCellWithBase/forecastTime — не по скорости
+    // последнего сплита, откат по решению директора трассы 2026-08-08).
+    // Прогноз на seq=3 (72 км, ближайшая следующая — pos.seq+1):
+    // 1000 * (72/10) = 7200с = 2:00:00. Финиш (seq=6, 145 км) — уже НЕ
+    // ближайшая следующая, прогноза там нет (сужено раньше, 2026-08-07,
+    // сохранено как есть).
     const r = { bib: 3, gender: 'M', status: 'active', cp: { bike_day1: { 1: 500, 2: 1000 } }, swim_s: 0, bike1_s: null, bike2_s: null, run_s: null };
     const data = { individual: [r], relay: [] };
     appEl.innerHTML = '';
@@ -450,13 +454,15 @@ check('renderIndividual() — будущие КТ показывают "~" пр�
     sandbox.renderIndividual(data, r);
     const section = stageSectionHtml('Вело День 1');
     assert.ok(section.includes('forecast-cell">~2:00:00<'), `ожидался прогноз ~2:00:00 на 72 км: ${section}`);
-    assert.ok(section.includes('forecast-cell">~4:01:40<'), `ожидался прогноз ~4:01:40 на финиш (145 км): ${section}`);
     // Вторая строка — астрономическое время в скобках (формат, не точное
     // значение — зависит от реального времени запуска теста).
     assert.ok(/forecast-clock">\(\d{2}:\d{2}:\d{2}\)</.test(section), `ожидалась вторая строка "(ЧЧ:ММ:СС)" астрономического времени: ${section}`);
     // Строка с прогнозом всё равно "pending" — Сплит/Темп остаются "—".
     const row72 = section.slice(section.indexOf('72 км'));
     assert.ok(row72.slice(0, 200).includes('>—<'), `Сплит/Темп у будущей КТ должны остаться "—": ${row72.slice(0, 200)}`);
+    // Финиш (145 км) — НЕ ближайшая следующая КТ, прогноза быть не должно.
+    const rowFinish = section.slice(section.indexOf('Финиш (145'));
+    assert.ok(!rowFinish.slice(0, 300).includes('forecast-cell'), `у финишной КТ (не ближайшей следующей) не должно быть прогноза: ${rowFinish.slice(0, 300)}`);
 });
 check('renderIndividual() — DNF с частичным прогрессом: пройденная КТ показывает реальное время, будущие остаются "—" без прогноза', () => {
     const r = { bib: 3, gender: 'M', status: 'dnf', cp: { bike_day1: { 1: 500, 2: 1000 } }, swim_s: 0, bike1_s: null, bike2_s: null, run_s: null };
