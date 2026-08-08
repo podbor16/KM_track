@@ -58,9 +58,6 @@ STATUS_MAP: dict[str, tuple[str, Optional[str]]] = {
     "withdrawn":  ("dnf", "run"),
 }
 
-# Красноярск — UTC+7 круглый год (без перехода на летнее время).
-KRASNOYARSK_UTC_OFFSET = datetime.timedelta(hours=7)
-
 
 def load_preset_config(path: str) -> dict:
     with open(path, encoding="utf-8") as f:
@@ -109,20 +106,23 @@ def _lap_fields(cfg: dict) -> list[tuple[int, str]]:
     return out
 
 
-def _parse_copernico_timestamp(raw: Optional[str]) -> Optional[datetime.datetime]:
-    """Copernico отдаёт ISO8601 с 'Z' (UTC) — конвертируем в наивное
-    красноярское время (то же представление, что и race_config.run_start,
-    который админ вводит вручную местным временем)."""
-    if not raw:
+def _parse_copernico_elapsed_ms(raw) -> Optional[int]:
+    """times.official_* у Copernico — ЦЕЛОЕ ЧИСЛО миллисекунд, прошедших от
+    старта забега, а НЕ ISO8601-таймстамп, как предполагалось на этапе
+    дизайна интеграции (см. комментарий про gunTime выше и старую
+    _parse_copernico_timestamp). Подтверждено первым живым fetch на
+    реальном забеге 2026-08-08: значения вида 1895002 соответствуют ~31
+    минуте бега — ровно то время, что прошло с 08:30 (run_start) для
+    участников, которых поллер опросил в этот момент. Из-за неверного
+    предположения о формате ни одна беговая КТ не записывалась ни разу с
+    начала этапа (fromisoformat ловил ValueError на каждой отметке)."""
+    if raw is None or raw == "":
         return None
     try:
-        dt = datetime.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-    except (ValueError, TypeError) as e:
-        log.warning(f"Copernico: не удалось распарсить таймстамп {raw!r}: {e}")
+        return int(raw)
+    except (TypeError, ValueError) as e:
+        log.warning(f"Copernico: не удалось распознать отметку времени {raw!r} (ожидалось целое число миллисекунд): {e}")
         return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None) + KRASNOYARSK_UTC_OFFSET
-    return dt
 
 
 def apply_copernico_snapshot(conn, race_year: int, runners: list[dict], cfg: dict) -> dict:
@@ -177,8 +177,8 @@ def apply_copernico_snapshot(conn, race_year: int, runners: list[dict], cfg: dic
             checkpoint_id = cp_id_map.get(("run", seq))
             if checkpoint_id is None:
                 continue
-            dt = _parse_copernico_timestamp(runner.get(field_name))
-            cumulative_s = int((dt - run_start).total_seconds()) if dt is not None else None
+            elapsed_ms = _parse_copernico_elapsed_ms(runner.get(field_name))
+            cumulative_s = elapsed_ms // 1000 if elapsed_ms is not None else None
             upsert_checkpoint_time(conn, pid, checkpoint_id, cumulative_s, None)
             if cumulative_s is not None:
                 checkpoint_writes += 1

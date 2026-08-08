@@ -2,7 +2,7 @@ import datetime
 from unittest.mock import patch, MagicMock
 
 from src.siberman.copernico_run import (
-    _fmt_km, _lap_fields, _parse_copernico_timestamp, apply_copernico_snapshot,
+    _fmt_km, _lap_fields, _parse_copernico_elapsed_ms, apply_copernico_snapshot,
 )
 
 CFG = {
@@ -38,15 +38,18 @@ def test_lap_fields_matches_real_copernico_field_names():
     assert d[112] == "times.official_83.5km"
 
 
-def test_parse_copernico_timestamp_converts_utc_to_krasnoyarsk_naive():
-    dt = _parse_copernico_timestamp("2026-08-08T01:30:00.988Z")
-    assert dt == datetime.datetime(2026, 8, 8, 8, 30, 0, 988000)
+def test_parse_copernico_elapsed_ms_accepts_int_and_numeric_string():
+    # Реальный пример живого fetch 2026-08-08: 1895002мс = ~31.6 минуты бега.
+    assert _parse_copernico_elapsed_ms(1895002) == 1895002
+    assert _parse_copernico_elapsed_ms("1895002") == 1895002
 
 
-def test_parse_copernico_timestamp_none_and_garbage():
-    assert _parse_copernico_timestamp(None) is None
-    assert _parse_copernico_timestamp("") is None
-    assert _parse_copernico_timestamp("not-a-date") is None
+def test_parse_copernico_elapsed_ms_none_and_garbage():
+    assert _parse_copernico_elapsed_ms(None) is None
+    assert _parse_copernico_elapsed_ms("") is None
+    assert _parse_copernico_elapsed_ms("not-a-number") is None
+    # Формат, который раньше ошибочно предполагался (ISO8601) — тоже не число.
+    assert _parse_copernico_elapsed_ms("2026-08-08T01:30:00.988Z") is None
 
 
 def _mk_conn():
@@ -75,16 +78,16 @@ def test_apply_snapshot_individual_writes_checkpoint_and_computes_cumulative_fro
         {"id": 900, "bib": "156", "relay_stage": "none", "status": "active", "dnf_stage": None},
     ]
     runners = [{
-        # 01:40 UTC = 08:40 Красноярск = run_start (08:30) + 10 мин
+        # times.official_* — целые миллисекунды от старта забега, не ISO8601
+        # (см. _parse_copernico_elapsed_ms) — 600000мс = 600с = 10 мин.
         "dorsal": 156, "category": "Мужчины", "status": "running",
-        "times.official_7km": "2026-08-08T01:40:00Z",
+        "times.official_7km": 600000,
     }]
 
     result = apply_copernico_snapshot(_mk_conn(), 2026, runners, CFG)
 
     assert result["ok"] is True
     assert result["skipped"] == 0
-    # cumulative_s = 08:40:00 - 08:30:00 = 600с
     calls_by_checkpoint = {c.args[2]: c.args for c in mock_upsert_cp.call_args_list}
     assert calls_by_checkpoint[5001][1] == 900   # participant_id
     assert calls_by_checkpoint[5001][3] == 600   # cumulative_s
