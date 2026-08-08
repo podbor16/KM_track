@@ -636,6 +636,11 @@ let _bikeSubTab = 'combined';
 let _fmt = 'all';
 let _gender = 'all';
 let _year = 2025;
+// Явно запрошенный год (?year=2025 в URL) — переопределяет "публичный" год
+// сервера (get_public_race_year), чтобы можно было открыть архив
+// прошлогодней гонки по прямой ссылке (запрошено пользователем
+// 2026-08-08). null — обычное поведение по умолчанию, год решает сервер.
+let _urlYear = null;
 let _raceStartEpoch = null; // мс, из _data.race_start (ISO) — якорь для секундомеров этапов
 // Расписание Вело Дня 2 / Бега (задаётся в админке, необязательно) —
 // используется ТОЛЬКО индикатором активного таба (computeAutoScrollTab/
@@ -3121,6 +3126,10 @@ function render() {
 // осмысленным переходам) и читаем обратно при загрузке страницы.
 function syncUrlFromState() {
     const params = new URLSearchParams();
+    // year — только если явно запрошен в URL при открытии страницы;
+    // должен пережить любой ре-рендер (клик по табу/фильтру), иначе первый
+    // же клик стёр бы его из URL (params здесь собирается с нуля).
+    if (_urlYear) params.set('year', _urlYear);
     params.set('tab', _tab);
     if (_tab === 'bike') params.set('bikeSubTab', _bikeSubTab);
     if (_tab === 'chart') params.set('chartSubTab', _chartSubTab);
@@ -3136,6 +3145,8 @@ function readStateFromUrl() {
         const v = params.get(key);
         return v && allowed.includes(v) ? v : current;
     };
+    const yearParam = parseInt(params.get('year'), 10);
+    _urlYear = Number.isFinite(yearParam) ? yearParam : null;
     _tab = pick('tab', ['overall', 'swim', 'bike', 'run', 'day1', 'day2', 'chart', 'startlist'], _tab);
     _bikeSubTab = pick('bikeSubTab', ['combined', 'bike1', 'bike2'], _bikeSubTab);
     _chartSubTab = pick('chartSubTab', ['position', 'pace'], _chartSubTab);
@@ -3158,10 +3169,14 @@ function syncStaticButtonClasses() {
 }
 
 /* ──────────────── Data loading ──────────────── */
-// Год больше не выбирается вручную (year-select убран, 2026-08-04) —
-// первая загрузка не передаёт year вовсе, сервер сам берёт год, явно
-// помеченный ПУБЛИЧНЫМ в админке (get_public_race_year) — НЕ обязательно
-// последний загруженный (2026-08-05, см. set_public_race_year).
+// Год больше не выбирается вручную UI-селектом (year-select убран,
+// 2026-08-04) — без ?year= в URL первая загрузка не передаёт year вовсе,
+// сервер сам берёт год, явно помеченный ПУБЛИЧНЫМ в админке
+// (get_public_race_year) — НЕ обязательно последний загруженный
+// (2026-08-05, см. set_public_race_year). ?year=2025 в URL (_urlYear,
+// см. readStateFromUrl) переопределяет это — прямая ссылка на архив
+// прошлогодней гонки (запрошено пользователем 2026-08-08), НЕ меняет
+// публичный год на сервере, только эту конкретную вкладку браузера.
 // _year фиксируется из ответа (data.race_year) и используется дальше для
 // поллинга/ссылок на карточки участников — сессия не "переключит" год сама
 // по себе, даже если админ загрузит новый, пока страница открыта.
@@ -3169,7 +3184,7 @@ async function loadResults() {
     document.getElementById('loading').style.display = '';
     document.getElementById('app').style.display = 'none';
     try {
-        const resp = await fetch('/api/siberman/results');
+        const resp = await fetch(_urlYear ? `/api/siberman/results?year=${_urlYear}` : '/api/siberman/results');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const raw = await resp.text();
         _lastDataJson = raw;
