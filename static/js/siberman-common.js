@@ -85,15 +85,25 @@ function buildRecordsIndex(records) {
 function _normPersonName(s) {
     return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
-// Категории, которые ИМЕННО ЭТА строка (личник или конкретный член
-// эстафеты — у него личное имя, не название команды) держит на колонке
-// columnKey ПРЯМО СЕЙЧАС.
-function recordCategoriesFor(recordsIndex, columnKey, surname, name) {
+// Категории, которые ИМЕННО ЭТА СТРОКА держит на колонке columnKey —
+// совпадение по имени (личник или конкретный член эстафеты, не название
+// команды) И по времени: timeS должен РОВНО совпасть с recordsIndex'ным
+// best_s этой категории, иначе бейдж не показываем (запрошено
+// пользователем 2026-08-08 — раньше сопоставление было только по имени,
+// и одноимённый рекордсмен получал 🏆 в КАЖДОМ году своего участия, даже
+// если его время В ЭТОТ РАЗ рекорд не бьёт — наглядный кейс: Бурдин
+// Михаил держит абсолютный рекорд заплыва 2023 года (7588с), но в 2025
+// году в архиве та же его строка со временем 8170с тоже подсвечивалась
+// трофеем). timeS — необязательный (не передан → старое поведение "только
+// по имени", для вызовов без осмысленного числа под рукой); передан и не
+// совпал → бейдж не показываем даже при совпадении имени.
+function recordCategoriesFor(recordsIndex, columnKey, surname, name, timeS) {
     const key = _normPersonName(`${surname} ${name}`);
     if (!key) return [];
     return RECORD_CATEGORIES.filter(cat => {
         const rec = recordsIndex[`${columnKey}:${cat}`];
-        return rec && _normPersonName(rec.holder_name) === key;
+        if (!rec || _normPersonName(rec.holder_name) !== key) return false;
+        return timeS === undefined || timeS === rec.best_s;
     });
 }
 function recordLabelText(cats) {

@@ -599,7 +599,7 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
     // (Вело1/Вело2 порознь рекорда не имеют — только объединённый
     // "Вело итого", см. combinedBikeSection), 2026-08-05.
     const recordColumn = { swim: 'swim', run: 'run' }[cfg.dbStage];
-    const recordCats = recordColumn ? recordCategoriesFor(_recordsIndex, recordColumn, r.surname, r.name) : [];
+    const recordCats = recordColumn ? recordCategoriesFor(_recordsIndex, recordColumn, r.surname, r.name, r[cfg.timeKey]) : [];
 
     return `<details class="stage" ${isCurrent ? 'open' : ''}>
         <summary>
@@ -631,7 +631,7 @@ function combinedBikeSection(r, b1, b2, swimS) {
     const bothKnown = b1 != null && b2 != null;
     const total = bothKnown ? b1 + b2 : null;
     const avgSpeed = bothKnown ? (145 + 276) / (total / 3600) : null;
-    const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name);
+    const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name, total);
     // Шапка (stage-time) — race-cumulative в табе "Гонка" (тот же
     // переключатель, что уже применён на "Общем времени"/отставаниях
     // остальных этапов, запрошено пользователем 2026-08-08 сразу вслед за
@@ -766,7 +766,7 @@ function renderIndividual(data, r) {
     const genderRankRows = combinedOverallRankRows(data.individual.filter(x => x.gender === r.gender), []);
     const genderRank = trulyFinished ? r.overall_rank_g : computeCombinedOverallRanks(genderRankRows, null)[r.bib];
 
-    const overallRecordCats = recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name);
+    const overallRecordCats = recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name, trulyFinished ? r.overall_s : liveTotal);
     let overallStat = `
         <div class="stat"><div class="stat-val">${fmtTime(trulyFinished ? r.overall_s : liveTotal)}</div><div class="stat-lbl">Итого</div>${overallRecordCats.length ? `<div class="stat-subgap record">🏆 ${recordLabelText(overallRecordCats)}</div>` : ''}</div>
         ${rankStatHtml(genderRank, genderGap, 'Место (по полу)')}

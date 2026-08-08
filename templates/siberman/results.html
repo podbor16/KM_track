@@ -955,13 +955,13 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
             ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name))}</td>
+        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name, liveTotal))}</td>
         ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
-        <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib], recordCategoriesFor(_recordsIndex, 'swim', r.surname, r.name))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib], recordCategoriesFor(_recordsIndex, 'swim', r.surname, r.name, r.swim_s))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike2_s), stageGaps.bike2[r.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(r)?.value ?? null), stageGaps.bikeCombined[r.bib], recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name))}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib], recordCategoriesFor(_recordsIndex, 'run', r.surname, r.name))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(r)?.value ?? null), stageGaps.bikeCombined[r.bib], recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name, bikeCombinedLastPos(r)?.value ?? null))}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(r.run_s), stageGaps.run[r.bib], recordCategoriesFor(_recordsIndex, 'run', r.surname, r.name, r.run_s))}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusBadge(r, null)}</td>
     </tr>`;
@@ -1001,11 +1001,11 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
         </div></td>
         <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
         ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
-        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib], swimM ? recordCategoriesFor(_recordsIndex, 'swim', swimM.surname, swimM.name) : [])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib], swimM ? recordCategoriesFor(_recordsIndex, 'swim', swimM.surname, swimM.name, tr.swim_s) : [])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike2_s), stageGaps.bike2[team.bib])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(tr)?.value ?? null), stageGaps.bikeCombined[team.bib], bikeM ? recordCategoriesFor(_recordsIndex, 'bike_total', bikeM.surname, bikeM.name) : [])}</td>
-        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib], runM ? recordCategoriesFor(_recordsIndex, 'run', runM.surname, runM.name) : [])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(bikeCombinedLastPos(tr)?.value ?? null), stageGaps.bikeCombined[team.bib], bikeM ? recordCategoriesFor(_recordsIndex, 'bike_total', bikeM.surname, bikeM.name, bikeCombinedLastPos(tr)?.value ?? null) : [])}</td>
+        <td class="r time-cell muted">${timeGapCell(fmtTime(tr.run_s), stageGaps.run[team.bib], runM ? recordCategoriesFor(_recordsIndex, 'run', runM.surname, runM.name, tr.run_s) : [])}</td>
         <td class="muted">${lastCpCell}</td>
         <td>${statusCell}</td>
     </tr>`;
@@ -1375,7 +1375,7 @@ function renderStage(stage) {
         // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
         // отдельно, только по объединённому "Вело итого" — см. Свод вело).
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
-        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, r.surname, r.name) : [];
+        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, r.surname, r.name, t) : [];
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
         // "Время" — офиц. t с проекта (полные круги), либо, пока его нет,
         // live-значение с учётом субметки (без "гэпа" — он посчитан
@@ -1426,7 +1426,7 @@ function renderStage(stage) {
             : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
-        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name) : [];
+        const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name, t) : [];
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
         // См. buildIndividualStageRow — "Время" live-значением с субметки,
@@ -1804,7 +1804,7 @@ function renderBikeCombined() {
         // "не начал" и "в процессе").
         const isFinishedBike = p => p.seq === maxVseq;
         const started = stageHasStarted(entry, 'bike_day1', _raceStartEpoch, Date.now());
-        const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', entry.surname, entry.name);
+        const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', entry.surname, entry.name, v);
         const forecastCell = showForecast
             ? stageForecastCell(entry, 'bike_day2', entry.bike1_s ?? 0, stageStartEpochFor(entry, 'bike_day2'))
             : '';
