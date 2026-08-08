@@ -934,14 +934,18 @@
         const title = BC_CATEGORY_TITLE[category] || category;
         return `${title}. ЛИЧНЫЙ ЗАЧЁТ. СУММА ЭТАПОВ. SIBERMAN 2026`;
     }
-    // ---- РЕЖИМ "ПО ЭТАПУ" (оставляем как было) ----
+    // ---- РЕЖИМ "ПО ЭТАПУ" ----
+    // "(ОТДЕЛЬНО)" после названия этапа — отличает пост с результатами
+    // ТОЛЬКО этого этапа от постов "СУММА ЭТАПОВ"/"ИТОГИ ДНЯ" (кумулятивное
+    // время), где название этапа могло звучать так же (2026-08-08).
+    const stageTitle = `${BC_STAGE_TITLE[stage]} (ОТДЕЛЬНО)`;
     if (category === 'combined') {
-        return `🏆 АБСОЛЮТ. ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+        return `🏆 АБСОЛЮТ. ${stageTitle}. SIBERMAN 2026`;
     }
     if (category === 'relay') {
-        return `🏆 ЭСТАФЕТЫ ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+        return `🏆 ЭСТАФЕТЫ ${bcStageEmoji(stage, category)} ${stageTitle}. SIBERMAN 2026`;
     }
-    return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${BC_STAGE_TITLE[stage]}. SIBERMAN 2026`;
+    return `${BC_CATEGORY_TITLE[category]} ${bcStageEmoji(stage, category)} ${stageTitle}. SIBERMAN 2026`;
 }
 
     // Финальная сборка: жирный заголовок (2 строки), тело, DNF/DSQ-блок
