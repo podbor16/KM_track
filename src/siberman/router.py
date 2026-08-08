@@ -99,6 +99,16 @@ async def participant_page(request: Request, bib: str, year: int = 2025):
 async def api_results(year: Optional[int] = None):
     # year не передан — год, явно помеченный публичным в админке
     # (get_public_race_year), НЕ обязательно последний загруженный.
+    # ⚠ Временная диагностика (2026-08-08, "путь от Copernico до лайв
+    # результатов иногда 3-4 минуты", найдено пользователем): весь блок
+    # ниже — СИНХРОННЫЙ mysql-connector внутри async def, без
+    # run_in_executor — блокирует event loop лидер-воркера целиком на
+    # время запроса. Если тут регулярно всплывают WARNING >1с при
+    # реально небольшом числе участников — это и есть причина задержек
+    # (конкурирует с asyncio.sleep(20) поллера Copernico на том же
+    # воркере). Не убирать до подтверждения/опровержения причины.
+    import time as _time
+    _t0 = _time.monotonic()
     conn = get_siberman_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
@@ -111,6 +121,9 @@ async def api_results(year: Optional[int] = None):
         data["records"] = get_all_records(conn)
     finally:
         conn.close()
+    _dt = _time.monotonic() - _t0
+    if _dt > 1:
+        log.warning(f"[siberman] api_results: запрос выполнялся {_dt:.2f}с (блокирует event loop)")
     # Конвертируем Decimal → float для JSON-сериализации
     import decimal
     def _clean(v):

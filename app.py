@@ -264,11 +264,30 @@ async def lifespan(app: FastAPI):
             finally:
                 conn.close()
 
+        # Временная диагностика (2026-08-08, задача "путь данных от
+        # Copernico до лайв результатов иногда занимает 3-4 минуты" —
+        # найдено пользователем на живой гонке): логируем РЕАЛЬНЫЙ разрыв
+        # между итерациями цикла (ожидается ~20с) и время выполнения самого
+        # цикла — если разрыв заметно больше 20с, значит планирование этой
+        # asyncio-задачи где-то стопорится (например, лидер-воркер занят
+        # синхронным блокирующим кодом в event loop от HTTP-запроса), а не
+        # сам Copernico/БД (apply_copernico_snapshot сам по себе <2с,
+        # проверено вручную). Не убирать до подтверждения причины.
+        last_tick = asyncio.get_event_loop().time()
         while True:
+            now = asyncio.get_event_loop().time()
+            gap = now - last_tick
+            last_tick = now
+            if gap > 25:
+                settings.logger.warning(f"[siberman] copernico_run_poller: разрыв между циклами {gap:.1f}с (ожидалось ~20с)")
             try:
                 current = await redis_client.get("tracker:leader")
                 if current and current.decode() == worker_id:
+                    t0 = asyncio.get_event_loop().time()
                     await asyncio.get_event_loop().run_in_executor(None, _run_cycle_sync)
+                    dt = asyncio.get_event_loop().time() - t0
+                    if dt > 3:
+                        settings.logger.warning(f"[siberman] copernico_run_poller: цикл выполнялся {dt:.1f}с")
             except Exception as _e:
                 settings.logger.warning(f"[siberman] copernico_run_poller error: {_e}")
             await asyncio.sleep(20)
