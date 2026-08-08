@@ -1278,7 +1278,11 @@ function renderStage(stage) {
         // абсурдные значения (напр. 900+ км/ч на вело), см. avgPaceLabel,
         // уже применяемый для того же в генераторе постов трансляции
         // (найдено пользователем 2026-08-04).
-        const metaCell = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        // Для "Бег" темп/прогноз тоже считаем по субметкам (lastCpPos), не
+        // по pos без них — иначе между полными кругами колонки "Время"/
+        // "Темп" повисали на "—" по 7 км, хотя live-позиция на "-500м до
+        // круга" уже известна (найдено пользователем 2026-08-08).
+        const metaCell = lastCpPos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value) : '—';
         // Прогноз финиша этапа — только для реально активных, ещё не
         // финишировавших этап. НЕ noTime (t==null) — r[cfg.timeKey]
         // (bike1_s/run_s/...) заполняется УЖЕ НА ПЕРВОЙ достигнутой КТ
@@ -1293,8 +1297,8 @@ function renderStage(stage) {
             const epoch = bike2StartEpoch(_raceStartEpoch, r.bike2_start_s);
             if (epoch != null) baseEpoch = epoch;
         }
-        const forecastCell = (pos && pos.seq !== maxSeq && r.status === 'active')
-            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
+        const forecastCell = (lastCpPos && lastCpPos.seq !== maxSeq && r.status === 'active')
+            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
         const started = stageHasStarted(r, dbStage, _raceStartEpoch, Date.now());
         // Рекорд есть только для 'swim'/'run' (нет данных по Вело1/Вело2
@@ -1302,6 +1306,12 @@ function renderStage(stage) {
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
         const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, r.surname, r.name) : [];
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[r.bib], stageGenderRankFor(r.bib, r.gender), genderBadge(r.gender), noTime ? '' : rc);
+        // "Время" — офиц. t с проекта (полные круги), либо, пока его нет,
+        // live-значение с учётом субметки (без "гэпа" — он посчитан
+        // сервером относительно ПОЛНЫХ кругов и был бы некорректен для
+        // промежуточного значения).
+        const displayTime = t ?? (dbStage === 'run' ? lastCpPos?.value : null);
+        const displayGap = t != null ? gaps[r.bib] : null;
         // Блёклая строка — только по РЕАЛЬНОМУ статусу гонки (DNF/DSQ/DNS),
         // не по "нет времени на этом этапе" (noTime): на живой гонке
         // абсолютно у всех участников noTime===true на этапах, которые они
@@ -1316,7 +1326,7 @@ function renderStage(stage) {
                 ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
                 <span class="badge badge-individual">Лично</span>
             </div></td>
-            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[r.bib], recordCats)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(displayTime), displayGap, recordCats)}</td>
             <td class="r muted">${metaCell}</td>
             ${showForecastColumn ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${lastCpCell}</td>
@@ -1329,10 +1339,14 @@ function renderStage(stage) {
         const t = m[cfg.timeKey];
         const key = `${m._bib}:${m.relay_stage}`;
         const pos = stagePos(m, dbStage);
+        // См. buildIndividualStageRow — "Отметка"/темп/прогноз для "Бег"
+        // учитывают субметки Copernico "-500м до круга", не только полные.
+        const lastCpPos = dbStage === 'run' ? lastReachedIncludingSubmarks(m.cp, dbStage) : pos;
+        const lastCpCell = lastCpTwoLineHtml(dbStage, lastCpPos?.seq);
         // См. buildIndividualStageRow — темп/скорость из живой позиции,
         // не из серверного avg_pace_s/avg_speed_kmh (неверно для тех, кто
         // ещё не финишировал этап).
-        const meta = pos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value) : '—';
+        const meta = lastCpPos ? avgPaceLabel(dbStage, CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value) : '—';
         // См. buildIndividualStageRow — тот же прогноз, та же поправка на
         // t/noTime (не сигнализирует "не финишировал", см. комментарий там).
         let baseEpoch = null;
@@ -1340,16 +1354,19 @@ function renderStage(stage) {
             const epoch = bike2StartEpoch(_raceStartEpoch, m.bike2_start_s);
             if (epoch != null) baseEpoch = epoch;
         }
-        const forecastCell = (pos && pos.seq !== maxSeq && m.status === 'active')
-            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][pos.seq], pos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
+        const forecastCell = (lastCpPos && lastCpPos.seq !== maxSeq && m.status === 'active')
+            ? forecastCellWithBase(CHECKPOINT_DIST_KM[dbStage][lastCpPos.seq], lastCpPos.value, CHECKPOINT_DIST_KM[dbStage][maxSeq], baseEpoch)
             : '';
         const started = stageHasStarted(m, dbStage, _raceStartEpoch, Date.now());
         const recordCol = STAGE_TO_RECORD_COLUMN[dbStage];
         const recordCats = recordCol ? recordCategoriesFor(_recordsIndex, recordCol, m.surname, m.name) : [];
-        const lastCpPos = dbStage === 'run' ? lastReachedIncludingSubmarks(m.cp, dbStage) : pos;
-        const lastCpCell = lastCpTwoLineHtml(dbStage, lastCpPos?.seq);
         const rc = stageAbsRanks[key] != null ? rankClass(stageAbsRanks[key]) : '';
         const rankCells = rankBodyCells(showGenderCol, stageAbsRanks[key], stageGenderRankFor(key, m.gender), genderBadge(m.gender), rc);
+        // См. buildIndividualStageRow — "Время" live-значением с субметки,
+        // пока нет офиц. t по полному кругу; без гэпа (он посчитан сервером
+        // относительно полных кругов).
+        const displayTime = t ?? (dbStage === 'run' ? lastCpPos?.value : null);
+        const displayGap = t != null ? gaps[`${m._bib}:${m.relay_stage}`] : null;
         return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
             ${rankCells}
             <td class="bib-cell">${m._bib}</td>
@@ -1358,7 +1375,7 @@ function renderStage(stage) {
                 <span class="name-city">${m._team}</span>
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
-            <td class="r time-cell">${timeGapCell(fmtTime(t), gaps[`${m._bib}:${m.relay_stage}`], recordCats)}</td>
+            <td class="r time-cell">${timeGapCell(fmtTime(displayTime), displayGap, recordCats)}</td>
             <td class="r muted">${meta}</td>
             ${showForecastColumn ? `<td class="r">${forecastCell}</td>` : ''}
             <td class="muted">${lastCpCell}</td>

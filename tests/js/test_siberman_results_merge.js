@@ -3180,6 +3180,21 @@ check('renderStage(\'bike1\') — эстафетный велосипедист 
     const html = domGetAppHtml();
     assert.ok(html.includes('forecast-cell">~4:40:52<'), `у эстафетного велосипедиста посреди этапа должен быть прогноз ~4:40:52: ${html}`);
 });
+check('renderStage(\'run\') — участник дошёл только до субметки "-500м до круга" (нет полного круга) — "Время"/"Темп" всё равно показывают live-значение, не "—"', () => {
+    // Регрессия 2026-08-08: run_s (и pos без субметок) заполняются только
+    // на ПОЛНЫХ кругах (seq 1..12) — участник между стартом и первым
+    // полным кругом (7 км), но уже дошедший до субметки "-500м" (6.5 км,
+    // seq 101), должен получать live "Время"/"Темп" из lastCpPos
+    // (lastReachedIncludingSubmarks), а не оставаться на "—" все 7 км.
+    const r = mkTimerInd('88', { status: 'active', run_s: null, cp: { run: { 101: 1500 } } }); // 6,5 км за 25 мин
+    setRaceData([r], [], Date.now());
+    setState('all', 'all');
+    sandbox.renderStage('run');
+    const html = domGetAppHtml();
+    const row = html.slice(html.indexOf('bib-cell">88<'), html.indexOf('bib-cell">88<') + 1500);
+    assert.ok(!row.includes('time-cell"><span class="muted">—'), `"Время" не должно быть "—" при наличии субметки: ${row}`);
+    assert.ok(row.includes('0:25:00'), `"Время" должно показать live-значение по субметке (25:00): ${row}`);
+});
 check('renderStage(\'bike1\') — заголовок таблицы содержит "Прогноз финиша" между "Скорость" и "Отметка"', () => {
     const r = mkTimerInd('9', { swim_s: 0, bike1_s: null, cp: { bike_day1: { 1: 100 } } });
     setRaceData([r], [], Date.now());
