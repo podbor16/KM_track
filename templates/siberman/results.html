@@ -1017,10 +1017,20 @@ function buildMergedOverallEntries(individual, relay) {
     const indWithKey = individual.map(r => ({ ...r, _liveSortKey: raceSortKey(racePos(r, null)) }));
     const indSorted = sortByStatus(indWithKey, '_liveSortKey');
     if (_fmt !== 'all') {
-        // Только один тип виден — смешивать нечего.
+        // Только один тип виден — смешивать нечего, но сортировать всё
+        // равно нужно: та же live-позиция и та же сортировка (активные
+        // впереди DNF/DSQ/DNS, внутри — по позиции в гонке), что и для
+        // личников — раньше эстафета здесь оставалась В ИСХОДНОМ ПОРЯДКЕ
+        // (как пришла с сервера) — колонка "Место" при фильтре "Эстафета"
+        // показывала правильные номера, но СТРОКИ шли вперемешку, не по
+        // возрастанию места (найдено пользователем 2026-08-08).
+        // teamGapRow(t).status — тот же способ получить статус команды,
+        // что и в ветке ниже (interleaved).
+        const relSingleWithKey = relay.map(t => ({ ...t, _liveSortKey: raceSortKey(racePos(teamGapRow(t), null)), status: teamGapRow(t).status }));
+        const relSorted = sortByStatus(relSingleWithKey, '_liveSortKey');
         return [
             ...indSorted.map(r => ({ type: 'individual', entry: r })),
-            ...relay.map(t => ({ type: 'relay', entry: t })),
+            ...relSorted.map(t => ({ type: 'relay', entry: t })),
         ];
     }
     const indFinished = indSorted.filter(r => r._liveSortKey != null && r.status === 'active');
