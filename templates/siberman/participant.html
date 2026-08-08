@@ -605,18 +605,30 @@ function stageSection(cfg, r, gapPool, overallGapPool) {
 
 // "Велоэтап (общ.)" — сумма вело день 1 + день 2, без своей ранжировки/КТ
 // (это агрегат для удобства чтения, не отдельный этап гонки с местом).
-function combinedBikeSection(r, b1, b2) {
+function combinedBikeSection(r, b1, b2, swimS) {
     if (b1 == null && b2 == null) return '';
     const bothKnown = b1 != null && b2 != null;
     const total = bothKnown ? b1 + b2 : null;
     const avgSpeed = bothKnown ? (145 + 276) / (total / 3600) : null;
     const recordCats = recordCategoriesFor(_recordsIndex, 'bike_total', r.surname, r.name);
+    // Шапка (stage-time) — race-cumulative в табе "Гонка" (тот же
+    // переключатель, что уже применён на "Общем времени"/отставаниях
+    // остальных этапов, запрошено пользователем 2026-08-08 сразу вслед за
+    // тем фиксом — этот блок остался не пересчитанным): плавание + оба дня
+    // вело, позиция К КОНЦУ вело-этапа. swimS — у эстафетного велосипедиста
+    // свой личный swim_s пуст (он сам не плавал), передаётся снаружи
+    // (teamSwimS команды), см. вызовы ниже.
+    // Таблица строк ("Вело День 1/2"/"Итого 421 км") остаётся ЧИСТО
+    // велосипедной разбивкой независимо от таба — так же, как "Сплит" на
+    // остальных этапах не переключается табом, меняется только сводное
+    // значение в шапке.
+    const headerTotal = (_mode === 'race' && total != null) ? (swimS ?? 0) + total : total;
     return `<details class="stage">
         <summary>
             <span class="stage-title">Велоэтап (общ.)</span>
             <span class="stage-dist">421 км</span>
             <span class="stage-spacer"></span>
-            ${total != null ? `<span class="stage-time">${fmtTime(total)}</span>` : ''}
+            ${headerTotal != null ? `<span class="stage-time">${fmtTime(headerTotal)}</span>` : ''}
         </summary>
         ${recordCats.length ? `<div class="stage-record">🏆 Рекорд: ${recordLabelText(recordCats)}</div>` : ''}
         <table class="cp-table">
@@ -765,7 +777,7 @@ function renderIndividual(data, r) {
         <div class="stats-row">${overallStat}</div>
         ${modeToggle()}
         ${STAGES.filter(s => s.dbStage !== 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
-        ${combinedBikeSection(r, r.bike1_s, r.bike2_s)}
+        ${combinedBikeSection(r, r.bike1_s, r.bike2_s, r.swim_s)}
         ${STAGES.filter(s => s.dbStage === 'run').map(cfg => stageSection(cfg, r, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
     </div>`;
     document.getElementById('app').innerHTML = html;
@@ -826,7 +838,7 @@ function renderTeam(data, team) {
             _teamBike1S: teamBike1S, _teamBike2S: teamBike2S,
             cp: { ...m.cp, swim: m.cp?.swim ?? teamSwimCp, bike_day2: m.cp?.bike_day2 ?? teamBike2Cp },
         }, buildStageGapPool(data, cfg.dbStage, cfg.relayStage), overallGapPool)).join('')}
-        ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s) : ''}
+        ${m.relay_stage === 'bike' ? combinedBikeSection(m, m.bike1_s, m.bike2_s, teamSwimS) : ''}
     </div>`;
 }).join('');
 
