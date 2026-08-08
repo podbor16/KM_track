@@ -804,7 +804,25 @@
             timeLine = `⏱️ ${fmtTime(timeS)}`;
         }
         const gapSuffix = idx === 0 ? '' : ` | ${bcGapText(item.gap)}`;
-        return `${rank}. ${name}${bcMedal(rank)}\n${timeLine}${gapSuffix}`;
+        // Темп бегового этапа (отдельной курсивной строкой) — только для
+        // поста "По всей гонке" на этапе "Бег": время гонки там кумулятивное
+        // (globalProgress, включает плавание+вело), из него темп бега не
+        // виден — берём отдельно elapsed ТОЛЬКО по бегу (bcStageRawTime,
+        // та же логика, что использует режим "По этапу"), запрошено
+        // пользователем 2026-08-08.
+        const paceLine = (mode !== 'stage' && stage === 'run')
+            ? bcRunPaceLine(bcStageRawTime(item.row, stage, seq), bcDistKm(stage, seq))
+            : '';
+        return `${rank}. ${name}${bcMedal(rank)}\n${timeLine}${gapSuffix}${paceLine}`;
+    }
+    // "Темп бегового этапа М:СС мин/км" курсивом — тот же расчёт, что
+    // avgPaceLabel для run (сек/км), но с суффиксом "мин/км" вместо "/км"
+    // (формат явно запрошен пользователем, отличается от остальных постов).
+    function bcRunPaceLine(timeS, distKm) {
+        if (timeS == null || !(distKm > 0)) return '';
+        const paceS = Math.round(timeS / distKm);
+        const pace = `${Math.floor(paceS / 60)}:${String(paceS % 60).padStart(2, '0')} мин/км`;
+        return `\n__Темп бегового этапа: ${pace}__`;
     }
 
     // Уточнение в скобках после "N из M км" — круги для плавания/бега
