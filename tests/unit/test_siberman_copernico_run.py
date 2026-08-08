@@ -102,6 +102,50 @@ def test_apply_snapshot_individual_writes_checkpoint_and_computes_cumulative_fro
 @patch("src.siberman.copernico_run.get_stage_starts")
 @patch("src.siberman.copernico_run.upsert_checkpoint_time")
 @patch("src.siberman.copernico_run.update_participant_status")
+def test_apply_snapshot_computes_split_s_from_consecutive_laps(
+    mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
+    mock_cp_times, mock_recompute, mock_run_enabled,
+):
+    """Регрессия 2026-08-08: split_s писался как None на каждом опросе, а
+    upsert_checkpoint_time затирает им уже посчитанное значение
+    (ON DUPLICATE KEY UPDATE split_s=VALUES(split_s)) — график "Темп/
+    скорость" на вкладке "Бег" оставался пустым весь этап, хотя
+    cumulative_s (время/место) писались верно."""
+    run_start = datetime.datetime(2026, 8, 8, 8, 30, 0)
+    mock_stage_starts.return_value = {"run_start": run_start, "bike2_start": None}
+    mock_checkpoints.return_value = [
+        {"stage": "run", "seq": 1, "id": 5001},
+        {"stage": "run", "seq": 2, "id": 5002},
+        {"stage": "run", "seq": 101, "id": 5101},
+    ]
+    mock_participants.return_value = [
+        {"id": 900, "bib": "156", "relay_stage": "none", "status": "active", "dnf_stage": None},
+    ]
+    runners = [{
+        "dorsal": 156, "category": "Мужчины", "status": "running",
+        "times.official_7km": 600000,   # 600с — 1 круг
+        "times.official_14km": 1350000,  # 1350с — 2 круга (сплит 2 круга = 750с)
+    }]
+
+    apply_copernico_snapshot(_mk_conn(), 2026, runners, CFG)
+
+    calls_by_checkpoint = {c.args[2]: c.args for c in mock_upsert_cp.call_args_list}
+    assert calls_by_checkpoint[5001][3] == 600   # cumulative_s круг 1
+    assert calls_by_checkpoint[5001][4] == 600   # split_s круг 1 = cumulative (первый круг)
+    assert calls_by_checkpoint[5002][3] == 1350  # cumulative_s круг 2
+    assert calls_by_checkpoint[5002][4] == 750   # split_s круг 2 = 1350 - 600
+    # Субметка "-500м до круга" — не участвует в графике темпа, split_s не нужен.
+    assert calls_by_checkpoint[5101][4] is None
+
+
+@patch("src.siberman.copernico_run.get_copernico_run_enabled", return_value=True)
+@patch("src.siberman.copernico_run.recompute_totals_ranks_records")
+@patch("src.siberman.copernico_run.get_checkpoint_times_for_year", return_value=({}, {}))
+@patch("src.siberman.copernico_run.get_participants_for_year")
+@patch("src.siberman.copernico_run.get_checkpoints")
+@patch("src.siberman.copernico_run.get_stage_starts")
+@patch("src.siberman.copernico_run.upsert_checkpoint_time")
+@patch("src.siberman.copernico_run.update_participant_status")
 def test_apply_snapshot_relay_runner_matched_by_bib_and_relay_stage_run(
     mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
     mock_cp_times, mock_recompute, mock_run_enabled,

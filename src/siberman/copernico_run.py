@@ -173,13 +173,34 @@ def apply_copernico_snapshot(conn, race_year: int, runners: list[dict], cfg: dic
             continue
         pid = participant["id"]
 
+        # Сначала считаем cumulative_s для ВСЕХ КТ этого участника (круговые
+        # 1..12 + субметки 101..112), чтобы затем посчитать split_s кругового
+        # seq как разницу с cumulative[seq-1] — та же логика, что уже
+        # используется для Google Sheet источника (см. apply_race_result в
+        # service.py). Раньше split_s писался как None всегда, а
+        # upsert_checkpoint_time делает "split_s=VALUES(split_s)" — каждый
+        # опрос Copernico затирал split_s обратно в NULL, из-за чего график
+        # "Темп/скорость" на вкладке "Бег" оставался пустым весь этап,
+        # несмотря на то, что cumulative_s (время/место) записывались верно
+        # (найдено пользователем 2026-08-08 на живой гонке).
+        cum_by_seq: dict[int, Optional[int]] = {}
+        for seq, field_name in lap_fields:
+            elapsed_ms = _parse_copernico_elapsed_ms(runner.get(field_name))
+            cum_by_seq[seq] = elapsed_ms // 1000 if elapsed_ms is not None else None
+
         for seq, field_name in lap_fields:
             checkpoint_id = cp_id_map.get(("run", seq))
             if checkpoint_id is None:
                 continue
-            elapsed_ms = _parse_copernico_elapsed_ms(runner.get(field_name))
-            cumulative_s = elapsed_ms // 1000 if elapsed_ms is not None else None
-            upsert_checkpoint_time(conn, pid, checkpoint_id, cumulative_s, None)
+            cumulative_s = cum_by_seq[seq]
+            split_s: Optional[int] = None
+            if cumulative_s is not None:
+                prev_cum = cum_by_seq.get(seq - 1)
+                if prev_cum is not None:
+                    split_s = cumulative_s - prev_cum
+                elif seq == 1:
+                    split_s = cumulative_s
+            upsert_checkpoint_time(conn, pid, checkpoint_id, cumulative_s, split_s)
             if cumulative_s is not None:
                 checkpoint_writes += 1
 
