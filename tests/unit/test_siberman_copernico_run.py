@@ -230,6 +230,38 @@ def test_apply_snapshot_dnf_status_maps_to_dnf_run_and_updates(
 @patch("src.siberman.copernico_run.get_stage_starts")
 @patch("src.siberman.copernico_run.upsert_checkpoint_time")
 @patch("src.siberman.copernico_run.update_participant_status")
+def test_apply_snapshot_disqualified_status_maps_to_dsq(
+    mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
+    mock_cp_times, mock_recompute, mock_run_enabled,
+):
+    """Регрессия 2026-08-09: Copernico на живой гонке прислал 'Disqualified'
+    (не 'DSQ') для bib=192 — STATUS_MAP не знал такого ключа, апдейт статуса
+    молча пропускался, участник оставался 'active' и лента показывала
+    "Финиш" по факту достижения последней КТ, хотя судьи его сняли."""
+    mock_stage_starts.return_value = {"run_start": datetime.datetime(2026, 8, 8, 8, 30, 0), "bike2_start": None}
+    mock_checkpoints.return_value = [{"stage": "run", "seq": 1, "id": 5001}]
+    mock_participants.return_value = [
+        {"id": 950, "bib": "192", "relay_stage": "none", "status": "active", "dnf_stage": None},
+    ]
+    runners = [{"dorsal": 192, "category": "Мужчины", "status": "Disqualified"}]
+
+    apply_copernico_snapshot(_mk_conn(), 2026, runners, CFG)
+
+    mock_update_status.assert_called_once()
+    call_args = mock_update_status.call_args[0]
+    assert call_args[1] == 950
+    assert call_args[2] == "dsq"
+    assert call_args[3] is None
+
+
+@patch("src.siberman.copernico_run.get_copernico_run_enabled", return_value=True)
+@patch("src.siberman.copernico_run.recompute_totals_ranks_records")
+@patch("src.siberman.copernico_run.get_checkpoint_times_for_year", return_value=({}, {}))
+@patch("src.siberman.copernico_run.get_participants_for_year")
+@patch("src.siberman.copernico_run.get_checkpoints")
+@patch("src.siberman.copernico_run.get_stage_starts")
+@patch("src.siberman.copernico_run.upsert_checkpoint_time")
+@patch("src.siberman.copernico_run.update_participant_status")
 def test_apply_snapshot_does_not_clear_dnf_from_earlier_stage_when_run_status_is_notstarted(
     mock_update_status, mock_upsert_cp, mock_stage_starts, mock_checkpoints, mock_participants,
     mock_cp_times, mock_recompute, mock_run_enabled,

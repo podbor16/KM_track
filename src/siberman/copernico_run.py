@@ -49,13 +49,22 @@ log = logging.getLogger(__name__)
 # всё это 'active' (ещё не закончил/идёт/успешно закончил сегмент), важно
 # различаются только dnf/dsq. 'withdrawn' трактуем как dnf (ближайший
 # аналог в 4-значном enum active/dnf/dns/dsq).
+# 'disqualified' — Copernico на живой гонке 2026 прислал именно это слово
+# (не 'dsq') для участника bib=192: `STATUS_MAP.get()` вернул None,
+# статус-апдейт целиком пропускался (см. ветку `if mapped is not None`
+# ниже) — участник оставался 'active' навсегда, а лента показывала
+# "Финиш" по факту достижения последней КТ бега, хотя судьи его сняли
+# (найдено пользователем 2026-08-09). У load_race_results.py тот же
+# пробел — если Copernico когда-нибудь пришлёт 'disqualified' и туда,
+# там тоже нужен этот алиас.
 STATUS_MAP: dict[str, tuple[str, Optional[str]]] = {
-    "notstarted": ("active", None),
-    "running":    ("active", None),
-    "finished":   ("active", None),
-    "dnf":        ("dnf", "run"),
-    "dsq":        ("dsq", None),
-    "withdrawn":  ("dnf", "run"),
+    "notstarted":   ("active", None),
+    "running":      ("active", None),
+    "finished":     ("active", None),
+    "dnf":          ("dnf", "run"),
+    "dsq":          ("dsq", None),
+    "disqualified": ("dsq", None),
+    "withdrawn":    ("dnf", "run"),
 }
 
 
