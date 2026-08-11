@@ -50,7 +50,7 @@ class NotificationHub:
         self._queues.discard(queue)
 
     async def broadcast(self, event_type: str, payload: Optional[dict] = None) -> None:
-        message = json.dumps({"type": event_type, **(payload or {})})
+        message = json.dumps({"type": event_type, **(payload or {})}, default=str)
         slow: set = set()
         for q in self._queues:
             try:

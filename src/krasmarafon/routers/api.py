@@ -722,7 +722,7 @@ async def sse_tracker(request: Request, event_id: int = Query(..., description="
                             'total_distance_km': None,
                             'total_results': full.get('total_results'),
                             'results': delta,
-                        })}
+                        }, default=str)}
                     else:
                         yield {"comment": "heartbeat"}
                 except asyncio.TimeoutError:
