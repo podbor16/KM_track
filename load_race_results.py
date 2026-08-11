@@ -205,6 +205,7 @@ def convert_status(status: Optional[str]) -> str:
         'finished': 'Finished',
         'dnf': 'DNF',
         'dsq': 'DSQ',
+        'disqualified': 'DSQ',
         'withdrawn': 'Withdrawn'
     }
     return status_map.get(status.lower(), 'Not started')
