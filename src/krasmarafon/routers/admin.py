@@ -4,15 +4,21 @@ Admin API роутер — управление конфигами событи�
 """
 
 import asyncio
+import pickle
+import secrets
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from src.krasmarafon.models.startlist import LeadPatch, LeadAdminItem, LeadsAdminResponse
+from src.krasmarafon.models.startlist import (
+    LeadPatch, LeadAdminItem, LeadsAdminResponse,
+    LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
+)
 
 from src.config import settings
 from src.config.event_loader import (
@@ -29,6 +35,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 EVENTS_DIR = BASE_DIR / "config" / "events"
 PRESETS_DIR = BASE_DIR / "config" / "copernico"
 LOADERS_DIR = BASE_DIR / "config" / "loader"
+
+# Pending-файлы bulk-импорта Tilda — общий для всех воркеров gunicorn,
+# как аналогичный паттерн у Siberman-загрузчика (src/siberman/router.py:52)
+_LEADS_IMPORT_PENDING_DIR = Path(tempfile.gettempdir()) / "leads_import_pending"
+_LEADS_IMPORT_PENDING_DIR.mkdir(exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +399,66 @@ async def patch_lead(
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Лид {lead_id} не найден")
     return LeadAdminItem.model_validate(updated).model_dump()
+
+
+@router.post("/api/admin/leads/import/upload")
+async def upload_leads_import(
+    file: UploadFile = File(...),
+    user: str = Depends(api_require_auth),
+) -> dict:
+    """Шаг 1 bulk-импорта заявок из выгрузки Tilda: парсит файл, строит
+    превью совпадений (обновится/создастся), сохраняет разобранные строки
+    во временный pending-файл — реальная запись в БД только на /apply."""
+    from src.krasmarafon.services.tilda_import_parser import parse_tilda_export
+    from src.analytics.db_results import preview_leads_import_matches
+
+    data = await file.read()
+    try:
+        parsed = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: parse_tilda_export(data, file.filename or "")
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    preview_rows = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: preview_leads_import_matches(parsed.rows)
+    )
+
+    token = secrets.token_urlsafe(16)
+    with open(_LEADS_IMPORT_PENDING_DIR / f"{token}.pkl", "wb") as f:
+        pickle.dump(parsed, f)
+
+    return LeadImportPreviewResponse(
+        token=token,
+        total_rows=parsed.total_rows,
+        to_update=sum(1 for r in preview_rows if r["will"] == "update"),
+        to_create=sum(1 for r in preview_rows if r["will"] == "create"),
+        parse_errors=parsed.errors,
+        sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
+    ).model_dump()
+
+
+@router.post("/api/admin/leads/import/apply")
+async def apply_leads_import(
+    token: str,
+    user: str = Depends(api_require_auth),
+) -> dict:
+    """Шаг 2 bulk-импорта: применяет ранее разобранный и подтверждённый
+    файл (по token из /upload) — UPDATE совпавших заявок, INSERT
+    несовпавших. Очищает pending-файл после применения."""
+    from src.analytics.db_results import bulk_import_leads
+
+    path = _LEADS_IMPORT_PENDING_DIR / f"{token}.pkl"
+    if not path.exists():
+        raise HTTPException(status_code=400, detail="Нет данных для импорта — загрузите файл заново")
+    with open(path, "rb") as f:
+        parsed = pickle.load(f)
+
+    summary = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: bulk_import_leads(parsed.rows)
+    )
+    path.unlink(missing_ok=True)
+    return LeadImportApplyResponse(**summary).model_dump()
 
 
 # ---------------------------------------------------------------------------

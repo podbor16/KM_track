@@ -94,8 +94,13 @@
                 <div class="admin-leads-actions">
                     <button class="km-btn km-btn--secondary" onclick="loadLeads(true)">Обновить</button>
                     <button class="km-btn km-btn--primary" id="leads-export-btn" onclick="exportLeadsCsv()" disabled>Экспорт CSV</button>
+                    <input type="file" id="leads-import-file" accept=".csv,.xlsx" style="display:none" onchange="onLeadsImportFileChosen()">
+                    <button class="km-btn km-btn--secondary" id="leads-import-btn" onclick="document.getElementById('leads-import-file').click()">Импорт из Tilda</button>
                 </div>
             </div>
+
+            <!-- Превью bulk-импорта из Tilda -->
+            <div id="leads-import-preview" class="admin-section-note" style="display:none"></div>
 
             <!-- Индикатор количества -->
             <div id="leads-count-bar" class="admin-leads-count" style="display:none">
@@ -911,6 +916,94 @@
         } finally {
             btn.disabled = false;
             btn.textContent = 'Экспорт CSV';
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Bulk-импорт заявок из выгрузки Tilda (upload → превью → apply)
+    // ------------------------------------------------------------------
+
+    async function onLeadsImportFileChosen() {
+        const fileInput = document.getElementById('leads-import-file');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const btn = document.getElementById('leads-import-btn');
+        btn.disabled = true;
+        btn.textContent = 'Загрузка...';
+
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const r = await fetch('/api/admin/leads/import/upload', { method: 'POST', body: fd });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert('Ошибка загрузки: ' + (err.detail || r.status));
+                return;
+            }
+            renderLeadsImportPreview(await r.json());
+        } catch(e) {
+            alert('Ошибка: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Импорт из Tilda';
+            fileInput.value = '';
+        }
+    }
+
+    function renderLeadsImportPreview(preview) {
+        const el = document.getElementById('leads-import-preview');
+
+        let errorsHtml = '';
+        if (preview.parse_errors.length) {
+            errorsHtml = `<div class="admin-error" style="margin-top:8px">
+                ${preview.parse_errors.length} строк с ошибками парсинга:<br>
+                ${preview.parse_errors.slice(0, 20).map(e => e.replace(/</g, '&lt;')).join('<br>')}
+                ${preview.parse_errors.length > 20 ? `<br>… и ещё ${preview.parse_errors.length - 20}` : ''}
+            </div>`;
+        }
+
+        const sampleRows = preview.sample.map(r => `
+            <tr>
+                <td>${r.row_number}</td>
+                <td>${r.surname} ${r.name}</td>
+                <td>${r.birthday}</td>
+                <td>${r.event_name} / ${r.event_distance}</td>
+                <td>${r.will === 'update' ? 'Обновится' : 'Создастся'}</td>
+            </tr>
+        `).join('');
+
+        el.style.display = '';
+        el.innerHTML = `
+            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}.</div>
+            ${errorsHtml}
+            <div style="max-height:240px; overflow:auto; margin-top:8px">
+                <table class="admin-loader-table">
+                    <thead><tr><th>Строка</th><th>ФИО</th><th>Дата рожд.</th><th>Событие</th><th>Действие</th></tr></thead>
+                    <tbody>${sampleRows}</tbody>
+                </table>
+            </div>
+            <div style="margin-top:8px">
+                <button class="km-btn km-btn--primary" onclick="applyLeadsImport('${preview.token}')">Применить импорт</button>
+                <button class="km-btn km-btn--secondary" onclick="document.getElementById('leads-import-preview').style.display='none'">Отменить</button>
+            </div>
+        `;
+    }
+
+    async function applyLeadsImport(token) {
+        try {
+            const r = await fetch(`/api/admin/leads/import/apply?token=${encodeURIComponent(token)}`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert('Ошибка применения импорта: ' + (err.detail || r.status));
+                return;
+            }
+            const summary = await r.json();
+            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.`);
+            document.getElementById('leads-import-preview').style.display = 'none';
+            loadLeads(true);
+        } catch(e) {
+            alert('Ошибка: ' + e.message);
         }
     }
 

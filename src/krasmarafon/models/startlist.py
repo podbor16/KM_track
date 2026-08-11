@@ -90,3 +90,35 @@ class LeadPatch(BaseModel):
 
     def non_null_fields(self) -> Dict[str, Any]:
         return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class LeadImportPreviewRow(BaseModel):
+    """Одна строка превью bulk-импорта Tilda — что будет с ней при apply."""
+
+    row_number: int
+    surname: str
+    name: str
+    birthday: str
+    event_name: str
+    event_distance: str
+    matched_count: int
+    will: str   # "update" | "create" | "unknown"
+
+
+class LeadImportPreviewResponse(BaseModel):
+    """Ответ POST /api/admin/leads/import/upload."""
+
+    token: str
+    total_rows: int
+    to_update: int
+    to_create: int
+    parse_errors: List[str]
+    sample: List[LeadImportPreviewRow]
+
+
+class LeadImportApplyResponse(BaseModel):
+    """Ответ POST /api/admin/leads/import/apply."""
+
+    updated: int
+    created: int
+    errors: List[str]

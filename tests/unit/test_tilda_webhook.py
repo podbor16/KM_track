@@ -66,6 +66,46 @@ def test_parse_products_detsky_zabeg():
     assert result["event_year"] == "2027"
 
 
+def test_parse_products_no_year_in_text_falls_back_to_slug_year():
+    """Реальная находка на боевой выгрузке Tilda: год в видимом тексте
+    названия есть не всегда (Tilda пишет его не всегда) — но всегда есть в
+    служебном slug-коде в скобках."""
+    products = ["5 км Жара (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1390"]
+    result = parse_products(products)
+    assert result["event_distance"] == "5 км"
+    assert result["event_name"] == "Жара"
+    assert result["event_year"] == "2026"
+
+
+def test_parse_products_no_visible_name_falls_back_to_config_by_slug():
+    """Ещё реже название события отсутствует в тексте вовсе — только slug.
+    'zhara' -> config/events/zhara.yaml -> name 'Жара'."""
+    products = ["5 км (zhara2026-5y, Выберите категорию: Дети 12-17 лет) x 1 ≡ 490"]
+    result = parse_products(products)
+    assert result["event_distance"] == "5 км"
+    assert result["event_name"] == "Жара"
+    assert result["event_year"] == "2026"
+
+
+def test_parse_products_no_year_anywhere_and_unknown_slug_returns_empty():
+    products = ["5 км Неизвестное (unknownslug, категория) x 1 ≡ 100"]
+    result = parse_products(products)
+    assert result == {"event_distance": "", "event_name": "", "event_year": ""}
+
+
+def test_parse_products_nested_parens_in_extras_still_finds_slug_year():
+    """Реальная строка с вложенными скобками у доп. опции (гравировка) —
+    год всё равно должен извлечься из начала slug-кода."""
+    products = [
+        "5 км Жара (zhara2026-5b, Выберите категорию: Пенсионеры, "
+        "Дополнительно: Гравировка (470 руб.)) x 1 ≡ 960"
+    ]
+    result = parse_products(products)
+    assert result["event_distance"] == "5 км"
+    assert result["event_name"] == "Жара"
+    assert result["event_year"] == "2026"
+
+
 def test_parse_payment():
     payment_str = (
         '{"sys":"cloudpayments","systranid":"3521002298","orderid":"1869817991",'

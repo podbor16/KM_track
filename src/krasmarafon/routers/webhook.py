@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from src.config import settings
 from src.analytics.db_connection_optimized import get_pooled_connection
+from src.analytics.db_results import recompute_duplicate_flag
 from src.krasmarafon.services.tilda_webhook import transform_tilda_payload
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
@@ -90,6 +91,16 @@ def _insert_lead(data: dict):
             data,
         )
         conn.commit()
-    finally:
+        new_id = cur.lastrowid
+
+        # client_id/event_id резолвлены триггером trg_leads_before_insert на
+        # BEFORE INSERT — читаем их обратно уже закоммиченными и пересчитываем
+        # is_duplicate для всей группы (включая саму первую заявку, если она
+        # уже существовала).
+        cur.execute("SELECT client_id, event_id FROM leads WHERE id = %s", (new_id,))
+        row = cur.fetchone()
         cur.close()
+        if row:
+            recompute_duplicate_flag(client_id=row[0], event_id=row[1])
+    finally:
         conn.close()

@@ -1374,6 +1374,175 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
             pass
 
 
+def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
+    """Пересчитать is_duplicate для ВСЕХ строк группы (client_id, event_id):
+    1, если в группе >1 строки, иначе 0 — включая первую заявку, не только
+    повторные (trg_leads_before_insert делает `SET NEW.is_duplicate = 0;`
+    безусловно на каждой вставке — мёртвый код, is_duplicate никогда не
+    считался автоматически). Вызывается из webhook._insert_lead после
+    INSERT и из bulk-импорта Tilda-заявок.
+
+    Один атомарный UPDATE с производной таблицей (MySQL не разрешает
+    `UPDATE leads SET ... WHERE ... IN (SELECT ... FROM leads)` напрямую по
+    той же таблице — оборачиваем в derived table), устраняет гонку между
+    параллельными вызовами вместо read-then-write.
+    """
+    if not client_id or not event_id:
+        return 0
+    conn = get_pooled_connection()
+    if not conn:
+        return 0
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE leads
+            SET is_duplicate = (
+                SELECT cnt > 1 FROM (
+                    SELECT COUNT(*) AS cnt FROM leads
+                    WHERE client_id = %s AND event_id = %s
+                ) t
+            )
+            WHERE client_id = %s AND event_id = %s
+            """,
+            (client_id, event_id, client_id, event_id),
+        )
+        conn.commit()
+        updated = cur.rowcount
+        cur.close()
+        return updated
+    except Exception as e:
+        logger.error(f"recompute_duplicate_flag error (client_id={client_id}, event_id={event_id}): {e}")
+        return 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'email', 'phone', 'event_distance')
+
+
+def bulk_import_leads(rows: list) -> Dict[str, Any]:
+    """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads по
+    surname+name+birthday+event_name+event_year+event_distance. Совпавшие
+    строки — UPDATE (ВСЕ строки группы, если их несколько — если группа уже
+    была дублем, обе строки должны отразить правку организатора).
+    Несовпавшие — INSERT новой заявки (trg_leads_before_insert сам резолвит
+    client_id/event_id — не переизобретаем это в Python), затем
+    recompute_duplicate_flag() на случай пересечения с уже живой группой.
+
+    birthday намеренно не в whitelist апдейта — это часть ключа
+    сопоставления, смена даты рождения = смена личности (для этого есть
+    обычный admin PATCH по одной строке). client_id/event_id/платёжные поля
+    тоже не трогаются — не про правки ФИО/контактов."""
+    conn = get_pooled_connection()
+    if not conn:
+        return {"updated": 0, "created": 0, "errors": ["Нет соединения с БД"]}
+    updated = created = 0
+    errors: list = []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        for row in rows:
+            cur.execute(
+                "SELECT id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
+                "AND event_name=%s AND event_year=%s AND event_distance=%s",
+                (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
+            )
+            matches = cur.fetchall()
+
+            if matches:
+                values = {c: (getattr(row, c) or None) for c in _IMPORT_UPDATABLE}
+                values['event_distance'] = row.event_distance  # не-NULL поле
+                set_clause = ", ".join(f"{c} = %s" for c in _IMPORT_UPDATABLE)
+                for m in matches:
+                    cur.execute(
+                        f"UPDATE leads SET {set_clause} WHERE id = %s",
+                        [values[c] for c in _IMPORT_UPDATABLE] + [m['id']],
+                    )
+                    updated += 1
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO leads (
+                        surname, name, sex, city, birthday, email, phone,
+                        event_name, event_distance, event_year, products,
+                        is_name_suspicious, client_id, event_id, is_duplicate,
+                        status, is_new, is_new_event
+                    ) VALUES (
+                        %(surname)s, %(name)s, %(sex)s, %(city)s, %(birthday)s,
+                        %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
+                        %(event_year)s, '', 0, 0, 0, 0, 0, 0, 0
+                    )
+                    """,
+                    {
+                        'surname': row.surname, 'name': row.name, 'sex': row.sex or '',
+                        'city': row.city or '', 'birthday': row.birthday,
+                        'email': row.email or 'example@mail.ru', 'phone': row.phone or None,
+                        'event_name': row.event_name, 'event_distance': row.event_distance,
+                        'event_year': row.event_year,
+                    },
+                )
+                new_id = cur.lastrowid
+                cur.execute("SELECT client_id, event_id FROM leads WHERE id = %s", (new_id,))
+                new_row = cur.fetchone()
+                if new_row:
+                    recompute_duplicate_flag(client_id=new_row['client_id'], event_id=new_row['event_id'])
+                created += 1
+        conn.commit()
+        cur.close()
+        return {"updated": updated, "created": created, "errors": errors}
+    except Exception as e:
+        logger.error(f"bulk_import_leads error: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {"updated": updated, "created": created, "errors": [str(e)]}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def preview_leads_import_matches(rows: list) -> list:
+    """Только чтение — для каждой row возвращает matched_count (0 = будет
+    создана новая заявка при bulk_import_leads), используется для превью
+    перед подтверждением импорта в admin UI."""
+    conn = get_pooled_connection()
+    if not conn:
+        return [
+            {"row_number": r.row_number, "surname": r.surname, "name": r.name,
+             "birthday": r.birthday, "event_name": r.event_name, "event_distance": r.event_distance,
+             "matched_count": 0, "will": "unknown"}
+            for r in rows
+        ]
+    try:
+        cur = conn.cursor(buffered=True)
+        out = []
+        for row in rows:
+            cur.execute(
+                "SELECT COUNT(*) FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
+                "AND event_name=%s AND event_year=%s AND event_distance=%s",
+                (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
+            )
+            cnt = cur.fetchone()[0]
+            out.append({
+                "row_number": row.row_number, "surname": row.surname, "name": row.name,
+                "birthday": row.birthday, "event_name": row.event_name, "event_distance": row.event_distance,
+                "matched_count": cnt, "will": "update" if cnt >= 1 else "create",
+            })
+        cur.close()
+        return out
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def create_connection():
     """УСТАРЕВШАЯ функция — используйте get_pooled_connection()."""
     logger.warning("⚠️ create_connection() устаревшая, используйте get_pooled_connection()")

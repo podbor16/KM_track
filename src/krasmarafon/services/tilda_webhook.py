@@ -40,6 +40,24 @@ def normalize_name(s):
     return " ".join(w.capitalize() for w in s.strip().split())
 
 
+def _lookup_event_name_by_slug(slug_text: str) -> str:
+    """Резолвит человекочитаемое имя события по префиксу slug-кода Tilda
+    (например 'zhara2026-5' -> код 'zhara' -> name из config/events/zhara.yaml).
+    Fallback для редких случаев, когда видимый текст названия в products
+    пуст (Tilda пишет slug без названия для части заказов)."""
+    m = re.match(r"^([a-zA-Zа-яА-ЯёЁ_]+)", slug_text.strip())
+    if not m:
+        return ""
+    prefix = m.group(1).lower()
+    try:
+        from src.config.event_loader import load_events_cached
+        events = load_events_cached()
+    except Exception:
+        return ""
+    event = events.get(prefix)
+    return event.name if event else ""
+
+
 def parse_products(products, birthday=None):
     empty = {"event_distance": "", "event_name": "", "event_year": ""}
     if not products:
@@ -64,6 +82,38 @@ def parse_products(products, birthday=None):
             "event_name": event_name,
             "event_year": event_year,
         }
+
+    # Fallback: Tilda не всегда пишет год рядом с названием (зависит от того,
+    # редактировал ли организатор название продукта в конструкторе после
+    # старта продаж) — но год всегда есть в служебном slug-коде в скобках
+    # (напр. "zhara2026-5"), иногда там же и единственное упоминание
+    # названия события (slug без человекочитаемого текста вообще).
+    fallback = re.match(
+        r"^(\d+(?:\.\d+)?)\s+(км|km)\s*(.*?)\(([^)]*)",
+        products_str,
+        re.IGNORECASE,
+    )
+    if fallback:
+        distance_num = fallback.group(1)
+        unit = "км"
+        visible_name = fallback.group(3).strip()
+        slug = fallback.group(4)
+        # Детский забег обрабатывается отдельной веткой ниже (возраст->дистанция) —
+        # не перехватываем его здесь, даже если в тексте уже есть название.
+        if not re.search(r"детск.*забег", visible_name, re.IGNORECASE):
+            # НЕ \b(20\d{2})\b — буквы и цифры оба относятся к \w, поэтому
+            # между "zhara" и "2026" в "zhara2026-5" нет границы слова;
+            # изолируем год явными проверками соседних символов вместо \b.
+            year_match = re.search(r"(?<!\d)(20\d{2})(?!\d)", slug)
+            event_year = year_match.group(1) if year_match else ""
+            event_name = visible_name or _lookup_event_name_by_slug(slug)
+            if event_name and event_year:
+                event_name = re.sub(r"\s+северная\s+ходьба\s*", " ", event_name, flags=re.IGNORECASE).strip()
+                return {
+                    "event_distance": f"{distance_num} {unit}",
+                    "event_name": event_name,
+                    "event_year": event_year,
+                }
 
     if re.search(r"детск.*забег", products_str, re.IGNORECASE):
         year_match = re.search(r"\b(20\d{2})\b", products_str)
