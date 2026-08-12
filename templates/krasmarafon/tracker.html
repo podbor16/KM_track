@@ -10,14 +10,13 @@
     <title>{{ event_title }}</title>
     <link rel="icon" type="image/png" href="/static/images/krasmarafon-logo.png">
     <link rel="stylesheet" href="/static/lib/leaflet-1.9.4/leaflet.css"/>
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/navigation.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/tracker.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
 </head>
 <body>
-    <!-- Включаем хэдер Красмарафона -->
-    {% include 'krasmarafon/krasmarafon_header.html' %}
     {% include 'krasmarafon/header.html' %}
 
     <div class="container">

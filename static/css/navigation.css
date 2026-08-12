@@ -10,15 +10,25 @@
   margin: 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   height: 44px;
   padding: 0 20px;
+}
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.navbar-logo-img {
+  display: block;
+  height: 26px;
+  width: auto;
 }
 .navbar-menu {
   display: flex;
   list-style: none;
   gap: 0;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
 }
 .navbar-link {
@@ -58,8 +68,11 @@
   border-radius: 2px;
 }
 @media (max-width: 640px) {
-  .navbar-container { justify-content: flex-end; }
   .navbar-toggle { display: flex; }
+  .navbar-logo-img {
+    height: auto;
+    max-width: 140px;
+  }
   .navbar-menu {
     display: none;
     position: absolute;
