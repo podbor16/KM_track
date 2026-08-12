@@ -178,6 +178,25 @@ def set_active_event_override(code: str) -> None:
     _ACTIVE_EVENT_OVERRIDE_FILE.write_text(code, encoding="utf-8")
 
 
+_HISTORY_ENABLED_FILE = Path(__file__).parent.parent.parent / "config" / "history_enabled.local"
+
+
+def get_history_enabled() -> bool:
+    """Раздел «История участия» (/history, /athlete-profile) — временно
+    скрыт до полной загрузки исторических данных (2013-2023 отсутствуют в
+    БД). Файл отсутствует -> включено (дефолт); содержимое "false" ->
+    выключено. Как active_event.local — вне git, переживает деплой."""
+    try:
+        return _HISTORY_ENABLED_FILE.read_text(encoding="utf-8").strip().lower() != "false"
+    except FileNotFoundError:
+        return True
+
+
+def set_history_enabled(enabled: bool) -> None:
+    """Переключается из /admin (POST /api/admin/history-toggle)."""
+    _HISTORY_ENABLED_FILE.write_text("true" if enabled else "false", encoding="utf-8")
+
+
 def get_active_event(
     events: dict[str, "EventConfig"],
 ) -> Optional["EventConfig"]:

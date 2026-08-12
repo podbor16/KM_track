@@ -20,6 +20,16 @@
             <a href="/logout" class="admin-logout">Выйти</a>
         </div>
 
+        <!-- Раздел «История участия» временно скрыт с публичного сайта, пока
+             историческая база 2013-2023 не загружена в БД (данные сейчас
+             практически только с 2024) — см. config/history_enabled.local -->
+        <div class="admin-section-note">
+            <label class="admin-checkbox-label">
+                <input type="checkbox" id="history-enabled-toggle" onchange="onHistoryToggle()">
+                Показывать раздел «История участия» на сайте (нав-пункт, /history, /athlete-profile)
+            </label>
+        </div>
+
         <!-- Вкладки -->
         <div class="admin-tabs">
             <button class="admin-tab admin-tab--active" onclick="switchTab('events', this)">События</button>
@@ -1067,10 +1077,44 @@
     }
 
     // ========================================================================
+    // Переключатель «История участия» (config/history_enabled.local)
+    // ========================================================================
+
+    async function loadHistoryToggle() {
+        try {
+            const r = await fetch('/api/admin/history-status');
+            const data = await r.json();
+            document.getElementById('history-enabled-toggle').checked = !!data.enabled;
+        } catch (e) {
+            console.error('loadHistoryToggle error:', e);
+        }
+    }
+
+    async function onHistoryToggle() {
+        const checkbox = document.getElementById('history-enabled-toggle');
+        const enabled = checkbox.checked;
+        checkbox.disabled = true;
+        try {
+            const r = await fetch(`/api/admin/history-toggle?enabled=${enabled}`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert('Ошибка: ' + (err.detail || r.status));
+                checkbox.checked = !enabled;
+            }
+        } catch (e) {
+            alert('Ошибка: ' + e.message);
+            checkbox.checked = !enabled;
+        } finally {
+            checkbox.disabled = false;
+        }
+    }
+
+    // ========================================================================
     // Инициализация — загружаем первую вкладку
     // ========================================================================
     _tabLoaded.events = true;
     loadEvents();
+    loadHistoryToggle();
     </script>
 </body>
 </html>

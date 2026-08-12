@@ -97,6 +97,7 @@ tests/fixtures/tilda_export_sample.xlsx
 # Активное событие, переключаемое из /admin — runtime-состояние, не код.
 # Не в git, чтобы деплой (git checkout) не затирал переключение на сервере.
 config/active_event.local
+config/history_enabled.local
 
 # Мокапы brainstorming-скилла (визуальный компаньон) — локальный черновой вывод
 .superpowers/

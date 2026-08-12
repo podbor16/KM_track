@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.config import settings
-from src.config.event_loader import get_event_by_name, get_event_by_db_id
+from src.config.event_loader import get_event_by_name, get_event_by_db_id, get_history_enabled
 from src.krasmarafon.services.diploma_service import get_diploma_data
 from src.core.auth import (
     COOKIE_NAME,
@@ -49,6 +49,7 @@ def _get_deploy_version() -> str:
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["v"] = _get_deploy_version()
+templates.env.globals["history_enabled"] = get_history_enabled
 
 
 # ============================================================================
@@ -196,15 +197,20 @@ async def results_page(request: Request):
     })
 
 
-@router.get("/history", response_class=HTMLResponse)
+@router.get("/history")
 async def history_page(request: Request):
-    """История: поиск по спортсмену и по забегу."""
+    """История: поиск по спортсмену и по забегу. Временно скрыто, пока
+    историческая база 2013-2023 не загружена — см. get_history_enabled()."""
+    if not get_history_enabled():
+        return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("krasmarafon/history.html", {"request": request})
 
 
-@router.get("/athlete-profile", response_class=HTMLResponse)
+@router.get("/athlete-profile")
 async def athlete_profile_page(request: Request):
-    """Профиль спортсмена со всеми его результатами."""
+    """Профиль спортсмена со всеми его результатами. Временно скрыто, см. history_page()."""
+    if not get_history_enabled():
+        return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("krasmarafon/athlete-profile.html", {
         "request": request,
         "diploma_event_ids": _diploma_event_ids(),

@@ -16,9 +16,11 @@
             <li class="navbar-item">
                 <a href="/results" class="navbar-link">РЕЗУЛЬТАТЫ</a>
             </li>
+            {% if history_enabled() %}
             <li class="navbar-item">
                 <a href="/history" class="navbar-link">ИСТОРИЯ</a>
             </li>
+            {% endif %}
         </ul>
     </div>
 </nav>

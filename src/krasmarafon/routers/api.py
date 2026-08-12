@@ -27,6 +27,7 @@ from src.krasmarafon.services.notification_hub import tracker_hub, notification_
 from src.config import settings
 from src.config.event_loader import (
     RouteConfig, load_events_cached, get_active_event, invalidate_events_cache,
+    get_history_enabled,
 )
 from src.core.state import AppState
 from src.core.dependencies import get_app_state
@@ -162,6 +163,8 @@ async def search_athletes(
     q: str = Query("", min_length=1, description="Фамилия или имя для поиска"),
 ):
     """Поиск спортсменов по фамилии/имени (таблица clients). Максимум 20 результатов."""
+    if not get_history_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
     try:
         from src.analytics.db_connection_optimized import search_clients_optimized
         results = await asyncio.get_event_loop().run_in_executor(
@@ -179,6 +182,8 @@ async def get_athlete_profile(
     name: str = PathParam(..., description="Имя"),
 ):
     """Профиль спортсмена и все его результаты."""
+    if not get_history_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
     try:
         from src.analytics.db_connection_optimized import get_athlete_results_optimized
 
