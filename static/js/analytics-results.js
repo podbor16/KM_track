@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('eventResultsSelector').value = currentEvent;
     document.getElementById('yearResultsSelector').value  = currentYear;
     updateEventThemeColor();
-    updateEventCardBackground();
+    updateEventBanner();
     updatePageTitle();
     loadRunnersData();
 
@@ -105,8 +105,8 @@ async function switchEventResults() {
     // Обновляем цвет темы
     updateEventThemeColor();
 
-    // Меняем фоновую картинку карточки события
-    updateEventCardBackground();
+    // Меняем фоновую картинку баннера события
+    updateEventBanner();
 
     // Обновляем заголовок страницы
     updatePageTitle();
@@ -124,13 +124,25 @@ function updatePageTitle() {
     title.innerHTML = `Результаты<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
 }
 
-// Функция обновления фонового изображения карточки события
-function updateEventCardBackground() {
-    const eventCard = document.getElementById('eventCard');
-    if (!eventCard) return;
+// Декоративный баннер события над тулбаром — показывается ТОЛЬКО если для
+// события реально есть фото в static/images/events/ (не у всех событий оно
+// есть). Наличие проверяется загрузкой картинки в браузере (Image()
+// onload/onerror), а не хардкод-списком — новое фото подхватится само.
+function updateEventBanner() {
+    const banner = document.getElementById('eventBanner');
+    if (!banner) return;
     const eventDisplayName = eventNameMap[currentEvent] || '';
-    const imageUrl = eventDisplayName ? `/static/images/events/${encodeURIComponent(eventDisplayName)}.png` : '';
-    eventCard.style.backgroundImage = `url('${imageUrl}')`;
+    if (!eventDisplayName) { banner.style.display = 'none'; return; }
+    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const img = new Image();
+    img.onload = () => {
+        banner.style.backgroundImage = `url('${imageUrl}')`;
+        banner.style.display = '';
+    };
+    img.onerror = () => {
+        banner.style.display = 'none';
+    };
+    img.src = imageUrl;
 }
 
 // Функция загрузки данных
