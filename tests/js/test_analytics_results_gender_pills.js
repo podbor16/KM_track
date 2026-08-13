@@ -88,12 +88,12 @@ const RUNNERS_FEMALE_ONLY = [
     { gender: 'Женщина', surname: 'Сидорова', name: 'Ольга', start_number: '3', rank_absolute: 1, rank_sex: 1, event: '5 км' },
 ];
 
-check('populateGenderFilter() — рендерит "Все" + пилюли по факту встречающихся полов, женщины раньше мужчин', () => {
+check('populateGenderFilter() — рендерит "Все" + пилюли по факту встречающихся полов (текст во множественном числе), женщины раньше мужчин', () => {
     resetDom();
     sandbox.populateGenderFilter(RUNNERS_MIXED);
     const container = domStub('genderFilter');
     const labels = container._children.map(c => c.textContent);
-    assert.deepStrictEqual(labels, ['Все', 'Женщина', 'Мужчина']);
+    assert.deepStrictEqual(labels, ['Все', 'Женщины', 'Мужчины']);
     assert.strictEqual(container.dataset.value, '');
     assert.strictEqual(container._children[0].className, 'km-pill active');
 });
@@ -102,7 +102,7 @@ check('populateGenderFilter() — не показывает пол, которо
     resetDom();
     sandbox.populateGenderFilter(RUNNERS_FEMALE_ONLY);
     const labels = domStub('genderFilter')._children.map(c => c.textContent);
-    assert.deepStrictEqual(labels, ['Все', 'Женщина']);
+    assert.deepStrictEqual(labels, ['Все', 'Женщины']);
 });
 
 check('setGenderFilter()/getGenderFilterValue() — раунд-трип', () => {

@@ -323,12 +323,16 @@ function populateGenderFilter(runners) {
     const values = ['', ...sortedGenders];
     const newValue = values.includes(savedValue) ? savedValue : '';
 
+    // Значение фильтра (data-value/сравнения с runner.gender) остаётся
+    // "Мужчина"/"Женщина" — меняется только отображаемый текст пилюли,
+    // тот же приём, что уже используется в tracker-api.js для кнопок пола.
+    const labels = { 'Женщина': 'Женщины', 'Мужчина': 'Мужчины' };
     container.innerHTML = '';
     values.forEach(value => {
         const pill = document.createElement('button');
         pill.type = 'button';
         pill.className = 'km-pill' + (value === newValue ? ' active' : '');
-        pill.textContent = value || 'Все';
+        pill.textContent = value ? (labels[value] || value) : 'Все';
         pill.addEventListener('click', () => setGenderFilter(value));
         container.appendChild(pill);
     });
