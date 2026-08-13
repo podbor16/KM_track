@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('eventSelector').value = currentEvent;
     const ySel = document.getElementById('yearStartSelector');
     if (ySel) ySel.value = currentYear;
-    updateEventCardBackground();
     updateEventThemeColor();
     updatePageTitle();
     loadRunnersData();
@@ -44,15 +43,6 @@ function populateYearSelector() {
     sel.value = now;
 }
 
-// Функция обновления фонового изображения карточки события
-function updateEventCardBackground() {
-    const eventCard = document.getElementById('eventCard');
-    if (!eventCard) return;
-    const eventDisplayName = eventNameMap[currentEvent];
-    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
-    eventCard.style.backgroundImage = `url('${imageUrl}')`;
-}
-
 // Функция обновления цвета темы в зависимости от события
 function updateEventThemeColor() {
     const color = eventColorMap[currentEvent] || '#EE2D62';
@@ -69,8 +59,7 @@ async function switchEvent() {
     // Сохраняем выбор в localStorage
     localStorage.setItem('selectedEvent', currentEvent);
 
-    // Обновляем фон карточки события и цвет темы
-    updateEventCardBackground();
+    // Обновляем цвет темы
     updateEventThemeColor();
 
     // Сбрасываем фильтры
