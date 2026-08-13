@@ -23,10 +23,9 @@
     <div class="km-page">
       <h1 id="pageTitle">Результаты забега</h1>
 
-      <div class="km-event-card" id="eventCard">
-        <div class="km-event-card__overlay"></div>
-        <div class="km-event-card__controls">
-          <div class="km-select-group">
+      <div class="km-toolbar">
+        <div class="km-filters">
+          <div class="km-filter-group">
             <label class="km-label">Событие:</label>
             <select id="eventResultsSelector" onchange="switchEventResults()" class="km-select">
               <option value="night_run">Ночной забег</option>
@@ -41,21 +40,14 @@
               <option value="dostigaya_tseli">Достигая цели</option>
             </select>
           </div>
-          <div class="km-select-group">
+          <div class="km-filter-group">
             <label class="km-label">Год:</label>
             <select id="yearResultsSelector" onchange="switchEventResults()" class="km-select km-select--year">
             </select>
           </div>
-        </div>
-      </div>
-
-      <div class="km-toolbar">
-        <div class="km-filters">
           <div class="km-filter-group">
-            <label class="km-label" for="genderFilter">Пол:</label>
-            <select id="genderFilter" onchange="onGenderChange()" class="km-select">
-              <option value="">Все</option>
-            </select>
+            <label class="km-label">Пол:</label>
+            <div class="km-pills" id="genderFilter" data-value=""></div>
           </div>
           <div class="km-filter-group" id="ageGroupFilterGroup">
             <label class="km-label" for="ageGroupFilter">Возр. группа:</label>
