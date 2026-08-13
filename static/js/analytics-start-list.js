@@ -47,6 +47,7 @@ function populateYearSelector() {
 // Функция обновления фонового изображения карточки события
 function updateEventCardBackground() {
     const eventCard = document.getElementById('eventCard');
+    if (!eventCard) return;
     const eventDisplayName = eventNameMap[currentEvent];
     const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
     eventCard.style.backgroundImage = `url('${imageUrl}')`;
@@ -73,7 +74,7 @@ async function switchEvent() {
     updateEventThemeColor();
 
     // Сбрасываем фильтры
-    document.getElementById('genderFilter').value = '';
+    _setGenderFilterActivePill('');
     document.getElementById('ageGroupFilter').value = '';
     document.getElementById('distanceFilter').value = '';
     document.getElementById('surnameSearch').value = '';
@@ -144,7 +145,7 @@ async function loadRunnersData(silent = false) {
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
-    const genderFilter = document.getElementById('genderFilter').value; // Получаем выбранный пол
+    const genderFilter = getGenderFilterValue(); // Получаем выбранный пол
     const savedValue = ageGroupSelect.value;
     const ageGroups = new Set();
     
@@ -280,6 +281,31 @@ function populateDistances(runners) {
     }
 }
 
+// Текущее значение пилюли пола: '' | 'Мужчина' | 'Женщина'
+function getGenderFilterValue() {
+    return document.getElementById('genderFilter').dataset.value || '';
+}
+
+// Устанавливает активную пилюлю пола БЕЗ побочных вызовов (onGenderChange/
+// applyFilters) — нужна для программного сброса (switchEvent()), где
+// пересчёт фильтров и так произойдёт позже через loadRunnersData() на
+// новых данных; вызывать его здесь преждевременно (тот же принцип, что и
+// обычное присваивание select.value, которое не вызывает onchange).
+function _setGenderFilterActivePill(value) {
+    const container = document.getElementById('genderFilter');
+    container.dataset.value = value;
+    container.querySelectorAll('.km-pill').forEach(pill => {
+        pill.classList.toggle('active', pill.dataset.value === value);
+    });
+}
+
+// Переключает активную пилюлю пола — вызывается по клику (эквивалент
+// прежнего onchange у <select>).
+function setGenderFilter(value) {
+    _setGenderFilterActivePill(value);
+    onGenderChange();
+}
+
 // Обработчик изменения пола - обновляет доступные возрастные группы
 function onGenderChange() {
     // Пересчитываем доступные возрастные группы в зависимости от выбранного пола
@@ -290,7 +316,7 @@ function onGenderChange() {
 
 // Применяем фильтры к данным
 function applyFilters() {
-    const genderFilter = document.getElementById('genderFilter').value;
+    const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const distanceFilter = document.getElementById('distanceFilter').value;
     const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
