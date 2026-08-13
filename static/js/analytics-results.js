@@ -127,6 +127,7 @@ function updatePageTitle() {
 // Функция обновления фонового изображения карточки события
 function updateEventCardBackground() {
     const eventCard = document.getElementById('eventCard');
+    if (!eventCard) return;
     const eventDisplayName = eventNameMap[currentEvent] || '';
     const imageUrl = eventDisplayName ? `/static/images/events/${encodeURIComponent(eventDisplayName)}.png` : '';
     eventCard.style.backgroundImage = `url('${imageUrl}')`;
@@ -303,44 +304,55 @@ function convertRaceStatus(raceStatus) {
 }
 
 
-// Заполняем опции пола — только те, что реально встречаются у участников
-// (напр. на "Женской семёрке" мужчин нет вообще, не показываем такой вариант)
+// Пилюли пола — только те, что реально встречаются у участников (напр. на
+// "Женской семёрке" мужчин нет вообще, не показываем такой вариант).
+// genderFilter — контейнер <div>, а не <select>: активное значение хранится
+// в data-value, читается через getGenderFilterValue().
 function populateGenderFilter(runners) {
-    const genderSelect = document.getElementById('genderFilter');
-    const savedValue = genderSelect.value;
+    const container = document.getElementById('genderFilter');
+    const savedValue = container.dataset.value || '';
 
     const genders = new Set();
     runners.forEach(runner => {
         if (runner.gender) genders.add(runner.gender);
     });
 
-    genderSelect.innerHTML = '';
-
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = 'Все';
-    genderSelect.appendChild(allOption);
-
     // Женщина раньше Мужчины — соответствует порядку в остальном UI
     const order = { 'Женщина': 0, 'Мужчина': 1 };
-    Array.from(genders).sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99)).forEach(gender => {
-        const option = document.createElement('option');
-        option.value = gender;
-        option.textContent = gender;
-        genderSelect.appendChild(option);
-    });
+    const sortedGenders = Array.from(genders).sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
+    const values = ['', ...sortedGenders];
+    const newValue = values.includes(savedValue) ? savedValue : '';
 
-    if (savedValue && Array.from(genderSelect.options).some(opt => opt.value === savedValue)) {
-        genderSelect.value = savedValue;
-    } else {
-        genderSelect.value = '';
-    }
+    container.innerHTML = '';
+    values.forEach(value => {
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'km-pill' + (value === newValue ? ' active' : '');
+        pill.textContent = value || 'Все';
+        pill.addEventListener('click', () => setGenderFilter(value));
+        container.appendChild(pill);
+    });
+    container.dataset.value = newValue;
+}
+
+// Текущее значение пилюли пола: '' | 'Мужчина' | 'Женщина'
+function getGenderFilterValue() {
+    return document.getElementById('genderFilter').dataset.value || '';
+}
+
+// Переключает активную пилюлю пола — вызывается по клику (эквивалент
+// прежнего onchange у <select>). Дальнейший ре-рендер пилюль (с уже
+// правильным активным значением) происходит внутри applyFilters() →
+// populateGenderFilter(allRunners), как и раньше для select.
+function setGenderFilter(value) {
+    document.getElementById('genderFilter').dataset.value = value;
+    onGenderChange();
 }
 
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
-    const genderFilter = document.getElementById('genderFilter').value; // Получаем выбранный пол
+    const genderFilter = getGenderFilterValue(); // Получаем выбранный пол
     const savedValue = ageGroupSelect.value;
 
     // Категория → множество полов, которым она реально встречается у участников.
@@ -482,7 +494,7 @@ function onGenderChange() {
 
 // Применяем фильтры к данным
 function applyFilters() {
-    const genderFilter = document.getElementById('genderFilter').value;
+    const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const distanceFilter = document.getElementById('distanceFilter').value;
     const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
@@ -554,7 +566,7 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // системе уже включает пол ("женщины до 49 лет"), поэтому при активном
 // фильтре по группе rank_category достаточен сам по себе.
 function getActiveRankField() {
-    const genderFilter = document.getElementById('genderFilter').value;
+    const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     if (ageGroupFilter !== '') return 'rank_category';
     if (genderFilter !== '') return 'rank_sex';
