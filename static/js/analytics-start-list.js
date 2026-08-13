@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const ySel = document.getElementById('yearStartSelector');
     if (ySel) ySel.value = currentYear;
     updateEventThemeColor();
+    updateEventBanner();
     updatePageTitle();
     loadRunnersData();
     new SSEClient('/api/sse/notify', {
@@ -49,6 +50,27 @@ function updateEventThemeColor() {
     document.documentElement.style.setProperty('--primary-color', color);
 }
 
+// Декоративный баннер события над тулбаром — показывается ТОЛЬКО если для
+// события реально есть фото в static/images/events/ (не у всех событий оно
+// есть). Наличие проверяется загрузкой картинки в браузере (Image()
+// onload/onerror), а не хардкод-списком — новое фото подхватится само.
+function updateEventBanner() {
+    const banner = document.getElementById('eventBanner');
+    if (!banner) return;
+    const eventDisplayName = eventNameMap[currentEvent] || '';
+    if (!eventDisplayName) { banner.style.display = 'none'; return; }
+    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const img = new Image();
+    img.onload = () => {
+        banner.style.backgroundImage = `url('${imageUrl}')`;
+        banner.style.display = '';
+    };
+    img.onerror = () => {
+        banner.style.display = 'none';
+    };
+    img.src = imageUrl;
+}
+
 // Функция для смены события или года
 async function switchEvent() {
     const eventSelector = document.getElementById('eventSelector');
@@ -61,6 +83,7 @@ async function switchEvent() {
 
     // Обновляем цвет темы
     updateEventThemeColor();
+    updateEventBanner();
 
     // Сбрасываем фильтры
     _setGenderFilterActivePill('');
