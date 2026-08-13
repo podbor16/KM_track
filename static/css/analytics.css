@@ -18,7 +18,11 @@ h1 {
 
 /* ── Event banner (декоративный, только если для события есть фото) ── */
 .km-event-banner {
-  height: 140px;
+  /* Все баннеры в static/images/events/ — ровно 2160×560. Задаём то же
+     соотношение сторон вместо фиксированной высоты, чтобы background-size:
+     cover не обрезал картинку (при height:140px соотношение контейнера
+     сильно отличалось от картинки — обрезался текст в нижней части). */
+  aspect-ratio: 2160 / 560;
   border-radius: var(--km-radius-card);
   background-size: cover;
   background-position: center;
@@ -354,7 +358,6 @@ h1 {
 /* ── Mobile ──────────────────────────────────────── */
 @media (max-width: 640px) {
   .km-page { padding: 12px; margin: 8px; border-radius: 8px; }
-  .km-event-banner { height: 100px; }
   .km-toolbar { gap: 6px; }
   .km-input { min-width: 0; }
   .detail-times-grid { grid-template-columns: 1fr; }
