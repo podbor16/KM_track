@@ -20,11 +20,9 @@
     <div class="km-page">
         <h1 id="pageTitle">Стартовый список</h1>
 
-        <!-- Карточка события с фото и селектором -->
-        <div class="km-event-card" id="eventCard">
-            <div class="km-event-card__overlay"></div>
-            <div class="km-event-card__controls">
-                <div class="km-select-group">
+        <div class="km-toolbar">
+            <div class="km-filters">
+                <div class="km-filter-group">
                     <label class="km-label" for="eventSelector">Событие:</label>
                     <select id="eventSelector" onchange="switchEvent()" class="km-select">
                         <option value="night_run">Ночной забег</option>
@@ -37,22 +35,17 @@
                         <option value="snow7">Снежная семерка</option>
                     </select>
                 </div>
-                <div class="km-select-group">
+                <div class="km-filter-group">
                     <label class="km-label" for="yearStartSelector">Год:</label>
                     <select id="yearStartSelector" onchange="switchEvent()" class="km-select km-select--year"></select>
                 </div>
-            </div>
-        </div>
-
-        <div class="km-toolbar">
-            <div class="km-filters">
                 <div class="km-filter-group">
-                    <label class="km-label" for="genderFilter">Пол:</label>
-                    <select id="genderFilter" onchange="onGenderChange()" class="km-select">
-                        <option value="">Все</option>
-                        <option value="Мужчина">Мужчины</option>
-                        <option value="Женщина">Женщины</option>
-                    </select>
+                    <label class="km-label" id="genderFilterLabel">Пол:</label>
+                    <div class="km-pills" id="genderFilter" data-value="" role="group" aria-labelledby="genderFilterLabel">
+                        <button type="button" class="km-pill active" data-value="" onclick="setGenderFilter('')">Все</button>
+                        <button type="button" class="km-pill" data-value="Женщина" onclick="setGenderFilter('Женщина')">Женщины</button>
+                        <button type="button" class="km-pill" data-value="Мужчина" onclick="setGenderFilter('Мужчина')">Мужчины</button>
+                    </div>
                 </div>
 
                 <div class="km-filter-group" id="ageGroupFilterGroup">

@@ -16,39 +16,6 @@ h1 {
   font-family: var(--km-font-brand);
 }
 
-/* ── Event card ──────────────────────────────────── */
-.km-event-card {
-  position: relative;
-  border-radius: var(--km-radius-card);
-  overflow: hidden;
-  height: 180px;
-  margin-bottom: 18px;
-  background-size: cover;
-  background-position: center;
-  box-shadow: 0 8px 24px rgba(0,0,0,.15);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 20px;
-}
-.km-event-card__overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,.28);
-}
-.km-event-card__controls {
-  position: relative;
-  z-index: 2;
-  background: rgba(255,255,255,.96);
-  padding: 14px 20px;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.12);
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.km-select-group { display: flex; gap: 8px; align-items: center; }
 .km-label { font-weight: 600; color: #333; font-size: 14px; white-space: nowrap; }
 .km-select {
   padding: 7px 11px;
@@ -376,12 +343,6 @@ h1 {
 /* ── Mobile ──────────────────────────────────────── */
 @media (max-width: 640px) {
   .km-page { padding: 12px; margin: 8px; border-radius: 8px; }
-  .km-event-card {
-    height: 110px;
-    padding: 0 12px;
-    justify-content: center;
-  }
-  .km-event-card__controls { padding: 10px 12px; gap: 8px; width: 100%; }
   .km-toolbar { gap: 6px; }
   .km-input { min-width: 0; }
   .detail-times-grid { grid-template-columns: 1fr; }
