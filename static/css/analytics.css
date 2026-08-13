@@ -75,6 +75,23 @@ h1 {
 }
 .km-input:focus, .km-select:focus { box-shadow: 0 0 0 3px rgba(238,45,98,.12); }
 
+/* ── Gender pill filter ──────────────────────────── */
+.km-pills { display: flex; gap: 6px; }
+.km-pill {
+  padding: 7px 14px;
+  border: 2px solid var(--km-primary);
+  border-radius: var(--km-radius-btn, 50px);
+  background: #fff;
+  color: var(--km-primary);
+  font-family: var(--km-font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.km-pill:hover { background: rgba(238,45,98,.08); }
+.km-pill.active { background: var(--km-primary); color: #fff; }
+
 /* ── Toolbar & filters ───────────────────────────── */
 .km-toolbar {
   display: flex;
@@ -158,13 +175,13 @@ h1 {
   font-size: 13px;
 }
 .km-th {
-  background: linear-gradient(to bottom, var(--km-primary), #1a1a1a);
+  background: var(--km-primary);
   color: #fff;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .4px;
   font-size: 11px;
-  padding: 12px 10px;
+  padding: 9px 10px;
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -172,11 +189,11 @@ h1 {
 .km-th--c { text-align: center; }
 .km-th--l { text-align: left; padding-left: 14px; }
 .km-th--sort { cursor: pointer; }
-.km-th--sort:hover { background: linear-gradient(to bottom, #c0234f, #111); }
+.km-th--sort:hover { background: #c0234f; }
 .km-tr { cursor: pointer; }
 .km-tr:hover .km-td { background: #e3f2fd !important; }
 .km-td {
-  padding: 11px 10px;
+  padding: 9px 10px;
   border-bottom: 1px solid #eaeaea;
   text-align: center;
 }
@@ -194,7 +211,7 @@ h1 {
   border-radius: 50%;
   font-weight: 800;
   font-size: 13px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,.28);
 }
 .km-rank-medal--1 { background: #FFD700; color: #7a5800; }
 .km-rank-medal--2 { background: #C0C0C0; color: #444; }
