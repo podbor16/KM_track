@@ -71,7 +71,7 @@ def _insert_lead(data: dict):
         cur.execute(
             """
             INSERT INTO leads (
-                surname, name, sex, city, birthday,
+                surname, name, sex, city, club, birthday,
                 email, phone,
                 event_name, event_distance, event_year,
                 products, payment_system, transaction_id, order_id,
@@ -79,7 +79,7 @@ def _insert_lead(data: dict):
                 is_name_suspicious, client_id, event_id,
                 is_duplicate, status, is_new, is_new_event
             ) VALUES (
-                %(surname)s, %(name)s, %(sex)s, %(city)s, %(birthday)s,
+                %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                 %(email)s, %(phone)s,
                 %(event_name)s, %(event_distance)s, %(event_year)s,
                 %(products)s, %(payment_system)s, %(transaction_id)s, %(order_id)s,

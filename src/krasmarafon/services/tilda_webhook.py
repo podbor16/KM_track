@@ -196,6 +196,7 @@ def transform_tilda_payload(body: dict) -> dict:
         "name": name,
         "sex": body.get("sex", ""),
         "city": body.get("city", ""),
+        "club": body.get("club", ""),
         "birthday": birthday,
         "email": body.get("email", ""),
         "phone": body.get("phone", ""),

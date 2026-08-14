@@ -1421,7 +1421,7 @@ def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
             pass
 
 
-_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'email', 'phone', 'event_distance')
+_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance')
 
 
 def bulk_import_leads(rows: list) -> Dict[str, Any]:
@@ -1473,13 +1473,13 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                 cur.execute(
                     """
                     INSERT INTO leads (
-                        surname, name, sex, city, birthday, email, phone,
+                        surname, name, sex, city, club, birthday, email, phone,
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id,
                         is_name_suspicious, client_id, event_id, is_duplicate,
                         status, is_new, is_new_event
                     ) VALUES (
-                        %(surname)s, %(name)s, %(sex)s, %(city)s, %(birthday)s,
+                        %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s,
@@ -1488,7 +1488,7 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                     """,
                     {
                         'surname': row.surname, 'name': row.name, 'sex': row.sex or '',
-                        'city': row.city or '', 'birthday': row.birthday,
+                        'city': row.city or '', 'club': row.club or '', 'birthday': row.birthday,
                         'email': row.email or 'example@mail.ru', 'phone': row.phone or None,
                         'event_name': row.event_name, 'event_distance': row.event_distance,
                         'event_year': row.event_year,

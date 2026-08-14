@@ -906,6 +906,7 @@ async def get_startlist(event_id: int = PathParam(..., description="ID собы�
             name=r.get('name') or '',
             sex=r.get('sex'),
             city=r.get('city'),
+            club=r.get('club'),
             event_distance=str(r['event_distance']) if r.get('event_distance') is not None else None,
             category=r.get('category'),
         )

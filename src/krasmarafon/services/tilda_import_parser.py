@@ -14,7 +14,7 @@ payment.products в вебхуке — переиспользуем parse_produc
 ТОЛЬКО при создании новой заявки (bulk_import_leads()), не при апдейте
 совпавшей: правки платёжных данных задним числом через CSV — не задача
 этого импорта, см. docstring bulk_import_leads(). Остальные колонки
-экспорта (Club, Date, phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
+экспорта (Date, phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
 ma_phone, formid/formname, file_discount*, field13/field14, Stage) — в
 leads нет соответствующей колонки, см. _KNOWN_IGNORED_HEADERS. Заголовок
 файла, которого нет ни в алиасах, ни в _KNOWN_IGNORED_HEADERS, попадает в
@@ -42,6 +42,7 @@ class ImportRow:
     event_distance: str
     sex: str = ""
     city: str = ""
+    club: str = ""
     email: str = ""
     phone: str = ""
     amount: str = ""            # "Сумма заказа" — сырое значение, конвертация в float в bulk_import_leads()
@@ -80,6 +81,8 @@ _HEADER_ALIASES = {
     "sex": "sex",
     "город": "city",
     "city": "city",
+    "клуб": "club",
+    "club": "club",
     "email": "email",
     "e-mail": "email",
     "телефон": "phone",
@@ -107,13 +110,13 @@ _HEADER_ALIASES = {
 # (ma_* — интеграция с сервисом email-маркетинга, utm_* — метки кампаний,
 # formid/formname/Stage — служебные поля CRM-воронки Tilda, file_discount* и
 # field13/field14 — generic-поля конструктора форм без зафиксированного
-# смысла) или дублирующие уже покрытое (Club/Date/phone_2/ma_email/Checkbox
+# смысла) или дублирующие уже покрытое (Date/phone_2/ma_email/Checkbox
 # — не нужны для сопоставления/создания лида). Перечислены явно, чтобы
 # parse_tilda_export() мог отличить "мы осознанно не берём эту колонку" от
 # "в файле появилась НОВАЯ колонка, которую мы никогда не видели" — второе
 # репортится через ImportResult.unknown_headers.
 _KNOWN_IGNORED_HEADERS = {
-    "club", "date", "phone_2", "ma_email", "checkbox",
+    "date", "phone_2", "ma_email", "checkbox",
     "utm_source", "utm_medium", "utm_campaign",
     "ma_id", "ma_name", "ma_phone", "formid", "formname",
     "file_discount", "file_discount_0", "file_discount_1",
@@ -233,6 +236,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 row_number=idx, surname=surname, name=name, birthday=birthday,
                 event_name=event_name, event_year=event_year, event_distance=event_distance,
                 sex=str(get("sex") or "").strip(), city=str(get("city") or "").strip(),
+                club=str(get("club") or "").strip(),
                 email=str(get("email") or "").strip(), phone=str(get("phone") or "").strip(),
                 amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),
                 discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),

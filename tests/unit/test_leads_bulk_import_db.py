@@ -9,7 +9,7 @@ from src.krasmarafon.services.tilda_import_parser import ImportRow
 def _row(**kw):
     base = dict(row_number=2, surname="Иванов", name="Иван", birthday="1990-01-01",
                 event_name="Весна", event_year=2027, event_distance="5 км",
-                sex="", city="", email="", phone="")
+                sex="", city="", club="", email="", phone="")
     base.update(kw)
     return ImportRow(**base)
 
@@ -81,6 +81,7 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
     bulk_import_leads([_row(
         amount="4.9", promocode="99TEST", discount="485.1",
         order_id="1486212513", transaction_id="144860:7719674713",
+        club="ILSS",
     )])
 
     insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
@@ -90,6 +91,7 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
     assert params["discount"] == 485.1
     assert params["order_id"] == 1486212513
     assert params["transaction_id"] == "144860:7719674713"
+    assert params["club"] == "ILSS"
 
 
 @patch("src.analytics.db_results.recompute_duplicate_flag")
@@ -128,6 +130,22 @@ def test_matched_row_update_does_not_touch_payment_fields(mock_get_conn):
     assert "amount" not in sql
     assert "promocode" not in sql
     assert "discount" not in sql
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_applies_club(mock_get_conn):
+    """club — контактные данные (как city/phone), не идентификационный
+    признак: повторный импорт должен обновлять его при совпадении."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [{"id": 101}]
+
+    bulk_import_leads([_row(club="ILSS")])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads" in c.args[0])
+    sql, params = update_call.args
+    assert "club" in sql
+    assert "ILSS" in params
     assert "order_id" not in sql
     assert "transaction_id" not in sql
 

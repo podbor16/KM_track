@@ -125,6 +125,7 @@ def test_transform_full_payload():
         "name": "иван",
         "sex": "мужской",
         "city": "Красноярск",
+        "club": "ILSS",
         "birthday": "01.01.1990",
         "email": "test@test.ru",
         "phone": "+7-900-000-0000",
@@ -137,6 +138,7 @@ def test_transform_full_payload():
     result = transform_tilda_payload(body)
     assert result["surname"] == "Иванов"
     assert result["name"] == "Иван"
+    assert result["club"] == "ILSS"
     assert result["birthday"] == "1990-01-01"
     assert result["event_name"] == "Весна"
     assert result["event_distance"] == "5 км"

@@ -277,12 +277,14 @@ def _real_export_xlsx(data_rows: list) -> bytes:
 
 
 def _real_row(surname, name, sex, city, birthday, phone, email, product,
-              amount=None, promocode=None, discount=None, order_id=None, tranid=None):
+              amount=None, promocode=None, discount=None, order_id=None, tranid=None,
+              club=None):
     row = [None] * len(_REAL_HEADERS)
     row[_REAL_HEADERS.index("surname")] = surname
     row[_REAL_HEADERS.index("Name")] = name
     row[_REAL_HEADERS.index("sex")] = sex
     row[_REAL_HEADERS.index("city")] = city
+    row[_REAL_HEADERS.index("Club")] = club
     row[_REAL_HEADERS.index("birthday")] = birthday
     row[_REAL_HEADERS.index("Phone")] = phone
     row[_REAL_HEADERS.index("Email")] = email
@@ -404,6 +406,31 @@ def test_parse_real_tilda_export_missing_payment_fields_default_to_empty():
     assert row.discount == ""
     assert row.order_id == ""
     assert row.transaction_id == ""
+
+
+def test_parse_real_tilda_export_captures_club():
+    xlsx = _real_export_xlsx([
+        _real_row("Экзархова", "Юлия", "Женщина", "Красноярск", "26.04.1979",
+                  "+7 (913) 031-50-35", "u19792007@ya.ru",
+                  "21.1 км Жара 2026 (zhara2026-21, Выберите категорию: Основная категория) x 1 ≡ 1790",
+                  club="ILSS"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    assert result.rows[0].club == "ILSS"
+
+
+def test_parse_real_tilda_export_missing_club_defaults_to_empty():
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  "+7 (900) 000-00-01", "test1@example.com",
+                  "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    assert result.rows[0].club == ""
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ class StartlistItem(BaseModel):
     name: str
     sex: Optional[str] = None
     city: Optional[str] = None
+    club: Optional[str] = None
     event_distance: Optional[str] = None
     category: Optional[str] = None
 
@@ -33,6 +34,7 @@ class LeadAdminItem(BaseModel):
     name: Optional[str] = None
     sex: Optional[str] = None
     city: Optional[str] = None
+    club: Optional[str] = None
     birthday: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
