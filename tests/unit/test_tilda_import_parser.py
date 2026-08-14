@@ -102,6 +102,32 @@ def test_parse_empty_event_value_collected_as_row_error():
     assert "строка 2" in result.errors[0]
 
 
+def test_parse_event_error_message_includes_raw_product_value():
+    """Реальная находка (2026-08-14): сообщение об ошибке 'не удалось
+    определить событие/дистанцию' не показывало САМ текст product, из-за
+    которого не сработал разбор — организатору/админу нечего было
+    диагностировать. Теперь сырое значение — в тексте ошибки."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,products\r\n"
+        "Иванов,Иван,01.05.1990,какая-то нераспознаваемая строка\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows == []
+    assert len(result.errors) == 1
+    assert "какая-то нераспознаваемая строка" in result.errors[0]
+
+
+def test_parse_event_error_message_includes_raw_columns_when_separate():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,01.05.1990,,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows == []
+    assert len(result.errors) == 1
+    assert "5 км" in result.errors[0]
+
+
 def test_parse_blank_row_skipped_silently():
     csv_text = (
         "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"

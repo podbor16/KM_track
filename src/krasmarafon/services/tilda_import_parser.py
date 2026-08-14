@@ -203,7 +203,18 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
 
             event_name, event_year, event_distance = _extract_event_info(get, col_map, birthday)
             if not event_name or not event_distance:
-                result.errors.append(f"строка {idx}: не удалось определить событие/дистанцию — строка пропущена")
+                if "products" in col_map:
+                    detail = f"product={str(get('products') or '')!r}"
+                elif "event_name" in col_map and "event_distance" in col_map:
+                    detail = (
+                        f"событие={str(get('event_name') or '')!r}, "
+                        f"дистанция={str(get('event_distance') or '')!r}"
+                    )
+                else:
+                    detail = "в файле нет ни products, ни отдельных колонок событие/дистанция"
+                result.errors.append(
+                    f"строка {idx}: не удалось определить событие/дистанцию ({detail}) — строка пропущена"
+                )
                 continue
 
             result.rows.append(ImportRow(
