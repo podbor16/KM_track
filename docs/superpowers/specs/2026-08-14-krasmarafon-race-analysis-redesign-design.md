@@ -61,6 +61,13 @@ markup его классы не использует — общих стилей
   нигде в `race-analysis.html` (шаблон использует `<div class="container">`
   без префикса `race-analysis-`). Удаляется вместе с остальными правками
   как подтверждённо неиспользуемое правило.
+- **`.race-info-section .info-row` / `.info-label` / `.info-value`** — тоже
+  мёртвый код: `race-analysis.js` (`displayRaceModal()`) никогда не
+  генерирует разметку с классом `race-info-section` — единственный путь,
+  создающий похожий блок (`openRaceModal()`, обработчик ошибки загрузки),
+  использует только `.race-info` (стилизован отдельно, `padding: 0`, этот
+  класс сохраняется). Удаляются вместе с остальным мёртвым кодом, а не
+  переносятся на токены.
 
 Фикс: все реально используемые переменные заменяются на существующие
 токены из `static/css/km-design-tokens.css` (даже там, где эффект
@@ -69,7 +76,8 @@ markup его классы не использует — общих стилей
 
 | Было | Станет |
 |---|---|
-| `var(--white)` | `var(--km-bg-card)` |
+| `var(--white)` (фон: `.back-button a`, `.race-modal-container`) | `var(--km-bg-card)` |
+| `var(--white)` (цвет текста на цветном фоне: `.back-button a:hover`) | `#fff` — литерал, не токен: в проекте нет `--km-*`-переменной для «белый текст на primary-фоне», везде на сайте (`.km-pill.active`, `.km-btn-export`, `.km-th` и т.д. в `analytics.css`) для этого используется `color: #fff` напрямую |
 | `var(--shadow)` | `var(--km-shadow)` |
 | `var(--text-dark)` | `var(--km-text-body)` |
 | `var(--text-light)` | `var(--km-text-secondary)` |
