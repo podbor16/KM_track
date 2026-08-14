@@ -125,6 +125,42 @@ def test_parse_unsupported_extension_raises():
         parse_tilda_export(b"whatever", filename="export.txt")
 
 
+def test_parse_csv_with_semicolon_delimiter():
+    """Реальная находка (2026-08-14): русская локаль Excel/Tilda экспортирует
+    CSV с ';' вместо ',' (запятая — десятичный разделитель в RU-локали).
+    csv.reader с дефолтным диалектом читал всю строку заголовков как ОДНУ
+    колонку — обязательные surname/name/birthday не находились вовсе."""
+    csv_text = (
+        "Фамилия;Имя;Дата рождения;Событие;Дистанция;Год\r\n"
+        "Иванов;Иван;01.05.1990;Весна;5 км;2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.surname == "Иванов"
+    assert row.event_name == "Весна"
+    assert row.event_year == 2027
+
+
+def test_parse_csv_semicolon_with_quoted_field_containing_comma():
+    """Значения с запятой внутри (например, город) должны остаться в
+    кавычках корректно распознаны даже при ';'-разделителе — запятая
+    внутри поля не должна ломать разбиение по колонкам."""
+    csv_text = (
+        'Фамилия;Имя;Дата рождения;Город;Событие;Дистанция;Год\r\n'
+        '"Петров";"Пётр";15.03.1985;"Красноярск, Сибирь";Весна;5 км;2027\r\n'
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.city == "Красноярск, Сибирь"
+    assert row.event_name == "Весна"
+
+
 def test_parse_xlsx_smoke():
     import io
     import openpyxl

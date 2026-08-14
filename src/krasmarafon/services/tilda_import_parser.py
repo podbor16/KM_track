@@ -119,7 +119,15 @@ _KNOWN_IGNORED_HEADERS = {
 
 def _read_csv_rows(file_bytes: bytes):
     text = file_bytes.decode("utf-8-sig")  # utf-8-sig — Excel/Tilda обычно пишут BOM
-    rows = list(csv.reader(io.StringIO(text)))
+    # RU-локаль Excel/Tilda экспортирует CSV с ';' (запятая занята под
+    # десятичный разделитель) — дефолтный csv.reader считал бы всю строку
+    # заголовков одной колонкой. Sniffer определяет реальный разделитель по
+    # первым строкам файла, ограничен только двумя реалистичными вариантами.
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;")
+    except csv.Error:
+        dialect = csv.excel  # непонятный сэмпл (например, файл из одной колонки) — дефолт ','
+    rows = list(csv.reader(io.StringIO(text), dialect))
     return (rows[0], rows[1:]) if rows else ([], [])
 
 
