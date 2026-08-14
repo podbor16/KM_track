@@ -775,6 +775,30 @@
             renderCharts();
         }
 
+        // Текущий режим отображения истории забегов: 'grid' | 'table'
+        function getViewMode() {
+            return document.getElementById('racesViewToggle').dataset.value || 'grid';
+        }
+
+        // Устанавливает активную пилюлю вида БЕЗ переключения видимости
+        // блоков — используется только внутри setViewMode().
+        function _setViewModeActivePill(value) {
+            const container = document.getElementById('racesViewToggle');
+            container.dataset.value = value;
+            container.querySelectorAll('.km-pill').forEach(pill => {
+                pill.classList.toggle('active', pill.dataset.value === value);
+            });
+        }
+
+        // Переключает пилюлю вида и показывает соответствующий блок
+        // (Сетка/Таблица) — вызывается по клику, эквивалент прежних
+        // gridViewBtn.onclick/tableViewBtn.onclick.
+        function setViewMode(value) {
+            _setViewModeActivePill(value);
+            document.getElementById('racesGrid').style.display = value === 'grid' ? 'grid' : 'none';
+            document.getElementById('racesTableWrapper').style.display = value === 'table' ? 'block' : 'none';
+        }
+
         // Отрисовать результаты
         function renderResults() {
             if (currentResults.length === 0) {
@@ -785,23 +809,9 @@
             }
 
             document.getElementById('noRaces').style.display = 'none';
-            
+
             renderGridView();
             renderTableView();
-
-            document.getElementById('gridViewBtn').onclick = () => {
-                document.getElementById('racesGrid').style.display = 'grid';
-                document.getElementById('racesTableWrapper').style.display = 'none';
-                document.getElementById('gridViewBtn').classList.add('view-toggle-btn--active');
-                document.getElementById('tableViewBtn').classList.remove('view-toggle-btn--active');
-            };
-
-            document.getElementById('tableViewBtn').onclick = () => {
-                document.getElementById('racesGrid').style.display = 'none';
-                document.getElementById('racesTableWrapper').style.display = 'block';
-                document.getElementById('tableViewBtn').classList.add('view-toggle-btn--active');
-                document.getElementById('gridViewBtn').classList.remove('view-toggle-btn--active');
-            };
         }
 
         // Отрисовать сетку
@@ -891,7 +901,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadAthleteProfile();
         });
-    </script>
     </script>
 </body>
 </html>
