@@ -277,6 +277,7 @@
     flex-direction: column;
     justify-content: space-between;
     transition: box-shadow 0.2s ease;
+    min-width: 0;
 }
 
 .extended-stat-item:hover {
@@ -296,8 +297,9 @@
     font-size: 28px;
     font-weight: 700;
     color: var(--km-primary, #EE2D62);
-    line-height: 1;
+    line-height: 1.15;
     margin-bottom: 8px;
+    overflow-wrap: break-word;
 }
 
 .extended-stat-secondary {
