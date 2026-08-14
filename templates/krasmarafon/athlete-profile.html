@@ -73,31 +73,31 @@
                 <h2>История забегов</h2>
 
                 <!-- Фильтры -->
-                <div class="filters-container" id="filtersContainer" style="display: none;">
-                    <div class="filter-group">
-                        <label for="eventNameFilter">Название забега:</label>
-                        <select id="eventNameFilter" class="filter-select">
+                <div class="km-toolbar" id="filtersContainer" style="display: none;">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="eventNameFilter">Название забега:</label>
+                        <select id="eventNameFilter" class="km-select">
                             <option value="">Все забеги</option>
                         </select>
                     </div>
-                    <div class="filter-group">
-                        <label for="distanceFilter">Дистанция:</label>
-                        <select id="distanceFilter" class="filter-select">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="distanceFilter">Дистанция:</label>
+                        <select id="distanceFilter" class="km-select">
                             <option value="">Все дистанции</option>
                         </select>
                     </div>
-                    <div class="filter-group">
-                        <label for="yearFilter">Год:</label>
-                        <select id="yearFilter" class="filter-select">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="yearFilter">Год:</label>
+                        <select id="yearFilter" class="km-select">
                             <option value="">Все годы</option>
                         </select>
                     </div>
                     <button id="clearFiltersBtn" class="btn-filter-clear">Очистить фильтры</button>
                 </div>
                 
-                <div id="racesViewToggle" style="margin-bottom: 20px;">
-                    <button id="gridViewBtn" class="view-toggle-btn view-toggle-btn--active">Сетка</button>
-                    <button id="tableViewBtn" class="view-toggle-btn">Таблица</button>
+                <div class="km-pills" id="racesViewToggle" data-value="grid" style="margin-bottom: 20px;" role="group" aria-label="Вид отображения">
+                    <button type="button" class="km-pill active" data-value="grid" onclick="setViewMode('grid')">Сетка</button>
+                    <button type="button" class="km-pill" data-value="table" onclick="setViewMode('table')">Таблица</button>
                 </div>
 
                 <div id="racesGrid" class="races-grid"></div>
@@ -775,6 +775,30 @@
             renderCharts();
         }
 
+        // Текущий режим отображения истории забегов: 'grid' | 'table'
+        function getViewMode() {
+            return document.getElementById('racesViewToggle').dataset.value || 'grid';
+        }
+
+        // Устанавливает активную пилюлю вида БЕЗ переключения видимости
+        // блоков — используется только внутри setViewMode().
+        function _setViewModeActivePill(value) {
+            const container = document.getElementById('racesViewToggle');
+            container.dataset.value = value;
+            container.querySelectorAll('.km-pill').forEach(pill => {
+                pill.classList.toggle('active', pill.dataset.value === value);
+            });
+        }
+
+        // Переключает пилюлю вида и показывает соответствующий блок
+        // (Сетка/Таблица) — вызывается по клику, эквивалент прежних
+        // gridViewBtn.onclick/tableViewBtn.onclick.
+        function setViewMode(value) {
+            _setViewModeActivePill(value);
+            document.getElementById('racesGrid').style.display = value === 'grid' ? 'grid' : 'none';
+            document.getElementById('racesTableWrapper').style.display = value === 'table' ? 'block' : 'none';
+        }
+
         // Отрисовать результаты
         function renderResults() {
             if (currentResults.length === 0) {
@@ -785,23 +809,9 @@
             }
 
             document.getElementById('noRaces').style.display = 'none';
-            
+
             renderGridView();
             renderTableView();
-
-            document.getElementById('gridViewBtn').onclick = () => {
-                document.getElementById('racesGrid').style.display = 'grid';
-                document.getElementById('racesTableWrapper').style.display = 'none';
-                document.getElementById('gridViewBtn').classList.add('view-toggle-btn--active');
-                document.getElementById('tableViewBtn').classList.remove('view-toggle-btn--active');
-            };
-
-            document.getElementById('tableViewBtn').onclick = () => {
-                document.getElementById('racesGrid').style.display = 'none';
-                document.getElementById('racesTableWrapper').style.display = 'block';
-                document.getElementById('tableViewBtn').classList.add('view-toggle-btn--active');
-                document.getElementById('gridViewBtn').classList.remove('view-toggle-btn--active');
-            };
         }
 
         // Отрисовать сетку
@@ -891,7 +901,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadAthleteProfile();
         });
-    </script>
     </script>
 </body>
 </html>
