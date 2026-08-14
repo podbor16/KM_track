@@ -73,31 +73,31 @@
                 <h2>История забегов</h2>
 
                 <!-- Фильтры -->
-                <div class="filters-container" id="filtersContainer" style="display: none;">
-                    <div class="filter-group">
-                        <label for="eventNameFilter">Название забега:</label>
-                        <select id="eventNameFilter" class="filter-select">
+                <div class="km-toolbar" id="filtersContainer" style="display: none;">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="eventNameFilter">Название забега:</label>
+                        <select id="eventNameFilter" class="km-select">
                             <option value="">Все забеги</option>
                         </select>
                     </div>
-                    <div class="filter-group">
-                        <label for="distanceFilter">Дистанция:</label>
-                        <select id="distanceFilter" class="filter-select">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="distanceFilter">Дистанция:</label>
+                        <select id="distanceFilter" class="km-select">
                             <option value="">Все дистанции</option>
                         </select>
                     </div>
-                    <div class="filter-group">
-                        <label for="yearFilter">Год:</label>
-                        <select id="yearFilter" class="filter-select">
+                    <div class="km-filter-group">
+                        <label class="km-label" for="yearFilter">Год:</label>
+                        <select id="yearFilter" class="km-select">
                             <option value="">Все годы</option>
                         </select>
                     </div>
                     <button id="clearFiltersBtn" class="btn-filter-clear">Очистить фильтры</button>
                 </div>
                 
-                <div id="racesViewToggle" style="margin-bottom: 20px;">
-                    <button id="gridViewBtn" class="view-toggle-btn view-toggle-btn--active">Сетка</button>
-                    <button id="tableViewBtn" class="view-toggle-btn">Таблица</button>
+                <div class="km-pills" id="racesViewToggle" data-value="grid" style="margin-bottom: 20px;" role="group" aria-label="Вид отображения">
+                    <button type="button" class="km-pill active" data-value="grid" onclick="setViewMode('grid')">Сетка</button>
+                    <button type="button" class="km-pill" data-value="table" onclick="setViewMode('table')">Таблица</button>
                 </div>
 
                 <div id="racesGrid" class="races-grid"></div>
