@@ -105,6 +105,17 @@ class LeadImportPreviewRow(BaseModel):
     will: str   # "update" | "create" | "unknown"
 
 
+class LeadImportFailedRow(BaseModel):
+    """Одна строка, пропущенная при разборе Tilda-импорта — для подсветки
+    в таблице превью (не только текстом в parse_errors)."""
+
+    row_number: int
+    surname: str
+    name: str
+    birthday: str
+    reason: str
+
+
 class LeadImportPreviewResponse(BaseModel):
     """Ответ POST /api/admin/leads/import/upload."""
 
@@ -115,6 +126,7 @@ class LeadImportPreviewResponse(BaseModel):
     parse_errors: List[str]
     sample: List[LeadImportPreviewRow]
     unknown_headers: List[str] = []
+    failed_rows: List[LeadImportFailedRow] = []
 
 
 class LeadImportApplyResponse(BaseModel):

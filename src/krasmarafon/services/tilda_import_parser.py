@@ -57,6 +57,10 @@ class ImportResult:
     errors: list = field(default_factory=list)     # list[str]
     total_rows: int = 0        # включая пропущенные из-за ошибок
     unknown_headers: list = field(default_factory=list)  # заголовки файла вне алиасов И вне _KNOWN_IGNORED_HEADERS
+    # Те же ошибки, что в errors, но структурированно — для подсветки
+    # конкретной строки в таблице превью /admin (не только текстом списком):
+    # list[{"row_number": int, "surname": str, "name": str, "birthday": str, "reason": str}]
+    failed_rows: list = field(default_factory=list)
 
 
 def _normalize_header(h) -> str:
@@ -195,10 +199,15 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
             birthday_raw = str(get("birthday") or "").strip()
             birthday = convert_birthday(birthday_raw)
             if not surname or not name or not birthday or len(birthday) != 10:
-                result.errors.append(
-                    f"строка {idx}: не удалось распознать ФИО/дату рождения "
-                    f"(surname={surname!r}, name={name!r}, birthday={birthday_raw!r}) — строка пропущена"
+                reason = (
+                    f"не распознано ФИО/дата рождения "
+                    f"(surname={surname!r}, name={name!r}, birthday={birthday_raw!r})"
                 )
+                result.errors.append(f"строка {idx}: {reason} — строка пропущена")
+                result.failed_rows.append({
+                    "row_number": idx, "surname": surname, "name": name,
+                    "birthday": birthday_raw, "reason": reason,
+                })
                 continue
 
             event_name, event_year, event_distance = _extract_event_info(get, col_map, birthday)
@@ -212,9 +221,12 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                     )
                 else:
                     detail = "в файле нет ни products, ни отдельных колонок событие/дистанция"
-                result.errors.append(
-                    f"строка {idx}: не удалось определить событие/дистанцию ({detail}) — строка пропущена"
-                )
+                reason = f"не удалось определить событие/дистанцию ({detail})"
+                result.errors.append(f"строка {idx}: {reason} — строка пропущена")
+                result.failed_rows.append({
+                    "row_number": idx, "surname": surname, "name": name,
+                    "birthday": birthday, "reason": reason,
+                })
                 continue
 
             result.rows.append(ImportRow(
@@ -227,6 +239,12 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 transaction_id=str(get("transaction_id") or "").strip(),
             ))
         except Exception as e:
-            result.errors.append(f"строка {idx}: непредвиденная ошибка парсинга — {e}")
+            reason = f"непредвиденная ошибка парсинга — {e}"
+            result.errors.append(f"строка {idx}: {reason}")
+            result.failed_rows.append({
+                "row_number": idx, "surname": locals().get("surname", ""),
+                "name": locals().get("name", ""), "birthday": locals().get("birthday_raw", ""),
+                "reason": reason,
+            })
 
     return result

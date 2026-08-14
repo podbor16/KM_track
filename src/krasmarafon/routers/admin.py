@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from src.krasmarafon.models.startlist import (
     LeadPatch, LeadAdminItem, LeadsAdminResponse,
     LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
+    LeadImportFailedRow,
 )
 
 from src.config import settings
@@ -454,6 +455,7 @@ async def upload_leads_import(
         parse_errors=parsed.errors,
         sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
         unknown_headers=parsed.unknown_headers,
+        failed_rows=[LeadImportFailedRow(**r) for r in parsed.failed_rows],
     ).model_dump()
 
 

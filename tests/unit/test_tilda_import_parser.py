@@ -128,6 +128,49 @@ def test_parse_event_error_message_includes_raw_columns_when_separate():
     assert "5 км" in result.errors[0]
 
 
+# ---------------------------------------------------------------------------
+# failed_rows — структурированные данные о пропущенных строках (для
+# подсветки прямо в таблице превью в /admin, а не только текстом списком)
+# ---------------------------------------------------------------------------
+
+def test_parse_event_error_populates_failed_rows_with_surname_and_reason():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,products\r\n"
+        "Иванов,Иван,01.05.1990,какая-то нераспознаваемая строка\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert len(result.failed_rows) == 1
+    fr = result.failed_rows[0]
+    assert fr["row_number"] == 2
+    assert fr["surname"] == "Иванов"
+    assert fr["name"] == "Иван"
+    assert fr["birthday"] == "1990-05-01"
+    assert "какая-то нераспознаваемая строка" in fr["reason"]
+
+
+def test_parse_birthday_error_populates_failed_rows_with_whatever_was_parsed():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,не дата,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert len(result.failed_rows) == 1
+    fr = result.failed_rows[0]
+    assert fr["row_number"] == 2
+    assert fr["surname"] == "Иванов"
+    assert fr["name"] == "Иван"
+    assert "не дата" in fr["reason"]
+
+
+def test_parse_successful_rows_do_not_appear_in_failed_rows():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.failed_rows == []
+
+
 def test_parse_blank_row_skipped_silently():
     csv_text = (
         "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"

@@ -963,13 +963,14 @@
 
     function renderLeadsImportPreview(preview) {
         const el = document.getElementById('leads-import-preview');
+        const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;');
+
+        const failedRows = preview.failed_rows || [];
 
         let errorsHtml = '';
-        if (preview.parse_errors.length) {
+        if (failedRows.length) {
             errorsHtml = `<div class="admin-error" style="margin-top:8px">
-                ${preview.parse_errors.length} строк с ошибками парсинга:<br>
-                ${preview.parse_errors.slice(0, 20).map(e => e.replace(/</g, '&lt;')).join('<br>')}
-                ${preview.parse_errors.length > 20 ? `<br>… и ещё ${preview.parse_errors.length - 20}` : ''}
+                ${failedRows.length} строк с ошибками парсинга — подсвечены красным в таблице ниже.
             </div>`;
         }
 
@@ -977,29 +978,44 @@
         if (preview.unknown_headers && preview.unknown_headers.length) {
             unknownHeadersHtml = `<div class="admin-section-note" style="margin-top:8px">
                 Колонки файла не распознаны и не участвуют в импорте (проверьте, не переименовала ли Tilda поле):
-                ${preview.unknown_headers.map(h => h.replace(/</g, '&lt;')).join(', ')}
+                ${preview.unknown_headers.map(esc).join(', ')}
             </div>`;
         }
 
-        const sampleRows = preview.sample.map(r => `
-            <tr>
+        // Успешные (sample, максимум 50 с бэкенда) + все проблемные строки —
+        // сливаем в один список по номеру строки, чтобы проблемные строки
+        // были видны прямо в таблице (подсвечены), а не только текстом.
+        const combined = [
+            ...preview.sample.map(r => ({
+                row_number: r.row_number, surname: r.surname, name: r.name, birthday: r.birthday,
+                event: `${r.event_name} / ${r.event_distance}`,
+                action: r.will === 'update' ? 'Обновится' : 'Создастся', isError: false,
+            })),
+            ...failedRows.map(r => ({
+                row_number: r.row_number, surname: r.surname, name: r.name, birthday: r.birthday,
+                event: '—', action: r.reason, isError: true,
+            })),
+        ].sort((a, b) => a.row_number - b.row_number);
+
+        const tableRows = combined.map(r => `
+            <tr${r.isError ? ' class="row-error"' : ''}>
                 <td>${r.row_number}</td>
-                <td>${r.surname} ${r.name}</td>
-                <td>${r.birthday}</td>
-                <td>${r.event_name} / ${r.event_distance}</td>
-                <td>${r.will === 'update' ? 'Обновится' : 'Создастся'}</td>
+                <td>${esc(r.surname)} ${esc(r.name)}</td>
+                <td>${esc(r.birthday)}</td>
+                <td>${esc(r.event)}</td>
+                <td>${esc(r.action)}</td>
             </tr>
         `).join('');
 
         el.style.display = '';
         el.innerHTML = `
-            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}.</div>
+            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
             ${errorsHtml}
             ${unknownHeadersHtml}
             <div style="max-height:240px; overflow:auto; margin-top:8px">
                 <table class="admin-loader-table">
                     <thead><tr><th>Строка</th><th>ФИО</th><th>Дата рожд.</th><th>Событие</th><th>Действие</th></tr></thead>
-                    <tbody>${sampleRows}</tbody>
+                    <tbody>${tableRows}</tbody>
                 </table>
             </div>
             <div style="margin-top:8px">
