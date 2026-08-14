@@ -453,6 +453,7 @@ async def upload_leads_import(
         to_create=sum(1 for r in preview_rows if r["will"] == "create"),
         parse_errors=parsed.errors,
         sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
+        unknown_headers=parsed.unknown_headers,
     ).model_dump()
 
 

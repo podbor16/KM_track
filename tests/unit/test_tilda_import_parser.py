@@ -171,7 +171,8 @@ def _real_export_xlsx(data_rows: list) -> bytes:
     return buf.getvalue()
 
 
-def _real_row(surname, name, sex, city, birthday, phone, email, product):
+def _real_row(surname, name, sex, city, birthday, phone, email, product,
+              amount=None, promocode=None, discount=None, order_id=None, tranid=None):
     row = [None] * len(_REAL_HEADERS)
     row[_REAL_HEADERS.index("surname")] = surname
     row[_REAL_HEADERS.index("Name")] = name
@@ -181,6 +182,11 @@ def _real_row(surname, name, sex, city, birthday, phone, email, product):
     row[_REAL_HEADERS.index("Phone")] = phone
     row[_REAL_HEADERS.index("Email")] = email
     row[_REAL_HEADERS.index("product")] = product
+    row[_REAL_HEADERS.index("Сумма заказа")] = amount
+    row[_REAL_HEADERS.index("Промокод")] = promocode
+    row[_REAL_HEADERS.index("Сумма скидки")] = discount
+    row[_REAL_HEADERS.index("order_id")] = order_id
+    row[_REAL_HEADERS.index("tranid")] = tranid
     return [v if v is not None else "" for v in row]
 
 
@@ -252,3 +258,73 @@ def test_parse_real_tilda_export_mixed_rows_with_service_columns_ignored():
     assert len(result.rows) == 1
     assert result.rows[0].event_distance == "21.1 км"
     assert result.rows[0].event_year == 2026
+
+
+# ---------------------------------------------------------------------------
+# Платёжные поля (Промокод/Сумма заказа/Сумма скидки/order_id/tranid) —
+# раньше молча отбрасывались, теперь читаются в ImportRow.
+# ---------------------------------------------------------------------------
+
+def test_parse_real_tilda_export_captures_payment_fields():
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  "+7 (900) 000-00-01", "test1@example.com",
+                  "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790",
+                  amount="4.9", promocode="99TEST", discount="485.1",
+                  order_id=1486212513, tranid="144860:7719674713"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    row = result.rows[0]
+    assert row.amount == "4.9"
+    assert row.promocode == "99TEST"
+    assert row.discount == "485.1"
+    assert row.order_id == "1486212513"
+    assert row.transaction_id == "144860:7719674713"
+
+
+def test_parse_real_tilda_export_missing_payment_fields_default_to_empty():
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  "+7 (900) 000-00-01", "test1@example.com",
+                  "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    row = result.rows[0]
+    assert row.amount == ""
+    assert row.promocode == ""
+    assert row.discount == ""
+    assert row.order_id == ""
+    assert row.transaction_id == ""
+
+
+# ---------------------------------------------------------------------------
+# unknown_headers — предупреждение о заголовках файла, которых нет ни среди
+# используемых алиасов, ни среди явно задокументированных игнорируемых
+# (защита от будущего дрейфа полей в Tilda, найденного вживую тихого
+# игнора).
+# ---------------------------------------------------------------------------
+
+def test_parse_real_tilda_export_all_known_headers_produce_no_warning():
+    """Полный реальный набор из 32 колонок — ни одна не должна попасть в
+    unknown_headers (все либо используются, либо явно задокументированы как
+    игнорируемые)."""
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  "+7 (900) 000-00-01", "test1@example.com",
+                  "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+    assert result.unknown_headers == []
+
+
+def test_parse_detects_genuinely_unknown_header():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,НоваяКолонкаТильды\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027,что-то новое\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.unknown_headers == ["НоваяКолонкаТильды"]

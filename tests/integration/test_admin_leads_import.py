@@ -16,7 +16,7 @@ def _override_auth():
     app.dependency_overrides.pop(api_require_auth, None)
 
 
-def _sample_parsed():
+def _sample_parsed(unknown_headers=None):
     return ImportResult(
         rows=[ImportRow(
             row_number=2, surname="Иванов", name="Иван", birthday="1990-01-01",
@@ -24,6 +24,7 @@ def _sample_parsed():
         )],
         errors=[],
         total_rows=1,
+        unknown_headers=unknown_headers or [],
     )
 
 
@@ -51,6 +52,25 @@ class TestLeadsImportUpload:
         assert data["to_create"] == 1
         assert data["parse_errors"] == []
         assert len(data["sample"]) == 1
+        assert data["unknown_headers"] == []
+
+    def test_upload_reports_unknown_headers_from_parser(self, client):
+        with patch(
+            "src.krasmarafon.services.tilda_import_parser.parse_tilda_export",
+            return_value=_sample_parsed(unknown_headers=["НоваяКолонкаТильды"]),
+        ), patch(
+            "src.analytics.db_results.preview_leads_import_matches",
+            return_value=[{
+                "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
+                "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
+            }],
+        ):
+            r = client.post(
+                "/api/admin/leads/import/upload",
+                files={"file": ("export.csv", b"whatever", "text/csv")},
+            )
+        assert r.status_code == 200
+        assert r.json()["unknown_headers"] == ["НоваяКолонкаТильды"]
 
     def test_upload_bad_file_returns_422(self, client):
         with patch(

@@ -1463,17 +1463,27 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                     )
                     updated += 1
             else:
+                def _float_or_zero(v):
+                    try:
+                        return float(v) if v else 0.0
+                    except (TypeError, ValueError):
+                        return 0.0
+
+                order_id_raw = (row.order_id or '').strip()
                 cur.execute(
                     """
                     INSERT INTO leads (
                         surname, name, sex, city, birthday, email, phone,
                         event_name, event_distance, event_year, products,
+                        amount, promocode, discount, order_id, transaction_id,
                         is_name_suspicious, client_id, event_id, is_duplicate,
                         status, is_new, is_new_event
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
-                        %(event_year)s, '', 0, 0, 0, 0, 0, 0, 0
+                        %(event_year)s, '',
+                        %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s,
+                        0, 0, 0, 0, 0, 0, 0
                     )
                     """,
                     {
@@ -1482,6 +1492,11 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         'email': row.email or 'example@mail.ru', 'phone': row.phone or None,
                         'event_name': row.event_name, 'event_distance': row.event_distance,
                         'event_year': row.event_year,
+                        'amount': _float_or_zero(row.amount),
+                        'promocode': row.promocode or '',
+                        'discount': _float_or_zero(row.discount),
+                        'order_id': int(order_id_raw) if order_id_raw.isdigit() else None,
+                        'transaction_id': row.transaction_id or '',
                     },
                 )
                 new_id = cur.lastrowid

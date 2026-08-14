@@ -114,6 +114,7 @@ class LeadImportPreviewResponse(BaseModel):
     to_create: int
     parse_errors: List[str]
     sample: List[LeadImportPreviewRow]
+    unknown_headers: List[str] = []
 
 
 class LeadImportApplyResponse(BaseModel):

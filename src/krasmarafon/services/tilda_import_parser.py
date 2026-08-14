@@ -9,8 +9,17 @@ _HEADER_ALIASES сверен с реальной выгрузкой Tilda (leads
 "product" (не "products") содержит тот же текстовый блоб, что и
 payment.products в вебхуке — переиспользуем parse_products() как есть, чтобы
 результат совпадал с уже занесёнными через вебхук заявками (иначе повторный
-импорт создаст дубли вместо апдейта). Остальные колонки экспорта (Club,
-Date, Промокод, utm_*, ma_*, formid и т.п.) не используются.
+импорт создаст дубли вместо апдейта). Платёжные колонки (Промокод/Сумма
+заказа/Сумма скидки/order_id/tranid) читаются в ImportRow — используются
+ТОЛЬКО при создании новой заявки (bulk_import_leads()), не при апдейте
+совпавшей: правки платёжных данных задним числом через CSV — не задача
+этого импорта, см. docstring bulk_import_leads(). Остальные колонки
+экспорта (Club, Date, phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
+ma_phone, formid/formname, file_discount*, field13/field14, Stage) — в
+leads нет соответствующей колонки, см. _KNOWN_IGNORED_HEADERS. Заголовок
+файла, которого нет ни в алиасах, ни в _KNOWN_IGNORED_HEADERS, попадает в
+ImportResult.unknown_headers — сигнал, что Tilda добавила/переименовала
+колонку и это стоит проверить вручную, а не тихо потерять данные.
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -35,6 +44,11 @@ class ImportRow:
     city: str = ""
     email: str = ""
     phone: str = ""
+    amount: str = ""            # "Сумма заказа" — сырое значение, конвертация в float в bulk_import_leads()
+    promocode: str = ""         # "Промокод"
+    discount: str = ""          # "Сумма скидки" — сырое значение
+    order_id: str = ""          # order_id — сырое значение (может быть числом или строкой)
+    transaction_id: str = ""    # tranid
 
 
 @dataclass
@@ -42,6 +56,7 @@ class ImportResult:
     rows: list = field(default_factory=list)      # list[ImportRow]
     errors: list = field(default_factory=list)     # list[str]
     total_rows: int = 0        # включая пропущенные из-за ошибок
+    unknown_headers: list = field(default_factory=list)  # заголовки файла вне алиасов И вне _KNOWN_IGNORED_HEADERS
 
 
 def _normalize_header(h) -> str:
@@ -73,6 +88,32 @@ _HEADER_ALIASES = {
     "событие": "event_name",
     "дистанция": "event_distance",
     "год": "event_year",
+    # Платёжные поля — те же данные, что вебхук пишет в leads.amount/
+    # .promocode/.discount/.order_id/.transaction_id (см. parse_payment()
+    # в tilda_webhook.py), но выгрузка называет колонки по-другому.
+    "сумма заказа": "amount",
+    "промокод": "promocode",
+    "сумма скидки": "discount",
+    "order_id": "order_id",
+    "tranid": "transaction_id",
+}
+
+# Реальные заголовки боевой выгрузки Tilda (32 колонки, см. заголовок файла
+# выше), для которых в leads НЕТ соответствующей колонки — Tilda-служебные
+# (ma_* — интеграция с сервисом email-маркетинга, utm_* — метки кампаний,
+# formid/formname/Stage — служебные поля CRM-воронки Tilda, file_discount* и
+# field13/field14 — generic-поля конструктора форм без зафиксированного
+# смысла) или дублирующие уже покрытое (Club/Date/phone_2/ma_email/Checkbox
+# — не нужны для сопоставления/создания лида). Перечислены явно, чтобы
+# parse_tilda_export() мог отличить "мы осознанно не берём эту колонку" от
+# "в файле появилась НОВАЯ колонка, которую мы никогда не видели" — второе
+# репортится через ImportResult.unknown_headers.
+_KNOWN_IGNORED_HEADERS = {
+    "club", "date", "phone_2", "ma_email", "checkbox",
+    "utm_source", "utm_medium", "utm_campaign",
+    "ma_id", "ma_name", "ma_phone", "formid", "formname",
+    "file_discount", "file_discount_0", "file_discount_1",
+    "field13", "field14", "stage",
 }
 
 
@@ -117,16 +158,20 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
         raise ValueError(f"Неподдерживаемый формат файла: .{ext} (ожидается .csv или .xlsx)")
 
     col_map: dict = {}
+    unknown_headers: list = []
     for i, h in enumerate(headers):
-        field_name = _HEADER_ALIASES.get(_normalize_header(h))
+        normalized = _normalize_header(h)
+        field_name = _HEADER_ALIASES.get(normalized)
         if field_name:
             col_map[field_name] = i
+        elif normalized and normalized not in _KNOWN_IGNORED_HEADERS:
+            unknown_headers.append(str(h).strip())
 
     missing = {"surname", "name", "birthday"} - col_map.keys()
     if missing:
         raise ValueError(f"В файле не найдены обязательные колонки: {missing} (заголовки: {headers})")
 
-    result = ImportResult()
+    result = ImportResult(unknown_headers=unknown_headers)
     for idx, raw_row in enumerate(data_rows, start=2):  # 2 = 1-based + строка заголовка
         result.total_rows += 1
         if not any(c not in (None, "") for c in raw_row):
@@ -158,6 +203,9 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 event_name=event_name, event_year=event_year, event_distance=event_distance,
                 sex=str(get("sex") or "").strip(), city=str(get("city") or "").strip(),
                 email=str(get("email") or "").strip(), phone=str(get("phone") or "").strip(),
+                amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),
+                discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),
+                transaction_id=str(get("transaction_id") or "").strip(),
             ))
         except Exception as e:
             result.errors.append(f"строка {idx}: непредвиденная ошибка парсинга — {e}")

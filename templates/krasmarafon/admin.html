@@ -973,6 +973,14 @@
             </div>`;
         }
 
+        let unknownHeadersHtml = '';
+        if (preview.unknown_headers && preview.unknown_headers.length) {
+            unknownHeadersHtml = `<div class="admin-section-note" style="margin-top:8px">
+                Колонки файла не распознаны и не участвуют в импорте (проверьте, не переименовала ли Tilda поле):
+                ${preview.unknown_headers.map(h => h.replace(/</g, '&lt;')).join(', ')}
+            </div>`;
+        }
+
         const sampleRows = preview.sample.map(r => `
             <tr>
                 <td>${r.row_number}</td>
@@ -987,6 +995,7 @@
         el.innerHTML = `
             <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}.</div>
             ${errorsHtml}
+            ${unknownHeadersHtml}
             <div style="max-height:240px; overflow:auto; margin-top:8px">
                 <table class="admin-loader-table">
                     <thead><tr><th>Строка</th><th>ФИО</th><th>Дата рожд.</th><th>Событие</th><th>Действие</th></tr></thead>
