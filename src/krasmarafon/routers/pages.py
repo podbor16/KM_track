@@ -270,7 +270,7 @@ async def login_submit(
     )
     if creds_ok:
         cookie_value = create_session_cookie(username)
-        redirect_target = "/admin" if domain == "siberman" else "/business-analytics"
+        redirect_target = "/admin"
         response = RedirectResponse(redirect_target, status_code=302)
         response.set_cookie(
             COOKIE_NAME,

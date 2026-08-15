@@ -206,7 +206,7 @@
     box-shadow: var(--km-shadow);
 }
 .admin-loader-table th {
-    background: var(--km-dark);
+    background: var(--km-primary);
     color: #fff;
     font-family: var(--km-font-ui);
     font-size: 0.8rem;

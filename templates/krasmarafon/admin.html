@@ -192,6 +192,11 @@
 
     const _tabLoaded = { events: false, presets: false, loader: false, leads: false, analytics: false };
 
+    // Запоминаем активную вкладку в localStorage, чтобы обновление страницы
+    // не сбрасывало пользователя на «События» — тот же приём, что уже в
+    // templates/siberman/admin.html (ADMIN_TAB_STORAGE_KEY).
+    const ADMIN_TAB_STORAGE_KEY = 'krasmarafon_admin_active_tab';
+
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
@@ -199,6 +204,7 @@
         btn.classList.add('admin-tab--active');
         // Широкий режим для таблицы заявок и дашборда аналитики
         document.querySelector('.admin-page').classList.toggle('admin-page--wide', name === 'leads' || name === 'analytics');
+        localStorage.setItem(ADMIN_TAB_STORAGE_KEY, name);
         if (!_tabLoaded[name]) {
             _tabLoaded[name] = true;
             if (name === 'events') loadEvents();
@@ -1135,10 +1141,17 @@
     }
 
     // ========================================================================
-    // Инициализация — загружаем первую вкладку
+    // Инициализация — восстанавливаем последнюю активную вкладку
+    // (localStorage), иначе открываем «События» по умолчанию
     // ========================================================================
-    _tabLoaded.events = true;
-    loadEvents();
+    const savedTab = localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+    const savedBtn = savedTab && document.querySelector(`.admin-tab[onclick*="'${savedTab}'"]`);
+    if (savedBtn) {
+        switchTab(savedTab, savedBtn);
+    } else {
+        _tabLoaded.events = true;
+        loadEvents();
+    }
     loadHistoryToggle();
     </script>
 </body>
