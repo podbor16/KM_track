@@ -43,20 +43,18 @@ body {
 
 .search-option {
   background: #fff;
-  border: 2px solid var(--km-primary, #EE2D62);
+  border: 1px solid var(--km-border-light, #e0e0e0);
   border-radius: 12px;
   padding: 32px 28px;
   box-shadow: var(--km-shadow, 0 2px 8px rgba(0,0,0,0.1));
   display: flex;
   flex-direction: column;
   min-height: 220px;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .search-option:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-  border-color: #d41f52;
+  box-shadow: var(--km-shadow-hover, 0 4px 12px rgba(0,0,0,0.15));
 }
 
 .search-option h2 {
@@ -194,7 +192,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 13px 36px;
-  background: linear-gradient(135deg, var(--km-primary, #EE2D62), #d41f52);
+  background: var(--km-primary, #EE2D62);
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -206,17 +204,17 @@ body {
   text-transform: uppercase;
   text-decoration: none;
   letter-spacing: .5px;
-  transition: all .3s;
+  transition: background .15s, transform .1s, box-shadow .15s;
 }
 
 .race-analysis-btn:hover {
-  background: linear-gradient(135deg, #d41f52, #b81a45);
-  transform: translateY(-2px);
+  background: #d4254f;
+  transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(238,45,98,.4);
 }
 
 .race-analysis-btn:active {
-  transform: translateY(-1px);
+  transform: translateY(0);
   box-shadow: 0 2px 8px rgba(238,45,98,.3);
 }
 
