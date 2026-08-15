@@ -295,16 +295,6 @@ async def logout():
     return response
 
 
-# ============================================================================
-# БИЗНЕС-АНАЛИТИКА (защищённая страница)
-# ============================================================================
-
-@router.get("/business-analytics")
-async def business_analytics_page():
-    """Бизнес-аналитика переехала в /admin → вкладка Аналитика."""
-    return RedirectResponse("/admin", status_code=302)
-
-
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request, user=Depends(require_auth)):
     if isinstance(user, RedirectResponse):

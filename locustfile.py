@@ -141,4 +141,4 @@ class BusinessUser(FakeIPUser):
 
     @task(1)
     def view_business_analytics(self):
-        self.client.get("/business-analytics", name="/business-analytics")
+        self.client.get("/admin", name="/admin")
