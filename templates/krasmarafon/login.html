@@ -7,12 +7,13 @@
     <link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" href="/static/images/krasmarafon/favicon-32.png" sizes="32x32">
     <link rel="apple-touch-icon" href="/static/images/krasmarafon/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: var(--km-font-ui, Arial, sans-serif);
             background: #1a1a1a;
             min-height: 100vh;
             display: flex;

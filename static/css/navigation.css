@@ -69,10 +69,6 @@
 }
 @media (max-width: 640px) {
   .navbar-toggle { display: flex; }
-  .navbar-logo-img {
-    height: auto;
-    max-width: 140px;
-  }
   .navbar-menu {
     display: none;
     position: absolute;
