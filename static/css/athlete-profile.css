@@ -380,6 +380,7 @@
     padding: 25px;
     box-shadow: var(--km-shadow, 0 2px 8px rgba(0,0,0,0.1));
     transition: all 0.3s ease;
+    min-width: 0;
 }
 
 .chart-card:hover {
@@ -407,6 +408,7 @@
 
 .chart-container canvas {
     max-height: 300px;
+    max-width: 100%;
 }
 
 /* === ФИЛЬТРЫ === */
@@ -535,8 +537,12 @@
     .athlete-profile-container {
         padding: 20px 10px;
     }
-    
+
     .results-section {
+        padding: 20px;
+    }
+
+    .charts-section {
         padding: 20px;
     }
 }
