@@ -54,21 +54,44 @@ function updateEventThemeColor() {
 // события реально есть фото в static/images/events/ (не у всех событий оно
 // есть). Наличие проверяется загрузкой картинки в браузере (Image()
 // onload/onerror), а не хардкод-списком — новое фото подхватится само.
+// Видимость серого подзаголовка под h1 зависит от того, показан ли баннер
+// (проверяется асинхронной загрузкой картинки — см. updateEventBanner).
+// Флаг общий с updatePageTitle(): applyFilters() дёргает updatePageTitle()
+// уже ПОСЛЕ завершения загрузки баннера (порядок не гарантирован), поэтому
+// решение "показывать ли подзаголовок" нельзя принимать только в момент
+// onload/onerror картинки — оно должно применяться и при каждой
+// пересборке заголовка через innerHTML.
+let _eventBannerVisible = false;
+
 function updateEventBanner() {
     const banner = document.getElementById('eventBanner');
     if (!banner) return;
     const eventDisplayName = eventNameMap[currentEvent] || '';
-    if (!eventDisplayName) { banner.style.display = 'none'; return; }
+    if (!eventDisplayName) {
+        banner.style.display = 'none';
+        _eventBannerVisible = false;
+        _setPageTitleSubtitleVisible(true);
+        return;
+    }
     const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
     const img = new Image();
     img.onload = () => {
         banner.style.backgroundImage = `url('${imageUrl}')`;
         banner.style.display = '';
+        _eventBannerVisible = true;
+        _setPageTitleSubtitleVisible(false);
     };
     img.onerror = () => {
         banner.style.display = 'none';
+        _eventBannerVisible = false;
+        _setPageTitleSubtitleVisible(true);
     };
     img.src = imageUrl;
+}
+
+function _setPageTitleSubtitleVisible(visible) {
+    const subtitle = document.querySelector('.page-title-event');
+    if (subtitle) subtitle.style.display = visible ? '' : 'none';
 }
 
 // Функция для смены события или года
@@ -106,7 +129,11 @@ function updatePageTitle() {
     const name = eventNameMap[currentEvent] || currentEvent;
     const distSel = document.getElementById('distanceFilter');
     const dist = distSel && distSel.value ? `, ${distSel.value}` : '';
-    title.innerHTML = `Стартовый список<br><span class="page-title-event">${name} ${currentYear}${dist}</span>`;
+    const subtitle = `${name} ${currentYear}${dist}`;
+    const subtitleStyle = _eventBannerVisible ? ' style="display:none"' : '';
+    title.innerHTML = `Стартовый список<br><span class="page-title-event"${subtitleStyle}>${subtitle}</span>`;
+    const bannerTitle = document.getElementById('eventBannerTitle');
+    if (bannerTitle) bannerTitle.textContent = subtitle;
 }
 
 // Функция загрузки данных
