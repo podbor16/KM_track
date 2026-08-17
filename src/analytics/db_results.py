@@ -17,6 +17,7 @@ from .db_pool import (
     get_cached_tables,
     _validate_table_name,
 )
+from src.krasmarafon.services.tilda_webhook import is_name_suspicious
 
 logger = logging.getLogger(__name__)
 
@@ -1350,6 +1351,18 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         return None
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
+        if 'surname' in safe or 'name' in safe:
+            # Правка ФИО вручную в админке должна пересчитывать
+            # is_name_suspicious — иначе после исправления "Kazakov"->"Казаков"
+            # флаг остаётся застрявшим на старом значении (реальная находка:
+            # 1547 записей с чистым кириллическим ФИО, но is_name_suspicious=1,
+            # т.к. этот путь никогда его не пересчитывал).
+            cur.execute("SELECT surname, name FROM leads WHERE id = %s", (lead_id,))
+            current = cur.fetchone()
+            if current:
+                new_surname = safe.get('surname', current['surname'])
+                new_name = safe.get('name', current['name'])
+                safe['is_name_suspicious'] = int(is_name_suspicious(new_surname, new_name))
         set_clause = ", ".join(f"{col} = %s" for col in safe)
         cur.execute(
             f"UPDATE leads SET {set_clause} WHERE id = %s",
