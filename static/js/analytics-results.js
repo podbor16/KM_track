@@ -11,6 +11,37 @@ const runnerDataMap = new Map(); // resultId → runner object
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
 
+// «Жара» награждает по чистому времени, а не по официальному (решение
+// оргкомитета, действует с 2026 года и далее) — единственное исключение
+// среди событий Красмарафона. Сравниваем по внутреннему ключу события
+// (не по отображаемому имени) — он не зависит от года.
+function isZharaEvent() {
+    return currentEvent === 'zhara';
+}
+
+// Расставляет заголовки+сортировку двух колонок времени в зависимости от
+// события: для Жары чистое время идёт первым, для остальных — официальное.
+function updateTimeColumnHeaders() {
+    const th1 = document.getElementById('thTimeCol1');
+    const th2 = document.getElementById('thTimeCol2');
+    if (!th1 || !th2) return;
+    const gun  = { label: 'Офиц. время',  key: 'time_gun' };
+    const net  = { label: 'Чистое время', key: 'time_net' };
+    const [first, second] = isZharaEvent() ? [net, gun] : [gun, net];
+    th1.textContent = first.label;
+    th1.setAttribute('onclick', `sortTable('${first.key}')`);
+    th2.textContent = second.label;
+    th2.setAttribute('onclick', `sortTable('${second.key}')`);
+}
+
+// Дефолтная сортировка при смене события — чистое время для Жары,
+// официальное для остальных. Сбрасывается при каждой смене события/года,
+// пользователь может дальше сортировать вручную кликом по заголовку.
+function resetSortStateForEvent() {
+    sortState = { column: isZharaEvent() ? 'time_net' : 'time_gun', direction: 'asc' };
+    updateTimeColumnHeaders();
+}
+
 // Маппинг событие + год на event_id в БД
 const eventYearToIdMap = {
     'night_run_2025': 67,
@@ -53,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateEventThemeColor();
     updateEventBanner();
     updatePageTitle();
+    resetSortStateForEvent();
     loadRunnersData();
 
     new SSEClient('/api/sse/notify', {
@@ -110,6 +142,9 @@ async function switchEventResults() {
 
     // Обновляем заголовок страницы
     updatePageTitle();
+
+    // Дефолтная сортировка + заголовки колонок под новое событие
+    resetSortStateForEvent();
 
     // Перезагружаем данные
     loadRunnersData();
@@ -608,12 +643,14 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // каждый посчитан отдельно на дистанцию (event_id). Возрастная группа в этой
 // системе уже включает пол ("женщины до 49 лет"), поэтому при активном
 // фильтре по группе rank_category достаточен сам по себе.
+// Для Жары берём _clean-варианты — награждение там по чистому времени.
 function getActiveRankField() {
     const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
-    if (ageGroupFilter !== '') return 'rank_category';
-    if (genderFilter !== '') return 'rank_sex';
-    return 'rank_absolute';
+    const suffix = isZharaEvent() ? '_clean' : '';
+    if (ageGroupFilter !== '') return 'rank_category' + suffix;
+    if (genderFilter !== '') return 'rank_sex' + suffix;
+    return 'rank_absolute' + suffix;
 }
 
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
@@ -690,16 +727,17 @@ function renderResultsTable(runners) {
         else rankDisplay = rankAbs ? `<span class="km-rank-num">${rankAbs}</span>` : '—';
 
         const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim() || 'N/A';
-        const timeGun = formatTime(runner.time_gun_finish) || '—';
-        const timeNet = formatTime(runner.time_clear_finish) || '—';
+        const timeGunCell = `<span class="km-time-gun">${formatTime(runner.time_gun_finish) || '—'}</span>`;
+        const timeNetCell = `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
+        const [timeCol1, timeCol2] = isZharaEvent() ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
 
         row.innerHTML = `
             <td class="km-td ${rowBg}">${rankDisplay}</td>
             <td class="km-td ${rowBg}"><span class="km-bib">${runner.start_number || ''}</span></td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
-            <td class="km-td ${rowBg}"><span class="km-time-gun">${timeGun}</span></td>
-            <td class="km-td ${rowBg}"><span class="km-time-net">${timeNet}</span></td>
+            <td class="km-td ${rowBg}">${timeCol1}</td>
+            <td class="km-td ${rowBg}">${timeCol2}</td>
         `;
 
         const resultId = String(runner.id || '');
@@ -940,8 +978,13 @@ function buildDetailPanelHTML(runner) {
     </div>
     <div class="detail-tab-pane active" data-pane="times">
         <div class="detail-times-grid">
+            ${isZharaEvent() ? `
+            ${timeCol('ЧИСТОЕ ВРЕМЯ', timeNet, 'net', paceNet, rankAbsClean, rankSexClean, rankCatClean)}
+            ${timeCol('ОФИЦИАЛЬНОЕ ВРЕМЯ', timeGun, 'gun', paceGun, rankAbs, rankSex, rankCat)}
+            ` : `
             ${timeCol('ОФИЦИАЛЬНОЕ ВРЕМЯ', timeGun, 'gun', paceGun, rankAbs, rankSex, rankCat)}
             ${timeCol('ЧИСТОЕ ВРЕМЯ', timeNet, 'net', paceNet, rankAbsClean, rankSexClean, rankCatClean)}
+            `}
         </div>
     </div>
     <div class="detail-tab-pane" data-pane="pace">
@@ -1379,11 +1422,14 @@ function getRaceStats() {
 function exportResultsPdf() {
     if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
     const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
+    const zhara = isZharaEvent();
+    const primaryTimeField = zhara ? 'time_clear_finish' : 'time_gun_finish';
 
-    // Сортировка: финишёры по возрастанию официального времени, остальные в конце
+    // Сортировка: финишёры по возрастанию основного (для Жары — чистого,
+    // иначе официального) времени, остальные в конце
     const sorted = [...filteredRunners].sort((a, b) => {
-        const tA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
-        const tB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
+        const tA = KMUtils.parseTimeToSeconds(a[primaryTimeField]);
+        const tB = KMUtils.parseTimeToSeconds(b[primaryTimeField]);
         const hasA = tA > 0;
         const hasB = tB > 0;
         if (hasA && hasB) return tA - tB;
@@ -1393,25 +1439,28 @@ function exportResultsPdf() {
     });
 
     const rows = sorted.map((r, i) => {
-        const tGun   = formatTime(r.time_gun_finish)   || '—';
-        const tClean = formatTime(r.time_clear_finish) || '—';
-        const rankAbs = r.rank_absolute != null ? r.rank_absolute : '—';
-        const rankSex = r.rank_sex      != null ? r.rank_sex      : '—';
-        const rankCat = r.rank_category != null ? r.rank_category : '—';
-        const noFinish = !r.time_gun_finish;
+        const tGunCell   = `<td>${formatTime(r.time_gun_finish)   || '—'}</td>`;
+        const tCleanCell = `<td>${formatTime(r.time_clear_finish) || '—'}</td>`;
+        const timeCells = zhara ? tCleanCell + tGunCell : tGunCell + tCleanCell;
+        const rankAbs = (zhara ? r.rank_absolute_clean : r.rank_absolute) ?? '—';
+        const rankSex = (zhara ? r.rank_sex_clean      : r.rank_sex)      ?? '—';
+        const rankCat = (zhara ? r.rank_category_clean : r.rank_category) ?? '—';
+        const noFinish = !r[primaryTimeField];
         const rowStyle = noFinish ? ' style="color:#999"' : '';
         return `<tr${rowStyle}>
             <td>${noFinish ? '—' : i + 1}</td>
             <td>${(r.surname||'')} ${(r.name||'')}</td>
             <td>${r.distance||r.event_distance||'—'}</td>
             <td>${r.category||'—'}</td>
-            <td>${tGun}</td>
-            <td>${tClean}</td>
+            ${timeCells}
             <td>${rankAbs}</td>
             <td>${rankSex}</td>
             <td>${rankCat}</td>
         </tr>`;
     }).join('');
+    const timeHeaders = zhara
+        ? '<th>Чистое время</th><th>Офиц. время</th>'
+        : '<th>Офиц. время</th><th>Чистое время</th>';
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
 <style>
   body{font-family:Arial,sans-serif;font-size:10px;margin:16px}
@@ -1427,7 +1476,7 @@ function exportResultsPdf() {
 <p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
 <table><thead><tr>
   <th>№</th><th>Фамилия и Имя</th><th>Дистанция</th><th>Категория</th>
-  <th>Офиц. время</th><th>Чистое время</th>
+  ${timeHeaders}
   <th>Место абс.</th><th>Место пол</th><th>Место кат.</th>
 </tr></thead><tbody>${rows}</tbody></table>
 <script>window.onload=()=>window.print();<\/script>

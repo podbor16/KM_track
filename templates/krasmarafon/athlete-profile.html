@@ -260,6 +260,14 @@
             return cat.replace(/\s*\([^)]+\)/g, '').trim();
         }
 
+        // «Жара» награждает по чистому времени, а не по официальному
+        // (решение оргкомитета, с 2026 года) — единственное исключение
+        // среди событий Красмарафона. field: 'absolute' | 'sex' | 'category'.
+        function raceRank(race, field) {
+            const key = race.event_name === 'Жара' ? `rank_${field}_clean` : `rank_${field}`;
+            return race[key];
+        }
+
         // Получить русский текст статуса
         function getStatusText(status) {
             const statuses = {
@@ -861,9 +869,9 @@
                                 <span class="time-value pace">${pace}</span>
                             </div>
                             ${category ? `<div class="time-row"><span class="time-label">Категория:</span><span class="time-value">${category}</span></div>` : ''}
-                            ${race.rank_absolute ? `<div class="time-row"><span class="time-label">Место:</span><span class="time-value">#${race.rank_absolute}</span></div>` : ''}
-                            ${race.rank_sex ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${race.rank_sex}</span></div>` : ''}
-                            ${race.rank_category ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${race.rank_category}</span></div>` : ''}
+                            ${raceRank(race, 'absolute') ? `<div class="time-row"><span class="time-label">Место:</span><span class="time-value">#${raceRank(race, 'absolute')}</span></div>` : ''}
+                            ${raceRank(race, 'sex') ? `<div class="time-row"><span class="time-label">Место (пол):</span><span class="time-value">#${raceRank(race, 'sex')}</span></div>` : ''}
+                            ${raceRank(race, 'category') ? `<div class="time-row"><span class="time-label">Место (кат.):</span><span class="time-value">#${raceRank(race, 'category')}</span></div>` : ''}
                         </div>
                         ${diplomaLinkHtml(race, 'diploma-link-btn')}
                     </div>
@@ -889,7 +897,7 @@
 
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
 
-                const ranking = race.rank_absolute || '-';
+                const ranking = raceRank(race, 'absolute') || '-';
                 const diplomaCell = diplomaLinkHtml(race, 'diploma-link-btn--table') || '-';
 
                 tbody.innerHTML += `

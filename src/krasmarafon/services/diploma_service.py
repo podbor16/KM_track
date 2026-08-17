@@ -75,20 +75,29 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
     categories = {str(r.get('category')).strip() for r in rows if r.get('category')}
     show_category_rank = not all(_is_gender_only_category(c) for c in categories) if categories else False
 
+    # Общее правило: время — чистое (net/clean), место — официальное
+    # (gun-based). Осознанное решение пользователя: эти дипломы не для
+    # награждения (там место объявляют по официальному времени) — а для
+    # соцсетей участников, время они хотят видеть своё честное (net), но
+    # место должно совпадать с тем, что объявляет судья/показывает сайт.
+    #
+    # Исключение — «Жара»: с 2026 года на этом событии награждают именно по
+    # чистому времени (решение оргкомитета), т.е. судья/сайт объявляют место
+    # по _clean-варианту — значит и диплом для Жары должен показывать его,
+    # чтобы место на дипломе по-прежнему совпадало с официально объявленным.
+    is_zhara = str(target.get('event_name') or '').strip() == 'Жара'
+    rank_absolute = target.get('rank_absolute_clean') if is_zhara else target.get('rank_absolute')
+    rank_sex = target.get('rank_sex_clean') if is_zhara else target.get('rank_sex')
+    rank_category = target.get('rank_category_clean') if is_zhara else target.get('rank_category')
+
     return {
         'surname': target.get('surname'),
         'name': target.get('name'),
         'category': target.get('category'),
-        # Время — чистое (net/clean), место — официальное (gun-based).
-        # Осознанное решение пользователя: эти дипломы не для награждения
-        # (там место объявляют по официальному времени) — а для соцсетей
-        # участников, время они хотят видеть своё честное (net), но место
-        # должно совпадать с тем, что объявляет судья/показывает сайт
-        # (rank_absolute/rank_sex/rank_category, НЕ _clean-варианты).
         'time_display': format_finish_time(target.get('time_clear_finish')),
-        'rank_absolute': target.get('rank_absolute'),
-        'rank_sex': target.get('rank_sex'),
-        'rank_category': target.get('rank_category'),
+        'rank_absolute': rank_absolute,
+        'rank_sex': rank_sex,
+        'rank_category': rank_category,
         'sex_label': _gender_label(target.get('sex')),
         'show_sex_rank': len(sexes) > 1,
         'show_category_rank': show_category_rank,

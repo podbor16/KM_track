@@ -6,10 +6,12 @@ from src.krasmarafon.services.diploma_service import get_diploma_data, format_fi
 
 
 def _row(bib, sex, status='Finished', time_s=None, rank_abs=1, rank_sex=1, rank_cat=1, category='Ж45',
-         rank_abs_gun=None, rank_sex_gun=None, rank_cat_gun=None):
+         rank_abs_gun=None, rank_sex_gun=None, rank_cat_gun=None, event_name='Ночной забег'):
     """rank_abs/rank_sex/rank_cat — чистые (_clean) места, по умолчанию
     используются и как официальные (gun), если *_gun не задан отдельно —
-    большинству тестов разница не важна, только test_..._uses_official_rank..."""
+    большинству тестов разница не важна, только test_..._uses_official_rank...
+    event_name по умолчанию — любое НЕ-«Жара» событие (у Жары место на
+    дипломе берётся из _clean-полей, см. test_..._uses_clean_rank_for_zhara)."""
     return {
         'start_number': bib,
         'surname': 'Аристархова',
@@ -24,6 +26,7 @@ def _row(bib, sex, status='Finished', time_s=None, rank_abs=1, rank_sex=1, rank_
         'rank_sex': rank_sex_gun if rank_sex_gun is not None else rank_sex,
         'rank_category': rank_cat_gun if rank_cat_gun is not None else rank_cat,
         'category': category,
+        'event_name': event_name,
     }
 
 
@@ -136,6 +139,26 @@ def test_get_diploma_data_uses_official_rank_but_clean_time():
     assert data['rank_absolute'] == 7
     assert data['rank_sex'] == 3
     assert data['rank_category'] == 2
+
+
+def test_get_diploma_data_uses_clean_rank_for_zhara():
+    """Исключение из общего правила: «Жара» с 2026 года награждает по
+    чистому времени (решение оргкомитета) — на дипломе Жары должно быть
+    место по _clean-варианту, а не официальное (gun-based), в отличие от
+    остальных событий (см. test_..._uses_official_rank_but_clean_time)."""
+    rows = [_row(
+        '101', 'female', time_s=1576,
+        rank_abs=5, rank_sex=2, rank_cat=1,
+        rank_abs_gun=7, rank_sex_gun=3, rank_cat_gun=2,
+        category='мужчины до 49 лет',
+        event_name='Жара',
+    )]
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data['time_display'] == '26:16'
+    assert data['rank_absolute'] == 5
+    assert data['rank_sex'] == 2
+    assert data['rank_category'] == 1
 
 
 def test_get_diploma_data_shows_category_row_when_real_age_category():
