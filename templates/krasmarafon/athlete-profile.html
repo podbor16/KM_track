@@ -115,13 +115,13 @@
                     <table class="races-table">
                         <thead>
                             <tr>
-                                <th>Дата</th>
+                                <th class="r">Дата</th>
                                 <th>Дистанция</th>
                                 <th>Статус</th>
-                                <th>Время</th>
-                                <th>Темп (мин/км)</th>
-                                <th>Место</th>
-                                <th>Диплом</th>
+                                <th class="r">Время</th>
+                                <th class="r">Темп (мин/км)</th>
+                                <th class="r">Место</th>
+                                <th class="r">Диплом</th>
                             </tr>
                         </thead>
                         <tbody id="racesTableBody"></tbody>
@@ -902,13 +902,13 @@
 
                 tbody.innerHTML += `
                     <tr>
-                        <td>${dateStr}</td>
+                        <td class="r">${dateStr}</td>
                         <td><strong>${race.event_name || '-'}</strong><br><small>${formatDistance(race.event_distance)}</small></td>
                         <td><span class="race-status ${statusInfo.class}">${statusInfo.text}</span></td>
-                        <td>${time}</td>
-                        <td><span class="pace">${pace}</span></td>
-                        <td>${ranking}</td>
-                        <td>${diplomaCell}</td>
+                        <td class="r">${time}</td>
+                        <td class="r"><span class="pace">${pace}</span></td>
+                        <td class="r">${ranking}</td>
+                        <td class="r">${diplomaCell}</td>
                     </tr>
                 `;
             });

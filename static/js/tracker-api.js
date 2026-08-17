@@ -664,8 +664,8 @@ function renderTopTableHTML(results, gender) {
                 <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>
                 <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
                 <td style="padding: 8px;">${KMUtils.normalizeCategory(runner.category) || '-'}</td>
-                <td style="padding: 8px; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
-                <td style="padding: 8px; font-family: monospace;">${pace}</td>
+                <td style="padding: 8px; text-align: center; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>
+                <td style="padding: 8px; text-align: center; font-family: monospace;">${pace}</td>
             </tr>`;
         }).join('')
         : '<tr><td colspan="6" style="padding: 10px; text-align: center;">Результатов нет</td></tr>';
@@ -677,8 +677,8 @@ function renderTopTableHTML(results, gender) {
                 <th style="padding: 10px; text-align: center;">№</th>
                 <th style="padding: 10px; text-align: left;">Фамилия Имя</th>
                 <th style="padding: 10px; text-align: left;">Категория</th>
-                <th style="padding: 8px; text-align: left;">Офиц. время</th>
-                <th style="padding: 8px; text-align: left;">Темп</th>
+                <th style="padding: 8px; text-align: center;">Офиц. время</th>
+                <th style="padding: 8px; text-align: center;">Темп</th>
             </tr>
         </thead>
         <tbody>${rows}</tbody>

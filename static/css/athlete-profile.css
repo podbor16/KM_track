@@ -507,11 +507,17 @@
     letter-spacing: 0.3px;
 }
 
+/* Числовые/табличные колонки (Дата/Время/Темп/Место/Диплом) — по центру,
+   по образцу Siberman (там же класс "r" — не буквально "right", а
+   "числовая колонка"). Дистанция и Статус — текст, остаются слева. */
+.races-table th.r { text-align: center; }
+
 .races-table td {
     padding: 14px 16px;
     border-bottom: 1px solid #f0f0f0;
     font-weight: 500;
 }
+.races-table td.r { text-align: center; }
 
 .races-table tbody tr:hover {
     background-color: #f9f9f9;
