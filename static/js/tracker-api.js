@@ -658,8 +658,7 @@ function renderTopTableHTML(results, gender) {
 
     const rows = top10.length
         ? top10.map(runner => {
-            const paceStr = parseDuration(runner.finish_pace_avg_gun) || parseDuration(runner.finish_pace_avg);
-            const pace = paceStr ? paceStr + ' мин/км' : '-';
+            const pace = parseDuration(runner.finish_pace_avg_gun) || parseDuration(runner.finish_pace_avg) || '-';
             return `<tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; text-align: center;">${runner[rankField] || '—'}</td>
                 <td style="padding: 8px; text-align: center;">${runner.start_number || '-'}</td>

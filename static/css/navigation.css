@@ -1,9 +1,20 @@
+/* position:fixed вместо sticky — на iOS Safari sticky-хэдер может на
+   мгновение "мигать"/пропускать контент поверх себя при резком скролле
+   или упругом оттягивании (rubber-band bounce) вверху страницы; fixed
+   всегда закреплён относительно вьюпорта и этого артефакта не даёт.
+   body ниже компенсирует высоту хэдера (44px + 2px рамка), которую
+   fixed-элемент выводит из потока документа. */
 .navbar {
   background: var(--km-dark-nav);
   border-bottom: 2px solid var(--km-primary);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
+}
+body {
+  padding-top: 46px;
 }
 .navbar-container {
   max-width: 1200px;
