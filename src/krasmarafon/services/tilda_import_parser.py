@@ -28,7 +28,7 @@ import io
 
 import openpyxl
 
-from src.krasmarafon.services.tilda_webhook import convert_birthday, normalize_name, parse_products
+from src.krasmarafon.services.tilda_webhook import convert_birthday, normalize_name, parse_products, is_name_suspicious
 
 
 @dataclass
@@ -50,6 +50,7 @@ class ImportRow:
     discount: str = ""          # "Сумма скидки" — сырое значение
     order_id: str = ""          # order_id — сырое значение (может быть числом или строкой)
     transaction_id: str = ""    # tranid
+    is_name_suspicious: bool = False  # см. tilda_webhook.is_name_suspicious()
 
 
 @dataclass
@@ -241,6 +242,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),
                 discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),
                 transaction_id=str(get("transaction_id") or "").strip(),
+                is_name_suspicious=is_name_suspicious(surname, name),
             ))
         except Exception as e:
             reason = f"непредвиденная ошибка парсинга — {e}"

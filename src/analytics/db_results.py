@@ -1421,22 +1421,59 @@ def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
             pass
 
 
-_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance')
+_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance', 'is_name_suspicious')
+
+
+def _find_lead_matches(cur, row) -> list:
+    """Список совпавших leads (dict-строк, курсор должен быть
+    dictionary=True) для row — двухуровневый поиск, общий для
+    bulk_import_leads()/preview_leads_import_matches():
+    1. По order_id (переживает правку фамилии/имени в CRM Tilda задним
+       числом) — order_id=0/NULL исключён, это заглушка Tilda для
+       бесплатных/незавершённых заявок, а не настоящий номер заказа.
+    2. Фоллбэк — surname+name+birthday+event_name+event_year+event_distance
+       (для заявок без order_id: бесплатные события, старые данные)."""
+    order_id_raw = (row.order_id or '').strip()
+    row_order_id = int(order_id_raw) if order_id_raw.isdigit() and order_id_raw != '0' else None
+
+    if row_order_id:
+        cur.execute(
+            "SELECT id FROM leads WHERE order_id=%s "
+            "AND event_name=%s AND event_year=%s AND event_distance=%s",
+            (row_order_id, row.event_name, row.event_year, row.event_distance),
+        )
+        matches = cur.fetchall()
+        if matches:
+            return matches
+
+    cur.execute(
+        "SELECT id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
+        "AND event_name=%s AND event_year=%s AND event_distance=%s",
+        (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
+    )
+    return cur.fetchall()
 
 
 def bulk_import_leads(rows: list) -> Dict[str, Any]:
-    """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads по
-    surname+name+birthday+event_name+event_year+event_distance. Совпавшие
-    строки — UPDATE (ВСЕ строки группы, если их несколько — если группа уже
-    была дублем, обе строки должны отразить правку организатора).
+    """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads.
+
+    Сопоставление — см. _find_lead_matches() (двухуровневое: order_id, затем
+    фоллбэк на surname+name+birthday+событие). Без order_id-поиска:
+    организатор правит "Kazakov Oleg" на "Казаков Олег" в Tilda,
+    переимпортирует — поиск по (уже устаревшим) фамилии/имени не находит
+    старую строку, создаётся дубль вместо исправления существующей записи
+    (реальный инцидент, Жара 2026, 2026-08-17).
+
+    Совпавшие строки — UPDATE (ВСЕ строки группы, если их несколько — если
+    группа уже была дублем, обе строки должны отразить правку организатора).
     Несовпавшие — INSERT новой заявки (trg_leads_before_insert сам резолвит
     client_id/event_id — не переизобретаем это в Python), затем
     recompute_duplicate_flag() на случай пересечения с уже живой группой.
 
-    birthday намеренно не в whitelist апдейта — это часть ключа
-    сопоставления, смена даты рождения = смена личности (для этого есть
-    обычный admin PATCH по одной строке). client_id/event_id/платёжные поля
-    тоже не трогаются — не про правки ФИО/контактов."""
+    birthday намеренно не в whitelist апдейта — смена даты рождения = смена
+    личности (для этого есть обычный admin PATCH по одной строке).
+    client_id/event_id/платёжные поля тоже не трогаются — не про правки
+    ФИО/контактов."""
     conn = get_pooled_connection()
     if not conn:
         return {"updated": 0, "created": 0, "errors": ["Нет соединения с БД"]}
@@ -1445,16 +1482,15 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         for row in rows:
-            cur.execute(
-                "SELECT id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
-                "AND event_name=%s AND event_year=%s AND event_distance=%s",
-                (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
-            )
-            matches = cur.fetchall()
+            matches = _find_lead_matches(cur, row)
 
             if matches:
                 values = {c: (getattr(row, c) or None) for c in _IMPORT_UPDATABLE}
                 values['event_distance'] = row.event_distance  # не-NULL поле
+                # is_name_suspicious — bool/int, а не текстовое поле: "or None"
+                # выше превратил бы False/0 в NULL, хотя False — валидное
+                # значение (имя чистое), а не "данных нет".
+                values['is_name_suspicious'] = int(row.is_name_suspicious)
                 set_clause = ", ".join(f"{c} = %s" for c in _IMPORT_UPDATABLE)
                 for m in matches:
                     cur.execute(
@@ -1483,7 +1519,7 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s,
-                        0, 0, 0, 0, 0, 0, 0
+                        %(is_name_suspicious)s, 0, 0, 0, 0, 0, 0
                     )
                     """,
                     {
@@ -1497,6 +1533,7 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         'discount': _float_or_zero(row.discount),
                         'order_id': int(order_id_raw) if order_id_raw.isdigit() else None,
                         'transaction_id': row.transaction_id or '',
+                        'is_name_suspicious': int(row.is_name_suspicious),
                     },
                 )
                 new_id = cur.lastrowid
@@ -1535,15 +1572,10 @@ def preview_leads_import_matches(rows: list) -> list:
             for r in rows
         ]
     try:
-        cur = conn.cursor(buffered=True)
+        cur = conn.cursor(dictionary=True, buffered=True)
         out = []
         for row in rows:
-            cur.execute(
-                "SELECT COUNT(*) FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
-                "AND event_name=%s AND event_year=%s AND event_distance=%s",
-                (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
-            )
-            cnt = cur.fetchone()[0]
+            cnt = len(_find_lead_matches(cur, row))
             out.append({
                 "row_number": row.row_number, "surname": row.surname, "name": row.name,
                 "birthday": row.birthday, "event_name": row.event_name, "event_distance": row.event_distance,

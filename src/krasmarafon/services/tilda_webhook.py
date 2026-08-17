@@ -5,6 +5,16 @@ import re
 
 _log = logging.getLogger(__name__)
 
+# Подозрительное имя: содержит не-кирилличные символы, пробелы, цифры, латиницу и т.п.
+# Допустимо: кириллица и дефис (для составных имён типа Анна-Мария)
+_CLEAN_NAME_RE = re.compile(r'^[а-яёА-ЯЁ\-]+$')
+
+
+def is_name_suspicious(surname: str, name: str) -> bool:
+    def _suspicious(val):
+        return bool(val) and not _CLEAN_NAME_RE.match(val.strip())
+    return _suspicious(surname) or _suspicious(name)
+
 
 def decode_from_db_format(value):
     if value is None or value == "":
@@ -178,12 +188,7 @@ def transform_tilda_payload(body: dict) -> dict:
     surname = normalize_name(body.get("surname", ""))
     name = normalize_name(body.get("name", ""))
 
-    # Подозрительное имя: содержит не-кирилличные символы, пробелы, цифры, латиницу и т.п.
-    # Допустимо: кириллица и дефис (для составных имён типа Анна-Мария)
-    _CLEAN_NAME = re.compile(r'^[а-яёА-ЯЁ\-]+$')
-    def _suspicious(val):
-        return bool(val) and not _CLEAN_NAME.match(val.strip())
-    is_name_suspicious = int(_suspicious(surname) or _suspicious(name))
+    name_suspicious = int(is_name_suspicious(surname, name))
 
     products_str = (
         ", ".join(products_list)
@@ -210,7 +215,7 @@ def transform_tilda_payload(body: dict) -> dict:
         "promocode": payment["promocode"],
         "discount": payment["discount"],
         "amount": payment["amount"],
-        "is_name_suspicious": is_name_suspicious,
+        "is_name_suspicious": name_suspicious,
         "client_id": 0,
         "event_id": 0,
         "is_duplicate": 0,

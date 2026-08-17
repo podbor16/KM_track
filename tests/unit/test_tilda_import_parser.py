@@ -63,6 +63,27 @@ def test_parse_normalizes_names_like_webhook():
     assert result.rows[0].name == "Иван"
 
 
+def test_parse_computes_is_name_suspicious_clean_cyrillic_name():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows[0].is_name_suspicious is False
+
+
+def test_parse_computes_is_name_suspicious_latin_name():
+    """Раньше при bulk-импорте is_name_suspicious всегда оставался 0/False
+    независимо от реального ФИО — теперь считается тем же критерием, что и
+    у вебхука (см. tilda_webhook.is_name_suspicious)."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Ivanov,Ivan,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows[0].is_name_suspicious is True
+
+
 def test_parse_bad_birthday_collected_as_error_not_raised():
     csv_text = (
         "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"

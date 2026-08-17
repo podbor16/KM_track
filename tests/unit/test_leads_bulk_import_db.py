@@ -38,6 +38,59 @@ def test_updates_single_matched_row(mock_get_conn):
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_matches_by_order_id_even_when_surname_name_changed(mock_get_conn):
+    """Реальный инцидент (Жара 2026, 2026-08-17): организатор поправил
+    фамилию/имя с английского на русское написание в Tilda и переимпортировал
+    — заявка должна обновить СУЩЕСТВУЮЩУЮ строку (найденную по order_id),
+    а не создать дубль, хотя surname/name в файле теперь другие."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [{"id": 34901}]  # найдено по order_id с первого запроса
+
+    summary = bulk_import_leads([_row(surname="Казаков", name="Олег", order_id="1644133682")])
+
+    assert summary["updated"] == 1
+    assert summary["created"] == 0
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    assert len(select_calls) == 1  # совпало по order_id — фоллбэк на surname+name не понадобился
+    assert "order_id" in select_calls[0].args[0]
+    assert 1644133682 in select_calls[0].args[1]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_falls_back_to_name_match_when_order_id_not_found(mock_get_conn):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[], [{"id": 555}]]  # order_id: пусто, потом surname+name: совпало
+
+    summary = bulk_import_leads([_row(order_id="999999")])
+
+    assert summary["updated"] == 1
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    assert len(select_calls) == 2
+    assert "surname" in select_calls[1].args[0]
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_order_id_zero_treated_as_no_order_id(mock_get_conn, mock_recompute):
+    """order_id=0 — заглушка Tilda для бесплатных/незавершённых заявок (199
+    строк 184 разных людей делили это значение на реальных данных), не
+    настоящий номер заказа — не должен участвовать в поиске совпадений."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []  # ни по order_id (пропущен), ни по surname+name
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 1, "event_id": 1}
+
+    bulk_import_leads([_row(order_id="0")])
+
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    assert len(select_calls) == 1  # order_id=0 пропущен — сразу фоллбэк на surname+name
+    assert "surname" in select_calls[0].args[0]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_updates_all_rows_in_existing_duplicate_group(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
@@ -150,6 +203,58 @@ def test_matched_row_update_applies_club(mock_get_conn):
     assert "transaction_id" not in sql
 
 
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_computes_is_name_suspicious(mock_get_conn, mock_recompute):
+    """Раньше is_name_suspicious при bulk-импорте был всегда захардкожен в 0
+    — теперь считается тем же критерием, что и у вебхука (только кириллица
+    и дефис — иначе подозрительно)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(surname="Ivanov", is_name_suspicious=True)])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    _, params = insert_call.args
+    assert params["is_name_suspicious"] == 1
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_clean_name_is_not_suspicious(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(is_name_suspicious=False)])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    _, params = insert_call.args
+    assert params["is_name_suspicious"] == 0
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_applies_is_name_suspicious(mock_get_conn):
+    """Повторный импорт должен обновить флаг, если исправленное ФИО
+    изменило его подозрительность — иначе после ручной правки в Tilda флаг
+    остался бы устаревшим до следующей смены surname/name напрямую в БД."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [{"id": 101}]
+
+    bulk_import_leads([_row(is_name_suspicious=True)])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads" in c.args[0])
+    sql, params = update_call.args
+    assert "is_name_suspicious" in sql
+    assert 1 in params
+
+
 @patch("src.analytics.db_results.get_pooled_connection")
 def test_no_connection_returns_zero_summary_with_error(mock_get_conn):
     mock_get_conn.return_value = None
@@ -175,7 +280,7 @@ def test_db_error_rolls_back_and_reports_error(mock_get_conn):
 def test_preview_marks_matched_row_as_update(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchone.return_value = (1,)
+    cur.fetchall.return_value = [{"id": 101}]
 
     preview = preview_leads_import_matches([_row()])
 
@@ -187,7 +292,7 @@ def test_preview_marks_matched_row_as_update(mock_get_conn):
 def test_preview_marks_unmatched_row_as_create(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchone.return_value = (0,)
+    cur.fetchall.return_value = []
 
     preview = preview_leads_import_matches([_row()])
 
