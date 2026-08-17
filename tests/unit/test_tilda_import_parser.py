@@ -278,7 +278,7 @@ _REAL_HEADERS = [
     "phone_2", "ma_email", "Checkbox", "utm_source", "utm_medium",
     "utm_campaign", "tranid", "ma_id", "ma_name", "ma_phone", "formid",
     "formname", "file_discount", "file_discount_0", "file_discount_1",
-    "field14", "field13", "Stage",
+    "field14", "field13", "Stage", "Способ оплаты",
 ]
 
 
@@ -299,7 +299,7 @@ def _real_export_xlsx(data_rows: list) -> bytes:
 
 def _real_row(surname, name, sex, city, birthday, phone, email, product,
               amount=None, promocode=None, discount=None, order_id=None, tranid=None,
-              club=None):
+              club=None, payment_system=None):
     row = [None] * len(_REAL_HEADERS)
     row[_REAL_HEADERS.index("surname")] = surname
     row[_REAL_HEADERS.index("Name")] = name
@@ -315,6 +315,7 @@ def _real_row(surname, name, sex, city, birthday, phone, email, product,
     row[_REAL_HEADERS.index("Сумма скидки")] = discount
     row[_REAL_HEADERS.index("order_id")] = order_id
     row[_REAL_HEADERS.index("tranid")] = tranid
+    row[_REAL_HEADERS.index("Способ оплаты")] = payment_system
     return [v if v is not None else "" for v in row]
 
 
@@ -452,6 +453,34 @@ def test_parse_real_tilda_export_missing_club_defaults_to_empty():
 
     assert result.errors == []
     assert result.rows[0].club == ""
+
+
+def test_parse_real_tilda_export_captures_payment_system():
+    """"Способ оплаты" — колонка, появившаяся в выгрузке Tilda позже
+    остальных 32 (поймана через unknown_headers на реальном импорте
+    2026-08-17, до этого теста была не сопоставлена ни с одним полем)."""
+    xlsx = _real_export_xlsx([
+        _real_row("Экзархова", "Юлия", "Женщина", "Красноярск", "26.04.1979",
+                  "+7 (913) 031-50-35", "u19792007@ya.ru",
+                  "21.1 км Жара 2026 (zhara2026-21, Выберите категорию: Основная категория) x 1 ≡ 1790",
+                  payment_system="Банковская карта"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    assert result.rows[0].payment_system == "Банковская карта"
+
+
+def test_parse_real_tilda_export_missing_payment_system_defaults_to_empty():
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  "+7 (900) 000-00-01", "test1@example.com",
+                  "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790"),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.errors == []
+    assert result.rows[0].payment_system == ""
 
 
 # ---------------------------------------------------------------------------

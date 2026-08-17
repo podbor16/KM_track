@@ -1524,14 +1524,14 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                     INSERT INTO leads (
                         surname, name, sex, city, club, birthday, email, phone,
                         event_name, event_distance, event_year, products,
-                        amount, promocode, discount, order_id, transaction_id,
+                        amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, client_id, event_id, is_duplicate,
                         status, is_new, is_new_event
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
-                        %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s,
+                        %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
                         %(is_name_suspicious)s, 0, 0, 0, 0, 0, 0
                     )
                     """,
@@ -1546,6 +1546,7 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         'discount': _float_or_zero(row.discount),
                         'order_id': int(order_id_raw) if order_id_raw.isdigit() else None,
                         'transaction_id': row.transaction_id or '',
+                        'payment_system': row.payment_system or '',
                         'is_name_suspicious': int(row.is_name_suspicious),
                     },
                 )

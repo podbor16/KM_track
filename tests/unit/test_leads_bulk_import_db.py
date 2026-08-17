@@ -134,7 +134,7 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
     bulk_import_leads([_row(
         amount="4.9", promocode="99TEST", discount="485.1",
         order_id="1486212513", transaction_id="144860:7719674713",
-        club="ILSS",
+        club="ILSS", payment_system="Банковская карта",
     )])
 
     insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
@@ -145,6 +145,7 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
     assert params["order_id"] == 1486212513
     assert params["transaction_id"] == "144860:7719674713"
     assert params["club"] == "ILSS"
+    assert params["payment_system"] == "Банковская карта"
 
 
 @patch("src.analytics.db_results.recompute_duplicate_flag")

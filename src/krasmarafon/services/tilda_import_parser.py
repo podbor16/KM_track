@@ -3,17 +3,19 @@
 заявки → выгружает файл) для bulk-импорта в leads. Не пишет в БД — см.
 src/analytics/db_results.py: bulk_import_leads()/preview_leads_import_matches().
 
-_HEADER_ALIASES сверен с реальной выгрузкой Tilda (leads-экспорт, 32
-колонки): surname/Name/sex/city/birthday/Phone/Email/product — совпадает по
+_HEADER_ALIASES сверен с реальной выгрузкой Tilda (leads-экспорт, изначально
+32 колонки, позже добавилась 33-я — "Способ оплаты", поймана как раз через
+ImportResult.unknown_headers на реальном импорте 2026-08-17):
+surname/Name/sex/city/birthday/Phone/Email/product — совпадает по
 смыслу с полями вебхука (src/krasmarafon/services/tilda_webhook.py), колонка
 "product" (не "products") содержит тот же текстовый блоб, что и
 payment.products в вебхуке — переиспользуем parse_products() как есть, чтобы
 результат совпадал с уже занесёнными через вебхук заявками (иначе повторный
 импорт создаст дубли вместо апдейта). Платёжные колонки (Промокод/Сумма
-заказа/Сумма скидки/order_id/tranid) читаются в ImportRow — используются
-ТОЛЬКО при создании новой заявки (bulk_import_leads()), не при апдейте
-совпавшей: правки платёжных данных задним числом через CSV — не задача
-этого импорта, см. docstring bulk_import_leads(). Остальные колонки
+заказа/Сумма скидки/order_id/tranid/Способ оплаты) читаются в ImportRow —
+используются ТОЛЬКО при создании новой заявки (bulk_import_leads()), не при
+апдейте совпавшей: правки платёжных данных задним числом через CSV — не
+задача этого импорта, см. docstring bulk_import_leads(). Остальные колонки
 экспорта (Date, phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
 ma_phone, formid/formname, file_discount*, field13/field14, Stage) — в
 leads нет соответствующей колонки, см. _KNOWN_IGNORED_HEADERS. Заголовок
@@ -50,6 +52,11 @@ class ImportRow:
     discount: str = ""          # "Сумма скидки" — сырое значение
     order_id: str = ""          # order_id — сырое значение (может быть числом или строкой)
     transaction_id: str = ""    # tranid
+    payment_system: str = ""    # "Способ оплаты" — в вебхуке это короткий код
+                                 # платёжной системы (parse_payment()'s "sys",
+                                 # напр. "sbrf"), в выгрузке Tilda — человекочитаемая
+                                 # строка ("Банковская карта" и т.п.); формат
+                                 # разный, но колонка та же (leads.payment_system)
     is_name_suspicious: bool = False  # см. tilda_webhook.is_name_suspicious()
 
 
@@ -104,6 +111,7 @@ _HEADER_ALIASES = {
     "сумма скидки": "discount",
     "order_id": "order_id",
     "tranid": "transaction_id",
+    "способ оплаты": "payment_system",
 }
 
 # Реальные заголовки боевой выгрузки Tilda (32 колонки, см. заголовок файла
@@ -242,6 +250,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),
                 discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),
                 transaction_id=str(get("transaction_id") or "").strip(),
+                payment_system=str(get("payment_system") or "").strip(),
                 is_name_suspicious=is_name_suspicious(surname, name),
             ))
         except Exception as e:
