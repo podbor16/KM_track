@@ -42,6 +42,7 @@
             <button class="admin-tab" onclick="switchTab('presets', this)">Пресеты Copernico</button>
             <button class="admin-tab" onclick="switchTab('loader', this)">Загрузчик</button>
             <button class="admin-tab" onclick="switchTab('leads', this)">Стартовый список</button>
+            <button class="admin-tab" onclick="switchTab('age-groups', this)">Возрастные группы</button>
             <button class="admin-tab" onclick="switchTab('analytics', this)">Аналитика</button>
         </div>
 
@@ -135,6 +136,32 @@
             </div>
         </div>
         <!-- ================================================================ -->
+        <!-- ВКЛАДКА: ВОЗРАСТНЫЕ ГРУППЫ                                       -->
+        <!-- ================================================================ -->
+        <div id="tab-age-groups" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Границы возрастных групп для стартового списка и стартового списка в
+                админке (не влияет на результаты после финиша — там категория берётся
+                из Copernico). Без настроенных границ показывается стандартный
+                развёрнутый формат («мужчины до 49 лет…»).
+            </div>
+
+            <div class="admin-leads-toolbar">
+                <div class="admin-leads-filters">
+                    <select id="ag-event-name" class="admin-select" onchange="onAgEventChange()">
+                        <option value="">— мероприятие —</option>
+                    </select>
+                    <select id="ag-distance" class="admin-select" onchange="loadAgeGroups()" disabled>
+                        <option value="">— дистанция —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="age-groups-content">
+                <div class="admin-loading">Выберите событие и дистанцию</div>
+            </div>
+        </div>
+        <!-- ================================================================ -->
         <!-- ВКЛАДКА: АНАЛИТИКА (DataLens)                                   -->
         <!-- ================================================================ -->
         <div id="tab-analytics" class="admin-tab-content" style="display:none">
@@ -217,6 +244,7 @@
             if (name === 'presets') loadPresets();
             if (name === 'loader') loadLoader();
             if (name === 'leads') loadLeadsTab();
+            if (name === 'age-groups') loadAgeGroupsTab();
             if (name === 'analytics') loadAnalyticsTab();
         }
     }
@@ -1051,6 +1079,156 @@
             loadLeads(true);
         } catch(e) {
             alert('Ошибка: ' + e.message);
+        }
+    }
+
+    // ========================================================================
+    // Age groups tab — границы для calculate_age_group()/get_age_group_label()
+    // ========================================================================
+
+    const AG_SEX_LABEL = { M: 'Мужчины', F: 'Женщины' };
+
+    async function loadAgeGroupsTab() {
+        const sel = document.getElementById('ag-event-name');
+        try {
+            const r = await fetch('/api/admin/leads/meta');
+            if (!r.ok) return;
+            const data = await r.json();
+            data.event_names.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name; opt.textContent = name;
+                sel.appendChild(opt);
+            });
+        } catch(e) { /* silent */ }
+    }
+
+    async function onAgEventChange() {
+        const eventName = document.getElementById('ag-event-name').value;
+        const distSel = document.getElementById('ag-distance');
+        distSel.innerHTML = '<option value="">— дистанция —</option>';
+        distSel.disabled = true;
+        document.getElementById('age-groups-content').innerHTML =
+            '<div class="admin-loading">Выберите дистанцию</div>';
+        if (!eventName) return;
+        try {
+            const r = await fetch(`/api/admin/leads/meta?event_name=${encodeURIComponent(eventName)}`);
+            const data = await r.json();
+            data.distances.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                distSel.appendChild(opt);
+            });
+            distSel.disabled = false;
+            if (data.distances.length === 1) {
+                distSel.value = data.distances[0];
+                loadAgeGroups();
+            }
+        } catch(e) { /* silent */ }
+    }
+
+    async function loadAgeGroups() {
+        const eventName = document.getElementById('ag-event-name').value;
+        const distance = document.getElementById('ag-distance').value;
+        const content = document.getElementById('age-groups-content');
+        if (!eventName || !distance) {
+            content.innerHTML = '<div class="admin-loading">Выберите событие и дистанцию</div>';
+            return;
+        }
+        content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
+        try {
+            const url = `/api/admin/age-groups?event_name=${encodeURIComponent(eventName)}&event_distance=${encodeURIComponent(distance)}`;
+            const r = await fetch(url);
+            const data = await r.json();
+            renderAgeGroups(data.items);
+        } catch(e) {
+            content.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        }
+    }
+
+    function renderAgeGroups(items) {
+        const content = document.getElementById('age-groups-content');
+        const bySex = { M: items.filter(i => i.sex === 'M'), F: items.filter(i => i.sex === 'F') };
+
+        const columnHtml = (sex) => {
+            const rows = bySex[sex].sort((a, b) => a.min_age - b.min_age).map(row => `
+                <tr data-id="${row.id}">
+                    <td><input type="number" class="admin-select ag-min" value="${row.min_age}" style="width:64px"></td>
+                    <td><input type="number" class="admin-select ag-max" value="${row.max_age ?? ''}" placeholder="∞" style="width:64px"></td>
+                    <td><input type="text" class="admin-select ag-label" value="${row.label}" style="width:90px"></td>
+                    <td>
+                        <button class="km-btn km-btn--secondary" onclick="saveAgeGroupRow(${row.id}, this)">Сохранить</button>
+                        <button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id})">Удалить</button>
+                    </td>
+                </tr>
+            `).join('');
+            return `
+                <h3 style="margin:16px 0 8px">${AG_SEX_LABEL[sex]}</h3>
+                <table class="admin-loader-table">
+                    <thead><tr><th>От</th><th>До</th><th>Метка</th><th></th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
+                </table>
+                <div class="admin-leads-toolbar" style="margin-top:8px">
+                    <input type="number" class="admin-select" id="ag-new-min-${sex}" placeholder="От" style="width:64px">
+                    <input type="number" class="admin-select" id="ag-new-max-${sex}" placeholder="До (пусто = без верхней границы)" style="width:64px">
+                    <input type="text" class="admin-select" id="ag-new-label-${sex}" placeholder="Метка, напр. М49" style="width:120px">
+                    <button class="km-btn km-btn--primary" onclick="addAgeGroupRow('${sex}')">Добавить границу</button>
+                </div>
+            `;
+        };
+
+        content.innerHTML = columnHtml('M') + columnHtml('F');
+    }
+
+    async function saveAgeGroupRow(id, btn) {
+        const tr = btn.closest('tr');
+        const min_age = parseInt(tr.querySelector('.ag-min').value, 10);
+        const maxRaw = tr.querySelector('.ag-max').value.trim();
+        const label = tr.querySelector('.ag-label').value.trim();
+        if (isNaN(min_age) || !label) { alert('Заполните "От" и "Метку"'); return; }
+        try {
+            const r = await fetch(`/api/admin/age-groups/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ min_age, max_age: maxRaw === '' ? null : parseInt(maxRaw, 10), label }),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadAgeGroups();
+        } catch(e) {
+            alert('Ошибка сохранения: ' + e.message);
+        }
+    }
+
+    async function removeAgeGroupRow(id) {
+        if (!confirm('Удалить эту границу?')) return;
+        try {
+            const r = await fetch(`/api/admin/age-groups/${id}`, { method: 'DELETE' });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadAgeGroups();
+        } catch(e) {
+            alert('Ошибка удаления: ' + e.message);
+        }
+    }
+
+    async function addAgeGroupRow(sex) {
+        const eventName = document.getElementById('ag-event-name').value;
+        const distance = document.getElementById('ag-distance').value;
+        const min_age = parseInt(document.getElementById(`ag-new-min-${sex}`).value, 10);
+        const maxRaw = document.getElementById(`ag-new-max-${sex}`).value.trim();
+        const label = document.getElementById(`ag-new-label-${sex}`).value.trim();
+        if (isNaN(min_age) || !label) { alert('Заполните "От" и "Метку"'); return; }
+        try {
+            const r = await fetch('/api/admin/age-groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event_name: eventName, event_distance: distance, sex,
+                    min_age, max_age: maxRaw === '' ? null : parseInt(maxRaw, 10), label,
+                }),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadAgeGroups();
+        } catch(e) {
+            alert('Ошибка создания: ' + e.message);
         }
     }
 

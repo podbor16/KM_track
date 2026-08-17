@@ -20,6 +20,7 @@ from src.krasmarafon.models.startlist import (
     LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
     LeadImportFailedRow,
 )
+from src.krasmarafon.models.age_groups import AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
 
 from src.config import settings
 from src.config.event_loader import (
@@ -418,6 +419,76 @@ async def patch_lead(
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Лид {lead_id} не найден")
     return LeadAdminItem.model_validate(updated).model_dump()
+
+
+# --- Возрастные группы (age_group_configs) --------------------------------
+# Границы для конкретных (event_name, event_distance) — переопределяют
+# дефолтную формулу calculate_age_group() при отображении регистраций
+# (/start_list, /admin → «Стартовый список»). Результаты после финиша
+# (results.category, из Copernico) не затрагиваются — сознательно вне
+# объёма этого API.
+
+@router.get("/api/admin/age-groups")
+async def list_age_groups_endpoint(
+    event_name: Optional[str] = Query(None),
+    event_distance: Optional[str] = Query(None),
+    user: str = Depends(api_require_auth),
+) -> dict:
+    from src.analytics.db_results import list_age_groups
+
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: list_age_groups(event_name, event_distance)
+    )
+    return {"items": [AgeGroupConfig.model_validate(r).model_dump() for r in rows]}
+
+
+@router.post("/api/admin/age-groups")
+async def create_age_group_endpoint(
+    body: AgeGroupCreate, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import create_age_group
+
+    created = await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: create_age_group(
+            body.event_name, body.event_distance, body.sex,
+            body.min_age, body.max_age, body.label,
+        ),
+    )
+    if created is None:
+        raise HTTPException(status_code=400, detail="Не удалось создать границу (возможно, дубликат)")
+    return AgeGroupConfig.model_validate(created).model_dump()
+
+
+@router.patch("/api/admin/age-groups/{config_id}")
+async def patch_age_group_endpoint(
+    config_id: int, body: AgeGroupPatch, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import update_age_group
+
+    fields = body.non_null_fields()
+    if not fields:
+        raise HTTPException(status_code=422, detail="Нет полей для обновления")
+    updated = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: update_age_group(config_id, fields)
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Граница {config_id} не найдена")
+    return AgeGroupConfig.model_validate(updated).model_dump()
+
+
+@router.delete("/api/admin/age-groups/{config_id}")
+async def delete_age_group_endpoint(
+    config_id: int, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import delete_age_group
+
+    deleted = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: delete_age_group(config_id)
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Граница {config_id} не найдена")
+    return {"status": "ok"}
 
 
 @router.post("/api/admin/leads/import/upload")

@@ -974,9 +974,223 @@ def get_database_info_optimized() -> Dict[str, Any]:
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
 
+def _parse_age_and_sex(birthdate_or_age, sex: str = None):
+    """(age, is_male) из даты рождения/возраста/пола — общий разбор,
+    переиспользуется calculate_age_group() и get_age_group_label().
+    Возвращает (None, is_male), если возраст не удалось определить."""
+    age = None
+
+    if isinstance(birthdate_or_age, (datetime.date, datetime.datetime)):
+        age = datetime.datetime.now().year - birthdate_or_age.year
+    elif isinstance(birthdate_or_age, str):
+        try:
+            birth_date = datetime.datetime.strptime(birthdate_or_age[:10], '%Y-%m-%d')
+            age = datetime.datetime.now().year - birth_date.year
+        except Exception:
+            try:
+                age = int(birthdate_or_age)
+            except Exception:
+                age = None
+    elif isinstance(birthdate_or_age, int):
+        age = birthdate_or_age
+
+    is_male = True
+    if sex:
+        sex_lower = str(sex).lower().strip()
+        if sex_lower in ['female', 'ж', 'женщина', 'women', 'f']:
+            is_male = False
+
+    return age, is_male
+
+
+_age_group_cache: dict = {}
+_age_group_cache_ts: float = 0.0
+AGE_GROUP_CACHE_TTL = 60  # админ-конфиг — короткий TTL, правки видны быстро
+
+
+def _get_age_group_configs() -> dict:
+    """{(event_name, event_distance, 'M'|'F'): [(min_age, max_age, label), ...]}
+    отсортировано по min_age, из age_group_configs. Кэш на весь процесс,
+    TTL 60с — таблицу правят из /admin, изменения должны быть видны быстро,
+    но не на каждый запрос."""
+    global _age_group_cache, _age_group_cache_ts
+    now = time.time()
+    if _age_group_cache and (now - _age_group_cache_ts) < AGE_GROUP_CACHE_TTL:
+        return _age_group_cache
+
+    conn = get_pooled_connection()
+    if not conn:
+        return _age_group_cache or {}
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "SELECT event_name, event_distance, sex, min_age, max_age, label "
+            "FROM age_group_configs ORDER BY event_name, event_distance, sex, min_age"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        cache: dict = {}
+        for r in rows:
+            key = (r['event_name'], r['event_distance'], r['sex'])
+            cache.setdefault(key, []).append((r['min_age'], r['max_age'], r['label']))
+        _age_group_cache = cache
+        _age_group_cache_ts = now
+        return cache
+    except Exception as e:
+        logger.error(f"_get_age_group_configs error: {e}")
+        return _age_group_cache or {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, sex: str = None) -> str:
+    """Возрастная группа с учётом границ, заданных в /admin для конкретных
+    (event_name, event_distance); если для этой пары ничего не настроено —
+    падает на старый дефолт calculate_age_group() (развёрнутый формат)."""
+    age, is_male = _parse_age_and_sex(birthdate_or_age, sex)
+    if age is None:
+        return 'Неизвестно'
+
+    sex_key = 'M' if is_male else 'F'
+    brackets = _get_age_group_configs().get((event_name, event_distance, sex_key))
+    if brackets:
+        for min_age, max_age, label in brackets:
+            if age >= min_age and (max_age is None or age <= max_age):
+                return label
+
+    return calculate_age_group(birthdate_or_age, sex)
+
+
+def _invalidate_age_group_cache() -> None:
+    global _age_group_cache_ts
+    _age_group_cache_ts = 0.0
+
+
+def list_age_groups(event_name: Optional[str] = None, event_distance: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Границы для /admin — без кеша, всегда актуальные (в отличие от
+    _get_age_group_configs(), которым пользуется отображение стартового
+    списка)."""
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        conds, params = [], []
+        if event_name is not None:
+            conds.append("event_name = %s"); params.append(event_name)
+        if event_distance is not None:
+            conds.append("event_distance = %s"); params.append(event_distance)
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        cur.execute(
+            f"SELECT * FROM age_group_configs {where} "
+            "ORDER BY event_name, event_distance, sex, min_age",
+            params,
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"list_age_groups error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def create_age_group(event_name: str, event_distance: str, sex: str,
+                      min_age: int, max_age: Optional[int], label: str) -> Optional[Dict[str, Any]]:
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "INSERT INTO age_group_configs (event_name, event_distance, sex, min_age, max_age, label) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (event_name, event_distance, sex, min_age, max_age, label),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        cur.execute("SELECT * FROM age_group_configs WHERE id = %s", (new_id,))
+        row = cur.fetchone()
+        cur.close()
+        _invalidate_age_group_cache()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"create_age_group error: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+_AGE_GROUP_UPDATABLE = ('event_name', 'event_distance', 'sex', 'min_age', 'max_age', 'label')
+
+
+def update_age_group(config_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    safe = {k: v for k, v in fields.items() if k in _AGE_GROUP_UPDATABLE}
+    if not safe:
+        return None
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        set_clause = ", ".join(f"{col} = %s" for col in safe)
+        cur.execute(
+            f"UPDATE age_group_configs SET {set_clause} WHERE id = %s",
+            list(safe.values()) + [config_id],
+        )
+        conn.commit()
+        cur.execute("SELECT * FROM age_group_configs WHERE id = %s", (config_id,))
+        row = cur.fetchone()
+        cur.close()
+        _invalidate_age_group_cache()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"update_age_group error: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def delete_age_group(config_id: int) -> bool:
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor(buffered=True)
+        cur.execute("DELETE FROM age_group_configs WHERE id = %s", (config_id,))
+        conn.commit()
+        deleted = cur.rowcount > 0
+        cur.close()
+        if deleted:
+            _invalidate_age_group_cache()
+        return deleted
+    except Exception as e:
+        logger.error(f"delete_age_group error: {e}")
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def calculate_age_group(birthdate_or_age, sex: str = None) -> str:
     """
-    Возрастная группа по дате рождения/возрасту и полу.
+    Возрастная группа по дате рождения/возрасту и полу — дефолт, когда для
+    события/дистанции не настроены свои границы (см. get_age_group_label()).
 
     Returns:
         Строка с названием возрастной группы.
@@ -985,30 +1199,9 @@ def calculate_age_group(birthdate_or_age, sex: str = None) -> str:
         return 'Неизвестно'
 
     try:
-        age = None
-
-        if isinstance(birthdate_or_age, (datetime.date, datetime.datetime)):
-            age = datetime.datetime.now().year - birthdate_or_age.year
-        elif isinstance(birthdate_or_age, str):
-            try:
-                birth_date = datetime.datetime.strptime(birthdate_or_age[:10], '%Y-%m-%d')
-                age = datetime.datetime.now().year - birth_date.year
-            except Exception:
-                try:
-                    age = int(birthdate_or_age)
-                except Exception:
-                    return 'Неизвестно'
-        elif isinstance(birthdate_or_age, int):
-            age = birthdate_or_age
-
+        age, is_male = _parse_age_and_sex(birthdate_or_age, sex)
         if age is None:
             return 'Неизвестно'
-
-        is_male = True
-        if sex:
-            sex_lower = str(sex).lower().strip()
-            if sex_lower in ['female', 'ж', 'женщина', 'women', 'f']:
-                is_male = False
 
         if is_male:
             if age < 49:
@@ -1087,7 +1280,9 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                             record.get('sex') or record.get('Пол') or
                             record.get('gender') or record.get('gender_en')
                         )
-                        record['category'] = calculate_age_group(age_info, sex=sex_info) if age_info else 'Неизвестно'
+                        record['category'] = get_age_group_label(
+                            record.get('event_name'), record.get('event_distance'), age_info, sex_info
+                        ) if age_info else 'Неизвестно'
 
                     _start_list_cache = records
                     _start_list_cache_ts = time.time()
@@ -1169,7 +1364,7 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
             result.append(d)
         _startlist_cache[key] = result
         _startlist_cache_ts[key] = time.time()
@@ -1281,7 +1476,7 @@ def get_leads_admin(
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
             result.append(d)
         return result
     except Exception as e:
@@ -1375,7 +1570,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         if not row:
             return None
         d = dict(row)
-        d['category'] = calculate_age_group(d.get('birthday'), d.get('sex'))
+        d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
         return d
     except Exception as e:
         logger.error(f"update_lead error: {e}")
