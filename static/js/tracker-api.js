@@ -337,6 +337,10 @@ async function init() {
             CONFIG.LAPS = defaultDist.laps ?? 1;
             eventCheckpoints = defaultDist.checkpoints || [];
             eventDecorativeCheckpoints = defaultDist.decorative_checkpoints || [];
+            // Нужно ДО первой отрисовки меток КТ (drawCheckpointMarkers вызывается
+            // сразу после загрузки GPX, раньше loadAnalytics() — без этого totalDist
+            // там падал на дефолт 5.0 и отсекал все отметки дистанций длиннее 5 км)
+            eventDistance = defaultDist.distance_km || 0;
         } else {
             // Fallback: одиночное событие без массива distances
             if (cfg.gpx_file) CONFIG.GPX_FILE = '/' + cfg.gpx_file;
