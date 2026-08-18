@@ -21,6 +21,7 @@ from src.krasmarafon.models.startlist import (
     LeadImportFailedRow,
 )
 from src.krasmarafon.models.age_groups import AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
+from src.krasmarafon.models.participant_photos import DbEvent, ParticipantPhoto, ParticipantPhotoUpsert
 
 from src.config import settings
 from src.config.event_loader import (
@@ -488,6 +489,60 @@ async def delete_age_group_endpoint(
     )
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Граница {config_id} не найдена")
+    return {"status": "ok"}
+
+
+# Числовой event_id для вкладки «Фото участников» — age_group_configs
+# использует event_name+event_distance строки, но participant_photos
+# ссылается на реальный results.event_id, поэтому нужен отдельный список
+# с настоящими ID.
+
+@router.get("/api/admin/db-events")
+async def list_db_events_endpoint(user: str = Depends(api_require_auth)) -> dict:
+    from src.analytics.db_results import list_db_events
+
+    rows = await asyncio.get_event_loop().run_in_executor(None, list_db_events)
+    return {"items": [DbEvent.model_validate(r).model_dump() for r in rows]}
+
+
+@router.get("/api/admin/participant-photos")
+async def list_participant_photos_endpoint(
+    event_id: int = Query(...), user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import list_participant_photos
+
+    rows = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: list_participant_photos(event_id)
+    )
+    return {"items": [ParticipantPhoto.model_validate(r).model_dump() for r in rows]}
+
+
+@router.post("/api/admin/participant-photos")
+async def upsert_participant_photo_endpoint(
+    body: ParticipantPhotoUpsert, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import upsert_participant_photo
+
+    saved = await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: upsert_participant_photo(body.event_id, body.start_number, body.photo_url),
+    )
+    if saved is None:
+        raise HTTPException(status_code=400, detail="Не удалось сохранить фото")
+    return ParticipantPhoto.model_validate(saved).model_dump()
+
+
+@router.delete("/api/admin/participant-photos/{photo_id}")
+async def delete_participant_photo_endpoint(
+    photo_id: int, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import delete_participant_photo
+
+    deleted = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: delete_participant_photo(photo_id)
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Фото {photo_id} не найдено")
     return {"status": "ok"}
 
 
