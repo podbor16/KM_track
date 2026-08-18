@@ -4,8 +4,13 @@
 set -a
 source /opt/km_track/config/loader/"$1".env
 set +a
+BROADCAST_ARGS=()
+if [ -n "$LOADER_BROADCAST_JSON" ]; then
+    BROADCAST_ARGS=(--broadcast-json "$LOADER_BROADCAST_JSON")
+fi
 exec /opt/km_track/venv/bin/python load_race_results.py \
     --config "$LOADER_CONFIG" \
     --distance "$LOADER_DISTANCE" \
     --interval "${LOADER_INTERVAL:-5}" \
-    --reset-cache "${LOADER_RESET_CACHE:-60}"
+    --reset-cache "${LOADER_RESET_CACHE:-60}" \
+    "${BROADCAST_ARGS[@]}"
