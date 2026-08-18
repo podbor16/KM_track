@@ -40,8 +40,11 @@ distances:
     db_event_id: 115         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
+    checkpoint_distances: [0, 2.5, 5.0]
+    checkpoints:
+      - {name: "Старт",    distance_km: 0.0, lat: 56.0126030, lon: 92.8936640}
+      - {name: "Разворот", distance_km: 2.5, lat: 56.01928,   lon: 92.93024}
+      - {name: "Финиш",    distance_km: 5.0, lat: 56.0126030, lon: 92.8936640}
     gpx_file: "static/map/2026/zhara_5.gpx"            # ← заполнить перед стартом
     event_date: "2026-08-22"          # ← заполнить перед стартом
     route:
