@@ -84,24 +84,30 @@ def _query_checkpoint_rows(
     которые формирует только generate_top10_json() ниже — параметризовать
     их через placeholder нельзя (это имена колонок, не значения)."""
     cur = connection.cursor(dictionary=True)
-    params: List[Any] = [event_id]
-    sex_clause = ""
-    if sex_filter:
-        sex_clause = "AND r.sex = %s"
-        params.append(sex_filter)
-    query = (
-        f"SELECT r.start_number, r.surname, r.name, r.sex, c.city, "
-        f"       r.{rank_abs_col} AS rank_absolute, r.{rank_sex_col} AS rank_sex, "
-        f"       r.{time_col} AS time_clear, r.{pace_col} AS pace_avg "
-        f"FROM results r "
-        f"LEFT JOIN clients c ON c.id = r.client_id "
-        f"WHERE r.event_id = %s AND r.{time_col} IS NOT NULL {sex_clause} "
-        f"ORDER BY r.{time_col} ASC "
-        f"LIMIT {_TOP_N}"
-    )
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    cur.close()
+    try:
+        params: List[Any] = [event_id]
+        sex_clause = ""
+        if sex_filter:
+            sex_clause = "AND r.sex = %s"
+            params.append(sex_filter)
+        query = (
+            f"SELECT r.start_number, r.surname, r.name, r.sex, c.city, "
+            f"       r.{rank_abs_col} AS rank_absolute, r.{rank_sex_col} AS rank_sex, "
+            f"       r.{time_col} AS time_clear, r.{pace_col} AS pace_avg "
+            f"FROM results r "
+            f"LEFT JOIN clients c ON c.id = r.client_id "
+            f"WHERE r.event_id = %s AND r.{time_col} IS NOT NULL {sex_clause} "
+            # Сортировка по TIME-колонке, а НЕ по rank_absolute_kt*/rank_sex_kt*:
+            # в реальной схеме БД rank_absolute_kt6/kt7 — VARCHAR(50), не INT,
+            # сортировка по ним лексикографическая ("10" < "2") и даёт неверный
+            # порядок. Сортировка по time_col корректна всегда.
+            f"ORDER BY r.{time_col} ASC "
+            f"LIMIT {_TOP_N}"
+        )
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    finally:
+        cur.close()
     return rows
 
 
@@ -151,12 +157,14 @@ def _build_checkpoint(
 
 def _load_photo_map(connection, event_id: int) -> Dict[int, str]:
     cur = connection.cursor(dictionary=True)
-    cur.execute(
-        "SELECT start_number, photo_url FROM participant_photos WHERE event_id = %s",
-        (event_id,),
-    )
-    rows = cur.fetchall()
-    cur.close()
+    try:
+        cur.execute(
+            "SELECT start_number, photo_url FROM participant_photos WHERE event_id = %s",
+            (event_id,),
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
     return {r["start_number"]: r["photo_url"] for r in rows}
 
 
@@ -166,13 +174,15 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
     временный файл, затем os.replace() — читающая сторона никогда не видит
     файл в момент записи наполовину)."""
     cur = connection.cursor(dictionary=True)
-    cur.execute(
-        "SELECT event_name, event_distance, event_year, checkpoint_distances "
-        "FROM events WHERE id = %s",
-        (event_id,),
-    )
-    event = cur.fetchone()
-    cur.close()
+    try:
+        cur.execute(
+            "SELECT event_name, event_distance, event_year, checkpoint_distances "
+            "FROM events WHERE id = %s",
+            (event_id,),
+        )
+        event = cur.fetchone()
+    finally:
+        cur.close()
     if not event:
         raise ValueError(f"event_id={event_id} не найден в events")
 

@@ -116,6 +116,19 @@ def test_build_checkpoint_splits_absolute_and_sex_with_shared_row_shape():
     assert checkpoint["top10_absolute"][0]["sex"] == "M"
     assert checkpoint["top10_absolute"][1]["sex"] == "F"
 
+    # Проверка не только результата, но и того, что _build_checkpoint
+    # реально передал правильные sex_filter в запросы к _query_checkpoint_rows
+    # (без этого перепутанные местами фильтры остались бы незамеченными —
+    # порядок вызовов сохранился бы, а данные внутри были бы неверными).
+    execute_calls = cur.execute.call_args_list
+    assert len(execute_calls) == 3
+    abs_params = execute_calls[0].args[1]
+    male_params = execute_calls[1].args[1]
+    female_params = execute_calls[2].args[1]
+    assert list(abs_params) == [116]
+    assert list(male_params) == [116, "Мужчина"]
+    assert list(female_params) == [116, "Женщина"]
+
 
 def test_build_checkpoint_truncates_below_ten_without_padding():
     conn = MagicMock()
