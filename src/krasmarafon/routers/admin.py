@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from src.krasmarafon.models.startlist import (
@@ -549,18 +549,27 @@ async def delete_participant_photo_endpoint(
 @router.post("/api/admin/leads/import/upload")
 async def upload_leads_import(
     file: UploadFile = File(...),
+    event_name: Optional[str] = Form(None),
+    event_year: Optional[int] = Form(None),
     user: str = Depends(api_require_auth),
 ) -> dict:
     """Шаг 1 bulk-импорта заявок из выгрузки Tilda: парсит файл, строит
     превью совпадений (обновится/создастся), сохраняет разобранные строки
-    во временный pending-файл — реальная запись в БД только на /apply."""
+    во временный pending-файл — реальная запись в БД только на /apply.
+
+    event_name/event_year — событие и год, выбранные в /admin перед
+    загрузкой файла (фильтры вкладки «Стартовый список»). Используются
+    ТОЛЬКО как фоллбэк — когда у строки нет полного текста продукта, а есть
+    отдельная колонка "Дистанция" (см. tilda_import_parser._extract_event_info,
+    реальный случай — организатор вручную укоротил product-текст при
+    переносе участника на другую дистанцию, 2026-08-18)."""
     from src.krasmarafon.services.tilda_import_parser import parse_tilda_export
     from src.analytics.db_results import preview_leads_import_matches
 
     data = await file.read()
     try:
         parsed = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: parse_tilda_export(data, file.filename or "")
+            None, lambda: parse_tilda_export(data, file.filename or "", event_name, event_year)
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

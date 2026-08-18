@@ -39,6 +39,62 @@ def test_parse_csv_with_separate_event_columns():
     assert row.event_year == 2027
 
 
+def test_parse_falls_back_to_selected_event_when_product_text_is_bare_distance():
+    """Реальный случай (обработанный организатором файл, 2026-08-18):
+    колонка product вручную укорочена до голой дистанции ("21.1 км", без
+    названия события/года/slug) при переносе участника на другую дистанцию
+    — parse_products() это не разбирает. Есть отдельная колонка "Дистанция"
+    (но НЕ "Событие" — иначе сработала бы первая ветка), плюс переданы
+    event_name/event_year — событие и год, выбранные в /admin перед
+    загрузкой (тот же смысл, что явные колонки, источник просто другой)."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Дистанция,product\r\n"
+        "Петров,Пётр,01.05.1990,21.1 км,21.1 км\r\n"
+    )
+    result = parse_tilda_export(
+        _csv_bytes(csv_text), filename="export.csv",
+        fallback_event_name="Жара", fallback_event_year=2026,
+    )
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.event_name == "Жара"
+    assert row.event_distance == "21.1 км"
+    assert row.event_year == 2026
+
+
+def test_parse_normalizes_comma_decimal_in_fallback_distance_column():
+    """RU-локаль Excel иногда даёт запятую как десятичный разделитель
+    ("21,1 км") — приводим к точке, иначе значение не совпадёт ни с одним
+    настроенным брекетом/отметкой (везде используется "21.1 км")."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Дистанция,product\r\n"
+        "Сидорова,Анна,01.05.1990,\"21,1 км\",\"21,1 км\"\r\n"
+    )
+    result = parse_tilda_export(
+        _csv_bytes(csv_text), filename="export.csv",
+        fallback_event_name="Жара", fallback_event_year=2026,
+    )
+
+    assert len(result.rows) == 1
+    assert result.rows[0].event_distance == "21.1 км"
+
+
+def test_parse_bare_distance_without_fallback_event_stays_an_error():
+    """Без выбранного в /admin события/года — не гадаем, строка остаётся
+    ошибкой, как и раньше (обратная совместимость: старое поведение для
+    вызовов parse_tilda_export() без новых необязательных аргументов)."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Дистанция,product\r\n"
+        "Петров,Пётр,01.05.1990,21.1 км,21.1 км\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert len(result.rows) == 0
+    assert len(result.failed_rows) == 1
+
+
 def test_parse_csv_with_products_blob():
     csv_text = (
         "Фамилия,Имя,Дата рождения,products\r\n"

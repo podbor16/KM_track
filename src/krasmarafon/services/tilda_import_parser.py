@@ -174,23 +174,45 @@ def _read_xlsx_rows(file_bytes: bytes):
     return headers, data_rows
 
 
-def _extract_event_info(get, col_map: dict, birthday: str):
+def _extract_event_info(get, col_map: dict, birthday: str,
+                         fallback_event_name: Optional[str] = None,
+                         fallback_event_year: Optional[int] = None):
     """Если есть отдельные колонки event_name/event_distance — берём их
     напрямую; иначе, если есть 'products'-блоб (формат как в вебхуке) —
-    переиспользуем parse_products(). Точная ветка зависит от реального
-    формата (план, Часть B, задача B0)."""
+    переиспользуем parse_products().
+
+    Реальный случай (обработанный организатором в Excel файл, 2026-08-18):
+    строку продукта вручную укоротили до голой дистанции ("21.1 км" без
+    названия события/года/slug) при переносе участника на другую дистанцию
+    — parse_products() такое не разбирает. Если в файле при этом есть
+    отдельная колонка "Дистанция" (event_distance, но БЕЗ event_name рядом,
+    иначе сработала бы первая ветка) — используем её вместе с событием/годом,
+    которые организатор уже выбрал в /admin перед загрузкой файла (тот же
+    принцип, что явные колонки, просто источник события — контекст
+    загрузки, а не сам файл). Без выбранного события/года — как раньше,
+    строка идёт в ошибки, не гадаем."""
     if "event_name" in col_map and "event_distance" in col_map:
         yr = str(get("event_year") or "").strip()
         event_year = int(yr) if yr.isdigit() else None
         return str(get("event_name") or "").strip(), event_year, str(get("event_distance") or "").strip()
+
     if "products" in col_map:
         info = parse_products([str(get("products") or "")], birthday=birthday)
-        event_year = int(info["event_year"]) if info["event_year"] else None
-        return info["event_name"], event_year, info["event_distance"]
+        if info["event_name"] and info["event_distance"]:
+            event_year = int(info["event_year"]) if info["event_year"] else None
+            return info["event_name"], event_year, info["event_distance"]
+
+    if "event_distance" in col_map and fallback_event_name and fallback_event_year:
+        distance = str(get("event_distance") or "").strip().replace(",", ".")
+        if distance:
+            return fallback_event_name, fallback_event_year, distance
+
     return "", None, ""
 
 
-def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
+def parse_tilda_export(file_bytes: bytes, filename: str,
+                        fallback_event_name: Optional[str] = None,
+                        fallback_event_year: Optional[int] = None) -> ImportResult:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext == "csv":
         headers, data_rows = _read_csv_rows(file_bytes)
@@ -240,7 +262,9 @@ def parse_tilda_export(file_bytes: bytes, filename: str) -> ImportResult:
                 })
                 continue
 
-            event_name, event_year, event_distance = _extract_event_info(get, col_map, birthday)
+            event_name, event_year, event_distance = _extract_event_info(
+                get, col_map, birthday, fallback_event_name, fallback_event_year
+            )
             if not event_name or not event_distance:
                 if "products" in col_map:
                     detail = f"product={str(get('products') or '')!r}"

@@ -1006,6 +1006,14 @@
 
         const fd = new FormData();
         fd.append('file', file);
+        // Фоллбэк на выбранное событие/год — только для строк без полного
+        // текста продукта, но с отдельной колонкой "Дистанция" (см. докстринг
+        // upload_leads_import). Не отправляем пустыми — Optional[int] на
+        // бэкенде не примет пустую строку как "не указано".
+        const selectedEventName = document.getElementById('leads-event-name').value;
+        const selectedYear = document.getElementById('leads-year-filter').value;
+        if (selectedEventName) fd.append('event_name', selectedEventName);
+        if (selectedYear) fd.append('event_year', selectedYear);
         try {
             const r = await fetch('/api/admin/leads/import/upload', { method: 'POST', body: fd });
             if (!r.ok) {
