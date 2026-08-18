@@ -1685,7 +1685,47 @@ def _find_lead_matches(cur, row) -> list:
     return cur.fetchall()
 
 
-def bulk_import_leads(rows: list) -> Dict[str, Any]:
+def _leads_to_delete_context(rows: list, failed_rows: list) -> tuple:
+    """(event_pairs, protected_names) — общий расчёт для превью и apply
+    реконсиляции "файл — источник истины" (см. _find_leads_to_delete()).
+    event_pairs — (event_name, event_year) всех успешно разобранных строк
+    (границы, в которых вообще ищем "пропавших"). protected_names —
+    (surname, name) из ВСЕХ строк файла, включая не разобранные (failed_rows)
+    — если строка не распозналась (не пустая, а сломанная), мы не знаем,
+    что с человеком, и не должны его удалять только из-за бага парсинга."""
+    event_pairs = {(r.event_name, r.event_year) for r in rows}
+    protected_names = {(r.surname, r.name) for r in rows}
+    protected_names |= {
+        (fr.get('surname', ''), fr.get('name', '')) for fr in (failed_rows or [])
+        if fr.get('surname') or fr.get('name')
+    }
+    return event_pairs, protected_names
+
+
+def _find_leads_to_delete(cur, event_pairs: set, present_ids: set, protected_names: set) -> list:
+    """leads в БД для каждой (event_name, event_year) из event_pairs, которых
+    НЕТ среди present_ids (совпали/только что созданы в этом импорте) И чьё
+    (surname, name) не в protected_names (защита строк с ошибкой парсинга —
+    см. _leads_to_delete_context()). Реконсиляция "файл — источник истины":
+    заявка, пропавшая из файла (организатор её удалил/перенёс), удаляется
+    из БД, а не остаётся зависшей навсегда (реальный запрос, 2026-08-18)."""
+    to_delete = []
+    for event_name, event_year in event_pairs:
+        cur.execute(
+            "SELECT id, surname, name, event_distance, start_number FROM leads "
+            "WHERE event_name = %s AND event_year = %s",
+            (event_name, event_year),
+        )
+        for lead in cur.fetchall():
+            if lead['id'] in present_ids:
+                continue
+            if (lead['surname'], lead['name']) in protected_names:
+                continue
+            to_delete.append(lead)
+    return to_delete
+
+
+def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
     """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads.
 
     Сопоставление — см. _find_lead_matches() (двухуровневое: order_id, затем
@@ -1704,16 +1744,26 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
     birthday намеренно не в whitelist апдейта — смена даты рождения = смена
     личности (для этого есть обычный admin PATCH по одной строке).
     client_id/event_id/платёжные поля тоже не трогаются — не про правки
-    ФИО/контактов."""
+    ФИО/контактов.
+
+    Файл — источник истины (2026-08-18): после обработки всех rows, для
+    каждой затронутой (event_name, event_year) удаляются заявки, которых
+    нет в rows И не защищены совпадением с failed_rows (см.
+    _leads_to_delete_context()/_find_leads_to_delete()) — organizer убрал
+    человека из файла, значит его больше не должно быть в БД. Безвозвратное
+    удаление — сознательный выбор пользователя (не soft-delete): при ошибке
+    можно повторно экспортировать из Tilda и переимпортировать."""
     conn = get_pooled_connection()
     if not conn:
-        return {"updated": 0, "created": 0, "errors": ["Нет соединения с БД"]}
-    updated = created = 0
+        return {"updated": 0, "created": 0, "deleted": 0, "errors": ["Нет соединения с БД"]}
+    updated = created = deleted = 0
     errors: list = []
+    present_ids: set = set()
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         for row in rows:
             matches = _find_lead_matches(cur, row)
+            present_ids.update(m['id'] for m in matches)
 
             if matches:
                 values = {c: (getattr(row, c) or None) for c in _IMPORT_UPDATABLE}
@@ -1788,21 +1838,32 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                     },
                 )
                 new_id = cur.lastrowid
+                present_ids.add(new_id)
                 cur.execute("SELECT client_id, event_id FROM leads WHERE id = %s", (new_id,))
                 new_row = cur.fetchone()
                 if new_row:
                     recompute_duplicate_flag(client_id=new_row['client_id'], event_id=new_row['event_id'])
                 created += 1
+
+        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows)
+        to_delete = _find_leads_to_delete(cur, event_pairs, present_ids, protected_names)
+        if to_delete:
+            cur.execute(
+                f"DELETE FROM leads WHERE id IN ({','.join(['%s'] * len(to_delete))})",
+                [lead['id'] for lead in to_delete],
+            )
+            deleted = len(to_delete)
+
         conn.commit()
         cur.close()
-        return {"updated": updated, "created": created, "errors": errors}
+        return {"updated": updated, "created": created, "deleted": deleted, "errors": errors}
     except Exception as e:
         logger.error(f"bulk_import_leads error: {e}")
         try:
             conn.rollback()
         except Exception:
             pass
-        return {"updated": updated, "created": created, "errors": [str(e)]}
+        return {"updated": updated, "created": created, "deleted": 0, "errors": [str(e)]}
     finally:
         try:
             conn.close()
@@ -1810,30 +1871,43 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
             pass
 
 
-def preview_leads_import_matches(rows: list) -> list:
+def preview_leads_import_matches(rows: list, failed_rows: list = None) -> dict:
     """Только чтение — для каждой row возвращает matched_count (0 = будет
     создана новая заявка при bulk_import_leads), используется для превью
-    перед подтверждением импорта в admin UI."""
+    перед подтверждением импорта в admin UI. Плюс to_delete — заявки,
+    которых нет в файле и которые bulk_import_leads() удалит (см. её
+    докстринг и _find_leads_to_delete()) — та же реконсиляция, что и apply,
+    только read-only, чтобы организатор видел удаления ДО подтверждения."""
     conn = get_pooled_connection()
     if not conn:
-        return [
-            {"row_number": r.row_number, "surname": r.surname, "name": r.name,
-             "birthday": r.birthday, "event_name": r.event_name, "event_distance": r.event_distance,
-             "matched_count": 0, "will": "unknown"}
-            for r in rows
-        ]
+        return {
+            "rows": [
+                {"row_number": r.row_number, "surname": r.surname, "name": r.name,
+                 "birthday": r.birthday, "event_name": r.event_name, "event_distance": r.event_distance,
+                 "matched_count": 0, "will": "unknown"}
+                for r in rows
+            ],
+            "to_delete": [],
+        }
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         out = []
+        present_ids: set = set()
         for row in rows:
-            cnt = len(_find_lead_matches(cur, row))
+            matches = _find_lead_matches(cur, row)
+            present_ids.update(m['id'] for m in matches)
+            cnt = len(matches)
             out.append({
                 "row_number": row.row_number, "surname": row.surname, "name": row.name,
                 "birthday": row.birthday, "event_name": row.event_name, "event_distance": row.event_distance,
                 "matched_count": cnt, "will": "update" if cnt >= 1 else "create",
             })
+
+        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows)
+        to_delete = _find_leads_to_delete(cur, event_pairs, present_ids, protected_names)
+
         cur.close()
-        return out
+        return {"rows": out, "to_delete": to_delete}
     finally:
         try:
             conn.close()

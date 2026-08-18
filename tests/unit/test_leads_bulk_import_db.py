@@ -27,7 +27,9 @@ def _mock_conn():
 def test_updates_single_matched_row(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    # 1-й fetchall — _find_lead_matches; 2-й — реконсиляция "пропавших" для
+    # этого события/года (пусто, вне фокуса этого теста)
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     summary = bulk_import_leads([_row(city="Красноярск")])
 
@@ -45,7 +47,8 @@ def test_matches_by_order_id_even_when_surname_name_changed(mock_get_conn):
     а не создать дубль, хотя surname/name в файле теперь другие."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 34901}]  # найдено по order_id с первого запроса
+    # найдено по order_id с первого запроса; 2-й fetchall — реконсиляция "пропавших"
+    cur.fetchall.side_effect = [[{"id": 34901}], []]
 
     summary = bulk_import_leads([_row(surname="Казаков", name="Олег", order_id="1644133682")])
 
@@ -61,7 +64,8 @@ def test_matches_by_order_id_even_when_surname_name_changed(mock_get_conn):
 def test_falls_back_to_name_match_when_order_id_not_found(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.side_effect = [[], [{"id": 555}]]  # order_id: пусто, потом surname+name: совпало
+    # order_id: пусто, потом surname+name: совпало; 3-й — реконсиляция "пропавших"
+    cur.fetchall.side_effect = [[], [{"id": 555}], []]
 
     summary = bulk_import_leads([_row(order_id="999999")])
 
@@ -94,7 +98,8 @@ def test_order_id_zero_treated_as_no_order_id(mock_get_conn, mock_recompute):
 def test_updates_all_rows_in_existing_duplicate_group(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}, {"id": 102}]  # уже дубль-группа из 2 строк
+    # уже дубль-группа из 2 строк; 2-й fetchall — реконсиляция "пропавших"
+    cur.fetchall.side_effect = [[{"id": 101}, {"id": 102}], []]
 
     summary = bulk_import_leads([_row()])
 
@@ -182,7 +187,7 @@ def test_new_lead_insert_start_number_null_when_absent(mock_get_conn, mock_recom
 def test_matched_row_update_applies_start_number_when_present(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     bulk_import_leads([_row(start_number="7")])
 
@@ -202,7 +207,7 @@ def test_matched_row_update_preserves_start_number_when_absent(mock_get_conn):
     номер — намеренное исключение из этого правила)."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     bulk_import_leads([_row()])  # start_number по умолчанию "" в _row()
 
@@ -260,7 +265,7 @@ def test_matched_row_update_does_not_touch_payment_fields(mock_get_conn):
     правкой организатора контактных данных."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     bulk_import_leads([_row(amount="999", promocode="SHOULD-NOT-APPLY")])
 
@@ -277,7 +282,7 @@ def test_matched_row_update_applies_club(mock_get_conn):
     признак: повторный импорт должен обновлять его при совпадении."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     bulk_import_leads([_row(club="ILSS")])
 
@@ -331,7 +336,7 @@ def test_matched_row_update_applies_is_name_suspicious(mock_get_conn):
     остался бы устаревшим до следующей смены surname/name напрямую в БД."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     bulk_import_leads([_row(is_name_suspicious=True)])
 
@@ -345,7 +350,7 @@ def test_matched_row_update_applies_is_name_suspicious(mock_get_conn):
 def test_no_connection_returns_zero_summary_with_error(mock_get_conn):
     mock_get_conn.return_value = None
     summary = bulk_import_leads([_row()])
-    assert summary == {"updated": 0, "created": 0, "errors": ["Нет соединения с БД"]}
+    assert summary == {"updated": 0, "created": 0, "deleted": 0, "errors": ["Нет соединения с БД"]}
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
@@ -366,24 +371,26 @@ def test_db_error_rolls_back_and_reports_error(mock_get_conn):
 def test_preview_marks_matched_row_as_update(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [{"id": 101}]
+    # 1-й fetchall — _find_lead_matches (совпало); 2-й — _find_leads_to_delete
+    # (проверка "пропавших" для этого события/года — пусто, не в фокусе теста)
+    cur.fetchall.side_effect = [[{"id": 101}], []]
 
     preview = preview_leads_import_matches([_row()])
 
-    assert preview[0]["will"] == "update"
-    assert preview[0]["matched_count"] == 1
+    assert preview["rows"][0]["will"] == "update"
+    assert preview["rows"][0]["matched_count"] == 1
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
 def test_preview_marks_unmatched_row_as_create(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = []
+    cur.fetchall.side_effect = [[], []]
 
     preview = preview_leads_import_matches([_row()])
 
-    assert preview[0]["will"] == "create"
-    assert preview[0]["matched_count"] == 0
+    assert preview["rows"][0]["will"] == "create"
+    assert preview["rows"][0]["matched_count"] == 0
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
@@ -396,11 +403,11 @@ def test_preview_handles_row_with_empty_birthday(mock_get_conn):
     '1900-01-01', что уже используется при INSERT."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = []
+    cur.fetchall.side_effect = [[], []]
 
     preview = preview_leads_import_matches([_row(birthday="")])
 
-    assert preview[0]["will"] == "create"
+    assert preview["rows"][0]["will"] == "create"
     select_call = cur.execute.call_args_list[0]
     assert "1900-01-01" in select_call.args[1]
 
@@ -409,4 +416,85 @@ def test_preview_handles_row_with_empty_birthday(mock_get_conn):
 def test_preview_no_connection_returns_unknown(mock_get_conn):
     mock_get_conn.return_value = None
     preview = preview_leads_import_matches([_row()])
-    assert preview[0]["will"] == "unknown"
+    assert preview["rows"][0]["will"] == "unknown"
+    assert preview["to_delete"] == []
+
+
+# --- реконсиляция "файл — источник истины" (удаление пропавших) ----------
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_deletes_leads_missing_from_import_file(mock_get_conn):
+    """Реальный сценарий (2026-08-18): организатор удалил заявку из файла и
+    переимпортировал — старая запись должна пропасть из БД, а не остаться
+    навсегда. row (id=101) совпадает и остаётся; id=202 отсутствует в файле
+    и не защищён — должен быть удалён."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [
+        [{"id": 101}],  # _find_lead_matches для единственной строки файла
+        [{"id": 101, "surname": "Иванов", "name": "Иван", "event_distance": "5 км", "start_number": None},
+         {"id": 202, "surname": "Петров", "name": "Пётр", "event_distance": "5 км", "start_number": None}],
+    ]
+
+    summary = bulk_import_leads([_row()])
+
+    assert summary["deleted"] == 1
+    delete_call = next(c for c in cur.execute.call_args_list if "DELETE FROM leads" in c.args[0])
+    assert delete_call.args[1] == [202]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_protects_lead_matching_failed_row_from_deletion(mock_get_conn):
+    """Заявка, чьё (surname, name) совпадает со строкой, не разобранной
+    парсером (failed_rows), не удаляется — мы не знаем, что с ней на самом
+    деле произошло в файле (баг парсинга ≠ "человека убрали")."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [
+        [{"id": 101}],
+        [{"id": 101, "surname": "Иванов", "name": "Иван", "event_distance": "5 км", "start_number": None},
+         {"id": 303, "surname": "Сидоров", "name": "Семён", "event_distance": "5 км", "start_number": None}],
+    ]
+
+    summary = bulk_import_leads(
+        [_row()],
+        failed_rows=[{"surname": "Сидоров", "name": "Семён", "birthday": "", "reason": "не распознано"}],
+    )
+
+    assert summary["deleted"] == 0
+    delete_calls = [c for c in cur.execute.call_args_list if "DELETE FROM leads" in c.args[0]]
+    assert delete_calls == []
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_preview_includes_to_delete(mock_get_conn):
+    """preview_leads_import_matches() должен показать организатору
+    удаления ДО подтверждения, тем же расчётом, что и apply."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [
+        [{"id": 101}],
+        [{"id": 101, "surname": "Иванов", "name": "Иван", "event_distance": "5 км", "start_number": None},
+         {"id": 202, "surname": "Петров", "name": "Пётр", "event_distance": "5 км", "start_number": None}],
+    ]
+
+    preview = preview_leads_import_matches([_row()])
+
+    assert len(preview["to_delete"]) == 1
+    assert preview["to_delete"][0]["id"] == 202
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_deletion_scoped_to_event_name_and_year_only(mock_get_conn):
+    """Реконсиляция ищет "пропавших" только по (event_name, event_year) из
+    файла — не по event_distance, т.к. один файл-импорт может не содержать
+    все дистанции события (ответ пользователя: "Событие + год")."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(event_name="Весна", event_year=2027)])
+
+    select_calls = [c for c in cur.execute.call_args_list if "FROM leads" in c.args[0] and "WHERE event_name" in c.args[0]]
+    assert len(select_calls) == 1
+    assert select_calls[0].args[1] == ("Весна", 2027)

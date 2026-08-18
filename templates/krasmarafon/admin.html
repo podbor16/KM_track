@@ -1052,6 +1052,36 @@
             </div>`;
         }
 
+        // Файл — источник истины: заявки, которых нет в файле, удаляются
+        // безвозвратно при "Применить" — показываем явно, кого именно
+        // затронет, это отдельный блок-предупреждение, не строка в общей таблице.
+        let deleteHtml = '';
+        const deleteSample = preview.delete_sample || [];
+        if (preview.to_delete > 0) {
+            const deleteRows = deleteSample.map(r => `
+                <tr>
+                    <td>${esc(r.surname)} ${esc(r.name)}</td>
+                    <td>${esc(r.event_distance)}</td>
+                    <td>${r.start_number ?? ''}</td>
+                </tr>
+            `).join('');
+            const moreNote = preview.to_delete > deleteSample.length
+                ? `<div style="margin-top:4px">…и ещё ${preview.to_delete - deleteSample.length}</div>` : '';
+            deleteHtml = `
+                <div class="admin-error" style="margin-top:8px">
+                    <b>⚠ Будет безвозвратно удалено заявок: ${preview.to_delete}</b> — этих людей нет в загруженном
+                    файле (файл считается источником истины для события/года загруженных строк).
+                </div>
+                <div style="max-height:160px; overflow:auto; margin-top:4px">
+                    <table class="admin-loader-table">
+                        <thead><tr><th>ФИО</th><th>Дистанция</th><th>Номер</th></tr></thead>
+                        <tbody>${deleteRows}</tbody>
+                    </table>
+                    ${moreNote}
+                </div>
+            `;
+        }
+
         // Успешные (sample, максимум 50 с бэкенда) + все проблемные строки —
         // сливаем в один список по номеру строки, чтобы проблемные строки
         // были видны прямо в таблице (подсвечены), а не только текстом.
@@ -1079,9 +1109,10 @@
 
         el.style.display = '';
         el.innerHTML = `
-            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
+            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${preview.to_delete ? `, удалится: ${preview.to_delete}` : ''}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
             ${errorsHtml}
             ${unknownHeadersHtml}
+            ${deleteHtml}
             <div style="max-height:240px; overflow:auto; margin-top:8px">
                 <table class="admin-loader-table">
                     <thead><tr><th>Строка</th><th>ФИО</th><th>Дата рожд.</th><th>Событие</th><th>Действие</th></tr></thead>
@@ -1089,13 +1120,16 @@
                 </table>
             </div>
             <div style="margin-top:8px">
-                <button class="km-btn km-btn--primary" onclick="applyLeadsImport('${preview.token}')">Применить импорт</button>
+                <button class="km-btn km-btn--primary" onclick="applyLeadsImport('${preview.token}', ${preview.to_delete || 0})">Применить импорт</button>
                 <button class="km-btn km-btn--secondary" onclick="document.getElementById('leads-import-preview').style.display='none'">Отменить</button>
             </div>
         `;
     }
 
-    async function applyLeadsImport(token) {
+    async function applyLeadsImport(token, toDelete) {
+        if (toDelete > 0 && !confirm(`Будет безвозвратно удалено заявок: ${toDelete}. Продолжить?`)) {
+            return;
+        }
         try {
             const r = await fetch(`/api/admin/leads/import/apply?token=${encodeURIComponent(token)}`, { method: 'POST' });
             if (!r.ok) {
@@ -1104,7 +1138,7 @@
                 return;
             }
             const summary = await r.json();
-            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.`);
+            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}`);
             document.getElementById('leads-import-preview').style.display = 'none';
             loadLeads(true);
         } catch(e) {

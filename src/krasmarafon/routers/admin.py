@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from src.krasmarafon.models.startlist import (
     LeadPatch, LeadAdminItem, LeadsAdminResponse,
     LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
-    LeadImportFailedRow,
+    LeadImportFailedRow, LeadImportDeleteRow,
 )
 from src.krasmarafon.models.age_groups import AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
 from src.krasmarafon.models.participant_photos import DbEvent, ParticipantPhoto, ParticipantPhotoUpsert
@@ -574,9 +574,11 @@ async def upload_leads_import(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    preview_rows = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: preview_leads_import_matches(parsed.rows)
+    preview = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: preview_leads_import_matches(parsed.rows, parsed.failed_rows)
     )
+    preview_rows = preview["rows"]
+    to_delete = preview["to_delete"]
 
     token = secrets.token_urlsafe(16)
     with open(_LEADS_IMPORT_PENDING_DIR / f"{token}.pkl", "wb") as f:
@@ -587,10 +589,12 @@ async def upload_leads_import(
         total_rows=parsed.total_rows,
         to_update=sum(1 for r in preview_rows if r["will"] == "update"),
         to_create=sum(1 for r in preview_rows if r["will"] == "create"),
+        to_delete=len(to_delete),
         parse_errors=parsed.errors,
         sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
         unknown_headers=parsed.unknown_headers,
         failed_rows=[LeadImportFailedRow(**r) for r in parsed.failed_rows],
+        delete_sample=[LeadImportDeleteRow(**r) for r in to_delete[:50]],
     ).model_dump()
 
 
@@ -601,7 +605,9 @@ async def apply_leads_import(
 ) -> dict:
     """Шаг 2 bulk-импорта: применяет ранее разобранный и подтверждённый
     файл (по token из /upload) — UPDATE совпавших заявок, INSERT
-    несовпавших. Очищает pending-файл после применения."""
+    несовпавших, DELETE заявок для тех же (event_name, event_year), которых
+    нет в файле (файл — источник истины, см. docstring bulk_import_leads()).
+    Очищает pending-файл после применения."""
     from src.analytics.db_results import bulk_import_leads
 
     path = _LEADS_IMPORT_PENDING_DIR / f"{token}.pkl"
@@ -611,7 +617,7 @@ async def apply_leads_import(
         parsed = pickle.load(f)
 
     summary = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: bulk_import_leads(parsed.rows)
+        None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows)
     )
     path.unlink(missing_ok=True)
     return LeadImportApplyResponse(**summary).model_dump()

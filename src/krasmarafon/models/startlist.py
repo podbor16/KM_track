@@ -119,6 +119,17 @@ class LeadImportFailedRow(BaseModel):
     reason: str
 
 
+class LeadImportDeleteRow(BaseModel):
+    """Одна заявка, которой нет в новом файле — будет удалена при apply
+    (файл — источник истины, см. bulk_import_leads())."""
+
+    id: int
+    surname: str
+    name: str
+    event_distance: str
+    start_number: Optional[int] = None
+
+
 class LeadImportPreviewResponse(BaseModel):
     """Ответ POST /api/admin/leads/import/upload."""
 
@@ -126,10 +137,12 @@ class LeadImportPreviewResponse(BaseModel):
     total_rows: int
     to_update: int
     to_create: int
+    to_delete: int
     parse_errors: List[str]
     sample: List[LeadImportPreviewRow]
     unknown_headers: List[str] = []
     failed_rows: List[LeadImportFailedRow] = []
+    delete_sample: List[LeadImportDeleteRow] = []
 
 
 class LeadImportApplyResponse(BaseModel):
@@ -137,4 +150,5 @@ class LeadImportApplyResponse(BaseModel):
 
     updated: int
     created: int
+    deleted: int = 0
     errors: List[str]
