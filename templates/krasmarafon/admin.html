@@ -1264,10 +1264,14 @@
             const r = await fetch('/api/admin/db-events');
             if (!r.ok) return;
             const data = await r.json();
-            // Фото — только для дистанций Жары, кроме "2 км" (там нет элитного
-            // кластера и вообще нет возрастных категорий, см. вкладку «Возрастные группы»)
-            data.items
-                .filter(ev => ev.event_name === 'Жара' && ev.event_distance !== 2)
+            // Фото — только для дистанций Жары ТЕКУЩЕГО года, кроме "2 км" (там нет
+            // элитного кластера и вообще нет возрастных категорий, см. вкладку
+            // «Возрастные группы»). "Текущий год" — максимальный среди загруженных
+            // Жар, не хардкод конкретного года — само сдвинется на будущий сезон.
+            const zharaEvents = data.items.filter(ev => ev.event_name === 'Жара' && ev.event_distance !== 2);
+            const currentYear = zharaEvents.reduce((max, ev) => Math.max(max, ev.event_year), 0);
+            zharaEvents
+                .filter(ev => ev.event_year === currentYear)
                 .forEach(ev => {
                     const opt = document.createElement('option');
                     opt.value = ev.id;
