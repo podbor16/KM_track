@@ -327,8 +327,19 @@ function onGenderChange() {
 // Применяем фильтры к данным
 function applyFilters() {
     const genderFilter = getGenderFilterValue();
-    const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const distanceFilter = document.getElementById('distanceFilter').value;
+
+    // "2 км" — единая категория без деления по возрасту ("7 лет и старше",
+    // без брекетов в age_group_configs) — фильтр и колонку скрываем целиком,
+    // а не оставляем с единственной бесполезной опцией "Все".
+    const hideAgeGroup = distanceFilter === '2 км';
+    document.getElementById('ageGroupFilterGroup').style.display = hideAgeGroup ? 'none' : '';
+    document.getElementById('startListTable').classList.toggle('km-table--hide-age-group', hideAgeGroup);
+    if (hideAgeGroup) {
+        document.getElementById('ageGroupFilter').value = '';
+    }
+
+    const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
     
     console.log('Применение фильтров:', { genderFilter, ageGroupFilter, distanceFilter, surnameSearch, totalRunners: allRunners.length });
@@ -490,8 +501,14 @@ function renderStartList(runners) {
             }
         }
         
-        // Возрастная категория
-        let category = runner.category || 'Неизвестно';
+        // Возрастная категория. Пустая строка от бэкенда — легитимное "нет
+        // брекета для этого возраста/дистанции" (не то же самое, что явное
+        // "Неизвестно" — та строка приходит текстом при нераспознанной дате
+        // рождения и сюда не попадает, т.к. уже truthy). "Ошибка возраста" —
+        // границы для дистанции настроены, но возраст участника не попадает
+        // ни в одну (непочищенная регистрация) — выделяем визуально.
+        let category = runner.category || '—';
+        let categoryTagClass = category === 'Ошибка возраста' ? 'age-group-tag age-group-tag--error' : 'age-group-tag';
         
         // Город, клуб - заменяем null, 'null' и N/A на пустую строку
         let city = (runner.city && runner.city.toLowerCase() !== 'n/a' && runner.city.toLowerCase() !== 'null') ? runner.city : '';
@@ -505,7 +522,7 @@ function renderStartList(runners) {
             <td class="km-td km-td--c ${rowBg}">${birthYear}</td>
             <td class="km-td km-td--c ${rowBg}">${distance}</td>
             <td class="km-td km-td--c ${rowBg}"><span class="gender-tag ${genderClass}">${genderText}</span></td>
-            <td class="km-td km-td--c ${rowBg}"><span class="age-group-tag">${category}</span></td>
+            <td class="km-td km-td--c ${rowBg}"><span class="${categoryTagClass}">${category}</span></td>
             <td class="km-td km-td--l ${rowBg}">${city}</td>
             <td class="km-td km-td--l ${rowBg}">${club}</td>
         `;

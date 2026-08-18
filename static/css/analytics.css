@@ -194,6 +194,14 @@ h1 {
 .km-th--l { text-align: left; padding-left: 14px; }
 .km-th--sort { cursor: pointer; }
 .km-th--sort:hover { background: #c0234f; }
+
+/* На дистанциях без возрастных категорий (напр. "2 км" — единая группа
+   "7 лет и старше" без деления) колонка не несёт информации — скрываем
+   вместе с фильтром (см. analytics-start-list.js, applyFilters()) */
+#startListTable.km-table--hide-age-group th:nth-child(7),
+#startListTable.km-table--hide-age-group td:nth-child(7) {
+  display: none;
+}
 .km-tr { cursor: pointer; }
 .km-tr:hover .km-td { background: #e3f2fd !important; }
 .km-td {
@@ -368,6 +376,12 @@ h1 {
   font-weight: 600;
   background: #f0f0f0;
   color: #555;
+}
+/* Возраст участника не попадает ни в один настроенный брекет дистанции —
+   вероятно, непочищенная регистрация (напр. младше минимального возраста) */
+.age-group-tag--error {
+  background: #fde2e2;
+  color: #c0234f;
 }
 .page-title-event {
   text-align: center;

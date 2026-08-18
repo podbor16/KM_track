@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import src.analytics.db_results as db_results
 from src.analytics.db_results import (
-    get_age_group_label, calculate_age_group,
+    get_age_group_label,
     create_age_group, update_age_group, delete_age_group, list_age_groups,
 )
 
@@ -69,23 +69,40 @@ def test_open_ended_top_bracket(mock_get_conn):
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
-def test_falls_back_to_calculate_age_group_without_config(mock_get_conn):
-    """Для события/дистанции без настроенных границ — старый развёрнутый
-    формат, как раньше."""
+def test_empty_string_without_config(mock_get_conn):
+    """Для события/дистанции без настроенных границ — пустая строка, не
+    развёрнутый текст (calculate_age_group() как фоллбэк убран по всему
+    проекту, не только для Жары)."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
     cur.fetchall.return_value = []  # в age_group_configs пусто
 
     label = get_age_group_label("Ночной забег", "5 км", "1990-01-01", "Мужчина")
 
-    assert label == calculate_age_group("1990-01-01", "Мужчина")
-    assert "до 49" in label  # развёрнутый формат, не компактный
+    assert label == ''
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_age_error_when_age_outside_all_configured_brackets(mock_get_conn):
+    """Границы заданы, но возраст участника не попадает НИ В ОДИН из них
+    (напр. несовершеннолетний на дистанции, где брекеты начинаются с 18) —
+    явный маркер "Ошибка возраста" (сигнал непочищенной регистрации), не
+    пустая строка и не развёрнутый текст."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [
+        {"event_name": "Жара", "event_distance": "21.1 км", "sex": "M", "min_age": 18, "max_age": 24, "label": "М18-24"},
+    ]
+
+    label = get_age_group_label("Жара", "21.1 км", 15, "Мужчина")
+
+    assert label == 'Ошибка возраста'
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
 def test_falls_back_when_config_exists_for_other_event(mock_get_conn):
-    """Границы заданы для Жары — для другого события используется
-    дефолт, а не чужие границы."""
+    """Границы заданы для Жары — для другого события они не применяются
+    (используется общий фоллбэк "нет конфига", не чужие границы)."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
     cur.fetchall.return_value = [
@@ -94,7 +111,7 @@ def test_falls_back_when_config_exists_for_other_event(mock_get_conn):
 
     label = get_age_group_label("Ночной забег", "5 км", "1990-01-01", "Мужчина")
 
-    assert label != "М49"
+    assert label == ''
 
 
 @patch("src.analytics.db_results.get_pooled_connection")

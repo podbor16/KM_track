@@ -1048,8 +1048,16 @@ def _get_age_group_configs() -> dict:
 
 def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, sex: str = None) -> str:
     """Возрастная группа с учётом границ, заданных в /admin для конкретных
-    (event_name, event_distance); если для этой пары ничего не настроено —
-    падает на старый дефолт calculate_age_group() (развёрнутый формат)."""
+    (event_name, event_distance). Два разных случая "нет подходящего
+    брекета" различаются осознанно:
+    - для события/дистанции вообще не настроены границы (напр. "2 км" —
+      единая группа без деления по возрасту) — пустая строка, тут просто
+      нет понятия "категория";
+    - границы настроены, но возраст КОНКРЕТНОГО участника не попадает ни в
+      один из них (напр. регистрация младше официального минимального
+      возраста дистанции, ещё не вычищенная организатором) — это сигнал
+      реальной проблемы данных, а не "категория не нужна", поэтому явный
+      маркер "Ошибка возраста", а не тихая пустая строка."""
     age, is_male = _parse_age_and_sex(birthdate_or_age, sex)
     if age is None:
         return 'Неизвестно'
@@ -1060,8 +1068,9 @@ def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, 
         for min_age, max_age, label in brackets:
             if age >= min_age and (max_age is None or age <= max_age):
                 return label
+        return 'Ошибка возраста'
 
-    return calculate_age_group(birthdate_or_age, sex)
+    return ''
 
 
 def _invalidate_age_group_cache() -> None:
