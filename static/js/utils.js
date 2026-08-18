@@ -89,18 +89,27 @@ window.KMUtils = {
         return Infinity;
     },
 
-    // Числовой ключ сортировки возрастной группы: женщины 0-6, мужчины 10-16
+    // Возрастная группа бывает в двух форматах: старый развёрнутый
+    // ("женщины до 49 лет") и новый компактный ("Ж18-49", "М80+", настраивается
+    // по событию/дистанции в age_group_configs) — различаются регистром первой
+    // буквы (лат. "женщины"/"мужчины" строчные, компактный — прописные "Ж"/"М").
+    isFemaleCategory(cat) {
+        return !!cat && (cat.startsWith('женщины') || cat.startsWith('Ж'));
+    },
+    isMaleCategory(cat) {
+        return !!cat && (cat.startsWith('мужчины') || cat.startsWith('М'));
+    },
+
+    // Числовой ключ сортировки возрастной группы — понимает оба формата: сортирует
+    // по первому числу в строке (49/50/60/65/70/75 или 18/50/60.../80 и т.п.),
+    // это работает одинаково что для "женщины до 49 лет", что для "Ж18-49"/"М80+",
+    // не завязано на конкретный набор границ конкретного события.
     categoryOrder(cat) {
-        if (!cat) return 99;
-        const c = cat.toLowerCase();
-        const base = c.startsWith('женщин') ? 0 : 10;
-        if (c.includes('до 49'))                            return base + 1;
-        if (c.includes('50-59'))                            return base + 2;
-        if (c.includes('60-64'))                            return base + 3;
-        if (c.includes('65-69'))                            return base + 4;
-        if (c.includes('70-74'))                            return base + 5;
-        if (c.includes('75') || c.includes('65 лет и старше')) return base + 6;
-        return base + 7;
+        if (!cat) return 9999;
+        const base = this.isFemaleCategory(cat) ? 0 : (this.isMaleCategory(cat) ? 1000 : 2000);
+        const m = cat.match(/\d+/);
+        const age = m ? parseInt(m[0], 10) : 999;
+        return base + age;
     },
 
     // Извлекает числовое значение км из строки типа "10 км"
