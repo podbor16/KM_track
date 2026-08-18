@@ -268,6 +268,31 @@ def test_parse_xlsx_smoke():
     assert result.rows[0].event_year == 2027
 
 
+def test_parse_xlsx_with_native_date_typed_birthday_cell():
+    """Если колонка "Дата рождения" отформатирована в Excel как дата (не
+    текст), openpyxl отдаёт datetime.date/datetime, а не строку "01.05.1990"
+    — str(date(1985,3,11)) даёт "1985-03-11 00:00:00" (с временем), что
+    раньше браковалось как "не распознано ФИО/дата рождения". Найдено на
+    реальном импорте 2026-08-18 (3611 из 3627 строк потеряно)."""
+    import datetime
+    import io
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Фамилия", "Имя", "Дата рождения", "Событие", "Дистанция", "Год"])
+    ws.append(["Бляблин", "Дмитрий", datetime.date(1985, 3, 11), "Весна", "5 км", 2027])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    result = parse_tilda_export(buf.getvalue(), filename="export.xlsx")
+
+    assert result.failed_rows == []
+    assert len(result.rows) == 1
+    assert result.rows[0].surname == "Бляблин"
+    assert result.rows[0].birthday == "1985-03-11"
+
+
 # ---------------------------------------------------------------------------
 # Реальные заголовки боевой выгрузки Tilda (данные ниже — фейковые)
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ ImportResult.unknown_headers — сигнал, что Tilda добавила/п�
 колонку и это стоит проверить вручную, а не тихо потерять данные.
 """
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Optional
 import csv
 import io
@@ -147,13 +148,30 @@ def _read_csv_rows(file_bytes: bytes):
     return (rows[0], rows[1:]) if rows else ([], [])
 
 
+def _normalize_xlsx_cell(value):
+    """Ячейки с датой (напр. "Дата рождения", если колонка отформатирована
+    в Excel как дата) openpyxl отдаёт как datetime.datetime/date, не строку
+    — str(datetime(1985,3,11)) даёт "1985-03-11 00:00:00" (19 символов), что
+    convert_birthday()/проверка len(birthday)==10 не распознаёт (ожидается
+    голая "1985-03-11" или "11.03.1985"), и строка целиком браковалась как
+    "не распознано ФИО/дата рождения" — найдено на реальном импорте
+    2026-08-18 (3611 из 3627 строк). CSV этой проблемы не имеет — там ячейки
+    всегда текст."""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    return value
+
+
 def _read_xlsx_rows(file_bytes: bytes):
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     all_rows = list(wb.active.iter_rows(values_only=True))
     if not all_rows:
         return [], []
     headers = [str(h).strip() if h is not None else "" for h in all_rows[0]]
-    return headers, [list(r) for r in all_rows[1:]]
+    data_rows = [[_normalize_xlsx_cell(c) for c in r] for r in all_rows[1:]]
+    return headers, data_rows
 
 
 def _extract_event_info(get, col_map: dict, birthday: str):
