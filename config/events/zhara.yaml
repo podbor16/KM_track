@@ -14,8 +14,16 @@ distances:
     db_event_id: 116         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
+    checkpoint_distances: [0, 5.0, 6.0, 10.55, 14.65, 15.65, 20.2, 21.1]
+    checkpoints:
+      - {name: "Старт", distance_km: 0.0,   lat: 56.0126030, lon: 92.8936640}
+      - {name: "КТ1",   distance_km: 5.0,   lat: 56.022044,  lon: 92.923459}
+      - {name: "КТ2",   distance_km: 6.0,   lat: 56.017308,  lon: 92.919390}
+      - {name: "КТ3",   distance_km: 10.55, lat: 56.014238,  lon: 92.907493}
+      - {name: "КТ4",   distance_km: 14.65, lat: 56.022044,  lon: 92.923459}
+      - {name: "КТ5",   distance_km: 15.65, lat: 56.017308,  lon: 92.919390}
+      - {name: "КТ6",   distance_km: 20.2,  lat: 56.014238,  lon: 92.907493}
+      - {name: "Финиш", distance_km: 21.1,  lat: 56.0126030, lon: 92.8936640}
     gpx_file: "static/map/2026/zhara_21.gpx"            # ← заполнить перед стартом
     event_date: "2026-08-23"         # ← заполнить перед стартом
     route:
