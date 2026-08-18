@@ -59,6 +59,10 @@ class ImportRow:
                                  # строка ("Банковская карта" и т.п.); формат
                                  # разный, но колонка та же (leads.payment_system)
     is_name_suspicious: bool = False  # см. tilda_webhook.is_name_suspicious()
+    start_number: str = ""      # "Номер" — стартовый номер (bib), присвоенный
+                                 # организатором заранее (не результат гонки,
+                                 # см. migrations/add_leads_start_number.sql).
+                                 # Сырая строка, int-конвертация в bulk_import_leads()
 
 
 @dataclass
@@ -113,6 +117,10 @@ _HEADER_ALIASES = {
     "order_id": "order_id",
     "tranid": "transaction_id",
     "способ оплаты": "payment_system",
+    # Стартовый номер (bib) — не из штатной выгрузки Tilda, а из "обработанного"
+    # организатором файла (номера расставлены вручную поверх экспорта), см.
+    # migrations/add_leads_start_number.sql. Опциональная колонка.
+    "номер": "start_number",
 }
 
 # Реальные заголовки боевой выгрузки Tilda (32 колонки, см. заголовок файла
@@ -298,6 +306,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 transaction_id=str(get("transaction_id") or "").strip(),
                 payment_system=str(get("payment_system") or "").strip(),
                 is_name_suspicious=is_name_suspicious(surname, name),
+                start_number=str(get("start_number") or "").strip(),
             ))
         except Exception as e:
             reason = f"непредвиденная ошибка парсинга — {e}"

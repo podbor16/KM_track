@@ -197,10 +197,24 @@ h1 {
 
 /* На дистанциях без возрастных категорий (напр. "2 км" — единая группа
    "7 лет и старше" без деления) колонка не несёт информации — скрываем
-   вместе с фильтром (см. analytics-start-list.js, applyFilters()) */
-#startListTable.km-table--hide-age-group th:nth-child(7),
-#startListTable.km-table--hide-age-group td:nth-child(7) {
+   вместе с фильтром (см. analytics-start-list.js, applyFilters()).
+   Позиция 8, не 7 — колонка "Номер" (позиция 2) сдвинула всё на 1. */
+#startListTable.km-table--hide-age-group th:nth-child(8),
+#startListTable.km-table--hide-age-group td:nth-child(8) {
   display: none;
+}
+
+/* "Номер" (стартовый номер/bib) — есть только когда организатор прислал
+   уже обработанный файл с расставленными номерами (не в каждом импорте) —
+   скрыта по умолчанию, показывается только если хоть у кого-то есть
+   значение (см. analytics-start-list.js, applyFilters()) */
+#startListTable th:nth-child(2),
+#startListTable td:nth-child(2) {
+  display: none;
+}
+#startListTable.km-table--show-start-number th:nth-child(2),
+#startListTable.km-table--show-start-number td:nth-child(2) {
+  display: table-cell;
 }
 .km-tr { cursor: pointer; }
 .km-tr:hover .km-td { background: #e3f2fd !important; }

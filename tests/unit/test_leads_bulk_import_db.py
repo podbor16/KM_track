@@ -150,6 +150,71 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
 
 @patch("src.analytics.db_results.recompute_duplicate_flag")
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_includes_start_number(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(start_number="42")])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    assert insert_call.args[1]["start_number"] == 42
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_start_number_null_when_absent(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row()])  # start_number по умолчанию "" в _row()
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    assert insert_call.args[1]["start_number"] is None
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_applies_start_number_when_present(mock_get_conn):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [{"id": 101}]
+
+    bulk_import_leads([_row(start_number="7")])
+
+    start_number_calls = [
+        c for c in cur.execute.call_args_list
+        if "UPDATE leads SET start_number" in c.args[0]
+    ]
+    assert len(start_number_calls) == 1
+    assert start_number_calls[0].args[1] == [7, 101]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_preserves_start_number_when_absent(mock_get_conn):
+    """Номер не в каждом импорте — повторный импорт файла БЕЗ колонки
+    "Номер" не должен затирать уже проставленный номер у существующей
+    заявки (в отличие от club/phone и т.п., где "пусто в файле" = "стереть",
+    номер — намеренное исключение из этого правила)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [{"id": 101}]
+
+    bulk_import_leads([_row()])  # start_number по умолчанию "" в _row()
+
+    start_number_calls = [
+        c for c in cur.execute.call_args_list
+        if "UPDATE leads SET start_number" in c.args[0]
+    ]
+    assert start_number_calls == []
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_new_lead_insert_maps_empty_birthday_to_sentinel(mock_get_conn, mock_recompute):
     """Дата рождения необязательна при импорте (2026-08-18) — ImportRow с
     birthday="" (parse_tilda_export больше не отбраковывает такие строки).

@@ -56,6 +56,7 @@ class LeadAdminItem(BaseModel):
     is_new: Optional[int] = None
     is_new_event: Optional[int] = None
     category: Optional[str] = None
+    start_number: Optional[int] = None
 
     @model_validator(mode='before')
     @classmethod

@@ -339,6 +339,13 @@ function applyFilters() {
         document.getElementById('ageGroupFilter').value = '';
     }
 
+    // "Номер" (стартовый номер/bib) — не в каждом импорте, показываем колонку
+    // только если хоть у кого-то из загруженных участников есть значение
+    // (проверяем по ВСЕМ участникам события, не только по отфильтрованным —
+    // чтобы колонка не мигала при смене фильтров пола/дистанции/группы).
+    const hasStartNumbers = allRunners.some(r => r.start_number);
+    document.getElementById('startListTable').classList.toggle('km-table--show-start-number', hasStartNumbers);
+
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
     
@@ -402,6 +409,11 @@ function _sortArray(arr) {
             case 'bib':
                 valA = a.bib || 0;
                 valB = b.bib || 0;
+                break;
+            case 'start_number':
+                // Без номера — в конец списка при сортировке по возрастанию
+                valA = a.start_number || Infinity;
+                valB = b.start_number || Infinity;
                 break;
             case 'surname':
                 valA = (a.surname || '').toLowerCase();
@@ -518,6 +530,7 @@ function renderStartList(runners) {
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
         let rowHTML = `
             <td class="km-td km-td--c ${rowBg}">${index + 1}</td>
+            <td class="km-td km-td--c ${rowBg}">${runner.start_number || ''}</td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div></td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${firstName}</div></td>
             <td class="km-td km-td--c ${rowBg}">${birthYear}</td>
@@ -558,10 +571,20 @@ function exportStartListPdf() {
         return s !== 0 ? s : (a.name || '').localeCompare(b.name || '', 'ru');
     });
 
+    // "Номер" — только если хоть у кого-то в выгрузке есть значение (см. тот
+    // же принцип, что и колонка на самой странице, applyFilters())
+    const showStartNumber = sorted.some(r => r.start_number);
+    const numberCell = r => showStartNumber ? `<td>${r.start_number || ''}</td>` : '';
+    const numberHeader = showStartNumber ? '<th>Номер</th>' : '';
+
     const rows = sorted.map((r, i) => {
-        const bYear = r.birthday ? String(r.birthday).replace(/^(\d{4}).*/, '$1') : '—';
+        // "1900-01-01" — сентинел БД "дата не указана" (birthday необязателен
+        // при импорте), не настоящий год рождения
+        const bYear = (r.birthday && !String(r.birthday).startsWith('1900'))
+            ? String(r.birthday).replace(/^(\d{4}).*/, '$1') : '—';
         return `<tr>
             <td>${i + 1}</td>
+            ${numberCell(r)}
             <td>${r.surname || ''}</td>
             <td>${r.name || ''}</td>
             <td>${bYear}</td>
@@ -585,7 +608,7 @@ function exportStartListPdf() {
 <h2>${title}</h2>
 <p>${sorted.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
 <table><thead><tr>
-  <th>№</th><th>Фамилия</th><th>Имя</th><th>Год рожд.</th>
+  <th>№</th>${numberHeader}<th>Фамилия</th><th>Имя</th><th>Год рожд.</th>
   <th>Дистанция</th><th>Пол</th><th>Возрастная группа</th><th>Город</th>
 </tr></thead><tbody>${rows}</tbody></table>
 <script>window.onload=()=>window.print();<\/script>

@@ -64,6 +64,30 @@ def test_parse_falls_back_to_selected_event_when_product_text_is_bare_distance()
     assert row.event_year == 2026
 
 
+def test_parse_captures_start_number_column():
+    """"Номер" — стартовый номер (bib), присвоенный заранее организатором в
+    "обработанном" файле (не в штатной выгрузке Tilda). Опциональная
+    колонка, читается как есть в start_number."""
+    csv_text = (
+        "Номер,Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "42,Иванов,Иван,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert len(result.rows) == 1
+    assert result.rows[0].start_number == "42"
+
+
+def test_parse_missing_start_number_column_defaults_to_empty():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert result.rows[0].start_number == ""
+
+
 def test_parse_normalizes_comma_decimal_in_fallback_distance_column():
     """RU-локаль Excel иногда даёт запятую как десятичный разделитель
     ("21,1 км") — приводим к точке, иначе значение не совпадёт ни с одним

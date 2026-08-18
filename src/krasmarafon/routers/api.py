@@ -410,6 +410,7 @@ async def get_registered_runners(
                 birthday=str(bday) if bday else '',
                 distance=str(r.get('event_distance', r.get('distance', ''))).strip(),
                 registration_date=None,
+                start_number=r.get('start_number'),
             ))
 
         return RegisteredRunnersListResponse(total=len(runners), runners=runners)

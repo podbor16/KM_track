@@ -1718,11 +1718,24 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                 # значение (имя чистое), а не "данных нет".
                 values['is_name_suspicious'] = int(row.is_name_suspicious)
                 set_clause = ", ".join(f"{c} = %s" for c in _IMPORT_UPDATABLE)
+                # start_number — намеренно ВНЕ _IMPORT_UPDATABLE/блока "or None"
+                # выше: та логика на пустом значении из файла тихо стирает
+                # существующее значение в БД (годится для club/phone и т.п. —
+                # "этот импорт теперь источник истины", но не для номера,
+                # который может быть проставлен только в одном из нескольких
+                # файлов, гуляющих между организатором/оператором). Обновляем
+                # только когда в ЭТОЙ строке номер реально есть.
+                start_number = int(row.start_number) if row.start_number.strip().isdigit() else None
                 for m in matches:
                     cur.execute(
                         f"UPDATE leads SET {set_clause} WHERE id = %s",
                         [values[c] for c in _IMPORT_UPDATABLE] + [m['id']],
                     )
+                    if start_number is not None:
+                        cur.execute(
+                            "UPDATE leads SET start_number = %s WHERE id = %s",
+                            [start_number, m['id']],
+                        )
                     updated += 1
             else:
                 def _float_or_zero(v):
@@ -1738,14 +1751,14 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         surname, name, sex, city, club, birthday, email, phone,
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
-                        is_name_suspicious, client_id, event_id, is_duplicate,
+                        is_name_suspicious, start_number, client_id, event_id, is_duplicate,
                         status, is_new, is_new_event
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
-                        %(is_name_suspicious)s, 0, 0, 0, 0, 0, 0
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0
                     )
                     """,
                     {
@@ -1766,6 +1779,7 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                         'transaction_id': row.transaction_id or '',
                         'payment_system': row.payment_system or '',
                         'is_name_suspicious': int(row.is_name_suspicious),
+                        'start_number': int(row.start_number) if row.start_number.strip().isdigit() else None,
                     },
                 )
                 new_id = cur.lastrowid
