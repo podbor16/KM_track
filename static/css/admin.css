@@ -6,7 +6,7 @@
 /* ------- Page layout ------- */
 
 .admin-page {
-    max-width: 960px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 24px 16px 48px;
 }
@@ -325,10 +325,6 @@
 .admin-leads-actions {
     display: flex;
     gap: 8px;
-}
-
-.admin-page--wide {
-    max-width: 100%;
 }
 
 .admin-leads-table {
