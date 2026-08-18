@@ -60,6 +60,7 @@ def test_upsert_participant_photo_returns_saved_row(mock_get_conn):
     conn.commit.assert_called_once()
     insert_call = cur.execute.call_args_list[0]
     assert "ON DUPLICATE KEY UPDATE" in insert_call.args[0]
+    assert insert_call.args[1] == (116, 245, "https://example.com/a.jpg")
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
