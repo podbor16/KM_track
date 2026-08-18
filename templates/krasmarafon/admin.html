@@ -43,6 +43,7 @@
             <button class="admin-tab" onclick="switchTab('loader', this)">Загрузчик</button>
             <button class="admin-tab" onclick="switchTab('leads', this)">Стартовый список</button>
             <button class="admin-tab" onclick="switchTab('age-groups', this)">Возрастные группы</button>
+            <button class="admin-tab" onclick="switchTab('photos', this)">Фото участников</button>
             <button class="admin-tab" onclick="switchTab('analytics', this)">Аналитика</button>
         </div>
 
@@ -162,6 +163,28 @@
             </div>
         </div>
         <!-- ================================================================ -->
+        <!-- ВКЛАДКА: ФОТО УЧАСТНИКОВ (live-топ-10 трансляции)                -->
+        <!-- ================================================================ -->
+        <div id="tab-photos" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Ссылки на фото участников для live-топ-10 трансляции Жары. У кого нет
+                фото — в JSON автоматически подставляется общая заглушка. Номер
+                участника — это стартовый номер (bib) из результатов, не номер заявки.
+            </div>
+
+            <div class="admin-leads-toolbar">
+                <div class="admin-leads-filters">
+                    <select id="ph-event" class="admin-select" onchange="loadParticipantPhotos()">
+                        <option value="">— событие —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="photos-content">
+                <div class="admin-loading">Выберите событие</div>
+            </div>
+        </div>
+        <!-- ================================================================ -->
         <!-- ВКЛАДКА: АНАЛИТИКА (DataLens)                                   -->
         <!-- ================================================================ -->
         <div id="tab-analytics" class="admin-tab-content" style="display:none">
@@ -245,6 +268,7 @@
             if (name === 'loader') loadLoader();
             if (name === 'leads') loadLeadsTab();
             if (name === 'age-groups') loadAgeGroupsTab();
+            if (name === 'photos') loadPhotosTab();
             if (name === 'analytics') loadAnalyticsTab();
         }
     }
@@ -1229,6 +1253,114 @@
             loadAgeGroups();
         } catch(e) {
             alert('Ошибка создания: ' + e.message);
+        }
+    }
+
+    // ========================================================================
+    // Photos tab — ссылки на фото участников для live-топ-10 трансляции
+    // ========================================================================
+
+    async function loadPhotosTab() {
+        const sel = document.getElementById('ph-event');
+        try {
+            const r = await fetch('/api/admin/db-events');
+            if (!r.ok) return;
+            const data = await r.json();
+            data.items.forEach(ev => {
+                const opt = document.createElement('option');
+                opt.value = ev.id;
+                opt.textContent = `${ev.event_name} ${ev.event_distance} км (${ev.event_year})`;
+                sel.appendChild(opt);
+            });
+        } catch(e) { /* silent */ }
+    }
+
+    async function loadParticipantPhotos() {
+        const eventId = document.getElementById('ph-event').value;
+        const content = document.getElementById('photos-content');
+        if (!eventId) {
+            content.innerHTML = '<div class="admin-loading">Выберите событие</div>';
+            return;
+        }
+        content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
+        try {
+            const r = await fetch(`/api/admin/participant-photos?event_id=${eventId}`);
+            const data = await r.json();
+            renderParticipantPhotos(data.items);
+        } catch(e) {
+            content.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        }
+    }
+
+    function renderParticipantPhotos(items) {
+        const content = document.getElementById('photos-content');
+        const rows = items.map(row => `
+            <tr data-id="${row.id}">
+                <td>${row.start_number}</td>
+                <td><input type="text" class="admin-select ph-url" value="${row.photo_url}" style="width:320px"></td>
+                <td>
+                    <button class="km-btn km-btn--secondary" onclick="saveParticipantPhotoRow(${row.start_number}, this)">Сохранить</button>
+                    <button class="km-btn km-btn--secondary" onclick="removeParticipantPhoto(${row.id})">Удалить</button>
+                </td>
+            </tr>
+        `).join('');
+        content.innerHTML = `
+            <table class="admin-loader-table">
+                <thead><tr><th>Номер</th><th>Ссылка на фото</th><th></th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3">Фото ещё не добавлены</td></tr>'}</tbody>
+            </table>
+            <div class="admin-leads-toolbar" style="margin-top:8px">
+                <input type="number" class="admin-select" id="ph-new-number" placeholder="Номер участника" style="width:140px">
+                <input type="text" class="admin-select" id="ph-new-url" placeholder="Ссылка на фото" style="width:320px">
+                <button class="km-btn km-btn--primary" onclick="addParticipantPhoto()">Сохранить</button>
+            </div>
+        `;
+    }
+
+    async function saveParticipantPhotoRow(startNumber, btn) {
+        const tr = btn.closest('tr');
+        const photo_url = tr.querySelector('.ph-url').value.trim();
+        const eventId = parseInt(document.getElementById('ph-event').value, 10);
+        if (!photo_url) { alert('Заполните ссылку'); return; }
+        try {
+            const r = await fetch('/api/admin/participant-photos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_id: eventId, start_number: startNumber, photo_url }),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadParticipantPhotos();
+        } catch(e) {
+            alert('Ошибка сохранения: ' + e.message);
+        }
+    }
+
+    async function removeParticipantPhoto(id) {
+        if (!confirm('Удалить это фото?')) return;
+        try {
+            const r = await fetch(`/api/admin/participant-photos/${id}`, { method: 'DELETE' });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadParticipantPhotos();
+        } catch(e) {
+            alert('Ошибка удаления: ' + e.message);
+        }
+    }
+
+    async function addParticipantPhoto() {
+        const eventId = parseInt(document.getElementById('ph-event').value, 10);
+        const start_number = parseInt(document.getElementById('ph-new-number').value, 10);
+        const photo_url = document.getElementById('ph-new-url').value.trim();
+        if (isNaN(start_number) || !photo_url) { alert('Заполните номер и ссылку'); return; }
+        try {
+            const r = await fetch('/api/admin/participant-photos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_id: eventId, start_number, photo_url }),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            loadParticipantPhotos();
+        } catch(e) {
+            alert('Ошибка сохранения: ' + e.message);
         }
     }
 
