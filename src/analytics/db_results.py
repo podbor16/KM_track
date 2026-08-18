@@ -1672,10 +1672,15 @@ def _find_lead_matches(cur, row) -> list:
         if matches:
             return matches
 
+    # birthday NOT NULL в схеме, '' невалиден как DATE для MySQL (ошибка 1525
+    # "Incorrect DATE value") — тот же сентинел '1900-01-01', что и при INSERT
+    # в bulk_import_leads(), иначе сравнение в WHERE падает при пустой дате
+    # (дата рождения необязательна при импорте с 2026-08-18).
+    row_birthday = row.birthday or '1900-01-01'
     cur.execute(
         "SELECT id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
         "AND event_name=%s AND event_year=%s AND event_distance=%s",
-        (row.surname, row.name, row.birthday, row.event_name, row.event_year, row.event_distance),
+        (row.surname, row.name, row_birthday, row.event_name, row.event_year, row.event_distance),
     )
     return cur.fetchall()
 

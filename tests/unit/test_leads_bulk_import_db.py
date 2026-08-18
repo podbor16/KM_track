@@ -387,6 +387,25 @@ def test_preview_marks_unmatched_row_as_create(mock_get_conn):
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_preview_handles_row_with_empty_birthday(mock_get_conn):
+    """Реальный инцидент (Жара 2026, 2026-08-18): дата рождения необязательна
+    при импорте с этой же сессии — но _find_lead_matches() передавал
+    row.birthday="" напрямую в SQL-сравнение с DATE-колонкой, что MySQL
+    отвергает как невалидную дату (ошибка 1525 "Incorrect DATE value: ''"),
+    роняя весь /api/admin/leads/import/upload с 500. Фикс — тот же сентинел
+    '1900-01-01', что уже используется при INSERT."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+
+    preview = preview_leads_import_matches([_row(birthday="")])
+
+    assert preview[0]["will"] == "create"
+    select_call = cur.execute.call_args_list[0]
+    assert "1900-01-01" in select_call.args[1]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_preview_no_connection_returns_unknown(mock_get_conn):
     mock_get_conn.return_value = None
     preview = preview_leads_import_matches([_row()])
