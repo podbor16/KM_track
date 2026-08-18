@@ -277,6 +277,33 @@ def test_matched_row_update_does_not_touch_payment_fields(mock_get_conn):
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_writes_empty_string_not_null_for_not_null_columns(mock_get_conn):
+    """Реальный инцидент (Жара 2026, 2026-08-18): leads.sex/city/email —
+    NOT NULL в схеме. Строка с пустыми sex/city/email в файле раньше писала
+    None в UPDATE → MySQL 1048 "Column 'x' cannot be null" → исключение →
+    ОТКАТ ВСЕГО импорта (один conn.commit() на весь файл), включая уже
+    обработанные строки других дистанций — так стартовые номера для 5 км/
+    2 км массово пропадали из-за одной строки без email/города где-то в
+    файле. club/phone — NULLable, пустое значение там по-прежнему стирает
+    старое (это осознанное поведение, не баг)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(sex="", city="", club="", email="", phone="")])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    sql, params = update_call.args
+    columns = [c.strip().split(" = ")[0] for c in sql.split("SET", 1)[1].split("WHERE")[0].split(",")]
+    values_by_col = dict(zip(columns, params))
+    assert values_by_col["sex"] == ""
+    assert values_by_col["city"] == ""
+    assert values_by_col["email"] == ""
+    assert values_by_col["club"] is None
+    assert values_by_col["phone"] is None
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_matched_row_update_applies_club(mock_get_conn):
     """club — контактные данные (как city/phone), не идентификационный
     признак: повторный импорт должен обновлять его при совпадении."""

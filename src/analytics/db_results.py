@@ -1648,6 +1648,15 @@ def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
 
 
 _IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance', 'is_name_suspicious')
+# club/phone — NULLable в схеме leads, пустое значение из файла осознанно
+# стирает старое (организатор убрал контакт). surname/name/sex/city/email —
+# NOT NULL: подстановка None вместо '' роняла UPDATE с ошибкой MySQL 1048
+# "Column 'x' cannot be null", а поскольку commit() один на весь импорт —
+# откатывался ВЕСЬ файл целиком, включая уже обработанные строки других
+# дистанций (реальный инцидент, Жара 2026, 2026-08-18: "Column 'city'
+# cannot be null" и "Column 'email' cannot be null" в логах — из-за одной
+# такой строки не применился весь стартовый номер для 5 км/2 км).
+_IMPORT_NULLABLE_ON_EMPTY = {'club', 'phone'}
 
 
 def _find_lead_matches(cur, row) -> list:
@@ -1766,8 +1775,11 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
             present_ids.update(m['id'] for m in matches)
 
             if matches:
-                values = {c: (getattr(row, c) or None) for c in _IMPORT_UPDATABLE}
-                values['event_distance'] = row.event_distance  # не-NULL поле
+                values = {
+                    c: (getattr(row, c) or None) if c in _IMPORT_NULLABLE_ON_EMPTY else (getattr(row, c) or '')
+                    for c in _IMPORT_UPDATABLE
+                }
+                values['event_distance'] = row.event_distance  # не-NULL поле, всегда непустое (см. parse_tilda_export)
                 # is_name_suspicious — bool/int, а не текстовое поле: "or None"
                 # выше превратил бы False/0 в NULL, хотя False — валидное
                 # значение (имя чистое), а не "данных нет".
