@@ -287,13 +287,19 @@ def _seconds_to_pace(total_seconds: Optional[float], distance_km: Optional[float
 class RaceLoader:
     """Оптимизированный загрузчик результатов в двух режимах"""
 
+    # Класс-дефолт: страхует объекты, созданные через __new__ в обход __init__
+    # (см. tests/unit/test_bulk_upsert.py::make_loader) от AttributeError.
+    broadcast_json_path: Optional[str] = None
+
     def __init__(self, event_id: int, logger: logging.LoggerAdapter,
                  copernico_race_id: Optional[str] = None,
                  copernico_login: Optional[str] = None,
                  copernico_preset: Optional[str] = None,
                  copernico_event: Optional[str] = None,
-                 preset_cfg: Optional[Dict] = None):
+                 preset_cfg: Optional[Dict] = None,
+                 broadcast_json_path: Optional[str] = None):
         self.event_id = event_id
+        self.broadcast_json_path = broadcast_json_path
         self.logger = logger
         self.connection = None
         self.cursor = None
@@ -678,6 +684,8 @@ class RaceLoader:
                     self._recalculate_ranks()
                 if updated_s > 0:
                     self._recalculate_segment_ranks()
+                if self.broadcast_json_path and (updated_r > 0 or updated_s > 0):
+                    self._maybe_write_broadcast_json()
                 rank_t = time.time() - t_rank
 
                 cycle_time = time.time() - cycle_start
@@ -736,6 +744,18 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено results: {self.updated_results_count} записей")
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
+
+    def _maybe_write_broadcast_json(self) -> None:
+        """Обновляет live-JSON топ-10 по отметкам для трансляции (см.
+        src/krasmarafon/services/live_top10_export.py). Ошибка здесь не
+        должна останавливать continuous_mode() — тот же принцип изоляции,
+        что уже применён для единичных сбоев пересчёта (см. урок про
+        avg_speed_kmh на Siberman)."""
+        try:
+            from src.krasmarafon.services.live_top10_export import generate_top10_json
+            generate_top10_json(self.connection, self.event_id, self.broadcast_json_path)
+        except Exception as e:
+            self.logger.error(f"⚠️ Не удалось обновить broadcast JSON: {e}")
 
     def _build_kt_field_map_from_preset(self) -> List[Optional[str]]:
         """Построить список КТ-полей (kt1..kt7) из preset-конфига."""
@@ -1436,6 +1456,13 @@ def main():
     )
 
     parser.add_argument(
+        '--broadcast-json',
+        type=str,
+        default=None,
+        help='Путь для live-JSON топ-10 по отметкам (для трансляции); если не задан — не генерируется'
+    )
+
+    parser.add_argument(
         '--debug',
         action='store_true',
         help='Показывать DEBUG логи (какие поля изменяются)'
@@ -1525,6 +1552,7 @@ def main():
         copernico_preset=copernico_preset,
         copernico_event=copernico_event,
         preset_cfg=preset_cfg,
+        broadcast_json_path=args.broadcast_json,
     )
 
     try:
