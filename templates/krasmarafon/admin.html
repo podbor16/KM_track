@@ -1264,12 +1264,16 @@
             const r = await fetch('/api/admin/db-events');
             if (!r.ok) return;
             const data = await r.json();
-            data.items.forEach(ev => {
-                const opt = document.createElement('option');
-                opt.value = ev.id;
-                opt.textContent = `${ev.event_name} ${ev.event_distance} км (${ev.event_year})`;
-                sel.appendChild(opt);
-            });
+            // Фото — только для дистанций Жары, кроме "2 км" (там нет элитного
+            // кластера и вообще нет возрастных категорий, см. вкладку «Возрастные группы»)
+            data.items
+                .filter(ev => ev.event_name === 'Жара' && ev.event_distance !== 2)
+                .forEach(ev => {
+                    const opt = document.createElement('option');
+                    opt.value = ev.id;
+                    opt.textContent = `${ev.event_name} ${ev.event_distance} км (${ev.event_year})`;
+                    sel.appendChild(opt);
+                });
         } catch(e) { /* silent */ }
     }
 
@@ -1308,7 +1312,7 @@
                 <tbody>${rows || '<tr><td colspan="3">Фото ещё не добавлены</td></tr>'}</tbody>
             </table>
             <div class="admin-leads-toolbar" style="margin-top:8px">
-                <input type="number" class="admin-select" id="ph-new-number" placeholder="Номер участника" style="width:140px">
+                <input type="number" class="admin-select" id="ph-new-number" placeholder="Номер участника" style="width:180px">
                 <input type="text" class="admin-select" id="ph-new-url" placeholder="Ссылка на фото" style="width:320px">
                 <button class="km-btn km-btn--primary" onclick="addParticipantPhoto()">Сохранить</button>
             </div>
