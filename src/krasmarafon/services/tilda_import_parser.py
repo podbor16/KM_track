@@ -250,11 +250,15 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
             name = normalize_name(str(get("name") or "").strip())
             birthday_raw = str(get("birthday") or "").strip()
             birthday = convert_birthday(birthday_raw)
-            if not surname or not name or not birthday or len(birthday) != 10:
-                reason = (
-                    f"не распознано ФИО/дата рождения "
-                    f"(surname={surname!r}, name={name!r}, birthday={birthday_raw!r})"
-                )
+            if len(birthday) != 10:
+                # Дата рождения не указана/не распознана — не блокируем
+                # импорт целиком из-за одного поля: просто нет данных для
+                # возраста/категории (get_age_group_label() уже отдаёт
+                # "Неизвестно" при отсутствующей дате), колонка "Год" на
+                # /start_list для такой строки будет пустой.
+                birthday = ""
+            if not surname or not name:
+                reason = f"не распознано ФИО (surname={surname!r}, name={name!r})"
                 result.errors.append(f"строка {idx}: {reason} — строка пропущена")
                 result.failed_rows.append({
                     "row_number": idx, "surname": surname, "name": name,

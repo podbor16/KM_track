@@ -469,9 +469,10 @@ function renderStartList(runners) {
         let firstName = runner.name || 'N/A';
         let lastName = runner.surname || 'N/A';
 
-        // Год рождения
+        // Год рождения. "1900-01-01" — сентинел БД для "дата не указана"
+        // (leads.birthday NOT NULL DEFAULT '1900-01-01'), не настоящий год.
         let birthYear = 'N/A';
-        if (runner.birthday) {
+        if (runner.birthday && !String(runner.birthday).startsWith('1900')) {
             try {
                 const dateStr = runner.birthday;
                 const year = new Date(dateStr).getFullYear();

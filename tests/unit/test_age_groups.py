@@ -1,5 +1,6 @@
 """Тесты для настраиваемых возрастных групп (age_group_configs) —
 get_age_group_label() и CRUD (list/create/update/delete_age_group)."""
+import datetime
 from unittest.mock import MagicMock, patch
 
 import src.analytics.db_results as db_results
@@ -130,6 +131,15 @@ def test_female_uses_female_brackets(mock_get_conn):
 
 def test_no_birthday_returns_unknown():
     assert get_age_group_label("Жара", "5 км", None, "Мужчина") == "Неизвестно"
+
+
+def test_sentinel_1900_birthday_returns_unknown_not_126_years_old():
+    """leads.birthday NOT NULL DEFAULT '1900-01-01' — сентинел "дата не
+    указана" (регистрация без даты рождения, необязательное поле с
+    2026-08-18), не настоящий возраст. Раньше давало age=126, которое
+    попадало в любой открытый верхний брекет (напр. "80+")."""
+    assert get_age_group_label("Жара", "5 км", "1900-01-01", "Мужчина") == "Неизвестно"
+    assert get_age_group_label("Жара", "5 км", datetime.date(1900, 1, 1), "Мужчина") == "Неизвестно"
 
 
 # --- CRUD --------------------------------------------------------------

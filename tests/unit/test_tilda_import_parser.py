@@ -140,17 +140,21 @@ def test_parse_computes_is_name_suspicious_latin_name():
     assert result.rows[0].is_name_suspicious is True
 
 
-def test_parse_bad_birthday_collected_as_error_not_raised():
+def test_parse_bad_birthday_does_not_block_row_just_leaves_it_empty():
+    """Дата рождения необязательна (2026-08-18) — нераспознанная/отсутствующая
+    дата не отбраковывает строку целиком, раз ФИО и событие/дистанция
+    определены. birthday в результате — пустая строка (не "не дата")."""
     csv_text = (
         "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
         "Иванов,Иван,не дата,Весна,5 км,2027\r\n"
     )
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
 
-    assert result.rows == []
+    assert result.errors == []
     assert result.total_rows == 1
-    assert len(result.errors) == 1
-    assert "строка 2" in result.errors[0]
+    assert len(result.rows) == 1
+    assert result.rows[0].surname == "Иванов"
+    assert result.rows[0].birthday == ""
 
 
 def test_parse_no_event_columns_at_all_collected_as_row_error():
@@ -225,18 +229,20 @@ def test_parse_event_error_populates_failed_rows_with_surname_and_reason():
     assert "какая-то нераспознаваемая строка" in fr["reason"]
 
 
-def test_parse_birthday_error_populates_failed_rows_with_whatever_was_parsed():
+def test_parse_missing_name_still_fails_even_with_bad_birthday():
+    """Дата рождения необязательна, но ФИО — по-прежнему обязательно;
+    строка без фамилии остаётся ошибкой независимо от даты рождения."""
     csv_text = (
         "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
-        "Иванов,Иван,не дата,Весна,5 км,2027\r\n"
+        ",Иван,не дата,Весна,5 км,2027\r\n"
     )
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert len(result.failed_rows) == 1
     fr = result.failed_rows[0]
     assert fr["row_number"] == 2
-    assert fr["surname"] == "Иванов"
+    assert fr["surname"] == ""
     assert fr["name"] == "Иван"
-    assert "не дата" in fr["reason"]
+    assert "не распознано ФИО" in fr["reason"]
 
 
 def test_parse_successful_rows_do_not_appear_in_failed_rows():

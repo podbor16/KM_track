@@ -981,16 +981,25 @@ def _parse_age_and_sex(birthdate_or_age, sex: str = None):
     age = None
 
     if isinstance(birthdate_or_age, (datetime.date, datetime.datetime)):
-        age = datetime.datetime.now().year - birthdate_or_age.year
+        if birthdate_or_age.year == 1900:
+            # Сентинел "дата рождения неизвестна" (leads.birthday NOT NULL
+            # DEFAULT '1900-01-01', bulk_import_leads() — регистрация без
+            # указанной даты) — не настоящий возраст 126 лет.
+            age = None
+        else:
+            age = datetime.datetime.now().year - birthdate_or_age.year
     elif isinstance(birthdate_or_age, str):
-        try:
-            birth_date = datetime.datetime.strptime(birthdate_or_age[:10], '%Y-%m-%d')
-            age = datetime.datetime.now().year - birth_date.year
-        except Exception:
+        if birthdate_or_age[:4] == '1900':
+            age = None
+        else:
             try:
-                age = int(birthdate_or_age)
+                birth_date = datetime.datetime.strptime(birthdate_or_age[:10], '%Y-%m-%d')
+                age = datetime.datetime.now().year - birth_date.year
             except Exception:
-                age = None
+                try:
+                    age = int(birthdate_or_age)
+                except Exception:
+                    age = None
     elif isinstance(birthdate_or_age, int):
         age = birthdate_or_age
 
@@ -1741,7 +1750,12 @@ def bulk_import_leads(rows: list) -> Dict[str, Any]:
                     """,
                     {
                         'surname': row.surname, 'name': row.name, 'sex': row.sex or '',
-                        'city': row.city or '', 'club': row.club or '', 'birthday': row.birthday,
+                        'city': row.city or '', 'club': row.club or '',
+                        # birthday NOT NULL в схеме — '1900-01-01' тот же сентинел
+                        # "дата неизвестна", что уже подразумевает DEFAULT колонки;
+                        # задаём явно, а не полагаемся на DEFAULT (сработал бы,
+                        # только если колонку вообще не передавать в INSERT).
+                        'birthday': row.birthday or '1900-01-01',
                         'email': row.email or 'example@mail.ru', 'phone': row.phone or None,
                         'event_name': row.event_name, 'event_distance': row.event_distance,
                         'event_year': row.event_year,

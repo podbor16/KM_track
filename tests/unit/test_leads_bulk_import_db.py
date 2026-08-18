@@ -150,6 +150,26 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
 
 @patch("src.analytics.db_results.recompute_duplicate_flag")
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_maps_empty_birthday_to_sentinel(mock_get_conn, mock_recompute):
+    """Дата рождения необязательна при импорте (2026-08-18) — ImportRow с
+    birthday="" (parse_tilda_export больше не отбраковывает такие строки).
+    leads.birthday NOT NULL — явно подставляем сентинел '1900-01-01', не
+    полагаясь на DEFAULT колонки (сработал бы только без явного значения
+    в INSERT)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(birthday="")])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    assert insert_call.args[1]["birthday"] == "1900-01-01"
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_new_lead_insert_handles_missing_payment_fields(mock_get_conn, mock_recompute):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
