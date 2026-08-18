@@ -402,6 +402,7 @@ function renderDistanceSwitcher(distances, activeDist) {
                 data-gpx="${d.gpx_file ? '/' + d.gpx_file : ''}"
                 data-route-type="${d.route_type || 'loop'}"
                 data-label="${d.distance}"
+                data-distance-km="${d.distance_km ?? 0}"
                 data-laps="${d.laps ?? 1}"
                 data-checkpoints="${encodeURIComponent(JSON.stringify(d.checkpoints || []))}"
                 data-decorative="${encodeURIComponent(JSON.stringify(d.decorative_checkpoints || []))}">
@@ -417,23 +418,27 @@ function renderDistanceSwitcher(distances, activeDist) {
             const gpx = btn.dataset.gpx;
             const routeType = btn.dataset.routeType;
             const label = btn.dataset.label || '';
+            const distanceKm = parseFloat(btn.dataset.distanceKm) || 0;
             const laps = parseInt(btn.dataset.laps) || 1;
             const checkpoints = JSON.parse(decodeURIComponent(btn.dataset.checkpoints || '%5B%5D'));
             const decorative = JSON.parse(decodeURIComponent(btn.dataset.decorative || '%5B%5D'));
             container.querySelectorAll('.dist-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            switchDistance(eventId, gpx, routeType, label, laps, checkpoints, decorative);
+            switchDistance(eventId, gpx, routeType, label, laps, checkpoints, decorative, distanceKm);
         });
     });
 }
 
-async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, checkpoints = [], decorativeCheckpoints = []) {
+async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, checkpoints = [], decorativeCheckpoints = [], distanceKm = 0) {
     CONFIG.EVENT_ID = eventId;
     CONFIG.GPX_FILE = gpxFile;
     CONFIG.LAPS = laps;
     if (label) CONFIG.CURRENT_DISTANCE = label;
     eventCheckpoints = checkpoints;
     eventDecorativeCheckpoints = decorativeCheckpoints;
+    // Нужно ДО reloadRoute()/drawCheckpointMarkers() — та же причина, что и
+    // при первой загрузке страницы (см. загрузку /api/current-event выше)
+    eventDistance = distanceKm;
     updateEventTitle();
 
     // Сбросить выбранных участников — они принадлежат другой дистанции
