@@ -1803,3 +1803,106 @@ def create_connection():
     """УСТАРЕВШАЯ функция — используйте get_pooled_connection()."""
     logger.warning("⚠️ create_connection() устаревшая, используйте get_pooled_connection()")
     return get_pooled_connection()
+
+
+def list_db_events() -> List[Dict[str, Any]]:
+    """Список событий из таблицы events (числовой id + человекочитаемые
+    поля) — для выбора конкретного event_id в админке (напр. вкладка «Фото
+    участников»), где нужен именно ID, а не event_name/event_distance
+    строки, как в age_group_configs."""
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "SELECT id, event_name, event_distance, event_year FROM events "
+            "ORDER BY event_year DESC, event_name, event_distance"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"list_db_events error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def list_participant_photos(event_id: int) -> List[Dict[str, Any]]:
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "SELECT * FROM participant_photos WHERE event_id = %s ORDER BY start_number",
+            (event_id,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"list_participant_photos error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def upsert_participant_photo(event_id: int, start_number: int, photo_url: str) -> Optional[Dict[str, Any]]:
+    """INSERT ... ON DUPLICATE KEY UPDATE — форма в /admin всегда просто
+    "сохраняет", не важно, новая это запись или правка существующей."""
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "INSERT INTO participant_photos (event_id, start_number, photo_url) "
+            "VALUES (%s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE photo_url = VALUES(photo_url)",
+            (event_id, start_number, photo_url),
+        )
+        conn.commit()
+        cur.execute(
+            "SELECT * FROM participant_photos WHERE event_id = %s AND start_number = %s",
+            (event_id, start_number),
+        )
+        row = cur.fetchone()
+        cur.close()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"upsert_participant_photo error: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def delete_participant_photo(photo_id: int) -> bool:
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor(buffered=True)
+        cur.execute("DELETE FROM participant_photos WHERE id = %s", (photo_id,))
+        conn.commit()
+        deleted = cur.rowcount > 0
+        cur.close()
+        return deleted
+    except Exception as e:
+        logger.error(f"delete_participant_photo error: {e}")
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
