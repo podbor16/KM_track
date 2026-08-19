@@ -28,6 +28,7 @@ from datetime import date, datetime
 from typing import Optional
 import csv
 import io
+import re
 
 import openpyxl
 
@@ -258,12 +259,17 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
             name = normalize_name(str(get("name") or "").strip())
             birthday_raw = str(get("birthday") or "").strip()
             birthday = convert_birthday(birthday_raw)
-            if len(birthday) != 10:
-                # Дата рождения не указана/не распознана — не блокируем
-                # импорт целиком из-за одного поля: просто нет данных для
-                # возраста/категории (get_age_group_label() уже отдаёт
-                # "Неизвестно" при отсутствующей дате), колонка "Год" на
-                # /start_list для такой строки будет пустой.
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", birthday):
+                # Дата рождения не указана/не распознана convert_birthday()
+                # — не блокируем импорт целиком из-за одного поля: просто
+                # нет данных для возраста/категории (get_age_group_label()
+                # уже отдаёт "Неизвестно" при отсутствующей дате), колонка
+                # "Год" на /start_list для такой строки будет пустой.
+                # ВАЖНО: проверяем именно формат ГГГГ-ММ-ДД, а не длину —
+                # нераспознанное значение вроде "27 08 1988" (тоже 10
+                # символов) раньше проходило эту проверку "как есть" и
+                # ломало SQL-сравнение с DATE-колонкой (MySQL 1525
+                # "Incorrect DATE value", реальный инцидент 2026-08-19).
                 birthday = ""
             if not surname or not name:
                 reason = f"не распознано ФИО (surname={surname!r}, name={name!r})"

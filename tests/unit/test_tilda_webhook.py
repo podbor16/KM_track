@@ -34,6 +34,23 @@ def test_convert_birthday_none():
     assert convert_birthday(None) is None
 
 
+def test_convert_birthday_space_separated():
+    """Реальный инцидент (обработанный вручную Excel-стартовый список,
+    2026-08-19): организатор вписал дату с пробелами вместо точек —
+    "27 08 1988" по длине совпадает с ISO-форматом (10 символов) и раньше
+    проходило как "валидная" дата прямиком в SQL-сравнение с DATE-колонкой,
+    роняя импорт с MySQL 1525 "Incorrect DATE value"."""
+    assert convert_birthday("27 08 1988") == "1988-08-27"
+
+
+def test_convert_birthday_dash_separated():
+    assert convert_birthday("27-08-1988") == "1988-08-27"
+
+
+def test_convert_birthday_slash_separated():
+    assert convert_birthday("27/08/1988") == "1988-08-27"
+
+
 def test_normalize_name():
     assert normalize_name("ИВАНОВ") == "Иванов"
     assert normalize_name("иван петров") == "Иван Петров"

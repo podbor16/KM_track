@@ -30,10 +30,16 @@ def decode_from_db_format(value):
 
 
 def convert_birthday(birthday):
+    """"ДД.ММ.ГГГГ" (и варианты с "-"/"/"/пробелом вместо точки — реальный
+    случай из ручного Excel-стартового списка, 2026-08-19: организатор
+    вписал дату как "27 08 1988") -> ISO "ГГГГ-ММ-ДД". Уже-ISO строка —
+    без изменений. Всё остальное — без изменений (парсер выше по стеку
+    решает, что делать с нераспознанным форматом, см. parse_tilda_export()
+    в tilda_import_parser.py — не блокируем такой вариант тут молча)."""
     if not birthday or not isinstance(birthday, str):
         return birthday
     birthday = birthday.strip()
-    match = re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$", birthday)
+    match = re.match(r"^(\d{1,2})[.\-/\s](\d{1,2})[.\-/\s](\d{4})$", birthday)
     if match:
         day = match.group(1).zfill(2)
         month = match.group(2).zfill(2)

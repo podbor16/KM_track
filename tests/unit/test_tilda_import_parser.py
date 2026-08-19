@@ -181,6 +181,26 @@ def test_parse_bad_birthday_does_not_block_row_just_leaves_it_empty():
     assert result.rows[0].birthday == ""
 
 
+def test_parse_birthday_same_length_as_iso_but_wrong_format_leaves_it_empty():
+    """Реальный инцидент (обработанный вручную Excel-файл, 2026-08-19):
+    "27 08 1988" — 10 символов, столько же, сколько у ISO "1988-08-27", но
+    формат другой (пробелы вместо тире). Раньше проверка валидности даты
+    была "len(birthday) == 10", и такое значение проходило "как валидное"
+    прямиком в SQL-сравнение с DATE-колонкой, роняя импорт с MySQL 1525.
+    convert_birthday() теперь и сам распознаёт пробелы как разделитель
+    (см. test_tilda_webhook.py), но проверка формата (не длины) здесь —
+    защита от ЛЮБОГО другого нераспознанного 10-символьного значения."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Петров,Пётр,mm dd yyyy,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    assert result.rows[0].birthday == ""
+
+
 def test_parse_no_event_columns_at_all_collected_as_row_error():
     """Обязательны только surname/name/birthday (проверка Task B1) — если в
     файле вовсе нет колонок события/products, это не структурная ошибка
