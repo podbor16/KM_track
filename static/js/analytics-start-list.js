@@ -94,12 +94,41 @@ function _setPageTitleSubtitleVisible(visible) {
     if (subtitle) subtitle.style.display = visible ? '' : 'none';
 }
 
-// Функция для смены события или года
-async function switchEvent() {
+// Последний год, для которого у события реально есть заявки (leads) или
+// уже сконфигурирована дистанция в events (см. get_leads_filter_options на
+// бэкенде) — дефолт года при смене СОБЫТИЯ, а не текущий календарный год,
+// у которого может вообще не быть данных для новостыранного события.
+async function fetchLatestYearForEvent(event) {
+    const eventName = eventNameMap[event];
+    if (!eventName) return null;
+    try {
+        const data = await fetch(`/api/registered-runners-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
+        return Array.isArray(data.years) && data.years.length ? data.years[0] : null;
+    } catch {
+        return null;
+    }
+}
+
+// Функция для смены события или года. trigger различает, какой селектор
+// вызвал смену ('event'/'year') — год автоматически переключается на
+// последний доступный ТОЛЬКО при смене события, ручной выбор года в
+// селекторе не перебивается.
+async function switchEvent(trigger) {
     const eventSelector = document.getElementById('eventSelector');
     currentEvent = eventSelector.value;
     const ySel = document.getElementById('yearStartSelector');
-    if (ySel) currentYear = parseInt(ySel.value) || currentYear;
+
+    if (trigger === 'event') {
+        const latestYear = await fetchLatestYearForEvent(currentEvent);
+        if (latestYear) {
+            currentYear = latestYear;
+            if (ySel) ySel.value = latestYear;
+        } else if (ySel) {
+            currentYear = parseInt(ySel.value) || currentYear;
+        }
+    } else if (ySel) {
+        currentYear = parseInt(ySel.value) || currentYear;
+    }
 
     // Сохраняем выбор в localStorage
     localStorage.setItem('selectedEvent', currentEvent);
@@ -335,10 +364,14 @@ function applyFilters() {
     const genderFilter = getGenderFilterValue();
     const distanceFilter = document.getElementById('distanceFilter').value;
 
-    // "2 км" — единая категория без деления по возрасту ("7 лет и старше",
-    // без брекетов в age_group_configs) — фильтр и колонку скрываем целиком,
-    // а не оставляем с единственной бесполезной опцией "Все".
-    const hideAgeGroup = distanceFilter === '2 км';
+    // Некоторые дистанции не разбиты на возрастные категории вообще (нет
+    // брекетов в age_group_configs — напр. "2 км" Жары, "500 м" Детского
+    // забега) — бэкенд отдаёт для них пустую category у ВСЕХ участников.
+    // Смотрим на реальные данные текущей дистанции, а не на хардкод
+    // конкретных строк дистанций — правило само подхватывает будущие
+    // дистанции без категорий, без правки JS.
+    const runnersOnDistance = allRunners.filter(r => (r.distance || '') === distanceFilter);
+    const hideAgeGroup = runnersOnDistance.length > 0 && runnersOnDistance.every(r => !r.category);
     document.getElementById('ageGroupFilterGroup').style.display = hideAgeGroup ? 'none' : '';
     document.getElementById('startListTable').classList.toggle('km-table--hide-age-group', hideAgeGroup);
     if (hideAgeGroup) {

@@ -64,17 +64,25 @@ const eventYearToIdMap = {
     'dostigaya_tseli_2026': 152
 };
 
-// Инициализация страницы — дефолт: активный забег + прошлый год
+// Последний год, для которого у события есть настроенный event_id
+// (eventYearToIdMap) — прокси для "есть данные в БД", используется и как
+// дефолт при первой загрузке страницы, и при смене события в селекторе.
+function latestConfiguredYearForEvent(event) {
+    const years = Object.keys(eventYearToIdMap)
+        .filter(key => key.startsWith(`${event}_`))
+        .map(key => parseInt(key.slice(event.length + 1), 10))
+        .filter(y => !isNaN(y));
+    return years.length ? Math.max(...years) : null;
+}
+
+// Инициализация страницы — дефолт: активный забег + последний год с данными
 document.addEventListener('DOMContentLoaded', async function() {
     populateYearSelector();
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
         currentEvent = cfg.event || 'night_run';
         const cfgYear = cfg.year || new Date().getFullYear();
-        // Показывать текущий год если для него есть данные, иначе прошлый
-        currentYear = eventYearToIdMap[`${currentEvent}_${cfgYear}`] !== undefined
-            ? cfgYear
-            : cfgYear - 1;
+        currentYear = latestConfiguredYearForEvent(currentEvent) || cfgYear;
     } catch {
         currentEvent = 'night_run';
         currentYear  = new Date().getFullYear() - 1;
@@ -129,10 +137,21 @@ function populateYearSelector() {
     yearSelector.value = currentYear;
 }
 
-// Функция переключения события и года
-async function switchEventResults() {
+// Функция переключения события и года. trigger различает, какой селектор
+// вызвал смену ('event'/'year') — год автоматически переключается на
+// последний доступный ТОЛЬКО при смене события, ручной выбор года не
+// перебивается.
+async function switchEventResults(trigger) {
     currentEvent = document.getElementById('eventResultsSelector').value;
-    currentYear = parseInt(document.getElementById('yearResultsSelector').value);
+    const yearSel = document.getElementById('yearResultsSelector');
+
+    if (trigger === 'event') {
+        const latestYear = latestConfiguredYearForEvent(currentEvent);
+        currentYear = latestYear || parseInt(yearSel.value);
+        if (latestYear) yearSel.value = latestYear;
+    } else {
+        currentYear = parseInt(yearSel.value);
+    }
 
     // Обновляем цвет темы
     updateEventThemeColor();

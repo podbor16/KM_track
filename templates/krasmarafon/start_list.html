@@ -37,7 +37,7 @@
             <div class="km-filters">
                 <div class="km-filter-group">
                     <label class="km-label" for="eventSelector">Событие:</label>
-                    <select id="eventSelector" onchange="switchEvent()" class="km-select">
+                    <select id="eventSelector" onchange="switchEvent('event')" class="km-select">
                         <option value="night_run">Ночной забег</option>
                         <option value="vesna">Весна</option>
                         <option value="colorrun">Красочный забег</option>
@@ -50,7 +50,7 @@
                 </div>
                 <div class="km-filter-group">
                     <label class="km-label" for="yearStartSelector">Год:</label>
-                    <select id="yearStartSelector" onchange="switchEvent()" class="km-select km-select--year"></select>
+                    <select id="yearStartSelector" onchange="switchEvent('year')" class="km-select km-select--year"></select>
                 </div>
                 <div class="km-filter-group">
                     <label class="km-label" id="genderFilterLabel">Пол:</label>
