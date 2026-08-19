@@ -204,6 +204,26 @@ def test_new_lead_insert_start_number_null_when_absent(mock_get_conn, mock_recom
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_marks_source_as_import(mock_get_conn):
+    """Реальный вопрос пользователя (2026-08-19): "я импортировал файл...
+    всё ещё вижу «Ошибка возраста»". Прошлый фикс source='import' работал
+    только для НОВЫХ заявок (INSERT) — но подавляющее большинство строк в
+    файле уже существуют в БД (пришли через вебхук раньше) и просто
+    ОБНОВЛЯЮТСЯ импортом. Раз организатор вручную разобрал файл — заявка
+    считается "проверенной через импорт" независимо от того, как она
+    попала в БД изначально, иначе get_age_group_label() для неё так и
+    остаётся на "Ошибка возраста" (source не менялся с DEFAULT 'webhook')."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row()])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    assert "source = 'import'" in update_call.args[0]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_matched_row_update_applies_start_number_when_present(mock_get_conn):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
