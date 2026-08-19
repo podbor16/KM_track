@@ -54,3 +54,83 @@ function buildTop3Post(checkpoint, sexKey) {
     const footer = '__👉 ссылка на лайв-результаты: https://analytics.krasmarafon.ru/results__';
     return `${title}\n\n${entries.join('\n\n')}\n\n${footer}`;
 }
+
+// ---- DOM-обвязка ----
+// Fetch происходит ДВАЖДЫ по дизайну (не кешируем JSON между шагами):
+// (1) при смене дистанции — только чтобы заполнить список отметок
+//     (структура отметок стабильна в рамках гонки, но перезапрашиваем
+//     всё равно ради простоты — один путь кода, не два);
+// (2) при каждом клике "Сгенерировать" — гарантирует, что пост строится
+//     по самым свежим данным на момент публикации, а не по снапшоту с
+//     момента выбора дистанции (тот же принцип, что у Siberman bcGenerate()
+//     — там тоже fetch происходит заново на каждый клик "Сгенерировать").
+
+async function bcpFetchDistanceData(distanceLabel) {
+    const url = BCP_JSON_URLS[distanceLabel];
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('not ok');
+    return r.json();
+}
+
+function bcpShowError(show) {
+    const errEl = document.getElementById('bcp-error');
+    if (!errEl) return;
+    errEl.textContent = BCP_NO_DATA_MESSAGE;
+    errEl.style.display = show ? '' : 'none';
+}
+
+async function bcpOnDistanceChange() {
+    const distSel = document.getElementById('bcp-distance');
+    const cpSel = document.getElementById('bcp-checkpoint');
+    cpSel.innerHTML = '<option value="">— отметка —</option>';
+    document.getElementById('bcp-output-male').value = '';
+    document.getElementById('bcp-output-female').value = '';
+    bcpShowError(false);
+    try {
+        const data = await bcpFetchDistanceData(distSel.value);
+        (data.checkpoints || []).forEach(cp => {
+            const opt = document.createElement('option');
+            opt.value = cp.code;
+            opt.textContent = cp.label;
+            cpSel.appendChild(opt);
+        });
+    } catch (e) {
+        bcpShowError(true);
+    }
+}
+
+async function bcpGenerate(sexKey) {
+    const distSel = document.getElementById('bcp-distance');
+    const cpSel = document.getElementById('bcp-checkpoint');
+    const outputId = sexKey === 'male' ? 'bcp-output-male' : 'bcp-output-female';
+    const ta = document.getElementById(outputId);
+    if (!cpSel.value) return;
+    bcpShowError(false);
+    try {
+        const data = await bcpFetchDistanceData(distSel.value);
+        const checkpoint = (data.checkpoints || []).find(cp => cp.code === cpSel.value);
+        if (!checkpoint) throw new Error('checkpoint not found');
+        ta.value = buildTop3Post(checkpoint, sexKey);
+    } catch (e) {
+        bcpShowError(true);
+    }
+}
+
+function bcpCopy(textareaId) {
+    const ta = document.getElementById(textareaId);
+    navigator.clipboard.writeText(ta.value).catch(() => {
+        ta.select();
+        document.execCommand('copy');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const distSel = document.getElementById('bcp-distance');
+    if (!distSel) return; // разметки вкладки нет на этой странице — не наш случай
+    distSel.addEventListener('change', bcpOnDistanceChange);
+    document.getElementById('bcp-generate-male').addEventListener('click', () => bcpGenerate('male'));
+    document.getElementById('bcp-generate-female').addEventListener('click', () => bcpGenerate('female'));
+    document.getElementById('bcp-copy-male').addEventListener('click', () => bcpCopy('bcp-output-male'));
+    document.getElementById('bcp-copy-female').addEventListener('click', () => bcpCopy('bcp-output-female'));
+    bcpOnDistanceChange(); // заполнить отметки для дистанции, выбранной по умолчанию
+});

@@ -105,6 +105,24 @@ check('2 записи вместо 3 — третье место не показ
     assert.ok(!text.includes('3.'), text);
 });
 
+check('4 записи — 4-я не попадает в пост, первые 3 попадают', () => {
+    const cp = {
+        code: 'kt1', label: 'КТ1 (10.55 км)',
+        top10_male: [
+            { surname: 'Иванов', name: 'Пётр', time: '00:45:00', pace: '4:30', gap_sex: 'Лидер' },
+            { surname: 'Сидоров', name: 'Олег', time: '00:50:30', pace: '5:03', gap_sex: '+05:30' },
+            { surname: 'Кузнецов', name: 'Илья', time: '00:52:00', pace: '5:12', gap_sex: '+07:00' },
+            { surname: 'Смирнов', name: 'Артём', time: '00:55:00', pace: '5:30', gap_sex: '+10:00' },
+        ],
+        top10_female: [],
+    };
+    const text = sandbox.buildTop3Post(cp, 'male');
+    assert.ok(text.includes('1. Иванов Пётр'), text);
+    assert.ok(text.includes('2. Сидоров Олег'), text);
+    assert.ok(text.includes('3. Кузнецов Илья'), text);
+    assert.ok(!text.includes('Смирнов'), text);
+});
+
 check('0 записей — короткое сообщение вместо всего поста', () => {
     const text = sandbox.buildTop3Post(CP_FINISH, 'female');
     assert.strictEqual(text, 'Нет данных для этой отметки — пока никто не финишировал.');
@@ -123,5 +141,79 @@ check('Заголовок и ссылка в markdown-конвенции Siberma
     assert.ok(text.includes('__👉 ссылка на лайв-результаты: https://analytics.krasmarafon.ru/results__'));
 });
 
-console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
-process.exit(failures === 0 ? 0 : 1);
+// ---- DOM-обвязка: минимальные стабы (тот же паттерн makeElement/domStub,
+// что в tests/js/test_analytics_start_list_gender_pills.js) ----
+function makeElement(tag) {
+    const children = [];
+    return {
+        tagName: (tag || 'DIV').toUpperCase(),
+        value: '',
+        textContent: '',
+        style: {},
+        _children: children,
+        set innerHTML(v) {
+            // Наивная симуляция парсинга: реальный DOM создаёт дочерний
+            // <option> из '<option value="">...</option>', сброшенный
+            // innerHTML в stub'е не парсил разметку — из-за этого select
+            // терял плейсхолдер-опцию. Здесь заменяем очистку одним
+            // синтетическим OPTION-узлом, если строка непустая.
+            children.length = 0;
+            if (v) children.push({ tagName: 'OPTION', value: '', textContent: '' });
+        },
+        get innerHTML() { return ''; },
+        appendChild(child) { children.push(child); return child; },
+        addEventListener() {},
+        get options() { return children.filter(c => c.tagName === 'OPTION'); },
+        select() {},
+    };
+}
+const elementsById2 = {};
+function domStub2(id) {
+    if (!elementsById2[id]) elementsById2[id] = makeElement('DIV');
+    return elementsById2[id];
+}
+
+const BCP_TEST_URL_5KM = '/live/zhara_5km_top10.json';
+const domSandbox = {
+    console,
+    fetch: (url) => {
+        if (url === BCP_TEST_URL_5KM) {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ checkpoints: [CP_KT, CP_FINISH] }) });
+        }
+        return Promise.resolve({ ok: false });
+    },
+    document: {
+        getElementById: domStub2,
+        createElement: (tag) => makeElement(tag),
+        addEventListener: () => {},
+    },
+    navigator: { clipboard: { writeText: () => Promise.resolve() } },
+    window: {},
+};
+domSandbox.window = domSandbox;
+vm.createContext(domSandbox);
+vm.runInContext(scriptJs, domSandbox);
+
+(async () => {
+    domStub2('bcp-distance').value = '5 км';
+    await domSandbox.bcpOnDistanceChange();
+
+    check('bcpOnDistanceChange() заполняет select отметок из checkpoints[]', () => {
+        const opts = domStub2('bcp-checkpoint').options;
+        // 1-я опция — плейсхолдер "— отметка —", затем kt1 и finish
+        assert.strictEqual(opts.length, 3, JSON.stringify(opts.map(o => o.textContent)));
+        assert.strictEqual(opts[1].value, 'kt1');
+        assert.strictEqual(opts[2].value, 'finish');
+    });
+
+    domStub2('bcp-checkpoint').value = 'kt1';
+    await domSandbox.bcpGenerate('female');
+
+    check('bcpGenerate("female") заполняет textarea готовым текстом', () => {
+        const text = domStub2('bcp-output-female').value;
+        assert.ok(text.startsWith('**Женщины. Отсечка 10.55 км**'), text);
+    });
+
+    console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
+    process.exit(failures === 0 ? 0 : 1);
+})();
