@@ -108,7 +108,11 @@ async function switchEvent() {
     updateEventThemeColor();
     updateEventBanner();
 
-    // Сбрасываем фильтры
+    // Сбрасываем фильтры. distanceFilter сбрасывается в '' — этого значения
+    // больше нет среди опций (см. populateDistances()), поэтому при
+    // следующей загрузке данных сработает её фоллбэк и выберется
+    // максимальная дистанция нового события, а не унаследуется дистанция
+    // от предыдущего.
     _setGenderFilterActivePill('');
     document.getElementById('ageGroupFilter').value = '';
     document.getElementById('distanceFilter').value = '';
@@ -238,12 +242,16 @@ function populateAgeGroups(runners) {
     }
 }
 
-// Заполняем опции дистанций
+// Заполняем опции дистанций — без опции "Все": стартовый список
+// просматривается по одной дистанции за раз (у разных дистанций одного
+// события — разные схемы возрастных категорий/номеров, смешивать их в
+// одной таблице неинформативно). По умолчанию выбирается максимальная
+// доступная дистанция.
 function populateDistances(runners) {
     const distanceSelect = document.getElementById('distanceFilter');
     const savedValue = distanceSelect.value; // Сохраняем текущее выбранное значение
     const distances = new Set();
-    
+
     runners.forEach(runner => {
         let distance = null;
         // Проверяем возможные названия полей для дистанции
@@ -256,16 +264,10 @@ function populateDistances(runners) {
             distances.add(distance);
         }
     });
-    
+
     // Очищаем текущие опции
     distanceSelect.innerHTML = '';
-    
-    // Добавляем опцию "Все" первой
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = 'Все';
-    distanceSelect.appendChild(allOption);
-    
+
     // Сортируем дистанции по возрастанию
     const sortedDistances = Array.from(distances).sort((a, b) => {
         // Извлекаем числовое значение для сортировки
@@ -277,17 +279,21 @@ function populateDistances(runners) {
         // Если числа одинаковые, сортируем по строке
         return a.localeCompare(b, 'ru');
     });
-    
+
     sortedDistances.forEach(distance => {
         const option = document.createElement('option');
         option.value = distance;
         option.textContent = distance;
         distanceSelect.appendChild(option);
     });
-    
-    // Восстанавливаем сохраненное значение
-    if (savedValue) {
+
+    // Восстанавливаем сохранённое значение, если оно всё ещё доступно —
+    // иначе выбираем максимальную дистанцию (последняя после сортировки
+    // по возрастанию), не первую попавшуюся и не пустое значение.
+    if (savedValue && sortedDistances.includes(savedValue)) {
         distanceSelect.value = savedValue;
+    } else if (sortedDistances.length > 0) {
+        distanceSelect.value = sortedDistances[sortedDistances.length - 1];
     }
 }
 
