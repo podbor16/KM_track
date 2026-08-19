@@ -105,10 +105,12 @@ async function bcpGenerate(sexKey) {
     const outputId = sexKey === 'male' ? 'bcp-output-male' : 'bcp-output-female';
     const ta = document.getElementById(outputId);
     if (!cpSel.value) return;
+    const wantedDistance = distSel.value;
+    const wantedCode = cpSel.value;
     bcpShowError(false);
     try {
-        const data = await bcpFetchDistanceData(distSel.value);
-        const checkpoint = (data.checkpoints || []).find(cp => cp.code === cpSel.value);
+        const data = await bcpFetchDistanceData(wantedDistance);
+        const checkpoint = (data.checkpoints || []).find(cp => cp.code === wantedCode);
         if (!checkpoint) throw new Error('checkpoint not found');
         ta.value = buildTop3Post(checkpoint, sexKey);
     } catch (e) {
