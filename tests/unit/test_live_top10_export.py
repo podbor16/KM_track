@@ -111,7 +111,7 @@ def test_build_checkpoint_splits_absolute_and_sex_with_shared_row_shape():
     assert checkpoint["top10_absolute"][1]["gap_sex"] == "Лидер"
     assert checkpoint["top10_absolute"][0]["photo_url"] == "https://example.com/ivanov.jpg"
     assert checkpoint["top10_absolute"][1]["photo_url"] == (
-        "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"
+        "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"
     )
     assert checkpoint["top10_absolute"][0]["sex"] == "M"
     assert checkpoint["top10_absolute"][1]["sex"] == "F"

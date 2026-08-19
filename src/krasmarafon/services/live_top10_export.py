@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 PARTICIPANT_PHOTO_PLACEHOLDER_URL = (
-    "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"
+    "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"
 )
 
 _TOP_N = 10

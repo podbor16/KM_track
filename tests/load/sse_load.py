@@ -7,8 +7,8 @@ SSE нагрузочный тест: открывает N параллельны
 из-за буферизации. requests + threads — проверенный рабочий подход.
 
 Запуск:
-    python tests/load/sse_load.py --vus 335 --hold 30 --host https://analytics.krasmarafon.ru
-    python tests/load/sse_load.py --smoke --host https://analytics.krasmarafon.ru
+    python tests/load/sse_load.py --vus 335 --hold 30 --host https://results.krasmarafon.ru
+    python tests/load/sse_load.py --smoke --host https://results.krasmarafon.ru
 """
 
 import argparse
@@ -194,7 +194,7 @@ def main():
     parser = argparse.ArgumentParser(description="SSE нагрузочный тест (requests+threads)")
     parser.add_argument("--vus", type=int, default=335)
     parser.add_argument("--hold", type=int, default=30, help="Секунд держать SSE соединение")
-    parser.add_argument("--host", default="https://analytics.krasmarafon.ru")
+    parser.add_argument("--host", default="https://results.krasmarafon.ru")
     parser.add_argument("--event-id", default="104")
     parser.add_argument("--spawn-rate", type=int, default=20)
     parser.add_argument("--smoke", action="store_true", help="10 VUs, 15s hold")

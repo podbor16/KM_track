@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).parent.parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
-HOST = os.environ.get("LOAD_TEST_HOST", "https://analytics.krasmarafon.ru")
+HOST = os.environ.get("LOAD_TEST_HOST", "https://results.krasmarafon.ru")
 LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD", "")
 

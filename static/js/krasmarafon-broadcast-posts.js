@@ -51,7 +51,7 @@ function buildTop3Post(checkpoint, sexKey) {
         return lines.join('\n');
     });
 
-    const footer = '__👉 ссылка на лайв-результаты: https://analytics.krasmarafon.ru/results__';
+    const footer = '__👉 ссылка на лайв-результаты: https://results.krasmarafon.ru/results__';
     return `${title}\n\n${entries.join('\n\n')}\n\n${footer}`;
 }
 

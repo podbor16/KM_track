@@ -138,7 +138,7 @@ check('Мужчины vs Женщины — правильный список и
 check('Заголовок и ссылка в markdown-конвенции Siberman (**bold**/__italic__)', () => {
     const text = sandbox.buildTop3Post(CP_KT, 'male');
     assert.ok(text.includes('**Мужчины. Отсечка 10.55 км**'));
-    assert.ok(text.includes('__👉 ссылка на лайв-результаты: https://analytics.krasmarafon.ru/results__'));
+    assert.ok(text.includes('__👉 ссылка на лайв-результаты: https://results.krasmarafon.ru/results__'));
 });
 
 // ---- DOM-обвязка: минимальные стабы (тот же паттерн makeElement/domStub,

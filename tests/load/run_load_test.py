@@ -11,7 +11,7 @@ chunked SSE-потоки и возвращается после первого �
     python tests/load/run_load_test.py --smoke       # smoke (5 пользователей, 1 мин)
 
 Переменные окружения:
-    LOAD_TEST_HOST          — хост (по умолч. https://analytics.krasmarafon.ru)
+    LOAD_TEST_HOST          — хост (по умолч. https://results.krasmarafon.ru)
     LIVE_EVENT_ID           — event_id live-гонки (по умолч. 104)
     LOCUST_ADMIN_PASSWORD   — пароль бизнес-аналитики (по умолч. km2026admin)
 """
@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).parent.parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
-HOST = os.environ.get("LOAD_TEST_HOST", "https://analytics.krasmarafon.ru")
+HOST = os.environ.get("LOAD_TEST_HOST", "https://results.krasmarafon.ru")
 
 LIVE_EVENT_ID = os.environ.get("LIVE_EVENT_ID", "104")  # 104=Ночной забег, реальные данные
 ADMIN_PASSWORD = os.environ.get("LOCUST_ADMIN_PASSWORD") or os.environ.get("ADMIN_PASSWORD", "")

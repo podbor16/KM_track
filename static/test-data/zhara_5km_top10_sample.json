@@ -11,24 +11,24 @@
       "top10_male": [
         {"start_number": 101, "surname": "Иванов", "name": "Пётр", "sex": "M", "city": "Красноярск",
          "rank_absolute": 1, "rank_sex": 1, "time": "00:10:15", "pace": "4:06",
-         "gap_absolute": "Лидер", "gap_sex": "Лидер", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
+         "gap_absolute": "Лидер", "gap_sex": "Лидер", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
         {"start_number": 102, "surname": "Сидоров", "name": "Олег", "sex": "M", "city": "Красноярск",
          "rank_absolute": 2, "rank_sex": 2, "time": "00:11:00", "pace": "4:24",
-         "gap_absolute": "+00:45", "gap_sex": "+00:45", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
+         "gap_absolute": "+00:45", "gap_sex": "+00:45", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
         {"start_number": 103, "surname": "Кузнецов", "name": "Игорь", "sex": "M", "city": "Красноярск",
          "rank_absolute": 3, "rank_sex": 3, "time": "00:11:30", "pace": "4:36",
-         "gap_absolute": "+01:15", "gap_sex": "+01:15", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
+         "gap_absolute": "+01:15", "gap_sex": "+01:15", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
         {"start_number": 104, "surname": "Морозов", "name": "Данил", "sex": "M", "city": "Красноярск",
          "rank_absolute": 4, "rank_sex": 4, "time": "00:12:00", "pace": "4:48",
-         "gap_absolute": "+01:45", "gap_sex": "+01:45", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
+         "gap_absolute": "+01:45", "gap_sex": "+01:45", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
       ],
       "top10_female": [
         {"start_number": 201, "surname": "Викулова", "name": "Анна", "sex": "F", "city": "Новосибирск",
          "rank_absolute": 5, "rank_sex": 1, "time": "00:15:00", "pace": "6:00",
-         "gap_absolute": "+04:45", "gap_sex": "Лидер", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
+         "gap_absolute": "+04:45", "gap_sex": "Лидер", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"},
         {"start_number": 202, "surname": "Томкус", "name": "Полина", "sex": "F", "city": "Красноярск",
          "rank_absolute": 6, "rank_sex": 2, "time": "00:20:00", "pace": "8:00",
-         "gap_absolute": "+09:45", "gap_sex": "+05:00", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
+         "gap_absolute": "+09:45", "gap_sex": "+05:00", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
       ]
     },
     {
@@ -38,7 +38,7 @@
       "top10_male": [
         {"start_number": 101, "surname": "Иванов", "name": "Пётр", "sex": "M", "city": "Красноярск",
          "rank_absolute": 1, "rank_sex": 1, "time": "00:22:10", "pace": "4:26",
-         "gap_absolute": "Лидер", "gap_sex": "Лидер", "photo_url": "https://analytics.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
+         "gap_absolute": "Лидер", "gap_sex": "Лидер", "photo_url": "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"}
       ],
       "top10_female": []
     }

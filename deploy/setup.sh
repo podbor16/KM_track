@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_URL="${1:-}"
 APP_DIR="/opt/km_track"
 APP_USER="km"
-DOMAIN="analytics.krasmarafon.ru"
+DOMAIN="results.krasmarafon.ru"
 
 if [ -z "$REPO_URL" ]; then
     echo "Использование: bash setup.sh <git_repo_url>"
@@ -62,7 +62,7 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 echo "=== SSL (Let's Encrypt) ==="
-echo "Убедись что DNS-запись analytics.krasmarafon.ru → $(curl -s ifconfig.me) уже создана!"
+echo "Убедись что DNS-запись results.krasmarafon.ru → $(curl -s ifconfig.me) уже создана!"
 read -p "DNS настроен? (y/n): " dns_ok
 if [ "$dns_ok" = "y" ]; then
     certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@krasmarafon.ru

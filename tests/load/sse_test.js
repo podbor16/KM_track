@@ -7,7 +7,7 @@
  *   k6 run tests/load/sse_test.js --vus 335 --duration 8m
  *
  * Переменные окружения:
- *   K6_HOST        — хост (по умолч. https://analytics.krasmarafon.ru)
+ *   K6_HOST        — хост (по умолч. https://results.krasmarafon.ru)
  *   K6_EVENT_ID    — event_id для SSE (по умолч. 106)
  *   K6_CONN_HOLD   — секунд держать соединение (по умолч. 30)
  */
@@ -16,7 +16,7 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
-const HOST = __ENV.K6_HOST || 'https://analytics.krasmarafon.ru';
+const HOST = __ENV.K6_HOST || 'https://results.krasmarafon.ru';
 const EVENT_ID = __ENV.K6_EVENT_ID || '106';
 const CONN_HOLD_S = parseInt(__ENV.K6_CONN_HOLD || '30', 10);
 

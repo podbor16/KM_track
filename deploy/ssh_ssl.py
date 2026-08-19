@@ -21,13 +21,13 @@ client.connect(HOST, username=USER, password=PASSWORD, timeout=30)
 print("Подключился")
 
 # Check DNS resolves to this server
-run(client, "dig +short analytics.krasmarafon.ru || nslookup analytics.krasmarafon.ru | grep Address | tail -1")
+run(client, "dig +short results.krasmarafon.ru || nslookup results.krasmarafon.ru | grep Address | tail -1")
 
 # Check nginx status
 run(client, "systemctl status nginx --no-pager | head -5")
 
 # Get SSL cert
-run(client, "certbot --nginx -d analytics.krasmarafon.ru --non-interactive --agree-tos -m admin@krasmarafon.ru", timeout=120)
+run(client, "certbot --nginx -d results.krasmarafon.ru --non-interactive --agree-tos -m admin@krasmarafon.ru", timeout=120)
 
 # Reload nginx
 run(client, "systemctl reload nginx")

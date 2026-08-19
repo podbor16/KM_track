@@ -1,6 +1,6 @@
 # Runbook: Деплой KM Track на nic.ru VDS
 
-Цель: запустить `https://analytics.krasmarafon.ru` на VDS nic.ru.
+Цель: запустить `https://results.krasmarafon.ru` на VDS nic.ru.
 
 **Условия nic.ru:** 30 дней бесплатно при оплате от 3 месяцев.
 Минимальный тариф 490 ₽/мес × 3 = **1 470 ₽** → первый месяц бесплатно.
@@ -22,7 +22,7 @@
 
 ---
 
-## Шаг 2 — DNS для analytics.krasmarafon.ru
+## Шаг 2 — DNS для results.krasmarafon.ru
 
 DNS домена уже на nic.ru — всё в одном месте.
 
@@ -35,7 +35,7 @@ DNS домена уже на nic.ru — всё в одном месте.
 3. Сохранить
 4. Проверить через 5–15 минут:
    ```
-   nslookup analytics.krasmarafon.ru
+   nslookup results.krasmarafon.ru
    ```
    Должен вернуть твой IP.
 
@@ -90,7 +90,7 @@ ADMIN_USERNAME=<логин>
 ADMIN_PASSWORD=<пароль>
 SECRET_KEY=<длинная случайная строка>
 DEBUG=False
-CORS_ORIGINS=https://analytics.krasmarafon.ru,https://krasmarafon.ru
+CORS_ORIGINS=https://results.krasmarafon.ru,https://krasmarafon.ru
 ```
 
 ---
@@ -115,9 +115,9 @@ curl http://127.0.0.1:8000/health
 ```
 
 В браузере:
-- `https://analytics.krasmarafon.ru/health` → `{"status":"ok"}`
-- `https://analytics.krasmarafon.ru/tracker`
-- `https://analytics.krasmarafon.ru/results`
+- `https://results.krasmarafon.ru/health` → `{"status":"ok"}`
+- `https://results.krasmarafon.ru/tracker`
+- `https://results.krasmarafon.ru/results`
 
 ---
 
@@ -160,5 +160,5 @@ curl http://127.0.0.1:8000   # работает локально?
 **SSL не получается:**
 ```bash
 # DNS ещё не распространился — подожди и повтори:
-certbot --nginx -d analytics.krasmarafon.ru
+certbot --nginx -d results.krasmarafon.ru
 ```
