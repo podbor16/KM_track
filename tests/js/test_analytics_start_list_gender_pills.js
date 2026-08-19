@@ -86,6 +86,9 @@ const sandbox = {
         querySelectorAll: () => [],
     },
     localStorage: { getItem: () => null, setItem: () => {} },
+    URLSearchParams,
+    location: { pathname: '/start_list', search: '', hash: '' },
+    history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
     window: {},
 };
 sandbox.window = sandbox;

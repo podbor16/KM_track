@@ -80,6 +80,9 @@ const sandbox = {
     },
     localStorage: { getItem: () => null, setItem: () => {} },
     Image: FakeImage,
+    URLSearchParams,
+    location: { pathname: '/start_list', search: '', hash: '' },
+    history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
     window: {},
 };
 sandbox.window = sandbox;
@@ -121,6 +124,15 @@ check('populateDistances() — реальный случай Детского з
     domStub('distanceFilter').value = '';
     vm.runInContext('populateDistances(allRunners)', sandbox);
     assert.strictEqual(domStub('distanceFilter').value, '1 км');
+});
+
+check('populateAgeGroups() — гендерно-нейтральные категории ("8 лет") не пропадают при активном фильтре пола', () => {
+    resetDom();
+    setAllRunners(KIDS_1KM); // category: '8 лет' — без деления по полу
+    domStub('distanceFilter').value = '1 км';
+    sandbox.setGenderFilter('Мужчина');
+    const options = domStub('ageGroupFilter').options.map(o => o.value);
+    assert.ok(options.includes('8 лет'), `"8 лет" должна остаться в списке при фильтре "Мужчина": ${options}`);
 });
 
 check('applyFilters() — скрывает фильтр/колонку "Возр. группа" на дистанции без категорий (500 м)', () => {

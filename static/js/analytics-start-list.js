@@ -9,15 +9,68 @@ let currentYear = new Date().getFullYear();
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
 
-// Инициализация страницы — дефолт из активного забега
+// ──────────────── Состояние в URL (прямая ссылка на конкретный
+// событие+год+дистанцию+фильтры, напр. чтобы прислать ссылку на старт-лист
+// конкретного забега) ────────────────
+// distance/ageGroup применяются "один раз" при первой загрузке данных — их
+// селекты в момент чтения URL ещё пустые (заполняются позже из реальных
+// данных события в populateDistances()/populateAgeGroups()), поэтому
+// напрямую задать select.value здесь бесполезно (браузер игнорирует
+// значение без совпадающей <option>). Флаги обнуляются после первого
+// успешного применения, чтобы не перебивать дальнейший ручной выбор
+// пользователя при каждом ре-рендере фильтров.
+let _urlEvent = null;
+let _urlYear = null;
+let _urlDistance = null;
+let _urlAgeGroup = null;
+
+function readStateFromUrl() {
+    const params = new URLSearchParams(location.search);
+    const event = params.get('event');
+    _urlEvent = event && eventNameMap[event] ? event : null;
+    const yearParam = parseInt(params.get('year'), 10);
+    _urlYear = Number.isFinite(yearParam) ? yearParam : null;
+    _urlDistance = params.get('distance') || null;
+    _urlAgeGroup = params.get('ageGroup') || null;
+    const gender = params.get('gender');
+    if (gender === 'Мужчина' || gender === 'Женщина') _setGenderFilterActivePill(gender);
+    const search = params.get('search');
+    if (search) document.getElementById('surnameSearch').value = search;
+}
+
+// Пишет текущие фильтры в query-параметры при каждом применении фильтров
+// (history.replaceState — НЕ pushState, иначе каждый клик фильтра добавлял
+// бы шаг в историю браузера вместо осмысленных переходов; тот же принцип,
+// что на Siberman results.html, см. syncUrlFromState() там).
+function syncUrlFromState() {
+    const params = new URLSearchParams();
+    params.set('event', currentEvent);
+    params.set('year', currentYear);
+    const distance = document.getElementById('distanceFilter').value;
+    if (distance) params.set('distance', distance);
+    const gender = getGenderFilterValue();
+    if (gender) params.set('gender', gender);
+    const ageGroup = document.getElementById('ageGroupFilter').value;
+    if (ageGroup) params.set('ageGroup', ageGroup);
+    const search = document.getElementById('surnameSearch').value;
+    if (search) params.set('search', search);
+    const qs = params.toString();
+    const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
+    if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
+}
+
+// Инициализация страницы — дефолт из активного забега, переопределяется
+// параметрами URL, если открыли по прямой ссылке
 document.addEventListener('DOMContentLoaded', async function() {
     populateYearSelector();
+    readStateFromUrl();
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
-        currentEvent = cfg.event || 'night_run';
-        currentYear = cfg.year || new Date().getFullYear();
+        currentEvent = _urlEvent || cfg.event || 'night_run';
+        currentYear = _urlYear || cfg.year || new Date().getFullYear();
     } catch {
-        currentEvent = 'night_run';
+        currentEvent = _urlEvent || 'night_run';
+        currentYear = _urlYear || currentYear;
     }
     document.getElementById('eventSelector').value = currentEvent;
     const ySel = document.getElementById('yearStartSelector');
@@ -240,15 +293,19 @@ function populateAgeGroups(runners) {
     allOption.textContent = 'Все';
     ageGroupSelect.appendChild(allOption);
 
-    // Фильтруем группы по выбранному полу
+    // Фильтруем группы по выбранному полу — исключаем ТОЛЬКО явно
+    // противоположный пол, а не "оставляем только явно совпадающий": у
+    // Детского забега категории без деления по полу ("8 лет", без префикса
+    // "М"/"Ж"/"мужчины"/"женщины") не матчат ни isMaleCategory, ни
+    // isFemaleCategory — при "оставляем только явно совпадающий" такие
+    // категории пропадали бы из списка целиком при ЛЮБОМ активном фильтре
+    // пола, хотя они относятся к участникам обоих полов.
     let filteredGroups = Array.from(ageGroups);
 
     if (genderFilter === 'Мужчина') {
-        // Показываем только мужские группы
-        filteredGroups = filteredGroups.filter(group => KMUtils.isMaleCategory(group));
+        filteredGroups = filteredGroups.filter(group => !KMUtils.isFemaleCategory(group));
     } else if (genderFilter === 'Женщина') {
-        // Показываем только женские группы
-        filteredGroups = filteredGroups.filter(group => KMUtils.isFemaleCategory(group));
+        filteredGroups = filteredGroups.filter(group => !KMUtils.isMaleCategory(group));
     }
 
     // Сортируем группы в правильном порядке (женские сначала, затем мужские,
@@ -262,8 +319,14 @@ function populateAgeGroups(runners) {
         ageGroupSelect.appendChild(option);
     });
     
-    // Восстанавливаем сохраненное значение, если оно еще доступно
-    if (savedValue && Array.from(ageGroupSelect.options).some(opt => opt.value === savedValue)) {
+    // Восстанавливаем значение: приоритет — значение из URL при первой
+    // загрузке (once, см. readStateFromUrl), иначе текущее выбранное,
+    // иначе "Все"
+    const optionValues = Array.from(ageGroupSelect.options).map(opt => opt.value);
+    if (_urlAgeGroup && optionValues.includes(_urlAgeGroup)) {
+        ageGroupSelect.value = _urlAgeGroup;
+        _urlAgeGroup = null;
+    } else if (savedValue && optionValues.includes(savedValue)) {
         ageGroupSelect.value = savedValue;
     } else {
         // Если выбранное значение больше не доступно, выбираем "Все"
@@ -317,10 +380,14 @@ function populateDistances(runners) {
         distanceSelect.appendChild(option);
     });
 
-    // Восстанавливаем сохранённое значение, если оно всё ещё доступно —
-    // иначе выбираем максимальную дистанцию (последняя после сортировки
-    // по возрастанию), не первую попавшуюся и не пустое значение.
-    if (savedValue && sortedDistances.includes(savedValue)) {
+    // Восстанавливаем значение: приоритет — значение из URL при первой
+    // загрузке (once, см. readStateFromUrl), иначе текущее выбранное,
+    // иначе максимальная дистанция (последняя после сортировки по
+    // возрастанию), не первая попавшаяся и не пустое значение.
+    if (_urlDistance && sortedDistances.includes(_urlDistance)) {
+        distanceSelect.value = _urlDistance;
+        _urlDistance = null;
+    } else if (savedValue && sortedDistances.includes(savedValue)) {
         distanceSelect.value = savedValue;
     } else if (sortedDistances.length > 0) {
         distanceSelect.value = sortedDistances[sortedDistances.length - 1];
@@ -437,6 +504,9 @@ function applyFilters() {
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
+
+    // Прямая ссылка на текущий вид (событие/год/дистанция/фильтры) в URL
+    syncUrlFromState();
 }
 
 function _sortArray(arr) {
