@@ -26,11 +26,17 @@ run(client, "dig +short results.krasmarafon.ru || nslookup results.krasmarafon.r
 # Check nginx status
 run(client, "systemctl status nginx --no-pager | head -5")
 
-# Get SSL cert
-run(client, "certbot --nginx -d results.krasmarafon.ru --non-interactive --agree-tos -m admin@krasmarafon.ru", timeout=120)
+# Get SSL cert — webroot-метод (НЕ --nginx): certbot только кладёт файл
+# проверки в /var/lib/letsencrypt (порт-80 блок results.krasmarafon.ru в
+# nginx.conf уже отдаёт его статикой), не редактирует живой nginx.conf
+# напрямую — деплой всё равно перезаписывает его из git на каждый пуш,
+# так что прямые правки certbot всё равно потерялись бы при следующем
+# деплое. Тот же паттерн уже используется для live.siberman515.com.
+run(client, "certbot certonly --webroot -w /var/lib/letsencrypt -d results.krasmarafon.ru --non-interactive --agree-tos -m admin@krasmarafon.ru", timeout=120)
 
-# Reload nginx
-run(client, "systemctl reload nginx")
+# certbot certonly не трогает nginx.conf — 443-блок для results.krasmarafon.ru
+# добавляется в deploy/nginx.conf отдельным коммитом ПОСЛЕ этого скрипта
+# (см. комментарий в nginx.conf), reload делать пока не нужно
 
 # Final check
 run(client, "curl -s http://127.0.0.1:8000/health")
