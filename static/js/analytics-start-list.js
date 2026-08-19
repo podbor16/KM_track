@@ -297,15 +297,16 @@ function populateDistances(runners) {
     // Очищаем текущие опции
     distanceSelect.innerHTML = '';
 
-    // Сортируем дистанции по возрастанию
+    // Сортируем дистанции по возрастанию — KMUtils.parseDistanceKm()
+    // приводит к единому километровому масштабу (не голое parseInt: "500 м"
+    // без учёта единицы измерения "больше" числа в "1 км")
     const sortedDistances = Array.from(distances).sort((a, b) => {
-        // Извлекаем числовое значение для сортировки
-        const numA = parseInt(a) || 0;
-        const numB = parseInt(b) || 0;
+        const numA = KMUtils.parseDistanceKm(a);
+        const numB = KMUtils.parseDistanceKm(b);
         if (numA !== numB) {
             return numA - numB;
         }
-        // Если числа одинаковые, сортируем по строке
+        // Если значения одинаковые, сортируем по строке
         return a.localeCompare(b, 'ru');
     });
 

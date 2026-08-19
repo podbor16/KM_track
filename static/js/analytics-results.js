@@ -557,12 +557,12 @@ function populateDistances(runners) {
     // Сортируем дистанции по возрастанию
     const sortedDistances = Array.from(distances).sort((a, b) => {
         // Извлекаем числовое значение для сортировки
-        const numA = parseInt(a) || 0;
-        const numB = parseInt(b) || 0;
+        const numA = KMUtils.parseDistanceKm(a);
+        const numB = KMUtils.parseDistanceKm(b);
         if (numA !== numB) {
             return numA - numB;
         }
-        // Если числа одинаковые, сортируем по строке
+        // Если значения одинаковые, сортируем по строке
         return a.localeCompare(b, 'ru');
     });
 

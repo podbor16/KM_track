@@ -109,6 +109,20 @@ const KIDS_1KM = [
     { sex: 'Мужчина', surname: 'Сидоров', name: 'Пётр', category: '8 лет', distance: '1 км' },
 ];
 
+check('KMUtils.parseDistanceKm() — учитывает единицу измерения ("500 м" < "1 км", не голое число)', () => {
+    assert.strictEqual(sandbox.KMUtils.parseDistanceKm('500 м'), 0.5);
+    assert.strictEqual(sandbox.KMUtils.parseDistanceKm('1 км'), 1);
+    assert.ok(sandbox.KMUtils.parseDistanceKm('500 м') < sandbox.KMUtils.parseDistanceKm('1 км'));
+});
+
+check('populateDistances() — реальный случай Детского забега: дефолт "1 км" (максимальная), не "500 м"', () => {
+    resetDom();
+    setAllRunners([...KIDS_500, ...KIDS_1KM]);
+    domStub('distanceFilter').value = '';
+    vm.runInContext('populateDistances(allRunners)', sandbox);
+    assert.strictEqual(domStub('distanceFilter').value, '1 км');
+});
+
 check('applyFilters() — скрывает фильтр/колонку "Возр. группа" на дистанции без категорий (500 м)', () => {
     resetDom();
     setAllRunners(KIDS_500);
