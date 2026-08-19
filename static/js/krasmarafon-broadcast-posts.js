@@ -111,8 +111,13 @@ async function bcpGenerate(sexKey) {
     try {
         const data = await bcpFetchDistanceData(wantedDistance);
         const checkpoint = (data.checkpoints || []).find(cp => cp.code === wantedCode);
-        if (!checkpoint) throw new Error('checkpoint not found');
-        ta.value = buildTop3Post(checkpoint, sexKey);
+        // Отметка не найдена в свежих данных (не должно происходить в норме —
+        // список отметок строится из того же JSON) — это другой случай, чем
+        // "источник данных недоступен": показываем сообщение о пустой
+        // отметке, а не общую ошибку "трансляция не активна".
+        ta.value = checkpoint
+            ? buildTop3Post(checkpoint, sexKey)
+            : 'Нет данных для этой отметки — пока никто не финишировал.';
     } catch (e) {
         bcpShowError(true);
     }
