@@ -1055,7 +1055,8 @@ def _get_age_group_configs() -> dict:
             pass
 
 
-def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, sex: str = None) -> str:
+def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, sex: str = None,
+                         source: str = None) -> str:
     """Возрастная группа с учётом границ, заданных в /admin для конкретных
     (event_name, event_distance). Два разных случая "нет подходящего
     брекета" различаются осознанно:
@@ -1064,9 +1065,13 @@ def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, 
       нет понятия "категория";
     - границы настроены, но возраст КОНКРЕТНОГО участника не попадает ни в
       один из них (напр. регистрация младше официального минимального
-      возраста дистанции, ещё не вычищенная организатором) — это сигнал
-      реальной проблемы данных, а не "категория не нужна", поэтому явный
-      маркер "Ошибка возраста", а не тихая пустая строка."""
+      возраста дистанции, ещё не вычищенная организатором) — сигнал
+      реальной проблемы данных. Для source='import' (обработанный
+      организатором файл — считаем, что он уже разобрался с такими
+      случаями) вместо "Ошибка возраста" присваиваем минимальную
+      возрастную категорию дистанции. Для остальных источников (вебхук,
+      source не передан) — по-прежнему "Ошибка возраста", требует ручной
+      проверки организатором (2026-08-19)."""
     age, is_male = _parse_age_and_sex(birthdate_or_age, sex)
     if age is None:
         return 'Неизвестно'
@@ -1077,6 +1082,8 @@ def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, 
         for min_age, max_age, label in brackets:
             if age >= min_age and (max_age is None or age <= max_age):
                 return label
+        if source == 'import':
+            return brackets[0][2]  # brackets отсортированы по min_age — [0] это минимальная категория
         return 'Ошибка возраста'
 
     return ''
@@ -1299,7 +1306,8 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                             record.get('gender') or record.get('gender_en')
                         )
                         record['category'] = get_age_group_label(
-                            record.get('event_name'), record.get('event_distance'), age_info, sex_info
+                            record.get('event_name'), record.get('event_distance'), age_info, sex_info,
+                            source=record.get('source'),
                         ) if age_info else 'Неизвестно'
 
                     _start_list_cache = records
@@ -1382,7 +1390,7 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
             result.append(d)
         _startlist_cache[key] = result
         _startlist_cache_ts[key] = time.time()
@@ -1494,7 +1502,7 @@ def get_leads_admin(
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
             result.append(d)
         return result
     except Exception as e:
@@ -1588,7 +1596,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         if not row:
             return None
         d = dict(row)
-        d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'))
+        d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
         return d
     except Exception as e:
         logger.error(f"update_lead error: {e}")
@@ -1819,13 +1827,13 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event
+                        status, is_new, is_new_event, source
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
-                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import'
                     )
                     """,
                     {

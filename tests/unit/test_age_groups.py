@@ -101,6 +101,40 @@ def test_age_error_when_age_outside_all_configured_brackets(mock_get_conn):
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_import_source_gets_minimum_bracket_instead_of_age_error(mock_get_conn):
+    """source='import' (bulk-импорт из обработанного организатором файла,
+    см. bulk_import_leads()) — для регистрации младше минимального возраста
+    дистанции присваиваем минимальную возрастную категорию вместо "Ошибка
+    возраста" (организатор уже разобрался с такими случаями руками при
+    подготовке файла, 2026-08-19)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [
+        {"event_name": "Жара", "event_distance": "21.1 км", "sex": "M", "min_age": 18, "max_age": 24, "label": "М18-24"},
+        {"event_name": "Жара", "event_distance": "21.1 км", "sex": "M", "min_age": 25, "max_age": None, "label": "М25+"},
+    ]
+
+    label = get_age_group_label("Жара", "21.1 км", 15, "Мужчина", source="import")
+
+    assert label == "М18-24"
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_webhook_source_still_returns_age_error(mock_get_conn):
+    """source='webhook' (или не передан вовсе) — поведение не меняется:
+    "Ошибка возраста", регистрация требует ручной проверки организатором."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [
+        {"event_name": "Жара", "event_distance": "21.1 км", "sex": "M", "min_age": 18, "max_age": 24, "label": "М18-24"},
+    ]
+
+    label = get_age_group_label("Жара", "21.1 км", 15, "Мужчина", source="webhook")
+
+    assert label == 'Ошибка возраста'
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_falls_back_when_config_exists_for_other_event(mock_get_conn):
     """Границы заданы для Жары — для другого события они не применяются
     (используется общий фоллбэк "нет конфига", не чужие границы)."""

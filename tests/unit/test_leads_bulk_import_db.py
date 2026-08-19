@@ -155,6 +155,26 @@ def test_new_lead_insert_includes_payment_fields_from_import_row(mock_get_conn, 
 
 @patch("src.analytics.db_results.recompute_duplicate_flag")
 @patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_marks_source_as_import(mock_get_conn, mock_recompute):
+    """leads.source различает вебхук/импорт для get_age_group_label() —
+    регистрация младше минимального возраста дистанции получает разное
+    поведение в зависимости от источника (2026-08-19)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row()])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    sql = insert_call.args[0]
+    assert "source" in sql
+    assert "'import'" in sql
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
 def test_new_lead_insert_includes_start_number(mock_get_conn, mock_recompute):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
