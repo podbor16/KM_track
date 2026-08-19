@@ -140,6 +140,10 @@ _KNOWN_IGNORED_HEADERS = {
     "ma_id", "ma_name", "ma_phone", "formid", "formname",
     "file_discount", "file_discount_0", "file_discount_1",
     "field13", "field14", "stage",
+    # "size" — размер формы/футболки (выгрузка Детского забега 2026,
+    # 2026-08-19), в leads нет соответствующей колонки, не участвует
+    # в сопоставлении/создании заявки.
+    "size",
 }
 
 
@@ -210,6 +214,28 @@ def _extract_event_info(get, col_map: dict, birthday: str,
         if info["event_name"] and info["event_distance"]:
             event_year = int(info["event_year"]) if info["event_year"] else None
             return info["event_name"], event_year, info["event_distance"]
+
+        # Реальный случай (Детский забег 2026, выгрузка 19.08 — 271 из 1116
+        # строк): организатор вписал участников от партнёров ("Профсоюз
+        # РН-Ванкор", "Магнит", "Балтика" и т.п.) прямо в выгрузку Tilda —
+        # у таких строк нет Date/order_id/Stage (заявка никогда не проходила
+        # оплату/checkout), а product либо пуст, либо голое название без
+        # года/слага ("Детский забег" без "(kids2026, ...)"). Текстовая
+        # ветка parse_products() для "детск.*забег" требует год ИЗ САМОЙ
+        # строки продукта — тут его взять неоткуда. Событие/год организатор
+        # уже выбрал в /admin перед загрузкой (fallback_event_name/year) —
+        # если это Детский забег, дистанция всё равно считается по возрасту
+        # (та же формула, что в parse_products()), просто год берём из
+        # фоллбэка, а не из текста.
+        event_name_guess = info["event_name"] or fallback_event_name or ""
+        if (fallback_event_name and fallback_event_year and birthday
+                and re.search(r"детск.*забег", event_name_guess, re.IGNORECASE)):
+            try:
+                age = fallback_event_year - int(birthday[:4])
+                event_distance = "500 м" if age < 6 else "1 км"
+                return fallback_event_name, fallback_event_year, event_distance
+            except (ValueError, IndexError):
+                pass
 
     if "event_distance" in col_map and fallback_event_name and fallback_event_year:
         distance = str(get("event_distance") or "").strip().replace(",", ".")

@@ -491,6 +491,81 @@ def test_parse_real_tilda_export_product_without_year_uses_slug_fallback():
     assert result.rows[0].event_year == 2026
 
 
+def test_parse_kids_race_empty_product_uses_age_from_fallback_year():
+    """Реальный случай (Детский забег 2026, выгрузка 19.08 — 250 из 1116
+    строк): организатор вписал участников от партнёров ("Профсоюз
+    РН-Ванкор" и т.п.) прямо в выгрузку — у таких строк product пустой (нет
+    Date/order_id — заявка никогда не проходила оплату Tilda). Событие/год
+    выбраны в /admin перед загрузкой (fallback), дистанция считается по
+    возрасту, как и для строк с полным текстом продукта."""
+    xlsx = _real_export_xlsx([
+        _real_row("Казанцева", "Ева", "Женщина", "Красноярск", "23.04.2021",
+                  None, None, ""),
+    ])
+    result = parse_tilda_export(
+        xlsx, filename="export.xlsx",
+        fallback_event_name="Детский забег", fallback_event_year=2026,
+    )
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.event_name == "Детский забег"
+    assert row.event_year == 2026
+    assert row.event_distance == "500 м"  # 2026 - 2021 = 5 лет, < 6
+
+
+def test_parse_kids_race_bare_product_text_uses_age_from_fallback_year():
+    """Тот же реальный импорт (2026-08-19) — 21 строка с голым product
+    "Детский забег" без года/слага (parse_products() не может извлечь год из
+    самого текста); фоллбэк из /admin закрывает и этот случай."""
+    xlsx = _real_export_xlsx([
+        _real_row("Кондауров", "Родион", "Мужчина", "Красноярск", "14.03.2018",
+                  None, None, "Детский забег"),
+    ])
+    result = parse_tilda_export(
+        xlsx, filename="export.xlsx",
+        fallback_event_name="Детский забег", fallback_event_year=2026,
+    )
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.event_name == "Детский забег"
+    assert row.event_year == 2026
+    assert row.event_distance == "1 км"  # 2026 - 2018 = 8 лет, >= 6
+
+
+def test_parse_kids_race_empty_product_without_fallback_stays_an_error():
+    """Без выбранного в /admin события/года — как и раньше, не гадаем."""
+    xlsx = _real_export_xlsx([
+        _real_row("Казанцева", "Ева", "Женщина", "Красноярск", "23.04.2021",
+                  None, None, ""),
+    ])
+    result = parse_tilda_export(xlsx, filename="export.xlsx")
+
+    assert result.rows == []
+    assert len(result.failed_rows) == 1
+
+
+def test_parse_kids_race_fallback_does_not_apply_to_other_events():
+    """Фоллбэк по возрасту — только для "Детский забег" (единственное
+    событие, где дистанция вообще определяется возрастом); для остальных
+    событий пустой product по-прежнему остаётся ошибкой, дистанцию по
+    возрасту не гадаем."""
+    xlsx = _real_export_xlsx([
+        _real_row("Тестов", "Иван", "Мужчина", "Красноярск", "01.05.1990",
+                  None, None, ""),
+    ])
+    result = parse_tilda_export(
+        xlsx, filename="export.xlsx",
+        fallback_event_name="Жара", fallback_event_year=2026,
+    )
+
+    assert result.rows == []
+    assert len(result.failed_rows) == 1
+
+
 def test_parse_real_tilda_export_garbage_product_value_collected_as_error():
     """Реальная находка: как минимум 1 строка боевой выгрузки содержала
     'yes' в колонке product вместо текста заказа (артефакт формы Tilda)."""
@@ -631,6 +706,17 @@ def test_parse_real_tilda_export_all_known_headers_produce_no_warning():
                   "5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1790"),
     ])
     result = parse_tilda_export(xlsx, filename="export.xlsx")
+    assert result.unknown_headers == []
+
+
+def test_parse_size_column_ignored_without_warning():
+    """"size" — размер формы/футболки, появившийся в выгрузке Детского
+    забега 2026 (2026-08-19); не должен попадать в unknown_headers."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,size\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027,128\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert result.unknown_headers == []
 
 
