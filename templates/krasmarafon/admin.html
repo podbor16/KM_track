@@ -45,6 +45,7 @@
             <button class="admin-tab" onclick="switchTab('age-groups', this)">Возрастные группы</button>
             <button class="admin-tab" onclick="switchTab('photos', this)">Фото участников</button>
             <button class="admin-tab" onclick="switchTab('analytics', this)">Аналитика</button>
+            <button class="admin-tab" onclick="switchTab('broadcast', this)">Трансляция</button>
         </div>
 
         <!-- ================================================================ -->
@@ -193,6 +194,49 @@
             </div>
             <div id="analytics-iframe-wrap">
                 <div class="admin-loading">Загрузка дашборда...</div>
+            </div>
+        </div>
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: ТРАНСЛЯЦИЯ (посты Топ-3 муж/жен по отметкам, Жара)     -->
+        <!-- ================================================================ -->
+        <div id="tab-broadcast" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Готовые к копированию посты «Топ-3» по отметкам Жары (5 км / 21.1 км) —
+                для соцсетей/мессенджера. Источник — тот же live-JSON, что и у режиссёра
+                трансляции; данные появляются только когда идёт гонка и загрузчик
+                результатов запущен с флагом <code>--broadcast-json</code>.
+            </div>
+
+            <div class="admin-leads-toolbar">
+                <div class="admin-leads-filters">
+                    <select id="bcp-distance" class="admin-select">
+                        <option value="5 км">5 км</option>
+                        <option value="21.1 км">21.1 км</option>
+                    </select>
+                    <select id="bcp-checkpoint" class="admin-select">
+                        <option value="">— отметка —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="bcp-error" class="admin-error" style="display:none"></div>
+
+            <div class="admin-leads-toolbar">
+                <button class="km-btn km-btn--primary" id="bcp-generate-male">Сгенерировать (Мужчины)</button>
+                <button class="km-btn km-btn--primary" id="bcp-generate-female">Сгенерировать (Женщины)</button>
+            </div>
+
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px">
+                <div style="flex:1; min-width:280px">
+                    <div style="font-weight:600; margin-bottom:4px">Мужчины</div>
+                    <textarea id="bcp-output-male" class="admin-yaml-editor" readonly rows="12"></textarea>
+                    <button class="km-btn km-btn--secondary" id="bcp-copy-male" style="margin-top:8px">Копировать</button>
+                </div>
+                <div style="flex:1; min-width:280px">
+                    <div style="font-weight:600; margin-bottom:4px">Женщины</div>
+                    <textarea id="bcp-output-female" class="admin-yaml-editor" readonly rows="12"></textarea>
+                    <button class="km-btn km-btn--secondary" id="bcp-copy-female" style="margin-top:8px">Копировать</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1518,6 +1562,7 @@
     }
     loadHistoryToggle();
     </script>
+    <script src="/static/js/krasmarafon-broadcast-posts.js"></script>
 </body>
 </html>
 
