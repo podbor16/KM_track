@@ -1516,25 +1516,36 @@ def get_leads_admin(
 
 
 def get_leads_filter_options(event_name: str = None, event_year: int = None) -> dict:
-    """Distinct значения для каскадных фильтров (event_names, years, distances)."""
+    """Distinct значения для каскадных фильтров (event_names, years, distances).
+
+    event_names/years объединяются (UNION) с таблицей events — иначе только
+    что сконфигурированное, но ещё ни разу не импортированное событие (0
+    заявок в leads) не появлялось бы в фильтре вообще, хотя оно уже
+    существует: курица-яйцо, событие есть, а выбрать его в дропдауне для
+    самого ПЕРВОГО импорта (fallback event_name/event_year, см. докстринг
+    upload_leads_import) — нельзя (реальный случай, Детский забег 2026,
+    2026-08-19). distances НЕ объединяем — events.event_distance хранит
+    число (км, напр. 1.0), а leads.event_distance — отформатированную
+    строку ("1 км"), несовместимые форматы."""
     conn = get_pooled_connection()
     if not conn:
         return {"event_names": [], "years": [], "distances": []}
     try:
         cur = conn.cursor(buffered=True)
         cur.execute(
-            "SELECT DISTINCT event_name FROM leads "
-            "WHERE event_name IS NOT NULL ORDER BY event_name"
+            "SELECT event_name FROM leads WHERE event_name IS NOT NULL "
+            "UNION SELECT event_name FROM events WHERE event_name IS NOT NULL "
+            "ORDER BY event_name"
         )
         event_names = [r[0] for r in cur.fetchall()]
 
         years: list = []
         if event_name:
             cur.execute(
-                "SELECT DISTINCT event_year FROM leads "
-                "WHERE event_name = %s AND event_year IS NOT NULL "
+                "SELECT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL "
+                "UNION SELECT event_year FROM events WHERE event_name = %s AND event_year IS NOT NULL "
                 "ORDER BY event_year DESC",
-                (event_name,),
+                (event_name, event_name),
             )
             years = [r[0] for r in cur.fetchall()]
 

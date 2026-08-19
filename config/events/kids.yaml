@@ -11,8 +11,8 @@ description: "Детский забег | Дистанция: 1 км"
 distances:
   - distance: "1 км"
     distance_km: 1.0
-    db_event_id: null         # ← заполнить перед стартом
-    tracked: true
+    db_event_id: 113
+    tracked: false            # трекер (живая карта) для детского забега не нужен
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
@@ -29,7 +29,7 @@ distances:
 
   - distance: "500 м"
     distance_km: 0.5
-    db_event_id: null
+    db_event_id: 112
     tracked: false
     has_start_list: true
     checkpoint_distances: []
