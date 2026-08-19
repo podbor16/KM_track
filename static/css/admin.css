@@ -243,6 +243,34 @@
     padding: 12px 0;
 }
 
+/* Анимированный индикатор загрузки (импорт заявок и т.п.) — тот же
+   визуальный приём, что .search-loader в history.css, здесь под именем
+   admin-* для консистентности с остальными классами этого файла. */
+.admin-loading-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--km-text-secondary);
+    font-size: 0.9rem;
+    padding: 12px 0;
+}
+
+.admin-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--km-primary);
+    border-radius: 50%;
+    animation: admin-spin 1s linear infinite;
+}
+
+@keyframes admin-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 .admin-error {
     color: #721c24;
     background: #f8d7da;

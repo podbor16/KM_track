@@ -1048,6 +1048,15 @@
         btn.disabled = true;
         btn.textContent = 'Загрузка...';
 
+        // Реальные Excel/CSV-выгрузки Tilda разбираются по несколько секунд
+        // (замерено на проде — до 14с на файлах в тысячи строк) — без
+        // видимого индикатора страница выглядит зависшей. Прогресс по
+        // строкам бэкенд не отдаёт (синхронный запрос-ответ, не SSE), так
+        // что честно показываем "идёт работа", не точный процент.
+        const previewEl = document.getElementById('leads-import-preview');
+        previewEl.style.display = '';
+        previewEl.innerHTML = '<div class="admin-loading-state"><span class="admin-spinner"></span>Загружаем и разбираем файл...</div>';
+
         const fd = new FormData();
         fd.append('file', file);
         // Фоллбэк на выбранное событие/год — только для строк без полного
@@ -1062,11 +1071,13 @@
             const r = await fetch('/api/admin/leads/import/upload', { method: 'POST', body: fd });
             if (!r.ok) {
                 const err = await r.json().catch(() => ({}));
+                previewEl.style.display = 'none';
                 alert('Ошибка загрузки: ' + (err.detail || r.status));
                 return;
             }
             renderLeadsImportPreview(await r.json());
         } catch(e) {
+            previewEl.style.display = 'none';
             alert('Ошибка: ' + e.message);
         } finally {
             btn.disabled = false;
@@ -1174,18 +1185,29 @@
         if (toDelete > 0 && !confirm(`Будет безвозвратно удалено заявок: ${toDelete}. Продолжить?`)) {
             return;
         }
+        // Тот же приём, что при загрузке файла — apply на больших файлах
+        // тоже занимает много секунд (замерено на проде), а до этой правки
+        // тут не было вообще никакого индикатора, кнопки оставались
+        // кликабельными. Превью-блок временно заменяется спиннером;
+        // при ошибке восстанавливаем исходную разметку, чтобы можно было
+        // повторить попытку, не перезагружая файл заново.
+        const previewEl = document.getElementById('leads-import-preview');
+        const savedHtml = previewEl.innerHTML;
+        previewEl.innerHTML = '<div class="admin-loading-state"><span class="admin-spinner"></span>Применяем импорт... это может занять до 15 секунд на больших файлах.</div>';
         try {
             const r = await fetch(`/api/admin/leads/import/apply?token=${encodeURIComponent(token)}`, { method: 'POST' });
             if (!r.ok) {
                 const err = await r.json().catch(() => ({}));
+                previewEl.innerHTML = savedHtml;
                 alert('Ошибка применения импорта: ' + (err.detail || r.status));
                 return;
             }
             const summary = await r.json();
             alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}`);
-            document.getElementById('leads-import-preview').style.display = 'none';
+            previewEl.style.display = 'none';
             loadLeads(true);
         } catch(e) {
+            previewEl.innerHTML = savedHtml;
             alert('Ошибка: ' + e.message);
         }
     }
