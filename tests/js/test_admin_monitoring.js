@@ -163,14 +163,37 @@ class FakeChart {
 }
 sandbox.Chart = FakeChart;
 
-check('renderHistoryCharts() — пустой массив точек показывает "Нет данных", не пустой график', () => {
+check('renderHistoryCharts() — пустой массив точек прячет canvas и показывает "Нет данных", не удаляя canvas из DOM', () => {
     resetDom();
     const box = makeElement('DIV');
     const canvas = makeElement('CANVAS');
     box.appendChild(canvas);
     elementsById['mon-chart-cpu'] = canvas;
     sandbox.renderHistoryCharts([]);
-    assert.ok(box.textContent.includes('Нет данных'));
+    assert.strictEqual(canvas.style.display, 'none');
+    const msg = box._children.find(c => c !== canvas);
+    assert.ok(msg && msg.textContent.includes('Нет данных'), 'должен быть добавлен отдельный элемент с текстом, а не заменён canvas');
+});
+
+check('renderHistoryCharts() — переход от пустой истории к данным возвращает canvas и рисует график (canvas не был удалён)', () => {
+    resetDom();
+    const box = makeElement('DIV');
+    const canvas = makeElement('CANVAS');
+    box.appendChild(canvas);
+    elementsById['mon-chart-cpu'] = canvas;
+    elementsById['mon-chart-ram'] = makeElement('CANVAS');
+    elementsById['mon-chart-response'] = makeElement('CANVAS');
+    elementsById['mon-chart-errors'] = makeElement('CANVAS');
+
+    sandbox.renderHistoryCharts([]); // пусто — canvas прячется
+    assert.strictEqual(canvas.style.display, 'none');
+
+    sandbox.renderHistoryCharts([
+        { ts: 1755000000, cpu_percent: 10, ram_used_mb: 100, ram_total_mb: 200, avg_response_ms: 50, http_errors: 0 },
+    ]); // данные появились — canvas должен снова стать видимым и получить график
+    assert.notStrictEqual(canvas.style.display, 'none');
+    const cpuChart = vm.runInContext('monCharts["mon-chart-cpu"]', sandbox);
+    assert.ok(cpuChart, 'график должен быть отрисован — canvas не должен был быть удалён из DOM');
 });
 
 vm.runInContext('void 0', sandbox); // no-op — Chart уже доступен глобально в sandbox без повторной загрузки скрипта

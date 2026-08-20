@@ -97,20 +97,22 @@ function hoursForRange(rangeKey) {
 }
 
 // ---- Графики истории (Chart.js v4, static/lib/chart4/) ----
+const MON_CHART_CANVAS_IDS = ['mon-chart-cpu', 'mon-chart-ram', 'mon-chart-response', 'mon-chart-errors'];
 let monCharts = {}; // canvasId → Chart instance, для destroy() перед перерисовкой
+const monEmptyEls = {}; // canvasId → элемент-заглушка "Нет данных"
 
 function renderHistoryCharts(points) {
     if (!points.length) {
         // Пустая история (свежий деплой, БД метрик ещё не наполнилась) —
-        // явное сообщение вместо пустого канваса без каких-либо данных.
-        Object.keys(MON_CHART_LABELS).forEach(canvasId => {
-            if (monCharts[canvasId]) { monCharts[canvasId].destroy(); monCharts[canvasId] = null; }
-            const canvas = document.getElementById(canvasId);
-            const box = canvas && canvas.parentElement;
-            if (box) box.textContent = 'Нет данных за выбранный период';
-        });
+        // явное сообщение вместо графика. Canvas прячем через style.display,
+        // НЕ через box.textContent — замена textContent удалила бы canvas
+        // из DOM безвозвратно, и переключение на диапазон с данными больше
+        // никогда бы его не нарисовало.
+        MON_CHART_CANVAS_IDS.forEach(canvasId => monShowEmptyChart(canvasId));
         return;
     }
+
+    MON_CHART_CANVAS_IDS.forEach(canvasId => monHideEmptyChart(canvasId));
 
     const labels = points.map(p => new Date(p.ts * 1000).toLocaleString('ru-RU', {
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
@@ -122,10 +124,26 @@ function renderHistoryCharts(points) {
     monRenderLineChart('mon-chart-errors', labels, points.map(p => p.http_errors), 'Ошибки', 'rgba(230,126,34,0.9)');
 }
 
-const MON_CHART_LABELS = {
-    'mon-chart-cpu': 'CPU %', 'mon-chart-ram': 'RAM %',
-    'mon-chart-response': 'Время ответа, мс', 'mon-chart-errors': 'Ошибки',
-};
+function monShowEmptyChart(canvasId) {
+    if (monCharts[canvasId]) { monCharts[canvasId].destroy(); monCharts[canvasId] = null; }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.style.display = 'none';
+    let msg = monEmptyEls[canvasId];
+    if (!msg && canvas.parentElement) {
+        msg = document.createElement('div');
+        msg.textContent = 'Нет данных за выбранный период';
+        canvas.parentElement.appendChild(msg);
+        monEmptyEls[canvasId] = msg;
+    }
+    if (msg) msg.style.display = '';
+}
+
+function monHideEmptyChart(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (canvas) canvas.style.display = '';
+    if (monEmptyEls[canvasId]) monEmptyEls[canvasId].style.display = 'none';
+}
 
 function monRenderLineChart(canvasId, labels, data, label, color) {
     const canvas = document.getElementById(canvasId);
@@ -148,7 +166,10 @@ function monRenderLineChart(canvasId, labels, data, label, color) {
 
 async function monLoadHistory(hours) {
     const resp = await fetch(`/api/admin/metrics?hours=${hours}`);
-    if (!resp.ok) return;
+    if (!resp.ok) {
+        console.error('Ошибка загрузки истории метрик:', resp.status);
+        return;
+    }
     const data = await resp.json();
     renderHistoryCharts(data.points || []);
     domSet('mon-tile-uptime', formatUptime(data.meta && data.meta.uptime_secs));
