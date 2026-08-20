@@ -449,6 +449,21 @@ class MetricsCollector:
         except Exception:
             return 0
 
+    def get_alerts_path(self) -> Path:
+        return self._alerts_path
+
+    def _recent_avg_sse(self, hours: int = 1) -> float | None:
+        """Среднее число SSE-соединений за последние `hours` часов —
+        baseline для generate_suggestions(), чтобы отличить "аномально
+        много" от обычного уровня. None, если истории ещё нет (свежий
+        деплой, БД метрик пустая)."""
+        now = int(time.time())
+        since = now - hours * 3600
+        points = self.query(since, now, hours_to_bucket_secs(hours))
+        if not points:
+            return None
+        return sum(p["sse_connections"] for p in points) / len(points)
+
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=10)
         self._subscribers.add(q)

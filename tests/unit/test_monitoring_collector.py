@@ -82,3 +82,28 @@ def test_empty_point_does_not_raise():
 def test_zero_total_requests_does_not_divide_by_zero():
     point = _base_point(total_requests=0, http_errors=0)
     assert generate_suggestions(point, recent_avg_sse=5.0) == []
+
+
+# --- MetricsCollector._recent_avg_sse() ----------------------------------
+
+@patch.object(MetricsCollector, "query")
+def test_recent_avg_sse_averages_query_points(mock_query, tmp_path):
+    mock_query.return_value = [
+        {"sse_connections": 10}, {"sse_connections": 20}, {"sse_connections": 30},
+    ]
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    assert collector._recent_avg_sse() == 20.0
+
+
+@patch.object(MetricsCollector, "query")
+def test_recent_avg_sse_returns_none_when_no_history(mock_query, tmp_path):
+    mock_query.return_value = []
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    assert collector._recent_avg_sse() is None
+
+
+# --- MetricsCollector.get_alerts_path() ----------------------------------
+
+def test_get_alerts_path_matches_db_path_parent(tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    assert collector.get_alerts_path() == tmp_path / "high_load_alerts.csv"
