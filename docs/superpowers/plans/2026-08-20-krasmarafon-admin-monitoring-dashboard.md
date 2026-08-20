@@ -1671,13 +1671,13 @@ Expected: только уже известные предсуществующи�
 Run: `git status --short`
 Expected: чисто относительно всех файлов этого плана (`src/monitoring/collector.py`, `src/krasmarafon/routers/api.py`, `templates/krasmarafon/admin.html`, `static/css/admin.css`, `static/js/admin-monitoring.js`, `tests/unit/test_monitoring_collector.py`, `tests/integration/test_admin_metrics.py`, `tests/js/test_admin_monitoring.js`)
 
-- [ ] **Step 4: Push**
+- [x] **Step 4: Push**
 
 ```bash
 git push
 ```
 
-- [ ] **Step 5: Дождаться деплоя и проверить на проде**
+- [x] **Step 5: Дождаться деплоя и проверить на проде**
 
 Run: `gh run list --limit 1` → `gh run watch <id> --exit-status`
 
