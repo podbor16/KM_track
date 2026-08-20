@@ -234,5 +234,37 @@ check('renderHistoryCharts() — второй вызов уничтожает п
     assert.strictEqual(first._destroyed, true);
 });
 
+check('renderAlertsTable() — пустой список показывает заглушку', () => {
+    resetDom();
+    sandbox.renderAlertsTable([]);
+    assert.ok(domStub('mon-alerts-body').innerHTML.includes('Алертов нет'));
+});
+
+check('renderAlertsTable() — строит строки с бейджем и советами', () => {
+    resetDom();
+    const alerts = [
+        {
+            datetime: '2026-08-19 16:49:02', load_label: 'Критическая',
+            cpu_pct: '2.4', ram_pct: '80.8', avg_ms: '17991.2',
+            suggestions: ['RAM 80% ...', 'Среднее время ответа 17991 мс ...'],
+        },
+    ];
+    sandbox.renderAlertsTable(alerts);
+    const html = domStub('mon-alerts-body').innerHTML;
+    assert.ok(html.includes('2026-08-19 16:49:02'));
+    assert.ok(html.includes('Критическая'));
+    assert.ok(html.includes('admin-badge--load-critical'));
+    assert.ok(html.includes('RAM 80%'));
+    assert.ok(html.includes('Среднее время ответа 17991 мс'));
+});
+
+check('renderAlertsTable() — алерт без советов показывает прочерк, не пустой <ul>', () => {
+    resetDom();
+    sandbox.renderAlertsTable([{ datetime: '2026-08-19 16:49:02', load_label: 'Высокая', cpu_pct: '90', ram_pct: '10', avg_ms: '100', suggestions: [] }]);
+    const html = domStub('mon-alerts-body').innerHTML;
+    assert.ok(html.includes('—'));
+    assert.ok(!html.includes('<ul'));
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

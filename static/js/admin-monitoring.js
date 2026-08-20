@@ -180,6 +180,37 @@ function monOnRangeChange() {
     monLoadHistory(hoursForRange(sel.value));
 }
 
+// ---- Таблица последних алертов ----
+function renderAlertsTable(alerts) {
+    const tbody = document.getElementById('mon-alerts-body');
+    if (!tbody) return;
+    if (!alerts.length) {
+        tbody.innerHTML = '<tr><td colspan="5">Алертов нет</td></tr>';
+        return;
+    }
+    tbody.innerHTML = alerts.map(a => {
+        const suggestionsHtml = (a.suggestions && a.suggestions.length)
+            ? `<ul class="admin-alerts-suggestions">${a.suggestions.map(s => `<li>${s}</li>`).join('')}</ul>`
+            : '—';
+        return `
+            <tr>
+                <td>${a.datetime || ''}</td>
+                <td><span class="admin-badge ${loadLabelBadgeClass(a.load_label)}">${a.load_label || ''}</span></td>
+                <td>CPU ${a.cpu_pct || 0}% / RAM ${a.ram_pct || 0}%</td>
+                <td>${a.avg_ms || 0} мс</td>
+                <td>${suggestionsHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function monLoadAlerts() {
+    const resp = await fetch('/api/admin/metrics/alerts?limit=50');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderAlertsTable(data.alerts || []);
+}
+
 // ---- Инициализация вкладки (вызывается из switchTab() в admin.html) ----
 function loadMonitoringTab() {
     monLoadHistory(24);
