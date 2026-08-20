@@ -127,7 +127,7 @@ def _query_checkpoint_rows(
 def _build_checkpoint(
     connection, event_id: int, code: str, label: str, time_col: str,
     rank_abs_col: str, rank_sex_col: str, pace_col: str,
-    photo_map: Dict[int, str],
+    photo_map: Dict[int, str], remaining_km: Optional[float] = None,
 ) -> Dict[str, Any]:
     abs_rows = _query_checkpoint_rows(connection, event_id, time_col, rank_abs_col, rank_sex_col, pace_col)
     male_rows = _query_checkpoint_rows(connection, event_id, time_col, rank_abs_col, rank_sex_col, pace_col, sex_filter="Мужчина")
@@ -143,7 +143,7 @@ def _build_checkpoint(
             seconds = _td_to_seconds(rec["time_clear"])
             leader_sex_s = leader_male_s if rec["sex"] == "Мужчина" else leader_female_s
             pace_seconds = _td_to_seconds(rec["pace_avg"])
-            result.append({
+            entry = {
                 "start_number": rec["start_number"],
                 "surname": rec["surname"],
                 "name": rec["name"],
@@ -156,7 +156,12 @@ def _build_checkpoint(
                 "gap_absolute": _format_gap(seconds - leader_abs_s) if leader_abs_s is not None else "Лидер",
                 "gap_sex": _format_gap(seconds - leader_sex_s) if leader_sex_s is not None else "Лидер",
                 "photo_url": photo_map.get(rec["start_number"], PARTICIPANT_PHOTO_PLACEHOLDER_URL),
-            })
+            }
+            if remaining_km is not None:
+                forecast_seconds = _forecast_finish_seconds(seconds, pace_seconds, remaining_km)
+                if forecast_seconds is not None:
+                    entry["forecast_finish_time"] = _seconds_to_hms(forecast_seconds)
+            result.append(entry)
         return result
 
     return {
@@ -214,6 +219,7 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
             time_col=f"time_clear_kt{i}", rank_abs_col=f"rank_absolute_kt{i}",
             rank_sex_col=f"rank_sex_kt{i}", pace_col=f"pace_avg_kt{i}",
             photo_map=photo_map,
+            remaining_km=float(event["event_distance"]) - checkpoint_distances[i],
         ))
 
     checkpoints.append(_build_checkpoint(

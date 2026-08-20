@@ -170,6 +170,44 @@ def test_build_checkpoint_truncates_below_ten_without_padding():
     assert checkpoint["top10_female"] == []
 
 
+def test_build_checkpoint_adds_forecast_finish_time_when_remaining_km_given():
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+
+    abs_rows = [_row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:10:00", "5:00")]
+    cur.fetchall.side_effect = [abs_rows, abs_rows, []]
+
+    checkpoint = _build_checkpoint(
+        conn, event_id=116, code="kt6", label="КТ6 (20.2 км)",
+        time_col="time_clear_kt6", rank_abs_col="rank_absolute_kt6",
+        rank_sex_col="rank_sex_kt6", pace_col="pace_avg_kt6",
+        photo_map={}, remaining_km=0.9,
+    )
+
+    # elapsed 4200с + 0.9км × 300с/км = 4470с = 01:14:30
+    assert checkpoint["top10_absolute"][0]["forecast_finish_time"] == "01:14:30"
+
+
+def test_build_checkpoint_omits_forecast_finish_time_without_remaining_km():
+    """Блок "finish" не передаёт remaining_km (используется дефолт None) —
+    поле должно ПОЛНОСТЬЮ ОТСУТСТВОВАТЬ в записи, не быть null."""
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    rows = [_row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:40:00", "4:44")]
+    cur.fetchall.side_effect = [rows, rows, []]
+
+    checkpoint = _build_checkpoint(
+        conn, event_id=116, code="finish", label="Финиш",
+        time_col="time_clear_finish", rank_abs_col="rank_absolute_clean",
+        rank_sex_col="rank_sex_clean", pace_col="finish_pace_avg_clean",
+        photo_map={},
+    )
+
+    assert "forecast_finish_time" not in checkpoint["top10_absolute"][0]
+
+
 from src.krasmarafon.services import live_top10_export
 from src.krasmarafon.services.live_top10_export import generate_top10_json
 
@@ -227,3 +265,32 @@ def test_generate_top10_json_creates_parent_directory(tmp_path, monkeypatch):
     generate_top10_json(conn, event_id=135, output_path=nested_path)
 
     assert (tmp_path / "nested" / "dir" / "zhara_top10.json").exists()
+
+
+def test_generate_top10_json_passes_remaining_km_to_intermediate_checkpoints_only(tmp_path, monkeypatch):
+    """Проверяет саму связку generate_top10_json → _build_checkpoint:
+    промежуточные КТ получают remaining_km = event_distance - checkpoint_distances[i],
+    финиш — не получает remaining_km вовсе (дефолт None)."""
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    cur.fetchone.return_value = {
+        "event_name": "Жара", "event_distance": 21.1, "event_year": 2026,
+        "checkpoint_distances": "[0, 5.0, 6.0, 10.55, 14.65, 15.65, 20.2, 21.1]",
+    }
+    cur.fetchall.return_value = []
+
+    captured = {}
+
+    def fake_build_checkpoint(connection, event_id, code, label, remaining_km=None, **kwargs):
+        captured[code] = remaining_km
+        return {"code": code, "label": label, "top10_absolute": [], "top10_male": [], "top10_female": []}
+
+    monkeypatch.setattr(live_top10_export, "_build_checkpoint", fake_build_checkpoint)
+
+    output_path = str(tmp_path / "zhara_21km_top10.json")
+    generate_top10_json(conn, event_id=116, output_path=output_path)
+
+    assert captured["kt1"] == 21.1 - 5.0
+    assert captured["kt6"] == 21.1 - 20.2
+    assert captured["finish"] is None
