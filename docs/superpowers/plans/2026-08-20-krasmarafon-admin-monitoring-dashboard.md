@@ -1497,7 +1497,7 @@ git commit -m "feat(krasmarafon): admin-monitoring.js — графики ист�
 - Modify: `static/js/admin-monitoring.js`
 - Modify: `tests/js/test_admin_monitoring.js`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Добавить в `tests/js/test_admin_monitoring.js` перед финальным `console.log(...)`:
 
@@ -1535,12 +1535,12 @@ check('renderAlertsTable() — алерт без советов показыва
 });
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: FAIL — `sandbox.renderAlertsTable is not a function`
 
-- [ ] **Step 3: Добавить рендер таблицы и `loadMonitoringTab()`**
+- [x] **Step 3: Добавить рендер таблицы и `loadMonitoringTab()`**
 
 В `static/js/admin-monitoring.js` найти текущее определение (добавлено в Task 9):
 
@@ -1597,12 +1597,12 @@ function loadMonitoringTab() {
 
 Обратить внимание: `monOnLivePoint()` (Task 9) уже вызывает `monLoadAlerts()` при появлении нового алерта — эта функция теперь определена, `ReferenceError` из Task 9 больше не актуален.
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: `ALL PASSED`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add static/js/admin-monitoring.js tests/js/test_admin_monitoring.js
