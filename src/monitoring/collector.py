@@ -345,16 +345,22 @@ class MetricsCollector:
         self._last_alert_ts = now
 
         dt = datetime.fromtimestamp(point["ts"]).strftime("%Y-%m-%d %H:%M:%S")
-        body = (
-            f"Время: {dt}\n"
-            f"Score: {point['load_score']} / 100\n"
-            f"CPU: {point['cpu_percent']}%\n"
-            f"RAM: {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)\n"
-            f"SSE: {point['sse_connections']} соединений\n"
-            f"IP: {point['unique_ips']} уникальных\n"
-            f"Запросов: {point['total_requests']} | Ошибок: {point['http_errors']}\n"
-            f"Среднее время: {point['avg_response_ms']} мс"
-        ).encode("utf-8")
+        suggestions = generate_suggestions(point, self._recent_avg_sse())
+        body_lines = [
+            f"Время: {dt}",
+            f"Score: {point['load_score']} / 100",
+            f"CPU: {point['cpu_percent']}%",
+            f"RAM: {ram_pct:.1f}% ({point['ram_used_mb']} / {point['ram_total_mb']} MB)",
+            f"SSE: {point['sse_connections']} соединений",
+            f"IP: {point['unique_ips']} уникальных",
+            f"Запросов: {point['total_requests']} | Ошибок: {point['http_errors']}",
+            f"Среднее время: {point['avg_response_ms']} мс",
+        ]
+        if suggestions:
+            body_lines.append("")
+            body_lines.append("Рекомендации:")
+            body_lines.extend(f"• {s}" for s in suggestions)
+        body = "\n".join(body_lines).encode("utf-8")
 
         req = urllib.request.Request(self._ntfy_url, data=body, method="POST")
         req.add_header("Title", f"KM_track — {point['load_label']} нагрузка")

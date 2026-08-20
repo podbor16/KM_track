@@ -171,3 +171,42 @@ def test_read_recent_alerts_empty_csv_returns_empty_list(tmp_path):
     collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
     collector.get_alerts_path().touch()  # существует, но пуст (0 байт)
     assert collector.read_recent_alerts() == []
+
+
+# --- MetricsCollector._send_ntfy_alert() ---------------------------------
+
+@patch("src.monitoring.collector.urllib.request.urlopen")
+def test_send_ntfy_alert_includes_suggestions_in_body(mock_urlopen, tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    collector._ntfy_url = "https://ntfy.sh/test-topic"
+    point = {
+        "ts": int(time.time()), "load_score": 85.0, "load_label": "Критическая",
+        "cpu_percent": 10.0, "ram_used_mb": 2400, "ram_total_mb": 2972,
+        "sse_connections": 5, "unique_ips": 10, "total_requests": 100,
+        "http_errors": 0, "avg_response_ms": 100,
+    }
+
+    collector._send_ntfy_alert(point, ram_pct=80.8)
+
+    sent_request = mock_urlopen.call_args_list[0].args[0]
+    body_text = sent_request.data.decode("utf-8")
+    assert "Рекомендации:" in body_text
+    assert "RAM" in body_text
+
+
+@patch("src.monitoring.collector.urllib.request.urlopen")
+def test_send_ntfy_alert_omits_recommendations_block_when_no_suggestions(mock_urlopen, tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    collector._ntfy_url = "https://ntfy.sh/test-topic"
+    point = {
+        "ts": int(time.time()), "load_score": 85.0, "load_label": "Критическая",
+        "cpu_percent": 95.0, "ram_used_mb": 500, "ram_total_mb": 2972,
+        "sse_connections": 5, "unique_ips": 10, "total_requests": 100,
+        "http_errors": 0, "avg_response_ms": 100,
+    }  # только CPU высокий (не входит в generate_suggestions()) — советов нет
+
+    collector._send_ntfy_alert(point, ram_pct=16.8)
+
+    sent_request = mock_urlopen.call_args_list[0].args[0]
+    body_text = sent_request.data.decode("utf-8")
+    assert "Рекомендации:" not in body_text
