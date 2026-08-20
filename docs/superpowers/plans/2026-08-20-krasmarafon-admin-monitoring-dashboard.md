@@ -1064,7 +1064,7 @@ git commit -m "feat(krasmarafon): стили вкладки «Мониторин
 - Create: `static/js/admin-monitoring.js`
 - Test: `tests/js/test_admin_monitoring.js` (создать)
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `tests/js/test_admin_monitoring.js`:
 
@@ -1185,12 +1185,12 @@ console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
 ```
 
-- [ ] **Step 2: Запустить тест, убедиться что падает**
+- [x] **Step 2: Запустить тест, убедиться что падает**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: FAIL — `static/js/admin-monitoring.js` ещё не существует (`ENOENT`)
 
-- [ ] **Step 3: Создать `static/js/admin-monitoring.js`**
+- [x] **Step 3: Создать `static/js/admin-monitoring.js`**
 
 ```javascript
 // static/js/admin-monitoring.js
@@ -1290,12 +1290,12 @@ function loadMonitoringTab() {
 
 Функции `monLoadHistory`/`monLoadAlerts`/`monOnRangeChange`/`renderHistoryCharts`/`renderAlertsTable` определяются в Task 10/11 — пока оставляем вызовы как есть (браузер выдаст `ReferenceError` в консоли при реальном открытии вкладки до завершения этих задач; для текущего теста это не проблема — тест не вызывает `loadMonitoringTab()`).
 
-- [ ] **Step 4: Запустить тест, убедиться что проходит**
+- [x] **Step 4: Запустить тест, убедиться что проходит**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: `ALL PASSED`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add static/js/admin-monitoring.js tests/js/test_admin_monitoring.js
