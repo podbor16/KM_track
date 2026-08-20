@@ -364,6 +364,15 @@
 
     {% include 'krasmarafon/krasmarafon_footer.html' %}
 
+    <!-- Должны быть подключены ДО инлайн-скрипта ниже: он при восстановлении
+         последней открытой вкладки (см. switchTab(savedTab, ...) в конце
+         инлайн-блока) может сразу вызвать loadMonitoringTab() из
+         admin-monitoring.js — если бы этот тег шёл после инлайн-скрипта (как
+         было раньше), при последней открытой вкладке "Мониторинг" загрузка
+         страницы падала с ReferenceError, обрывая весь инлайн-скрипт
+         (включая несвязанный loadHistoryToggle() в его хвосте). -->
+    <script src="/static/lib/chart4/chart.umd.min.js"></script>
+    <script src="/static/js/admin-monitoring.js"></script>
     <script>
     // ========================================================================
     // Tab switching
@@ -1664,9 +1673,7 @@
     }
     loadHistoryToggle();
     </script>
-    <script src="/static/lib/chart4/chart.umd.min.js"></script>
     <script src="/static/js/krasmarafon-broadcast-posts.js"></script>
-    <script src="/static/js/admin-monitoring.js"></script>
 </body>
 </html>
 
