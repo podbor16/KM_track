@@ -1261,6 +1261,20 @@ _start_list_cache_ts: float = 0.0
 START_LIST_CACHE_TTL = 300  # 5 минут
 
 
+def invalidate_start_list_cache() -> None:
+    """Сбрасывает in-memory кеш get_test_table_data() (TTL 5 минут).
+
+    Нужно дёргать сразу после ЛЮБОЙ прямой правки leads мимо обычного
+    вебхука (bulk-импорт из Tilda) — иначе /api/registered-runners
+    (/start_list) отдаёт данные "на момент последнего наполнения кеша" ещё
+    до 5 минут после импорта, независимо от того, сколько раз организатор
+    перезагружает страницу (реальная находка — 2026-08-20, стартовые номера
+    не появлялись после переимпорта файла Детского забега до истечения TTL)."""
+    global _start_list_cache, _start_list_cache_ts
+    _start_list_cache = []
+    _start_list_cache_ts = 0.0
+
+
 def get_test_table_data() -> List[Dict[str, Any]]:
     """
     Данные участников из БД (стартовый список).
@@ -1601,6 +1615,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
             list(safe.values()) + [lead_id],
         )
         conn.commit()
+        invalidate_start_list_cache()
         cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
         cur.close()
@@ -1899,6 +1914,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
 
         conn.commit()
         cur.close()
+        invalidate_start_list_cache()
         return {"updated": updated, "created": created, "deleted": deleted, "errors": errors}
     except Exception as e:
         logger.error(f"bulk_import_leads error: {e}")

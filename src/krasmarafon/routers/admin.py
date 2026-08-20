@@ -4,6 +4,8 @@ Admin API роутер — управление конфигами событи�
 """
 
 import asyncio
+import json
+import logging
 import pickle
 import secrets
 import subprocess
@@ -33,6 +35,8 @@ from src.config.event_loader import (
     set_history_enabled,
 )
 from src.core.auth import api_require_auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Admin"])
 
@@ -598,6 +602,27 @@ async def upload_leads_import(
     ).model_dump()
 
 
+async def _notify_startlist_updated() -> None:
+    """Публикует startlist_updated в Redis сразу после bulk-импорта.
+
+    app.py::_startlist_watcher() тоже публикует это событие, но только
+    когда меняется COUNT(*) заявок на событие — реимпорт файла, где строки
+    UPDATE'ятся (напр. организатор доставил стартовые номера для уже
+    существующих заявок), количество не меняет, и watcher никогда не
+    заметит изменение. Прямая публикация сразу в месте самой правки —
+    открытые вкладки /start_list подхватывают новые данные без ручной
+    перезагрузки (тот же принцип живого обновления, что на Siberman).
+    Redis недоступен — не страшно, сам импорт уже применён; молча логируем
+    и продолжаем (тот же graceful-degradation, что и остальной SSE-стек)."""
+    try:
+        import redis.asyncio as aioredis
+        client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
+        await client.publish("tracker:notification", json.dumps({"type": "startlist_updated"}))
+        await client.aclose()
+    except Exception as e:
+        logger.warning(f"[SSE] Не удалось опубликовать startlist_updated: {e}")
+
+
 @router.post("/api/admin/leads/import/apply")
 async def apply_leads_import(
     token: str,
@@ -620,6 +645,7 @@ async def apply_leads_import(
         None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows)
     )
     path.unlink(missing_ok=True)
+    await _notify_startlist_updated()
     return LeadImportApplyResponse(**summary).model_dump()
 
 
