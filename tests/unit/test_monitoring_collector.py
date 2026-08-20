@@ -107,3 +107,67 @@ def test_recent_avg_sse_returns_none_when_no_history(mock_query, tmp_path):
 def test_get_alerts_path_matches_db_path_parent(tmp_path):
     collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
     assert collector.get_alerts_path() == tmp_path / "high_load_alerts.csv"
+
+
+# --- MetricsCollector.read_recent_alerts() -------------------------------
+
+_CSV_HEADER = [
+    "datetime", "ts", "worker_id", "load_label", "load_score",
+    "cpu_pct", "ram_pct", "ram_used_mb", "ram_total_mb",
+    "sse_connections", "unique_ips", "requests", "http_errors", "avg_ms",
+]
+
+
+def _write_alerts_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(_CSV_HEADER)
+        for r in rows:
+            w.writerow(r)
+
+
+def test_read_recent_alerts_missing_file_returns_empty_list(tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    assert collector.read_recent_alerts() == []
+
+
+@patch.object(MetricsCollector, "_recent_avg_sse", return_value=5.0)
+def test_read_recent_alerts_maps_csv_columns_to_point_shape(mock_avg, tmp_path):
+    """cpu_pct/ram_used_mb/requests/avg_ms в CSV должны превратиться в
+    cpu_percent/total_requests/avg_response_ms и т.д. для generate_suggestions()
+    — иначе советы никогда не появятся (см. примечание к задаче)."""
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    _write_alerts_csv(collector.get_alerts_path(), [
+        ["2026-08-19 16:49:02", "1787147342", "332942", "Критическая", "85.0",
+         "2.4", "80.8", "2400", "2972", "5", "10", "100", "1", "17991.2"],
+    ])
+
+    alerts = collector.read_recent_alerts(limit=50)
+
+    assert len(alerts) == 1
+    assert alerts[0]["load_label"] == "Критическая"
+    suggestions = alerts[0]["suggestions"]
+    assert any("RAM" in s for s in suggestions), suggestions
+    assert any("Среднее время ответа" in s for s in suggestions), suggestions
+
+
+def test_read_recent_alerts_respects_limit_and_newest_first(tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    rows = [
+        [f"2026-08-19 16:{i:02d}:00", str(1787147000 + i), "1", "Высокая", "60.0",
+         "10.0", "50.0", "1000", "2972", "5", "10", "100", "0", "500.0"]
+        for i in range(5)
+    ]
+    _write_alerts_csv(collector.get_alerts_path(), rows)
+
+    alerts = collector.read_recent_alerts(limit=2)
+
+    assert len(alerts) == 2
+    assert alerts[0]["datetime"] == "2026-08-19 16:04:00"  # самая новая строка первая
+    assert alerts[1]["datetime"] == "2026-08-19 16:03:00"
+
+
+def test_read_recent_alerts_empty_csv_returns_empty_list(tmp_path):
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    collector.get_alerts_path().touch()  # существует, но пуст (0 байт)
+    assert collector.read_recent_alerts() == []

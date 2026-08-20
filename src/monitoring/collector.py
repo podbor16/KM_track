@@ -464,6 +464,36 @@ class MetricsCollector:
             return None
         return sum(p["sse_connections"] for p in points) / len(points)
 
+    def read_recent_alerts(self, limit: int = 50) -> list[dict]:
+        """Последние `limit` строк high_load_alerts.csv, самые новые первыми,
+        каждая дополнена suggestions (generate_suggestions()) — советы
+        считаются на лету при каждом чтении, не хранятся в CSV, чтобы
+        будущие улучшения логики сразу применялись и к старым алертам."""
+        if not self._alerts_path.exists() or self._alerts_path.stat().st_size == 0:
+            return []
+        try:
+            with self._file_lock:
+                with open(self._alerts_path, "r", encoding="utf-8", newline="") as f:
+                    rows = list(csv.DictReader(f))
+        except Exception as e:
+            _log.warning(f"MetricsCollector: read_recent_alerts failed: {e}")
+            return []
+
+        recent_avg_sse = self._recent_avg_sse()
+        result = []
+        for row in reversed(rows[-limit:]):
+            point = {
+                "cpu_percent": float(row.get("cpu_pct") or 0),
+                "ram_used_mb": int(float(row.get("ram_used_mb") or 0)),
+                "ram_total_mb": int(float(row.get("ram_total_mb") or 0)),
+                "avg_response_ms": float(row.get("avg_ms") or 0),
+                "total_requests": int(float(row.get("requests") or 0)),
+                "http_errors": int(float(row.get("http_errors") or 0)),
+                "sse_connections": int(float(row.get("sse_connections") or 0)),
+            }
+            result.append({**row, "suggestions": generate_suggestions(point, recent_avg_sse)})
+        return result
+
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=10)
         self._subscribers.add(q)
