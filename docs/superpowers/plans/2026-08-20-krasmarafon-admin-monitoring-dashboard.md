@@ -1654,19 +1654,19 @@ Run: `pkill -f "uvicorn app:app.*8010"` (или закрыть терминал,
 
 **Files:** нет изменений кода.
 
-- [ ] **Step 1: Полный прогон Python-тестов**
+- [x] **Step 1: Полный прогон Python-тестов**
 
 Run: `conda run -n base python -m pytest tests/unit/ -v`
 Expected: все тесты проходят (в т.ч. новые из Task 2-6)
 
-- [ ] **Step 2: Полный прогон JS-тестов проекта**
+- [x] **Step 2: Полный прогон JS-тестов проекта**
 
 ```bash
 for f in tests/js/*.js; do node "$f" >/tmp/o.log 2>&1; ec=$?; echo "$f: exit=$ec"; done
 ```
 Expected: только уже известные предсуществующие падения (`test_analytics_results_event_banner.js`, `test_analytics_start_list_event_banner.js`, `test_siberman_results_merge.js` — не связаны с этой задачей, см. историю проекта), новый `test_admin_monitoring.js` — `exit=0`
 
-- [ ] **Step 3: Проверить git-статус — не осталось ли незакоммиченных изменений**
+- [x] **Step 3: Проверить git-статус — не осталось ли незакоммиченных изменений**
 
 Run: `git status --short`
 Expected: чисто относительно всех файлов этого плана (`src/monitoring/collector.py`, `src/krasmarafon/routers/api.py`, `templates/krasmarafon/admin.html`, `static/css/admin.css`, `static/js/admin-monitoring.js`, `tests/unit/test_monitoring_collector.py`, `tests/integration/test_admin_metrics.py`, `tests/js/test_admin_monitoring.js`)
