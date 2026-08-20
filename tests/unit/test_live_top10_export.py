@@ -208,6 +208,27 @@ def test_build_checkpoint_omits_forecast_finish_time_without_remaining_km():
     assert "forecast_finish_time" not in checkpoint["top10_absolute"][0]
 
 
+def test_build_checkpoint_omits_forecast_finish_time_when_pace_missing():
+    """remaining_km задан, но у конкретной записи нет pace_avg (например,
+    сбойный сплит) — _forecast_finish_seconds() вернёт None, поле должно
+    отсутствовать в этой записи, не падать с TypeError на None."""
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    row = _row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:10:00", "5:00")
+    row["pace_avg"] = None
+    cur.fetchall.side_effect = [[row], [row], []]
+
+    checkpoint = _build_checkpoint(
+        conn, event_id=116, code="kt6", label="КТ6 (20.2 км)",
+        time_col="time_clear_kt6", rank_abs_col="rank_absolute_kt6",
+        rank_sex_col="rank_sex_kt6", pace_col="pace_avg_kt6",
+        photo_map={}, remaining_km=0.9,
+    )
+
+    assert "forecast_finish_time" not in checkpoint["top10_absolute"][0]
+
+
 from src.krasmarafon.services import live_top10_export
 from src.krasmarafon.services.live_top10_export import generate_top10_json
 
