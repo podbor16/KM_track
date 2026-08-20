@@ -691,7 +691,7 @@ git commit -m "feat(krasmarafon): push-уведомления ntfy дополн�
 - Modify: `src/krasmarafon/routers/api.py`
 - Test: `tests/integration/test_admin_metrics.py`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Добавить в `tests/integration/test_admin_metrics.py` (после класса `TestServerMetricsLive`):
 
@@ -736,12 +736,12 @@ class TestServerMetricsAlerts:
         assert r.status_code == 401
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/integration/test_admin_metrics.py::TestServerMetricsAlerts -v`
 Expected: FAIL — `404 Not Found` (эндпоинта ещё нет)
 
-- [ ] **Step 3: Добавить эндпоинт**
+- [x] **Step 3: Добавить эндпоинт**
 
 В `src/krasmarafon/routers/api.py`, сразу после `get_server_metrics_live()` (после строки с `return EventSourceResponse(stream())`, добавленной в Task 1), добавить:
 
@@ -760,12 +760,12 @@ async def get_server_metrics_alerts(
     return {"alerts": alerts}
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/integration/test_admin_metrics.py -v`
 Expected: `7 passed` (Task 1 + Task 6 тесты суммарно)
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/krasmarafon/routers/api.py tests/integration/test_admin_metrics.py
