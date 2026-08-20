@@ -362,7 +362,7 @@ git commit -m "feat(krasmarafon): generate_suggestions() — советы по �
 - Modify: `src/monitoring/collector.py`
 - Test: `tests/unit/test_monitoring_collector.py`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Добавить в конец `tests/unit/test_monitoring_collector.py`:
 
@@ -392,12 +392,12 @@ def test_get_alerts_path_matches_db_path_parent(tmp_path):
     assert collector.get_alerts_path() == tmp_path / "high_load_alerts.csv"
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -k "recent_avg_sse or alerts_path" -v`
 Expected: FAIL — `AttributeError: 'MetricsCollector' object has no attribute '_recent_avg_sse'`
 
-- [ ] **Step 3: Добавить методы в `MetricsCollector`**
+- [x] **Step 3: Добавить методы в `MetricsCollector`**
 
 В `src/monitoring/collector.py`, найти метод `get_uptime_secs()` (после `query()`, перед `subscribe()`):
 
@@ -430,12 +430,12 @@ Expected: FAIL — `AttributeError: 'MetricsCollector' object has no attribute '
         return sum(p["sse_connections"] for p in points) / len(points)
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -k "recent_avg_sse or alerts_path" -v`
 Expected: `3 passed`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/monitoring/collector.py tests/unit/test_monitoring_collector.py
