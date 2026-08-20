@@ -63,13 +63,15 @@
             <label class="km-label" id="genderFilterLabel">Пол:</label>
             <div class="km-pills" id="genderFilter" data-value="" role="group" aria-labelledby="genderFilterLabel"></div>
           </div>
-          <div class="km-filter-group" id="ageGroupFilterGroup">
-            <label class="km-label" for="ageGroupFilter">Возр. группа:</label>
-            <select id="ageGroupFilter" onchange="applyFilters()" class="km-select"></select>
-          </div>
-          <div class="km-filter-group" id="distanceFilterGroup">
-            <label class="km-label" for="distanceFilter">Дистанция:</label>
-            <select id="distanceFilter" onchange="applyFilters()" class="km-select"></select>
+          <div class="km-filter-pair">
+            <div class="km-filter-group" id="ageGroupFilterGroup">
+              <label class="km-label" for="ageGroupFilter">Возр. группа:</label>
+              <select id="ageGroupFilter" onchange="applyFilters()" class="km-select"></select>
+            </div>
+            <div class="km-filter-group" id="distanceFilterGroup">
+              <label class="km-label" for="distanceFilter">Дистанция:</label>
+              <select id="distanceFilter" onchange="applyFilters()" class="km-select"></select>
+            </div>
           </div>
         </div>
         <div class="km-filter-group km-search-group">

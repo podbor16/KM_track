@@ -62,18 +62,20 @@
                     </div>
                 </div>
 
-                <div class="km-filter-group" id="ageGroupFilterGroup">
-                    <label class="km-label" for="ageGroupFilter">Возрастная группа:</label>
-                    <select id="ageGroupFilter" onchange="applyFilters()" class="km-select">
-                        <!-- Возрастные группы будут заполнены динамически -->
-                    </select>
-                </div>
+                <div class="km-filter-pair">
+                    <div class="km-filter-group" id="ageGroupFilterGroup">
+                        <label class="km-label" for="ageGroupFilter">Возрастная группа:</label>
+                        <select id="ageGroupFilter" onchange="applyFilters()" class="km-select">
+                            <!-- Возрастные группы будут заполнены динамически -->
+                        </select>
+                    </div>
 
-                <div class="km-filter-group" id="distanceFilterGroup">
-                    <label class="km-label" for="distanceFilter">Дистанция:</label>
-                    <select id="distanceFilter" onchange="applyFilters()" class="km-select">
-                        <!-- Дистанции будут заполнены динамически -->
-                    </select>
+                    <div class="km-filter-group" id="distanceFilterGroup">
+                        <label class="km-label" for="distanceFilter">Дистанция:</label>
+                        <select id="distanceFilter" onchange="applyFilters()" class="km-select">
+                            <!-- Дистанции будут заполнены динамически -->
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="km-filter-group km-search-group">
