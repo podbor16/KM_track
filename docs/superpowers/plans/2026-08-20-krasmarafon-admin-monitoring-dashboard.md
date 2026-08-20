@@ -40,7 +40,7 @@
 - Modify: `src/krasmarafon/routers/api.py:881-902`
 - Test: `tests/integration/test_admin_metrics.py` (создать)
 
-- [ ] **Step 1: Прочитать текущий код эндпоинта, чтобы убедиться в баге**
+- [x] **Step 1: Прочитать текущий код эндпоинта, чтобы убедиться в баге**
 
 Открыть `src/krasmarafon/routers/api.py`, строки 881-902:
 
@@ -71,7 +71,7 @@ async def get_server_metrics_live(
 
 Убедиться, что после определения `stream()` нет `return EventSourceResponse(stream())` — сравнить с соседним `sse_notify()` (строки 758-777 того же файла), который заканчивается именно этой строкой.
 
-- [ ] **Step 2: Написать падающий тест**
+- [x] **Step 2: Написать падающий тест**
 
 Создать `tests/integration/test_admin_metrics.py`:
 
@@ -115,12 +115,12 @@ class TestServerMetricsLive:
         assert r.status_code == 401
 ```
 
-- [ ] **Step 3: Запустить тест, убедиться что первый кейс падает**
+- [x] **Step 3: Запустить тест, убедиться что первый кейс падает**
 
 Run: `conda run -n base python -m pytest tests/integration/test_admin_metrics.py::TestServerMetricsLive::test_returns_event_source_response -v`
 Expected: FAIL — `assert isinstance(None, EventSourceResponse)` (функция вернула `None`)
 
-- [ ] **Step 4: Добавить недостающий `return`**
+- [x] **Step 4: Добавить недостающий `return`**
 
 В `src/krasmarafon/routers/api.py`, сразу после блока `async def stream(): ... finally: collector.unsubscribe(queue)` (конец функции `get_server_metrics_live`), добавить:
 
@@ -131,12 +131,12 @@ Expected: FAIL — `assert isinstance(None, EventSourceResponse)` (функци�
     return EventSourceResponse(stream())
 ```
 
-- [ ] **Step 5: Запустить тесты, убедиться что оба проходят**
+- [x] **Step 5: Запустить тесты, убедиться что оба проходят**
 
 Run: `conda run -n base python -m pytest tests/integration/test_admin_metrics.py -v`
 Expected: `2 passed`
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add src/krasmarafon/routers/api.py tests/integration/test_admin_metrics.py
