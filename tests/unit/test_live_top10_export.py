@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from src.krasmarafon.services.live_top10_export import (
     _td_to_seconds, _seconds_to_hms, _seconds_to_pace_str, _format_gap,
-    _sex_code, _format_distance_label,
+    _sex_code, _format_distance_label, _forecast_finish_seconds,
 )
 
 
@@ -63,6 +63,28 @@ def test_format_distance_label_drops_trailing_zero():
 
 def test_format_distance_label_keeps_decimal():
     assert _format_distance_label(21.1) == "21.1 км"
+
+
+def test_forecast_finish_seconds_extrapolates_remaining_distance():
+    # elapsed 1:10:00 = 4200с, темп 5:00/км = 300с/км, осталось 1.1 км
+    assert _forecast_finish_seconds(4200.0, 300.0, 1.1) == 4530.0
+
+
+def test_forecast_finish_seconds_none_pace_returns_none():
+    """Темп неизвестен — прогноз невозможен, не 0 (явно отличимо от
+    "прогноз совпадает с текущим временем")."""
+    assert _forecast_finish_seconds(4200.0, None, 1.1) is None
+
+
+def test_forecast_finish_seconds_zero_remaining_returns_elapsed():
+    assert _forecast_finish_seconds(4200.0, 300.0, 0.0) == 4200.0
+
+
+def test_forecast_finish_seconds_negative_remaining_does_not_raise():
+    """checkpoint_distances может содержать небольшую неточность —
+    формула не должна падать, просто даёт прогноз чуть меньше текущего
+    времени на КТ (не вводит в заблуждение при таких малых величинах)."""
+    assert _forecast_finish_seconds(4200.0, 300.0, -0.5) == 4050.0
 
 
 from src.krasmarafon.services.live_top10_export import _build_checkpoint

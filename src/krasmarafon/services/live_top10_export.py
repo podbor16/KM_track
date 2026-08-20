@@ -67,6 +67,19 @@ def _format_gap(seconds: float) -> str:
     return f"+{m:02d}:{s:02d}"
 
 
+def _forecast_finish_seconds(
+    time_clear_seconds: float, pace_avg_seconds_per_km: Optional[float], remaining_km: float,
+) -> Optional[float]:
+    """Прогноз финишного времени (elapsed/чистое, БЕЗ астрономического
+    времени) — линейная экстраполяция среднего темпа с начала гонки
+    (тот же темп, что уже даёт pace_avg_kt* в БД) на оставшуюся дистанцию.
+    None, если темп неизвестен — отсутствие прогноза, не "прогноз
+    совпадает с текущим временем"."""
+    if pace_avg_seconds_per_km is None:
+        return None
+    return time_clear_seconds + remaining_km * pace_avg_seconds_per_km
+
+
 def _sex_code(sex_ru: str) -> str:
     return "M" if sex_ru == "Мужчина" else "F"
 
