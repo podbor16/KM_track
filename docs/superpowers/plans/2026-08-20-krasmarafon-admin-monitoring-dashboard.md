@@ -976,7 +976,7 @@ static/js/admin-monitoring.js."
 **Files:**
 - Modify: `static/css/admin.css`
 
-- [ ] **Step 1: Добавить стили**
+- [x] **Step 1: Добавить стили**
 
 В конец `static/css/admin.css` добавить:
 
@@ -1049,7 +1049,7 @@ static/js/admin-monitoring.js."
 }
 ```
 
-- [ ] **Step 2: Коммит**
+- [x] **Step 2: Коммит**
 
 ```bash
 git add static/css/admin.css
