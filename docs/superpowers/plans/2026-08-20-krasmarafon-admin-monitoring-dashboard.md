@@ -582,7 +582,7 @@ git commit -m "feat(krasmarafon): MetricsCollector.read_recent_alerts() — ис
 - Modify: `src/monitoring/collector.py:265-294`
 - Test: `tests/unit/test_monitoring_collector.py`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Добавить в конец `tests/unit/test_monitoring_collector.py`:
 
@@ -626,12 +626,12 @@ def test_send_ntfy_alert_omits_recommendations_block_when_no_suggestions(mock_ur
     assert "Рекомендации:" not in body_text
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -k send_ntfy_alert -v`
 Expected: FAIL — первый тест: `assert "Рекомендации:" in body_text` → AssertionError (блока сейчас нет вообще)
 
-- [ ] **Step 3: Переписать сборку `body` в `_send_ntfy_alert()`**
+- [x] **Step 3: Переписать сборку `body` в `_send_ntfy_alert()`**
 
 В `src/monitoring/collector.py` найти текущий блок (внутри `_send_ntfy_alert`):
 
@@ -671,12 +671,12 @@ Expected: FAIL — первый тест: `assert "Рекомендации:" in
         body = "\n".join(body_lines).encode("utf-8")
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -v`
 Expected: `19 passed`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/monitoring/collector.py tests/unit/test_monitoring_collector.py
