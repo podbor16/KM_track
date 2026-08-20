@@ -901,6 +901,8 @@ async def get_server_metrics_live(
         finally:
             collector.unsubscribe(queue)
 
+    return EventSourceResponse(stream())
+
 
 # ============================================================================
 # СТАРТОВЫЙ СПИСОК
