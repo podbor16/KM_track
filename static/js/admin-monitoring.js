@@ -206,7 +206,10 @@ function renderAlertsTable(alerts) {
 
 async function monLoadAlerts() {
     const resp = await fetch('/api/admin/metrics/alerts?limit=50');
-    if (!resp.ok) return;
+    if (!resp.ok) {
+        console.error('Ошибка загрузки алертов:', resp.status);
+        return;
+    }
     const data = await resp.json();
     renderAlertsTable(data.alerts || []);
 }
