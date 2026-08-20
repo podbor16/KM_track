@@ -91,6 +91,80 @@ _EMAIL_CPU_THRESHOLD = 90.0
 _EMAIL_LOAD_LABELS = {"Критическая"}
 _EMAIL_COOLDOWN_S = 900
 
+# Пороги для generate_suggestions() — какой конкретно фактор считается
+# "виновником" высокой нагрузки. Из них только _SUGGEST_RT_MS_THRESHOLD
+# совпадает с уже существующим порогом _load_score() (там же rt=35 с
+# 1500мс) — RAM/ошибки/SSE-аномалия здесь заводятся впервые, для них в
+# коде раньше не было отдельных констант (_ALERT_CPU_THRESHOLD/
+# _EMAIL_CPU_THRESHOLD относятся только к CPU).
+_SUGGEST_RAM_PCT_THRESHOLD = 80.0
+_SUGGEST_RT_MS_THRESHOLD = 1500.0
+_SUGGEST_ERROR_RATE_THRESHOLD = 5.0
+_SUGGEST_SSE_MULTIPLIER = 2.0
+_SUGGEST_SSE_MIN_ABSOLUTE = 20
+
+
+def generate_suggestions(point: dict, recent_avg_sse: float | None) -> list[str]:
+    """Готовые русские советы по решению проблемы для точки метрик — 0, 1
+    или несколько сразу (проблема может быть многофакторной). Чистая
+    функция: без обращений к БД/сети, полностью определяется аргументами —
+    used и в _send_ntfy_alert() (свежая точка), и в read_recent_alerts()
+    (исторические строки CSV, пересчитывается на лету при каждом чтении,
+    не хранится).
+
+    recent_avg_sse — baseline для сравнения "аномально много SSE" (среднее
+    число соединений за последний час, см. MetricsCollector._recent_avg_sse());
+    вычисляется ВЫЗЫВАЮЩЕЙ стороной, не этой функцией — единственная
+    внешняя зависимость, оставлена снаружи ради тестируемости в изоляции."""
+    suggestions: list[str] = []
+
+    ram_used = point.get("ram_used_mb") or 0
+    ram_total = point.get("ram_total_mb") or 0
+    if ram_total > 0 and (ram_used / ram_total) >= _SUGGEST_RAM_PCT_THRESHOLD / 100:
+        ram_pct = ram_used / ram_total * 100
+        suggestions.append(
+            f"RAM {ram_pct:.0f}% ({ram_used} из {ram_total} MB). "
+            "ps aux --sort=-%mem | head -5 — какой процесс тянет. "
+            "Если один gunicorn-воркер сильно больше других — похоже на утечку, "
+            "сброс: systemctl restart km_track. "
+            "Если равномерно у всех — это реальный трафик, рассмотреть апгрейд VPS до 4 ГБ."
+        )
+
+    avg_ms = point.get("avg_response_ms") or 0
+    if avg_ms >= _SUGGEST_RT_MS_THRESHOLD:
+        suggestions.append(
+            f"Среднее время ответа {avg_ms:.0f} мс. "
+            "Проверьте, не идёт ли сейчас bulk-импорт заявок в /admin — это тяжёлая "
+            "синхронная операция. Если нет — возможен «thundering herd» на "
+            "/api/registered-runners после истечения 5-минутного кеша: много "
+            "одновременных запросов бьют в «холодную» БД одновременно."
+        )
+
+    total_req = point.get("total_requests") or 0
+    http_errors = point.get("http_errors") or 0
+    if total_req > 0 and (http_errors / total_req) >= _SUGGEST_ERROR_RATE_THRESHOLD / 100:
+        err_rate = http_errors / total_req * 100
+        suggestions.append(
+            f"Ошибок {err_rate:.0f}% от {total_req} запросов. "
+            "journalctl -u km_track --since '15 min ago' | grep -iE \"error|traceback\" "
+            "— конкретные исключения. systemctl status mysql redis-server — не легла "
+            "ли база/очереди SSE."
+        )
+
+    sse = point.get("sse_connections") or 0
+    if (recent_avg_sse is not None
+            and sse > recent_avg_sse * _SUGGEST_SSE_MULTIPLIER
+            and sse > _SUGGEST_SSE_MIN_ABSOLUTE):
+        suggestions.append(
+            f"Открыто {sse} SSE-подключений (обычно ~{recent_avg_sse:.0f}). "
+            "Проверьте, не держит ли один IP непропорционально много соединений "
+            "(бот/зависший клиент в цикле переподключения) — nginx уже режет по 50 "
+            "на IP. Проверьте также, не лёг ли Redis (без него SSE не рассылает "
+            "уведомления, но клиенты всё равно держат соединение)."
+        )
+
+    return suggestions
+
 
 class MetricsCollector:
     def __init__(self, db_path: str, retention_days: int = 365):
