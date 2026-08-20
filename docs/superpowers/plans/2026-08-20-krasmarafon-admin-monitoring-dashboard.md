@@ -452,7 +452,7 @@ git commit -m "feat(krasmarafon): MetricsCollector._recent_avg_sse()/get_alerts_
 
 **Важно:** колонки CSV (`_write_alert()`, уже существующий код) называются НЕ так, как ключи `point`-словаря, которые ждёт `generate_suggestions()` — `cpu_pct` (не `cpu_percent`), `ram_pct`/`ram_used_mb`/`ram_total_mb`, `requests` (не `total_requests`), `avg_ms` (не `avg_response_ms`). Без явного маппинга `generate_suggestions()` тихо получит на входе `{}`-подобный объект (через `.get()`) и всегда будет возвращать пустой список — не упадёт, но советы никогда не появятся.
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Добавить в конец `tests/unit/test_monitoring_collector.py`:
 
@@ -521,12 +521,12 @@ def test_read_recent_alerts_empty_csv_returns_empty_list(tmp_path):
     assert collector.read_recent_alerts() == []
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -k read_recent_alerts -v`
 Expected: FAIL — `AttributeError: 'MetricsCollector' object has no attribute 'read_recent_alerts'`
 
-- [ ] **Step 3: Добавить метод**
+- [x] **Step 3: Добавить метод**
 
 В `src/monitoring/collector.py`, сразу после `_recent_avg_sse()` (добавлен в Task 3), добавить:
 
@@ -562,12 +562,12 @@ Expected: FAIL — `AttributeError: 'MetricsCollector' object has no attribute '
         return result
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -v`
 Expected: `17 passed` (все тесты файла — из Task 2/3/4 суммарно)
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/monitoring/collector.py tests/unit/test_monitoring_collector.py
