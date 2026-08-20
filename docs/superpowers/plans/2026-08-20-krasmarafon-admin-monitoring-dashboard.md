@@ -779,7 +779,7 @@ git commit -m "feat(krasmarafon): GET /api/admin/metrics/alerts — истори
 **Files:**
 - Modify: `templates/krasmarafon/admin.html`
 
-- [ ] **Step 1: Добавить кнопку вкладки**
+- [x] **Step 1: Добавить кнопку вкладки**
 
 Найти (строка 48):
 
@@ -796,7 +796,7 @@ git commit -m "feat(krasmarafon): GET /api/admin/metrics/alerts — истори
         </div>
 ```
 
-- [ ] **Step 2: Добавить контент вкладки**
+- [x] **Step 2: Добавить контент вкладки**
 
 Найти конец блока `tab-broadcast` (после закрывающего `</div>` вкладки «Трансляция», перед закрывающим `</div>` контейнера `.admin-page` — строки 240-242 в исходном файле):
 
@@ -896,7 +896,7 @@ git commit -m "feat(krasmarafon): GET /api/admin/metrics/alerts — истори
     <!-- ШАБЛОН КАРТОЧКИ СОБЫТИЯ (JS-клонирование) -->
 ```
 
-- [ ] **Step 3: Подключить Chart.js и новый JS-файл**
+- [x] **Step 3: Подключить Chart.js и новый JS-файл**
 
 Найти строку 1587:
 
@@ -912,7 +912,7 @@ git commit -m "feat(krasmarafon): GET /api/admin/metrics/alerts — истори
     <script src="/static/js/admin-monitoring.js"></script>
 ```
 
-- [ ] **Step 4: Подключить вкладку к диспетчеру `switchTab()`**
+- [x] **Step 4: Подключить вкладку к диспетчеру `switchTab()`**
 
 Найти (строка 293):
 
@@ -957,7 +957,7 @@ git commit -m "feat(krasmarafon): GET /api/admin/metrics/alerts — истори
         }
 ```
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 Файл `static/js/admin-monitoring.js` ещё не создан (Task 9-11) — `loadMonitoringTab()` пока не определена, страница будет падать в консоли при клике на вкладку. Это нормально для промежуточного коммита в рамках плана (следующие задачи создают файл), но чтобы не оставлять репозиторий в ломаном состоянии дольше одного коммита, объединяем со следующей задачей:
 
