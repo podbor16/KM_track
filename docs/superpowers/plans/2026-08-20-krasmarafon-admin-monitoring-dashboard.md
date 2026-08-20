@@ -1310,7 +1310,7 @@ git commit -m "feat(krasmarafon): admin-monitoring.js — живые плитк�
 - Modify: `static/js/admin-monitoring.js`
 - Modify: `tests/js/test_admin_monitoring.js`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Добавить в `tests/js/test_admin_monitoring.js` перед финальным `console.log(...)`:
 
@@ -1360,12 +1360,12 @@ check('renderHistoryCharts() — второй вызов уничтожает п
 });
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: FAIL — `sandbox.hoursForRange is not a function`
 
-- [ ] **Step 3: Добавить графики в `static/js/admin-monitoring.js`**
+- [x] **Step 3: Добавить графики в `static/js/admin-monitoring.js`**
 
 Найти текущее определение (добавлено в Task 9):
 
@@ -1461,7 +1461,7 @@ function loadMonitoringTab() {
 }
 ```
 
-- [ ] **Step 4: Дополнить тест на пустую историю**
+- [x] **Step 4: Дополнить тест на пустую историю**
 
 `makeElement()` (Task 9 Step 1) уже проставляет `parentElement` в `appendChild` — ничего в тестовом хелпере менять не нужно. Добавить в `tests/js/test_admin_monitoring.js`, в блок с `FakeChart` (после `sandbox.Chart = FakeChart;`), тест на пустое состояние:
 
@@ -1477,12 +1477,12 @@ check('renderHistoryCharts() — пустой массив точек показ
 });
 ```
 
-- [ ] **Step 5: Запустить тесты, убедиться что проходят**
+- [x] **Step 5: Запустить тесты, убедиться что проходят**
 
 Run: `node tests/js/test_admin_monitoring.js`
 Expected: `ALL PASSED`
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add static/js/admin-monitoring.js tests/js/test_admin_monitoring.js
