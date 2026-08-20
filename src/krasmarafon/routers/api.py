@@ -904,6 +904,20 @@ async def get_server_metrics_live(
     return EventSourceResponse(stream())
 
 
+@router.get("/api/admin/metrics/alerts", tags=["Admin"])
+async def get_server_metrics_alerts(
+    limit: int = Query(default=50, le=200),
+    user: str = Depends(api_require_auth),
+):
+    """Последние алерты высокой нагрузки — каждый дополнен советами по
+    решению (generate_suggestions(), считаются на лету, не хранятся в CSV)."""
+    collector = _get_metrics_collector()
+    alerts = await asyncio.get_event_loop().run_in_executor(
+        None, collector.read_recent_alerts, limit
+    )
+    return {"alerts": alerts}
+
+
 # ============================================================================
 # СТАРТОВЫЙ СПИСОК
 # ============================================================================

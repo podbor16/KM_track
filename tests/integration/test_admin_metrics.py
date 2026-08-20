@@ -35,3 +35,43 @@ class TestServerMetricsLive:
         app.dependency_overrides.pop(api_require_auth, None)
         r = client.get("/api/admin/metrics/live")
         assert r.status_code == 401
+
+
+class TestServerMetricsAlerts:
+    def test_returns_alerts_from_collector(self, client):
+        fake_alerts = [{
+            "datetime": "2026-08-19 16:49:02", "load_label": "Критическая",
+            "suggestions": ["RAM 80% ..."],
+        }]
+        with patch("src.krasmarafon.routers.api._get_metrics_collector") as mock_get:
+            mock_collector = MagicMock()
+            mock_collector.read_recent_alerts.return_value = fake_alerts
+            mock_get.return_value = mock_collector
+            r = client.get("/api/admin/metrics/alerts")
+        assert r.status_code == 200
+        assert r.json() == {"alerts": fake_alerts}
+
+    def test_passes_limit_to_collector(self, client):
+        with patch("src.krasmarafon.routers.api._get_metrics_collector") as mock_get:
+            mock_collector = MagicMock()
+            mock_collector.read_recent_alerts.return_value = []
+            mock_get.return_value = mock_collector
+            client.get("/api/admin/metrics/alerts?limit=10")
+        mock_collector.read_recent_alerts.assert_called_once_with(10)
+
+    def test_default_limit_is_50(self, client):
+        with patch("src.krasmarafon.routers.api._get_metrics_collector") as mock_get:
+            mock_collector = MagicMock()
+            mock_collector.read_recent_alerts.return_value = []
+            mock_get.return_value = mock_collector
+            client.get("/api/admin/metrics/alerts")
+        mock_collector.read_recent_alerts.assert_called_once_with(50)
+
+    def test_limit_over_200_returns_422(self, client):
+        r = client.get("/api/admin/metrics/alerts?limit=500")
+        assert r.status_code == 422
+
+    def test_requires_auth(self, client):
+        app.dependency_overrides.pop(api_require_auth, None)
+        r = client.get("/api/admin/metrics/alerts")
+        assert r.status_code == 401
