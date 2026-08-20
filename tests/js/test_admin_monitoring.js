@@ -110,5 +110,51 @@ check('renderLiveTiles() — заполняет все плитки из точ�
     assert.ok(domStub('mon-tile-load-badge').classList.contains('admin-badge--load-medium'));
 });
 
+check('monSubscribeLive() — создаёт EventSource на правильный URL, повторный вызов не пересоздаёт', () => {
+    resetDom();
+    vm.runInContext('monSSE = null;', sandbox); // сброс между тестами — модуль хранит состояние в замыкании sandbox
+    sandbox.monSubscribeLive();
+    const first = vm.runInContext('monSSE', sandbox);
+    assert.strictEqual(first.url, '/api/admin/metrics/live');
+    sandbox.monSubscribeLive();
+    const second = vm.runInContext('monSSE', sandbox);
+    assert.strictEqual(first, second, 'повторный вызов не должен создавать новый EventSource');
+});
+
+check('monOnLivePoint() — рендерит плитки при каждой точке', () => {
+    resetDom();
+    vm.runInContext('monLastLoadLabel = null;', sandbox);
+    const point = {
+        cpu_percent: 10, ram_used_mb: 100, ram_total_mb: 2000,
+        avg_response_ms: 50, total_requests: 10, http_errors: 0,
+        sse_connections: 1, unique_ips: 1, load_score: 5, load_label: 'Низкая',
+    };
+    sandbox.monOnLivePoint(point);
+    assert.strictEqual(domStub('mon-tile-cpu').textContent, '10%');
+});
+
+check('monOnLivePoint() — переход в "Критическая" вызывает monLoadAlerts() один раз', () => {
+    resetDom();
+    vm.runInContext('monLastLoadLabel = null;', sandbox);
+    let calls = 0;
+    sandbox.monLoadAlerts = () => { calls++; };
+    sandbox.monOnLivePoint({ load_label: 'Критическая' });
+    assert.strictEqual(calls, 1);
+    // Повторная точка с той же меткой — НЕ должна вызывать снова (дедуп по "раньше не была")
+    sandbox.monOnLivePoint({ load_label: 'Критическая' });
+    assert.strictEqual(calls, 1, 'повторная точка с той же высокой меткой не должна повторно дёргать monLoadAlerts()');
+});
+
+check('monOnLivePoint() — переход из "Критическая" обратно в "Низкая" и снова в "Критическая" вызывает monLoadAlerts() дважды', () => {
+    resetDom();
+    vm.runInContext('monLastLoadLabel = null;', sandbox);
+    let calls = 0;
+    sandbox.monLoadAlerts = () => { calls++; };
+    sandbox.monOnLivePoint({ load_label: 'Критическая' });
+    sandbox.monOnLivePoint({ load_label: 'Низкая' });
+    sandbox.monOnLivePoint({ load_label: 'Критическая' });
+    assert.strictEqual(calls, 2);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

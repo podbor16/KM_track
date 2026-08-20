@@ -81,7 +81,9 @@ function monSubscribeLive() {
     monSSE.onmessage = (e) => {
         try {
             monOnLivePoint(JSON.parse(e.data));
-        } catch {}
+        } catch (err) {
+            console.error('Ошибка SSE-данных мониторинга:', err);
+        }
     };
 }
 
