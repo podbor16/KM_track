@@ -38,15 +38,13 @@
             <div class="km-filters">
                 <div class="km-filter-group">
                     <label class="km-label" for="eventSelector">Событие:</label>
+                    <!-- Временно (2026-08-20, по решению пользователя) показываем в
+                         этом селекте только Жару и Детский забег — остальные
+                         события скрыты со стартового списка до отдельного решения
+                         вернуть полный список. -->
                     <select id="eventSelector" onchange="switchEvent('event')" class="km-select">
-                        <option value="night_run">Ночной забег</option>
-                        <option value="vesna">Весна</option>
-                        <option value="colorrun">Красочный забег</option>
-                        <option value="girlseven">Женская семерка</option>
                         <option value="zhara">Жара</option>
                         <option value="kids">Детский забег</option>
-                        <option value="xtrailrun">Х Трейл</option>
-                        <option value="snow7">Снежная семерка</option>
                     </select>
                 </div>
                 <div class="km-filter-group">

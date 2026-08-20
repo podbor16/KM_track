@@ -60,8 +60,10 @@ function syncUrlFromState() {
 }
 
 // Инициализация страницы — дефолт из активного забега, переопределяется
-// параметрами URL, если открыли по прямой ссылке
-document.addEventListener('DOMContentLoaded', async function() {
+// параметрами URL, если открыли по прямой ссылке. Именованная функция (не
+// анонимная в addEventListener) — чтобы её можно было вызвать напрямую из
+// тестов.
+async function initStartListPage() {
     populateYearSelector();
     readStateFromUrl();
     try {
@@ -72,7 +74,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         currentEvent = _urlEvent || 'night_run';
         currentYear = _urlYear || currentYear;
     }
-    document.getElementById('eventSelector').value = currentEvent;
+    const eventSel = document.getElementById('eventSelector');
+    // Активное на сайте (/admin) или запрошенное в URL событие может не
+    // входить в текущий видимый список опций (напр. временно скрытые
+    // события) — присваивание select.value невалидного значения СБРАСЫВАЕТ
+    // selectedIndex в -1 (а не оставляет дефолтную первую опцию), поэтому
+    // валидность проверяем ДО присваивания, не постфактум.
+    const availableEvents = Array.from(eventSel.options).map(o => o.value);
+    if (!availableEvents.includes(currentEvent) && availableEvents.length > 0) {
+        currentEvent = availableEvents[0];
+    }
+    eventSel.value = currentEvent;
     const ySel = document.getElementById('yearStartSelector');
     if (ySel) ySel.value = currentYear;
     updateEventThemeColor();
@@ -82,7 +94,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     new SSEClient('/api/sse/notify', {
         startlist_updated: () => loadRunnersData(true)
     });
-});
+}
+document.addEventListener('DOMContentLoaded', initStartListPage);
 
 function populateYearSelector() {
     const sel = document.getElementById('yearStartSelector');

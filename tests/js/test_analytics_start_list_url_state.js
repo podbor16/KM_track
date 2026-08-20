@@ -64,16 +64,35 @@ function resetDom() {
     });
 }
 
+class FakeImage {
+    set src(_url) { if (this.onerror) this.onerror(); }
+    get src() { return this._url; }
+}
+
+// initStartListPage() открывает SSE-подписку в самом конце — реальный
+// realtime.js здесь не загружен (не нужен для тестируемой логики), стаб
+// просто не должен падать при new SSEClient(...).
+class FakeSSEClient {
+    constructor() {}
+    close() {}
+}
+
+let fetchMock = () => Promise.resolve({ json: () => Promise.resolve({}) });
+
 const sandbox = {
     console,
-    fetch: () => Promise.resolve({ json: () => Promise.resolve({}) }),
+    fetch: (url) => fetchMock(url),
     document: {
         getElementById: domStub,
         createElement: (tag) => makeElement(tag),
         addEventListener: () => {},
         querySelectorAll: () => [],
+        querySelector: () => null,
+        documentElement: { style: { setProperty: () => {} } },
     },
     localStorage: { getItem: () => null, setItem: () => {} },
+    Image: FakeImage,
+    SSEClient: FakeSSEClient,
     URLSearchParams,
     location: { pathname: '/start_list', search: '', hash: '' },
     history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
@@ -92,6 +111,24 @@ let failures = 0;
 function check(name, fn) {
     try { fn(); console.log(`OK   ${name}`); }
     catch (e) { failures++; console.log(`FAIL ${name}: ${e.message}`); }
+}
+async function checkAsync(name, fn) {
+    try { await fn(); console.log(`OK   ${name}`); }
+    catch (e) { failures++; console.log(`FAIL ${name}: ${e.message}`); }
+}
+
+// Опции события в реальном HTML временно сокращены (2026-08-20, по решению
+// пользователя — только Жара и Детский забег видны на /start_list), с
+// options-НЕ содержащими <select> объект не работает через .value =
+// напрямую (это plain-стаб, не настоящий select), поэтому строим их вручную.
+function setEventSelectorOptions(values) {
+    const sel = domStub('eventSelector');
+    sel._children.length = 0;
+    values.forEach(v => {
+        const opt = makeElement('OPTION');
+        opt.value = v;
+        sel.appendChild(opt);
+    });
 }
 
 const KIDS_RUNNERS = [
@@ -190,5 +227,43 @@ check('syncUrlFromState() — не пишет distance/gender/ageGroup/search в
     assert.strictEqual(params.has('search'), false);
 });
 
-console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
-process.exit(failures === 0 ? 0 : 1);
+(async () => {
+    await checkAsync('initStartListPage() — активное на сайте событие вне текущего списка опций → фоллбэк на первую доступную, select и currentEvent синхронны', async () => {
+        resetDom();
+        sandbox.location.search = ''; // предыдущий тест мог оставить свой ?event= в URL (syncUrlFromState)
+        setEventSelectorOptions(['zhara', 'kids']); // временно сокращённый список (2026-08-20)
+        domStub('yearStartSelector').value = '';
+        fetchMock = (url) => {
+            if (String(url).includes('/api/current-event')) {
+                return Promise.resolve({ json: () => Promise.resolve({ event: 'colorrun', year: 2026 }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({}) });
+        };
+
+        await sandbox.initStartListPage();
+
+        assert.strictEqual(domStub('eventSelector').value, 'zhara', 'select должен показывать реально доступную опцию, не оставаться пустым');
+        assert.strictEqual(vm.runInContext('currentEvent', sandbox), 'zhara', 'currentEvent (данные/баннер/заголовок) должен совпадать с тем, что показывает select');
+    });
+
+    await checkAsync('initStartListPage() — активное событие ЕСТЬ в списке опций → используется как есть', async () => {
+        resetDom();
+        sandbox.location.search = '';
+        setEventSelectorOptions(['zhara', 'kids']);
+        domStub('yearStartSelector').value = '';
+        fetchMock = (url) => {
+            if (String(url).includes('/api/current-event')) {
+                return Promise.resolve({ json: () => Promise.resolve({ event: 'kids', year: 2026 }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({}) });
+        };
+
+        await sandbox.initStartListPage();
+
+        assert.strictEqual(domStub('eventSelector').value, 'kids');
+        assert.strictEqual(vm.runInContext('currentEvent', sandbox), 'kids');
+    });
+
+    console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
+    process.exit(failures === 0 ? 0 : 1);
+})();
