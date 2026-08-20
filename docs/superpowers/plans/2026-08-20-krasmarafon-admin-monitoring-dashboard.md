@@ -156,7 +156,7 @@ None вместо живого потока метрик. Найдено при 
 - Modify: `src/monitoring/collector.py`
 - Test: `tests/unit/test_monitoring_collector.py` (создать)
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Создать `tests/unit/test_monitoring_collector.py`:
 
@@ -247,12 +247,12 @@ def test_zero_total_requests_does_not_divide_by_zero():
     assert generate_suggestions(point, recent_avg_sse=5.0) == []
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -v`
 Expected: FAIL — `ImportError: cannot import name 'generate_suggestions'`
 
-- [ ] **Step 3: Добавить константы и функцию в `collector.py`**
+- [x] **Step 3: Добавить константы и функцию в `collector.py`**
 
 Открыть `src/monitoring/collector.py`, найти существующий блок констант (строки 88-92):
 
@@ -342,12 +342,12 @@ def generate_suggestions(point: dict, recent_avg_sse: float | None) -> list[str]
     return suggestions
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_monitoring_collector.py -v`
 Expected: `10 passed`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/monitoring/collector.py tests/unit/test_monitoring_collector.py
