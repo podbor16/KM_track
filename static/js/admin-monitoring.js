@@ -87,6 +87,78 @@ function monSubscribeLive() {
     };
 }
 
+// ---- Диапазон графиков истории: ключ UI → часы для /api/admin/metrics ----
+const MON_RANGE_HOURS = {
+    '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720,
+    '90d': 2160, '6m': 4320, '1y': 8760,
+};
+function hoursForRange(rangeKey) {
+    return MON_RANGE_HOURS[rangeKey] || 24;
+}
+
+// ---- Графики истории (Chart.js v4, static/lib/chart4/) ----
+let monCharts = {}; // canvasId → Chart instance, для destroy() перед перерисовкой
+
+function renderHistoryCharts(points) {
+    if (!points.length) {
+        // Пустая история (свежий деплой, БД метрик ещё не наполнилась) —
+        // явное сообщение вместо пустого канваса без каких-либо данных.
+        Object.keys(MON_CHART_LABELS).forEach(canvasId => {
+            if (monCharts[canvasId]) { monCharts[canvasId].destroy(); monCharts[canvasId] = null; }
+            const canvas = document.getElementById(canvasId);
+            const box = canvas && canvas.parentElement;
+            if (box) box.textContent = 'Нет данных за выбранный период';
+        });
+        return;
+    }
+
+    const labels = points.map(p => new Date(p.ts * 1000).toLocaleString('ru-RU', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    }));
+
+    monRenderLineChart('mon-chart-cpu', labels, points.map(p => p.cpu_percent), 'CPU %', 'rgba(238,45,98,0.9)');
+    monRenderLineChart('mon-chart-ram', labels, points.map(p => p.ram_total_mb ? Math.round(p.ram_used_mb / p.ram_total_mb * 100) : 0), 'RAM %', 'rgba(39,174,96,0.9)');
+    monRenderLineChart('mon-chart-response', labels, points.map(p => p.avg_response_ms), 'Время ответа, мс', 'rgba(52,152,219,0.9)');
+    monRenderLineChart('mon-chart-errors', labels, points.map(p => p.http_errors), 'Ошибки', 'rgba(230,126,34,0.9)');
+}
+
+const MON_CHART_LABELS = {
+    'mon-chart-cpu': 'CPU %', 'mon-chart-ram': 'RAM %',
+    'mon-chart-response': 'Время ответа, мс', 'mon-chart-errors': 'Ошибки',
+};
+
+function monRenderLineChart(canvasId, labels, data, label, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (monCharts[canvasId]) monCharts[canvasId].destroy();
+    monCharts[canvasId] = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{ label, data, borderColor: color, backgroundColor: color, tension: 0.2, pointRadius: 0 }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { x: { ticks: { maxTicksLimit: 8 } } },
+            plugins: { legend: { display: true } },
+        },
+    });
+}
+
+async function monLoadHistory(hours) {
+    const resp = await fetch(`/api/admin/metrics?hours=${hours}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderHistoryCharts(data.points || []);
+    domSet('mon-tile-uptime', formatUptime(data.meta && data.meta.uptime_secs));
+}
+
+function monOnRangeChange() {
+    const sel = document.getElementById('mon-range');
+    monLoadHistory(hoursForRange(sel.value));
+}
+
 // ---- Инициализация вкладки (вызывается из switchTab() в admin.html) ----
 function loadMonitoringTab() {
     monLoadHistory(24);

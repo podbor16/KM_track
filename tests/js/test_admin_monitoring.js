@@ -156,5 +156,60 @@ check('monOnLivePoint() — переход из "Критическая" обр�
     assert.strictEqual(calls, 2);
 });
 
+// ---- Chart.js стаб ----
+class FakeChart {
+    constructor(canvas, config) { this.canvas = canvas; this.config = config; this._destroyed = false; }
+    destroy() { this._destroyed = true; }
+}
+sandbox.Chart = FakeChart;
+
+check('renderHistoryCharts() — пустой массив точек показывает "Нет данных", не пустой график', () => {
+    resetDom();
+    const box = makeElement('DIV');
+    const canvas = makeElement('CANVAS');
+    box.appendChild(canvas);
+    elementsById['mon-chart-cpu'] = canvas;
+    sandbox.renderHistoryCharts([]);
+    assert.ok(box.textContent.includes('Нет данных'));
+});
+
+vm.runInContext('void 0', sandbox); // no-op — Chart уже доступен глобально в sandbox без повторной загрузки скрипта
+
+check('hoursForRange() — маппит ключ диапазона на часы для API', () => {
+    assert.strictEqual(sandbox.hoursForRange('1h'), 1);
+    assert.strictEqual(sandbox.hoursForRange('6h'), 6);
+    assert.strictEqual(sandbox.hoursForRange('24h'), 24);
+    assert.strictEqual(sandbox.hoursForRange('7d'), 168);
+    assert.strictEqual(sandbox.hoursForRange('30d'), 720);
+    assert.strictEqual(sandbox.hoursForRange('90d'), 2160);
+    assert.strictEqual(sandbox.hoursForRange('6m'), 4320);
+    assert.strictEqual(sandbox.hoursForRange('1y'), 8760);
+});
+
+check('hoursForRange() — неизвестный ключ по умолчанию 24 часа', () => {
+    assert.strictEqual(sandbox.hoursForRange('bogus'), 24);
+});
+
+check('renderHistoryCharts() — строит 4 графика с данными из точек истории', () => {
+    resetDom();
+    const points = [
+        { ts: 1755000000, cpu_percent: 10, ram_used_mb: 1000, ram_total_mb: 2000, avg_response_ms: 200, http_errors: 1 },
+        { ts: 1755003600, cpu_percent: 20, ram_used_mb: 1500, ram_total_mb: 2000, avg_response_ms: 300, http_errors: 2 },
+    ];
+    sandbox.renderHistoryCharts(points);
+    const cpuChart = vm.runInContext('monCharts["mon-chart-cpu"]', sandbox);
+    const ramChart = vm.runInContext('monCharts["mon-chart-ram"]', sandbox);
+    assert.deepStrictEqual(cpuChart.config.data.datasets[0].data, [10, 20]);
+    assert.deepStrictEqual(ramChart.config.data.datasets[0].data, [50, 75]); // RAM% = used/total*100
+});
+
+check('renderHistoryCharts() — второй вызов уничтожает предыдущие графики (нет утечки)', () => {
+    resetDom();
+    sandbox.renderHistoryCharts([{ ts: 1755000000, cpu_percent: 5, ram_used_mb: 100, ram_total_mb: 200, avg_response_ms: 50, http_errors: 0 }]);
+    const first = vm.runInContext('monCharts["mon-chart-cpu"]', sandbox);
+    sandbox.renderHistoryCharts([{ ts: 1755000000, cpu_percent: 5, ram_used_mb: 100, ram_total_mb: 200, avg_response_ms: 50, http_errors: 0 }]);
+    assert.strictEqual(first._destroyed, true);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
