@@ -22,7 +22,7 @@ distances:
       laps: 1
       total_km: 1.0
     copernico:
-      race_id: "--2026-6118"
+      race_id: "--2026-6118"  # общий race_id с Жарой 5км (zhara.yaml) — разделены по event
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event:

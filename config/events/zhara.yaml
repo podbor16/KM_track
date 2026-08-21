@@ -51,7 +51,7 @@ distances:
       laps: 1
       total_km: 5.0
     copernico:
-      race_id: "--2026-6118"
+      race_id: "--2026-6118"  # общий race_id с Детским забегом (kids.yaml) — разделены по event
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event: "5km"
