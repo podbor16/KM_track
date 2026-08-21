@@ -145,5 +145,18 @@ window.KMUtils = {
         const s = totalSeconds % 60;
         if (h > 0) return `${h}:${String(min).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
         return `${min}:${String(s).padStart(2,'0')}`;
+    },
+
+    // fetch() с явным cache:'no-store' — сервер уже шлёт Cache-Control:
+    // no-store на все /api/* и HTML (nginx location /), но некоторые
+    // WebView (замечено в браузере Telegram — Android System WebView под
+    // капотом) не всегда честно ревалидируют по одним только заголовкам
+    // ответа и отдают закэшированный fetch() без похода в сеть вовсе.
+    // Явная опция cache в самом запросе форсирует пропуск HTTP-кэша на
+    // уровне браузерного API, а не только на уровне заголовков —
+    // надёжнее для таких WebView. См. sessions/2026-05-23-telegram-cache-fix
+    // (тот фикс закрыл HTML/статику, но не сами fetch()-запросы за данными).
+    fetchFresh(url, options = {}) {
+        return fetch(url, { ...options, cache: 'no-store' });
     }
 };

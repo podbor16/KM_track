@@ -304,7 +304,7 @@ function clearSelectedStorage() {
 async function init() {
     // Загружаем конфиг активного забега из API — перезаписываем всё из серверного рендера
     try {
-        const cfg = await fetch('/api/current-event').then(r => r.json());
+        const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
         if (cfg.start_lat)    CONFIG.START_LAT     = cfg.start_lat;
         if (cfg.start_lon)    CONFIG.START_LON     = cfg.start_lon;
         if (cfg.event)        CONFIG.EVENT_NAME    = cfg.event;
@@ -560,7 +560,7 @@ async function loadAllRunners() {
         if (CONFIG.EVENT_ID != null) _params.set('event_id', CONFIG.EVENT_ID);
         else if (CONFIG.EVENT_DB_NAME) _params.set('event_name', CONFIG.EVENT_DB_NAME);
         else if (CONFIG.EVENT_NAME)    _params.set('event_name', CONFIG.EVENT_NAME);
-        const response = await fetch(`${CONFIG.API_BASE}/event-results?${_params}`);
+        const response = await KMUtils.fetchFresh(`${CONFIG.API_BASE}/event-results?${_params}`);
         const _fetchMs = performance.now() - _t0;
 
         if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
@@ -589,7 +589,7 @@ async function loadAnalytics() {
         if (CONFIG.EVENT_ID != null) _aParams.set('event_id', CONFIG.EVENT_ID);
         else if (CONFIG.EVENT_DB_NAME) _aParams.set('event_name', CONFIG.EVENT_DB_NAME);
         else if (CONFIG.EVENT_NAME)    _aParams.set('event_name', CONFIG.EVENT_NAME);
-        const response = await fetch(`${CONFIG.API_BASE}/event-results?${_aParams}`);
+        const response = await KMUtils.fetchFresh(`${CONFIG.API_BASE}/event-results?${_aParams}`);
 
         if (!response.ok) throw new Error('Ошибка загрузки результатов');
 

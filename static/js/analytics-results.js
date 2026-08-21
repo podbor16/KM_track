@@ -141,7 +141,7 @@ async function initResultsPage() {
     populateYearSelector();
     readStateFromUrl();
     try {
-        const cfg = await fetch('/api/current-event').then(r => r.json());
+        const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
         currentEvent = _urlEvent || cfg.event || 'night_run';
         const cfgYear = cfg.year || new Date().getFullYear();
         currentYear = _urlYear || latestConfiguredYearForEvent(currentEvent) || cfgYear;
@@ -315,7 +315,7 @@ async function loadRunnersData(silent = false) {
             const eventIds = Array.isArray(eventIdOrIds) ? eventIdOrIds : [eventIdOrIds];
             
             for (const eventId of eventIds) {
-                const response = await fetch(`/api/event-results?event_id=${eventId}`);
+                const response = await KMUtils.fetchFresh(`/api/event-results?event_id=${eventId}`);
                 
                 if (!response.ok) {
                     throw new Error(`Ошибка загрузки результатов для event_id=${eventId}`);
@@ -337,7 +337,7 @@ async function loadRunnersData(silent = false) {
             const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
             console.log('Запрос к ' + apiUrl);
             
-            const response = await fetch(apiUrl);
+            const response = await KMUtils.fetchFresh(apiUrl);
             console.log('Ответ от /api/race-results получен, статус:', response.status);
             const data = await response.json();
             
@@ -1106,7 +1106,7 @@ function buildDetailPanelHTML(runner) {
 async function loadSegmentsIntoPanel(cell, resultId) {
     const segPlaceholder = cell.querySelector('.segs-placeholder');
     try {
-        const resp = await fetch(`/api/result-segments?result_id=${resultId}`);
+        const resp = await KMUtils.fetchFresh(`/api/result-segments?result_id=${resultId}`);
         if (!resp.ok) throw new Error(`Ошибка сервера: ${resp.status}`);
         const segments = await resp.json();
 

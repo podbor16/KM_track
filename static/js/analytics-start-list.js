@@ -67,7 +67,7 @@ async function initStartListPage() {
     populateYearSelector();
     readStateFromUrl();
     try {
-        const cfg = await fetch('/api/current-event').then(r => r.json());
+        const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
         currentEvent = _urlEvent || cfg.event || 'night_run';
         currentYear = _urlYear || cfg.year || new Date().getFullYear();
     } catch {
@@ -168,7 +168,7 @@ async function fetchLatestYearForEvent(event) {
     const eventName = eventNameMap[event];
     if (!eventName) return null;
     try {
-        const data = await fetch(`/api/registered-runners-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
+        const data = await KMUtils.fetchFresh(`/api/registered-runners-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
         return Array.isArray(data.years) && data.years.length ? data.years[0] : null;
     } catch {
         return null;
@@ -249,7 +249,7 @@ async function loadRunnersData(silent = false) {
         // Загружаем зарегистрированных участников из БД с фильтром по событию
         const eventName = eventNameMap[currentEvent] || 'Ночной забег';
         const url = `/api/registered-runners?event_name=${encodeURIComponent(eventName)}&event_year=${currentYear}`;
-        const data = await fetch(url).then(r => r.json());
+        const data = await KMUtils.fetchFresh(url).then(r => r.json());
 
         
         const raw = Array.isArray(data) ? data : (data.runners || data.data || []);
