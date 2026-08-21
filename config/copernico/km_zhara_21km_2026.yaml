@@ -1,16 +1,8 @@
 description: >
-  Жара 21.1 км, race_id --2026-6118, event "21.1km" — подтверждено
-  живым fetch 2026-08-21 (20 участников, частичная выгрузка). Пресет
-  km_zhara_21km_2026 в Copernico пока отдаёт только старт/финиш плюс
-  те же 2,5/4,5 км, что и у 5км (times.official_2,5 / _4,5) — похоже,
-  чекпоинты 21.1 км судейская команда ещё не донастроила на своей
-  стороне. checkpoint_fields намеренно пустой — реальных полей под 6
-  промежуточных точек (5.0/6.0/10.55/14.65/15.65/20.2 км,
-  checkpoint_distances в zhara.yaml) в ответе API пока нет. Проверить
-  через "python scripts/prerace_check.py --config config/events/zhara.yaml
-  --distance '21.1 км' --inspect" ближе к старту 2026-08-23 — если поля
-  так и не появятся, live-трекер 21.1 км будет работать только по
-  старту/финишу, без промежуточных отметок.
+  Жара 21.1 км, race_id --2026-6118, event "21.1km". Живой fetch
+  2026-08-21 подтвердил все 6 промежуточных КТ (судейская команда
+  донастроила пресет) — прежние "чужие" поля 2,5/4,5 км (утечка из
+  пресета 5км) пропали, пресет пересобран заново.
 
 fields:
   bib: dorsal
@@ -27,4 +19,10 @@ time_fields:
   chip_start:  null
   chip_finish: null
 
-checkpoint_fields: {}
+checkpoint_fields:
+  kt1: "times.official_5"
+  kt2: "times.official_6"
+  kt3: "times.official_10.55"
+  kt4: "times.official_14.65"
+  kt5: "times.official_15.65"
+  kt6: "times.official_20.2"

@@ -97,11 +97,10 @@ def test_km_kids_1km_2026_preset_has_500m_checkpoint():
     assert preset["checkpoint_fields"] == {"kt1": "times.official_500"}
 
 
-def test_km_zhara_21km_2026_preset_exists_unverified():
-    """Событие 21.1 км создано (2026-08-21), но пресет в Copernico пока
-    не отдаёт реальных полей под 6 промежуточных КТ (только старт/финиш
-    и чужие 2,5/4,5 км от 5км) — checkpoint_fields намеренно пустой, см.
-    описание в самом preset-файле."""
+def test_km_zhara_21km_2026_preset_has_all_six_checkpoints():
+    """Живой fetch (2026-08-21) подтвердил все 6 промежуточных КТ —
+    судейская команда донастроила пресет в Copernico, прежние "чужие"
+    поля 2,5/4,5 км от 5км пропали."""
     preset_path = PROJECT_ROOT / "config/copernico/km_zhara_21km_2026.yaml"
     assert preset_path.exists(), f"Preset-файл не найден: {preset_path}"
 
@@ -109,4 +108,11 @@ def test_km_zhara_21km_2026_preset_exists_unverified():
 
     assert preset["time_fields"]["gun_start"] == "times.official_:::start:::"
     assert preset["time_fields"]["gun_finish"] == "times.official_:::finish:::"
-    assert preset["checkpoint_fields"] == {}
+    assert preset["checkpoint_fields"] == {
+        "kt1": "times.official_5",
+        "kt2": "times.official_6",
+        "kt3": "times.official_10.55",
+        "kt4": "times.official_14.65",
+        "kt5": "times.official_15.65",
+        "kt6": "times.official_20.2",
+    }
