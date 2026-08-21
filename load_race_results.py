@@ -379,43 +379,50 @@ class RaceLoader:
             return False
 
     def fetch_from_copernico(self) -> List[Dict]:
-        """Получить данные из Copernico API."""
+        """Получить данные из Copernico API. copernico_event может быть
+        строкой (один event) или списком строк (несколько event —
+        сливаются в один плоский список участников, напр. несколько
+        возрастных групп одной дистанции). gun_time_utc обновляется
+        ТОЛЬКО при одном event — при списке событий у каждого своё время
+        старта, общее поле на event_id писать нечем (не искажаем
+        реальность одним случайным значением)."""
         if not all([self.copernico_race_id, self.copernico_login, self.copernico_preset, self.copernico_event]):
             self.logger.error("❌ Не заданы все параметры Copernico API")
             return []
 
-        encoded_preset = urllib.parse.quote(self.copernico_preset)
-        encoded_event = urllib.parse.quote(self.copernico_event)
-        url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
-        self.logger.info(f"📡 Запрос к Copernico API: {url}")
-        try:
-            import requests as _req
-            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
-            response.raise_for_status()
-            data = response.json()
-            self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
-            if isinstance(data, dict) and 'data' in data:
-                runners = data['data']
-                gun_time = data.get('gunTime')
-                # Fallback: gunTime может быть per-runner полем
-                if not gun_time and runners:
-                    gun_time = runners[0].get('gunTime')
-                if gun_time:
+        events = self.copernico_event if isinstance(self.copernico_event, list) else [self.copernico_event]
+        all_runners: List[Dict] = []
+        for event in events:
+            encoded_preset = urllib.parse.quote(self.copernico_preset)
+            encoded_event = urllib.parse.quote(event)
+            url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
+            self.logger.info(f"📡 Запрос к Copernico API: {url}")
+            try:
+                import requests as _req
+                response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
+                response.raise_for_status()
+                data = response.json()
+                self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
+                if isinstance(data, dict) and 'data' in data:
+                    runners = data['data']
+                    gun_time = data.get('gunTime')
+                    # Fallback: gunTime может быть per-runner полем
+                    if not gun_time and runners:
+                        gun_time = runners[0].get('gunTime')
+                elif isinstance(data, list):
+                    runners = data
+                    gun_time = runners[0].get('gunTime') if runners else None
+                else:
+                    self.logger.error(f"❌ Неожиданный формат ответа для event={event}: {type(data)}")
+                    continue
+                if gun_time and len(events) == 1:
                     self.gun_time_utc = gun_time
-            elif isinstance(data, list):
-                runners = data
-                if runners:
-                    gun_time = runners[0].get('gunTime')
-                    if gun_time:
-                        self.gun_time_utc = gun_time
-            else:
-                self.logger.error(f"❌ Неожиданный формат ответа: {type(data)}")
-                return []
-            self.logger.info(f"✅ Получено {len(runners)} участников из API")
-            return runners
-        except Exception as e:
-            self.logger.error(f"❌ Ошибка при запросе к API: {e}")
-            return []
+                self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
+                all_runners.extend(runners)
+            except Exception as e:
+                self.logger.error(f"❌ Ошибка при запросе к API (event={event}): {e}")
+                continue
+        return all_runners
 
     def load_race_data(self) -> List[Dict]:
         """Получить данные (из API или из файла) и обновить JSON."""
