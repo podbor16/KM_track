@@ -7,18 +7,35 @@
 // Дизайн этой конкретной фичи (формат поста, markdown-конвенция **/__ как у
 // Siberman) — docs/superpowers/specs/2026-08-19-krasmarafon-broadcast-top3-posts-design.md.
 
+// Обе дистанции читают ОДИН общий файл: загрузчики 5км (22.08) и 21.1км
+// (23.08) никогда не работают одновременно (5км останавливается перед
+// стартом 21.1км), оба config/loader/zhara_*.env пишут в него по очереди
+// (см. deploy/nginx.conf — тот же файл отдаётся режиссёру трансляции по
+// заранее захардкоженному им URL, менять который в день гонки не нужно).
 const BCP_JSON_URLS = {
-    '5 км': '/live/zhara_5km_top10.json',
-    '21.1 км': '/live/zhara_21km_top10.json',
+    '5 км': '/live/zhara_top10.json',
+    '21.1 км': '/live/zhara_top10.json',
 };
 
 const BCP_NO_DATA_MESSAGE = 'Нет данных — трансляция ещё не активна';
 
+// Рекорды дистанций (обновляются вручную по мере установления новых
+// рекордов) — строка с рекордом добавляется в пост только для дистанций,
+// перечисленных здесь.
+const BCP_COURSE_RECORDS = {
+    '21.1 км': {
+        male: { time: '1:03:03', pace: '2:59', surname: 'Чертыков', name: 'Денис', year: 2024 },
+        female: { time: '1:13:04', pace: '3:28', surname: 'Викулова', name: 'Анна', year: 2024 },
+    },
+};
+
 // Строит готовый к копированию текст поста для одной (checkpoint, sexKey).
 // checkpoint — один объект из data.checkpoints (см. схему в спеке),
-// sexKey — 'male' | 'female'. Чистая функция, без обращения к DOM — легко
-// тестируется через node:vm без стабов document/fetch.
-function buildTop3Post(checkpoint, sexKey) {
+// sexKey — 'male' | 'female', distanceLabel — ключ BCP_JSON_URLS ('5 км' /
+// '21.1 км'), используется только чтобы решить, добавлять ли строку рекорда.
+// Чистая функция, без обращения к DOM — легко тестируется через node:vm без
+// стабов document/fetch.
+function buildTop3Post(checkpoint, sexKey, distanceLabel) {
     const list = (sexKey === 'male' ? checkpoint.top10_male : checkpoint.top10_female) || [];
     const top3 = list.slice(0, 3);
     // Пустой топ-3 — короткое сообщение вместо всего поста (тот же приём,
@@ -34,9 +51,12 @@ function buildTop3Post(checkpoint, sexKey) {
         titleSuffix = 'Финиш';
     } else {
         // label — "КТ{i} ({N} км)" (live_top10_export.py), N km извлекаем
-        // регэкспом, а не пересчитываем на клиенте заново.
+        // регэкспом, а не пересчитываем на клиенте заново. M — общая длина
+        // дистанции из distanceLabel ('21.1 км' → '21.1'), если он передан.
         const m = /\(([\d.]+)\s*км\)/.exec(checkpoint.label || '');
-        titleSuffix = `Отсечка ${m ? m[1] : '?'} км`;
+        const totalKm = distanceLabel ? distanceLabel.replace(/\s*км$/, '') : null;
+        const n = m ? m[1] : '?';
+        titleSuffix = totalKm ? `Отметка ${n}/${totalKm} км` : `Отметка ${n} км`;
     }
     const title = `**${sexLabel}. ${titleSuffix}**`;
 
@@ -51,8 +71,23 @@ function buildTop3Post(checkpoint, sexKey) {
         return lines.join('\n');
     });
 
-    const footer = '__👉 ссылка на лайв-результаты: https://results.krasmarafon.ru/results__';
-    return `${title}\n\n${entries.join('\n\n')}\n\n${footer}`;
+    const record = BCP_COURSE_RECORDS[distanceLabel] && BCP_COURSE_RECORDS[distanceLabel][sexKey];
+    const recordLine = record
+        ? `🏆 Рекорд дистанции: ${record.time}, ${record.surname} ${record.name} (${record.year}), ${record.pace} мин/км`
+        : null;
+
+    // [текст](url) не годится: пост копируется вручную и вставляется в
+    // Telegram как обычный текст (не через Bot API с parse_mode), а
+    // обычная вставка текста markdown-ссылки не парсит — Telegram видит
+    // скобки буквально и ОТДЕЛЬНО автолинкует и подпись, и URL внутри
+    // скобок, получаются две ссылки вместо одной. Голый URL без скобок —
+    // единственный вариант, который Telegram гарантированно сворачивает
+    // в одну кликабельную ссылку при вставке.
+    const footer = '__👉 ссылка на лайв-результаты: results.krasmarafon.ru/results__';
+    const blocks = [title, entries.join('\n\n')];
+    if (recordLine) blocks.push(recordLine);
+    blocks.push(footer);
+    return blocks.join('\n\n');
 }
 
 // ---- DOM-обвязка ----
@@ -116,7 +151,7 @@ async function bcpGenerate(sexKey) {
         // "источник данных недоступен": показываем сообщение о пустой
         // отметке, а не общую ошибку "трансляция не активна".
         ta.value = checkpoint
-            ? buildTop3Post(checkpoint, sexKey)
+            ? buildTop3Post(checkpoint, sexKey, wantedDistance)
             : 'Нет данных для этой отметки — пока никто не финишировал.';
     } catch (e) {
         bcpShowError(true);

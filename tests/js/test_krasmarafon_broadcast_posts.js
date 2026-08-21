@@ -54,12 +54,17 @@ const CP_FINISH = {
     top10_female: [],
 };
 
-check('Заголовок КТ — "Отсечка N км" с числом из label', () => {
+check('Заголовок КТ без distanceLabel — "Отметка N км" с числом из label', () => {
     const text = sandbox.buildTop3Post(CP_KT, 'female');
-    assert.ok(text.startsWith('**Женщины. Отсечка 10.55 км**'), text);
+    assert.ok(text.startsWith('**Женщины. Отметка 10.55 км**'), text);
 });
 
-check('Заголовок Финиш — "Финиш" без "Отсечка"', () => {
+check('Заголовок КТ с distanceLabel — "Отметка N/M км"', () => {
+    const text = sandbox.buildTop3Post(CP_KT, 'male', '21.1 км');
+    assert.ok(text.startsWith('**Мужчины. Отметка 10.55/21.1 км**'), text);
+});
+
+check('Заголовок Финиш — "Финиш" без "Отметка"', () => {
     const text = sandbox.buildTop3Post(CP_FINISH, 'male');
     assert.ok(text.startsWith('**Мужчины. Финиш**'), text);
 });
@@ -137,8 +142,32 @@ check('Мужчины vs Женщины — правильный список и
 
 check('Заголовок и ссылка в markdown-конвенции Siberman (**bold**/__italic__)', () => {
     const text = sandbox.buildTop3Post(CP_KT, 'male');
-    assert.ok(text.includes('**Мужчины. Отсечка 10.55 км**'));
-    assert.ok(text.includes('__👉 ссылка на лайв-результаты: https://results.krasmarafon.ru/results__'));
+    assert.ok(text.includes('**Мужчины. Отметка 10.55 км**'));
+    assert.ok(text.includes('__👉 ссылка на лайв-результаты: results.krasmarafon.ru/results__'));
+});
+
+check('21.1 км, мужчины — строка рекорда трассы (с темпом) после топ-3, перед ссылкой', () => {
+    const text = sandbox.buildTop3Post(CP_KT, 'male', '21.1 км');
+    const recordIdx = text.indexOf('🏆 Рекорд дистанции: 1:03:03, Чертыков Денис (2024), 2:59 мин/км');
+    const linkIdx = text.indexOf('👉 ссылка на лайв-результаты');
+    assert.ok(recordIdx > -1, text);
+    assert.ok(recordIdx > text.indexOf('2. Сидоров Олег'), text);
+    assert.ok(recordIdx < linkIdx, text);
+});
+
+check('21.1 км, женщины — свой рекорд трассы (с темпом)', () => {
+    const text = sandbox.buildTop3Post(CP_KT, 'female', '21.1 км');
+    assert.ok(text.includes('🏆 Рекорд дистанции: 1:13:04, Викулова Анна (2024), 3:28 мин/км'), text);
+});
+
+check('5 км — строка рекорда не добавляется (рекорд задан только для 21.1 км)', () => {
+    const text = sandbox.buildTop3Post(CP_KT, 'male', '5 км');
+    assert.ok(!text.includes('Рекорд дистанции'), text);
+});
+
+check('distanceLabel не передан — строка рекорда не добавляется (обратная совместимость)', () => {
+    const text = sandbox.buildTop3Post(CP_KT, 'male');
+    assert.ok(!text.includes('Рекорд дистанции'), text);
 });
 
 // ---- DOM-обвязка: минимальные стабы (тот же паттерн makeElement/domStub,
@@ -173,11 +202,13 @@ function domStub2(id) {
     return elementsById2[id];
 }
 
-const BCP_TEST_URL_5KM = '/live/zhara_5km_top10.json';
+// Один общий файл на обе дистанции (5км/21.1км никогда не работают
+// одновременно — см. комментарий у BCP_JSON_URLS в исходнике).
+const BCP_TEST_URL = '/live/zhara_top10.json';
 const domSandbox = {
     console,
     fetch: (url) => {
-        if (url === BCP_TEST_URL_5KM) {
+        if (url === BCP_TEST_URL) {
             return Promise.resolve({ ok: true, json: () => Promise.resolve({ checkpoints: [CP_KT, CP_FINISH] }) });
         }
         return Promise.resolve({ ok: false });
@@ -209,9 +240,9 @@ vm.runInContext(scriptJs, domSandbox);
     domStub2('bcp-checkpoint').value = 'kt1';
     await domSandbox.bcpGenerate('female');
 
-    check('bcpGenerate("female") заполняет textarea готовым текстом', () => {
+    check('bcpGenerate("female") заполняет textarea готовым текстом (с distanceLabel из select)', () => {
         const text = domStub2('bcp-output-female').value;
-        assert.ok(text.startsWith('**Женщины. Отсечка 10.55 км**'), text);
+        assert.ok(text.startsWith('**Женщины. Отметка 10.55/5 км**'), text);
     });
 
     console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
