@@ -394,7 +394,15 @@ class RaceLoader:
         self.logger.info(f"📡 Запрос к Copernico API: {url}")
         try:
             import requests as _req
-            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
+            # Read-timeout короткий (не 150с, как раньше) — диагностировано
+            # 2026-08-21: public-api.copernico.cloud резолвится в 3 IP, и
+            # Python (requests/urllib3) в отличие от curl нередко выбирает
+            # первым проблемный адрес (заканчивается на .0), на котором
+            # соединение открывается, но ответ не приходит вовсе. DNS
+            # резолвится заново на каждый вызов — короткий таймаут даёт
+            # быстрее попасть на рабочий IP на следующей попытке вместо
+            # многоминутного ожидания мёртвого соединения.
+            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 20))
             if response.status_code == 429:
                 retry_after = response.headers.get('Retry-After')
                 self.logger.warning(
@@ -677,14 +685,16 @@ class RaceLoader:
         self.logger.info("="*70 + "\n")
 
         last_cache_reload = time.time()
-        # Copernico периодически "подтормаживает" ответы конкретно с этого
-        # VPS-IP (задокументировано ещё на "Весне" 2026-05-17, docs/reports/
-        # 2026-05-17-vesna-race-day-report.md, п.3 — whitelisting не сделан).
-        # Повтор сразу через interval (5с) после таймаута обычно попадает в
-        # то же самое "медленное окно" повторно (наблюдалось: 2 таймаута
-        # подряд каждые ~2 мин). Растущий backoff с потолком в 30с даёт
-        # окну на стороне Copernico время пройти, не отставая надолго от
-        # реального времени гонки при разовых сбоях.
+        # Таймауты к Copernico бывают регулярно (задокументировано ещё на
+        # "Весне" 2026-05-17, docs/reports/2026-05-17-vesna-race-day-report.md,
+        # п.3) — уточнённая причина найдена 2026-08-21: DNS
+        # public-api.copernico.cloud резолвится в несколько IP, и
+        # requests/urllib3 иногда первым пробует проблемный адрес, на
+        # котором соединение открывается, но ответа не приходит вовсе (см.
+        # короткий read-timeout в _fetch_one_copernico_event()). Повтор
+        # почти сразу обычно попадает уже на другой IP (DNS резолвится
+        # заново на каждый вызов) — растущий backoff с потолком в 30с не
+        # даёт долбить впустую при пары неудачных попыток подряд.
         consecutive_failures = 0
 
         try:
