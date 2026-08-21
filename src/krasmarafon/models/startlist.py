@@ -90,6 +90,7 @@ class LeadPatch(BaseModel):
     event_distance: Optional[str] = None
     is_duplicate: Optional[int] = None
     status: Optional[Any] = None
+    birthday: Optional[str] = None
 
     def non_null_fields(self) -> Dict[str, Any]:
         return {k: v for k, v in self.model_dump().items() if v is not None}

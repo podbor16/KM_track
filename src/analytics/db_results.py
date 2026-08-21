@@ -1588,7 +1588,7 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None) -> 
 
 def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Partial UPDATE leads по leads.id. Поля — только из whitelist."""
-    ALLOWED = {'surname', 'name', 'event_distance', 'is_duplicate', 'status'}
+    ALLOWED = {'surname', 'name', 'event_distance', 'is_duplicate', 'status', 'birthday'}
     safe = {k: v for k, v in fields.items() if k in ALLOWED}
     if not safe:
         return None
@@ -1681,7 +1681,7 @@ def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
             pass
 
 
-_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance', 'is_name_suspicious')
+_IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance', 'is_name_suspicious', 'birthday')
 # club/phone — NULLable в схеме leads, пустое значение из файла осознанно
 # стирает старое (организатор убрал контакт). surname/name/sex/city/email —
 # NOT NULL: подстановка None вместо '' роняла UPDATE с ошибкой MySQL 1048
@@ -1690,6 +1690,9 @@ _IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone',
 # дистанций (реальный инцидент, Жара 2026, 2026-08-18: "Column 'city'
 # cannot be null" и "Column 'email' cannot be null" в логах — из-за одной
 # такой строки не применился весь стартовый номер для 5 км/2 км).
+# birthday — тоже NOT NULL, но НЕ в _IMPORT_NULLABLE_ON_EMPTY: пустое
+# значение из файла подставляет тот же sentinel '1900-01-01', что и при
+# INSERT (см. ниже), а не стирает реальную дату на NULL/''.
 _IMPORT_NULLABLE_ON_EMPTY = {'club', 'phone'}
 
 
@@ -1784,9 +1787,16 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
     client_id/event_id — не переизобретаем это в Python), затем
     recompute_duplicate_flag() на случай пересечения с уже живой группой.
 
-    birthday намеренно не в whitelist апдейта — смена даты рождения = смена
-    личности (для этого есть обычный admin PATCH по одной строке).
-    client_id/event_id/платёжные поля тоже не трогаются — не про правки
+    birthday — в whitelist апдейта (с 2026-08-21): организатор переиспользует
+    стартовый номер для другого участника (старый снялся, номер отдали
+    новому), правит ФИО+дату рождения в одной строке Excel с тем же
+    order_id — если не обновлять birthday, возрастная категория остаётся от
+    прежнего человека (реальный инцидент, Жара 2026, дистанция 5 км: номер
+    4291 — "Подборский Лев 1948 г.р." заменён на "Подборский Иван 2011
+    г.р.", категория осталась от 1948 г.р.). Пустое значение в файле не
+    стирает существующую дату — см. _IMPORT_NULLABLE_ON_EMPTY и sentinel
+    '1900-01-01' при INSERT.
+    client_id/event_id/платёжные поля не трогаются — не про правки
     ФИО/контактов.
 
     Файл — источник истины (2026-08-18): после обработки всех rows, для
@@ -1818,6 +1828,10 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                 # выше превратил бы False/0 в NULL, хотя False — валидное
                 # значение (имя чистое), а не "данных нет".
                 values['is_name_suspicious'] = int(row.is_name_suspicious)
+                # birthday NOT NULL в схеме — тот же sentinel, что при INSERT
+                # (см. ниже): "or ''" из generic-конструкции values выше дал
+                # бы невалидную DATE-строку для MySQL при пустой дате в файле.
+                values['birthday'] = row.birthday or '1900-01-01'
                 # source='import' — намеренно и для СОВПАВШИХ (уже существующих)
                 # заявок, не только для новых: подавляющее большинство заявок,
                 # которые вообще попадают в этот файл, изначально пришли через

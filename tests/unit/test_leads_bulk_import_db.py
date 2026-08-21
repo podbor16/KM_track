@@ -361,6 +361,44 @@ def test_matched_row_update_applies_club(mock_get_conn):
     assert "transaction_id" not in sql
 
 
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_applies_birthday(mock_get_conn):
+    """Реальный инцидент (Жара 2026, 5 км, 2026-08-21): номер 4291
+    переиспользован для другого участника — организатор поправил
+    ФИО+дату рождения в одной строке Excel с тем же order_id ("Подборский
+    Лев 1948 г.р." → "Подборский Иван 2011 г.р."). Если birthday не
+    обновляется вместе с ФИО, возрастная категория остаётся от прежнего
+    человека."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(surname="Подборский", name="Иван", birthday="2011-05-14")])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    sql, params = update_call.args
+    assert "birthday" in sql
+    assert "2011-05-14" in params
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_maps_empty_birthday_to_sentinel(mock_get_conn):
+    """Пустая дата рождения в файле не должна писать невалидную '' в
+    NOT NULL DATE-колонку при UPDATE — тот же sentinel, что и при INSERT
+    (см. test_new_lead_insert_maps_empty_birthday_to_sentinel)."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(birthday="")])
+
+    update_call = next(c for c in cur.execute.call_args_list if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    sql, params = update_call.args
+    columns = [c.strip().split(" = ")[0] for c in sql.split("SET", 1)[1].split("WHERE")[0].split(",")]
+    values_by_col = dict(zip(columns, params))
+    assert values_by_col["birthday"] == "1900-01-01"
+
+
 @patch("src.analytics.db_results.recompute_duplicate_flag")
 @patch("src.analytics.db_results.get_pooled_connection")
 def test_new_lead_insert_computes_is_name_suspicious(mock_get_conn, mock_recompute):
