@@ -276,7 +276,7 @@ git commit -m "feat(krasmarafon): fetch_from_copernico() — поддержка 
 - Modify: `config/events/kids.yaml`
 - Test: `tests/unit/test_event_config_copernico.py` (создать)
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Создать `tests/unit/test_event_config_copernico.py`:
 
@@ -320,12 +320,12 @@ def test_kids_1km_copernico_config_has_all_six_age_groups():
     assert cop["preset"] == "km_analytics"
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_event_config_copernico.py -v`
 Expected: FAIL — `test_zhara_5km_copernico_config` и `test_kids_1km_copernico_config_has_all_six_age_groups` падают на `assert cop["race_id"] == "--2026-6118"` (сейчас там `None`); `test_zhara_21km_copernico_not_touched` проходит уже сейчас (эту дистанцию не трогаем)
 
-- [ ] **Step 3: Обновить `config/events/zhara.yaml`**
+- [x] **Step 3: Обновить `config/events/zhara.yaml`**
 
 Найти в файле блок дистанции «5 км»:
 
@@ -349,7 +349,7 @@ Expected: FAIL — `test_zhara_5km_copernico_config` и `test_kids_1km_copernico
 
 Блок дистанции «21.1 км» НЕ трогать — остаётся с `race_id: null`.
 
-- [ ] **Step 4: Обновить `config/events/kids.yaml`**
+- [x] **Step 4: Обновить `config/events/kids.yaml`**
 
 Найти в файле блок дистанции «1 км»:
 
@@ -379,12 +379,12 @@ Expected: FAIL — `test_zhara_5km_copernico_config` и `test_kids_1km_copernico
 
 Блок дистанции «500 м» НЕ трогать (у неё нет секции `copernico`).
 
-- [ ] **Step 5: Запустить тесты, убедиться что проходят**
+- [x] **Step 5: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_event_config_copernico.py -v`
 Expected: `3 passed`
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add config/events/zhara.yaml config/events/kids.yaml tests/unit/test_event_config_copernico.py
