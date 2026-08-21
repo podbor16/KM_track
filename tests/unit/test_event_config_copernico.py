@@ -1,0 +1,37 @@
+"""Верификация блоков copernico в config/events/zhara.yaml и kids.yaml —
+race_id общий для Жары и Детского забега, event: строка у Жары 5км,
+список из 6 возрастных групп у Детского забега 1км."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from load_race_results import _load_event_config
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
+def test_zhara_5km_copernico_config():
+    dist_cfg = _load_event_config(str(PROJECT_ROOT / "config/events/zhara.yaml"), "5 км")
+    cop = dist_cfg["copernico"]
+    assert cop["race_id"] == "--2026-6118"
+    assert cop["event"] == "5km"
+    assert cop["preset"] == "km_analytics"
+
+
+def test_zhara_21km_copernico_not_touched():
+    """21.1 км ещё не создана в Copernico — конфиг не должен был измениться
+    в рамках этой задачи."""
+    dist_cfg = _load_event_config(str(PROJECT_ROOT / "config/events/zhara.yaml"), "21.1 км")
+    cop = dist_cfg["copernico"]
+    assert cop["race_id"] is None
+
+
+def test_kids_1km_copernico_config_has_all_six_age_groups():
+    dist_cfg = _load_event_config(str(PROJECT_ROOT / "config/events/kids.yaml"), "1 км")
+    cop = dist_cfg["copernico"]
+    assert cop["race_id"] == "--2026-6118"
+    assert cop["event"] == [
+        "1km-2020", "1km-2019", "1km-2018", "1km-2017", "1km-2016", "1km-2015",
+    ]
+    assert cop["preset"] == "km_analytics"
