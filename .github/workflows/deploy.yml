@@ -52,6 +52,12 @@ jobs:
             cp /opt/km_track/deploy/km_track.service /etc/systemd/system/km_track.service
             systemctl daemon-reload
 
+            # run_loader.sh — обёртка для km_race_loader@.service (WorkingDirectory=/opt/km_track,
+            # ExecStart ищет его в корне, не в deploy/) — раньше не копировался деплоем вообще,
+            # поэтому правки в deploy/run_loader.sh годами не долетали до реально исполняемого файла
+            cp /opt/km_track/deploy/run_loader.sh /opt/km_track/run_loader.sh
+            chmod +x /opt/km_track/run_loader.sh
+
             # Установить/обновить зависимости
             /opt/km_track/venv/bin/pip install -r /opt/km_track/requirements.txt
 
