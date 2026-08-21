@@ -22,7 +22,7 @@ def test_zhara_5km_copernico_config():
     assert cop["race_id"] == "--2026-6118"
     assert cop["event"] == "5km"
     assert cop["preset"] == "km_zhara_5km_2026"
-    assert dist_cfg["checkpoint_distances"] == [0, 2.5, 4.5, 5.0]
+    assert dist_cfg["checkpoint_distances"] == [0, 2.5, 5.0]
 
 
 def test_zhara_21km_copernico_not_touched():
@@ -69,9 +69,10 @@ def test_km_analytics_preset_exists_and_has_expected_fields():
     assert preset["checkpoint_fields"] == {}
 
 
-def test_km_zhara_5km_2026_preset_has_two_checkpoints():
-    """Живой fetch (2026-08-21) подтвердил 2 КТ у Жары 5км: 2,5 и 4,5 км —
-    не один разворот, как считалось на этапе km_analytics."""
+def test_km_zhara_5km_2026_preset_uses_only_the_2_5km_checkpoint():
+    """Copernico отдаёт 2 поля КТ (2,5 и 4,5 км) — 4,5 км это отсечка для
+    судей (видеть, кто подбегает к финишу), нам не нужна и намеренно не
+    замаплена."""
     preset_path = PROJECT_ROOT / "config/copernico/km_zhara_5km_2026.yaml"
     assert preset_path.exists(), f"Preset-файл не найден: {preset_path}"
 
@@ -79,10 +80,7 @@ def test_km_zhara_5km_2026_preset_has_two_checkpoints():
 
     assert preset["time_fields"]["gun_start"] == "times.official_:::start:::"
     assert preset["time_fields"]["gun_finish"] == "times.official_:::finish:::"
-    assert preset["checkpoint_fields"] == {
-        "kt1": "times.official_2,5",
-        "kt2": "times.official_4,5",
-    }
+    assert preset["checkpoint_fields"] == {"kt1": "times.official_2,5"}
 
 
 def test_km_kids_1km_2026_preset_has_500m_checkpoint():
