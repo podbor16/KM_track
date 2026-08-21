@@ -25,12 +25,14 @@ def test_zhara_5km_copernico_config():
     assert dist_cfg["checkpoint_distances"] == [0, 2.5, 5.0]
 
 
-def test_zhara_21km_copernico_not_touched():
-    """21.1 км ещё не создана в Copernico (race_id/event) — только preset
-    прописан заранее (организатор уже создал его в Copernico)."""
+def test_zhara_21km_copernico_shares_race_id_but_event_not_yet_created():
+    """race_id общий с Жарой 5км/Детским забегом (подтверждено
+    пользователем), но само событие 21.1 км в Copernico организатор ещё
+    не создал — все проверенные варианты event живым fetch дают 0
+    участников, поэтому event остаётся плейсхолдером до подтверждения."""
     dist_cfg = _load_event_config(str(PROJECT_ROOT / "config/events/zhara.yaml"), "21.1 км")
     cop = dist_cfg["copernico"]
-    assert cop["race_id"] is None
+    assert cop["race_id"] == "--2026-6118"
     assert cop["preset"] == "km_zhara_21km_2026"
 
 

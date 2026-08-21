@@ -1,11 +1,13 @@
 description: >
-  Жара 21.1 км, race_id --2026-6118. Событие в Copernico организатором
-  ещё не создано (участники не выгружены) — checkpoint_fields пока
-  пустой, реальные имена полей не подтверждены живым fetch. Заполнить
-  через "python scripts/prerace_check.py --config config/events/zhara.yaml
-  --distance '21.1 км' --inspect", когда race_id/event появятся.
-  Ожидаемые КТ (checkpoint_distances в zhara.yaml): 5.0, 6.0, 10.55,
-  14.65, 15.65, 20.2 км — 6 точек между стартом и финишем.
+  Жара 21.1 км, race_id --2026-6118 (общий с Жарой 5км и Детским
+  забегом — подтверждено). Само событие в Copernico организатором ещё
+  не создано (все проверенные варианты event живым fetch дают 0
+  участников) — checkpoint_fields пока пустой, реальные имена полей не
+  подтверждены. Заполнить через "python scripts/prerace_check.py
+  --config config/events/zhara.yaml --distance '21.1 км' --inspect",
+  когда организатор создаст event и появятся данные. Ожидаемые КТ
+  (checkpoint_distances в zhara.yaml): 5.0, 6.0, 10.55, 14.65, 15.65,
+  20.2 км — 6 точек между стартом и финишем.
 
 fields:
   bib: dorsal

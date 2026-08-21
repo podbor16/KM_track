@@ -30,10 +30,10 @@ distances:
       laps: 1
       total_km: 21.1
     copernico:
-      race_id: null           # ← заполнить перед стартом
+      race_id: "--2026-6118"  # общий race_id с Жарой 5км и Детским забегом — разделены по event
       login: "podbor250718@gmail.com"
       preset: "km_zhara_21km_2026"
-      event: "21.1 км"
+      event: "21.1 км"        # ← плейсхолдер: организатор ещё не создал событие в Copernico (все проверенные варианты дают 0 участников)
 
   - distance: "5 км"
     distance_km: 5.0
