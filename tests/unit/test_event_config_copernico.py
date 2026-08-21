@@ -25,14 +25,13 @@ def test_zhara_5km_copernico_config():
     assert dist_cfg["checkpoint_distances"] == [0, 2.5, 5.0]
 
 
-def test_zhara_21km_copernico_shares_race_id_but_event_not_yet_created():
-    """race_id общий с Жарой 5км/Детским забегом (подтверждено
-    пользователем), но само событие 21.1 км в Copernico организатор ещё
-    не создал — все проверенные варианты event живым fetch дают 0
-    участников, поэтому event остаётся плейсхолдером до подтверждения."""
+def test_zhara_21km_copernico_config():
+    """Событие создано организатором 2026-08-21, подтверждено живым
+    fetch (20 участников, частичная выгрузка)."""
     dist_cfg = _load_event_config(str(PROJECT_ROOT / "config/events/zhara.yaml"), "21.1 км")
     cop = dist_cfg["copernico"]
     assert cop["race_id"] == "--2026-6118"
+    assert cop["event"] == "21.1km"
     assert cop["preset"] == "km_zhara_21km_2026"
 
 
@@ -99,8 +98,10 @@ def test_km_kids_1km_2026_preset_has_500m_checkpoint():
 
 
 def test_km_zhara_21km_2026_preset_exists_unverified():
-    """21.1 км ещё не создана в Copernico — checkpoint_fields намеренно
-    пустой до живой проверки (см. описание в самом preset-файле)."""
+    """Событие 21.1 км создано (2026-08-21), но пресет в Copernico пока
+    не отдаёт реальных полей под 6 промежуточных КТ (только старт/финиш
+    и чужие 2,5/4,5 км от 5км) — checkpoint_fields намеренно пустой, см.
+    описание в самом preset-файле."""
     preset_path = PROJECT_ROOT / "config/copernico/km_zhara_21km_2026.yaml"
     assert preset_path.exists(), f"Preset-файл не найден: {preset_path}"
 
