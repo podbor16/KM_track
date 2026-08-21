@@ -399,7 +399,7 @@ git commit -m "feat(krasmarafon): race_id/event для Жары 5км и Дет�
 - Create: `config/copernico/km_analytics.yaml`
 - Test: `tests/unit/test_event_config_copernico.py` (дополнить)
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Добавить в конец `tests/unit/test_event_config_copernico.py`:
 
@@ -431,12 +431,12 @@ def test_km_analytics_preset_exists_and_has_expected_fields():
     assert preset["checkpoint_fields"] == {}
 ```
 
-- [ ] **Step 2: Запустить тест, убедиться что падает**
+- [x] **Step 2: Запустить тест, убедиться что падает**
 
 Run: `conda run -n base python -m pytest tests/unit/test_event_config_copernico.py -k km_analytics_preset -v`
 Expected: FAIL — `assert preset_path.exists()` (файла ещё нет)
 
-- [ ] **Step 3: Создать `config/copernico/km_analytics.yaml`**
+- [x] **Step 3: Создать `config/copernico/km_analytics.yaml`**
 
 По образцу уже существующего `config/copernico/km_vesna_5km_2026.yaml`:
 
@@ -461,12 +461,12 @@ time_fields:
 checkpoint_fields: {}
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_event_config_copernico.py -v`
 Expected: `4 passed`
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add config/copernico/km_analytics.yaml tests/unit/test_event_config_copernico.py
