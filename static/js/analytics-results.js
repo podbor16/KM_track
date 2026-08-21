@@ -8,6 +8,12 @@ let currentYear = new Date().getFullYear();
 const timeMode = 'gun'; // фиксировано для сегментных функций
 const runnerDataMap = new Map(); // resultId → runner object
 
+// Раздел /athlete-profile временно скрыт (решение пользователя,
+// 2026-08-21) — кнопка "Профиль" в панели деталей до его возвращения не
+// показывается. Один флаг вместо закомментированного кода — включить
+// обратно: PROFILE_BUTTON_ENABLED = true.
+const PROFILE_BUTTON_ENABLED = false;
+
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
 
@@ -1020,6 +1026,9 @@ function buildDetailPanelHTML(runner) {
     const rankCatClean = runner.rank_category_clean ? fmtRank(runner.rank_category_clean, nCat) : '—';
 
     const profileUrl = `/athlete-profile?surname=${encodeURIComponent(runner.surname || '')}&name=${encodeURIComponent(runner.name || '')}`;
+    const profileBtn = PROFILE_BUTTON_ENABLED
+        ? `<a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>`
+        : '';
 
     // DIPLOMA_EVENT_IDS — глобальный Set из results.html (event_id, для
     // которых вообще настроен diploma-конфиг). event_id проставляется на
@@ -1046,7 +1055,7 @@ function buildDetailPanelHTML(runner) {
         <div>
             <div class="detail-name-row">
                 <span class="detail-panel-name">${fullName}</span>
-                <a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>
+                ${profileBtn}
                 ${diplomaBtn}
             </div>
             <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
