@@ -20,7 +20,10 @@ class CopernicoConfig(BaseModel):
     race_id: Optional[str] = None
     login: str
     preset: str
-    event: str
+    # Список event нужен, когда несколько Copernico-событий (напр. возрастные
+    # группы Детского забега) объединяются в один db_event_id — см.
+    # RaceLoader.fetch_from_copernico() в load_race_results.py.
+    event: str | list[str]
 
 
 class RouteConfig(BaseModel):
