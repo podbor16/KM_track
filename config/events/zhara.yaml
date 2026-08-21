@@ -32,7 +32,7 @@ distances:
     copernico:
       race_id: null           # ← заполнить перед стартом
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
+      preset: "km_zhara_21km_2026"
       event: "21.1 км"
 
   - distance: "5 км"
@@ -40,11 +40,14 @@ distances:
     db_event_id: 115         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: [0, 2.5, 5.0]
+    checkpoint_distances: [0, 2.5, 4.5, 5.0]   # живой fetch подтвердил 2 КТ (не 1)
     checkpoints:
       - {name: "Старт",    distance_km: 0.0, lat: 56.0126030, lon: 92.8936640}
       - {name: "Разворот", distance_km: 2.5, lat: 56.01928,   lon: 92.93024}
       - {name: "Финиш",    distance_km: 5.0, lat: 56.0126030, lon: 92.8936640}
+      # КТ на 4.5 км подтверждён Copernico (times.official_4,5), GPS-точка
+      # для карты пока не добавлена — на расчёт мест/скорости не влияет
+      # (calculate_live_position использует только checkpoint_distances)
     gpx_file: "static/map/2026/zhara_5.gpx"            # ← заполнить перед стартом
     event_date: "2026-08-22"          # ← заполнить перед стартом
     route:
@@ -53,7 +56,7 @@ distances:
     copernico:
       race_id: "--2026-6118"  # общий race_id с Детским забегом (kids.yaml) — разделены по event
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
+      preset: "km_zhara_5km_2026"
       event: "5km"
 
   - distance: "2 км"

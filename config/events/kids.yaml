@@ -14,7 +14,7 @@ distances:
     db_event_id: 113
     tracked: false            # трекер (живая карта) для детского забега не нужен
     has_start_list: true
-    checkpoint_distances: [0, 1.0]   # разворот 500м — пока нет поля в Copernico, см. заметку ниже
+    checkpoint_distances: [0, 0.5, 1.0]   # разворот 500м — подтверждён Copernico (times.official_500)
     checkpoints: []           # GPS не нужен — tracked: false
     gpx_file: null            # GPS не нужен — tracked: false
     event_date: "2026-08-22"
@@ -24,7 +24,7 @@ distances:
     copernico:
       race_id: "--2026-6118"  # общий race_id с Жарой 5км (zhara.yaml) — разделены по event
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
+      preset: "km_kids_1km_2026"
       event:
         - "1km-2020"
         - "1km-2019"
