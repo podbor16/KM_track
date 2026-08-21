@@ -1000,7 +1000,10 @@ function buildDetailPanelHTML(runner) {
     // Полное слово в шапке карточки ("Мужчина"/"Женщина") — сокращение
     // "М"/"Ж" (genderShort) оставлено для компактных мест по полу ниже
     // ("М 5"/"Ж 12"), там развёрнутое слово не поместится.
-    const metaParts = [distance, runner.gender || '', birthYear ? `${birthYear} г.р.` : ''].filter(Boolean);
+    // Категория — раньше нигде не показывалась в результатах, хотя место
+    // по категории уже есть в самой карточке ("По кат." ниже).
+    const metaParts = [distance, runner.gender || '', birthYear ? `${birthYear} г.р.` : '', runner.category || '']
+        .filter(Boolean);
 
     const timeGun = formatTime(runner.time_gun_finish) || '—';
     const timeNet = formatTime(runner.time_clear_finish) || '—';
