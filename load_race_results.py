@@ -21,7 +21,7 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 import os
 
 try:
@@ -295,7 +295,7 @@ class RaceLoader:
                  copernico_race_id: Optional[str] = None,
                  copernico_login: Optional[str] = None,
                  copernico_preset: Optional[str] = None,
-                 copernico_event: Optional[str] = None,
+                 copernico_event: Optional[Union[str, List[str]]] = None,
                  preset_cfg: Optional[Dict] = None,
                  broadcast_json_path: Optional[str] = None):
         self.event_id = event_id
