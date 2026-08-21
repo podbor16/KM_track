@@ -21,7 +21,7 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple, Any, Union
 import os
 
@@ -809,6 +809,55 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено results: {self.updated_results_count} записей")
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
+
+    def write_waiting_placeholder(self, distance_label: str, event_date: Optional[str]) -> None:
+        """Пишет плейсхолдер "ждём старта" в broadcast_json_path, ЕСЛИ
+        файла там ещё нет — то есть ни одного реального цикла с
+        изменениями ещё не было. Режиссёр трансляции по тому же
+        публичному URL видит "всё настроено, ждём старта в HH:MM" вместо
+        404/пустого ответа. Как только пойдут реальные данные,
+        _maybe_write_broadcast_json() перезапишет файл — этот плейсхолдер
+        больше не трогается (проверка "файла ещё нет" защищает от того,
+        чтобы рестарт загрузчика ПОСЛЕ старта гонки затёр уже накопленные
+        реальные данные плейсхолдером)."""
+        if not self.broadcast_json_path:
+            return
+        path = Path(self.broadcast_json_path)
+        if path.exists():
+            return
+
+        when = None
+        if self.gun_time_utc:
+            try:
+                gt = datetime.fromisoformat(self.gun_time_utc.replace('Z', '+00:00'))
+                local = gt.astimezone(timezone(timedelta(hours=7)))  # Красноярск, UTC+7
+                when = local.strftime('%d.%m в %H:%M')
+            except Exception:
+                when = None
+        if not when and event_date:
+            try:
+                when = datetime.strptime(event_date, '%Y-%m-%d').strftime('%d.%m')
+            except Exception:
+                when = event_date
+        if not when:
+            when = "скоро"
+
+        message = f"Данные на {distance_label} появятся после старта события {when}"
+        payload = {
+            "status": "waiting",
+            "message": message,
+            "distance": distance_label,
+            "gun_time_utc": self.gun_time_utc,
+            "updated_at": datetime.now().isoformat(),
+        }
+        try:
+            tmp = str(path) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, str(path))
+            self.logger.info(f"📢 Плейсхолдер записан: {message}")
+        except Exception as e:
+            self.logger.error(f"⚠️ Не удалось записать плейсхолдер broadcast JSON: {e}")
 
     def _maybe_write_broadcast_json(self) -> None:
         """Обновляет live-JSON топ-10 по отметкам для трансляции (см.
@@ -1642,6 +1691,8 @@ def main():
                 return 1
         else:
             loader.load_existing_results()
+            if args.config:
+                loader.write_waiting_placeholder(args.distance, dist_cfg.get("event_date"))
             loader.continuous_mode(runners or [], args.interval, args.reset_cache)
 
         return 0
