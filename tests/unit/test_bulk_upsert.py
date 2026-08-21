@@ -42,6 +42,7 @@ def make_loader():
     loader.checkpoint_distances = None
     loader.gun_time_utc = None
     loader.event_distance_km = 5.0
+    loader.rate_limited = False
     return loader
 
 
@@ -191,3 +192,95 @@ class TestConditionalRanks:
 
         loader._recalculate_ranks.assert_not_called()
         loader._recalculate_segment_ranks.assert_called_once()
+
+
+class TestSegmentGating:
+    """_update_existing() раньше безусловно пересчитывал и переписывал
+    сегменты КАЖДОГО участника КАЖДЫЙ цикл, даже если у него ничего не
+    изменилось — для 21.1км (8 точек → 28 сегментов × ~1500 чел.) это до
+    ~42000 лишних upsert-строк на цикл. Теперь сегменты пересчитываются
+    только вместе с results_batch — при реальном изменении полей."""
+
+    def _make_runner(self):
+        # Старт/финиш с реальными значениями (не None) — иначе
+        # _prepare_segments() всегда вернёт [] независимо от гейтинга
+        # (нет двух точек с временем — не из чего строить сегмент), и тест
+        # не сможет отличить "сегменты намеренно не переписаны" от "там и
+        # так нечего было писать".
+        return {
+            'dorsal': 100,
+            'surname': 'Иванов',
+            'name': 'Иван',
+            'birthdate': None,
+            'gender': 'male',
+            'category': 'M18-29',
+            'status': 'finished',
+            'times.official_:::start:::': 0,
+            'times.official_:::finish:::': 1800000,
+        }
+
+    def _make_loader_for_update_existing(self):
+        loader = make_loader()
+        loader.event_id = 999
+        loader.existing_results_by_name = {}
+        loader.checkpoint_distances = [0, 5.0]
+        loader._preset_cfg = {
+            'time_fields': {
+                'gun_start': 'times.official_:::start:::',
+                'gun_finish': 'times.official_:::finish:::',
+            },
+            'checkpoint_fields': {},
+        }
+        # Сид кэша: id обязателен, чтобы _update_existing не пропустил
+        # участника как "не найден в кэше" — остальные поля намеренно НЕ
+        # совпадают с тем, что вычислится из runner, чтобы первый вызов
+        # гарантированно попал в changed_fields.
+        loader.existing_results = {'100': {'id': 1, 'surname': None, 'name': None}}
+        loader._bulk_update_join = MagicMock()
+        loader._bulk_upsert = MagicMock()
+        return loader
+
+    def test_first_seen_runner_writes_segments(self):
+        """Первый раз видим участника (кэш ещё не совпадает) — сегменты
+        должны записаться."""
+        loader = self._make_loader_for_update_existing()
+        runner = self._make_runner()
+
+        loader._update_existing([runner])
+
+        segment_calls = [c for c in loader._bulk_upsert.call_args_list if c.args[0] == 'result_segments']
+        assert len(segment_calls) == 1, "сегменты должны были записаться на первом проходе"
+
+    def test_unchanged_runner_on_second_cycle_does_not_rewrite_segments(self):
+        """Второй цикл подряд с ТЕМИ ЖЕ данными участника (типичный случай —
+        большинство участников ничего не меняют между соседними циклами
+        опроса) — сегменты переписываться не должны."""
+        loader = self._make_loader_for_update_existing()
+        runner = self._make_runner()
+
+        loader._update_existing([runner])  # первый проход — заполняет кэш
+        loader._bulk_upsert.reset_mock()
+        loader._bulk_update_join.reset_mock()
+
+        loader._update_existing([runner])  # второй проход — те же данные
+
+        segment_calls = [c for c in loader._bulk_upsert.call_args_list if c.args[0] == 'result_segments']
+        assert segment_calls == [], "сегменты не должны переписываться без реальных изменений"
+        loader._bulk_update_join.assert_not_called()
+
+    def test_runner_with_real_change_still_rewrites_segments(self):
+        """Если у участника реально что-то изменилось (например, статус) —
+        сегменты пересчитываются как и раньше."""
+        loader = self._make_loader_for_update_existing()
+        runner = self._make_runner()
+
+        loader._update_existing([runner])  # первый проход — заполняет кэш
+        loader._bulk_upsert.reset_mock()
+        loader._bulk_update_join.reset_mock()
+
+        changed_runner = dict(runner)
+        changed_runner['status'] = 'started'
+        loader._update_existing([changed_runner])
+
+        segment_calls = [c for c in loader._bulk_upsert.call_args_list if c.args[0] == 'result_segments']
+        assert len(segment_calls) == 1, "сегменты должны пересчитаться при реальном изменении статуса"

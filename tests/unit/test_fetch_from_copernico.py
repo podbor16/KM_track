@@ -1,7 +1,9 @@
 """Тесты для RaceLoader.fetch_from_copernico() — поддержка списка Copernico
 event-значений на одну дистанцию (нужно для Детского забега, где 6
-возрастных групп по году рождения объединяются в один db_event_id)."""
+возрастных групп по году рождения объединяются в один db_event_id),
+параллельный fetch (ThreadPoolExecutor) и обработка HTTP 429."""
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -29,11 +31,19 @@ def make_loader(copernico_event):
 
 def _fake_response(runners, gun_time=None):
     resp = MagicMock()
+    resp.status_code = 200
     resp.raise_for_status = MagicMock()
     payload = {"data": runners}
     if gun_time:
         payload["gunTime"] = gun_time
     resp.json.return_value = payload
+    return resp
+
+
+def _fake_429_response(retry_after=None):
+    resp = MagicMock()
+    resp.status_code = 429
+    resp.headers = {"Retry-After": retry_after} if retry_after else {}
     return resp
 
 
@@ -61,10 +71,16 @@ class TestFetchFromCopernicoEventList:
     @patch("requests.get")
     def test_merges_runners_from_all_events(self, mock_get):
         loader = make_loader(["1km-2020", "1km-2019"])
-        mock_get.side_effect = [
-            _fake_response([{"dorsal": 2118, "surname": None}], gun_time="2026-08-22T03:30:00.000Z"),
-            _fake_response([{"dorsal": 9014, "surname": "Рековская"}], gun_time="2026-08-22T03:45:00.000Z"),
-        ]
+
+        def side_effect(url, **kwargs):
+            # Ключ по URL, а не позиционный список — запросы теперь идут
+            # параллельно из разных потоков (ThreadPoolExecutor), порядок
+            # вызовов mock_get не гарантирован.
+            if "1km-2020" in url:
+                return _fake_response([{"dorsal": 2118, "surname": None}], gun_time="2026-08-22T03:30:00.000Z")
+            return _fake_response([{"dorsal": 9014, "surname": "Рековская"}], gun_time="2026-08-22T03:45:00.000Z")
+
+        mock_get.side_effect = side_effect
 
         runners = loader.fetch_from_copernico()
 
@@ -77,10 +93,13 @@ class TestFetchFromCopernicoEventList:
         """У каждой возрастной группы своё время старта — нет одного
         корректного значения для общего поля на весь db_event_id."""
         loader = make_loader(["1km-2020", "1km-2019"])
-        mock_get.side_effect = [
-            _fake_response([{"dorsal": 2118}], gun_time="2026-08-22T03:30:00.000Z"),
-            _fake_response([{"dorsal": 9014}], gun_time="2026-08-22T03:45:00.000Z"),
-        ]
+
+        def side_effect(url, **kwargs):
+            if "1km-2020" in url:
+                return _fake_response([{"dorsal": 2118}], gun_time="2026-08-22T03:30:00.000Z")
+            return _fake_response([{"dorsal": 9014}], gun_time="2026-08-22T03:45:00.000Z")
+
+        mock_get.side_effect = side_effect
 
         loader.fetch_from_copernico()
 
@@ -112,3 +131,67 @@ class TestFetchFromCopernicoEventList:
         runners = loader.fetch_from_copernico()
 
         assert runners == []
+
+    @patch("requests.get")
+    def test_events_fetched_concurrently_not_sequentially(self, mock_get):
+        """При списке событий запросы должны идти ПАРАЛЛЕЛЬНО — иначе цикл
+        для Детского забега (6 event) занимал бы 6-12+ секунд вместо 1-2.
+        threading.Barrier ловит регресс к последовательному fetch: если бы
+        запросы шли по очереди, первый поток застрял бы на barrier.wait(),
+        так и не дождавшись остальных (они стартуют только после него) —
+        сработает BrokenBarrierError по таймауту, участники для этого
+        события не попадут в результат."""
+        events = ["1km-2020", "1km-2019", "1km-2018"]
+        loader = make_loader(events)
+        barrier = threading.Barrier(len(events), timeout=2)
+
+        def side_effect(url, **kwargs):
+            barrier.wait()
+            return _fake_response([{"dorsal": 1}])
+
+        mock_get.side_effect = side_effect
+
+        runners = loader.fetch_from_copernico()
+
+        assert len(runners) == len(events)
+
+
+class TestFetchFromCopernicoRateLimit:
+    @patch("requests.get")
+    def test_429_sets_rate_limited_flag_and_returns_no_runners(self, mock_get):
+        loader = make_loader("5km")
+        mock_get.return_value = _fake_429_response(retry_after="10")
+
+        runners = loader.fetch_from_copernico()
+
+        assert runners == []
+        assert loader.rate_limited is True
+
+    @patch("requests.get")
+    def test_429_on_one_sub_event_does_not_block_others(self, mock_get):
+        loader = make_loader(["1km-2020", "1km-2019"])
+
+        def side_effect(url, **kwargs):
+            if "1km-2019" in url:
+                return _fake_429_response()
+            return _fake_response([{"dorsal": 2118}])
+
+        mock_get.side_effect = side_effect
+
+        runners = loader.fetch_from_copernico()
+
+        assert {r["dorsal"] for r in runners} == {2118}
+        assert loader.rate_limited is True
+
+    @patch("requests.get")
+    def test_rate_limited_flag_resets_on_next_successful_fetch(self, mock_get):
+        """rate_limited не должен залипать навсегда — сбрасывается в начале
+        каждого fetch_from_copernico()."""
+        loader = make_loader("5km")
+        mock_get.return_value = _fake_429_response()
+        loader.fetch_from_copernico()
+        assert loader.rate_limited is True
+
+        mock_get.return_value = _fake_response([{"dorsal": 1}])
+        loader.fetch_from_copernico()
+        assert loader.rate_limited is False

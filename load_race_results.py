@@ -19,6 +19,7 @@ import argparse
 import re
 import urllib.request
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any, Union
@@ -320,6 +321,10 @@ class RaceLoader:
         self.copernico_preset = copernico_preset
         self.copernico_event = copernico_event
         self.gun_time_utc: Optional[str] = None
+        # True, если последний fetch_from_copernico() словил HTTP 429 хотя бы
+        # на одном под-событии — continuous_mode() увеличивает backoff сильнее
+        # обычного (не просто "нет данных", а явный rate-limit).
+        self.rate_limited = False
 
         # Preset-конфиг: описание полей Copernico для этой дистанции
         self._preset_cfg: Dict = preset_cfg or {}
@@ -378,50 +383,75 @@ class RaceLoader:
             self.logger.error(f"❌ Ошибка подключения: {e}")
             return False
 
+    def _fetch_one_copernico_event(self, event: str) -> Tuple[List[Dict], Optional[str]]:
+        """Один HTTP-запрос к Copernico за одно под-событие. Возвращает
+        (runners, gun_time) — при ошибке/429 пустой список и None. При 429
+        выставляет self.rate_limited = True (без исключения — вызывающий
+        код per-событийно изолирует сбои, см. fetch_from_copernico())."""
+        encoded_preset = urllib.parse.quote(self.copernico_preset)
+        encoded_event = urllib.parse.quote(event)
+        url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
+        self.logger.info(f"📡 Запрос к Copernico API: {url}")
+        try:
+            import requests as _req
+            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
+            if response.status_code == 429:
+                retry_after = response.headers.get('Retry-After')
+                self.logger.warning(
+                    f"⚠️ Copernico 429 Too Many Requests (event={event}"
+                    f"{f', Retry-After={retry_after}s' if retry_after else ''})"
+                )
+                self.rate_limited = True
+                return [], None
+            response.raise_for_status()
+            data = response.json()
+            self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
+            if isinstance(data, dict) and 'data' in data:
+                runners = data['data']
+                gun_time = data.get('gunTime')
+                # Fallback: gunTime может быть per-runner полем
+                if not gun_time and runners:
+                    gun_time = runners[0].get('gunTime')
+            elif isinstance(data, list):
+                runners = data
+                gun_time = runners[0].get('gunTime') if runners else None
+            else:
+                self.logger.error(f"❌ Неожиданный формат ответа для event={event}: {type(data)}")
+                return [], None
+            self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
+            return runners, gun_time
+        except Exception as e:
+            self.logger.error(f"❌ Ошибка при запросе к API (event={event}): {e}")
+            return [], None
+
     def fetch_from_copernico(self) -> List[Dict]:
         """Получить данные из Copernico API. copernico_event может быть
         строкой (один event) или списком строк (несколько event —
         сливаются в один плоский список участников, напр. несколько
-        возрастных групп одной дистанции). gun_time_utc обновляется
-        ТОЛЬКО при одном event — при списке событий у каждого своё время
-        старта, общее поле на event_id писать нечем (не искажаем
-        реальность одним случайным значением)."""
+        возрастных групп одной дистанции). При списке события опрашиваются
+        ПАРАЛЛЕЛЬНО (ThreadPoolExecutor) — иначе для Детского забега (6
+        событий) один цикл занимал бы 6-12+ секунд вместо 1-2.
+        gun_time_utc обновляется ТОЛЬКО при одном event — при списке
+        событий у каждого своё время старта, общее поле на event_id
+        писать нечем (не искажаем реальность одним случайным значением)."""
+        self.rate_limited = False
         if not all([self.copernico_race_id, self.copernico_login, self.copernico_preset, self.copernico_event]):
             self.logger.error("❌ Не заданы все параметры Copernico API")
             return []
 
         events = self.copernico_event if isinstance(self.copernico_event, list) else [self.copernico_event]
         all_runners: List[Dict] = []
-        for event in events:
-            encoded_preset = urllib.parse.quote(self.copernico_preset)
-            encoded_event = urllib.parse.quote(event)
-            url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
-            self.logger.info(f"📡 Запрос к Copernico API: {url}")
-            try:
-                import requests as _req
-                response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 150))
-                response.raise_for_status()
-                data = response.json()
-                self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
-                if isinstance(data, dict) and 'data' in data:
-                    runners = data['data']
-                    gun_time = data.get('gunTime')
-                    # Fallback: gunTime может быть per-runner полем
-                    if not gun_time and runners:
-                        gun_time = runners[0].get('gunTime')
-                elif isinstance(data, list):
-                    runners = data
-                    gun_time = runners[0].get('gunTime') if runners else None
-                else:
-                    self.logger.error(f"❌ Неожиданный формат ответа для event={event}: {type(data)}")
-                    continue
-                if gun_time and len(events) == 1:
-                    self.gun_time_utc = gun_time
-                self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
-                all_runners.extend(runners)
-            except Exception as e:
-                self.logger.error(f"❌ Ошибка при запросе к API (event={event}): {e}")
-                continue
+
+        if len(events) == 1:
+            runners, gun_time = self._fetch_one_copernico_event(events[0])
+            if gun_time:
+                self.gun_time_utc = gun_time
+            all_runners.extend(runners)
+        else:
+            with ThreadPoolExecutor(max_workers=len(events)) as executor:
+                for runners, _gun_time in executor.map(self._fetch_one_copernico_event, events):
+                    all_runners.extend(runners)
+
         return all_runners
 
     def load_race_data(self) -> List[Dict]:
@@ -670,14 +700,23 @@ class RaceLoader:
                 t_fetch = time.time()
                 runners = self.load_race_data()
                 fetch_t = time.time() - t_fetch
+                rate_limited_this_cycle = self.rate_limited
 
                 if not runners:
                     consecutive_failures += 1
-                    backoff = min(interval + 10 * consecutive_failures, 30)
-                    self.logger.warning(
-                        f"⚠️ Ошибка получения данных (подряд: {consecutive_failures}), "
-                        f"повтор через {backoff}с..."
-                    )
+                    if rate_limited_this_cycle:
+                        # Copernico явно просит притормозить (HTTP 429) —
+                        # пауза заметно больше обычного backoff на "нет
+                        # данных", чтобы не долбить API ещё быстрее вглубь
+                        # того же окна лимита.
+                        backoff = max(interval * 4, 20)
+                        self.logger.warning(f"⚠️ Copernico rate-limit (429), пауза {backoff}с...")
+                    else:
+                        backoff = min(interval + 10 * consecutive_failures, 30)
+                        self.logger.warning(
+                            f"⚠️ Ошибка получения данных (подряд: {consecutive_failures}), "
+                            f"повтор через {backoff}с..."
+                        )
                     time.sleep(backoff)
                     continue
                 consecutive_failures = 0
@@ -739,9 +778,18 @@ class RaceLoader:
                         json.dump(stats, _sf, ensure_ascii=False, indent=2)
                     self._last_stats_log = now_ts
 
-                sleep_time = max(0, interval - cycle_time)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                if rate_limited_this_cycle:
+                    # Частичный rate-limit — часть событий прошла успешно
+                    # (runners не пуст), но раз Copernico уже вернул 429 хотя
+                    # бы на одном под-событии, следующий цикл всё равно стоит
+                    # притормозить сильнее обычного.
+                    backoff = max(interval * 4, 20)
+                    self.logger.warning(f"⚠️ Copernico rate-limit (429) на части событий, пауза {backoff}с...")
+                    time.sleep(backoff)
+                else:
+                    sleep_time = max(0, interval - cycle_time)
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
 
         except KeyboardInterrupt:
             self.logger.info("\n⛔ Остановка (Ctrl+C)...")
@@ -928,9 +976,16 @@ class RaceLoader:
                     pace_avg_kt1, pace_avg_kt2, pace_avg_kt3, pace_avg_kt4, pace_avg_kt5, pace_avg_kt6, pace_avg_kt7,
                 ))
 
-            # === СЕГМЕНТЫ (всегда обновляем) ===
-            segments = self._prepare_segments(result_id, runner)
-            segments_batch.extend(segments)
+                # === СЕГМЕНТЫ (пересчитываем только при реальных изменениях
+                # у этого участника — иначе на каждый цикл переписывались бы
+                # ВСЕ C(N,2) сегментов ВСЕХ участников независимо от того,
+                # поменялось ли что-то. Для 21.1км (8 точек → 28 сегментов ×
+                # ~1500 чел.) это до ~42000 upsert-строк впустую на цикл.
+                # Корректность не страдает: _recalculate_segment_ranks()
+                # всё равно пересчитывает места по ПОЛНОЙ таблице из БД, а
+                # не только по тем, кто обновился в этом цикле.) ===
+                segments = self._prepare_segments(result_id, runner)
+                segments_batch.extend(segments)
 
             # Обновляем кэш
             self.existing_results[dorsal] = {
