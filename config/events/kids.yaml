@@ -14,10 +14,10 @@ distances:
     db_event_id: 113
     tracked: false            # трекер (живая карта) для детского забега не нужен
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
-    gpx_file: null            # ← заполнить перед стартом
-    event_date: null          # ← заполнить перед стартом
+    checkpoint_distances: [0, 1.0]   # разворот 500м — пока нет поля в Copernico, см. заметку ниже
+    checkpoints: []           # GPS не нужен — tracked: false
+    gpx_file: null            # GPS не нужен — tracked: false
+    event_date: "2026-08-22"
     route:
       laps: 1
       total_km: 1.0
