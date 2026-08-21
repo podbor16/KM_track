@@ -33,6 +33,15 @@ import urllib.request
 import urllib.error
 
 
+def _single_event(event_param):
+    """copernico.event может быть строкой или списком (несколько возрастных
+    групп на одну дистанцию, см. kids.yaml) — для точечных проверок (состав
+    полей пресета, инспекция) достаточно одного под-события из списка."""
+    if isinstance(event_param, list):
+        return event_param[0] if event_param else ""
+    return event_param or ""
+
+
 def _read_response_text(response) -> str:
     """Читает тело ответа, прозрачно распаковывая gzip (Copernico иногда
     сжимает большие ответы, не всегда честно указывая Content-Encoding)."""
@@ -93,19 +102,24 @@ def check_config(cfg, dist_cfg):
     errors = []
     warnings = []
 
-    required_top = ["start_lat", "start_lon"]
-    for field in required_top:
-        if cfg.get(field) is None:
-            errors.append(f"нет {field}")
+    tracked = dist_cfg.get("tracked", True)
 
-    required_dist = ["db_event_id", "event_date", "gpx_file", "checkpoint_distances"]
+    required_dist = ["db_event_id", "event_date", "checkpoint_distances"]
+    if tracked:
+        required_top = ["start_lat", "start_lon"]
+        for field in required_top:
+            if cfg.get(field) is None:
+                errors.append(f"нет {field}")
+        required_dist.append("gpx_file")
+
     for field in required_dist:
         if dist_cfg.get(field) is None:
             errors.append(f"нет {field}")
 
-    cps = dist_cfg.get("checkpoints") or []
-    if len(cps) < 2:
-        errors.append("checkpoints: нужно >= 2 точек")
+    if tracked:
+        cps = dist_cfg.get("checkpoints") or []
+        if len(cps) < 2:
+            errors.append("checkpoints: нужно >= 2 точек")
 
     race_id = (dist_cfg.get("copernico") or {}).get("race_id")
     if race_id is None:
@@ -122,6 +136,10 @@ def check_config(cfg, dist_cfg):
 # ── Блок B: Файлы ───────────────────────────────────────────────────────────
 
 def check_files(dist_cfg):
+    if not dist_cfg.get("tracked", True):
+        skip("B", "Файлы", "tracked: false — трекер не используется, GPX не нужен")
+        return
+
     gpx_rel = dist_cfg.get("gpx_file")
     if not gpx_rel:
         fail("B", "Файлы", "gpx_file не задан")
@@ -313,7 +331,7 @@ def check_preset_fields(dist_cfg):
 
     # 4. Fetch одного участника из Copernico
     login = cop.get("login", "podbor250718@gmail.com")
-    event_param = cop.get("event", "")
+    event_param = _single_event(cop.get("event", ""))
     encoded_preset = urllib.parse.quote(preset_name)
     encoded_event  = urllib.parse.quote(event_param)
     url = f"https://public-api.copernico.cloud/api/races/{race_id}/preset/{login}:::{encoded_preset}/{encoded_event}"
@@ -360,7 +378,7 @@ def inspect_preset(dist_cfg):
     race_id = cop.get("race_id")
     preset_name = cop.get("preset")
     login = cop.get("login", "podbor250718@gmail.com")
-    event_param = cop.get("event", "")
+    event_param = _single_event(cop.get("event", ""))
 
     if not race_id:
         print("\nFAIL: race_id не задан в конфиге. Добавьте его перед инспекцией.")
