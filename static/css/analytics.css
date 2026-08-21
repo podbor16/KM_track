@@ -433,6 +433,10 @@ h1 {
   #resultsTable .km-th:nth-child(5),
   #resultsTable .km-td:nth-child(5) { width: 76px; }
   .km-th { padding: 10px 5px; font-size: 9px; }
+  /* "ЧИСТОЕ ВРЕМЯ"/"ОФИЦ. ВРЕМЯ" в фикс. 76px-колонке не помещаются в одну
+     строку без переноса — буквы обрезались/наезжали на соседний заголовок
+     (nowrap не режет и не переносит, просто визуально вылезает наружу). */
+  #thTimeCol1, #thTimeCol2 { white-space: normal; line-height: 1.25; }
   .km-td { padding: 8px 5px; font-size: 12px; }
   .km-td--l { padding-left: 6px; }
 

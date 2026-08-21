@@ -11,6 +11,58 @@ const runnerDataMap = new Map(); // resultId → runner object
 const eventNameMap = KMUtils.EVENT_NAMES;
 const eventColorMap = KMUtils.EVENT_COLORS;
 
+// ──────────────── Состояние в URL (прямая ссылка на конкретный
+// событие+год+дистанцию+фильтры, напр. чтобы прислать ссылку на результаты
+// конкретного забега) — тот же приём, что на /start-list, см.
+// analytics-start-list.js readStateFromUrl()/syncUrlFromState().
+// distance/ageGroup применяются "один раз" при первой загрузке данных — их
+// селекты в момент чтения URL ещё пустые (заполняются позже из реальных
+// данных события в populateDistances()/populateAgeGroups()), поэтому
+// напрямую задать select.value здесь бесполезно (браузер игнорирует
+// значение без совпадающей <option>). Флаги обнуляются после первого
+// успешного применения, чтобы не перебивать дальнейший ручной выбор
+// пользователя при каждом ре-рендере фильтров.
+let _urlEvent = null;
+let _urlYear = null;
+let _urlDistance = null;
+let _urlAgeGroup = null;
+
+function readStateFromUrl() {
+    const params = new URLSearchParams(location.search);
+    const event = params.get('event');
+    _urlEvent = event && eventNameMap[event] ? event : null;
+    const yearParam = parseInt(params.get('year'), 10);
+    _urlYear = Number.isFinite(yearParam) ? yearParam : null;
+    _urlDistance = params.get('distance') || null;
+    _urlAgeGroup = params.get('ageGroup') || null;
+    const gender = params.get('gender');
+    if (gender === 'Мужчина' || gender === 'Женщина') {
+        document.getElementById('genderFilter').dataset.value = gender;
+    }
+    const search = params.get('search');
+    if (search) document.getElementById('surnameSearch').value = search;
+}
+
+// Пишет текущие фильтры в query-параметры при каждом применении фильтров
+// (history.replaceState — НЕ pushState, иначе каждый клик фильтра добавлял
+// бы шаг в историю браузера вместо осмысленных переходов).
+function syncUrlFromState() {
+    const params = new URLSearchParams();
+    params.set('event', currentEvent);
+    params.set('year', currentYear);
+    const distance = document.getElementById('distanceFilter').value;
+    if (distance) params.set('distance', distance);
+    const gender = getGenderFilterValue();
+    if (gender) params.set('gender', gender);
+    const ageGroup = document.getElementById('ageGroupFilter').value;
+    if (ageGroup) params.set('ageGroup', ageGroup);
+    const search = document.getElementById('surnameSearch').value;
+    if (search) params.set('search', search);
+    const qs = params.toString();
+    const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
+    if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
+}
+
 // «Жара» награждает по чистому времени, а не по официальному (решение
 // оргкомитета, действует с 2026 года и далее) — единственное исключение
 // среди событий Красмарафона. Сравниваем по внутреннему ключу события
@@ -75,17 +127,21 @@ function latestConfiguredYearForEvent(event) {
     return years.length ? Math.max(...years) : null;
 }
 
-// Инициализация страницы — дефолт: активный забег + последний год с данными
-document.addEventListener('DOMContentLoaded', async function() {
+// Инициализация страницы — дефолт: активный забег + последний год с
+// данными, переопределяется параметрами URL, если открыли по прямой
+// ссылке. Именованная функция (не анонимная в addEventListener) — чтобы её
+// можно было вызвать напрямую из тестов (см. analytics-start-list.js).
+async function initResultsPage() {
     populateYearSelector();
+    readStateFromUrl();
     try {
         const cfg = await fetch('/api/current-event').then(r => r.json());
-        currentEvent = cfg.event || 'night_run';
+        currentEvent = _urlEvent || cfg.event || 'night_run';
         const cfgYear = cfg.year || new Date().getFullYear();
-        currentYear = latestConfiguredYearForEvent(currentEvent) || cfgYear;
+        currentYear = _urlYear || latestConfiguredYearForEvent(currentEvent) || cfgYear;
     } catch {
-        currentEvent = 'night_run';
-        currentYear  = new Date().getFullYear() - 1;
+        currentEvent = _urlEvent || 'night_run';
+        currentYear  = _urlYear || (new Date().getFullYear() - 1);
     }
     document.getElementById('eventResultsSelector').value = currentEvent;
     document.getElementById('yearResultsSelector').value  = currentYear;
@@ -102,7 +158,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!msg.event_id || ids.includes(msg.event_id)) loadRunnersData(true);
         }
     });
-});
+}
+document.addEventListener('DOMContentLoaded', initResultsPage);
 
 document.addEventListener('click', e => {
     const tab = e.target.closest('.detail-tab');
@@ -480,22 +537,16 @@ function populateAgeGroups(runners) {
         filteredGroups = filteredGroups.filter(group => categoryGenders.get(group).has(genderFilter));
     }
     
-    // Порядок возраста по числовому диапазону в названии — не завязан на суффикс
-    // "лет"/"года" или префикс "до", поэтому одинаково работает и для "Ж 49",
-    // и для "женщины до 49 лет".
-    const AGE_ORDER_RULES = [
-        [1, /49/],
-        [2, /50-?\s*59/],
-        [3, /60-?\s*64/],
-        [4, /65-?\s*69/],
-        [5, /70-?\s*74/],
-        [6, /75|80\+|65\s*лет\s*и\s*старше/],
-    ];
+    // Порядок возраста — первое число в названии категории, по возрастанию.
+    // Раньше был список regex под конкретные диапазоны ("49"/"50-59"/...) —
+    // не покрывал детские категории Жары ("Ж12-13"/"Ж14-15"/"Ж16-17", все
+    // падали в один "прочее"-бакет и шли в произвольном порядке) и путал
+    // "75-79"/"80+" (оба матчили одно и то же правило). Числовое извлечение
+    // работает для любого формата без хардкода границ конкретного события —
+    // тот же приём, что уже в KMUtils.categoryOrder() на /start-list.
     const ageGroupOrder = cat => {
-        for (const [order, re] of AGE_ORDER_RULES) {
-            if (re.test(cat)) return order;
-        }
-        return 99;
+        const m = cat.match(/\d+/);
+        return m ? parseInt(m[0], 10) : 999;
     };
 
     // Сортируем группы в правильном порядке
@@ -519,8 +570,14 @@ function populateAgeGroups(runners) {
         ageGroupSelect.appendChild(option);
     });
     
-    // Восстанавливаем сохраненное значение, если оно еще доступно
-    if (savedValue && Array.from(ageGroupSelect.options).some(opt => opt.value === savedValue)) {
+    // Восстанавливаем значение: приоритет — значение из URL при первой
+    // загрузке (once, см. readStateFromUrl), иначе текущее выбранное,
+    // иначе "Все"
+    const optionValues = Array.from(ageGroupSelect.options).map(opt => opt.value);
+    if (_urlAgeGroup && optionValues.includes(_urlAgeGroup)) {
+        ageGroupSelect.value = _urlAgeGroup;
+        _urlAgeGroup = null;
+    } else if (savedValue && optionValues.includes(savedValue)) {
         ageGroupSelect.value = savedValue;
     } else {
         // Если выбранное значение больше не доступно, выбираем "Все"
@@ -573,8 +630,13 @@ function populateDistances(runners) {
         distanceSelect.appendChild(option);
     });
 
-    // Восстанавливаем сохранённое значение, иначе — первая дистанция по умолчанию
-    if (savedValue && sortedDistances.includes(savedValue)) {
+    // Восстанавливаем значение: приоритет — значение из URL при первой
+    // загрузке (once, см. readStateFromUrl), иначе текущее выбранное,
+    // иначе первая дистанция по умолчанию
+    if (_urlDistance && sortedDistances.includes(_urlDistance)) {
+        distanceSelect.value = _urlDistance;
+        _urlDistance = null;
+    } else if (savedValue && sortedDistances.includes(savedValue)) {
         distanceSelect.value = savedValue;
     } else if (sortedDistances.length > 0) {
         distanceSelect.value = sortedDistances[0];
@@ -652,6 +714,9 @@ function applyFilters() {
 
     // Обновляем заголовок (дистанция могла смениться)
     updatePageTitle();
+
+    // Прямая ссылка на текущий вид (событие/год/дистанция/фильтры) в URL
+    syncUrlFromState();
 }
 
 const formatTime = KMUtils.formatTime.bind(KMUtils);

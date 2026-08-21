@@ -55,6 +55,9 @@ const sandbox = {
         addEventListener: () => {},
         querySelectorAll: () => [],
     },
+    URLSearchParams,
+    location: { pathname: '/results', search: '', hash: '' },
+    history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
     window: {},
 };
 sandbox.window = sandbox;

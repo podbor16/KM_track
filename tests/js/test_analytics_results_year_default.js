@@ -16,9 +16,13 @@ const utilsJs = fs.readFileSync(path.join(ROOT, 'static/js/utils.js'), 'utf-8');
 const scriptJs = fs.readFileSync(path.join(ROOT, 'static/js/analytics-results.js'), 'utf-8');
 
 function makeElement(tag) {
+    const children = [];
     return {
         tagName: (tag || 'DIV').toUpperCase(), style: {}, value: '', textContent: '', dataset: {},
-        appendChild() {}, addEventListener() {}, querySelectorAll() { return []; }, setAttribute() {},
+        _children: children,
+        get options() { return children.filter(c => c.tagName === 'OPTION'); },
+        appendChild(child) { children.push(child); return child; },
+        addEventListener() {}, querySelectorAll() { return []; }, setAttribute() {},
     };
 }
 const elementsById = {};
@@ -47,6 +51,9 @@ const sandbox = {
         documentElement: { style: { setProperty: () => {} } },
     },
     Image: FakeImage,
+    URLSearchParams,
+    location: { pathname: '/results', search: '', hash: '' },
+    history: { replaceState: (_s, _t, url) => { sandbox.location.search = (url.split('?')[1] ? '?' + url.split('?')[1] : ''); } },
     window: {},
 };
 sandbox.window = sandbox;
