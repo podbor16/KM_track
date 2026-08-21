@@ -29,7 +29,7 @@
 - Modify: `load_race_results.py:381-418`
 - Test: `tests/unit/test_fetch_from_copernico.py` (создать)
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Создать `tests/unit/test_fetch_from_copernico.py`:
 
@@ -150,12 +150,12 @@ class TestFetchFromCopernicoEventList:
         assert runners == []
 ```
 
-- [ ] **Step 2: Запустить тесты, убедиться что падают**
+- [x] **Step 2: Запустить тесты, убедиться что падают**
 
 Run: `conda run -n base python -m pytest tests/unit/test_fetch_from_copernico.py -v`
 Expected: FAIL — `test_single_event_returns_runners_and_updates_gun_time` падает, т.к. `requests.get` сейчас не патчится (реальный код делает `import requests as _req` и обращается к настоящему API) — тест либо зависнет на реальном сетевом запросе, либо упадёт по таймауту/ошибке подключения, а не по логике. Тесты на список событий (`TestFetchFromCopernicoEventList`) упадут с `AttributeError` или неверным числом вызовов `mock_get` (текущий код делает РОВНО ОДИН запрос, используя `self.copernico_event` напрямую как строку — при списке `urllib.parse.quote(self.copernico_event)` упадёт с `TypeError`, т.к. `quote()` не принимает список).
 
-- [ ] **Step 3: Переписать `fetch_from_copernico()`**
+- [x] **Step 3: Переписать `fetch_from_copernico()`**
 
 Найти в `load_race_results.py` текущее определение (строки 381-418):
 
@@ -250,17 +250,17 @@ Expected: FAIL — `test_single_event_returns_runners_and_updates_gun_time` па
         return all_runners
 ```
 
-- [ ] **Step 4: Запустить тесты, убедиться что проходят**
+- [x] **Step 4: Запустить тесты, убедиться что проходят**
 
 Run: `conda run -n base python -m pytest tests/unit/test_fetch_from_copernico.py -v`
 Expected: `5 passed`
 
-- [ ] **Step 5: Прогнать уже существующие тесты загрузчика — убедиться, что не сломалось**
+- [x] **Step 5: Прогнать уже существующие тесты загрузчика — убедиться, что не сломалось**
 
 Run: `conda run -n base python -m pytest tests/unit/test_bulk_upsert.py -v`
 Expected: все тесты по-прежнему проходят (файл не менялся, но `fetch_from_copernico()` — часть того же класса `RaceLoader`)
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add load_race_results.py tests/unit/test_fetch_from_copernico.py

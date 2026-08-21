@@ -26,6 +26,16 @@ distances:
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
       event: "1 км"
+    diploma:
+      # Фон бренда "Жара" (детский забег — часть программы этих выходных),
+      # дистанция "1 км" уже впечатана в саму картинку — отдельный
+      # distance_box не нужен.
+      background: "static/images/diplomas/kids/1km/background.jpg"
+      width_px: 1080
+      height_px: 1960
+      name_box:  {top: 21.53, left: 9.44, width: 81.11, height: 15.82}
+      ranks_box: {top: 40.51, left: 9.44, width: 81.11, height: 15.82}
+      text_color: "#1a1a1a"
 
   - distance: "500 м"
     distance_km: 0.5
