@@ -1,0 +1,18 @@
+description: "Жара 5км + Детский забег 1км (6 возрастных групп), race_id --2026-6118. Chip-времена не включены в пресет (нет times.real_*). Контрольные точки трассы отсутствуют — единственные КТ-поля, которые сейчас отдаёт Copernico по этому race_id, физически принадлежат дистанции 21.1 км, которой ещё нет в Copernico (появятся здесь же или в отдельном preset-файле, когда организатор её создаст)."
+
+fields:
+  bib: dorsal
+  surname: surname
+  name: name
+  birthdate: birthdate
+  gender: gender
+  status: status
+  category: category
+
+time_fields:
+  gun_start:   "times.official_:::start:::"
+  gun_finish:  "times.official_:::finish:::"
+  chip_start:  null
+  chip_finish: null
+
+checkpoint_fields: {}
