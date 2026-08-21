@@ -45,11 +45,15 @@ class FakeEventSource {
     close() {}
 }
 
+let fetchMock = () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+
 const sandbox = {
     console,
-    fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }),
+    fetch: (url) => fetchMock(url),
     document: { getElementById: domStub, createElement: (tag) => makeElement(tag) },
     EventSource: FakeEventSource,
+    setInterval: () => 'fake-interval-id',
+    clearInterval: () => {},
     window: {},
 };
 sandbox.window = sandbox;
@@ -60,6 +64,13 @@ let failures = 0;
 function check(name, fn) {
     try { fn(); console.log(`OK   ${name}`); }
     catch (e) { failures++; console.log(`FAIL ${name}: ${e.message}`); }
+}
+async function checkAsync(name, fn) {
+    try { await fn(); console.log(`OK   ${name}`); }
+    catch (e) { failures++; console.log(`FAIL ${name}: ${e.message}`); }
+}
+function flushMicrotasks() {
+    return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 check('loadLabelBadgeClass() — маппит русские метки на CSS-классы', () => {
@@ -266,5 +277,64 @@ check('renderAlertsTable() — алерт без советов показыва
     assert.ok(!html.includes('<ul'));
 });
 
-console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
-process.exit(failures === 0 ? 0 : 1);
+(async () => {
+    await checkAsync('monPollLiveOnce() — опрашивает /api/admin/metrics/snapshot и обновляет плитки', async () => {
+        resetDom();
+        vm.runInContext('monLastLoadLabel = null;', sandbox);
+        const point = {
+            cpu_percent: 33.0, ram_used_mb: 100, ram_total_mb: 2972,
+            avg_response_ms: 40, total_requests: 5, http_errors: 0,
+            sse_connections: 2, unique_ips: 3, load_score: 15.0, load_label: 'Низкая',
+        };
+        let requestedUrl = null;
+        fetchMock = (url) => {
+            requestedUrl = url;
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(point) });
+        };
+
+        sandbox.monPollLiveOnce();
+        await flushMicrotasks();
+
+        assert.strictEqual(requestedUrl, '/api/admin/metrics/snapshot');
+        assert.strictEqual(domStub('mon-tile-cpu').textContent, '33%');
+    });
+
+    await checkAsync('monPollLiveOnce() — неуспешный ответ не падает, плитки не трогает', async () => {
+        resetDom();
+        fetchMock = () => Promise.resolve({ ok: false });
+
+        sandbox.monPollLiveOnce();
+        await flushMicrotasks();
+
+        assert.strictEqual(domStub('mon-tile-cpu').textContent, '');
+    });
+
+    await checkAsync('monStartLivePolling() — опрашивает сразу, не только через 30с', async () => {
+        resetDom();
+        vm.runInContext('monPollIntervalId = null;', sandbox);
+        let calls = 0;
+        fetchMock = () => { calls++; return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }); };
+
+        sandbox.monStartLivePolling();
+        await flushMicrotasks();
+
+        assert.strictEqual(calls, 1);
+    });
+
+    await checkAsync('monStartLivePolling() — повторный вызов не запускает второй опрос немедленно', async () => {
+        resetDom();
+        vm.runInContext('monPollIntervalId = null;', sandbox);
+        let calls = 0;
+        fetchMock = () => { calls++; return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }); };
+
+        sandbox.monStartLivePolling();
+        await flushMicrotasks();
+        sandbox.monStartLivePolling();
+        await flushMicrotasks();
+
+        assert.strictEqual(calls, 1, 'повторный monStartLivePolling() не должен снова дёргать немедленный опрос');
+    });
+
+    console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
+    process.exit(failures === 0 ? 0 : 1);
+})();

@@ -87,6 +87,28 @@ function monSubscribeLive() {
     };
 }
 
+// ---- Опрос-fallback для живых плиток ----
+// Часть браузеров не получает SSE-кадры через связку nginx+HTTP/2 на этом
+// сервере (сырые HTTP-клиенты — доходят, найдено 2026-08-21), хотя
+// EventSource остаётся открытым (readyState=OPEN). Причина не устранена
+// на уровне инфраструктуры — опрос ниже не заменяет SSE (если он всё же
+// доходит, monOnLivePoint() просто получит те же данные раньше), а
+// гарантирует, что плитки обновляются в любом случае.
+let monPollIntervalId = null;
+
+function monPollLiveOnce() {
+    fetch('/api/admin/metrics/snapshot')
+        .then(resp => resp.ok ? resp.json() : null)
+        .then(point => { if (point) monOnLivePoint(point); })
+        .catch(err => console.error('Ошибка опроса метрик (fallback):', err));
+}
+
+function monStartLivePolling() {
+    if (monPollIntervalId) return;
+    monPollLiveOnce();
+    monPollIntervalId = setInterval(monPollLiveOnce, 30000);
+}
+
 // ---- Диапазон графиков истории: ключ UI → часы для /api/admin/metrics ----
 const MON_RANGE_HOURS = {
     '1h': 1, '6h': 6, '24h': 24, '7d': 168, '30d': 720,
@@ -219,4 +241,5 @@ function loadMonitoringTab() {
     monLoadHistory(24);
     monLoadAlerts();
     monSubscribeLive();
+    monStartLivePolling();
 }

@@ -75,3 +75,25 @@ class TestServerMetricsAlerts:
         app.dependency_overrides.pop(api_require_auth, None)
         r = client.get("/api/admin/metrics/alerts")
         assert r.status_code == 401
+
+
+class TestServerMetricsSnapshot:
+    def test_returns_current_snapshot_from_collector(self, client):
+        fake_snapshot = {
+            "unique_ips": 3, "total_requests": 40, "http_errors": 0,
+            "avg_response_ms": 55.0, "sse_connections": 2,
+            "cpu_percent": 4.1, "ram_used_mb": 1500, "ram_total_mb": 2972,
+            "load_score": 20.2, "load_label": "Низкая",
+        }
+        with patch("src.krasmarafon.routers.api._get_metrics_collector") as mock_get:
+            mock_collector = MagicMock()
+            mock_collector.current_snapshot.return_value = fake_snapshot
+            mock_get.return_value = mock_collector
+            r = client.get("/api/admin/metrics/snapshot")
+        assert r.status_code == 200
+        assert r.json() == fake_snapshot
+
+    def test_requires_auth(self, client):
+        app.dependency_overrides.pop(api_require_auth, None)
+        r = client.get("/api/admin/metrics/snapshot")
+        assert r.status_code == 401

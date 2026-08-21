@@ -442,6 +442,7 @@ class MetricsCollector:
         snap["cpu_percent"] = lp.get("cpu_percent", 0.0)
         snap["ram_used_mb"] = lp.get("ram_used_mb", 0)
         snap["ram_total_mb"] = lp.get("ram_total_mb", 0)
+        snap["sse_connections"] = lp.get("sse_connections", 0)
         ram_pct = (snap["ram_used_mb"] / snap["ram_total_mb"] * 100) if snap["ram_total_mb"] else 0.0
         err_rate = (snap["http_errors"] / snap["total_requests"] * 100) if snap["total_requests"] else 0.0
         snap["load_score"], snap["load_label"] = _load_score(ram_pct, snap["avg_response_ms"], err_rate)

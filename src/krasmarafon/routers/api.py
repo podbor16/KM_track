@@ -918,6 +918,20 @@ async def get_server_metrics_alerts(
     return {"alerts": alerts}
 
 
+@router.get("/api/admin/metrics/snapshot", tags=["Admin"])
+async def get_server_metrics_snapshot(user: str = Depends(api_require_auth)):
+    """Мгновенный (не устаревший на 60с) снимок текущего состояния —
+    fallback-опрос для живых плиток /admin, если push через
+    /api/admin/metrics/live не доходит до конкретного браузера (найдено
+    2026-08-21: часть браузеров не получала SSE-кадры через связку
+    nginx+HTTP/2 на этом сервере, хотя простые HTTP-клиенты — доходили;
+    корень не устранён, опрос — рабочий обходной путь, не костыль на
+    неизвестную причину: current_snapshot() уже существовал и был не
+    подключён нигде)."""
+    collector = _get_metrics_collector()
+    return collector.current_snapshot()
+
+
 # ============================================================================
 # СТАРТОВЫЙ СПИСОК
 # ============================================================================

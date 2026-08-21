@@ -210,3 +210,28 @@ def test_send_ntfy_alert_omits_recommendations_block_when_no_suggestions(mock_ur
     sent_request = mock_urlopen.call_args_list[0].args[0]
     body_text = sent_request.data.decode("utf-8")
     assert "Рекомендации:" not in body_text
+
+
+# --- MetricsCollector.current_snapshot() ---------------------------------
+
+def test_current_snapshot_includes_sse_connections_from_last_flush(tmp_path):
+    """Опрос-fallback для живых плиток /admin (SSE не доходит до части
+    браузеров через nginx+HTTP/2, найдено 2026-08-21) — snapshot должен
+    нести sse_connections наравне с остальными полями SSE-точки."""
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    collector._last_point = {
+        "cpu_percent": 12.0, "ram_used_mb": 1000, "ram_total_mb": 2972,
+        "sse_connections": 7,
+    }
+    snap = collector.current_snapshot()
+    assert snap["sse_connections"] == 7
+
+
+def test_current_snapshot_defaults_before_first_flush(tmp_path):
+    """Свежий процесс, ни одного flush() ещё не было — не падает, просто
+    нули (тот же принцип, что и у остальных "нет данных ещё" веток)."""
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    snap = collector.current_snapshot()
+    assert snap["sse_connections"] == 0
+    assert snap["cpu_percent"] == 0.0
+    assert snap["load_label"] == "Низкая"
