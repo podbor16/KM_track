@@ -44,8 +44,8 @@ distances:
       background: "static/images/diplomas/zhara/21km/background.jpg"
       width_px: 1080
       height_px: 1960
-      name_box:  {top: 56.02, left: 10.37, width: 81.20, height: 15.87}
-      ranks_box: {top: 74.95, left: 10.37, width: 81.20, height: 15.87}
+      name_box:  {top: 10.00, left: 10.37, width: 81.20, height: 15.87}
+      ranks_box: {top: 28.93, left: 10.37, width: 81.20, height: 15.87}
       text_color: "#fff"
 
   - distance: "5 км"
@@ -77,8 +77,8 @@ distances:
       background: "static/images/diplomas/zhara/5km/background.jpg"
       width_px: 1080
       height_px: 1960
-      name_box:  {top: 56.02, left: 10.37, width: 81.20, height: 15.87}
-      ranks_box: {top: 74.95, left: 10.37, width: 81.20, height: 15.87}
+      name_box:  {top: 10.00, left: 10.37, width: 81.20, height: 15.87}
+      ranks_box: {top: 28.93, left: 10.37, width: 81.20, height: 15.87}
       text_color: "#fff"
 
   - distance: "2 км"
