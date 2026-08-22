@@ -1031,8 +1031,11 @@ function buildDetailPanelHTML(runner) {
     // "М"/"Ж" (genderShort) оставлено для компактных мест по полу ниже
     // ("М 5"/"Ж 12"), там развёрнутое слово не поместится.
     // Категория — раньше нигде не показывалась в результатах, хотя место
-    // по категории уже есть в самой карточке ("По кат." ниже).
-    const metaParts = [distance, runner.gender || '', birthYear ? `${birthYear} г.р.` : '', runner.category || '']
+    // по категории уже есть в самой карточке ("По кат." ниже). Длинная
+    // категория (напр. Детский забег: "Мальчики 2015 г.р.") не помещалась
+    // в одну строку со всем остальным — категория и статус вынесены на
+    // отдельную строку (см. metaLine2 ниже).
+    const metaParts = [distance, runner.gender || '', birthYear ? `${birthYear} г.р.` : '']
         .filter(Boolean);
 
     const timeGun = formatTime(runner.time_gun_finish) || '—';
@@ -1094,7 +1097,7 @@ function buildDetailPanelHTML(runner) {
                 ${profileBtn}
                 ${diplomaBtn}
             </div>
-            <div class="detail-panel-meta">${metaParts.join(' · ')} · ${status}</div>
+            <div class="detail-panel-meta">${metaParts.join(' · ')}<br>${[runner.category || '', status].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="detail-panel-actions">
             <button class="detail-panel-close" title="Закрыть">&times;</button>
