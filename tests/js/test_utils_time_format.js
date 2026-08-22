@@ -48,6 +48,15 @@ check('parseDuration() — тот же формат, что и formatTime, дл�
     assert.strictEqual(KMUtils.parseDuration('0:22:48'), '22:48');
     assert.strictEqual(KMUtils.parseDuration('1:05:03'), '1:05:03');
 });
+check('parseTimeToSeconds() — понимает короткий "M:SS" (регрессия: раньше отдавал Infinity для < 1 часа)', () => {
+    assert.strictEqual(KMUtils.parseTimeToSeconds('5:45'), 345);
+    assert.strictEqual(KMUtils.parseTimeToSeconds('22:48'), 1368);
+});
+check('parseTimeToSeconds() — "H:MM:SS" и пустое/некорректное значение (Infinity — сортировка уносит в конец)', () => {
+    assert.strictEqual(KMUtils.parseTimeToSeconds('1:05:03'), 3903);
+    assert.strictEqual(KMUtils.parseTimeToSeconds(null), Infinity);
+    assert.strictEqual(KMUtils.parseTimeToSeconds(''), Infinity);
+});
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

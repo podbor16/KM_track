@@ -734,13 +734,16 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // системе уже включает пол ("женщины до 49 лет"), поэтому при активном
 // фильтре по группе rank_category достаточен сам по себе.
 // Для Жары берём _clean-варианты — награждение там по чистому времени.
-function getActiveRankField() {
+function _rankFieldForScope(suffix) {
     const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
-    const suffix = isZharaEvent() ? '_clean' : '';
     if (ageGroupFilter !== '') return 'rank_category' + suffix;
     if (genderFilter !== '') return 'rank_sex' + suffix;
     return 'rank_absolute' + suffix;
+}
+
+function getActiveRankField() {
+    return _rankFieldForScope(isZharaEvent() ? '_clean' : '');
 }
 
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
@@ -769,7 +772,17 @@ function _sortArray(arr) {
                 if (pa !== pb) return pa - pb;
                 valA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
                 valB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
-                if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                if (valA === valB) {
+                    // Внутри одной целой секунды (TIME-колонка без мс) официальный
+                    // тай-брейк уже посчитан на сервере с точностью до мс (см.
+                    // _recalculate_ranks() в load_race_results.py) — используем его
+                    // вместо алфавита по фамилии, иначе видимый порядок строк
+                    // расходится с местом, уже показанным в той же строке.
+                    const rf = _rankFieldForScope('');
+                    valA = a[rf] || 9999;
+                    valB = b[rf] || 9999;
+                    if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                }
                 break;
             }
             case 'time_net': {
@@ -777,7 +790,12 @@ function _sortArray(arr) {
                 if (pa !== pb) return pa - pb;
                 valA = KMUtils.parseTimeToSeconds(a.time_clear_finish);
                 valB = KMUtils.parseTimeToSeconds(b.time_clear_finish);
-                if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                if (valA === valB) {
+                    const rf = _rankFieldForScope('_clean');
+                    valA = a[rf] || 9999;
+                    valB = b[rf] || 9999;
+                    if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                }
                 break;
             }
             default:
