@@ -31,7 +31,7 @@
         .diploma-card {
             width: 100%; max-width: 420px;
             aspect-ratio: {{ distance.diploma.width_px }} / {{ distance.diploma.height_px }};
-            background-image: url('/{{ distance.diploma.background }}');
+            background-image: url('/{{ distance.diploma.background }}?v={{ v }}');
             background-size: cover; background-position: center;
             border-radius: 8px; position: relative; overflow: hidden;
             container-type: inline-size;
