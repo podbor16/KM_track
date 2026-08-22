@@ -823,6 +823,14 @@ function renderResultsTable(runners) {
 
     const rankField = getActiveRankField();
 
+    // Колонка "Категория" — только когда фильтр по возр. группе = "Все",
+    // иначе она видна на каждой строке одним и тем же значением и не несёт
+    // информации, а с фильтром "Все" помогает понять, к какой группе
+    // относится место в общем списке.
+    const showCategory = document.getElementById('ageGroupFilter').value === '';
+    const thCategory = document.getElementById('thCategory');
+    if (thCategory) thCategory.style.display = showCategory ? '' : 'none';
+
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
         row.className = 'km-tr';
@@ -839,11 +847,15 @@ function renderResultsTable(runners) {
         const timeNetCell = `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
         const [timeCol1, timeCol2] = isZharaEvent() ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
+        const categoryCell = showCategory
+            ? `<td class="km-td km-td--l ${rowBg}">${KMUtils.normalizeCategory(runner.category) || '—'}</td>`
+            : '';
 
         row.innerHTML = `
             <td class="km-td ${rowBg}">${rankDisplay}</td>
             <td class="km-td ${rowBg}"><span class="km-bib">${runner.start_number || ''}</span></td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
+            ${categoryCell}
             <td class="km-td ${rowBg}">${timeCol1}</td>
             <td class="km-td ${rowBg}">${timeCol2}</td>
         `;
