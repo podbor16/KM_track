@@ -944,10 +944,19 @@ class RaceLoader:
             chip_start_field  = TF.get("chip_start")
             chip_finish_field = TF.get("chip_finish")
 
-            time_gun_start = milliseconds_to_time(runner.get(gun_start_field))
+            # Copernico отдаёт times.official_:::start::: только пока участник
+            # "running" — у финишировавших это поле пропадает из ответа целиком
+            # (подтверждено живым сравнением running/finished записей 2026-08-22).
+            # Без фолбэка новый цикл после финиша затирал бы уже сохранённое
+            # значение на None, и чистое время навсегда схлопывалось с официальным.
+            official_start_ms = runner.get(gun_start_field)
+            if official_start_ms is None:
+                _prev_start_s = _time_str_to_seconds(existing.get('time_gun_start'))
+                if _prev_start_s is not None:
+                    official_start_ms = int(_prev_start_s * 1000)
+            time_gun_start = milliseconds_to_time(official_start_ms)
             time_clear_start = milliseconds_to_time(runner.get(chip_start_field) if chip_start_field else None)
             official_finish_ms = runner.get(gun_finish_field)
-            official_start_ms = runner.get(gun_start_field)
             time_gun_finish = milliseconds_to_time(official_finish_ms)
 
             # Чистое время = chip-время из Copernico, либо official_finish - wave_start_offset
@@ -1051,7 +1060,7 @@ class RaceLoader:
                 # Корректность не страдает: _recalculate_segment_ranks()
                 # всё равно пересчитывает места по ПОЛНОЙ таблице из БД, а
                 # не только по тем, кто обновился в этом цикле.) ===
-                segments = self._prepare_segments(result_id, runner)
+                segments = self._prepare_segments(result_id, runner, gun_offset_ms=official_start_ms)
                 segments_batch.extend(segments)
 
             # Обновляем кэш
@@ -1394,25 +1403,32 @@ class RaceLoader:
             if self.connection:
                 self.connection.rollback()
 
-    def _prepare_segments(self, result_id: int, runner_data: Dict) -> List[Tuple]:
-        """Подготовить данные сегментов для всех пар точек из checkpoint_distances."""
+    def _prepare_segments(self, result_id: int, runner_data: Dict, gun_offset_ms: Optional[int] = None) -> List[Tuple]:
+        """Подготовить данные сегментов для всех пар точек из checkpoint_distances.
+        gun_offset_ms: волновая задержка участника (мс от выстрела до пересечения
+        старта). Copernico отдаёт times.official_:::start::: только пока участник
+        "running" — у финишировавших поле пропадает из ответа, поэтому вызывающий
+        код (_update_existing) передаёт уже восстановленное из кэша значение вместо
+        того, чтобы брать его заново из runner_data (там будет None)."""
         if self.checkpoint_distances is None:
             return []
 
         num_kt = len(self.checkpoint_distances) - 2
         point_names = ['start'] + [f'kt{i}' for i in range(1, num_kt + 1)] + ['finish']
 
+        if gun_offset_ms is None:
+            gun_offset_ms = runner_data.get('times.official_:::start:::')
+        if gun_offset_ms is None:
+            gun_offset_ms = 0
+
         kt_f = self._kt_fields or [None] * 7
         times: Dict[str, Optional[int]] = {
-            'start': runner_data.get('times.official_:::start:::'),
+            'start': gun_offset_ms,
             'finish': runner_data.get('times.official_:::finish:::'),
         }
         for i in range(1, num_kt + 1):
             field = kt_f[i - 1] if i - 1 < len(kt_f) else None
             times[f'kt{i}'] = runner_data.get(field) if field else None
-
-        # Волновая задержка: время от выстрела до пересечения старта участником
-        gun_offset_ms = runner_data.get('times.official_:::start:::') or 0
 
         segments = []
         for i in range(len(point_names)):
