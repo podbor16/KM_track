@@ -910,4 +910,14 @@ body {
     }
 
     .search-results { max-height: 180px; }
+
+    /* "КТn (X км) ... Y мин/км" в узкой карточке участника — иначе подпись
+       "мин/км" не помещается в строку и обрезается/переносится */
+    .card-c__kt-row {
+        font-size: 11px;
+        gap: 5px;
+    }
+    .card-c__kt-row .card-c__kt-pace {
+        font-size: 10px;
+    }
 }
