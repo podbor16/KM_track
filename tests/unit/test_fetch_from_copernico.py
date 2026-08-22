@@ -107,6 +107,9 @@ class TestFetchFromCopernicoEventList:
 
     @patch("requests.get")
     def test_one_failing_sub_event_does_not_break_the_rest(self, mock_get):
+        """1km-2019 падает на ОБЕИХ попытках (быстрый повтор внутри
+        _fetch_one_copernico_event, см. его докстринг) — 2 успешных
+        события по 1 вызову + 1 неудачное по 2 вызова = 4 всего."""
         loader = make_loader(["1km-2020", "1km-2019", "1km-2018"])
 
         def side_effect(url, **kwargs):
@@ -121,7 +124,7 @@ class TestFetchFromCopernicoEventList:
         runners = loader.fetch_from_copernico()
 
         assert {r["dorsal"] for r in runners} == {2118, 8008}
-        assert mock_get.call_count == 3
+        assert mock_get.call_count == 4
 
     @patch("requests.get")
     def test_all_sub_events_failing_returns_empty_list(self, mock_get):

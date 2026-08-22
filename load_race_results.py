@@ -384,53 +384,61 @@ class RaceLoader:
             return False
 
     def _fetch_one_copernico_event(self, event: str) -> Tuple[List[Dict], Optional[str]]:
-        """Один HTTP-запрос к Copernico за одно под-событие. Возвращает
+        """Один HTTP-запрос к Copernico за одно под-событие (с одним
+        быстрым повтором при сетевой ошибке — см. ниже). Возвращает
         (runners, gun_time) — при ошибке/429 пустой список и None. При 429
         выставляет self.rate_limited = True (без исключения — вызывающий
         код per-событийно изолирует сбои, см. fetch_from_copernico())."""
         encoded_preset = urllib.parse.quote(self.copernico_preset)
         encoded_event = urllib.parse.quote(event)
         url = f"https://public-api.copernico.cloud/api/races/{self.copernico_race_id}/preset/{self.copernico_login}:::{encoded_preset}/{encoded_event}"
-        self.logger.info(f"📡 Запрос к Copernico API: {url}")
-        try:
-            import requests as _req
-            # Read-timeout короткий (не 150с, как раньше) — диагностировано
-            # 2026-08-21: public-api.copernico.cloud резолвится в 3 IP, и
-            # Python (requests/urllib3) в отличие от curl нередко выбирает
-            # первым проблемный адрес (заканчивается на .0), на котором
-            # соединение открывается, но ответ не приходит вовсе. DNS
-            # резолвится заново на каждый вызов — короткий таймаут даёт
-            # быстрее попасть на рабочий IP на следующей попытке вместо
-            # многоминутного ожидания мёртвого соединения.
-            response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 20))
-            if response.status_code == 429:
-                retry_after = response.headers.get('Retry-After')
-                self.logger.warning(
-                    f"⚠️ Copernico 429 Too Many Requests (event={event}"
-                    f"{f', Retry-After={retry_after}s' if retry_after else ''})"
-                )
-                self.rate_limited = True
-                return [], None
-            response.raise_for_status()
-            data = response.json()
-            self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
-            if isinstance(data, dict) and 'data' in data:
-                runners = data['data']
-                gun_time = data.get('gunTime')
-                # Fallback: gunTime может быть per-runner полем
-                if not gun_time and runners:
-                    gun_time = runners[0].get('gunTime')
-            elif isinstance(data, list):
-                runners = data
-                gun_time = runners[0].get('gunTime') if runners else None
-            else:
-                self.logger.error(f"❌ Неожиданный формат ответа для event={event}: {type(data)}")
-                return [], None
-            self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
-            return runners, gun_time
-        except Exception as e:
-            self.logger.error(f"❌ Ошибка при запросе к API (event={event}): {e}")
-            return [], None
+        import requests as _req
+
+        # До 2 попыток подряд (без паузы) — диагностировано 2026-08-21/22:
+        # public-api.copernico.cloud резолвится в 3 IP, и на один из них
+        # (проблемный) регулярно попадает и requests, и обычный curl —
+        # ~30% запросов вживую 22.08 во время старта Жары 5км. DNS
+        # резолвится заново на каждый вызов requests.get(), поэтому
+        # немедленный повтор той же попытки часто сразу попадает на
+        # рабочий IP, а не ждёт следующего планового цикла (5-30с).
+        for attempt in range(2):
+            suffix = " (повтор)" if attempt else ""
+            self.logger.info(f"📡 Запрос к Copernico API: {url}{suffix}")
+            try:
+                # Read-timeout короткий (не 150с, как раньше) — тот же
+                # проблемный IP открывает соединение, но не отвечает вовсе;
+                # короткий таймаут даёт быстрее перейти к повтору/следующему
+                # циклу вместо многоминутного ожидания мёртвого соединения.
+                response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 20))
+                if response.status_code == 429:
+                    retry_after = response.headers.get('Retry-After')
+                    self.logger.warning(
+                        f"⚠️ Copernico 429 Too Many Requests (event={event}"
+                        f"{f', Retry-After={retry_after}s' if retry_after else ''})"
+                    )
+                    self.rate_limited = True
+                    return [], None
+                response.raise_for_status()
+                data = response.json()
+                self.logger.debug(f"Ответ API: тип={type(data).__name__}, размер={len(data) if isinstance(data, (list, dict)) else '?'}")
+                if isinstance(data, dict) and 'data' in data:
+                    runners = data['data']
+                    gun_time = data.get('gunTime')
+                    # Fallback: gunTime может быть per-runner полем
+                    if not gun_time and runners:
+                        gun_time = runners[0].get('gunTime')
+                elif isinstance(data, list):
+                    runners = data
+                    gun_time = runners[0].get('gunTime') if runners else None
+                else:
+                    self.logger.error(f"❌ Неожиданный формат ответа для event={event}: {type(data)}")
+                    return [], None
+                self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
+                return runners, gun_time
+            except Exception as e:
+                self.logger.error(f"❌ Ошибка при запросе к API (event={event}, попытка {attempt + 1}/2): {e}")
+                continue
+        return [], None
 
     def fetch_from_copernico(self) -> List[Dict]:
         """Получить данные из Copernico API. copernico_event может быть
