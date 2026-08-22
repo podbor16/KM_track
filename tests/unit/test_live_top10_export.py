@@ -175,3 +175,38 @@ def test_generate_top10_json_builds_checkpoint_for_every_intermediate_kt(tmp_pat
     assert list(captured_time_cols.keys()) == ["kt1", "kt2", "kt3", "kt4", "kt5", "kt6", "finish"]
     assert captured_time_cols["kt1"] == "time_clear_kt1"
     assert captured_time_cols["finish"] == "time_clear_finish"
+
+
+def test_generate_top10_json_label_format_matches_broadcast_director_request(tmp_path, monkeypatch):
+    """Готовое к показу имя отметки: "{дистанция}. {N} км" / "{дистанция}.
+    Финиш" — запрос режиссёра трансляции 2026-08-22, с уточнением, что для
+    21.1 км префикс — сама дистанция ("21.1 км"), без спецназвания."""
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+
+    captured_labels = {}
+
+    def fake_build_checkpoint(connection, event_id, code, label, time_col, **kwargs):
+        captured_labels[code] = label
+        return _fake_checkpoint(code, label)
+
+    monkeypatch.setattr(live_top10_export, "_build_checkpoint", fake_build_checkpoint)
+
+    cur.fetchone.return_value = {
+        "event_name": "Жара", "event_distance": 5.0, "event_year": 2026,
+        "checkpoint_distances": "[0, 2.5, 5.0]",
+    }
+    generate_top10_json(conn, event_id=115, output_path=str(tmp_path / "zhara_5km_top10.json"))
+    assert captured_labels["kt1"] == "5 км. 2.5 км"
+    assert captured_labels["finish"] == "5 км. Финиш"
+
+    captured_labels.clear()
+    cur.fetchone.return_value = {
+        "event_name": "Жара", "event_distance": 21.1, "event_year": 2026,
+        "checkpoint_distances": "[0, 5.0, 6.0, 10.55, 14.65, 15.65, 20.2, 21.1]",
+    }
+    generate_top10_json(conn, event_id=116, output_path=str(tmp_path / "zhara_21km_top10.json"))
+    assert captured_labels["kt1"] == "21.1 км. 5 км"
+    assert captured_labels["kt3"] == "21.1 км. 10.55 км"
+    assert captured_labels["finish"] == "21.1 км. Финиш"

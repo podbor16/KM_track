@@ -113,25 +113,28 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
         json.loads(event["checkpoint_distances"]) if event["checkpoint_distances"] else []
     )
     num_kt = max(0, len(checkpoint_distances) - 2)
+    distance_label = _format_distance_label(float(event["event_distance"]))
 
+    # label — готовое к показу режиссёром имя отметки: "5 км. 2.5 км",
+    # "21.1 км. Финиш" и т.п. (запрос режиссёра трансляции, 2026-08-22).
     checkpoints = []
     for i in range(1, num_kt + 1):
         checkpoints.append(_build_checkpoint(
             connection, event_id,
-            code=f"kt{i}", label=f"КТ{i} ({checkpoint_distances[i]} км)",
+            code=f"kt{i}", label=f"{distance_label}. {_format_distance_label(checkpoint_distances[i])}",
             time_col=f"time_clear_kt{i}",
         ))
 
     checkpoints.append(_build_checkpoint(
         connection, event_id,
-        code="finish", label="Финиш",
+        code="finish", label=f"{distance_label}. Финиш",
         time_col="time_clear_finish",
     ))
 
     data = {
         "event_name": event["event_name"],
         "event_year": event["event_year"],
-        "distance": _format_distance_label(float(event["event_distance"])),
+        "distance": distance_label,
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "checkpoints": checkpoints,
     }
