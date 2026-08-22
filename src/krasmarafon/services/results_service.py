@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from typing import Optional
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 
 from src.config.event_loader import EventConfig, get_event_by_name
 from src.krasmarafon.models.analytics import RaceResultsResponse
@@ -215,11 +215,17 @@ def _do_build(
         _event_cfg_for_gun = get_event_by_name(events, ev_name)
         if _event_cfg_for_gun and _event_cfg_for_gun.gun_time and race_date:
             try:
+                # gun_time в YAML указан в красноярском времени (UTC+7) — сервер
+                # (VPS) живёт в Europe/Moscow (UTC+3), наивный datetime.timestamp()
+                # интерпретировал бы его как московское и сдвигал на 4 часа.
                 _rd = race_date if isinstance(race_date, date) else date.today()
-                gun_start_dt = datetime.combine(
-                    _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time()
+                _krat_tz = timezone(timedelta(hours=7))
+                _gun_krat = datetime.combine(
+                    _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time(),
+                    tzinfo=_krat_tz,
                 )
-                race_gun_unix_ms = int(gun_start_dt.timestamp() * 1000)
+                race_gun_unix_ms = int(_gun_krat.timestamp() * 1000)
+                gun_start_dt = _gun_krat.astimezone().replace(tzinfo=None)
             except Exception as _ge:
                 logger.debug(f"gun_time YAML parse failed: {_ge}")
 
