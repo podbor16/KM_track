@@ -6,7 +6,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from src.krasmarafon.services.live_top10_export import (
-    _td_to_seconds, _seconds_to_hms, _seconds_to_pace_str, _format_gap,
+    _td_to_seconds, _seconds_to_time_str, _seconds_to_pace_str, _format_gap,
     _sex_code, _format_distance_label, _forecast_finish_seconds,
 )
 
@@ -19,12 +19,12 @@ def test_td_to_seconds_none_for_none():
     assert _td_to_seconds(None) is None
 
 
-def test_seconds_to_hms_formats_with_leading_zeros():
-    assert _seconds_to_hms(3723) == "01:02:03"
+def test_seconds_to_time_str_hour_and_above_hms():
+    assert _seconds_to_time_str(3723) == "1:02:03"
 
 
-def test_seconds_to_hms_under_an_hour():
-    assert _seconds_to_hms(125) == "00:02:05"
+def test_seconds_to_time_str_under_an_hour_ms():
+    assert _seconds_to_time_str(125) == "2:05"
 
 
 def test_seconds_to_pace_str_mmss():
@@ -185,8 +185,8 @@ def test_build_checkpoint_adds_forecast_finish_time_when_remaining_km_given():
         photo_map={}, remaining_km=0.9,
     )
 
-    # elapsed 4200с + 0.9км × 300с/км = 4470с = 01:14:30
-    assert checkpoint["top10_absolute"][0]["forecast_finish_time"] == "01:14:30"
+    # elapsed 4200с + 0.9км × 300с/км = 4470с = 1:14:30
+    assert checkpoint["top10_absolute"][0]["forecast_finish_time"] == "1:14:30"
 
 
 def test_build_checkpoint_omits_forecast_finish_time_without_remaining_km():

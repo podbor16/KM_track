@@ -26,29 +26,40 @@ window.KMUtils = {
         'dostigaya_tseli': '#c1272d'
     },
 
-    // Форматирует время в HH:MM:SS; принимает строку HH:MM:SS, ISO 8601 (PT...) или число мс
-    formatTime(timeData) {
-        if (!timeData) return '-';
-        if (typeof timeData === 'string') {
-            if (timeData.match(/^\d{1,2}:\d{2}:\d{2}$/)) return timeData;
-            if (timeData.startsWith('PT')) {
-                const m = timeData.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
-                if (m) {
-                    let h = parseInt(m[1] || 0);
-                    let min = parseInt(m[2] || 0);
-                    let sec = Math.floor(parseFloat(m[3] || 0));
-                    min += Math.floor(sec / 60); sec %= 60;
-                    h += Math.floor(min / 60); min %= 60;
-                    return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-                }
-            }
-            return '-';
+    // Общий парсер длительности → секунды. Принимает строку "H:MM:SS"/"MM:SS",
+    // ISO 8601 (PT...) или число мс. null, если распознать не удалось.
+    _durationToSeconds(timeData) {
+        if (timeData === null || timeData === undefined || timeData === '') return null;
+        if (typeof timeData === 'number') return Math.floor(timeData / 1000);
+        const s = String(timeData);
+        if (s.startsWith('PT')) {
+            const m = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/);
+            if (!m) return null;
+            return parseInt(m[1] || 0) * 3600 + parseInt(m[2] || 0) * 60 + Math.floor(parseFloat(m[3] || 0));
         }
-        const ts = Math.floor(timeData / 1000);
-        const h = Math.floor(ts / 3600);
-        const min = Math.floor((ts % 3600) / 60);
-        const sec = ts % 60;
-        return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        const parts = s.split(':').map(p => parseInt(p, 10));
+        if (parts.some(isNaN)) return null;
+        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        if (parts.length === 2) return parts[0] * 60 + parts[1];
+        return null;
+    },
+
+    // Форматирует секунды по единому правилу проекта: меньше часа → "M:SS",
+    // час и больше → "H:MM:SS" (часы без ведущего нуля, минуты/секунды — с).
+    _formatSecondsAdaptive(totalSeconds) {
+        if (totalSeconds === null || totalSeconds === undefined || isNaN(totalSeconds)) return null;
+        totalSeconds = Math.floor(totalSeconds);
+        const h = Math.floor(totalSeconds / 3600);
+        const min = Math.floor((totalSeconds % 3600) / 60);
+        const sec = totalSeconds % 60;
+        if (h > 0) return `${h}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        return `${min}:${String(sec).padStart(2,'0')}`;
+    },
+
+    // Форматирует время по единому правилу проекта (< 1 часа → M:SS, иначе
+    // H:MM:SS); принимает строку HH:MM:SS/MM:SS, ISO 8601 (PT...) или число мс
+    formatTime(timeData) {
+        return this._formatSecondsAdaptive(this._durationToSeconds(timeData)) ?? '-';
     },
 
     // Вычисляет темп (минут/км) как число; принимает время (строка HH:MM:SS / ISO 8601 / мс) и строку дистанции
@@ -133,18 +144,13 @@ window.KMUtils = {
         return cat.replace(/\s*\(.*?\)/g, '').trim();
     },
 
-    // Парсит ISO 8601 duration (PT1H26M0S) в читаемый формат H:MM:SS
+    // Парсит длительность (ISO 8601 PT.../"H:MM:SS"/"MM:SS") в читаемый формат
+    // по единому правилу проекта (< 1 часа → M:SS, иначе H:MM:SS)
     parseDuration(duration) {
         if (!duration) return null;
-        if (!String(duration).startsWith('PT')) return duration;
-        const m = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-        if (!m) return duration;
-        const totalSeconds = (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
-        const h = Math.floor(totalSeconds / 3600);
-        const min = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
-        if (h > 0) return `${h}:${String(min).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-        return `${min}:${String(s).padStart(2,'0')}`;
+        const totalSeconds = this._durationToSeconds(duration);
+        if (totalSeconds === null) return duration;
+        return this._formatSecondsAdaptive(totalSeconds);
     },
 
     // fetch() с явным cache:'no-store' — сервер уже шлёт Cache-Control:

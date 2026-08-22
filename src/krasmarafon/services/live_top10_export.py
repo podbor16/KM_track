@@ -40,11 +40,15 @@ def _td_to_seconds(value) -> Optional[float]:
     return None
 
 
-def _seconds_to_hms(seconds: float) -> str:
+def _seconds_to_time_str(seconds: float) -> str:
+    """secs → 'H:MM:SS' (или 'MM:SS', если меньше часа) — единый формат
+    времени по всему проекту (см. format_finish_time в diploma_service.py)."""
     total = int(round(seconds))
     h, rem = divmod(total, 3600)
     m, s = divmod(rem, 60)
-    return f"{h:02d}:{m:02d}:{s:02d}"
+    if h > 0:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
 
 def _seconds_to_pace_str(seconds: float) -> str:
@@ -151,7 +155,7 @@ def _build_checkpoint(
                 "city": rec.get("city") or "",
                 "rank_absolute": int(rec["rank_absolute"]) if rec["rank_absolute"] is not None else None,
                 "rank_sex": int(rec["rank_sex"]) if rec["rank_sex"] is not None else None,
-                "time": _seconds_to_hms(seconds),
+                "time": _seconds_to_time_str(seconds),
                 "pace": _seconds_to_pace_str(pace_seconds) if pace_seconds is not None else None,
                 "gap_absolute": _format_gap(seconds - leader_abs_s) if leader_abs_s is not None else "Лидер",
                 "gap_sex": _format_gap(seconds - leader_sex_s) if leader_sex_s is not None else "Лидер",
@@ -160,7 +164,7 @@ def _build_checkpoint(
             if remaining_km is not None:
                 forecast_seconds = _forecast_finish_seconds(seconds, pace_seconds, remaining_km)
                 if forecast_seconds is not None:
-                    entry["forecast_finish_time"] = _seconds_to_hms(forecast_seconds)
+                    entry["forecast_finish_time"] = _seconds_to_time_str(forecast_seconds)
             result.append(entry)
         return result
 

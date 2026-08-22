@@ -59,25 +59,7 @@ const STATUS_COLORS = {
 // ============================================
 
 function parseDuration(duration) {
-    if (!duration) return null;
-    if (!String(duration).startsWith('PT')) return duration;
-
-    const match = String(duration).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-    if (!match) return duration;
-
-    const totalSeconds =
-        (parseInt(match[1] || 0) * 3600) +
-        (parseInt(match[2] || 0) * 60) +
-        parseInt(match[3] || 0);
-
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-
-    if (h > 0) {
-        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }
-    return `${m}:${String(s).padStart(2, '0')}`;
+    return KMUtils.parseDuration(duration);
 }
 
 function getStatusText(status) {
@@ -445,6 +427,9 @@ async function switchDistance(eventId, gpxFile, routeType, label, laps = 1, chec
     selectedRunnerIds.clear();
     saveSelectedToStorage();
     updateSelectedList();
+
+    // Закрыть открытую карточку участника — она тоже принадлежит другой дистанции
+    hideRunnerPanel();
 
     // Очистить маркеры текущей дистанции
     Object.values(runnerMarkers).forEach(m => { if (map) map.removeLayer(m); });

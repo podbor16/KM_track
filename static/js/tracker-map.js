@@ -285,9 +285,9 @@ function buildPopupContent(runner) {
     if (isFinished) {
         const finishPaceGun   = runner.finish_pace_avg_gun   || '-';
         const finishPaceClean = runner.finish_pace_avg_clean || runner.finish_pace_avg_gun || '-';
-        const clearTime = runner.time_clear_finish || '';
-        const gunTime   = runner.time_gun_finish   || '';
-        const timesEqual = gunTime && clearTime && gunTime === clearTime;
+        const timesEqual = runner.time_clear_finish && runner.time_gun_finish && runner.time_gun_finish === runner.time_clear_finish;
+        const clearTime = KMUtils.formatTime(runner.time_clear_finish);
+        const gunTime   = KMUtils.formatTime(runner.time_gun_finish);
 
         // Строка: Офиц. время | Дист. | Темп (gun) | Чист. время
         const statsHTML = `
