@@ -34,6 +34,16 @@ distances:
       login: "podbor250718@gmail.com"
       preset: "km_zhara_21km_2026"
       event: "21.1km"         # подтверждено живым fetch 2026-08-21 — событие создано, участники частично загружены
+    diploma:
+      # Дистанция "21,1 км" уже впечатана в саму картинку (плашка
+      # "Дистанция" + значение) — отдельный distance_box не нужен, как и
+      # у Детского забега (см. kids.yaml).
+      background: "static/images/diplomas/zhara/21km/background.jpg"
+      width_px: 1080
+      height_px: 1960
+      name_box:  {top: 56.02, left: 10.37, width: 81.20, height: 15.87}
+      ranks_box: {top: 74.95, left: 10.37, width: 81.20, height: 15.87}
+      text_color: "#fff"
 
   - distance: "5 км"
     distance_km: 5.0
@@ -58,6 +68,15 @@ distances:
       login: "podbor250718@gmail.com"
       preset: "km_zhara_5km_2026"
       event: "5km"
+    diploma:
+      # Дистанция "5 км" уже впечатана в саму картинку — отдельный
+      # distance_box не нужен (тот же принцип, что у 21.1 км выше).
+      background: "static/images/diplomas/zhara/5km/background.jpg"
+      width_px: 1080
+      height_px: 1960
+      name_box:  {top: 56.02, left: 10.37, width: 81.20, height: 15.87}
+      ranks_box: {top: 74.95, left: 10.37, width: 81.20, height: 15.87}
+      text_color: "#fff"
 
   - distance: "2 км"
     distance_km: 2.0
