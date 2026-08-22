@@ -187,12 +187,17 @@ def convert_pace_format(pace_str: Optional[str]) -> Optional[str]:
 
 
 def compute_pace(seconds_km: float) -> Optional[str]:
-    """Конвертирует секунды на километр в строку 'ЧЧ:ММ:СС' (часы всегда 00)"""
+    """Конвертирует секунды на километр в строку 'ЧЧ:ММ:СС' для MySQL TIME.
+    Минуты переносятся в часы (>= 60 мин/км — редкий, но реальный случай на
+    коротких детских дистанциях) — иначе "00:75:18" ловит MySQL strict mode
+    как invalid time value и валит executemany() ЦЕЛИКОМ, а не только эту
+    строку (найдено 2026-08-22 на Детском забеге, коммит после этого)."""
     if seconds_km is None or seconds_km <= 0:
         return None
-    minutes = int(seconds_km // 60)
-    seconds = int(seconds_km % 60)
-    return f"00:{minutes:02d}:{seconds:02d}"
+    total = int(seconds_km)
+    hours, rem = divmod(total, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def convert_status(status: Optional[str]) -> str:
@@ -275,13 +280,15 @@ def _time_str_to_seconds(t: Optional[str]) -> Optional[float]:
 
 
 def _seconds_to_pace(total_seconds: Optional[float], distance_km: Optional[float]) -> Optional[str]:
-    """total_sec / dist_km → '00:mm:ss' темп для хранения в MySQL TIME. None если данных нет."""
+    """total_sec / dist_km → 'hh:mm:ss' темп для хранения в MySQL TIME —
+    минуты переносятся в часы (см. compute_pace() выше, та же причина).
+    None если данных нет."""
     if not total_seconds or not distance_km or distance_km <= 0:
         return None
-    secs_per_km = total_seconds / distance_km
-    minutes = int(secs_per_km // 60)
-    seconds = int(secs_per_km % 60)
-    return f"00:{minutes:02d}:{seconds:02d}"
+    secs_per_km = int(total_seconds / distance_km)
+    hours, rem = divmod(secs_per_km, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 # === КЛАСС ЗАГРУЗЧИКА ===
