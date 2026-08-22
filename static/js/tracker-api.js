@@ -613,11 +613,7 @@ async function loadAnalytics() {
             analyticsPanel.innerHTML = renderAnalyticsHTML(stats, results);
         }
 
-        const analyticsH2 = document.querySelector('#analyticsPanel h2');
-        if (analyticsH2) {
-            const distStr = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
-            analyticsH2.textContent = `Общая аналитика по забегу${distStr}`;
-        }
+        updateAnalyticsHeading();
 
     } catch (error) {
         console.error('Ошибка загрузки аналитики:', error);
@@ -645,6 +641,20 @@ function refreshAnalyticsFromMemory() {
     if (analyticsPanel) {
         analyticsPanel.innerHTML = renderAnalyticsHTML(stats, allRunners);
     }
+    updateAnalyticsHeading();
+}
+
+// Заголовок секции (розовая строка) — событие+год+дистанция. Блок статистики
+// внутри (чёрная строка, renderAnalyticsHTML) несёт только "Общая статистика",
+// без дублирования события/года/дистанции — раньше было наоборот и обе строки
+// частично дублировали друг друга.
+function updateAnalyticsHeading() {
+    const analyticsH2 = document.querySelector('#analyticsPanel h2');
+    if (!analyticsH2) return;
+    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
+    const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
+    const distStr = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
+    analyticsH2.textContent = `${evName} ${evYear}${distStr}`;
 }
 
 window.setTopGender = function(gender) {
@@ -695,9 +705,6 @@ function renderTopTableHTML(results, gender) {
 }
 
 function renderAnalyticsHTML(stats, results) {
-    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
-    const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
-    const distStr = (results.length > 0 && results[0].distance) ? ` (${results[0].distance})` : '';
     const totalSafe = stats.total || 1;
     const genderBtns = ['all', 'Мужчина', 'Женщина'].map(g => {
         const labels = { all: 'Все', 'Мужчина': 'Мужчины', 'Женщина': 'Женщины' };
@@ -706,7 +713,7 @@ function renderAnalyticsHTML(stats, results) {
 
     return `
         <div class="analytics-section">
-            <h3>${evName} ${evYear}${distStr} — Общая статистика</h3>
+            <h3>Общая статистика</h3>
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-card-value">${stats.total}</div>
