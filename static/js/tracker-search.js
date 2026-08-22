@@ -67,6 +67,9 @@ function updateSelectedList() {
     const selectedListDiv = document.getElementById('selectedList');
     if (!selectedListDiv) return;
 
+    const countEl = document.getElementById('selectedCount');
+    if (countEl) countEl.textContent = selectedRunnerIds.size;
+
     if (selectedRunnerIds.size === 0) {
         selectedListDiv.innerHTML = '<div class="empty-selection">Нет отслеживаемых участников</div>';
         return;
@@ -91,7 +94,7 @@ function updateSelectedList() {
     });
 
     html += '</div>';
-    html += `<button class="selected-runner-clear" onclick="clearSelection()">Очистить (${selectedRunnerIds.size}/${CONFIG.MAX_SELECTED})</button>`;
+    html += `<button class="selected-runner-clear" onclick="clearSelection()">Очистить всех</button>`;
 
     selectedListDiv.innerHTML = html;
 }
