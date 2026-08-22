@@ -198,7 +198,8 @@ def _do_build(
     ev_distance = ev_info.get('event_distance')
     ev_year = ev_info.get('event_year', current_year)
 
-    # --- gun_start_dt из gun_time_utc в БД ---
+    # --- gun_start_dt из gun_time_utc в БД (приоритет) или gun_time в YAML (fallback,
+    # напр. когда Copernico не отдаёт gunTime для wave-based расписаний) ---
     gun_start_dt = None
     race_gun_unix_ms = None
     _gun_utc = ev_info.get('gun_time_utc')
@@ -209,6 +210,18 @@ def _do_build(
             gun_start_dt = _gun_aware.astimezone().replace(tzinfo=None)
         except Exception as _ge:
             logger.debug(f"gun_time_utc parse failed: {_ge}")
+
+    if gun_start_dt is None:
+        _event_cfg_for_gun = get_event_by_name(events, ev_name)
+        if _event_cfg_for_gun and _event_cfg_for_gun.gun_time and race_date:
+            try:
+                _rd = race_date if isinstance(race_date, date) else date.today()
+                gun_start_dt = datetime.combine(
+                    _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time()
+                )
+                race_gun_unix_ms = int(gun_start_dt.timestamp() * 1000)
+            except Exception as _ge:
+                logger.debug(f"gun_time YAML parse failed: {_ge}")
 
     # Контрольные точки: из БД или расчётные
     raw_cp = ev_info.get('checkpoint_distances')
@@ -363,19 +376,6 @@ def _do_build(
             'last_kt_unix_ms': _calc_last_kt_unix_ms(runner, gun_start_dt),
         })
     _t_loop_done = time.time() - _t_loop
-
-    # --- YAML fallback для race_gun_unix_ms если в БД нет gun_time_utc ---
-    if race_gun_unix_ms is None:
-        event_cfg_match = get_event_by_name(events, ev_name)
-        if event_cfg_match and event_cfg_match.gun_time and race_date:
-            try:
-                _rd = race_date if isinstance(race_date, date) else date.today()
-                _gun_dt = datetime.combine(
-                    _rd, datetime.strptime(event_cfg_match.gun_time, '%H:%M:%S').time()
-                )
-                race_gun_unix_ms = int(_gun_dt.timestamp() * 1000)
-            except Exception as _ge:
-                logger.debug(f"gun_time YAML parse failed: {_ge}")
 
     _total = time.time() - _t0
     logger.info(

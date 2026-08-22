@@ -482,8 +482,7 @@ function buildPopupContent(runner) {
             <div class="card-c__eta" style="grid-column:1/-1">
                 <div class="card-c__eta-lbl">Прогноз финиша</div>
                 <div class="card-c__eta-vals">
-                    <div class="card-c__eta-val">${resultStr || astroStr}</div>
-                    ${resultStr ? `<div class="card-c__eta-time">финиш в ${astroStr}</div>` : ''}
+                    <div class="card-c__eta-val">${resultStr ? `${resultStr} (${astroStr})` : astroStr}</div>
                 </div>
             </div>`;
     }
