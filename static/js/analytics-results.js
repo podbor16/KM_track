@@ -1622,7 +1622,7 @@ function exportResultsPdf() {
 <h2>${title}</h2>
 <p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
 <table><thead><tr>
-  <th>№</th><th>Фамилия и Имя</th><th>Дистанция</th><th>Категория</th>
+  <th>№</th><th>Участник</th><th>Дистанция</th><th>Категория</th>
   ${timeHeaders}
   <th>Место абс.</th><th>Место пол</th><th>Место кат.</th>
 </tr></thead><tbody>${rows}</tbody></table>
