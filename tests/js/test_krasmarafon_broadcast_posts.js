@@ -1,6 +1,9 @@
 // Тесты для buildTop3Post() из static/js/krasmarafon-broadcast-posts.js —
 // чистая функция, DOM не нужен. В проекте нет JS-тест-фреймворка —
 // используется node:vm (тот же приём, что в остальных tests/js/*.js).
+// Схема источника (live_top10_export.py) упрощена по запросу режиссёра
+// трансляции 2026-08-22: top3_male/top3_female вместо top10_*, каждая
+// запись — только full_name + time (без pace/gap_sex/фото/мест).
 // Запуск: node tests/js/test_krasmarafon_broadcast_posts.js
 const fs = require('fs');
 const path = require('path');
@@ -36,22 +39,22 @@ function check(name, fn) {
 
 const CP_KT = {
     code: 'kt1', label: 'КТ1 (10.55 км)',
-    top10_male: [
-        { surname: 'Иванов', name: 'Пётр', sex: 'M', time: '00:45:00', pace: '4:30', gap_sex: 'Лидер' },
-        { surname: 'Сидоров', name: 'Олег', sex: 'M', time: '00:50:30', pace: '5:03', gap_sex: '+05:30' },
+    top3_male: [
+        { full_name: 'Иванов Пётр', time: '45:00' },
+        { full_name: 'Сидоров Олег', time: '50:30' },
     ],
-    top10_female: [
-        { surname: 'Викулова', name: 'Анна', sex: 'F', time: '00:15:00', pace: '3:00', gap_sex: 'Лидер' },
-        { surname: 'Томкус', name: 'Полина', sex: 'F', time: '00:20:00', pace: '4:00', gap_sex: '+05:00' },
+    top3_female: [
+        { full_name: 'Викулова Анна', time: '15:00' },
+        { full_name: 'Томкус Полина', time: '20:00' },
     ],
 };
 
 const CP_FINISH = {
     code: 'finish', label: 'Финиш',
-    top10_male: [
-        { surname: 'Иванов', name: 'Пётр', sex: 'M', time: '01:32:10', pace: '4:20', gap_sex: 'Лидер' },
+    top3_male: [
+        { full_name: 'Иванов Пётр', time: '1:32:10' },
     ],
-    top10_female: [],
+    top3_female: [],
 };
 
 check('Заголовок КТ без distanceLabel — "Отметка N км" с числом из label', () => {
@@ -69,63 +72,20 @@ check('Заголовок Финиш — "Финиш" без "Отметка"', 
     assert.ok(text.startsWith('**Мужчины. Финиш**'), text);
 });
 
-check('Время "00:15:00" обрезается до "15:00"', () => {
+check('Время выводится как есть (уже "M:SS"/"H:MM:SS" от сервера)', () => {
     const text = sandbox.buildTop3Post(CP_KT, 'female');
     assert.ok(text.includes('⏱️15:00'), text);
 });
 
-check('Время с ненулевым часом остаётся "ЧЧ:ММ:СС"', () => {
+check('Время с ненулевым часом остаётся "H:MM:SS"', () => {
     const text = sandbox.buildTop3Post(CP_FINISH, 'male');
-    assert.ok(text.includes('⏱️01:32:10'), text);
-});
-
-check('Лидер — без отставания в скобках', () => {
-    const text = sandbox.buildTop3Post(CP_KT, 'female');
-    assert.ok(text.includes('⏱️15:00\n'), text);
-    assert.ok(!text.includes('⏱️15:00 ('), text);
-});
-
-check('Не-лидер — отставание в скобках сразу после времени', () => {
-    const text = sandbox.buildTop3Post(CP_KT, 'female');
-    assert.ok(text.includes('⏱️20:00 (+05:00)'), text);
-});
-
-check('Темп выводится отдельной строкой', () => {
-    const text = sandbox.buildTop3Post(CP_KT, 'female');
-    assert.ok(text.includes('3:00 мин/км'), text);
-});
-
-check('pace === null — строка темпа не выводится', () => {
-    const cp = { code: 'kt1', label: 'КТ1 (5 км)', top10_male: [], top10_female: [
-        { surname: 'Петрова', name: 'Мария', time: '00:20:00', pace: null, gap_sex: 'Лидер' },
-    ] };
-    const text = sandbox.buildTop3Post(cp, 'female');
-    assert.ok(!text.includes('мин/км'), text);
-    assert.ok(text.includes('⏱️20:00'), text);
+    assert.ok(text.includes('⏱️1:32:10'), text);
 });
 
 check('2 записи вместо 3 — третье место не показывается', () => {
     const text = sandbox.buildTop3Post(CP_KT, 'female');
     assert.ok(text.includes('2. Томкус Полина'), text);
     assert.ok(!text.includes('3.'), text);
-});
-
-check('4 записи — 4-я не попадает в пост, первые 3 попадают', () => {
-    const cp = {
-        code: 'kt1', label: 'КТ1 (10.55 км)',
-        top10_male: [
-            { surname: 'Иванов', name: 'Пётр', time: '00:45:00', pace: '4:30', gap_sex: 'Лидер' },
-            { surname: 'Сидоров', name: 'Олег', time: '00:50:30', pace: '5:03', gap_sex: '+05:30' },
-            { surname: 'Кузнецов', name: 'Илья', time: '00:52:00', pace: '5:12', gap_sex: '+07:00' },
-            { surname: 'Смирнов', name: 'Артём', time: '00:55:00', pace: '5:30', gap_sex: '+10:00' },
-        ],
-        top10_female: [],
-    };
-    const text = sandbox.buildTop3Post(cp, 'male');
-    assert.ok(text.includes('1. Иванов Пётр'), text);
-    assert.ok(text.includes('2. Сидоров Олег'), text);
-    assert.ok(text.includes('3. Кузнецов Илья'), text);
-    assert.ok(!text.includes('Смирнов'), text);
 });
 
 check('0 записей — короткое сообщение вместо всего поста', () => {

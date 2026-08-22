@@ -36,8 +36,9 @@ const BCP_COURSE_RECORDS = {
 // Чистая функция, без обращения к DOM — легко тестируется через node:vm без
 // стабов document/fetch.
 function buildTop3Post(checkpoint, sexKey, distanceLabel) {
-    const list = (sexKey === 'male' ? checkpoint.top10_male : checkpoint.top10_female) || [];
-    const top3 = list.slice(0, 3);
+    // top3_male/top3_female (live_top10_export.py) уже содержат не больше
+    // 3 записей — обрезка на клиенте не нужна.
+    const top3 = (sexKey === 'male' ? checkpoint.top3_male : checkpoint.top3_female) || [];
     // Пустой топ-3 — короткое сообщение вместо всего поста (тот же приём,
     // что у Siberman: bcBuildStagePost() возвращает голую строку без
     // заголовка/подписи, когда никто ещё не дошёл до отметки).
@@ -60,16 +61,9 @@ function buildTop3Post(checkpoint, sexKey, distanceLabel) {
     }
     const title = `**${sexLabel}. ${titleSuffix}**`;
 
-    const entries = top3.map((entry, idx) => {
-        // entry.time уже "ЧЧ:ММ:СС" — обрезаем "00:" в начале, часовую
-        // часть оставляем как есть, если гонка реально идёт больше часа.
-        let time = entry.time || '';
-        if (time.startsWith('00:')) time = time.slice(3);
-        const gapSuffix = (entry.gap_sex && entry.gap_sex !== 'Лидер') ? ` (${entry.gap_sex})` : '';
-        const lines = [`${idx + 1}. ${entry.surname} ${entry.name}`, `⏱️${time}${gapSuffix}`];
-        if (entry.pace) lines.push(`${entry.pace} мин/км`);
-        return lines.join('\n');
-    });
+    const entries = top3.map((entry, idx) =>
+        `${idx + 1}. ${entry.full_name}\n⏱️${entry.time || ''}`
+    );
 
     const record = BCP_COURSE_RECORDS[distanceLabel] && BCP_COURSE_RECORDS[distanceLabel][sexKey];
     const recordLine = record

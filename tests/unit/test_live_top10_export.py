@@ -1,13 +1,12 @@
-"""Тесты для live_top10_export.py — сборка live-JSON топ-10 по отметкам
-для трансляции Жары. TIME-поля MySQL (mysql-connector) приходят как
-datetime.timedelta, не строки — см. _td_to_seconds()."""
+"""Тесты для live_top10_export.py — сборка live-JSON топ-3 (муж/жен) по
+отметкам для трансляции Жары. TIME-поля MySQL (mysql-connector) приходят
+как datetime.timedelta, не строки — см. _td_to_seconds()."""
 import json
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.krasmarafon.services.live_top10_export import (
-    _td_to_seconds, _seconds_to_time_str, _seconds_to_pace_str, _format_gap,
-    _sex_code, _format_distance_label, _forecast_finish_seconds,
+    _td_to_seconds, _seconds_to_time_str, _format_distance_label, _build_checkpoint,
 )
 
 
@@ -27,36 +26,6 @@ def test_seconds_to_time_str_under_an_hour_ms():
     assert _seconds_to_time_str(125) == "2:05"
 
 
-def test_seconds_to_pace_str_mmss():
-    assert _seconds_to_pace_str(349) == "5:49"
-
-
-def test_format_gap_leader_is_zero():
-    assert _format_gap(0) == "Лидер"
-
-
-def test_format_gap_negative_treated_as_leader():
-    """Защита от округления/погрешности — небольшая отрицательная разница
-    (сам лидер, сравнение с самим собой) не должна давать "-00:00"."""
-    assert _format_gap(-0.4) == "Лидер"
-
-
-def test_format_gap_under_an_hour():
-    assert _format_gap(18) == "+00:18"
-
-
-def test_format_gap_over_an_hour():
-    assert _format_gap(3725) == "+01:02:05"
-
-
-def test_sex_code_male():
-    assert _sex_code("Мужчина") == "M"
-
-
-def test_sex_code_female():
-    assert _sex_code("Женщина") == "F"
-
-
 def test_format_distance_label_drops_trailing_zero():
     assert _format_distance_label(5.0) == "5 км"
 
@@ -65,190 +34,86 @@ def test_format_distance_label_keeps_decimal():
     assert _format_distance_label(21.1) == "21.1 км"
 
 
-def test_forecast_finish_seconds_extrapolates_remaining_distance():
-    # elapsed 1:10:00 = 4200с, темп 5:00/км = 300с/км, осталось 1.1 км
-    assert _forecast_finish_seconds(4200.0, 300.0, 1.1) == 4530.0
-
-
-def test_forecast_finish_seconds_none_pace_returns_none():
-    """Темп неизвестен — прогноз невозможен, не 0 (явно отличимо от
-    "прогноз совпадает с текущим временем")."""
-    assert _forecast_finish_seconds(4200.0, None, 1.1) is None
-
-
-def test_forecast_finish_seconds_zero_remaining_returns_elapsed():
-    assert _forecast_finish_seconds(4200.0, 300.0, 0.0) == 4200.0
-
-
-def test_forecast_finish_seconds_negative_remaining_does_not_raise():
-    """checkpoint_distances может содержать небольшую неточность —
-    формула не должна падать, просто даёт прогноз чуть меньше текущего
-    времени на КТ (не вводит в заблуждение при таких малых величинах)."""
-    assert _forecast_finish_seconds(4200.0, 300.0, -0.5) == 4050.0
-
-
-from src.krasmarafon.services.live_top10_export import _build_checkpoint
-
-
-def _row(start_number, surname, sex, city, rank_abs, rank_sex, time_str, pace_str):
+def _row(surname, time_str):
     h, m, s = map(int, time_str.split(':'))
-    ph, pm = map(int, pace_str.split(':'))
-    return {
-        "start_number": start_number, "surname": surname, "name": "Тест", "sex": sex,
-        "city": city, "rank_absolute": rank_abs, "rank_sex": rank_sex,
-        "time_clear": timedelta(hours=h, minutes=m, seconds=s),
-        "pace_avg": timedelta(minutes=ph, seconds=pm),
+    return {"surname": surname, "name": "Тест", "time_clear": timedelta(hours=h, minutes=m, seconds=s)}
+
+
+def test_build_checkpoint_returns_only_full_name_and_time():
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value = cur
+    male_rows = [_row("Иванов", "00:14:14")]
+    female_rows = [_row("Петрова", "00:14:32")]
+    # Порядок вызовов внутри _build_checkpoint: мужчины, женщины
+    cur.fetchall.side_effect = [male_rows, female_rows]
+
+    checkpoint = _build_checkpoint(
+        conn, event_id=116, code="kt1", label="КТ1 (6.0 км)", time_col="time_clear_kt1",
+    )
+
+    assert checkpoint == {
+        "code": "kt1",
+        "label": "КТ1 (6.0 км)",
+        "top3_male": [{"full_name": "Иванов Тест", "time": "14:14"}],
+        "top3_female": [{"full_name": "Петрова Тест", "time": "14:32"}],
     }
 
 
-def test_build_checkpoint_splits_absolute_and_sex_with_shared_row_shape():
+def test_build_checkpoint_passes_correct_sex_filter_to_each_query():
+    """Проверка не только результата, но и того, что _build_checkpoint
+    реально передал правильный sex-фильтр в SQL — без этого перепутанные
+    местами мужской/женский запросы остались бы незамеченными (порядок
+    вызовов сохранился бы, а данные внутри были бы неверными)."""
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
+    cur.fetchall.side_effect = [[], []]
 
-    abs_rows = [
-        _row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "00:14:14", "5:41"),
-        _row(20, "Петрова", "Женщина", "Москва", 2, 1, "00:14:32", "5:49"),
-    ]
-    male_rows = [abs_rows[0]]
-    female_rows = [abs_rows[1]]
-    # Порядок вызовов внутри _build_checkpoint: абсолют, мужчины, женщины
-    cur.fetchall.side_effect = [abs_rows, male_rows, female_rows]
+    _build_checkpoint(conn, event_id=116, code="finish", label="Финиш", time_col="time_clear_finish")
 
-    photo_map = {10: "https://example.com/ivanov.jpg"}
-
-    checkpoint = _build_checkpoint(
-        conn, event_id=116, code="kt1", label="КТ1 (6.0 км)",
-        time_col="time_clear_kt1", rank_abs_col="rank_absolute_kt1",
-        rank_sex_col="rank_sex_kt1", pace_col="pace_avg_kt1",
-        photo_map=photo_map,
-    )
-
-    assert checkpoint["code"] == "kt1"
-    assert len(checkpoint["top10_absolute"]) == 2
-    assert checkpoint["top10_absolute"][0]["gap_absolute"] == "Лидер"
-    assert checkpoint["top10_absolute"][1]["gap_absolute"] == "+00:18"
-    # Петрова — лидер СВОЕГО пола (единственная женщина в списке), хотя
-    # вторая по абсолюту
-    assert checkpoint["top10_absolute"][1]["gap_sex"] == "Лидер"
-    assert checkpoint["top10_absolute"][0]["photo_url"] == "https://example.com/ivanov.jpg"
-    assert checkpoint["top10_absolute"][1]["photo_url"] == (
-        "https://results.krasmarafon.ru/static/images/krasmarafon/participant-placeholder.png"
-    )
-    assert checkpoint["top10_absolute"][0]["sex"] == "M"
-    assert checkpoint["top10_absolute"][1]["sex"] == "F"
-
-    # Проверка не только результата, но и того, что _build_checkpoint
-    # реально передал правильные sex_filter в запросы к _query_checkpoint_rows
-    # (без этого перепутанные местами фильтры остались бы незамеченными —
-    # порядок вызовов сохранился бы, а данные внутри были бы неверными).
     execute_calls = cur.execute.call_args_list
-    assert len(execute_calls) == 3
-    abs_params = execute_calls[0].args[1]
-    male_params = execute_calls[1].args[1]
-    female_params = execute_calls[2].args[1]
-    assert list(abs_params) == [116]
-    assert list(male_params) == [116, "Мужчина"]
-    assert list(female_params) == [116, "Женщина"]
+    assert len(execute_calls) == 2
+    assert tuple(execute_calls[0].args[1]) == (116, "Мужчина")
+    assert tuple(execute_calls[1].args[1]) == (116, "Женщина")
 
 
-def test_build_checkpoint_truncates_below_ten_without_padding():
+def test_build_checkpoint_empty_when_no_finishers_of_that_sex():
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
-    three_rows = [_row(i, f"Участник{i}", "Мужчина", "Красноярск", i, i, "00:10:0" + str(i), "4:0" + str(i)) for i in range(1, 4)]
-    cur.fetchall.side_effect = [three_rows, three_rows, []]
+    cur.fetchall.side_effect = [[_row("Иванов", "00:10:01")], []]
 
     checkpoint = _build_checkpoint(
-        conn, event_id=116, code="finish", label="Финиш",
-        time_col="time_clear_finish", rank_abs_col="rank_absolute_clean",
-        rank_sex_col="rank_sex_clean", pace_col="finish_pace_avg_clean",
-        photo_map={},
+        conn, event_id=116, code="finish", label="Финиш", time_col="time_clear_finish",
     )
 
-    assert len(checkpoint["top10_absolute"]) == 3
-    assert checkpoint["top10_female"] == []
-
-
-def test_build_checkpoint_adds_forecast_finish_time_when_remaining_km_given():
-    conn = MagicMock()
-    cur = MagicMock()
-    conn.cursor.return_value = cur
-
-    abs_rows = [_row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:10:00", "5:00")]
-    cur.fetchall.side_effect = [abs_rows, abs_rows, []]
-
-    checkpoint = _build_checkpoint(
-        conn, event_id=116, code="kt6", label="КТ6 (20.2 км)",
-        time_col="time_clear_kt6", rank_abs_col="rank_absolute_kt6",
-        rank_sex_col="rank_sex_kt6", pace_col="pace_avg_kt6",
-        photo_map={}, remaining_km=0.9,
-    )
-
-    # elapsed 4200с + 0.9км × 300с/км = 4470с = 1:14:30
-    assert checkpoint["top10_absolute"][0]["forecast_finish_time"] == "1:14:30"
-
-
-def test_build_checkpoint_omits_forecast_finish_time_without_remaining_km():
-    """Блок "finish" не передаёт remaining_km (используется дефолт None) —
-    поле должно ПОЛНОСТЬЮ ОТСУТСТВОВАТЬ в записи, не быть null."""
-    conn = MagicMock()
-    cur = MagicMock()
-    conn.cursor.return_value = cur
-    rows = [_row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:40:00", "4:44")]
-    cur.fetchall.side_effect = [rows, rows, []]
-
-    checkpoint = _build_checkpoint(
-        conn, event_id=116, code="finish", label="Финиш",
-        time_col="time_clear_finish", rank_abs_col="rank_absolute_clean",
-        rank_sex_col="rank_sex_clean", pace_col="finish_pace_avg_clean",
-        photo_map={},
-    )
-
-    assert "forecast_finish_time" not in checkpoint["top10_absolute"][0]
-
-
-def test_build_checkpoint_omits_forecast_finish_time_when_pace_missing():
-    """remaining_km задан, но у конкретной записи нет pace_avg (например,
-    сбойный сплит) — _forecast_finish_seconds() вернёт None, поле должно
-    отсутствовать в этой записи, не падать с TypeError на None."""
-    conn = MagicMock()
-    cur = MagicMock()
-    conn.cursor.return_value = cur
-    row = _row(10, "Иванов", "Мужчина", "Красноярск", 1, 1, "01:10:00", "5:00")
-    row["pace_avg"] = None
-    cur.fetchall.side_effect = [[row], [row], []]
-
-    checkpoint = _build_checkpoint(
-        conn, event_id=116, code="kt6", label="КТ6 (20.2 км)",
-        time_col="time_clear_kt6", rank_abs_col="rank_absolute_kt6",
-        rank_sex_col="rank_sex_kt6", pace_col="pace_avg_kt6",
-        photo_map={}, remaining_km=0.9,
-    )
-
-    assert "forecast_finish_time" not in checkpoint["top10_absolute"][0]
+    assert len(checkpoint["top3_male"]) == 1
+    assert checkpoint["top3_female"] == []
 
 
 from src.krasmarafon.services import live_top10_export
 from src.krasmarafon.services.live_top10_export import generate_top10_json
 
 
+def _fake_checkpoint(code, label):
+    return {"code": code, "label": label, "top3_male": [], "top3_female": []}
+
+
 def test_generate_top10_json_writes_atomic_file_with_all_checkpoints(tmp_path, monkeypatch):
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
-    # 1-й fetchone — событие; 1-й fetchall — фото (пусто)
     cur.fetchone.return_value = {
         "event_name": "Жара", "event_distance": 5.0, "event_year": 2026,
         "checkpoint_distances": "[0, 2.5, 5.0]",
     }
-    cur.fetchall.return_value = []
 
     calls = []
 
     def fake_build_checkpoint(connection, event_id, code, label, **kwargs):
         calls.append(code)
-        return {"code": code, "label": label, "top10_absolute": [], "top10_male": [], "top10_female": []}
+        return _fake_checkpoint(code, label)
 
     monkeypatch.setattr(live_top10_export, "_build_checkpoint", fake_build_checkpoint)
 
@@ -275,12 +140,11 @@ def test_generate_top10_json_creates_parent_directory(tmp_path, monkeypatch):
         "event_name": "Жара", "event_distance": 2.0, "event_year": 2026,
         "checkpoint_distances": None,
     }
-    cur.fetchall.return_value = []
 
-    def fake_build_checkpoint(connection, event_id, code, label, **kwargs):
-        return {"code": code, "label": label, "top10_absolute": [], "top10_male": [], "top10_female": []}
-
-    monkeypatch.setattr(live_top10_export, "_build_checkpoint", fake_build_checkpoint)
+    monkeypatch.setattr(
+        live_top10_export, "_build_checkpoint",
+        lambda connection, event_id, code, label, **kwargs: _fake_checkpoint(code, label),
+    )
 
     nested_path = str(tmp_path / "nested" / "dir" / "zhara_top10.json")
     generate_top10_json(conn, event_id=135, output_path=nested_path)
@@ -288,10 +152,7 @@ def test_generate_top10_json_creates_parent_directory(tmp_path, monkeypatch):
     assert (tmp_path / "nested" / "dir" / "zhara_top10.json").exists()
 
 
-def test_generate_top10_json_passes_remaining_km_to_intermediate_checkpoints_only(tmp_path, monkeypatch):
-    """Проверяет саму связку generate_top10_json → _build_checkpoint:
-    промежуточные КТ получают remaining_km = event_distance - checkpoint_distances[i],
-    финиш — не получает remaining_km вовсе (дефолт None)."""
+def test_generate_top10_json_builds_checkpoint_for_every_intermediate_kt(tmp_path, monkeypatch):
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
@@ -299,19 +160,18 @@ def test_generate_top10_json_passes_remaining_km_to_intermediate_checkpoints_onl
         "event_name": "Жара", "event_distance": 21.1, "event_year": 2026,
         "checkpoint_distances": "[0, 5.0, 6.0, 10.55, 14.65, 15.65, 20.2, 21.1]",
     }
-    cur.fetchall.return_value = []
 
-    captured = {}
+    captured_time_cols = {}
 
-    def fake_build_checkpoint(connection, event_id, code, label, remaining_km=None, **kwargs):
-        captured[code] = remaining_km
-        return {"code": code, "label": label, "top10_absolute": [], "top10_male": [], "top10_female": []}
+    def fake_build_checkpoint(connection, event_id, code, label, time_col, **kwargs):
+        captured_time_cols[code] = time_col
+        return _fake_checkpoint(code, label)
 
     monkeypatch.setattr(live_top10_export, "_build_checkpoint", fake_build_checkpoint)
 
     output_path = str(tmp_path / "zhara_21km_top10.json")
     generate_top10_json(conn, event_id=116, output_path=output_path)
 
-    assert captured["kt1"] == 21.1 - 5.0
-    assert captured["kt6"] == 21.1 - 20.2
-    assert captured["finish"] is None
+    assert list(captured_time_cols.keys()) == ["kt1", "kt2", "kt3", "kt4", "kt5", "kt6", "finish"]
+    assert captured_time_cols["kt1"] == "time_clear_kt1"
+    assert captured_time_cols["finish"] == "time_clear_finish"
