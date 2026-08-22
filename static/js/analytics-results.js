@@ -449,13 +449,19 @@ function convertSexToGender(sex) {
 function convertRaceStatus(raceStatus) {
     if (!raceStatus) return 'notstarted';
     const lowerStatus = raceStatus.toLowerCase();
-    
+
+    // DNF/DSQ (значения из convert_status() в load_race_results.py — ровно
+    // "DNF"/"DSQ") раньше не матчились НИ ОДНИМ правилом ниже и молча
+    // попадали в дефолт 'notstarted' — участник, сошедший с дистанции,
+    // выглядел как не стартовавший вовсе.
+    if (lowerStatus.includes('dnf')) return 'dnf';
+    if (lowerStatus.includes('dsq')) return 'dsq';
     if (lowerStatus.includes('finish')) return 'finished';
     if (lowerStatus.includes('notstarted') || lowerStatus.includes('not start')) return 'notstarted';
     if (lowerStatus.includes('running') || lowerStatus.includes('started')) return 'running';
     if (lowerStatus.includes('withdraw')) return 'disqualified';
     if (lowerStatus.includes('disqualif')) return 'disqualified';
-    
+
     return 'notstarted';
 }
 
@@ -843,8 +849,17 @@ function renderResultsTable(runners) {
         else rankDisplay = rankAbs ? `<span class="km-rank-num">${rankAbs}</span>` : '—';
 
         const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim() || 'N/A';
-        const timeGunCell = `<span class="km-time-gun">${formatTime(runner.time_gun_finish) || '—'}</span>`;
-        const timeNetCell = `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
+        // Вместо времени — статус, если участник не финишировал (запрос
+        // пользователя 2026-08-22): "Не стартовал"/DNF/DSQ вместо пустого
+        // "—". convertRaceStatus() приводит 'notstarted'/'dnf'/'dsq'.
+        const noTimeStatusLabels = { notstarted: 'Не стартовал', dnf: 'DNF', dsq: 'DSQ' };
+        const statusLabel = noTimeStatusLabels[runner.status];
+        const timeGunCell = statusLabel
+            ? `<span class="km-time-status">${statusLabel}</span>`
+            : `<span class="km-time-gun">${formatTime(runner.time_gun_finish) || '—'}</span>`;
+        const timeNetCell = statusLabel
+            ? `<span class="km-time-status">${statusLabel}</span>`
+            : `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
         const [timeCol1, timeCol2] = isZharaEvent() ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
         const categoryCell = showCategory

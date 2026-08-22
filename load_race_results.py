@@ -1265,6 +1265,24 @@ class RaceLoader:
                  'rank_absolute_clean', 'rank_sex_clean', 'rank_category_clean'],
                 rank_batch,
             )
+
+            # Затираем "призрачные" места у тех, кто больше НЕ в числе
+            # финишировавших (напр. организатор в Copernico откатил
+            # ошибочный финиш обратно на "не стартовал") — сами места
+            # выставляются только для finished выше, но никогда явно не
+            # сбрасываются при обратном переходе, из-за чего они оставались
+            # в БД навсегда (найдено 2026-08-22, Жара 5км, id=109329:
+            # race_status='Not started' + все времена NULL, но
+            # rank_absolute=1394 сохранялся с более раннего цикла).
+            self.cursor.execute(
+                """UPDATE results
+                   SET rank_absolute = NULL, rank_sex = NULL, rank_category = NULL,
+                       rank_absolute_clean = NULL, rank_sex_clean = NULL, rank_category_clean = NULL
+                   WHERE event_id = %s
+                     AND rank_absolute IS NOT NULL
+                     AND (race_status != 'Finished' OR time_gun_finish IS NULL)""",
+                (self.event_id,)
+            )
             self.connection.commit()
             self.logger.debug(f"🏆 Места пересчитаны: {len(rank_batch)} финишировавших")
 
