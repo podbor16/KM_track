@@ -148,6 +148,36 @@ window.KMUtils = {
         return this._formatSecondsAdaptive(totalSeconds);
     },
 
+    // Календарная дата "сегодня" по красноярскому времени (UTC+7, без
+    // перехода на летнее время) — гонки идут по местному времени
+    // организатора, а не по таймзоне устройства зрителя или сервера.
+    // .toISOString() всегда возвращает UTC: без сдвига календарная дата
+    // ошибочно "отстаёт" на 7 часов каждую ночь (00:00-07:00 в Красноярске
+    // — ещё вчера по UTC), из-за чего дефолтная дистанция могла не
+    // переключаться на следующий день гонки вовремя (найдено на Жаре
+    // 22→23.08.2026 5км→21.1км, см. sessions/2026-08-23-krasmarafon-...).
+    krasnoyarskTodayISO() {
+        return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+    },
+
+    // Выбор дистанции по умолчанию среди уже отслеживаемых (объекты с
+    // полем event_date, "YYYY-MM-DD") — ближайшая к сегодняшнему дню по
+    // красноярскому времени: предпочитаем ближайшую будущую/сегодняшнюю
+    // дату, если таких нет — самую последнюю прошедшую. Общая логика для
+    // tracker (переключатель дистанций) и results (фильтр "Дистанция") —
+    // раньше была продублирована и по-разному чинилась в двух местах.
+    pickDefaultDistance(distances) {
+        if (!distances || distances.length === 0) return null;
+        const withDates = distances.filter(d => d.event_date);
+        if (withDates.length === 0) return distances[0];
+        const today = this.krasnoyarskTodayISO();
+        const future = withDates.filter(d => d.event_date >= today);
+        if (future.length > 0) {
+            return future.sort((a, b) => a.event_date.localeCompare(b.event_date))[0];
+        }
+        return withDates.sort((a, b) => b.event_date.localeCompare(a.event_date))[0];
+    },
+
     // fetch() с явным cache:'no-store' — сервер уже шлёт Cache-Control:
     // no-store на все /api/* и HTML (nginx location /), но некоторые
     // WebView (замечено в браузере Telegram — Android System WebView под

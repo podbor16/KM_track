@@ -5,6 +5,12 @@ let filteredRunners = [];
 let sortState = { column: 'time_gun', direction: 'asc' }; // Дефолт: по официальному времени
 let currentEvent = 'night_run';
 let currentYear = new Date().getFullYear();
+// Предпочтительная дистанция для дефолтного выбора на /results — ближайшая
+// по event_date к сегодня (красноярское время), как на трекере. Известна
+// только для АКТИВНОГО события (только для него приходит cfg.distances с
+// датами из /api/current-event) — используется в populateDistances()
+// только пока currentEvent совпадает с событием, для которого посчитана.
+let _preferredDefaultDistance = null; // { event, distance } | null
 const timeMode = 'gun'; // фиксировано для сегментных функций
 const runnerDataMap = new Map(); // resultId → runner object
 
@@ -145,6 +151,14 @@ async function initResultsPage() {
         currentEvent = _urlEvent || cfg.event || 'night_run';
         const cfgYear = cfg.year || new Date().getFullYear();
         currentYear = _urlYear || latestConfiguredYearForEvent(currentEvent) || cfgYear;
+
+        // Дефолтная дистанция по дате — только для события, которое сейчас
+        // реально активно (cfg.distances — данные именно про cfg.event, не
+        // про currentEvent, если он подставлен из URL и отличается).
+        const preferred = cfg.event && cfg.distances
+            ? KMUtils.pickDefaultDistance(cfg.distances)
+            : null;
+        _preferredDefaultDistance = preferred ? { event: cfg.event, distance: preferred.distance } : null;
     } catch {
         currentEvent = _urlEvent || 'night_run';
         currentYear  = _urlYear || (new Date().getFullYear() - 1);
@@ -644,12 +658,18 @@ function populateDistances(runners) {
 
     // Восстанавливаем значение: приоритет — значение из URL при первой
     // загрузке (once, см. readStateFromUrl), иначе текущее выбранное,
-    // иначе первая дистанция по умолчанию
+    // иначе дистанция ближайшая по дате к сегодня (только для активного
+    // события — см. _preferredDefaultDistance), иначе первая по умолчанию
+    const preferredDistance = _preferredDefaultDistance && _preferredDefaultDistance.event === currentEvent
+        ? _preferredDefaultDistance.distance
+        : null;
     if (_urlDistance && sortedDistances.includes(_urlDistance)) {
         distanceSelect.value = _urlDistance;
         _urlDistance = null;
     } else if (savedValue && sortedDistances.includes(savedValue)) {
         distanceSelect.value = savedValue;
+    } else if (preferredDistance && sortedDistances.includes(preferredDistance)) {
+        distanceSelect.value = preferredDistance;
     } else if (sortedDistances.length > 0) {
         distanceSelect.value = sortedDistances[0];
     }

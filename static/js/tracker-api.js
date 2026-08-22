@@ -295,22 +295,9 @@ async function init() {
         if (cfg.storage_key)  CONFIG.STORAGE_KEY   = cfg.storage_key;
 
         // Выбрать дистанцию по умолчанию: ближайшую по дате к сегодня
+        // (красноярское время — см. KMUtils.pickDefaultDistance)
         const trackedDistances = cfg.distances || [];
-        let defaultDist = trackedDistances[0] || null;
-
-        if (trackedDistances.length > 1) {
-            const today = new Date().toISOString().slice(0, 10);
-            const withDates = trackedDistances.filter(d => d.event_date);
-            if (withDates.length > 0) {
-                // Предпочитаем ближайшую будущую дату; если все прошли — берём самую последнюю
-                const future = withDates.filter(d => d.event_date >= today);
-                if (future.length > 0) {
-                    defaultDist = future.sort((a, b) => a.event_date.localeCompare(b.event_date))[0];
-                } else {
-                    defaultDist = withDates.sort((a, b) => b.event_date.localeCompare(a.event_date))[0];
-                }
-            }
-        }
+        const defaultDist = KMUtils.pickDefaultDistance(trackedDistances);
 
         if (defaultDist) {
             if (defaultDist.gpx_file) CONFIG.GPX_FILE = '/' + defaultDist.gpx_file;
