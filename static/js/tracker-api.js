@@ -210,7 +210,7 @@ function calculatePaceFromTime(isoTime, distanceKm) {
     const minutes = Math.floor(secondsPerKm / 60);
     const seconds = Math.round(secondsPerKm % 60);
 
-    return `${minutes}:${String(seconds).padStart(2, '0')} мин/км`;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function findNearestPointOnRoute(targetLat, targetLon) {
