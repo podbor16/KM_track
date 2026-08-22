@@ -178,9 +178,10 @@ def test_generate_top10_json_builds_checkpoint_for_every_intermediate_kt(tmp_pat
 
 
 def test_generate_top10_json_label_format_matches_broadcast_director_request(tmp_path, monkeypatch):
-    """Готовое к показу имя отметки: "{дистанция}. {N} км" / "{дистанция}.
-    Финиш" — запрос режиссёра трансляции 2026-08-22, с уточнением, что для
-    21.1 км префикс — сама дистанция ("21.1 км"), без спецназвания."""
+    """Готовое к показу имя отметки: "Отметка {N} км" / "Финиш" — запрос
+    режиссёра трансляции 2026-08-22, уточнён 2026-08-22: полная дистанция
+    события в label не нужна (она уже в верхней плашке трансляции
+    отдельно, см. data["distance"])."""
     conn = MagicMock()
     cur = MagicMock()
     conn.cursor.return_value = cur
@@ -198,8 +199,8 @@ def test_generate_top10_json_label_format_matches_broadcast_director_request(tmp
         "checkpoint_distances": "[0, 2.5, 5.0]",
     }
     generate_top10_json(conn, event_id=115, output_path=str(tmp_path / "zhara_5km_top10.json"))
-    assert captured_labels["kt1"] == "5 км. 2.5 км"
-    assert captured_labels["finish"] == "5 км. Финиш"
+    assert captured_labels["kt1"] == "Отметка 2.5 км"
+    assert captured_labels["finish"] == "Финиш"
 
     captured_labels.clear()
     cur.fetchone.return_value = {
@@ -207,6 +208,6 @@ def test_generate_top10_json_label_format_matches_broadcast_director_request(tmp
         "checkpoint_distances": "[0, 5.0, 6.0, 10.55, 14.65, 15.65, 20.2, 21.1]",
     }
     generate_top10_json(conn, event_id=116, output_path=str(tmp_path / "zhara_21km_top10.json"))
-    assert captured_labels["kt1"] == "21.1 км. 5 км"
-    assert captured_labels["kt3"] == "21.1 км. 10.55 км"
-    assert captured_labels["finish"] == "21.1 км. Финиш"
+    assert captured_labels["kt1"] == "Отметка 5 км"
+    assert captured_labels["kt3"] == "Отметка 10.55 км"
+    assert captured_labels["finish"] == "Финиш"

@@ -51,11 +51,12 @@ function buildTop3Post(checkpoint, sexKey, distanceLabel) {
     if (checkpoint.code === 'finish') {
         titleSuffix = 'Финиш';
     } else {
-        // label — "{дистанция}. {N} км" (live_top10_export.py, обновлено
-        // 2026-08-22), N km извлекаем регэкспом, а не пересчитываем на
-        // клиенте заново. M — общая длина дистанции из distanceLabel
-        // ('21.1 км' → '21.1'), если он передан.
-        const m = /\.\s*([\d.]+)\s*км\s*$/.exec(checkpoint.label || '');
+        // label — "Отметка {N} км" (live_top10_export.py, обновлено
+        // 2026-08-22 — полная дистанция события в label больше не нужна,
+        // она уже в верхней плашке трансляции отдельно), N km извлекаем
+        // регэкспом, а не пересчитываем на клиенте заново. M — общая длина
+        // дистанции из distanceLabel ('21.1 км' → '21.1'), если он передан.
+        const m = /^Отметка\s+([\d.]+)\s*км/.exec(checkpoint.label || '');
         const totalKm = distanceLabel ? distanceLabel.replace(/\s*км$/, '') : null;
         const n = m ? m[1] : '?';
         titleSuffix = totalKm ? `Отметка ${n}/${totalKm} км` : `Отметка ${n} км`;

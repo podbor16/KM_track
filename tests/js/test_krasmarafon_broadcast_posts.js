@@ -38,7 +38,7 @@ function check(name, fn) {
 }
 
 const CP_KT = {
-    code: 'kt1', label: '21.1 км. 10.55 км',
+    code: 'kt1', label: 'Отметка 10.55 км',
     top3_male: [
         { full_name: 'Иванов Пётр', time: '45:00' },
         { full_name: 'Сидоров Олег', time: '50:30' },
@@ -50,7 +50,7 @@ const CP_KT = {
 };
 
 const CP_FINISH = {
-    code: 'finish', label: '21.1 км. Финиш',
+    code: 'finish', label: 'Финиш',
     top3_male: [
         { full_name: 'Иванов Пётр', time: '1:32:10' },
     ],

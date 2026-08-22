@@ -115,19 +115,21 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
     num_kt = max(0, len(checkpoint_distances) - 2)
     distance_label = _format_distance_label(float(event["event_distance"]))
 
-    # label — готовое к показу режиссёром имя отметки: "5 км. 2.5 км",
-    # "21.1 км. Финиш" и т.п. (запрос режиссёра трансляции, 2026-08-22).
+    # label — готовое к показу режиссёром имя отметки: "Отметка 2.5 км",
+    # "Финиш" (запрос режиссёра трансляции, 2026-08-22; полная дистанция
+    # события в label больше не нужна — она уже есть в верхней плашке
+    # трансляции отдельно, см. data["distance"] ниже).
     checkpoints = []
     for i in range(1, num_kt + 1):
         checkpoints.append(_build_checkpoint(
             connection, event_id,
-            code=f"kt{i}", label=f"{distance_label}. {_format_distance_label(checkpoint_distances[i])}",
+            code=f"kt{i}", label=f"Отметка {_format_distance_label(checkpoint_distances[i])}",
             time_col=f"time_clear_kt{i}",
         ))
 
     checkpoints.append(_build_checkpoint(
         connection, event_id,
-        code="finish", label=f"{distance_label}. Финиш",
+        code="finish", label="Финиш",
         time_col="time_clear_finish",
     ))
 
