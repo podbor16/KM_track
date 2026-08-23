@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import json
 import logging
 import os
@@ -407,16 +407,93 @@ _MAINTENANCE_ALLOWED_PREFIXES = (
     "/openapi.json",
     "/health",
 )
-_MAINTENANCE_MESSAGE = (
-    "В системе электронного хронометража ведутся технические работы. "
-    "Данные временно не доступны, следите за обновлением"
+_MAINTENANCE_ICON_SVG = (
+    '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">'
+    '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 '
+    '7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
 )
+_MAINTENANCE_TITLE = "Ведутся технические работы"
+_MAINTENANCE_TEXT = (
+    "В системе электронного хронометража ведутся технические работы.<br>"
+    "Данные временно не доступны, следите за обновлением."
+)
+
+_MAINTENANCE_PAGES = {
+    "krasmarafon": f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Технические работы — Красмарафон</title>
+<link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: Arial, sans-serif; background: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }}
+.topbar {{ background: #222; border-bottom: 3px solid #e84c8c; padding: 12px 24px; display: flex; align-items: center; }}
+.topbar img {{ height: 26px; width: auto; display: block; }}
+.wrap {{ flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 16px; }}
+.card {{ background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px; padding: 44px 36px; max-width: 440px; width: 100%; text-align: center; }}
+.icon {{ width: 46px; height: 46px; margin: 0 auto 20px; color: #e84c8c; }}
+h1 {{ color: #fff; font-size: 20px; font-weight: 700; margin-bottom: 12px; letter-spacing: .3px; }}
+p {{ color: #ccc; font-size: 15px; line-height: 1.55; }}
+</style></head><body>
+<div class="topbar"><img src="/static/images/krasmarafon/logo-mark.png" alt="Красмарафон"></div>
+<div class="wrap"><div class="card">{_MAINTENANCE_ICON_SVG}<h1>{_MAINTENANCE_TITLE}</h1><p>{_MAINTENANCE_TEXT}</p></div></div>
+</body></html>""",
+    "siberman": f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Технические работы — Siberman</title>
+<link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
+<style>
+:root {{ --red: #BE0A21; --blue: #6AABD7; --bg: #071622; --bg2: #0c2035; --border: rgba(106,171,215,.18); --text: #e4eef6; --muted: #7aaabf; }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }}
+.logo-name {{ font-size: 26px; font-weight: 800; letter-spacing: 1px; text-align: center; margin-bottom: 28px; }}
+.logo-name .m {{ color: var(--red); }}
+.card {{ background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 40px 32px; max-width: 400px; width: 100%; text-align: center; }}
+.icon {{ width: 44px; height: 44px; margin: 0 auto 18px; color: var(--blue); }}
+h1 {{ font-size: 18px; font-weight: 700; margin-bottom: 10px; }}
+p {{ color: var(--muted); font-size: 14px; line-height: 1.55; }}
+</style></head><body>
+<div><div class="logo-name">SIBER<span class="m">M</span>AN</div>
+<div class="card">{_MAINTENANCE_ICON_SVG}<h1>{_MAINTENANCE_TITLE}</h1><p>{_MAINTENANCE_TEXT}</p></div></div>
+</body></html>""",
+    "triatleta": f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Технические работы — Triatleta 24h</title>
+<style>
+:root {{ --bg: #f5f5f5; --surface: #fff; --border: #e8e8e8; --accent: #FF8562; --text: #050505; --muted: #888; --header-bg: linear-gradient(135deg, #050505 0%, #263146 100%); }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }}
+.topbar {{ background: var(--header-bg); border-bottom: 3px solid var(--accent); padding: 16px 24px; color: #fff; font-weight: 800; letter-spacing: 1px; }}
+.wrap {{ flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 16px; }}
+.card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 40px 32px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.06); }}
+.icon {{ width: 44px; height: 44px; margin: 0 auto 18px; color: var(--accent); }}
+h1 {{ color: var(--text); font-size: 18px; font-weight: 700; margin-bottom: 10px; }}
+p {{ color: var(--muted); font-size: 14px; line-height: 1.55; }}
+</style></head><body>
+<div class="topbar">TRIATLETA 24H</div>
+<div class="wrap"><div class="card">{_MAINTENANCE_ICON_SVG}<h1>{_MAINTENANCE_TITLE}</h1><p>{_MAINTENANCE_TEXT}</p></div></div>
+</body></html>""",
+}
+
+
+def _maintenance_domain(request: Request) -> str:
+    host = request.headers.get("host", "").lower().split(":")[0]
+    if "triatleta" in host:
+        return "triatleta"
+    if "siberman" in host:
+        return "siberman"
+    return "krasmarafon"
+
 
 @app.middleware("http")
 async def maintenance_mode_middleware(request: Request, call_next):
     if MAINTENANCE_MODE and not request.url.path.startswith(_MAINTENANCE_ALLOWED_PREFIXES):
-        return PlainTextResponse(
-            _MAINTENANCE_MESSAGE,
+        domain = _maintenance_domain(request)
+        return HTMLResponse(
+            _MAINTENANCE_PAGES[domain],
             status_code=503,
             headers={"Retry-After": "3600"},
         )
