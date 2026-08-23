@@ -1216,7 +1216,7 @@ async function openDetailPanel(runnerRow, resultId) {
         runnerRow.classList.remove('row-active');
     });
 
-    loadSegmentsIntoPanel(cell, resultId, runner && (runner.distance || runner.event));
+    loadSegmentsIntoPanel(cell, resultId, runner && _distanceLabelForConfigLookup(runner));
 }
 
 /**
@@ -1467,6 +1467,16 @@ function toTotalSec(val) {
 // индекс 0=Старт..N=Финиш). Возвращает null, если событие сейчас не
 // активное (просмотр старых результатов) — тогда buildKmMap() падает на
 // прежнюю производную оценку по time/pace.
+// runner.event ("21.1 км") — тот же формат, что и cfg.distances[].distance
+// из /api/current-event; runner.distance ("21.1", без "км") — сырое число
+// из БД (event_distance), в конфиге такого значения нет. Реальный баг
+// (2026-08-23): приоритет был перепутан (distance первым) — точные
+// дистанции КТ из конфига не подхватывались, тихо падало на старую
+// производную оценку по time/pace (5.0 км показывалось как 5.02 км).
+function _distanceLabelForConfigLookup(runner) {
+    return runner.event || runner.distance;
+}
+
 function _configCheckpointsForDistance(distanceLabel) {
     if (!_liveEventDistances || !distanceLabel) return null;
     const dist = _liveEventDistances.find(d => d.distance === distanceLabel);

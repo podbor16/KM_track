@@ -76,6 +76,19 @@ check('_configCheckpointsForDistance() — null для неизвестной/н
     assert.strictEqual(sandbox._configCheckpointsForDistance(null), null);
 });
 
+// Реальный баг на живых данных 2026-08-23: runner.distance приходит как "21.1"
+// (сырое число из БД, без "км"), runner.event — "21.1 км" (совпадает с
+// конфигом). Приоритет был перепутан (distance первым) — конфиг тихо не
+// находился, всё падало на старую производную оценку.
+check('_distanceLabelForConfigLookup() — предпочитает runner.event, а не сырое runner.distance', () => {
+    const runner = { distance: '21.1', event: '21.1 км' };
+    assert.strictEqual(sandbox._distanceLabelForConfigLookup(runner), '21.1 км');
+});
+check('_distanceLabelForConfigLookup() — падает на runner.distance, если event не задан', () => {
+    const runner = { distance: '21.1 км' };
+    assert.strictEqual(sandbox._distanceLabelForConfigLookup(runner), '21.1 км');
+});
+
 check('buildKmMap() с конфигом — точное значение 5 (не 5.02) для KT1', () => {
     const configCps = sandbox._configCheckpointsForDistance('21.1 км');
     // Сегменты с сырыми временем/темпом, которые раньше давали НЕТОЧНОЕ 5.02
