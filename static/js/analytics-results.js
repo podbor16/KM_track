@@ -480,33 +480,59 @@ function _liveRankTier(runner) {
 // от того, что сейчас выбрано в UI, только отображение выбирает нужное поле
 // (см. getActiveLiveRankField()). current_distance приходит с сервера уже
 // готовый (та же calculate_live_position, что двигает маркеры на трекере).
+//
+// Нумерация ПРОДОЛЖАЕТ официальный счёт финишировавших, а не начинается
+// заново с 1 — иначе на экране одновременно два разных "1-х места" (баг,
+// найденный пользователем на живых данных 2026-08-23: бегущие лидеры с
+// медалями 1/2/3 показывались сразу под официальным 19-м местом). Та же
+// модель непрерывной живой позиции, что уже работает на Siberman
+// (racePos/raceSortKey) — там место тоже не начинается заново для тех,
+// кто ещё не закончил гонку.
 function _computeLiveRanks(runners) {
-    const eligible = runners.filter(r => _liveRankTier(r) === 1);
+    // Официальные места Жары — по _clean-полям (награждение по чистому
+    // времени), у остальных событий — обычные. Тот же суффикс, что и в
+    // getActiveRankField(), но вычислен один раз здесь (isZharaEvent() не
+    // зависит от текущего UI-фильтра, в отличие от выбора поля по scope).
+    const officialSuffix = isZharaEvent() ? '_clean' : '';
+    const finished = runners.filter(r => _liveRankTier(r) === 0);
+    const running = runners.filter(r => _liveRankTier(r) === 1);
+
     const byProgressDesc = (a, b) => {
         const d = (b.current_distance || 0) - (a.current_distance || 0);
         if (d !== 0) return d;
         return (a.surname || '').localeCompare(b.surname || '', 'ru');
     };
-    const assignRanks = (group, field) => {
-        [...group].sort(byProgressDesc).forEach((r, i) => { r[field] = i + 1; });
+    // Плотная последовательная нумерация без пропусков гарантируется
+    // _assign_ranks() на сервере — максимум официального места в группе
+    // равен числу финишировавших в этой же группе.
+    const maxField = (group, field) => group.reduce((m, r) => Math.max(m, r[field] || 0), 0);
+    const assignContinuing = (group, offset, field) => {
+        [...group].sort(byProgressDesc).forEach((r, i) => { r[field] = offset + i + 1; });
     };
 
-    assignRanks(eligible, 'live_rank_absolute');
+    assignContinuing(running, maxField(finished, 'rank_absolute' + officialSuffix), 'live_rank_absolute');
 
-    const bySex = new Map();
-    const byCategory = new Map();
-    eligible.forEach(r => {
-        if (r.gender) {
-            if (!bySex.has(r.gender)) bySex.set(r.gender, []);
-            bySex.get(r.gender).push(r);
-        }
-        if (r.category) {
-            if (!byCategory.has(r.category)) byCategory.set(r.category, []);
-            byCategory.get(r.category).push(r);
-        }
+    const groupBy = (list, keyField) => {
+        const map = new Map();
+        list.forEach(r => {
+            const key = r[keyField];
+            if (!key) return;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(r);
+        });
+        return map;
+    };
+    const runningBySex = groupBy(running, 'gender');
+    const finishedBySex = groupBy(finished, 'gender');
+    runningBySex.forEach((group, sex) => {
+        assignContinuing(group, maxField(finishedBySex.get(sex) || [], 'rank_sex' + officialSuffix), 'live_rank_sex');
     });
-    bySex.forEach(group => assignRanks(group, 'live_rank_sex'));
-    byCategory.forEach(group => assignRanks(group, 'live_rank_category'));
+
+    const runningByCategory = groupBy(running, 'category');
+    const finishedByCategory = groupBy(finished, 'category');
+    runningByCategory.forEach((group, cat) => {
+        assignContinuing(group, maxField(finishedByCategory.get(cat) || [], 'rank_category' + officialSuffix), 'live_rank_category');
+    });
 }
 
 // Конвертируем пол из БД в формат приложения (сохраняем на русском)

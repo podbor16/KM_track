@@ -76,12 +76,30 @@ check('первая КТ пришла — только у неё тир "жив�
     assert.strictEqual(sandbox._liveRankTier(noKt), 3);
 });
 
-check('живое место = 1 у единственного с прогрессом', () => {
+check('живое место = 1 у единственного с прогрессом (финишировавших ещё нет)', () => {
     const runners = [
         mkRunner('Абрамов', { status: 'running', current_distance: 5.1, last_kt_unix_ms: 1000 }),
     ];
     sandbox._computeLiveRanks(runners);
     assert.strictEqual(runners[0].live_rank_absolute, 1);
+});
+
+// Реальный баг с живой гонки 2026-08-23: 19 официально финишировавших +
+// бегущие с прогрессом показывались С МЕДАЛЯМИ 1/2/3 сразу под 19-м
+// местом — на экране одновременно два разных "1-х места". Живое место
+// должно ПРОДОЛЖАТЬ официальный счёт (20, 21, 22...), не начинать заново.
+check('живое место продолжает счёт финишировавших, не начинается заново с 1', () => {
+    const finished = Array.from({ length: 19 }, (_, i) => mkRunner(`Финишер${i + 1}`, {
+        status: 'finished', rank_absolute: i + 1,
+    }));
+    const running = [
+        mkRunner('Сакс',      { status: 'running', current_distance: 15, last_kt_unix_ms: 1 }),
+        mkRunner('Ткаченко',  { status: 'running', current_distance: 12, last_kt_unix_ms: 1 }),
+    ];
+    const runners = [...finished, ...running];
+    sandbox._computeLiveRanks(runners);
+    assert.strictEqual(running[0].live_rank_absolute, 20, 'первый бегущий лидер идёт следующим номером после 19 финишировавших');
+    assert.strictEqual(running[1].live_rank_absolute, 21);
 });
 
 check('двое с прогрессом — впереди тот, кто дальше по дистанции', () => {
