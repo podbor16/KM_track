@@ -1035,7 +1035,11 @@ async function openDetailPanel(runnerRow, resultId) {
     const panelRow = document.createElement('tr');
     panelRow.classList.add('detail-panel-row');
     const cell = document.createElement('td');
-    cell.colSpan = 5;
+    // Число видимых колонок меняется (напр. "Категория" скрывается/
+    // показывается — см. showCategory выше), фиксированное значение
+    // оставляло панель уже таблицы, когда видимых колонок было 6.
+    cell.colSpan = Array.from(document.querySelectorAll('#resultsTable thead th'))
+        .filter(th => th.style.display !== 'none').length;
     cell.innerHTML = buildDetailPanelHTML(runner);
     panelRow.appendChild(cell);
     runnerRow.insertAdjacentElement('afterend', panelRow);
