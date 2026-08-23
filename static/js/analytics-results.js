@@ -1216,7 +1216,7 @@ async function openDetailPanel(runnerRow, resultId) {
         runnerRow.classList.remove('row-active');
     });
 
-    loadSegmentsIntoPanel(cell, resultId);
+    loadSegmentsIntoPanel(cell, resultId, runner && (runner.distance || runner.event));
 }
 
 /**
@@ -1341,7 +1341,7 @@ function buildDetailPanelHTML(runner) {
 /**
  * Загружает сегменты и вставляет таблицу вместо заглушки
  */
-async function loadSegmentsIntoPanel(cell, resultId) {
+async function loadSegmentsIntoPanel(cell, resultId, distanceLabel) {
     const segPlaceholder = cell.querySelector('.segs-placeholder');
     try {
         const resp = await KMUtils.fetchFresh(`/api/result-segments?result_id=${resultId}`);
@@ -1358,7 +1358,7 @@ async function loadSegmentsIntoPanel(cell, resultId) {
 
         const consecutive = filterConsecutiveSegments(segments);
         const splits       = filterSplitSegments(segments);
-        const kmMap        = buildKmMap(segments);
+        const kmMap        = buildKmMap(segments, _configCheckpointsForDistance(distanceLabel));
 
         // Рендер графика темпа прямо на canvas, встроенный в HTML
         const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
@@ -1462,8 +1462,36 @@ function toTotalSec(val) {
  * Вычисляет to_km = time_sec / pace_sec_per_km.
  * Если данных нет — ключ отсутствует.
  */
-function buildKmMap(segments) {
+// Дистанции КТ конкретной дистанции события — из того же конфига, что уже
+// используется для _lastCheckpointLabel() (checkpoints[].distance_km,
+// индекс 0=Старт..N=Финиш). Возвращает null, если событие сейчас не
+// активное (просмотр старых результатов) — тогда buildKmMap() падает на
+// прежнюю производную оценку по time/pace.
+function _configCheckpointsForDistance(distanceLabel) {
+    if (!_liveEventDistances || !distanceLabel) return null;
+    const dist = _liveEventDistances.find(d => d.distance === distanceLabel);
+    return dist && dist.checkpoints ? dist.checkpoints : null;
+}
+
+function buildKmMap(segments, configCheckpoints) {
     const map = { start: 0 };
+
+    // Реальные дистанции КТ из конфига события — точные (5.0, 14.65...),
+    // в отличие от производной оценки по time/pace ниже, которая лишь
+    // АППРОКСИМИРУЕТ километраж и давала, например, "5.02 км" вместо
+    // реальных 5.0 (найдено пользователем 2026-08-23).
+    if (configCheckpoints && configCheckpoints.length > 1) {
+        const finishIdx = configCheckpoints.length - 1;
+        for (let i = 1; i <= finishIdx; i++) {
+            const cp = configCheckpoints[i];
+            if (!cp || cp.distance_km == null) continue;
+            map[i === finishIdx ? 'finish' : `kt${i}`] = cp.distance_km;
+        }
+        return map;
+    }
+
+    // Фоллбэк для событий без доступного конфига (не активное сейчас
+    // событие) — прежняя оценка по фактическому времени/темпу участка.
 
     // Pass 1: km-позиции от 'start-*' сплитов
     for (const seg of segments) {
