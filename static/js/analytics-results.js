@@ -647,12 +647,24 @@ function populateAgeGroups(runners) {
     const genderFilter = getGenderFilterValue(); // Получаем выбранный пол
     const savedValue = ageGroupSelect.value;
 
+    // Дистанция всегда выбрана (опции "Все" у distanceFilter нет — места по
+    // категории считаются отдельно на каждый event_id). Схемы категорий у
+    // разных дистанций одного события могут не совпадать (напр. "Жара":
+    // 5 км — укрупнённая "50-59", 21.1 км — сплит "50-54"/"55-59"), поэтому
+    // список категорий должен строиться только по runners текущей дистанции,
+    // иначе в выпадашке остаются категории, для которых на этой дистанции
+    // нет ни одного участника.
+    const distanceFilter = document.getElementById('distanceFilter').value;
+    const scopedRunners = distanceFilter
+        ? runners.filter(r => (r.event || '') === distanceFilter)
+        : runners;
+
     // Категория → множество полов, которым она реально встречается у участников.
     // Формат строки category не унифицирован между событиями ("Ж 49" / "женщины
     // до 49 лет" / "Мужчины 30-39"), поэтому определяем пол категории по факту
     // (runner.gender уже нормализован одинаково везде), а не парсингом строки.
     const categoryGenders = new Map();
-    runners.forEach(runner => {
+    scopedRunners.forEach(runner => {
         const cat = runner.category || runner.age_group || runner['Возрастная категория'];
         if (!cat) return;
         if (!categoryGenders.has(cat)) categoryGenders.set(cat, new Set());

@@ -114,5 +114,36 @@ check('populateAgeGroups() — 75-79 идёт перед 80+ (раньше об�
     assert.ok(idx75 < idx80, `М75-79 (${idx75}) должен идти раньше М80+ (${idx80})`);
 });
 
+// Регрессия (2026-08-23): «Жара» 5 км и 21.1 км — разные схемы категорий
+// (5 км — укрупнённая "50-59", 21.1 км — сплит "50-54"/"55-59"), но
+// populateAgeGroups() строил список из allRunners без учёта выбранной
+// дистанции — на 21.1 км в фильтре висели категории с 5 км, которым там
+// физически не соответствовал ни один участник.
+const MIXED_DISTANCE_RUNNERS = [
+    { gender: 'Женщина', category: 'Ж50-59', event: '5 км' },
+    { gender: 'Мужчина', category: 'М50-59', event: '5 км' },
+    { gender: 'Женщина', category: 'Ж50-54', event: '21.1 км' },
+    { gender: 'Женщина', category: 'Ж55-59', event: '21.1 км' },
+    { gender: 'Мужчина', category: 'М50-54', event: '21.1 км' },
+];
+
+check('populateAgeGroups() — при выбранной дистанции категории только с неё', () => {
+    resetDom();
+    domStub('distanceFilter').value = '21.1 км';
+    sandbox.populateAgeGroups(MIXED_DISTANCE_RUNNERS);
+    const values = domStub('ageGroupFilter').options.map(o => o.value).filter(v => v !== '');
+
+    assert.deepStrictEqual(values, ['Ж50-54', 'Ж55-59', 'М50-54']);
+});
+
+check('populateAgeGroups() — без выбранной дистанции категории со всех (не ломаем старое поведение)', () => {
+    resetDom();
+    domStub('distanceFilter').value = '';
+    sandbox.populateAgeGroups(MIXED_DISTANCE_RUNNERS);
+    const values = domStub('ageGroupFilter').options.map(o => o.value).filter(v => v !== '');
+
+    assert.deepStrictEqual(values, ['Ж50-59', 'Ж50-54', 'Ж55-59', 'М50-59', 'М50-54']);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
