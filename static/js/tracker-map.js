@@ -583,8 +583,13 @@ function updateRunnerMarkerPosition(runner) {
                 const ce = ct < 0.5 ? 2*ct*ct : -1+(4-2*ct)*ct;
                 currentRender = phys + (anim.renderCorrection || 0) * (1 - ce);
             }
-            const newPhysDist = (runner.current_distance || 0)
-                + newSpeed * (nowMs - runner.last_kt_unix_ms) / 3_600_000;
+            // Тот же потолок, что у phys выше — иначе после последней КТ, пока
+            // не пришло время финиша, newPhysDist уходит за eventDistance без
+            // ограничения, а phys/currentRender упираются в потолок. Разница
+            // растёт неограниченно → каждый опрос запускал коррекцию "рендер
+            // отстаёт" и откатывал маркер назад — дёрганье на подходе к финишу.
+            const newPhysDist = Math.min(eventDistance || 5, (runner.current_distance || 0)
+                + newSpeed * (nowMs - runner.last_kt_unix_ms) / 3_600_000);
             const delta = currentRender - newPhysDist;
             if (delta > 0.03) {
                 // Рендер впереди истины — мгновенный snap (не рисуем движение назад)
