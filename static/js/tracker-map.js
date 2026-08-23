@@ -348,7 +348,7 @@ function buildPopupContent(runner) {
                 const pace = kt?.pace ? parseDuration(kt.pace) : null;
                 return `
                     <div class="card-c__kt-row">
-                        <span class="card-c__kt-label">КТ${i} (${cp.distance_km} км)</span>
+                        <span class="card-c__kt-label">Время на ${cp.distance_km} км</span>
                         <span class="card-c__kt-val">${escHtml(time)}</span>
                         ${pace ? `<span class="card-c__kt-pace">${escHtml(pace)} мин/км</span>` : ''}
                     </div>`;
@@ -366,19 +366,20 @@ function buildPopupContent(runner) {
     const distTotal = eventDistance > 0 ? Number(eventDistance).toFixed(1) : '?';
     const rankAbs = runner.rank_absolute || '-';
 
-    // 4th desktop stat: KT time
+    // 4th desktop stat: время на последней отметке
+    const ktDist = lastCP ? (eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0) : 0;
     let ktTimeShort = '-';
-    let ktDesktopLbl = 'Время КТ';
+    let ktDesktopLbl = 'Время на отметке';
     if (lastCP) {
         ktTimeShort = parseDuration(lastCP.time);
-        ktDesktopLbl = `Время ${lastCP.name}`;
+        ktDesktopLbl = ktDist > 0 ? `Время на ${ktDist} км` : 'Время на отметке';
     }
 
     const statsHTML = `
         <div class="card-c__stats-grid">
             <div class="card-c__stat">
                 <div class="card-c__stat-val">${pace}</div>
-                <div class="card-c__stat-lbl">Темп</div>
+                <div class="card-c__stat-lbl">Темп на отрезке</div>
             </div>
             <div class="card-c__stat">
                 <div class="card-c__stat-val" id="panel-stat-dist">${distCurrent}<span class="unit">/${distTotal}</span></div>
@@ -394,21 +395,24 @@ function buildPopupContent(runner) {
             </div>
         </div>`;
 
-    // KT block
+    // Блок последней отметки: "Темп на отрезке" выше — темп ТОЛЬКО последнего
+    // завершённого участка (между двумя последними отметками); здесь —
+    // средний темп от старта ДО этой отметки, поэтому подписан отдельно
+    // ("Ср. темп"), иначе два похожих, но разных числа выглядят как ошибка
+    // (запрос пользователя 2026-08-23 — не хватало текстового пояснения).
     let ktBlockHTML = '';
     if (lastCP) {
-        const ktDist = eventCheckpoints[lastCP.cpIdx]?.distance_km ?? 0;
         const ktSecs = durationToSeconds(lastCP.time);
         let ktPaceStr = '';
         if (ktSecs > 0 && ktDist > 0) {
             const spk = ktSecs / ktDist;
-            ktPaceStr = `${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')} мин/км`;
+            ktPaceStr = `Ср. темп: ${Math.floor(spk / 60)}:${String(Math.round(spk % 60)).padStart(2, '0')} мин/км`;
         }
         ktBlockHTML = `
             <div class="card-c__kt-block">
                 <div class="card-c__kt-left">
-                    <div class="card-c__kt-label">Последняя КТ</div>
-                    <div class="card-c__kt-name">${escHtml(lastCP.name)}${ktDist > 0 ? ` · ${ktDist} км` : ''}</div>
+                    <div class="card-c__kt-label">Последняя отметка</div>
+                    <div class="card-c__kt-name">${ktDist > 0 ? `${ktDist} км` : escHtml(lastCP.name)}</div>
                 </div>
                 <div class="card-c__kt-right">
                     <div class="card-c__kt-time">${parseDuration(lastCP.time)}</div>

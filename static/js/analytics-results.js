@@ -11,6 +11,12 @@ let currentYear = new Date().getFullYear();
 // датами из /api/current-event) — используется в populateDistances()
 // только пока currentEvent совпадает с событием, для которого посчитана.
 let _preferredDefaultDistance = null; // { event, distance } | null
+// Конфиг дистанций активного события (с checkpoints[].distance_km) — нужен
+// только чтобы показать "последняя отметка" вместо "-" у ещё бегущих (см.
+// _lastCheckpointLabel()). Бегущие участники по определению существуют
+// только у ТЕКУЩЕГО активного события, поэтому не нужно сверять с
+// currentEvent на каждый рендер, как для _preferredDefaultDistance выше.
+let _liveEventDistances = null;
 const timeMode = 'gun'; // фиксировано для сегментных функций
 const runnerDataMap = new Map(); // resultId → runner object
 
@@ -159,6 +165,7 @@ async function initResultsPage() {
             ? KMUtils.pickDefaultDistance(cfg.distances)
             : null;
         _preferredDefaultDistance = preferred ? { event: cfg.event, distance: preferred.distance } : null;
+        _liveEventDistances = cfg.distances || null;
     } catch {
         currentEvent = _urlEvent || 'night_run';
         currentYear  = _urlYear || (new Date().getFullYear() - 1);
@@ -533,6 +540,26 @@ function _computeLiveRanks(runners) {
     runningByCategory.forEach((group, cat) => {
         assignContinuing(group, maxField(finishedByCategory.get(cat) || [], 'rank_category' + officialSuffix), 'live_rank_category');
     });
+}
+
+// "10.55 км" — дистанция последней реально пройденной отметки участника,
+// показывается вместо "-" в колонках времени, пока участник ещё бежит
+// (запрос пользователя 2026-08-23). _liveEventDistances — конфиг активного
+// события с checkpoints[].distance_km (см. initResultsPage()); бегущие
+// участники есть только у активного события, поэтому матчить по
+// currentEvent, как для _preferredDefaultDistance, не нужно.
+function _lastCheckpointLabel(runner) {
+    if (!_liveEventDistances || !runner.checkpoints) return null;
+    const dist = _liveEventDistances.find(d => d.distance === runner.distance || d.distance === runner.event);
+    if (!dist || !dist.checkpoints) return null;
+    for (let i = 7; i >= 1; i--) {
+        const cp = runner.checkpoints[`kt${i}`];
+        if (cp && cp.time) {
+            const km = dist.checkpoints[i]?.distance_km;
+            return km != null ? `${km} км` : null;
+        }
+    }
+    return null;
 }
 
 // Конвертируем пол из БД в формат приложения (сохраняем на русском)
@@ -997,7 +1024,10 @@ function renderResultsTable(runners) {
         // пользователя 2026-08-22): "Не стартовал"/DNF/DSQ вместо пустого
         // "—". convertRaceStatus() приводит 'notstarted'/'dnf'/'dsq'.
         const noTimeStatusLabels = { notstarted: 'Не стартовал', dnf: 'DNF', dsq: 'DSQ' };
-        const statusLabel = noTimeStatusLabels[runner.status];
+        // Ещё бежит, но уже прошёл отметку — показываем её дистанцию
+        // ("10.55 км") вместо пустого "-" (запрос пользователя 2026-08-23).
+        const statusLabel = noTimeStatusLabels[runner.status]
+            || (runner.status === 'running' ? _lastCheckpointLabel(runner) : null);
         const timeGunCell = statusLabel
             ? `<span class="km-time-status">${statusLabel}</span>`
             : `<span class="km-time-gun">${formatTime(runner.time_gun_finish) || '—'}</span>`;
@@ -1309,8 +1339,8 @@ async function loadSegmentsIntoPanel(cell, resultId) {
         if (!segments.length) {
             const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
             if (paceCanvas) paceCanvas.closest('.detail-chart-canvas-wrap').innerHTML =
-                '<div style="color:#aaa;font-size:13px;padding:8px 0;text-align:center">Данные КТ не найдены</div>';
-            if (segPlaceholder) segPlaceholder.textContent = 'Данные КТ не найдены';
+                '<div style="color:#aaa;font-size:13px;padding:8px 0;text-align:center">Данные по отметкам не найдены</div>';
+            if (segPlaceholder) segPlaceholder.textContent = 'Данные по отметкам не найдены';
             return;
         }
 
@@ -1336,7 +1366,7 @@ async function loadSegmentsIntoPanel(cell, resultId) {
         }
     } catch (e) {
         console.error('Ошибка loadSegmentsIntoPanel:', e);
-        const errMsg = `Ошибка загрузки КТ: ${e.message}`;
+        const errMsg = `Ошибка загрузки отметок: ${e.message}`;
         const paceCanvas = cell.querySelector('canvas.pace-chart-canvas');
         if (paceCanvas) paceCanvas.closest('.detail-chart-canvas-wrap').innerHTML =
             `<div style="color:#c0392b;font-size:13px;padding:8px 0;text-align:center">${errMsg}</div>`;
@@ -1382,7 +1412,7 @@ function calcSegmentDistanceKm(timeStr, paceStr) {
     if (!paceMatch) return null;
     const paceSec = parseInt(paceMatch[1]) * 60 + parseInt(paceMatch[2]);
     if (paceSec === 0) return null;
-    return Math.round(timeSec / paceSec * 10) / 10;
+    return Math.round(timeSec / paceSec * 100) / 100;
 }
 
 const KT_ORDER = ['start', 'kt1', 'kt2', 'kt3', 'kt4', 'kt5', 'kt6', 'kt7', 'finish'];
@@ -1429,7 +1459,7 @@ function buildKmMap(segments) {
         if (from !== 'start') continue;
         const timeSec = toTotalSec(seg.sg_time_clear || seg.sg_time_gun);
         const paceSec = toTotalSec(seg.sg_pace_avg || seg.sg_pace_avg_gun);
-        if (timeSec && paceSec) map[to] = Math.round((timeSec / paceSec) * 10) / 10;
+        if (timeSec && paceSec) map[to] = Math.round((timeSec / paceSec) * 100) / 100;
     }
 
     // Pass 2: дополняем из последовательных сегментов
@@ -1442,7 +1472,7 @@ function buildKmMap(segments) {
             const timeSec = toTotalSec(seg.sg_time_clear || seg.sg_time_gun);
             const paceSec = toTotalSec(seg.sg_pace_avg || seg.sg_pace_avg_gun);
             if (timeSec && paceSec) {
-                map[to] = Math.round((map[from] + timeSec / paceSec) * 10) / 10;
+                map[to] = Math.round((map[from] + timeSec / paceSec) * 100) / 100;
                 changed = true;
             }
         }
@@ -1535,7 +1565,7 @@ function renderPaceChart(consecutive, kmMap, canvas) {
         const fromKm = kmMap && kmMap[from] !== undefined ? kmMap[from] : null;
         const toKm   = kmMap && kmMap[to]   !== undefined ? kmMap[to]   : null;
         const rangeLabel = (fromKm !== null && toKm !== null)
-            ? `${fromKm}–${toKm} км`
+            ? `${fromKm.toFixed(2)}–${toKm.toFixed(2)} км`
             : (seg.segment_code || '?');
 
         const rawTime = useGun ? (seg.sg_time_gun || seg.sg_time_clear) : seg.sg_time_clear;
@@ -1547,8 +1577,10 @@ function renderPaceChart(consecutive, kmMap, canvas) {
 
         rangeLabels.push(rangeLabel);
         values.push(parseFloat(paceMin.toFixed(2)));
+        // .toFixed(2), не сырая разница float — иначе иногда показывало
+        // "4.6000000000000001 км" вместо "4.60 км" (найдено пользователем).
         const segDist = (fromKm !== null && toKm !== null) ? toKm - fromKm : null;
-        topLabels.push({ time: timeStr, dist: segDist !== null ? `${segDist} км` : '' });
+        topLabels.push({ time: timeStr, dist: segDist !== null ? `${segDist.toFixed(2)} км` : '' });
         paceStrs.push(`${pm}:${String(ps).padStart(2, '0')} мин/км`);
     });
     if (!values.length) return null;
@@ -1636,7 +1668,7 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
         const { from, to } = parseSegmentCode(code);
         const fk = kmMap && kmMap[from] != null ? kmMap[from] : null;
         const tk = kmMap && kmMap[to]   != null ? kmMap[to]   : null;
-        return (fk !== null && tk !== null) ? `${fk}–${tk} км` : formatSegmentName(code);
+        return (fk !== null && tk !== null) ? `${fk.toFixed(2)}–${tk.toFixed(2)} км` : formatSegmentName(code);
     };
 
     const header = document.createElement('div');
