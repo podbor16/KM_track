@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 import json
 import logging
 import os
@@ -387,6 +387,40 @@ app = FastAPI(
 
 # Настройка логирования
 logging.getLogger("fastapi").setLevel(logging.INFO)
+
+# --- ТЕХНИЧЕСКИЕ РАБОТЫ ---
+# Временная заглушка: система хронометража сломалась (2026-08-23), все
+# публичные URL отдают текст-заглушку, админка и авторизация продолжают
+# работать. Чтобы вернуть сайт к жизни — выставить MAINTENANCE_MODE = False.
+MAINTENANCE_MODE = True
+_MAINTENANCE_ALLOWED_PREFIXES = (
+    "/admin",
+    "/24h/admin",
+    "/login",
+    "/logout",
+    "/api/admin",
+    "/api/tri/admin",
+    "/api/siberman/admin",
+    "/static",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/health",
+)
+_MAINTENANCE_MESSAGE = (
+    "В системе электронного хронометража ведутся технические работы. "
+    "Данные временно не доступны, следите за обновлением"
+)
+
+@app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    if MAINTENANCE_MODE and not request.url.path.startswith(_MAINTENANCE_ALLOWED_PREFIXES):
+        return PlainTextResponse(
+            _MAINTENANCE_MESSAGE,
+            status_code=503,
+            headers={"Retry-After": "3600"},
+        )
+    return await call_next(request)
 
 # Middleware
 app.add_middleware(GZipMiddleware, minimum_size=500)
