@@ -98,6 +98,7 @@ tests/fixtures/tilda_export_sample.xlsx
 # Не в git, чтобы деплой (git checkout) не затирал переключение на сервере.
 config/active_event.local
 config/history_enabled.local
+config/maintenance_mode.local
 
 # Мокапы brainstorming-скилла (визуальный компаньон) — локальный черновой вывод
 .superpowers/

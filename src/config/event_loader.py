@@ -200,6 +200,26 @@ def set_history_enabled(enabled: bool) -> None:
     _HISTORY_ENABLED_FILE.write_text("true" if enabled else "false", encoding="utf-8")
 
 
+_MAINTENANCE_MODE_FILE = Path(__file__).parent.parent.parent / "config" / "maintenance_mode.local"
+
+
+def get_maintenance_enabled() -> bool:
+    """Заглушка техработ на всех публичных URL (см. app.py::maintenance_mode_middleware).
+    Файл отсутствует -> включено (безопасный дефолт сразу после первого
+    деплоя этой фичи, пока флаг не переключён явно из /admin); содержимое
+    "false" -> выключено. Как history_enabled.local — вне git, переживает
+    деплой, читается на каждый запрос (без кеша) для мгновенного эффекта."""
+    try:
+        return _MAINTENANCE_MODE_FILE.read_text(encoding="utf-8").strip().lower() != "false"
+    except FileNotFoundError:
+        return True
+
+
+def set_maintenance_enabled(enabled: bool) -> None:
+    """Переключается из /admin (POST /api/admin/maintenance-toggle)."""
+    _MAINTENANCE_MODE_FILE.write_text("true" if enabled else "false", encoding="utf-8")
+
+
 def get_active_event(
     events: dict[str, "EventConfig"],
 ) -> Optional["EventConfig"]:

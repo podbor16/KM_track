@@ -297,6 +297,12 @@
     border-radius: 3px;
 }
 
+.admin-section-note--danger {
+    background: #fdecea;
+    border-left-color: #d32f2f;
+    color: #8c1c13;
+}
+
 /* ------- Wide editor for events tab (full-width cards) ------- */
 
 #tab-events .admin-cards,

@@ -18,6 +18,7 @@ import time as _time
 from pathlib import Path
 
 from src.config import settings
+from src.config.event_loader import get_maintenance_enabled
 from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
 from src.analytics.db_connection_optimized import initialize_connection_pool
@@ -389,10 +390,10 @@ app = FastAPI(
 logging.getLogger("fastapi").setLevel(logging.INFO)
 
 # --- ТЕХНИЧЕСКИЕ РАБОТЫ ---
-# Временная заглушка: система хронометража сломалась (2026-08-23), все
-# публичные URL отдают текст-заглушку, админка и авторизация продолжают
-# работать. Чтобы вернуть сайт к жизни — выставить MAINTENANCE_MODE = False.
-MAINTENANCE_MODE = True
+# Заглушка на все публичные URL, кроме админки/авторизации/статики —
+# переключается мгновенно (без деплоя) через /admin, см.
+# get_maintenance_enabled()/set_maintenance_enabled() в event_loader.py
+# и POST /api/admin/maintenance-toggle в src/krasmarafon/routers/admin.py.
 _MAINTENANCE_ALLOWED_PREFIXES = (
     "/admin",
     "/24h/admin",
@@ -490,7 +491,7 @@ def _maintenance_domain(request: Request) -> str:
 
 @app.middleware("http")
 async def maintenance_mode_middleware(request: Request, call_next):
-    if MAINTENANCE_MODE and not request.url.path.startswith(_MAINTENANCE_ALLOWED_PREFIXES):
+    if get_maintenance_enabled() and not request.url.path.startswith(_MAINTENANCE_ALLOWED_PREFIXES):
         domain = _maintenance_domain(request)
         return HTMLResponse(
             _MAINTENANCE_PAGES[domain],

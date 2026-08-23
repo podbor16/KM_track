@@ -29,10 +29,12 @@ from src.config import settings
 from src.config.event_loader import (
     get_active_event,
     get_history_enabled,
+    get_maintenance_enabled,
     invalidate_events_cache,
     load_events_cached,
     set_active_event_override,
     set_history_enabled,
+    set_maintenance_enabled,
 )
 from src.core.auth import api_require_auth
 
@@ -148,6 +150,23 @@ async def get_history_status(user: str = Depends(api_require_auth)) -> dict:
 @router.post("/api/admin/history-toggle")
 async def toggle_history(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
     set_history_enabled(enabled)
+    return {"enabled": enabled}
+
+
+# ---------------------------------------------------------------------------
+# Заглушка технических работ (все публичные URL кроме админки) — см.
+# app.py::maintenance_mode_middleware
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/admin/maintenance-status")
+async def get_maintenance_status(user: str = Depends(api_require_auth)) -> dict:
+    return {"enabled": get_maintenance_enabled()}
+
+
+@router.post("/api/admin/maintenance-toggle")
+async def toggle_maintenance(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
+    set_maintenance_enabled(enabled)
     return {"enabled": enabled}
 
 
