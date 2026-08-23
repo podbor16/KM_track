@@ -241,6 +241,10 @@ function buildPopupContent(runner) {
     const status = (runner.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'started' || status === 'на трассе';
     const isFinished = status === 'finished' || status === 'финишировал' || status.startsWith('finish');
+    // DNF/DSQ — не "не стартовал" (запрос пользователя 2026-08-23: статусы
+    // Copernico должны обрабатываться корректно, а не тонуть в "notstarted").
+    const isDsq = status === 'dsq' || status === 'disqualified';
+    const isDnf = status === 'dnf' || status === 'withdrawn';
 
     // Circle badge — same color as map marker
     const circleColor = getStatusColor(runner.status, getVisualLap(runner));
@@ -257,7 +261,7 @@ function buildPopupContent(runner) {
         });
     }
 
-    const pillLabel = isFinished ? 'Финишировал' : isRunning ? 'Бежит' : 'Не стартовал';
+    const pillLabel = isFinished ? 'Финишировал' : isRunning ? 'Бежит' : isDsq ? 'DSQ' : isDnf ? 'DNF' : 'Не стартовал';
     const pillClass = isFinished ? 'card-c__pill card-c__pill--finished' : 'card-c__pill';
     const subParts = [
         runner.category ? KMUtils.normalizeCategory(runner.category) : null,

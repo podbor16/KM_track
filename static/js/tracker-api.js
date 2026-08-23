@@ -73,10 +73,14 @@ function getStatusText(status) {
         'started':      'На трассе',
         'Finished':     'Финишировал',
         'finished':     'Финишировал',
-        'Disqualified': 'Нарушение',
-        'disqualified': 'Нарушение',
-        'Withdrawn':    'Снялся',
-        'withdrawn':    'Снялся',
+        'DSQ':          'DSQ',
+        'dsq':          'DSQ',
+        'Disqualified': 'DSQ',
+        'disqualified': 'DSQ',
+        'DNF':          'DNF',
+        'dnf':          'DNF',
+        'Withdrawn':    'DNF',
+        'withdrawn':    'DNF',
     };
     return statusMap[status] || status;
 }
@@ -569,13 +573,18 @@ async function loadAnalytics() {
         const results = data.results || [];
         _analyticsResults = results;
 
+        // race_status приходит из convert_status() (load_race_results.py) — реальные
+        // значения 'Finished'/'Not started'/'Running'/'DNF'/'DSQ'/'Withdrawn'. Раньше
+        // тут искали несуществующие 'Disqualifed'/'Disqualified' (никогда не
+        // совпадало с 'DSQ') и вообще не проверяли 'DNF' — DSQ/DNF участники
+        // "терялись" из статистики (найдено на живых данных Жары 2026-08-23).
         const stats = {
             total:        results.length,
             finished:     results.filter(r => r.race_status === 'Finished').length,
             not_started:  results.filter(r => r.race_status === 'Not started').length,
             running:      results.filter(r => r.race_status === 'Running').length,
-            withdrawn:    results.filter(r => r.race_status === 'Withdrawn').length,
-            disqualified: results.filter(r => r.race_status === 'Disqualifed' || r.race_status === 'Disqualified').length,
+            dnf:          results.filter(r => r.race_status === 'DNF' || r.race_status === 'Withdrawn').length,
+            dsq:          results.filter(r => r.race_status === 'DSQ').length,
             male:         results.filter(r => r.sex === 'Мужчина').length,
             female:       results.filter(r => r.sex === 'Женщина').length
         };
@@ -604,8 +613,8 @@ function refreshAnalyticsFromMemory() {
         finished:     allRunners.filter(r => r.status === 'Finished').length,
         not_started:  allRunners.filter(r => r.status === 'Not started').length,
         running:      allRunners.filter(r => r.status === 'Running').length,
-        withdrawn:    allRunners.filter(r => r.status === 'Withdrawn' || r.status === 'Disqualified').length,
-        disqualified: 0,
+        dnf:          allRunners.filter(r => r.status === 'DNF' || r.status === 'Withdrawn').length,
+        dsq:          allRunners.filter(r => r.status === 'DSQ').length,
         male:         allRunners.filter(r => r.sex === 'Мужчина').length,
         female:       allRunners.filter(r => r.sex === 'Женщина').length
     };
@@ -704,8 +713,12 @@ function renderAnalyticsHTML(stats, results) {
                     <div class="stat-card-label">Не стартовали</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-card-value" style="color: #f44336;">${stats.withdrawn + stats.disqualified}</div>
-                    <div class="stat-card-label">Снялись</div>
+                    <div class="stat-card-value" style="color: #f44336;">${stats.dnf}</div>
+                    <div class="stat-card-label">DNF</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-value" style="color: #9c27b0;">${stats.dsq}</div>
+                    <div class="stat-card-label">DSQ</div>
                 </div>
             </div>
         </div>

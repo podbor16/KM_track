@@ -54,7 +54,7 @@ check('updateAnalyticsHeading() — без дистанции не добавл�
 });
 
 check('renderAnalyticsHTML() — h3 содержит только "Общая статистика", без события/года/дистанции', () => {
-    const stats = { total: 10, finished: 5, not_started: 5, running: 0, withdrawn: 0, disqualified: 0, male: 5, female: 5 };
+    const stats = { total: 10, finished: 5, not_started: 5, running: 0, dnf: 0, dsq: 0, male: 5, female: 5 };
     const html = sandbox.renderAnalyticsHTML(stats, [{ distance: '5.0' }]);
     assert.ok(html.includes('<h3>Общая статистика</h3>'), 'h3 должен быть ровно "Общая статистика"');
     assert.ok(!html.includes('Жара'), 'h3 не должен дублировать название события');

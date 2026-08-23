@@ -210,6 +210,9 @@ def convert_status(status: Optional[str]) -> str:
         'running': 'Running',
         'finished': 'Finished',
         'dnf': 'DNF',
+        'retired': 'DNF',      # реальное значение Copernico для сошедших с дистанции
+                                # (не 'dnf' — найдено на живых данных Жары 21.1км
+                                # 2026-08-23, 15 участников тихо попадали в "Not started")
         'dsq': 'DSQ',
         'disqualified': 'DSQ',
         'withdrawn': 'Withdrawn'
