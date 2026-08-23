@@ -53,11 +53,14 @@ function check(name, fn) {
 
 // Точное воспроизведение живого случая: Момотов (кат. место 53) и Осипенко
 // (кат. место 52) — оба "5:48" по офиц. времени с точностью до целой секунды.
+// status: 'finished' (нормализованный, нижний регистр) — ровно то, что
+// возвращает convertRaceStatus() внутри normalizeRunnerData(); _sortArray()
+// в реальном приложении вызывается только на уже нормализованных данных.
 const RUNNERS_TIE = [
-    { status: 'Finished', surname: 'Момотов', name: 'Артемий', start_number: '8086',
+    { status: 'finished', surname: 'Момотов', name: 'Артемий', start_number: '8086',
       time_gun_finish: '5:48', time_clear_finish: '5:48',
       rank_absolute: 53, rank_category: 53, rank_sex: 53 },
-    { status: 'Finished', surname: 'Осипенко', name: 'Владимир', start_number: '8124',
+    { status: 'finished', surname: 'Осипенко', name: 'Владимир', start_number: '8124',
       time_gun_finish: '5:48', time_clear_finish: '5:45',
       rank_absolute: 52, rank_category: 52, rank_sex: 52 },
 ];

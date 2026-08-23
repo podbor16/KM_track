@@ -362,7 +362,8 @@ async function loadRunnersData(silent = false) {
         
         // Нормализуем данные в единый формат
         allRunners = normalizeRunnerData(rawData);
-        
+        _computeLiveRanks(allRunners);
+
         console.log('allRunners после нормализации:', allRunners.length);
         if (allRunners.length > 0) {
             console.log('Пример первого элемента:', allRunners[0]);
@@ -443,11 +444,69 @@ function normalizeRunnerData(runners) {
             // Дистанция и событие - используем distance_from_event из БД если есть
             event: runner.event || runner.distance_from_event || 'Ночной забег',
             distance: runner.distance || runner.distance_from_event || '5 км',
-            
+
             // Дополнительные поля
-            checkpoints: runner.checkpoints || {}
+            checkpoints: runner.checkpoints || {},
+
+            // Живая дистанция участника (та же calculate_live_position, что
+            // двигает маркеры на трекере) — используется для живого "Места"
+            // до финиша, см. _computeLiveRanks()/_liveRankTier().
+            current_distance: runner.current_distance,
+            // Метка ЕСТЬ только если реально пройдена хотя бы одна КТ (не
+            // просто идёт оценка темпа до первой КТ) — именно это отличает
+            // "ни у одного участника нет отметки" (алфавит) от "первая
+            // отметка пришла" (живое место).
+            last_kt_unix_ms: runner.last_kt_unix_ms
         };
     });
+}
+
+// Тир строки для сортировки/тай-брейка "Место" и колонок времени: 0=финишировал
+// (официальное место), 1=бежит и прошёл хотя бы одну КТ (живое место по
+// current_distance), 2=DNF/DSQ (отдельной группой после бегущих — решение
+// пользователя 2026-08-23), 3=ещё не стартовал ИЛИ бежит, но КТ ещё нет
+// (только алфавит — пока нет ни одной отметки, таблица целиком в этом тире).
+function _liveRankTier(runner) {
+    if (runner.status === 'finished') return 0;
+    if (runner.status === 'running' && runner.last_kt_unix_ms) return 1;
+    if (runner.status === 'dnf' || runner.status === 'dsq' || runner.status === 'disqualified') return 2;
+    return 3;
+}
+
+// Живое "Место" для тех, кто ещё не финишировал, но уже прошёл хотя бы одну
+// КТ — считается ОДИН раз на весь набор участников (не на каждую смену
+// фильтра пол/возр. группа), ровно как официальные rank_absolute/rank_sex/
+// rank_category с сервера: сами группы "по полу"/"по категории" не зависят
+// от того, что сейчас выбрано в UI, только отображение выбирает нужное поле
+// (см. getActiveLiveRankField()). current_distance приходит с сервера уже
+// готовый (та же calculate_live_position, что двигает маркеры на трекере).
+function _computeLiveRanks(runners) {
+    const eligible = runners.filter(r => _liveRankTier(r) === 1);
+    const byProgressDesc = (a, b) => {
+        const d = (b.current_distance || 0) - (a.current_distance || 0);
+        if (d !== 0) return d;
+        return (a.surname || '').localeCompare(b.surname || '', 'ru');
+    };
+    const assignRanks = (group, field) => {
+        [...group].sort(byProgressDesc).forEach((r, i) => { r[field] = i + 1; });
+    };
+
+    assignRanks(eligible, 'live_rank_absolute');
+
+    const bySex = new Map();
+    const byCategory = new Map();
+    eligible.forEach(r => {
+        if (r.gender) {
+            if (!bySex.has(r.gender)) bySex.set(r.gender, []);
+            bySex.get(r.gender).push(r);
+        }
+        if (r.category) {
+            if (!byCategory.has(r.category)) byCategory.set(r.category, []);
+            byCategory.get(r.category).push(r);
+        }
+    });
+    bySex.forEach(group => assignRanks(group, 'live_rank_sex'));
+    byCategory.forEach(group => assignRanks(group, 'live_rank_category'));
 }
 
 // Конвертируем пол из БД в формат приложения (сохраняем на русском)
@@ -760,29 +819,45 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // системе уже включает пол ("женщины до 49 лет"), поэтому при активном
 // фильтре по группе rank_category достаточен сам по себе.
 // Для Жары берём _clean-варианты — награждение там по чистому времени.
-function _rankFieldForScope(suffix) {
+// prefix — 'live_' для живых мест (см. getActiveLiveRankField()), у них нет
+// gun/clean-различия (считаются по дистанции, не по времени финиша).
+function _rankFieldForScope(suffix, prefix = '') {
     const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
-    if (ageGroupFilter !== '') return 'rank_category' + suffix;
-    if (genderFilter !== '') return 'rank_sex' + suffix;
-    return 'rank_absolute' + suffix;
+    if (ageGroupFilter !== '') return prefix + 'rank_category' + suffix;
+    if (genderFilter !== '') return prefix + 'rank_sex' + suffix;
+    return prefix + 'rank_absolute' + suffix;
 }
 
 function getActiveRankField() {
     return _rankFieldForScope(isZharaEvent() ? '_clean' : '');
 }
 
+function getActiveLiveRankField() {
+    return _rankFieldForScope('', 'live_');
+}
+
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
 function _sortArray(arr) {
     if (!sortState.column) return arr;
-    const pri = s => s === 'finished' ? 0 : s === 'running' ? 1 : s === 'notstarted' ? 3 : 2;
     return [...arr].sort((a, b) => {
         let valA, valB;
         switch (sortState.column) {
             case 'rank': {
-                const rankField = getActiveRankField();
-                valA = a[rankField] || 9999;
-                valB = b[rankField] || 9999;
+                const tierA = _liveRankTier(a), tierB = _liveRankTier(b);
+                if (tierA !== tierB) return tierA - tierB;
+                if (tierA === 0) {
+                    const rankField = getActiveRankField();
+                    valA = a[rankField] || 9999;
+                    valB = b[rankField] || 9999;
+                } else if (tierA === 1) {
+                    const liveField = getActiveLiveRankField();
+                    valA = a[liveField] || 9999;
+                    valB = b[liveField] || 9999;
+                } else {
+                    valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
+                    valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
+                }
                 break;
             }
             case 'bib':
@@ -794,33 +869,51 @@ function _sortArray(arr) {
                 valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 break;
             case 'time_gun': {
-                const pa = pri(a.status), pb = pri(b.status);
-                if (pa !== pb) return pa - pb;
-                valA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
-                valB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
-                if (valA === valB) {
-                    // Внутри одной целой секунды (TIME-колонка без мс) официальный
-                    // тай-брейк уже посчитан на сервере с точностью до мс (см.
-                    // _recalculate_ranks() в load_race_results.py) — используем его
-                    // вместо алфавита по фамилии, иначе видимый порядок строк
-                    // расходится с местом, уже показанным в той же строке.
-                    const rf = _rankFieldForScope('');
-                    valA = a[rf] || 9999;
-                    valB = b[rf] || 9999;
-                    if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                const tierA = _liveRankTier(a), tierB = _liveRankTier(b);
+                if (tierA !== tierB) return tierA - tierB;
+                if (tierA === 0) {
+                    valA = KMUtils.parseTimeToSeconds(a.time_gun_finish);
+                    valB = KMUtils.parseTimeToSeconds(b.time_gun_finish);
+                    if (valA === valB) {
+                        // Внутри одной целой секунды (TIME-колонка без мс) официальный
+                        // тай-брейк уже посчитан на сервере с точностью до мс (см.
+                        // _recalculate_ranks() в load_race_results.py) — используем его
+                        // вместо алфавита по фамилии, иначе видимый порядок строк
+                        // расходится с местом, уже показанным в той же строке.
+                        const rf = _rankFieldForScope('');
+                        valA = a[rf] || 9999;
+                        valB = b[rf] || 9999;
+                        if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                    }
+                } else if (tierA === 1) {
+                    const liveField = getActiveLiveRankField();
+                    valA = a[liveField] || 9999;
+                    valB = b[liveField] || 9999;
+                } else {
+                    valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
+                    valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 }
                 break;
             }
             case 'time_net': {
-                const pa = pri(a.status), pb = pri(b.status);
-                if (pa !== pb) return pa - pb;
-                valA = KMUtils.parseTimeToSeconds(a.time_clear_finish);
-                valB = KMUtils.parseTimeToSeconds(b.time_clear_finish);
-                if (valA === valB) {
-                    const rf = _rankFieldForScope('_clean');
-                    valA = a[rf] || 9999;
-                    valB = b[rf] || 9999;
-                    if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                const tierA = _liveRankTier(a), tierB = _liveRankTier(b);
+                if (tierA !== tierB) return tierA - tierB;
+                if (tierA === 0) {
+                    valA = KMUtils.parseTimeToSeconds(a.time_clear_finish);
+                    valB = KMUtils.parseTimeToSeconds(b.time_clear_finish);
+                    if (valA === valB) {
+                        const rf = _rankFieldForScope('_clean');
+                        valA = a[rf] || 9999;
+                        valB = b[rf] || 9999;
+                        if (valA === valB) return (a.surname || '').localeCompare(b.surname || '', 'ru');
+                    }
+                } else if (tierA === 1) {
+                    const liveField = getActiveLiveRankField();
+                    valA = a[liveField] || 9999;
+                    valB = b[liveField] || 9999;
+                } else {
+                    valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
+                    valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 }
                 break;
             }
@@ -861,7 +954,12 @@ function renderResultsTable(runners) {
         const row = document.createElement('tr');
         row.className = 'km-tr';
 
-        const rankAbs = runner[rankField];
+        // До финиша, но с хотя бы одной пройденной КТ — показываем живое
+        // место (по current_distance, см. _computeLiveRanks()) вместо "—".
+        const rankTier = _liveRankTier(runner);
+        const rankAbs = rankTier === 0 ? runner[rankField]
+            : rankTier === 1 ? runner[getActiveLiveRankField()]
+            : null;
         let rankDisplay;
         if (rankAbs === 1) rankDisplay = `<span class="km-rank-medal km-rank-medal--1">1</span>`;
         else if (rankAbs === 2) rankDisplay = `<span class="km-rank-medal km-rank-medal--2">2</span>`;
