@@ -32,7 +32,7 @@ _connection_pool = None
 _pool_lock = Lock()
 
 
-def initialize_connection_pool(pool_size: int = 5) -> Optional[pooling.MySQLConnectionPool]:
+def initialize_connection_pool(pool_size: int = 10) -> Optional[pooling.MySQLConnectionPool]:
     """Инициализирует глобальный пул соединений."""
     global _connection_pool
 
@@ -66,7 +66,16 @@ def initialize_connection_pool(pool_size: int = 5) -> Optional[pooling.MySQLConn
 
 
 def get_pooled_connection() -> Optional[mysql.connector.MySQLConnection]:
-    """Получает соединение из пула (с ленивой инициализацией)."""
+    """Получает соединение из пула (с ленивой инициализацией).
+
+    Исчерпание пула (все pool_size соединений заняты в момент пикового
+    трафика — реальная находка дня гонки Жары 21.1км 2026-08-23:
+    3 gunicorn-воркера × pool_size=5 могли исчерпаться под одновременной
+    нагрузкой /tracker + /results + /start_list + непрерывный загрузчик)
+    обычно снимается за миллисекунды — короткая пауза и один повтор решают
+    подавляющее большинство случаев, не заставляя вызывающий код (который
+    везде тихо трактует None как "0 результатов") показывать пустые
+    данные вместо реальных."""
     global _connection_pool
 
     if _connection_pool is None:
@@ -74,14 +83,21 @@ def get_pooled_connection() -> Optional[mysql.connector.MySQLConnection]:
             if _connection_pool is None:
                 _connection_pool = initialize_connection_pool()
 
-    try:
-        if _connection_pool:
+    if not _connection_pool:
+        return None
+
+    for attempt in range(2):
+        try:
             connection = _connection_pool.get_connection()
             if connection and connection.is_connected():
                 logger.debug("✅ Соединение получено из пула")
                 return connection
-    except Error as e:
-        logger.error(f"❌ Ошибка получения соединения из пула: {e}")
+        except Error as e:
+            if attempt == 0:
+                logger.warning(f"⚠️ Пул соединений временно исчерпан, повтор через 100мс: {e}")
+                time.sleep(0.1)
+            else:
+                logger.error(f"❌ Ошибка получения соединения из пула: {e}")
 
     return None
 
