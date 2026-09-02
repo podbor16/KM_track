@@ -11,7 +11,7 @@ from src.config import settings
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
-from src.duathlon222.service import get_standings
+from src.duathlon222.service import get_standings, get_participant
 
 _require_auth = require_auth_for("/duathlon222/login")
 
@@ -59,6 +59,14 @@ async def duathlon_home(request: Request):
     })
 
 
+@router.get("/duathlon222/participant/{start_number}", response_class=HTMLResponse)
+async def duathlon_participant_page(request: Request, start_number: int):
+    return templates.TemplateResponse("race_triatleta/duathlon_participant.html", {
+        "request": request,
+        "start_number": start_number,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -67,6 +75,14 @@ async def duathlon_home(request: Request):
 async def duathlon_standings(gender: str = None):
     rows = get_standings(DUATHLON_EVENT_ID, gender or None)
     return {"standings": rows}
+
+
+@router.get("/api/duathlon222/participant/{start_number}")
+async def duathlon_participant_api(start_number: int):
+    data = get_participant(DUATHLON_EVENT_ID, start_number)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Участник не найден")
+    return data
 
 
 # ---------------------------------------------------------------------------

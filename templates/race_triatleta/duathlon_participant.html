@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дуатлон 222 — Участник №{{ start_number }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <style>
+        .p-wrap { max-width: 900px; margin: 0 auto; padding: 20px 16px 48px; }
+        .p-back { display: inline-flex; align-items: center; gap: 6px; color: var(--tri-muted); text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+        .p-back:hover { color: var(--tri-text); }
+
+        .p-card { background: var(--tri-surface); border: 1px solid var(--tri-border); border-radius: 10px; overflow: hidden; }
+        .p-card-hdr { padding: 16px 18px; border-bottom: 1px solid var(--tri-border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .p-bib { font-size: 13px; font-weight: 700; color: var(--tri-muted); }
+        .p-name { font-size: 20px; font-weight: 800; }
+
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+        .badge-m { background: rgba(38,49,70,.10); color: var(--tri-navy); }
+        .badge-f { background: rgba(222,0,0,.10); color: var(--tri-red); }
+        .badge-active   { background: rgba(255,133,98,.14); color: var(--tri-accent); }
+        .badge-finished { background: rgba(24,165,88,.12);  color: var(--tri-green); }
+        .badge-dnf, .badge-dsq { background: rgba(222,0,0,.10); color: var(--tri-red); }
+
+        /* ---- Бегунок (прогресс-бар с маркером) ---- */
+        .pb-outer { padding: 26px 18px 16px; }
+        .pb-track-wrap { position: relative; }
+        .pb-track { position: relative; height: 10px; border-radius: 5px; overflow: hidden; display: flex; background: var(--tri-bg); }
+        .pb-seg { height: 100%; }
+        .pb-seg.run1 { background: rgba(255,133,98,.20); }
+        .pb-seg.bike { background: rgba(234,179,8,.20); }
+        .pb-seg.run2 { background: rgba(24,165,88,.18); }
+        .pb-fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--tri-accent); opacity: .9; }
+        .pb-boundary { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.15); }
+        .pb-marker-dot { position: absolute; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--tri-surface); border: 2px solid var(--tri-accent); transform: translateX(-5px); }
+        .pb-chip { position: absolute; top: -22px; transform: translateX(-50%); background: var(--tri-accent); color: #fff; padding: 3px 8px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+        .pb-flag { position: absolute; top: -13px; font-size: 11px; line-height: 1; }
+        .pb-flag-start { left: 0; }
+        .pb-flag-finish { right: 0; }
+        .pb-stage-labels { display: flex; margin-top: 6px; font-size: 11px; color: var(--tri-muted); }
+        .pb-stage-labels span.active { color: var(--tri-text); font-weight: 700; }
+        .pb-stage-labels span.run1 { width: 4.5%; min-width: 40px; }
+        .pb-stage-labels span.bike { width: 76.6%; text-align: center; }
+        .pb-stage-labels span.run2 { width: 18.9%; text-align: right; min-width: 40px; }
+
+        .stats-row { display: flex; gap: 12px; padding: 14px 18px; flex-wrap: wrap; }
+        .stat { background: var(--tri-bg); border-radius: 8px; padding: 8px 14px; min-width: 90px; }
+        .stat-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .stat-lbl { font-size: 10px; color: var(--tri-muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+        .stat-sub { font-size: 11px; font-weight: 600; color: var(--tri-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+        /* ---- Аккордеон по этапам ---- */
+        details.stage { border-top: 1px solid var(--tri-border); }
+        details.stage summary {
+            list-style: none; cursor: pointer; padding: 12px 18px;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+        details.stage summary::-webkit-details-marker { display: none; }
+        details.stage summary::before { content: '▸'; color: var(--tri-muted); font-size: 12px; width: 12px; display: inline-block; transition: transform .15s; }
+        details.stage[open] summary::before { transform: rotate(90deg); }
+        .stage-title { font-weight: 700; font-size: 14px; }
+        .stage-dist { font-size: 11px; color: var(--tri-muted); }
+        .stage-spacer { flex: 1; }
+        .stage-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .stage-meta { font-size: 12px; color: var(--tri-muted); }
+        .stage-forecast { font-size: 12px; color: var(--tri-accent); font-weight: 600; }
+
+        .table-wrap { overflow-x: auto; }
+        .cp-table { width: 100%; border-collapse: collapse; }
+        .cp-table th {
+            padding: 6px 14px; text-align: right; font-size: 10px; color: var(--tri-muted);
+            text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+            border-bottom: 1px solid var(--tri-border); background: var(--tri-bg); white-space: nowrap;
+        }
+        .cp-table th:first-child, .cp-table td:first-child { text-align: left; }
+        .cp-table td { padding: 7px 14px; font-size: 13px; border-bottom: 1px solid var(--tri-border); text-align: right; font-variant-numeric: tabular-nums; }
+        .cp-table tr:last-child td { border-bottom: none; }
+
+        .p-empty { padding: 60px 20px; text-align: center; color: var(--tri-muted); }
+    </style>
+</head>
+<body>
+    <div class="p-wrap">
+        <a href="/duathlon222" class="p-back">← К результатам</a>
+        <div id="app"><div class="p-empty">Загрузка...</div></div>
+    </div>
+
+    <script>
+    const START_NUMBER = {{ start_number|tojson }};
+    const GUN_UTC_MS = new Date('2026-09-05T02:00:00Z').getTime(); // TODO: заменить на реальное время старта
+
+    const STAGE_INFO = {
+        run1: { label: 'Бег-1' },
+        bike: { label: 'Вело' },
+        run2: { label: 'Бег-2' },
+    };
+    // Доля 0-100% на общей полосе гонки — по дистанции этапа (10/170/42 из 222 км)
+    const STAGE_SHARE = { run1: 10/222*100, bike: 170/222*100, run2: 42/222*100 };
+    const STAGE_OFFSET = { run1: 0, bike: 10/222*100, run2: 180/222*100 };
+
+    const STATUS_LABEL = { active: 'На дистанции', finished: 'Финишировал', dnf: 'DNF', dsq: 'DSQ' };
+
+    function fmtS(totalSeconds) {
+        if (totalSeconds === null || totalSeconds === undefined) return '—';
+        const s = Math.max(0, Math.floor(totalSeconds));
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+    function fmtClock(elapsedFromGunS) {
+        const d = new Date(GUN_UTC_MS + elapsedFromGunS * 1000);
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+    function fmtGap(g) {
+        if (g === null || g === undefined) return '—';
+        if (g === 0) return '<span style="color:var(--tri-green);font-weight:700">Лидер</span>';
+        return '+' + fmtS(g);
+    }
+
+    function overallProgressBarHtml(d) {
+        let fillPct = 0, chipText = null;
+        if (d.current_stage === 'finished') {
+            fillPct = 100;
+            chipText = 'Финиш';
+        } else {
+            const stage = d.current_stage;
+            const kmInStage = (d.current_stage_lap || 0) * d.stages[stage].lap_km;
+            const kmOverall = STAGE_OFFSET[stage] / 100 * 222 + kmInStage;
+            fillPct = (kmOverall / 222) * 100;
+            chipText = `${kmOverall.toFixed(1)} / 222 км`;
+        }
+        const chipPct = Math.min(94, Math.max(6, fillPct));
+        const b1 = STAGE_OFFSET.bike, b2 = STAGE_OFFSET.run2;
+        const activeKey = d.current_stage === 'finished' ? 'run2' : d.current_stage;
+        return `
+        <div class="pb-outer">
+            <div class="pb-track-wrap">
+                <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+                <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+                <div class="pb-chip" style="left:${chipPct}%">${chipText}</div>
+                <div class="pb-track">
+                    <div class="pb-seg run1" style="width:${STAGE_SHARE.run1}%"></div>
+                    <div class="pb-seg bike" style="width:${STAGE_SHARE.bike}%"></div>
+                    <div class="pb-seg run2" style="width:${STAGE_SHARE.run2}%"></div>
+                    <div class="pb-fill" style="width:${fillPct}%"></div>
+                    <div class="pb-boundary" style="left:${b1}%"></div>
+                    <div class="pb-boundary" style="left:${b2}%"></div>
+                </div>
+                <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+            </div>
+            <div class="pb-stage-labels">
+                <span class="run1${activeKey==='run1'?' active':''}">Бег-1</span>
+                <span class="bike${activeKey==='bike'?' active':''}">Вело</span>
+                <span class="run2${activeKey==='run2'?' active':''}">Бег-2</span>
+            </div>
+        </div>`;
+    }
+
+    function stageProgressBarHtml(stageCode, d) {
+        const info = d.stages[stageCode];
+        const isCurrent = d.current_stage === stageCode;
+        const isDone = d[stageCode + '_s'] != null;
+        let fillPct = 0, chipText = null;
+        if (isDone) {
+            fillPct = 100;
+            chipText = 'Финиш этапа';
+        } else if (isCurrent) {
+            const kmInStage = (d.current_stage_lap || 0) * info.lap_km;
+            fillPct = (kmInStage / info.distance_km) * 100;
+            chipText = `${kmInStage.toFixed(1)} / ${info.distance_km} км`;
+        } else {
+            chipText = null;
+        }
+        const chipPct = Math.min(94, Math.max(6, fillPct));
+        return `
+        <div class="pb-outer">
+            <div class="pb-track-wrap">
+                <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
+                <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+                ${chipText ? `<div class="pb-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
+                <div class="pb-track"><div class="pb-fill" style="width:${fillPct}%"></div></div>
+                <div class="pb-marker-dot" style="left:${fillPct}%"></div>
+            </div>
+        </div>`;
+    }
+
+    function lapTableHtml(stageCode, d) {
+        const info = d.stages[stageCode];
+        if (!info.laps.length) {
+            return '<div class="p-empty" style="padding:16px">Кругов ещё нет</div>';
+        }
+        const rows = info.laps.map(lap => `
+            <tr>
+                <td>Круг ${lap.lap_number}</td>
+                <td>${fmtS(lap.split_s)}</td>
+                <td>${lap.speed_kmh != null ? lap.speed_kmh.toFixed(1) + ' км/ч' : '—'}</td>
+                <td>${fmtS(lap.cumulative_s)}</td>
+                <td>${lap.rank_gender != null ? lap.rank_gender : '—'}</td>
+                <td>${fmtGap(lap.gap_gender)}</td>
+                <td>${lap.rank_abs != null ? lap.rank_abs : '—'}</td>
+                <td>${fmtGap(lap.gap_abs)}</td>
+            </tr>`).join('');
+        return `<div class="table-wrap"><table class="cp-table">
+            <thead><tr>
+                <th>Круг</th><th>Сплит</th><th>Скорость</th><th>Общее время</th>
+                <th>Место (пол)</th><th>Отст. (пол)</th>
+                <th>Место (абс)</th><th>Отст. (абс)</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>`;
+    }
+
+    function stageSectionHtml(stageCode, d) {
+        const info = d.stages[stageCode];
+        const label = STAGE_INFO[stageCode].label;
+        const isCurrent = d.current_stage === stageCode;
+        const timeKey = stageCode + '_s';
+        const speedKey = stageCode + '_speed_kmh';
+        const stageTime = d[timeKey];
+        const isOpen = isCurrent || stageTime != null;
+        const forecastHtml = (isCurrent && d.forecast_stage_finish_s != null)
+            ? `<span class="stage-forecast">~${fmtClock(d.forecast_stage_finish_s)} прогноз финиша</span>`
+            : '';
+        const lapProgress = (isCurrent && d.current_stage_lap)
+            ? `<span class="stage-meta">круг ${d.current_stage_lap}/${d.current_stage_lap_total}</span>`
+            : '';
+        return `<details class="stage" ${isOpen ? 'open' : ''}>
+            <summary>
+                <span class="stage-title">${label}</span>
+                <span class="stage-dist">${info.distance_km} км · ${info.lap_count}×${info.lap_km} км</span>
+                <span class="stage-spacer"></span>
+                ${stageTime != null ? `<span class="stage-time">${fmtS(stageTime)}</span>` : ''}
+                ${stageTime != null && d[speedKey] != null ? `<span class="stage-meta">${d[speedKey].toFixed(1)} км/ч</span>` : ''}
+                ${lapProgress}
+                ${forecastHtml}
+            </summary>
+            ${stageProgressBarHtml(stageCode, d)}
+            ${lapTableHtml(stageCode, d)}
+        </details>`;
+    }
+
+    function genderBadge(g) {
+        return g === 'F' ? '<span class="badge badge-f">Ж</span>' : '<span class="badge badge-m">М</span>';
+    }
+    function statusBadge(status) {
+        const cls = { active: 'badge-active', finished: 'badge-finished', dnf: 'badge-dnf', dsq: 'badge-dsq' }[status] || '';
+        return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
+    }
+
+    function render(d) {
+        const html = `
+        <div class="p-card">
+            <div class="p-card-hdr">
+                <span class="p-bib">№${d.start_number}</span>
+                <span class="p-name">${d.surname} ${d.name}</span>
+                ${genderBadge(d.gender)}
+                ${statusBadge(d.status)}
+            </div>
+            ${overallProgressBarHtml(d)}
+            <div class="stats-row">
+                <div class="stat">
+                    <div class="stat-val">${fmtS(d.total_s)}</div>
+                    <div class="stat-lbl">Итого</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-val">${d.rank_gender != null ? d.rank_gender : '—'}</div>
+                    <div class="stat-lbl">Место (пол)</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-val">${d.rank_abs != null ? d.rank_abs : '—'}</div>
+                    <div class="stat-lbl">Место (абсолют)</div>
+                </div>
+            </div>
+            ${stageSectionHtml('run1', d)}
+            ${stageSectionHtml('bike', d)}
+            ${stageSectionHtml('run2', d)}
+        </div>`;
+        document.getElementById('app').innerHTML = html;
+    }
+
+    async function load() {
+        try {
+            const r = await fetch(`/api/duathlon222/participant/${START_NUMBER}`);
+            if (!r.ok) {
+                document.getElementById('app').innerHTML =
+                    '<div class="p-empty">Участник не найден</div>';
+                return;
+            }
+            const data = await r.json();
+            render(data);
+        } catch(e) {
+            document.getElementById('app').innerHTML = `<div class="p-empty">Ошибка: ${e.message}</div>`;
+        }
+    }
+
+    load();
+    setInterval(load, 30000);
+    </script>
+</body>
+</html>

@@ -177,8 +177,8 @@
         }
         tbody.innerHTML = rows.map(r => {
             const isOut = r.status === 'dnf' || r.status === 'dsq';
-            const rowStyle = isOut ? 'style="opacity:.55"' : '';
-            return `<tr ${rowStyle}>
+            const rowStyle = `cursor:pointer;${isOut ? 'opacity:.55' : ''}`;
+            return `<tr style="${rowStyle}" onclick="location.href='/duathlon222/participant/${r.start_number}'">
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
                 <td><span class="tri-name">${r.surname} ${r.name}</span></td>

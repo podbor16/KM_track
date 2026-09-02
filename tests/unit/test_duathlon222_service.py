@@ -1,4 +1,7 @@
-from src.duathlon222.service import _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish
+from src.duathlon222.service import (
+    _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish,
+    _lap_ranks_from_rows, _build_stage_laps,
+)
 
 
 def test_stage_times_all_finished():
@@ -86,3 +89,56 @@ def test_forecast_stage_finish_no_lap_data_returns_none():
 
 def test_forecast_stage_finish_zero_lap_returns_none():
     assert _forecast_stage_finish("run1", 0, 500, 0) is None
+
+
+def test_lap_ranks_abs_and_gender():
+    rows = [
+        {"participant_id": 1, "stage": "run1", "lap_number": 1, "cumulative_s": 500, "gender": "M"},
+        {"participant_id": 2, "stage": "run1", "lap_number": 1, "cumulative_s": 520, "gender": "M"},
+        {"participant_id": 3, "stage": "run1", "lap_number": 1, "cumulative_s": 510, "gender": "F"},
+    ]
+    ranks = _lap_ranks_from_rows(rows)
+
+    assert ranks[(1, "run1", 1)] == {"rank_abs": 1, "gap_abs": 0, "rank_gender": 1, "gap_gender": 0}
+    assert ranks[(3, "run1", 1)] == {"rank_abs": 2, "gap_abs": 10, "rank_gender": 1, "gap_gender": 0}
+    assert ranks[(2, "run1", 1)] == {"rank_abs": 3, "gap_abs": 20, "rank_gender": 2, "gap_gender": 20}
+
+
+def test_lap_ranks_separates_stages_and_laps():
+    rows = [
+        {"participant_id": 1, "stage": "run1", "lap_number": 1, "cumulative_s": 500, "gender": "M"},
+        {"participant_id": 1, "stage": "bike", "lap_number": 1, "cumulative_s": 900, "gender": "M"},
+    ]
+    ranks = _lap_ranks_from_rows(rows)
+    assert (1, "run1", 1) in ranks
+    assert (1, "bike", 1) in ranks
+    assert ranks[(1, "run1", 1)]["rank_abs"] == 1
+    assert ranks[(1, "bike", 1)]["rank_abs"] == 1
+
+
+def test_build_stage_laps_split_and_speed():
+    lap_rows = [
+        {"lap_number": 1, "cumulative_s": 500},
+        {"lap_number": 2, "cumulative_s": 1050},
+    ]
+    laps = _build_stage_laps("run1", lap_rows, 0, {}, participant_id=1)
+
+    assert laps[0]["lap_number"] == 1
+    assert laps[0]["split_s"] == 500
+    assert laps[0]["speed_kmh"] == 18.0
+    assert laps[1]["split_s"] == 550
+    assert laps[1]["speed_kmh"] == round(2.5 / (550 / 3600.0), 2)
+
+
+def test_build_stage_laps_split_uses_stage_start_for_first_lap():
+    lap_rows = [{"lap_number": 1, "cumulative_s": 2900}]
+    laps = _build_stage_laps("bike", lap_rows, 2400, {}, participant_id=1)
+    assert laps[0]["split_s"] == 500
+
+
+def test_build_stage_laps_includes_ranks():
+    lap_rows = [{"lap_number": 1, "cumulative_s": 500}]
+    ranks = {(1, "run1", 1): {"rank_abs": 2, "gap_abs": 10, "rank_gender": 1, "gap_gender": 0}}
+    laps = _build_stage_laps("run1", lap_rows, 0, ranks, participant_id=1)
+    assert laps[0]["rank_abs"] == 2
+    assert laps[0]["rank_gender"] == 1
