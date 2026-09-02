@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Дуатлон 222 Admin</title>
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: var(--tri-header-bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .login-card {
+            background: var(--tri-surface);
+            border: 1px solid var(--tri-border);
+            border-radius: 10px;
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 380px;
+        }
+        .login-card h1 { font-size: 18px; font-weight: 700; color: var(--tri-text); margin-bottom: 4px; }
+        .login-card .subtitle { color: var(--tri-muted); font-size: 13px; margin-bottom: 24px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block; color: var(--tri-muted); font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
+        }
+        .form-group input {
+            width: 100%; padding: 10px 12px; background: var(--tri-bg);
+            border: 1px solid var(--tri-border); border-radius: 6px; color: var(--tri-text);
+            font-size: 14px; outline: none; transition: border-color .15s;
+        }
+        .form-group input:focus { border-color: var(--tri-accent); }
+        .error-msg {
+            background: rgba(222,0,0,.08); border: 1px solid rgba(222,0,0,.3);
+            border-radius: 6px; color: var(--tri-red); font-size: 13px; padding: 10px 12px;
+            margin-bottom: 16px;
+        }
+        .btn-login {
+            width: 100%; padding: 12px; background: var(--tri-accent); border: none;
+            border-radius: 6px; color: #fff; font-size: 14px; font-weight: 700;
+            letter-spacing: .5px; cursor: pointer; transition: opacity .15s;
+        }
+        .btn-login:hover { opacity: .85; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Дуатлон 222 — Admin</h1>
+        <p class="subtitle">Доступ только для организаторов гонки</p>
+
+        {% if error %}
+        <div class="error-msg">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/duathlon222/login">
+            <div class="form-group">
+                <label for="username">Логин</label>
+                <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+            </div>
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn-login">Войти</button>
+        </form>
+    </div>
+</body>
+</html>

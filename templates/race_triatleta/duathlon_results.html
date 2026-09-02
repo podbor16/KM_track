@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дуатлон 222 — Live результаты</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+</head>
+<body>
+    <div class="tri-header">
+        <div>
+            <div class="tri-header__eyebrow">Triatleta · Дуатлон 222</div>
+            <div class="tri-header__title">Дуатлон 222<br>05 сентября 2026</div>
+            <div class="tri-header__meta">Красноярск · Бег 10 км → Вело 170 км → Бег 42 км</div>
+        </div>
+        <div class="tri-elapsed-wrap">
+            <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
+            <div class="tri-elapsed" id="elapsed">—</div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="tri-toolbar">
+        <div class="tri-filter-group">
+            <label class="tri-label">Пол:</label>
+            <select id="filter-gender" class="tri-select" onchange="loadStandings()">
+                <option value="">Все</option>
+                <option value="M">Мужчины</option>
+                <option value="F">Женщины</option>
+            </select>
+        </div>
+        <div class="tri-filter-group">
+            <input type="search" id="filter-search" class="tri-search"
+                   placeholder="Поиск по фамилии"
+                   oninput="renderFiltered()" onkeydown="if(event.key==='Enter')renderFiltered()">
+        </div>
+        <span class="tri-results-count" id="results-count"></span>
+    </div>
+
+    <div class="tri-container">
+        <div class="tri-table-wrap">
+            <table class="tri-table">
+                <thead>
+                    <tr>
+                        <th class="tri-rank">Место</th>
+                        <th class="tri-bib">Номер</th>
+                        <th>Участник</th>
+                        <th>Бег-1<br><span style="font-weight:400">10 км</span></th>
+                        <th>Вело<br><span style="font-weight:400">170 км</span></th>
+                        <th>Бег-2<br><span style="font-weight:400">42 км</span></th>
+                        <th>Итого</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody id="standings-body">
+                    <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="tri-refresh" id="refresh-label"></div>
+    </div>
+
+    <script>
+    const GUN_UTC_MS = new Date('2026-09-05T02:00:00Z').getTime(); // TODO: заменить на реальное время старта
+    let allStandings = [];
+
+    function updateElapsed() {
+        const diff = Date.now() - GUN_UTC_MS;
+        const ms = Math.abs(diff);
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        const str = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        document.getElementById('elapsed').textContent = str;
+        document.getElementById('elapsed-label').textContent = diff < 0 ? 'До старта' : 'Прошло';
+    }
+    setInterval(updateElapsed, 1000);
+    updateElapsed();
+
+    function fmtS(totalSeconds) {
+        if (totalSeconds === null || totalSeconds === undefined) return '—';
+        const s = Math.max(0, Math.floor(totalSeconds));
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    const STATUS_LABEL = {
+        active: 'На дистанции',
+        finished: 'Финишировал',
+        dnf: 'DNF',
+        dsq: 'DSQ',
+    };
+
+    async function loadStandings() {
+        const gender = document.getElementById('filter-gender').value;
+        try {
+            const url = gender ? `/api/duathlon222/standings?gender=${gender}` : '/api/duathlon222/standings';
+            const r = await fetch(url);
+            const data = await r.json();
+            allStandings = data.standings || [];
+            renderFiltered();
+            document.getElementById('refresh-label').textContent =
+                `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+        } catch(e) { console.error('standings error', e); }
+    }
+
+    function renderFiltered() {
+        const search = document.getElementById('filter-search').value.trim().toLowerCase();
+        const rows = allStandings.filter(r => !search || (r.surname || '').toLowerCase().includes(search));
+        document.getElementById('results-count').textContent = rows.length ? `${rows.length} участн.` : '';
+        renderStandings(rows);
+    }
+
+    function renderStandings(rows) {
+        const tbody = document.getElementById('standings-body');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const isOut = r.status === 'dnf' || r.status === 'dsq';
+            const rowStyle = isOut ? 'style="opacity:.55"' : '';
+            return `<tr ${rowStyle}>
+                <td class="tri-rank">${r.rank}</td>
+                <td class="tri-bib">${r.start_number}</td>
+                <td><span class="tri-name">${r.surname} ${r.name}</span></td>
+                <td style="font-variant-numeric:tabular-nums">${fmtS(r.run1_s)}</td>
+                <td style="font-variant-numeric:tabular-nums">${fmtS(r.bike_s)}</td>
+                <td style="font-variant-numeric:tabular-nums">${fmtS(r.run2_s)}</td>
+                <td style="font-variant-numeric:tabular-nums;font-weight:700">${fmtS(r.total_s)}</td>
+                <td>${STATUS_LABEL[r.status] || r.status}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    loadStandings();
+    setInterval(loadStandings, 30000);
+    </script>
+</body>
+</html>

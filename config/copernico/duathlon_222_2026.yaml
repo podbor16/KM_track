@@ -1,0 +1,22 @@
+description: >
+  Дуатлон 222 2026. Один event на всю гонку (подтверждено пользователем
+  2026-08-25 как наиболее вероятный вариант — организаторы ещё не
+  подтвердили точные имена полей). Один массовый старт, личное непрерывное
+  время: run1 -> T1 -> bike -> T2 -> run2. Поля ниже — ПЛЕЙСХОЛДЕРЫ,
+  обновить после реального fetch из Copernico API (см. Task 0 в
+  docs/superpowers/plans/2026-08-24-duathlon-222.md).
+
+fields:
+  start_number: dorsal    # TBD — сверить, может быть "bib" (см. tri_24h: там оказалось dorsal)
+  surname: surname
+  name: name
+  gender: gender          # 'male'/'female' -> нормализуется загрузчиком в M/F
+  status: status
+
+# Кумулятивное время (мс от общего старта гонки) на финише каждого этапа.
+# Имена полей — ДОГАДКА по типовой конвенции Copernico для мультиспорта,
+# ОБЯЗАТЕЛЬНО проверить реальным запросом API перед использованием.
+stage_fields:
+  run1: "times.official_run1"
+  bike: "times.official_bike"
+  run2: "times.official_finish"
