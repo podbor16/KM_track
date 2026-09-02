@@ -1,18 +1,20 @@
 """
-Применяет 001_init.sql — создаёт БД duathlon_222 и таблицы на проде.
+Применяет миграцию duathlon_222 на проде (по умолчанию 001_init.sql).
 
 paramiko (прямой сокет из python.exe) блокируется файрволом на порт 22 в
 этом окружении — используем plink.exe (PuTTY) как отдельный процесс, см.
 deploy/ssh_apply_siberman_migration.py (тот же паттерн).
 
-Usage: python deploy/ssh_apply_duathlon222_migration.py
+Usage: python -m deploy.ssh_apply_duathlon222_migration [migration_file.sql]
 """
+import sys
 import subprocess
 from pathlib import Path
 from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 ROOT = Path(__file__).resolve().parent.parent
-SQL_FILE = ROOT / "src" / "duathlon222" / "migrations" / "001_init.sql"
+MIGRATION_NAME = sys.argv[1] if len(sys.argv) > 1 else "001_init.sql"
+SQL_FILE = ROOT / "src" / "duathlon222" / "migrations" / MIGRATION_NAME
 
 
 def plink_run(cmd: str, stdin_bytes: bytes = None, timeout: int = 60) -> str:

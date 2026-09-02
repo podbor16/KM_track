@@ -48,6 +48,7 @@
                         <th class="tri-rank">Место</th>
                         <th class="tri-bib">Номер</th>
                         <th>Участник</th>
+                        <th>Этап</th>
                         <th>Бег-1<br><span style="font-weight:400">10 км</span></th>
                         <th>Вело<br><span style="font-weight:400">170 км</span></th>
                         <th>Бег-2<br><span style="font-weight:400">42 км</span></th>
@@ -56,7 +57,7 @@
                     </tr>
                 </thead>
                 <tbody id="standings-body">
-                    <tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                    <tr><td colspan="9" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -96,6 +97,58 @@
         dsq: 'DSQ',
     };
 
+    const STAGE_LABEL = {
+        run1: 'Бег-1',
+        bike: 'Вело',
+        run2: 'Бег-2',
+        finished: 'Финиш',
+    };
+
+    // Живые часы «сколько уже на текущем этапе» — обновляются раз в сек без
+    // перезапроса standings (data-start-s — кумулятивный старт этапа от
+    // общего выстрела, посчитан на бэкенде вместе со standings).
+    function tickStageTimers() {
+        const nowElapsedS = (Date.now() - GUN_UTC_MS) / 1000;
+        document.querySelectorAll('.stage-timer').forEach(el => {
+            const startS = parseFloat(el.dataset.startS);
+            el.textContent = fmtS(Math.max(0, nowElapsedS - startS));
+        });
+    }
+    setInterval(tickStageTimers, 1000);
+
+    function stageCell(timeS, speedKmh) {
+        if (timeS === null || timeS === undefined) {
+            return '<span style="color:var(--tri-muted)">—</span>';
+        }
+        const speedStr = speedKmh
+            ? `<br><span style="font-size:11px;color:var(--tri-muted)">${speedKmh.toFixed(1)} км/ч</span>`
+            : '';
+        return `<span style="font-variant-numeric:tabular-nums">${fmtS(timeS)}</span>${speedStr}`;
+    }
+
+    // Абсолютное время по часам для elapsed-от-старта секунд (прогноз финиша)
+    function fmtClock(elapsedFromGunS) {
+        const d = new Date(GUN_UTC_MS + elapsedFromGunS * 1000);
+        return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+
+    function stageColumnCell(r) {
+        const label = STAGE_LABEL[r.current_stage] || r.current_stage;
+        if (r.current_stage === 'finished' || r.current_stage_start_s === null) {
+            return `<span class="stage-badge">${label}</span>`;
+        }
+        const lapStr = r.current_stage_lap
+            ? `<br><span style="font-size:11px;color:var(--tri-muted)">круг ${r.current_stage_lap}/${r.current_stage_lap_total}</span>`
+            : '';
+        const forecastStr = r.forecast_stage_finish_s != null
+            ? `<br><span style="font-size:11px;color:var(--tri-accent)" title="Прогноз финиша этапа">~${fmtClock(r.forecast_stage_finish_s)}</span>`
+            : '';
+        return `<span class="stage-badge">${label}</span><br>` +
+               `<span class="stage-timer" data-start-s="${r.current_stage_start_s}" ` +
+               `style="font-size:11px;color:var(--tri-muted);font-variant-numeric:tabular-nums">--:--:--</span>` +
+               lapStr + forecastStr;
+    }
+
     async function loadStandings() {
         const gender = document.getElementById('filter-gender').value;
         try {
@@ -119,7 +172,7 @@
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -129,13 +182,15 @@
                 <td class="tri-rank">${r.rank}</td>
                 <td class="tri-bib">${r.start_number}</td>
                 <td><span class="tri-name">${r.surname} ${r.name}</span></td>
-                <td style="font-variant-numeric:tabular-nums">${fmtS(r.run1_s)}</td>
-                <td style="font-variant-numeric:tabular-nums">${fmtS(r.bike_s)}</td>
-                <td style="font-variant-numeric:tabular-nums">${fmtS(r.run2_s)}</td>
+                <td>${stageColumnCell(r)}</td>
+                <td>${stageCell(r.run1_s, r.run1_speed_kmh)}</td>
+                <td>${stageCell(r.bike_s, r.bike_speed_kmh)}</td>
+                <td>${stageCell(r.run2_s, r.run2_speed_kmh)}</td>
                 <td style="font-variant-numeric:tabular-nums;font-weight:700">${fmtS(r.total_s)}</td>
                 <td>${STATUS_LABEL[r.status] || r.status}</td>
             </tr>`;
         }).join('');
+        tickStageTimers();
     }
 
     loadStandings();

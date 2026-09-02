@@ -1,10 +1,11 @@
 """Загрузчик результатов Дуатлона 222 из Copernico API.
 
-В отличие от load_tri_results.py (одинаковые круги), здесь три РАЗНЫЕ
-дисциплины — храним не круги, а кумулятивное время (сек от общего массового
-старта) на финише каждого этапа прямо в строке participants
-(run1_s/bike_s/run2_s). Время самого этапа = вычитание соседних отметок,
-считается в src/duathlon222/service.py, не здесь.
+Два уровня данных: (1) финиш каждого из 3 этапов — кумулятивное время (сек
+от общего массового старта) прямо в строке participants (run1_s/bike_s/
+run2_s), время самого этапа = вычитание соседних отметок, считается в
+src/duathlon222/service.py, не здесь; (2) круги ВНУТРИ каждого этапа —
+таблица checkpoints (participant_id, stage, lap_number, cumulative_s), нужна
+для «последней пройденной отметки» и прогноза финиша текущего этапа.
 """
 import argparse
 import logging
@@ -138,17 +139,48 @@ def _process_stages(cursor, participant_id: int, runner: dict, stage_fields: dic
     return 1
 
 
-def _load_preset(preset_name: str) -> tuple[dict, dict]:
+def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fields: dict) -> int:
+    """Обновляет таблицу checkpoints (круги внутри каждого этапа) из
+    кумулятивных мс Copernico (-> целые секунды, от общего старта гонки).
+    Останавливается на первом отсутствующем круге стадии — Copernico отдаёт
+    круги последовательно, дальше проверять бессмысленно (тот же принцип,
+    что _process_laps в load_tri_results.py)."""
+    changed = 0
+    for stage_code, lap_cfg in stage_lap_fields.items():
+        count = lap_cfg.get("count", 0)
+        pattern = lap_cfg.get("pattern", "")
+        for n in range(1, count + 1):
+            field_name = pattern.replace("{n}", str(n))
+            val_ms = runner.get(field_name)
+            if val_ms is None or val_ms == 0:
+                break
+            cumulative_s = int(val_ms // 1000)
+            cursor.execute(
+                """INSERT INTO checkpoints (participant_id, stage, lap_number, cumulative_s)
+                   VALUES (%s,%s,%s,%s)
+                   ON DUPLICATE KEY UPDATE cumulative_s=VALUES(cumulative_s)""",
+                (participant_id, stage_code, n, cumulative_s),
+            )
+            if cursor.rowcount:
+                changed += 1
+    return changed
+
+
+def _load_preset(preset_name: str) -> tuple[dict, dict, dict]:
     with open(f"config/copernico/{preset_name}.yaml", encoding="utf-8") as f:
         preset_cfg = yaml.safe_load(f)
-    return preset_cfg.get("fields", {}), preset_cfg.get("stage_fields", {})
+    return (
+        preset_cfg.get("fields", {}),
+        preset_cfg.get("stage_fields", {}),
+        preset_cfg.get("stage_lap_fields", {}),
+    )
 
 
 def _run_once(config_path: str) -> int:
     dist_cfg = _load_config(config_path)
     event_id = dist_cfg["db_event_id"]
     cop = dist_cfg["copernico"]
-    field_map, stage_fields = _load_preset(cop["preset"])
+    field_map, stage_fields, stage_lap_fields = _load_preset(cop["preset"])
 
     runners = _fetch_copernico(cop["race_id"], cop["login"], cop["preset"], cop["event"])
     logger.info(f"✅ Получено {len(runners)} участников")
@@ -157,16 +189,18 @@ def _run_once(config_path: str) -> int:
     cursor = conn.cursor()
     touched = 0
     changed = 0
+    laps_changed = 0
     for runner in runners:
         pid = _get_or_create_participant(cursor, event_id, runner, field_map)
         if pid is None:
             continue
         touched += 1
         changed += _process_stages(cursor, pid, runner, stage_fields)
+        laps_changed += _process_stage_laps(cursor, pid, runner, stage_lap_fields)
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info(f"Участников: {touched}, обновлений этапов: {changed}")
+    logger.info(f"Участников: {touched}, обновлений этапов: {changed}, обновлений кругов: {laps_changed}")
     return touched
 
 
@@ -183,8 +217,8 @@ def run(config_path: str, interval: int):
 
 
 def resync(config_path: str) -> int:
-    """Сбрасывает run1_s/bike_s/run2_s всех участников события и заново
-    заполняет их из Copernico — исправляет накопленные ошибки хронометража."""
+    """Сбрасывает run1_s/bike_s/run2_s и все круги события, заново заполняет
+    из Copernico — исправляет накопленные ошибки хронометража."""
     dist_cfg = _load_config(config_path)
     event_id = dist_cfg["db_event_id"]
 
@@ -195,6 +229,11 @@ def resync(config_path: str) -> int:
         (event_id,),
     )
     logger.info(f"🗑 Сброшено этапов у {cursor.rowcount} участников")
+    cursor.execute(
+        "DELETE c FROM checkpoints c JOIN participants p ON p.id=c.participant_id WHERE p.event_id=%s",
+        (event_id,),
+    )
+    logger.info(f"🗑 Удалено кругов: {cursor.rowcount}")
     conn.commit()
     cursor.close()
     conn.close()

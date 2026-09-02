@@ -7,9 +7,11 @@ distances:
   - distance: "222 км (10 км бег + 170 км вело + 42 км бег)"
     db_event_id: null     # ← заполнить после создания записи в duathlon_222.events (Task 1)
     stages:
-      - {code: "run1", label: "Бег 10 км",   distance_km: 10.0}
-      - {code: "bike", label: "Вело 170 км", distance_km: 170.0}
-      - {code: "run2", label: "Бег 42 км",   distance_km: 42.0}
+      # laps/lap_km подтверждены пользователем 2026-09-02: гонка круговая на
+      # всех трёх этапах. 4x2.5=10, 42x4.04=169.68≈170, 12x3.5=42.
+      - {code: "run1", label: "Бег 10 км",   distance_km: 10.0,  laps: 4,  lap_km: 2.5}
+      - {code: "bike", label: "Вело 170 км", distance_km: 170.0, laps: 42, lap_km: 4.04}
+      - {code: "run2", label: "Бег 42 км",   distance_km: 42.0,  laps: 12, lap_km: 3.5}
     copernico:
       race_id: "TBD"       # ← уточнить у организаторов
       login: "podbor250718@gmail.com"   # предположение по аналогии с tri_24h — подтвердить

@@ -650,6 +650,17 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 .admin-badge--active   { background: rgba(24, 165, 88, 0.12); color: var(--tri-green); }
 .admin-badge--inactive { background: rgba(222, 0, 0, 0.10); color: var(--tri-red); }
 
+/* ---- Дуатлон 222: бейдж текущего этапа ---- */
+.stage-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(255, 133, 98, 0.12);
+    color: var(--tri-accent);
+}
+
 /* ---- Admin: buttons ---- */
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .adm-btn {

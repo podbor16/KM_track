@@ -71,7 +71,25 @@ CREATE TABLE participants (
 
 **rawStatus vs status** (урок из Siberman, [[project_siberman_live_v2]]): `status` участника — это статус ВСЕЙ гонки (`active`/`finished`/`dnf`/`dsq`), не вывод из наличия `run1_s`/`bike_s` (участник, сошедший на вело, всё ещё имеет `run1_s`, но не имеет `bike_s`/`run2_s` — это не должно читаться как "лидирует на вело"). Финишированность этапа проверяется по факту non-NULL соответствующей колонки, ранжирование и допуск к "лидеру"/месту — по `status`.
 
-Если организатор Copernico даёт ещё и промежуточные КТ внутри этапов (круги на вело/беге) — они не меняют эту таблицу; при необходимости добавляется отдельная generic-таблица `checkpoints` (participant_id, stage, seq, elapsed_s) по аналогии с `laps` у tri_24h, но это не в MVP, пока не подтверждено, что организатор такие данные вообще даёт.
+**2026-09-02: подтверждено и реализовано.** Пользователь подтвердил параметры кругов внутри каждого этапа (гонка круговая на всех трёх): Бег-1 — 4 круга по ~2.5 км, Вело — 42 круга по ~4.04 км, Бег-2 — 12 кругов по ~3.5 км. Добавлена таблица `checkpoints` (`src/duathlon222/migrations/002_checkpoints.sql`, применена на проде):
+
+```sql
+CREATE TABLE checkpoints (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  participant_id INT NOT NULL,
+  stage          ENUM('run1','bike','run2') NOT NULL,
+  lap_number     INT NOT NULL,
+  cumulative_s   INT NOT NULL,  -- от общего массового старта, как run1_s/bike_s/run2_s
+  UNIQUE KEY uq_participant_stage_lap (participant_id, stage, lap_number),
+  FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE
+);
+```
+
+Даёт две новые возможности на странице результатов:
+- **Последняя пройденная отметка:** `круг N/M` текущего этапа.
+- **Прогноз финиша этапа:** экстраполяция по средней скорости уже пройденных кругов ЭТОГО этапа — `_forecast_stage_finish()` в `service.py`, тот же принцип, что `forecastTime()` в Siberman (`elapsed * target/пройдено`), адаптированный на Python и покрытый unit-тестами вместо клиентского JS.
+
+Имена полей Copernico для кругов (`config/copernico/duathlon_222_2026.yaml` → `stage_lap_fields`) — по-прежнему ДОГАДКА по конвенции `tri_24h_2026.yaml` (`times.official_run1_{n}kr` и т.п.), не подтверждены организаторами.
 
 ---
 

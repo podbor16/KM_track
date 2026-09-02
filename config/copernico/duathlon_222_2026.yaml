@@ -20,3 +20,12 @@ stage_fields:
   run1: "times.official_run1"
   bike: "times.official_bike"
   run2: "times.official_finish"
+
+# Круги внутри каждого этапа (подтверждено пользователем 2026-09-02: 4x2.5км
+# бег-1, 42x4.04км вело, 12x3.5км бег-2). Имена полей — ДОГАДКА по аналогии с
+# tri_24h_2026.yaml ("times.official_{n}kr"), префикс этапа добавлен, чтобы не
+# столкнуться с чужими полями внутри одного event — ОБЯЗАТЕЛЬНО проверить.
+stage_lap_fields:
+  run1: {count: 4,  pattern: "times.official_run1_{n}kr"}
+  bike: {count: 42, pattern: "times.official_bike_{n}kr"}
+  run2: {count: 12, pattern: "times.official_run2_{n}kr"}
