@@ -166,6 +166,7 @@
     }
 
     const STATUS_LABEL = {
+        notstarted: 'Не стартовал',
         active: 'На дистанции',
         finished: 'Финишировал',
         dnf: 'DNF',
@@ -268,7 +269,7 @@
             const isOut = r.status === 'dnf' || r.status === 'dsq';
             const rowStyle = `cursor:pointer;${isOut ? 'opacity:.55' : ''}`;
             return `<tr style="${rowStyle}" onclick="location.href='/duathlon222_${YEAR}/participant/${r.start_number}'">
-                <td class="tri-rank">${r.rank}</td>
+                <td class="tri-rank">${r.rank ?? '—'}</td>
                 <td class="tri-bib">${r.start_number}</td>
                 <td><span class="tri-name">${r.surname} ${r.name}</span></td>
                 <td>${badgeCell(r)}</td>

@@ -23,7 +23,8 @@
         .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
         .badge-m { background: rgba(38,49,70,.10); color: var(--tri-navy); }
         .badge-f { background: rgba(222,0,0,.10); color: var(--tri-red); }
-        .badge-active   { background: rgba(255,133,98,.14); color: var(--tri-accent); }
+        .badge-active     { background: rgba(255,133,98,.14); color: var(--tri-accent); }
+        .badge-notstarted { background: rgba(0,0,0,.06); color: var(--tri-muted); }
         .badge-finished { background: rgba(24,165,88,.12);  color: var(--tri-green); }
         .badge-dnf, .badge-dsq { background: rgba(222,0,0,.10); color: var(--tri-red); }
 
@@ -104,7 +105,13 @@
     const STAGE_SHARE = { run1: 10/222*100, bike: 170/222*100, run2: 42/222*100 };
     const STAGE_OFFSET = { run1: 0, bike: 10/222*100, run2: 180/222*100 };
 
-    const STATUS_LABEL = { active: 'На дистанции', finished: 'Финишировал', dnf: 'DNF', dsq: 'DSQ' };
+    const STATUS_LABEL = {
+        notstarted: 'Не стартовал',
+        active: 'На дистанции',
+        finished: 'Финишировал',
+        dnf: 'DNF',
+        dsq: 'DSQ',
+    };
 
     function fmtS(totalSeconds) {
         if (totalSeconds === null || totalSeconds === undefined) return '—';
@@ -248,7 +255,10 @@
         return g === 'F' ? '<span class="badge badge-f">Ж</span>' : '<span class="badge badge-m">М</span>';
     }
     function statusBadge(status) {
-        const cls = { active: 'badge-active', finished: 'badge-finished', dnf: 'badge-dnf', dsq: 'badge-dsq' }[status] || '';
+        const cls = {
+            notstarted: 'badge-notstarted', active: 'badge-active',
+            finished: 'badge-finished', dnf: 'badge-dnf', dsq: 'badge-dsq',
+        }[status] || '';
         return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
     }
 

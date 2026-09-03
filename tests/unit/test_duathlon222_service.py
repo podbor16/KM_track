@@ -1,6 +1,7 @@
 from src.duathlon222.service import (
     _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish,
     _lap_ranks_from_rows, _build_stage_laps,
+    _distance_covered_km, _display_status, _rank_standings_rows,
 )
 
 
@@ -163,3 +164,74 @@ def test_build_stage_laps_includes_ranks():
     laps = _build_stage_laps("run1", lap_rows, 0, ranks, participant_id=1)
     assert laps[0]["rank_abs"] == 2
     assert laps[0]["rank_gender"] == 1
+
+
+def test_distance_covered_km_within_run1():
+    assert _distance_covered_km("run1", 2) == 5.0
+    assert _distance_covered_km("run1", None) == 0.0
+
+
+def test_distance_covered_km_within_bike_includes_completed_run1():
+    assert _distance_covered_km("bike", 5) == 10.0 + 5 * 4.04
+
+
+def test_distance_covered_km_within_run2_includes_completed_run1_and_bike():
+    assert _distance_covered_km("run2", 3) == 10.0 + 170.0 + 3 * 3.5
+
+
+def test_distance_covered_km_finished_is_full_race():
+    assert _distance_covered_km("finished", None) == 222.0
+
+
+def test_display_status_terminal_states_pass_through():
+    assert _display_status("dnf", 50.0) == "dnf"
+    assert _display_status("dsq", 0.0) == "dsq"
+    assert _display_status("finished", 222.0) == "finished"
+
+
+def test_display_status_derived_from_progress_not_raw_db_value():
+    # Copernico для этой гонки не различает "не стартовал"/"на дистанции" —
+    # оба хранятся как один и тот же raw-статус, реальный статус выводится
+    # из факта прогресса (>0 км), а не из буквального значения в БД.
+    assert _display_status("active", 0.0) == "notstarted"
+    assert _display_status("active", 5.0) == "active"
+
+
+def _row(id, distance_km, elapsed_s, is_out=False, start_number=None):
+    return {
+        "id": id, "start_number": start_number or id,
+        "_is_out": is_out, "_distance_km": distance_km, "_elapsed_s": elapsed_s,
+    }
+
+
+def test_rank_standings_more_distance_ranks_first():
+    # Ровно сценарий из багрепорта: один прошёл 5 км, другой 10 — второй
+    # должен быть на первом месте, даже если оба ещё внутри одного этапа.
+    rows = [_row(1, 5.0, 1000), _row(2, 10.0, 2000)]
+    ranked = _rank_standings_rows(rows)
+    assert [r["id"] for r in ranked] == [2, 1]
+    assert ranked[0]["rank"] == 1
+    assert ranked[1]["rank"] == 2
+
+
+def test_rank_standings_zero_progress_gets_no_rank():
+    rows = [_row(1, 5.0, 1000), _row(2, 0.0, 0)]
+    ranked = _rank_standings_rows(rows)
+    by_id = {r["id"]: r for r in ranked}
+    assert by_id[1]["rank"] == 1
+    assert by_id[2]["rank"] is None
+
+
+def test_rank_standings_dnf_always_last_regardless_of_distance():
+    # DNF прошёл БОЛЬШЕ (150км), но всё равно должен быть внизу
+    rows = [_row(1, 5.0, 1000), _row(2, 150.0, 5000, is_out=True)]
+    ranked = _rank_standings_rows(rows)
+    assert [r["id"] for r in ranked] == [1, 2]
+    assert ranked[0]["rank"] == 1
+    assert ranked[1]["rank"] is None
+
+
+def test_rank_standings_ties_broken_by_earlier_elapsed_time():
+    rows = [_row(1, 10.0, 2000), _row(2, 10.0, 1500)]
+    ranked = _rank_standings_rows(rows)
+    assert [r["id"] for r in ranked] == [2, 1]

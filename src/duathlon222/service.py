@@ -43,6 +43,36 @@ def _current_stage(run1_s, t1_s, bike_s, t2_s, run2_s):
     return "run1", 0
 
 
+_STAGE_ORDER = ("run1", "bike", "run2")
+
+
+def _distance_covered_km(current_stage: str, current_stage_lap) -> float:
+    """Суммарная дистанция, пройденная участником по ВСЕЙ гонке (км) — общий
+    критерий живого места: кто прошёл больше километров, тот выше, даже если
+    оба ещё внутри одного и того же незавершённого этапа (напр. один прошёл
+    2 круга бег-1, другой — 3, оба ещё не финишировали этап целиком)."""
+    if current_stage == "finished":
+        return sum(STAGE_KM.values())
+    completed_km = 0.0
+    for stage_code in _STAGE_ORDER:
+        if stage_code == current_stage:
+            break
+        completed_km += STAGE_KM[stage_code]
+    return completed_km + (current_stage_lap or 0) * LAP_KM[current_stage]
+
+
+def _display_status(raw_status: str, distance_km: float) -> str:
+    """rawStatus (dnf/dsq/finished) — как есть с Copernico, определяет
+    сортировку/дименг, не подменяется. Для промежуточного 'active' (Copernico
+    для этой гонки не различает "ещё не стартовал"/"на дистанции" — оба
+    приходят как 'notstarted'/'active') статус ВЫВОДИТСЯ из факта реального
+    прогресса (пройдено >0 км), а не берётся из БД буквально — тот же принцип,
+    что rawStatus vs slice-status в Siberman."""
+    if raw_status in ("dnf", "dsq", "finished"):
+        return raw_status
+    return "active" if distance_km > 0 else "notstarted"
+
+
 def _forecast_stage_finish(stage: str, last_lap_number, last_lap_cumulative_s, stage_start_s) -> Optional[int]:
     """Прогноз момента финиша ТЕКУЩЕГО (незавершённого) этапа — экстраполяция
     по средней скорости уже пройденных кругов ЭТОГО этапа (тот же принцип,
@@ -167,8 +197,10 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         current_laps = by_stage.get(current_stage, [])
         if current_laps:
             lap_number, lap_cumulative_s = current_laps[-1]["lap_number"], current_laps[-1]["cumulative_s"]
+        distance_km = _distance_covered_km(current_stage, lap_number)
+        is_out = row["status"] in ("dnf", "dsq")
         forecast_s = None
-        if current_stage != "finished" and row["status"] not in ("dnf", "dsq"):
+        if current_stage != "finished" and not is_out:
             forecast_s = _forecast_stage_finish(current_stage, lap_number, lap_cumulative_s, current_stage_start_s)
 
         # Старт этапа = финиш предыдущего + транзит (не сразу финиш
@@ -200,7 +232,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "surname": row["surname"],
             "name": row["name"],
             "gender": row["gender"],
-            "status": row["status"],
+            "status": _display_status(row["status"], distance_km),
             "run1_s": run1_time,
             "t1_s": row["t1_s"],
             "bike_s": bike_time,
@@ -224,11 +256,35 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         conn.close()
 
 
+def _rank_standings_rows(rows: list[dict]) -> list[dict]:
+    """Сортировка + место: живой критерий "кто прошёл больше км" (не только
+    завершённые этапы целиком — круг внутри незавершённого этапа тоже
+    считается), при равной дистанции — кто раньше её достиг. DNF/DSQ — всегда
+    в самом низу, независимо от того, как далеко они продвинулись до схода
+    (rawStatus). Место НЕ проставляется («—»), пока нет ни одной пройденной
+    отметки — 0 км это ещё не участие в зачёте, а "не стартовал".
+
+    rows: список словарей с ключами "_is_out", "_distance_km", "_elapsed_s",
+    "start_number" — остальные поля произвольны и просто переносятся."""
+    ordered = sorted(
+        rows,
+        key=lambda r: (r["_is_out"], -r["_distance_km"], r["_elapsed_s"], r["start_number"]),
+    )
+    rank_counter = 0
+    for row in ordered:
+        if not row["_is_out"] and row["_distance_km"] > 0:
+            rank_counter += 1
+            row["rank"] = rank_counter
+        else:
+            row["rank"] = None
+    return ordered
+
+
 def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
-    """Таблица результатов: по прогрессу (сколько этапов пройдено), затем по
-    времени внутри той же стадии прогресса. DNF/DSQ — всегда внизу, независимо
-    от того, насколько быстрым было их частичное время (rawStatus, не выводить
-    из наличия времени на этапе)."""
+    """Таблица результатов: живое место по факту пройденной дистанции (не
+    только по завершённым этапам целиком — см. _rank_standings_rows), статус
+    'notstarted'/'active' выводится из наличия прогресса (Copernico для этой
+    гонки не различает их отдельным значением)."""
     conn = get_duathlon_connection()
     if not conn:
         return []
@@ -238,16 +294,9 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         params = [event_id, gender] if gender else [event_id]
         cursor.execute(f"""
             SELECT id, start_number, surname, name, gender, status,
-                   run1_s, t1_s, bike_s, t2_s, run2_s,
-                   (status IN ('dnf','dsq')) AS is_out,
-                   CASE WHEN run2_s IS NOT NULL THEN 3
-                        WHEN bike_s IS NOT NULL THEN 2
-                        WHEN run1_s IS NOT NULL THEN 1
-                        ELSE 0 END AS progress,
-                   COALESCE(run2_s, bike_s, run1_s, 999999999) AS sort_time
+                   run1_s, t1_s, bike_s, t2_s, run2_s
             FROM participants
             WHERE event_id = %s {gender_filter}
-            ORDER BY is_out ASC, progress DESC, sort_time ASC, start_number ASC
         """, params)
         rows = cursor.fetchall()
 
@@ -266,8 +315,8 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             if key not in last_lap or lap_row["lap_number"] > last_lap[key][0]:
                 last_lap[key] = (lap_row["lap_number"], lap_row["cumulative_s"])
 
-        result = []
-        for i, row in enumerate(rows):
+        enriched = []
+        for row in rows:
             run1_time, bike_time, run2_time = _stage_times(
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
             )
@@ -275,19 +324,20 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
             )
             lap_number, lap_cumulative_s = last_lap.get((row["id"], current_stage), (None, None))
+            distance_km = _distance_covered_km(current_stage, lap_number)
+            is_out = row["status"] in ("dnf", "dsq")
             forecast_s = None
-            if current_stage != "finished" and row["status"] not in ("dnf", "dsq"):
+            if current_stage != "finished" and not is_out:
                 forecast_s = _forecast_stage_finish(
                     current_stage, lap_number, lap_cumulative_s, current_stage_start_s
                 )
-            result.append({
+            enriched.append({
                 "id": row["id"],
-                "rank": i + 1,
                 "start_number": row["start_number"],
                 "surname": row["surname"],
                 "name": row["name"],
                 "gender": row["gender"],
-                "status": row["status"],
+                "status": _display_status(row["status"], distance_km),
                 "run1_s": run1_time,
                 "t1_s": row["t1_s"],
                 "bike_s": bike_time,
@@ -302,7 +352,14 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "current_stage_lap": lap_number,
                 "current_stage_lap_total": LAP_COUNT.get(current_stage),
                 "forecast_stage_finish_s": forecast_s,
+                "_is_out": is_out,
+                "_distance_km": distance_km,
+                "_elapsed_s": lap_cumulative_s if lap_cumulative_s is not None else (current_stage_start_s or 0),
             })
+
+        result = _rank_standings_rows(enriched)
+        for row in result:
+            del row["_is_out"], row["_distance_km"], row["_elapsed_s"]
         return result
     finally:
         cursor.close()
