@@ -2,6 +2,7 @@ from src.duathlon222.service import (
     _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish,
     _lap_ranks_from_rows, _build_stage_laps,
     _distance_covered_km, _display_status, _rank_standings_rows,
+    _forecast_race_finish,
 )
 
 
@@ -235,3 +236,23 @@ def test_rank_standings_ties_broken_by_earlier_elapsed_time():
     rows = [_row(1, 10.0, 2000), _row(2, 10.0, 1500)]
     ranked = _rank_standings_rows(rows)
     assert [r["id"] for r in ranked] == [2, 1]
+
+
+def test_forecast_race_finish_only_on_run2():
+    # Прогноз финиша ГОНКИ появляется только на бег-2 (последнем этапе) —
+    # на run1/bike возвращает None, даже если прогноз этапа уже посчитан.
+    assert _forecast_race_finish("run1", 12345) is None
+    assert _forecast_race_finish("bike", 12345) is None
+    assert _forecast_race_finish("finished", 12345) is None
+
+
+def test_forecast_race_finish_equals_stage_forecast_on_run2():
+    # На бег-2 (последнем этапе) прогноз финиша этапа И ЕСТЬ прогноз финиша
+    # гонки — префикс (бег-1+Т1+вело+Т2) уже внутри forecast_stage_finish_s.
+    assert _forecast_race_finish("run2", 54321) == 54321
+
+
+def test_forecast_race_finish_none_before_first_run2_lap():
+    # "После первой отсечки на беге-2" — до неё forecast_stage_finish_s сам
+    # уже None (см. _forecast_stage_finish), значит и прогноз гонки тоже.
+    assert _forecast_race_finish("run2", None) is None

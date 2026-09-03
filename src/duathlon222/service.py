@@ -75,10 +75,12 @@ def _display_status(raw_status: str, distance_km: float) -> str:
 
 def _forecast_stage_finish(stage: str, last_lap_number, last_lap_cumulative_s, stage_start_s) -> Optional[int]:
     """Прогноз момента финиша ТЕКУЩЕГО (незавершённого) этапа — экстраполяция
-    по средней скорости уже пройденных кругов ЭТОГО этапа (тот же принцип,
-    что forecastTime() в Siberman: elapsed * target/пройдено). Возвращает
-    кумулятивные секунды от общего старта гонки, или None, если данных о
-    кругах ещё нет (первый круг ещё не пройден)."""
+    по средней скорости уже пройденных кругов ЭТОГО этапа, на ЧИСТЫХ данных
+    (stage_start_s уже учитывает Т1/Т2 — см. _current_stage, транзит не
+    попадает в темп экстраполяции). Тот же принцип, что forecastTime() в
+    Siberman: elapsed * target/пройдено. Возвращает кумулятивные секунды от
+    общего старта гонки, или None, если данных о кругах ещё нет (первый круг
+    ещё не пройден)."""
     if last_lap_number is None or last_lap_cumulative_s is None or not last_lap_number:
         return None
     dist_so_far_km = last_lap_number * LAP_KM[stage]
@@ -87,6 +89,19 @@ def _forecast_stage_finish(stage: str, last_lap_number, last_lap_cumulative_s, s
         return None
     forecast_in_stage_s = elapsed_in_stage_s * (STAGE_KM[stage] / dist_so_far_km)
     return round(stage_start_s + forecast_in_stage_s)
+
+
+def _forecast_race_finish(current_stage: str, forecast_stage_finish_s: Optional[int]) -> Optional[int]:
+    """Прогноз финиша ВСЕЙ ГОНКИ — появляется только на бег-2 (последний
+    этап): "префикс" (бег-1 + Т1 + вело + Т2) уже целиком внутри
+    stage_start_s этапа бег-2, поэтому прогноз финиша бег-2 И ЕСТЬ прогноз
+    финиша гонки — считать заново нечего. На run1/bike нарочно не считаем
+    (по решению пользователя, аналогия с Siberman) — предсказывать финиш всей
+    гонки по темпу этапа, который не является последним, слишком спекулятивно
+    (не учитывает будущий темп ещё не начатых дисциплин)."""
+    if current_stage != "run2":
+        return None
+    return forecast_stage_finish_s
 
 
 def _lap_ranks_from_rows(rows: list[dict]) -> dict[tuple[int, str, int], dict]:
@@ -202,6 +217,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         forecast_s = None
         if current_stage != "finished" and not is_out:
             forecast_s = _forecast_stage_finish(current_stage, lap_number, lap_cumulative_s, current_stage_start_s)
+        forecast_race_s = _forecast_race_finish(current_stage, forecast_s)
 
         # Старт этапа = финиш предыдущего + транзит (не сразу финиш
         # предыдущего) — иначе сплит 1-го круга включал бы Т1/Т2.
@@ -247,6 +263,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "current_stage_lap": lap_number,
             "current_stage_lap_total": LAP_COUNT.get(current_stage),
             "forecast_stage_finish_s": forecast_s,
+            "forecast_race_finish_s": forecast_race_s,
             "rank_abs": rank_abs,
             "rank_gender": rank_gender,
             "stages": stages_out,
@@ -331,6 +348,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 forecast_s = _forecast_stage_finish(
                     current_stage, lap_number, lap_cumulative_s, current_stage_start_s
                 )
+            forecast_race_s = _forecast_race_finish(current_stage, forecast_s)
             enriched.append({
                 "id": row["id"],
                 "start_number": row["start_number"],
@@ -352,6 +370,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "current_stage_lap": lap_number,
                 "current_stage_lap_total": LAP_COUNT.get(current_stage),
                 "forecast_stage_finish_s": forecast_s,
+                "forecast_race_finish_s": forecast_race_s,
                 "_is_out": is_out,
                 "_distance_km": distance_km,
                 "_elapsed_s": lap_cumulative_s if lap_cumulative_s is not None else (current_stage_start_s or 0),

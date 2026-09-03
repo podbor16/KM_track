@@ -230,6 +230,20 @@
                `style="font-size:11px;color:var(--tri-muted);font-variant-numeric:tabular-nums">--:--:--</span>`;
     }
 
+    // Колонка «Итого» — реальное время, либо (после первой отметки на бег-2)
+    // прогноз финиша ГОНКИ: и длительность, и астрономическое время.
+    function totalCell(r) {
+        if (r.total_s != null) {
+            return `<span style="font-variant-numeric:tabular-nums;font-weight:700">${fmtS(r.total_s)}</span>`;
+        }
+        if (r.forecast_race_finish_s != null) {
+            return `<span style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--tri-accent)" ` +
+                   `title="Прогноз финиша гонки">~${fmtS(r.forecast_race_finish_s)}</span><br>` +
+                   `<span style="font-size:11px;color:var(--tri-accent)">~${fmtClock(r.forecast_race_finish_s)}</span>`;
+        }
+        return '<span style="color:var(--tri-muted)">—</span>';
+    }
+
     // Колонка «Отметка» — последний пройденный круг текущего этапа + прогноз
     function markCell(r) {
         if (r.current_stage === 'finished' || !r.current_stage_lap) {
@@ -305,7 +319,7 @@
                 <td>${stageCell('bike', r.bike_s, r.bike_speed_kmh)}</td>
                 <td>${transitionCell(r.t2_s)}</td>
                 <td>${stageCell('run2', r.run2_s, r.run2_speed_kmh)}</td>
-                <td style="font-variant-numeric:tabular-nums;font-weight:700">${fmtS(r.total_s)}</td>
+                <td>${totalCell(r)}</td>
                 <td>${STATUS_LABEL[r.status] || r.status}</td>
             </tr>`;
         }).join('');

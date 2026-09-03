@@ -251,6 +251,19 @@
         </details>`;
     }
 
+    // «Итого»: реальное время, либо (после первой отметки на бег-2) прогноз
+    // финиша ГОНКИ — длительность + астрономическое время второй строкой.
+    function totalStatHtml(d) {
+        if (d.total_s != null) {
+            return `<div class="stat-val">${fmtS(d.total_s)}</div>`;
+        }
+        if (d.forecast_race_finish_s != null) {
+            return `<div class="stat-val" style="color:var(--tri-accent)" title="Прогноз финиша гонки">~${fmtS(d.forecast_race_finish_s)}</div>` +
+                   `<div class="stat-sub" style="color:var(--tri-accent)">~${fmtClock(d.forecast_race_finish_s)}</div>`;
+        }
+        return '<div class="stat-val">—</div>';
+    }
+
     function genderBadge(g) {
         return g === 'F' ? '<span class="badge badge-f">Ж</span>' : '<span class="badge badge-m">М</span>';
     }
@@ -274,7 +287,7 @@
             ${overallProgressBarHtml(d)}
             <div class="stats-row">
                 <div class="stat">
-                    <div class="stat-val">${fmtS(d.total_s)}</div>
+                    ${totalStatHtml(d)}
                     <div class="stat-lbl">Итого</div>
                 </div>
                 <div class="stat">
