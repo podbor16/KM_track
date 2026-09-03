@@ -166,8 +166,15 @@ def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fie
     return changed
 
 
-def _load_preset(preset_name: str) -> tuple[dict, dict, dict]:
-    with open(f"config/copernico/{preset_name}.yaml", encoding="utf-8") as f:
+PRESET_CONFIG_PATH = "config/copernico/duathlon_222_2026.yaml"
+
+
+def _load_preset() -> tuple[dict, dict, dict]:
+    """Наш локальный конфиг field-маппинга — ИМЯ ФАЙЛА фиксировано и не
+    связано с тем, как называется сам пресет в Copernico UI (cop['preset'] —
+    отдельный идентификатор для URL API, не имя файла; для Дуатлона 222 это
+    "222_2026", а локальный файл — "duathlon_222_2026.yaml")."""
+    with open(PRESET_CONFIG_PATH, encoding="utf-8") as f:
         preset_cfg = yaml.safe_load(f)
     return (
         preset_cfg.get("fields", {}),
@@ -180,7 +187,7 @@ def _run_once(config_path: str) -> int:
     dist_cfg = _load_config(config_path)
     event_id = dist_cfg["db_event_id"]
     cop = dist_cfg["copernico"]
-    field_map, stage_fields, stage_lap_fields = _load_preset(cop["preset"])
+    field_map, stage_fields, stage_lap_fields = _load_preset()
 
     runners = _fetch_copernico(cop["race_id"], cop["login"], cop["preset"], cop["event"])
     logger.info(f"✅ Получено {len(runners)} участников")
