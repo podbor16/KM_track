@@ -19,10 +19,12 @@ from load_duathlon_results import _load_preset, PRESET_CONFIG_PATH
 
 
 def test_load_preset_reads_local_config_without_arguments():
-    field_map, stage_fields, stage_lap_fields = _load_preset()
+    field_map, stage_fields, stage_lap_fields, transition_fields = _load_preset()
     assert field_map["start_number"] == "dorsal"
     assert "run1" in stage_fields
     assert "run1" in stage_lap_fields
+    assert "t1" in transition_fields
+    assert "t2" in transition_fields
 
 
 def test_preset_config_path_independent_of_real_copernico_preset_name():
@@ -34,5 +36,5 @@ def test_preset_config_path_independent_of_real_copernico_preset_name():
     real_copernico_preset_name = event_cfg["distances"][0]["copernico"]["preset"]
 
     assert real_copernico_preset_name != Path(PRESET_CONFIG_PATH).stem
-    field_map, _, _ = _load_preset()
+    field_map, _, _, _ = _load_preset()
     assert field_map

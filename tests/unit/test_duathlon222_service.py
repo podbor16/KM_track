@@ -5,31 +5,39 @@ from src.duathlon222.service import (
 
 
 def test_stage_times_all_finished():
-    run1, bike, run2 = _stage_times(2400, 22800, 40800)
+    run1, bike, run2 = _stage_times(2400, None, 22800, None, 40800)
     assert run1 == 2400
     assert bike == 20400
     assert run2 == 18000
 
 
 def test_stage_times_only_run1_done():
-    run1, bike, run2 = _stage_times(2400, None, None)
+    run1, bike, run2 = _stage_times(2400, None, None, None, None)
     assert run1 == 2400
     assert bike is None
     assert run2 is None
 
 
 def test_stage_times_run1_and_bike_done():
-    run1, bike, run2 = _stage_times(2400, 22800, None)
+    run1, bike, run2 = _stage_times(2400, None, 22800, None, None)
     assert run1 == 2400
     assert bike == 20400
     assert run2 is None
 
 
 def test_stage_times_nothing_done():
-    run1, bike, run2 = _stage_times(None, None, None)
+    run1, bike, run2 = _stage_times(None, None, None, None, None)
     assert run1 is None
     assert bike is None
     assert run2 is None
+
+
+def test_stage_times_subtracts_known_transitions():
+    # Т1=300с, Т2=200с — эти секунды не должны попадать во время этапа
+    run1, bike, run2 = _stage_times(2400, 300, 22800, 200, 40800)
+    assert run1 == 2400
+    assert bike == 22800 - 2400 - 300
+    assert run2 == 40800 - 22800 - 200
 
 
 def test_speed_kmh_run1_25_min_for_10km():
@@ -42,25 +50,38 @@ def test_speed_kmh_none_when_no_time():
 
 
 def test_current_stage_not_started_defaults_to_run1():
-    stage, start_s = _current_stage(None, None, None)
+    stage, start_s = _current_stage(None, None, None, None, None)
     assert stage == "run1"
     assert start_s == 0
 
 
 def test_current_stage_on_bike():
-    stage, start_s = _current_stage(2400, None, None)
+    stage, start_s = _current_stage(2400, None, None, None, None)
     assert stage == "bike"
     assert start_s == 2400
 
 
+def test_current_stage_on_bike_accounts_for_t1():
+    # Вело реально начинается ПОСЛЕ транзита, не сразу на финише бег-1
+    stage, start_s = _current_stage(2400, 300, None, None, None)
+    assert stage == "bike"
+    assert start_s == 2700
+
+
 def test_current_stage_on_run2():
-    stage, start_s = _current_stage(2400, 22800, None)
+    stage, start_s = _current_stage(2400, None, 22800, None, None)
     assert stage == "run2"
     assert start_s == 22800
 
 
+def test_current_stage_on_run2_accounts_for_t2():
+    stage, start_s = _current_stage(2400, None, 22800, 200, None)
+    assert stage == "run2"
+    assert start_s == 23000
+
+
 def test_current_stage_finished():
-    stage, start_s = _current_stage(2400, 22800, 40800)
+    stage, start_s = _current_stage(2400, None, 22800, None, 40800)
     assert stage == "finished"
     assert start_s is None
 

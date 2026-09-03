@@ -33,3 +33,11 @@ stage_lap_fields:
   run1: {count: 4,  pattern: "times.official_run1_{n}kr"}
   bike: {count: 42, pattern: "times.official_bike_{n}kr"}
   run2: {count: 12, pattern: "times.official_run2_{n}kr"}
+
+# Т1 (бег-1 -> вело) и Т2 (вело -> бег-2) — ДЛИТЕЛЬНОСТЬ транзита (мс),
+# не кумулятивная отметка. Учитываются в общем времени гонки (уже внутри
+# run2_s), но вычитаются из "чистого" времени соседних этапов. Имена полей —
+# ДОГАДКА, ОБЯЗАТЕЛЬНО проверить реальным запросом API.
+transition_fields:
+  t1: "times.t1"
+  t2: "times.t2"
