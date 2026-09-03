@@ -25,6 +25,7 @@
         <div class="admin-tabs">
             <button class="admin-tab active" onclick="switchTab('loader', this)">Загрузчик</button>
             <button class="admin-tab" onclick="switchTab('preset', this)">Пресет Copernico</button>
+            <button class="admin-tab" onclick="switchTab('post', this)">📋 Пост</button>
         </div>
 
         <!-- Загрузчик -->
@@ -42,6 +43,47 @@
             <div id="preset-wrap">
                 <div class="admin-loading">Загрузка...</div>
             </div>
+        </div>
+
+        <!-- Пост -->
+        <div id="tab-post" class="tab-pane">
+            <div class="admin-section-note">
+                Снимок «кто где был» на самой свежей пройденной отметке этапа — свой пост на каждый этап и зачёт (Абсолют/Мужчины/Женщины).
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+                <div class="tri-filter-group">
+                    <label class="tri-label">Этап:</label>
+                    <select id="post-stage" class="tri-select">
+                        <option value="run1">Бег-1</option>
+                        <option value="bike">Вело</option>
+                        <option value="run2">Бег-2</option>
+                    </select>
+                </div>
+                <div class="tri-filter-group">
+                    <label class="tri-label">Зачёт:</label>
+                    <select id="post-category" class="tri-select">
+                        <option value="">Абсолют</option>
+                        <option value="M">Мужчины</option>
+                        <option value="F">Женщины</option>
+                    </select>
+                </div>
+                <div class="tri-filter-group">
+                    <label class="tri-label">Время:</label>
+                    <select id="post-timebase" class="tri-select">
+                        <option value="stage">Чистое время этапа</option>
+                        <option value="race">С начала гонки</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+                <button class="adm-btn adm-btn--start" onclick="generateAndShow()">Сгенерировать</button>
+                <button class="adm-btn adm-btn--edit" id="btn-copy" onclick="copyPost()" style="display:none">Копировать</button>
+                <span id="copy-ok" style="display:none;color:var(--tri-green);font-size:13px">✓ Скопировано!</span>
+            </div>
+            <textarea id="post-preview" readonly
+                style="width:100%;height:520px;font-family:monospace;font-size:13px;line-height:1.6;
+                       border:1px solid var(--tri-border);border-radius:8px;padding:14px;
+                       background:var(--tri-surface);color:var(--tri-text);resize:vertical;display:none"></textarea>
         </div>
     </div>
 
@@ -277,6 +319,118 @@
         });
 
         return card;
+    }
+
+    // ---- Генератор поста для трансляции ----
+    // Формат — по образцу Siberman: снимок на КОНКРЕТНОЙ отметке (самый
+    // дальний круг, до которого дошёл хоть один участник пула), а не
+    // "текущий живой прогресс каждого" — так время у всех сопоставимо
+    // (сравниваются на одной и той же дистанции). Один пост = один этап +
+    // один зачёт (Абсолют/Мужчины/Женщины), генерируются по отдельности.
+
+    const YEAR = 2026;
+
+    const STAGE_PHRASE = {
+        run1: 'первого бегового этапа',
+        bike: 'велоэтапа',
+        run2: 'второго бегового этапа',
+    };
+    const RATE_LABEL = { run1: 'Темп на этапе', bike: 'Скорость на этапе', run2: 'Темп на этапе' };
+    const CATEGORY_TITLE = { '': 'Абсолют', M: 'Мужчины', F: 'Женщины' };
+
+    // Длительность (не астрономическое время!) — "чистое время этапа" или
+    // "время с начала гонки", в зависимости от выбранного в UI режима
+    // (post-timebase). Формат ЧЧ:ММ:СС, часы не отбрасываются даже при 0 —
+    // так привычнее читается в постах результатов.
+    function fmtDuration(totalSeconds) {
+        const s = Math.max(0, Math.round(totalSeconds));
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+
+    function fmtGapShort(deltaSeconds) {
+        const s = Math.max(0, Math.round(deltaSeconds));
+        const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+        return h > 0
+            ? `+${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+            : `+${m}:${String(ss).padStart(2,'0')}`;
+    }
+
+    // Скорость (км/ч) → темп мин/км для беговых этапов; вело остаётся км/ч
+    function fmtPaceOrSpeed(stageCode, speedKmh) {
+        if (speedKmh == null) return '—';
+        if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
+        const secPerKm = 3600 / speedKmh;
+        const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60);
+        return `${m}:${String(s).padStart(2,'0')} /км`;
+    }
+
+    async function generateAndShow() {
+        const ta  = document.getElementById('post-preview');
+        const btn = document.getElementById('btn-copy');
+        const ok  = document.getElementById('copy-ok');
+        const stage = document.getElementById('post-stage').value;
+        const category = document.getElementById('post-category').value;
+        const timebase = document.getElementById('post-timebase').value; // 'stage' | 'race'
+        ta.value = 'Загрузка...';
+        ta.style.display = '';
+        btn.style.display = 'none';
+        ok.style.display  = 'none';
+
+        try {
+            const url = `/api/duathlon222_${YEAR}/stage-mark/${stage}` + (category ? `?gender=${category}` : '');
+            const r = await fetch(url);
+            const d = await r.json();
+
+            if (!d.available) {
+                ta.value = 'Нет данных — в этом зачёте ещё никто не дошёл ни до одной отметки этапа.';
+                return;
+            }
+
+            // "Чистое время этапа" — уже отсортировано сервером (elapsed_s).
+            // "С начала гонки" — своя сортировка: кто быстрее финишировал
+            // ПРЕДЫДУЩИЕ этапы, стартует этот раньше по часам гонки, даже
+            // если сам этап пройдёт медленнее — реальный текущий расклад.
+            const entries = timebase === 'race'
+                ? [...d.entries].sort((a, b) => a.race_elapsed_s - b.race_elapsed_s)
+                : d.entries;
+            const timeKey = timebase === 'race' ? 'race_elapsed_s' : 'elapsed_s';
+            const gapKey  = timebase === 'race' ? 'race_gap_s'    : 'gap_s';
+
+            const lines = entries.map((e, i) => {
+                const gapStr = i === 0 ? '' : ` | ${fmtGapShort(e[gapKey])}`;
+                return `${i + 1}. ${e.surname} ${e.name}\n` +
+                       `⏱️ ${fmtDuration(e[timeKey])}${gapStr}\n` +
+                       `${RATE_LABEL[stage]}: ${fmtPaceOrSpeed(stage, e.speed_kmh)}`;
+            });
+
+            const text =
+                `222 Дуатлон ${YEAR}. ${CATEGORY_TITLE[category]}.\n` +
+                `📍 Отметка: ${d.overall_km} из ${d.race_total_km} км\n` +
+                `(${d.stage_km_at_mark} из ${d.stage_total_km} км ${STAGE_PHRASE[stage]}).\n\n` +
+                lines.join('\n\n') +
+                `\n\n👉 Лайв-результаты и трансляция: https://live-race.triatleta.ru/duathlon222_${YEAR}`;
+
+            ta.value = text;
+            btn.style.display = '';
+        } catch(e) {
+            ta.value = 'Ошибка: ' + e.message;
+        }
+    }
+
+    async function copyPost() {
+        const ta = document.getElementById('post-preview');
+        const ok = document.getElementById('copy-ok');
+        try {
+            await navigator.clipboard.writeText(ta.value);
+            ok.style.display = '';
+            setTimeout(() => { ok.style.display = 'none'; }, 2000);
+        } catch(e) {
+            ta.select();
+            document.execCommand('copy');
+            ok.style.display = '';
+            setTimeout(() => { ok.style.display = 'none'; }, 2000);
+        }
     }
 
     document.addEventListener('keydown', e => {

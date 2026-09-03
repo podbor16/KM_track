@@ -1,10 +1,40 @@
 from typing import Optional
 from src.duathlon222.db import get_duathlon_connection
 
-# Дистанции и круги этапов — фиксированы для этой гонки, см. config/events/duathlon_222.yaml
+# Дистанции этапов целиком — из stage_fields (финиш), не из кругов.
 STAGE_KM = {"run1": 10.0, "bike": 170.0, "run2": 42.0}
-LAP_KM = {"run1": 2.5, "bike": 4.04, "run2": 3.5}
-LAP_COUNT = {"run1": 4, "bike": 42, "run2": 12}
+
+# Шаг между соседними отметками (км) — уточнено живым fetch Copernico
+# 2026-09-04 (реальные отметки трассы, не номинальные 2.5/4.04/3.5): Бег-1 и
+# Бег-2 включают середины кругов (вдвое больше точек прогресса, по решению
+# пользователя), поэтому их фактический шаг вдвое меньше "длины круга".
+LAP_KM = {"run1": 1.25, "bike": 4.04, "run2": 1.757}
+LAP_COUNT = {"run1": 8, "bike": 42, "run2": 24}
+
+# Смещение первой отметки от начала этапа — Вело: от старта вело (0 км) до
+# первой считаемой мачты — 3.4 км (короткий "пролог"), не полные 4.04 км;
+# все ПОСЛЕДУЮЩИЕ отметки уже ровно по 4.04 км друг от друга. Формула
+# _lap_distance_km ниже: distance(n) = n*LAP_KM + OFFSET, при OFFSET=3.4-4.04
+# distance(1) даёт ровно 3.4. Бег-1/Бег-2 стартуют без "пролога" (0).
+STAGE_LAP_OFFSET = {"run1": 0.0, "bike": 3.4 - 4.04, "run2": 0.0}
+
+
+def _lap_distance_km(stage_code: str, lap_number: Optional[int]) -> float:
+    """Кумулятивная дистанция (км) НА данной отметке этапа — не просто
+    lap_number*LAP_KM: Вело стартует с более коротким "прологом" (см.
+    STAGE_LAP_OFFSET). 0.0, если отметка ещё не пройдена (lap_number=None)."""
+    if not lap_number:
+        return 0.0
+    return lap_number * LAP_KM[stage_code] + STAGE_LAP_OFFSET[stage_code]
+
+
+def _lap_split_distance_km(stage_code: str, lap_number: int) -> float:
+    """Дистанция ИМЕННО этой отметки (не кумулятивно от старта этапа) — для
+    скорости/темпа сплита. Первая отметка включает смещение-"пролог" (см.
+    STAGE_LAP_OFFSET), остальные — постоянный шаг LAP_KM."""
+    if lap_number <= 1:
+        return _lap_distance_km(stage_code, 1)
+    return LAP_KM[stage_code]
 
 
 def _stage_times(run1_s, t1_s, bike_s, t2_s, run2_s):
@@ -20,30 +50,53 @@ def _stage_times(run1_s, t1_s, bike_s, t2_s, run2_s):
     return run1_time, bike_time, run2_time
 
 
-def _speed_kmh(stage_code: str, stage_time_s) -> Optional[float]:
-    if not stage_time_s or stage_time_s <= 0:
+def _speed_kmh_for_distance(distance_km: float, elapsed_s) -> Optional[float]:
+    """Скорость км/ч для произвольной пройденной дистанции/времени — обобщение
+    _speed_kmh() на частичный прогресс (не только завершённый этап целиком),
+    нужно для _speed_kmh() ниже и для рангов внутри незавершённого этапа
+    (get_stage_standings)."""
+    if not elapsed_s or elapsed_s <= 0 or not distance_km:
         return None
-    return round(STAGE_KM[stage_code] / (stage_time_s / 3600.0), 2)
+    return round(distance_km / (elapsed_s / 3600.0), 2)
+
+
+def _speed_kmh(stage_code: str, stage_time_s) -> Optional[float]:
+    return _speed_kmh_for_distance(STAGE_KM[stage_code], stage_time_s)
+
+
+_STAGE_ORDER = ("run1", "bike", "run2")
+# Дистанция гонки, пройденная ДО начала этого этапа — для заголовка поста
+# ("X из 222 км") и общей позиции.
+_STAGE_KM_BEFORE = {"run1": 0.0, "bike": STAGE_KM["run1"], "run2": STAGE_KM["run1"] + STAGE_KM["bike"]}
+
+
+def _stage_start_s(stage_code, run1_s, t1_s, bike_s, t2_s) -> Optional[int]:
+    """Кумулятивная отметка (сек от общего старта), с которой НАЧАЛСЯ этот
+    этап — финиш предыдущего + транзит (Т1/Т2), а не сразу финиш предыдущего,
+    иначе сплит/темп/прогноз включали бы транзитную зону, будто участник уже
+    на трассе следующего этапа. None, если предыдущий этап ещё не завершён
+    (стартовая отметка этого этапа неизвестна)."""
+    if stage_code == "run1":
+        return 0
+    if stage_code == "bike":
+        return (run1_s + (t1_s or 0)) if run1_s is not None else None
+    if stage_code == "run2":
+        return (bike_s + (t2_s or 0)) if bike_s is not None else None
+    return None
 
 
 def _current_stage(run1_s, t1_s, bike_s, t2_s, run2_s):
     """Какой этап сейчас в процессе (или завершён) + с какой кумулятивной
     отметки (сек от общего старта) он начался — для тикающих часов и
-    прогноза на фронтенде. Старт следующего этапа = финиш предыдущего +
-    транзит (Т1/Т2), а не сразу финиш предыдущего — иначе прогноз/таймер
-    включали бы транзитную зону как будто участник уже крутит педали.
-    run1 — дефолт и для «ещё не стартовал»: отдельного сигнала старта
-    Copernico не даёт, отличить не от чего."""
+    прогноза на фронтенде. run1 — дефолт и для «ещё не стартовал»:
+    отдельного сигнала старта Copernico не даёт, отличить не от чего."""
     if run2_s is not None:
         return "finished", None
     if bike_s is not None:
-        return "run2", bike_s + (t2_s or 0)
+        return "run2", _stage_start_s("run2", run1_s, t1_s, bike_s, t2_s)
     if run1_s is not None:
-        return "bike", run1_s + (t1_s or 0)
+        return "bike", _stage_start_s("bike", run1_s, t1_s, bike_s, t2_s)
     return "run1", 0
-
-
-_STAGE_ORDER = ("run1", "bike", "run2")
 
 
 def _distance_covered_km(current_stage: str, current_stage_lap) -> float:
@@ -58,7 +111,7 @@ def _distance_covered_km(current_stage: str, current_stage_lap) -> float:
         if stage_code == current_stage:
             break
         completed_km += STAGE_KM[stage_code]
-    return completed_km + (current_stage_lap or 0) * LAP_KM[current_stage]
+    return completed_km + _lap_distance_km(current_stage, current_stage_lap)
 
 
 def _display_status(raw_status: str, distance_km: float) -> str:
@@ -83,7 +136,7 @@ def _forecast_stage_finish(stage: str, last_lap_number, last_lap_cumulative_s, s
     ещё не пройден)."""
     if last_lap_number is None or last_lap_cumulative_s is None or not last_lap_number:
         return None
-    dist_so_far_km = last_lap_number * LAP_KM[stage]
+    dist_so_far_km = _lap_distance_km(stage, last_lap_number)
     elapsed_in_stage_s = last_lap_cumulative_s - stage_start_s
     if dist_so_far_km <= 0 or elapsed_in_stage_s <= 0:
         return None
@@ -150,7 +203,7 @@ def _build_stage_laps(
     for lr in lap_rows:
         cum = lr["cumulative_s"]
         split = (cum - prev_cum) if prev_cum is not None else None
-        speed_kmh = round(LAP_KM[stage_code] / (split / 3600.0), 2) if split and split > 0 else None
+        speed_kmh = _speed_kmh_for_distance(_lap_split_distance_km(stage_code, lr["lap_number"]), split)
         r = ranks.get((participant_id, stage_code, lr["lap_number"]), {})
         laps.append({
             "lap_number": lr["lap_number"],
@@ -219,11 +272,10 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             forecast_s = _forecast_stage_finish(current_stage, lap_number, lap_cumulative_s, current_stage_start_s)
         forecast_race_s = _forecast_race_finish(current_stage, forecast_s)
 
-        # Старт этапа = финиш предыдущего + транзит (не сразу финиш
-        # предыдущего) — иначе сплит 1-го круга включал бы Т1/Т2.
-        bike_start = (row["run1_s"] + (row["t1_s"] or 0)) if row["run1_s"] is not None else None
-        run2_start = (row["bike_s"] + (row["t2_s"] or 0)) if row["bike_s"] is not None else None
-        stage_starts = {"run1": 0, "bike": bike_start, "run2": run2_start}
+        stage_starts = {
+            stage_code: _stage_start_s(stage_code, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"])
+            for stage_code in _STAGE_ORDER
+        }
         stages_out = {
             stage_code: {
                 "distance_km": STAGE_KM[stage_code],
@@ -295,6 +347,98 @@ def _rank_standings_rows(rows: list[dict]) -> list[dict]:
         else:
             row["rank"] = None
     return ordered
+
+
+def _frontier_lap(lap_numbers: list[int]) -> Optional[int]:
+    """Самый дальний круг, до которого дошёл хотя бы один участник пула —
+    "текущая отметка" для автоматической генерации поста трансляции (тот же
+    принцип, что "последняя пройденная отметка" в остальном приложении, но
+    для целого ПУЛА, а не одного участника)."""
+    return max(lap_numbers) if lap_numbers else None
+
+
+def get_stage_mark_broadcast(event_id: int, stage_code: str, gender: Optional[str] = None) -> Optional[dict]:
+    """Снимок «кто где был на текущей отметке» для поста трансляции (формат
+    Siberman): берём САМЫЙ ДАЛЬНИЙ круг, до которого дошёл хоть один участник
+    пула (весь пул, если gender=None), и показываем ВСЕХ, у кого есть
+    ЗАПИСЬ именно на этом круге (исторический сплит на этой отметке — не их
+    текущий прогресс, который мог уйти дальше), отсортированных по времени
+    восхождения к ней. Время/темп — ЧИСТЫЕ данные этапа (без Т1/Т2,
+    stage_start уже их исключает). None, если в пуле ещё никто не дошёл ни
+    до одного круга этого этапа."""
+    conn = get_duathlon_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id, surname, name, gender, run1_s, t1_s, bike_s, t2_s
+            FROM participants WHERE event_id=%s
+        """, (event_id,))
+        participants = {r["id"]: r for r in cursor.fetchall()}
+
+        gender_filter = "AND p.gender=%s" if gender else ""
+        params = [event_id, stage_code] + ([gender] if gender else [])
+        cursor.execute(f"""
+            SELECT c.participant_id, c.lap_number, c.cumulative_s
+            FROM checkpoints c JOIN participants p ON p.id = c.participant_id
+            WHERE p.event_id=%s AND c.stage=%s {gender_filter}
+        """, params)
+        laps = cursor.fetchall()
+
+        frontier = _frontier_lap([lr["lap_number"] for lr in laps])
+        if frontier is None:
+            return None
+
+        entries = []
+        for lr in laps:
+            if lr["lap_number"] != frontier:
+                continue
+            p = participants.get(lr["participant_id"])
+            stage_start = _stage_start_s(stage_code, p["run1_s"], p["t1_s"], p["bike_s"], p["t2_s"])
+            if stage_start is None:
+                continue
+            entries.append({
+                "surname": p["surname"], "name": p["name"],
+                # Чистое время ЭТАПА (без Т1/Т2/предыдущих этапов) — для
+                # поста "по этапу" (кто быстрее ИМЕННО на этом этапе).
+                "elapsed_s": lr["cumulative_s"] - stage_start,
+                # Кумулятивное время С ОБЩЕГО СТАРТА ГОНКИ (уже включает
+                # предыдущие этапы + транзиты) — для поста "по всей гонке".
+                # Это РАЗНЫЕ рейтинги для стадий после run1: кто финишировал
+                # run1 быстрее, стартует этот этап раньше по часам гонки,
+                # даже если сам этап пройдёт медленнее.
+                "race_elapsed_s": lr["cumulative_s"],
+            })
+        if not entries:
+            return None
+        stage_leader_elapsed = min(e["elapsed_s"] for e in entries)
+        race_leader_elapsed = min(e["race_elapsed_s"] for e in entries)
+        entries.sort(key=lambda e: e["elapsed_s"])
+
+        stage_km_at_mark = round(_lap_distance_km(stage_code, frontier), 2)
+        return {
+            "stage": stage_code,
+            "lap_mark": frontier,
+            "stage_km_at_mark": stage_km_at_mark,
+            "stage_total_km": STAGE_KM[stage_code],
+            "overall_km": round(_STAGE_KM_BEFORE[stage_code] + stage_km_at_mark, 2),
+            "race_total_km": sum(STAGE_KM.values()),
+            "entries": [
+                {
+                    "surname": e["surname"], "name": e["name"],
+                    "elapsed_s": e["elapsed_s"],
+                    "gap_s": e["elapsed_s"] - stage_leader_elapsed,
+                    "race_elapsed_s": e["race_elapsed_s"],
+                    "race_gap_s": e["race_elapsed_s"] - race_leader_elapsed,
+                    "speed_kmh": _speed_kmh_for_distance(stage_km_at_mark, e["elapsed_s"]),
+                }
+                for e in entries
+            ],
+        }
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:

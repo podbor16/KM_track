@@ -244,7 +244,9 @@
         return '<span style="color:var(--tri-muted)">—</span>';
     }
 
-    // Колонка «Отметка» — последний пройденный круг текущего этапа + прогноз
+    // Колонка «Отметка» — последняя пройденная отметка текущего этапа + прогноз.
+    // "Отметка", не "круг": current_stage_lap считает и промежуточные точки
+    // внутри круга (Бег-1/Бег-2) — само число кругов трассы не менялось.
     function markCell(r) {
         if (r.current_stage === 'finished' || !r.current_stage_lap) {
             return '<span style="color:var(--tri-muted)">—</span>';
@@ -252,7 +254,7 @@
         const forecastStr = r.forecast_stage_finish_s != null
             ? `<br><span style="font-size:11px;color:var(--tri-accent)" title="Прогноз финиша этапа">~${fmtClock(r.forecast_stage_finish_s)}</span>`
             : '';
-        return `<span style="font-size:12px">круг ${r.current_stage_lap}/${r.current_stage_lap_total}</span>${forecastStr}`;
+        return `<span style="font-size:12px">отметка ${r.current_stage_lap}/${r.current_stage_lap_total}</span>${forecastStr}`;
     }
 
     // Та же «Отметка», но для вкладки КОНКРЕТНОГО этапа — показываем только

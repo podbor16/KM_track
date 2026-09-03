@@ -23,8 +23,8 @@ def test_load_preset_reads_local_config_without_arguments():
     assert field_map["start_number"] == "dorsal"
     assert "run1" in stage_fields
     assert "run1" in stage_lap_fields
-    assert "t1" in transition_fields
-    assert "t2" in transition_fields
+    assert "t1_start" in transition_fields
+    assert "t2_start" in transition_fields
 
 
 def test_preset_config_path_independent_of_real_copernico_preset_name():

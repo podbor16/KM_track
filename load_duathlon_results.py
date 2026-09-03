@@ -122,39 +122,32 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
     return cursor.lastrowid
 
 
-def _process_stages(cursor, participant_id: int, runner: dict, stage_fields: dict) -> int:
-    """Обновляет run1_s/bike_s/run2_s из кумулятивных мс Copernico (-> целые секунды)."""
+def _process_stages_and_transitions(
+    cursor, participant_id: int, runner: dict, stage_fields: dict, transition_fields: dict,
+) -> int:
+    """Обновляет run1_s/bike_s/run2_s (финиш этапа целиком, кумулятивные мс
+    Copernico -> целые секунды) И t1_s/t2_s. В отличие от run1_s/bike_s/
+    run2_s, Т1/Т2 Copernico не отдаёт готовой ДЛИТЕЛЬНОСТЬЮ — только
+    кумулятивные отметки старта транзита (transition_fields), поэтому
+    длительность считается здесь же: старт транзита минус финиш
+    ПРЕДЫДУЩЕГО этапа (тот же raw-словарь runner, оба поля читаются один
+    раз за вызов)."""
+    stage_ms = {code: runner.get(field) for code, field in stage_fields.items()}
+
     updates = {}
-    for stage_code, field_name in stage_fields.items():
+    for stage_code, val_ms in stage_ms.items():
         col = f"{stage_code}_s"
-        if col not in STAGE_COLUMNS:
-            continue
-        val_ms = runner.get(field_name)
-        if val_ms is not None and val_ms != 0:
+        if col in STAGE_COLUMNS and val_ms is not None and val_ms != 0:
             updates[col] = int(val_ms // 1000)
-    if not updates:
-        return 0
-    set_clause = ", ".join(f"{col}=%s" for col in updates)
-    cursor.execute(
-        f"UPDATE participants SET {set_clause} WHERE id=%s",
-        (*updates.values(), participant_id),
-    )
-    return 1
 
+    t1_start_ms = runner.get(transition_fields.get("t1_start", ""))
+    if t1_start_ms and stage_ms.get("run1"):
+        updates["t1_s"] = int((t1_start_ms - stage_ms["run1"]) // 1000)
 
-def _process_transitions(cursor, participant_id: int, runner: dict, transition_fields: dict) -> int:
-    """Обновляет t1_s/t2_s из значений Copernico. В отличие от stage_fields
-    (кумулятивные отметки, из которых ещё вычитается предыдущая) — Т1/Т2
-    ожидаются уже готовой ДЛИТЕЛЬНОСТЬЮ транзита (мс -> целые секунды),
-    т.к. это отдельная метрика хронометража, а не точка на маршруте."""
-    updates = {}
-    for zone_code, field_name in transition_fields.items():
-        col = f"{zone_code}_s"
-        if col not in TRANSITION_COLUMNS:
-            continue
-        val_ms = runner.get(field_name)
-        if val_ms is not None and val_ms != 0:
-            updates[col] = int(val_ms // 1000)
+    t2_start_ms = runner.get(transition_fields.get("t2_start", ""))
+    if t2_start_ms and stage_ms.get("bike"):
+        updates["t2_s"] = int((t2_start_ms - stage_ms["bike"]) // 1000)
+
     if not updates:
         return 0
     set_clause = ", ".join(f"{col}=%s" for col in updates)
@@ -168,15 +161,15 @@ def _process_transitions(cursor, participant_id: int, runner: dict, transition_f
 def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fields: dict) -> int:
     """Обновляет таблицу checkpoints (круги внутри каждого этапа) из
     кумулятивных мс Copernico (-> целые секунды, от общего старта гонки).
-    Останавливается на первом отсутствующем круге стадии — Copernico отдаёт
-    круги последовательно, дальше проверять бессмысленно (тот же принцип,
-    что _process_laps в load_tri_results.py)."""
+    stage_lap_fields[stage] — ТОЧНЫЙ список имён полей по порядку (не
+    шаблон "{n}" — реальные отметки Copernico не равномерны, см.
+    config/copernico/duathlon_222_2026.yaml). Останавливается на первом
+    отсутствующем круге — Copernico отдаёт круги последовательно, дальше
+    проверять бессмысленно (тот же принцип, что _process_laps в
+    load_tri_results.py)."""
     changed = 0
-    for stage_code, lap_cfg in stage_lap_fields.items():
-        count = lap_cfg.get("count", 0)
-        pattern = lap_cfg.get("pattern", "")
-        for n in range(1, count + 1):
-            field_name = pattern.replace("{n}", str(n))
+    for stage_code, field_names in stage_lap_fields.items():
+        for n, field_name in enumerate(field_names, start=1):
             val_ms = runner.get(field_name)
             if val_ms is None or val_ms == 0:
                 break
@@ -224,22 +217,17 @@ def _run_once(config_path: str) -> int:
     touched = 0
     changed = 0
     laps_changed = 0
-    transitions_changed = 0
     for runner in runners:
         pid = _get_or_create_participant(cursor, event_id, runner, field_map)
         if pid is None:
             continue
         touched += 1
-        changed += _process_stages(cursor, pid, runner, stage_fields)
+        changed += _process_stages_and_transitions(cursor, pid, runner, stage_fields, transition_fields)
         laps_changed += _process_stage_laps(cursor, pid, runner, stage_lap_fields)
-        transitions_changed += _process_transitions(cursor, pid, runner, transition_fields)
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info(
-        f"Участников: {touched}, обновлений этапов: {changed}, "
-        f"обновлений кругов: {laps_changed}, обновлений транзитов: {transitions_changed}"
-    )
+    logger.info(f"Участников: {touched}, обновлений этапов: {changed}, обновлений кругов: {laps_changed}")
     return touched
 
 

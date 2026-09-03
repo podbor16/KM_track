@@ -1,43 +1,136 @@
 description: >
-  Дуатлон 222 2026. Один event на всю гонку (подтверждено). Один массовый
-  старт, личное непрерывное время: run1 -> T1 -> bike -> T2 -> run2.
-  Пресет "222_2026" создан пользователем в Copernico UI 2026-09-03.
-  Участник-поля ниже ПОДТВЕРЖДЕНЫ живым fetch (2026-09-03, 15 реальных
-  участников). Поля тайминга (stage_fields/stage_lap_fields) — ещё
-  ДОГАДКА: живой ответ не содержал ни одного "times.*"-ключа, т.к. гонка
-  ещё не стартовала (все status="notstarted") — неясно, отдаёт ли
-  Copernico ключ с null до первой реальной отметки, или пропускает вовсе
-  (sparse JSON). Проверить после первой тестовой/реальной отметки — см.
-  docs/superpowers/plans/2026-08-24-duathlon-222.md Task 0.
+  Дуатлон 222 2026. Один event на всю гонку. Один массовый старт, личное
+  непрерывное время: run1 -> T1 -> bike -> T2 -> run2. Пресет "222_2026"
+  создан пользователем в Copernico UI 2026-09-03, поля тайминга добавлены и
+  СОХРАНЕНЫ 2026-09-04 (до этого пресет отдавал только 12 identity-полей без
+  единого "times.*" — правки в редакторе Copernico не были опубликованы).
+  Все имена полей ниже подтверждены живым fetch 2026-09-04, разобраны кодом
+  (не на глаз — избегаем опечаток транскрипции). Гонка круговая на всех
+  этапах, но Copernico называет отметки НЕ по номеру круга ("{n}"), а по
+  РЕАЛЬНОЙ измеренной кумулятивной дистанции трассы — числа НЕ равномерны
+  (см. комментарии у каждого списка), пришлось перечислить точные строки,
+  не шаблон.
 
 fields:
   start_number: dorsal    # подтверждено 2026-09-03
   surname: surname        # подтверждено
   name: name              # подтверждено
   gender: gender          # подтверждено — 'male'/'female', нормализуется загрузчиком в M/F
-  status: status          # подтверждено — 'notstarted' у всех сейчас
+  status: status          # подтверждено — 'notstarted' у всех до старта
 
-# Кумулятивное время (мс от общего старта гонки) на финише каждого этапа.
-# Имена полей — ДОГАДКА по типовой конвенции Copernico для мультиспорта,
-# ОБЯЗАТЕЛЬНО проверить реальным запросом API перед использованием.
+# Финиш этапа ЦЕЛИКОМ — отдельное поле от кругов, даже там где казалось бы
+# последний круг и есть финиш. Для Бег-1 последний круг равномерной
+# последовательности через 1.25км — "9,98 km" (реальная измеренная
+# дистанция), но НАСТОЯЩИЙ финиш — отдельное круглое "10 km" (подтверждено
+# пользователем 2026-09-04, приоритет круглому числу над "точной" меньшей
+# отметкой). Для Вело — "b170-start_T2" (то же значение служит и стартом Т2).
+# Для Бег-2 — специальное поле Copernico ":::finish:::" (финиш всей гонки).
 stage_fields:
-  run1: "times.official_run1"
-  bike: "times.official_bike"
-  run2: "times.official_finish"
+  run1: "times.official_10 km"
+  bike: "times.official_b170-start_T2"
+  run2: "times.official_:::finish:::"
 
-# Круги внутри каждого этапа (подтверждено пользователем 2026-09-02: 4x2.5км
-# бег-1, 42x4.04км вело, 12x3.5км бег-2). Имена полей — ДОГАДКА по аналогии с
-# tri_24h_2026.yaml ("times.official_{n}kr"), префикс этапа добавлен, чтобы не
-# столкнуться с чужими полями внутри одного event — ОБЯЗАТЕЛЬНО проверить.
-stage_lap_fields:
-  run1: {count: 4,  pattern: "times.official_run1_{n}kr"}
-  bike: {count: 42, pattern: "times.official_bike_{n}kr"}
-  run2: {count: 12, pattern: "times.official_run2_{n}kr"}
-
-# Т1 (бег-1 -> вело) и Т2 (вело -> бег-2) — ДЛИТЕЛЬНОСТЬ транзита (мс),
-# не кумулятивная отметка. Учитываются в общем времени гонки (уже внутри
-# run2_s), но вычитаются из "чистого" времени соседних этапов. Имена полей —
-# ДОГАДКА, ОБЯЗАТЕЛЬНО проверить реальным запросом API.
+# Старт-маркеры для расчёта ДЛИТЕЛЬНОСТИ Т1/Т2 — Copernico не отдаёт
+# готовую длительность транзита отдельным полем, только кумулятивные
+# отметки; длительность = стартовый маркер минус финиш предыдущего этапа
+# (stage_fields выше), считается в загрузчике (load_duathlon_results.py).
 transition_fields:
-  t1: "times.t1"
-  t2: "times.t2"
+  t1_start: "times.official_bike0"                    # конец Т1 = начало вело (км 0)
+  t2_start: "times.official_finish_T2-start_R2"        # конец Т2 = начало бег-2
+
+# Круги внутри каждого этапа — ТОЧНЫЕ строки как отдаёт Copernico (не
+# шаблон "{n}" — реальные имена не равномерны, есть опечатки/особенности
+# ввода: "9,98 km" через запятую вместо точки как у остальных Бег-1 марок,
+# "times.official_ 5 km" — с ведущим пробелом внутри имени поля).
+#
+# Бег-1 (8 отметок через 1.25км — включает середины кругов, по решению
+# пользователя 2026-09-04: вдвое больше точек прогресса, чем 4 "круга"
+# 2.5км). Финиш ("10 km") — отдельно в stage_fields, не в этом списке.
+#
+# Вело (42 отметки — ровно число кругов). ВАЖНО: первая отметка на 3.4км,
+# а не на 4.04км — короткий "пролог" от старта вело до первой мачты
+# подсчёта кругов, все последующие круги ровно по 4.04км (см.
+# STAGE_LAP_OFFSET в src/duathlon222/service.py, учитывает это смещение).
+#
+# Бег-2 (24 отметки, в МЕТРАХ — единственный этап без "km" в имени поля,
+# загрузчик делит на 1000 при парсинге distance, не при парсинге времени).
+# Включает середины кругов, как и Бег-1. Финиш (":::finish:::") — отдельно
+# в stage_fields.
+stage_lap_fields:
+  run1:
+    - "times.official_1.25 km"
+    - "times.official_2.5 km"
+    - "times.official_3.75 km"
+    - "times.official_ 5 km"
+    - "times.official_6.25 km"
+    - "times.official_7.5 km"
+    - "times.official_8.75 km"
+    - "times.official_9,98 km"
+  bike:
+    - "times.official_b3,4"
+    - "times.official_b7,44"
+    - "times.official_b11,48"
+    - "times.official_b15,52"
+    - "times.official_b19,56"
+    - "times.official_b23,6"
+    - "times.official_b27,64"
+    - "times.official_b31,68"
+    - "times.official_b35,72"
+    - "times.official_b39,76"
+    - "times.official_b43,8"
+    - "times.official_b47,84"
+    - "times.official_b51,88"
+    - "times.official_b55,92"
+    - "times.official_b59,96"
+    - "times.official_b64"
+    - "times.official_b68,04"
+    - "times.official_b72,08"
+    - "times.official_b76,12"
+    - "times.official_b80,16"
+    - "times.official_b84,2"
+    - "times.official_b88,24"
+    - "times.official_b92,28"
+    - "times.official_b96,32"
+    - "times.official_b100,36"
+    - "times.official_b104,4"
+    - "times.official_b108,44"
+    - "times.official_b112,48"
+    - "times.official_b116,52"
+    - "times.official_b120,56"
+    - "times.official_b124,6"
+    - "times.official_b128,64"
+    - "times.official_b132,68"
+    - "times.official_b136,72"
+    - "times.official_b140,76"
+    - "times.official_b144,8"
+    - "times.official_b148,64"
+    - "times.official_b152,88"
+    - "times.official_b156,92"
+    - "times.official_b160,96"
+    - "times.official_b165"
+    - "times.official_b169,04"
+  run2:
+    - "times.official_1777"
+    - "times.official_3534"
+    - "times.official_5291"
+    - "times.official_7048"
+    - "times.official_8805"
+    - "times.official_10562"
+    - "times.official_12319"
+    - "times.official_14076"
+    - "times.official_15833"
+    - "times.official_17590"
+    - "times.official_19347"
+    - "times.official_21104"
+    - "times.official_22861"
+    - "times.official_24618"
+    - "times.official_26375"
+    - "times.official_28132"
+    - "times.official_29889"
+    - "times.official_31646"
+    - "times.official_33403"
+    - "times.official_35160"
+    - "times.official_36917"
+    - "times.official_38674"
+    - "times.official_40431"
+    - "times.official_42188"

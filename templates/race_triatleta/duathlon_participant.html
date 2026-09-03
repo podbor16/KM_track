@@ -123,6 +123,16 @@
         const d = new Date(GUN_UTC_MS + elapsedFromGunS * 1000);
         return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
+    // Скорость (км/ч из бэкенда) → темп мин/км для беговых этапов; вело
+    // остаётся км/ч. Та же функция, что в duathlon_results.html.
+    function fmtPaceOrSpeed(stageCode, speedKmh) {
+        if (!speedKmh) return '—';
+        if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
+        const secPerKm = 3600 / speedKmh;
+        const m = Math.floor(secPerKm / 60);
+        const s = Math.round(secPerKm % 60);
+        return `${m}:${String(s).padStart(2, '0')} /км`;
+    }
     function fmtGap(g) {
         if (g === null || g === undefined) return '—';
         if (g === 0) return '<span style="color:var(--tri-green);font-weight:700">Лидер</span>';
@@ -199,13 +209,13 @@
     function lapTableHtml(stageCode, d) {
         const info = d.stages[stageCode];
         if (!info.laps.length) {
-            return '<div class="p-empty" style="padding:16px">Кругов ещё нет</div>';
+            return '<div class="p-empty" style="padding:16px">Отметок ещё нет</div>';
         }
         const rows = info.laps.map(lap => `
             <tr>
-                <td>Круг ${lap.lap_number}</td>
+                <td>Отметка ${lap.lap_number}</td>
                 <td>${fmtS(lap.split_s)}</td>
-                <td>${lap.speed_kmh != null ? lap.speed_kmh.toFixed(1) + ' км/ч' : '—'}</td>
+                <td>${fmtPaceOrSpeed(stageCode, lap.speed_kmh)}</td>
                 <td>${fmtS(lap.cumulative_s)}</td>
                 <td>${lap.rank_gender != null ? lap.rank_gender : '—'}</td>
                 <td>${fmtGap(lap.gap_gender)}</td>
@@ -214,7 +224,7 @@
             </tr>`).join('');
         return `<div class="table-wrap"><table class="cp-table">
             <thead><tr>
-                <th>Круг</th><th>Сплит</th><th>Скорость</th><th>Общее время</th>
+                <th>Отметка</th><th>Сплит</th><th>Темп/Скорость</th><th>Общее время</th>
                 <th>Место (пол)</th><th>Отст. (пол)</th>
                 <th>Место (абс)</th><th>Отст. (абс)</th>
             </tr></thead>
@@ -234,12 +244,12 @@
             ? `<span class="stage-forecast">~${fmtClock(d.forecast_stage_finish_s)} прогноз финиша</span>`
             : '';
         const lapProgress = (isCurrent && d.current_stage_lap)
-            ? `<span class="stage-meta">круг ${d.current_stage_lap}/${d.current_stage_lap_total}</span>`
+            ? `<span class="stage-meta">отметка ${d.current_stage_lap}/${d.current_stage_lap_total}</span>`
             : '';
         return `<details class="stage" ${isOpen ? 'open' : ''}>
             <summary>
                 <span class="stage-title">${label}</span>
-                <span class="stage-dist">${info.distance_km} км · ${info.lap_count}×${info.lap_km} км</span>
+                <span class="stage-dist">${info.distance_km} км · до ${info.lap_count} отметок</span>
                 <span class="stage-spacer"></span>
                 ${stageTime != null ? `<span class="stage-time">${fmtS(stageTime)}</span>` : ''}
                 ${stageTime != null && d[speedKey] != null ? `<span class="stage-meta">${d[speedKey].toFixed(1)} км/ч</span>` : ''}

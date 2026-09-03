@@ -2,8 +2,79 @@ from src.duathlon222.service import (
     _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish,
     _lap_ranks_from_rows, _build_stage_laps,
     _distance_covered_km, _display_status, _rank_standings_rows,
-    _forecast_race_finish,
+    _forecast_race_finish, _speed_kmh_for_distance,
+    _stage_start_s, _frontier_lap,
+    _lap_distance_km, _lap_split_distance_km,
 )
+
+
+def test_lap_distance_km_run1_uniform_no_offset():
+    # Реальные отметки Copernico: 1.25, 2.5, 3.75, 5, 6.25, 7.5, 8.75, 9.98
+    assert _lap_distance_km("run1", 1) == 1.25
+    assert _lap_distance_km("run1", 4) == 5.0
+    assert _lap_distance_km("run1", 8) == 10.0
+
+
+def test_lap_distance_km_bike_first_lap_shorter_prologue():
+    # Реальные отметки Copernico: b3,4 / b7,44 / b11,48 ... — первая короче
+    # полного круга (3.4 не 4.04), см. STAGE_LAP_OFFSET.
+    assert _lap_distance_km("bike", 1) == 3.4
+    assert round(_lap_distance_km("bike", 2), 2) == 7.44
+    assert round(_lap_distance_km("bike", 42), 2) == 169.04
+
+
+def test_lap_distance_km_none_lap_number_is_zero():
+    assert _lap_distance_km("run1", None) == 0.0
+
+
+def test_lap_split_distance_km_bike_first_lap_is_the_prologue():
+    assert _lap_split_distance_km("bike", 1) == 3.4
+
+
+def test_lap_split_distance_km_bike_later_laps_is_constant_step():
+    assert _lap_split_distance_km("bike", 2) == 4.04
+    assert _lap_split_distance_km("bike", 42) == 4.04
+
+
+def test_stage_start_s_run1_is_always_zero():
+    assert _stage_start_s("run1", None, None, None, None) == 0
+
+
+def test_stage_start_s_bike_is_run1_plus_t1():
+    assert _stage_start_s("bike", 2400, 60, None, None) == 2460
+
+
+def test_stage_start_s_bike_none_when_run1_not_finished():
+    assert _stage_start_s("bike", None, None, None, None) is None
+
+
+def test_stage_start_s_run2_is_bike_plus_t2():
+    assert _stage_start_s("run2", 2400, 60, 22800, 90) == 22890
+
+
+def test_stage_start_s_run2_none_when_bike_not_finished():
+    assert _stage_start_s("run2", 2400, 60, None, None) is None
+
+
+def test_frontier_lap_returns_max():
+    assert _frontier_lap([1, 3, 2]) == 3
+
+
+def test_frontier_lap_none_when_empty():
+    assert _frontier_lap([]) is None
+
+
+def test_speed_kmh_for_distance_basic():
+    assert _speed_kmh_for_distance(10.0, 3600) == 10.0
+
+
+def test_speed_kmh_for_distance_none_when_no_elapsed():
+    assert _speed_kmh_for_distance(10.0, None) is None
+    assert _speed_kmh_for_distance(10.0, 0) is None
+
+
+def test_speed_kmh_for_distance_none_when_no_distance():
+    assert _speed_kmh_for_distance(0, 3600) is None
 
 
 def test_stage_times_all_finished():
@@ -89,20 +160,22 @@ def test_current_stage_finished():
 
 
 def test_forecast_stage_finish_full_stage_ratio_one():
-    # 4 из 4 кругов бег-1 (все 10 км) за 2400с -> прогноз = фактическое время
-    assert _forecast_stage_finish("run1", 4, 2400, 0) == 2400
+    # 8 из 8 отметок бег-1 (все 10 км, шаг 1.25км) за 2400с -> прогноз = факт
+    assert _forecast_stage_finish("run1", 8, 2400, 0) == 2400
 
 
 def test_forecast_stage_finish_partial_progress():
-    # 2 из 4 кругов бег-1 (5 км из 10) за 1000с -> прогноз 2000с на весь этап
-    assert _forecast_stage_finish("run1", 2, 1000, 0) == 2000
+    # 2 из 8 отметок бег-1 (2.5 км из 10, шаг 1.25км) за 1000с -> прогноз 4000с
+    assert _forecast_stage_finish("run1", 2, 1000, 0) == 4000
 
 
 def test_forecast_stage_finish_with_nonzero_stage_start():
     # Этап начался на 2400с от общего старта (конец бег-1); на вело прошло
-    # 2 круга (8.08 км) за 1000с внутри этапа -> экстраполяция на 170 км
+    # 2 отметки за 1000с внутри этапа. Реальная дистанция 2-й отметки —
+    # 7.44км (не 8.08 = 2*4.04 — первая отметка Вело короче полного круга,
+    # см. STAGE_LAP_OFFSET), экстраполяция на 170 км от неё.
     forecast = _forecast_stage_finish("bike", 2, 2400 + 1000, 2400)
-    expected_stage_s = 1000 * (170.0 / (2 * 4.04))
+    expected_stage_s = 1000 * (170.0 / 7.44)
     assert forecast == round(2400 + expected_stage_s)
 
 
@@ -148,9 +221,9 @@ def test_build_stage_laps_split_and_speed():
 
     assert laps[0]["lap_number"] == 1
     assert laps[0]["split_s"] == 500
-    assert laps[0]["speed_kmh"] == 18.0
+    assert laps[0]["speed_kmh"] == round(1.25 / (500 / 3600.0), 2)
     assert laps[1]["split_s"] == 550
-    assert laps[1]["speed_kmh"] == round(2.5 / (550 / 3600.0), 2)
+    assert laps[1]["speed_kmh"] == round(1.25 / (550 / 3600.0), 2)
 
 
 def test_build_stage_laps_split_uses_stage_start_for_first_lap():
@@ -168,16 +241,18 @@ def test_build_stage_laps_includes_ranks():
 
 
 def test_distance_covered_km_within_run1():
-    assert _distance_covered_km("run1", 2) == 5.0
+    assert _distance_covered_km("run1", 2) == 2.5  # шаг 1.25км (см. LAP_KM)
     assert _distance_covered_km("run1", None) == 0.0
 
 
 def test_distance_covered_km_within_bike_includes_completed_run1():
-    assert _distance_covered_km("bike", 5) == 10.0 + 5 * 4.04
+    # Первая отметка Вело короче полного круга (см. STAGE_LAP_OFFSET) —
+    # distance(5) = 5*4.04 + (3.4-4.04) = 19.56, реальная марка Copernico b19,56
+    assert _distance_covered_km("bike", 5) == 10.0 + (5 * 4.04 + (3.4 - 4.04))
 
 
 def test_distance_covered_km_within_run2_includes_completed_run1_and_bike():
-    assert _distance_covered_km("run2", 3) == 10.0 + 170.0 + 3 * 3.5
+    assert _distance_covered_km("run2", 3) == 10.0 + 170.0 + 3 * 1.757
 
 
 def test_distance_covered_km_finished_is_full_race():
