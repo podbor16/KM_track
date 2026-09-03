@@ -1,10 +1,12 @@
 name: "Дуатлон 222"
+display_name: "Дуатлон 222"
 code: "duathlon_222_2026"
 year: 2026
 gun_time: "TBD"          # ← заполнить перед стартом, единый массовый старт 05.09.2026 (время в UTC)
 
 distances:
   - distance: "222 км (10 км бег + 170 км вело + 42 км бег)"
+    distance_km: 222.0
     db_event_id: null     # ← заполнить после создания записи в duathlon_222.events (Task 1)
     stages:
       # laps/lap_km подтверждены пользователем 2026-09-02: гонка круговая на

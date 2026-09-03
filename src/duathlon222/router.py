@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 import sys
+from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -8,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from src.config import settings
+from src.config.event_loader import load_events_cached
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
@@ -15,11 +17,35 @@ from src.duathlon222.service import get_standings, get_participant
 
 _require_auth = require_auth_for("/duathlon222/login")
 
-DUATHLON_EVENT_ID = 1  # TODO: заменить на реальный id после INSERT INTO duathlon_222.events
+# Год по умолчанию — на него редиректит "голый" /duathlon222 (обратная
+# совместимость с URL, который был единственным до 2026-09-03) и на него же
+# смотрит админка/загрузчик (управление "текущей" гонкой — не архивное,
+# организаторам не нужно выбирать год для управления systemd-сервисом).
+CURRENT_YEAR = 2026
 DUATHLON_LOADER_NAME = "duathlon_222"
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 LOADERS_DIR = BASE_DIR / "config" / "loader"
 PRESET_PATH = BASE_DIR / "config" / "copernico" / "duathlon_222_2026.yaml"
+
+
+def _year_exists(year: int) -> bool:
+    """Есть ли вообще конфиг события на этот год (config/events/*.yaml с
+    code == "duathlon_222_{year}") — 404 для несуществующего года, но НЕ для
+    года, у которого просто ещё не заполнен db_event_id (см. _resolve_event_id)."""
+    return f"duathlon_222_{year}" in load_events_cached()
+
+
+def _resolve_event_id(year: int) -> Optional[int]:
+    """db_event_id для конкретного года по config/events/*.yaml, где
+    code == "duathlon_222_{year}" (см. EventConfig в src/config/event_loader.py).
+    Новый год — новый YAML-файл с этим code, без правок роутера. None, если
+    db_event_id ещё не заполнен в YAML (до вставки записи в БД) — не ошибка,
+    get_standings/get_participant с event_id=None просто вернут пустые данные."""
+    events = load_events_cached()
+    event = events.get(f"duathlon_222_{year}")
+    if event is None or not event.distances:
+        return None
+    return event.distances[0].db_event_id
 
 
 class YamlBody(BaseModel):
@@ -52,17 +78,35 @@ templates.env.globals["v"] = _get_deploy_version()
 
 @router.get("/duathlon222", response_class=HTMLResponse)
 @router.get("/duathlon222/", response_class=HTMLResponse)
-async def duathlon_home(request: Request):
-    return templates.TemplateResponse("race_triatleta/duathlon_results.html", {
-        "request": request,
-        "event_id": DUATHLON_EVENT_ID,
-    })
+async def duathlon_home_redirect():
+    """Обратная совместимость с URL без года (единственный вариант до
+    2026-09-03) — редирект на текущий год."""
+    return RedirectResponse(f"/duathlon222_{CURRENT_YEAR}", status_code=307)
 
 
 @router.get("/duathlon222/participant/{start_number}", response_class=HTMLResponse)
-async def duathlon_participant_page(request: Request, start_number: int):
+async def duathlon_participant_page_redirect(start_number: int):
+    return RedirectResponse(f"/duathlon222_{CURRENT_YEAR}/participant/{start_number}", status_code=307)
+
+
+@router.get("/duathlon222_{year}", response_class=HTMLResponse)
+@router.get("/duathlon222_{year}/", response_class=HTMLResponse)
+async def duathlon_home(request: Request, year: int):
+    if not _year_exists(year):
+        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+    return templates.TemplateResponse("race_triatleta/duathlon_results.html", {
+        "request": request,
+        "year": year,
+    })
+
+
+@router.get("/duathlon222_{year}/participant/{start_number}", response_class=HTMLResponse)
+async def duathlon_participant_page(request: Request, year: int, start_number: int):
+    if not _year_exists(year):
+        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
     return templates.TemplateResponse("race_triatleta/duathlon_participant.html", {
         "request": request,
+        "year": year,
         "start_number": start_number,
     })
 
@@ -71,15 +115,19 @@ async def duathlon_participant_page(request: Request, start_number: int):
 # Public API
 # ---------------------------------------------------------------------------
 
-@router.get("/api/duathlon222/standings")
-async def duathlon_standings(gender: str = None):
-    rows = get_standings(DUATHLON_EVENT_ID, gender or None)
+@router.get("/api/duathlon222_{year}/standings")
+async def duathlon_standings(year: int, gender: str = None):
+    if not _year_exists(year):
+        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+    rows = get_standings(_resolve_event_id(year), gender or None)
     return {"standings": rows}
 
 
-@router.get("/api/duathlon222/participant/{start_number}")
-async def duathlon_participant_api(start_number: int):
-    data = get_participant(DUATHLON_EVENT_ID, start_number)
+@router.get("/api/duathlon222_{year}/participant/{start_number}")
+async def duathlon_participant_api(year: int, start_number: int):
+    if not _year_exists(year):
+        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+    data = get_participant(_resolve_event_id(year), start_number)
     if data is None:
         raise HTTPException(status_code=404, detail="Участник не найден")
     return data
