@@ -88,8 +88,9 @@
                             <th class="tri-rank">Место</th>
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
+                            <th>Отметка</th>
                             <th>Время (чист.)</th>
-                            <th>Скорость</th>
+                            <th>Темп/Скорость</th>
                             <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
@@ -107,8 +108,9 @@
                             <th class="tri-rank">Место</th>
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
+                            <th>Отметка</th>
                             <th>Время (чист.)</th>
-                            <th>Скорость</th>
+                            <th>Темп/Скорость</th>
                             <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
@@ -126,8 +128,9 @@
                             <th class="tri-rank">Место</th>
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
+                            <th>Отметка</th>
                             <th>Время (чист.)</th>
-                            <th>Скорость</th>
+                            <th>Темп/Скорость</th>
                             <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
@@ -193,14 +196,15 @@
     }
     setInterval(tickStageTimers, 1000);
 
-    function stageCell(timeS, speedKmh) {
+    function stageCell(stageCode, timeS, speedKmh) {
         if (timeS === null || timeS === undefined) {
             return '<span style="color:var(--tri-muted)">—</span>';
         }
-        const speedStr = speedKmh
-            ? `<br><span style="font-size:11px;color:var(--tri-muted)">${speedKmh.toFixed(1)} км/ч</span>`
+        const paceOrSpeed = fmtPaceOrSpeed(stageCode, speedKmh);
+        const metaStr = paceOrSpeed !== '—'
+            ? `<br><span style="font-size:11px;color:var(--tri-muted)">${paceOrSpeed}</span>`
             : '';
-        return `<span style="font-variant-numeric:tabular-nums">${fmtS(timeS)}</span>${speedStr}`;
+        return `<span style="font-variant-numeric:tabular-nums">${fmtS(timeS)}</span>${metaStr}`;
     }
 
     function transitionCell(timeS) {
@@ -235,6 +239,28 @@
             ? `<br><span style="font-size:11px;color:var(--tri-accent)" title="Прогноз финиша этапа">~${fmtClock(r.forecast_stage_finish_s)}</span>`
             : '';
         return `<span style="font-size:12px">круг ${r.current_stage_lap}/${r.current_stage_lap_total}</span>${forecastStr}`;
+    }
+
+    // Та же «Отметка», но для вкладки КОНКРЕТНОГО этапа — показываем только
+    // если участник СЕЙЧАС именно на этом этапе (иначе r.current_stage_lap
+    // относится к ДРУГОМУ этапу и показывать его здесь неверно — можно
+    // подумать, что человек ещё не финишировал этот этап, хотя он давно на
+    // следующем).
+    function stageMarkCell(stageCode, r) {
+        if (r.current_stage !== stageCode) {
+            return '<span style="color:var(--tri-muted)">—</span>';
+        }
+        return markCell(r);
+    }
+
+    // Бег — темп (мин/км), вело — скорость (км/ч)
+    function fmtPaceOrSpeed(stageCode, speedKmh) {
+        if (!speedKmh) return '—';
+        if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
+        const secPerKm = 3600 / speedKmh;
+        const m = Math.floor(secPerKm / 60);
+        const s = Math.round(secPerKm % 60);
+        return `${m}:${String(s).padStart(2, '0')} /км`;
     }
 
     async function loadStandings() {
@@ -274,11 +300,11 @@
                 <td><span class="tri-name">${r.surname} ${r.name}</span></td>
                 <td>${badgeCell(r)}</td>
                 <td>${markCell(r)}</td>
-                <td>${stageCell(r.run1_s, r.run1_speed_kmh)}</td>
+                <td>${stageCell('run1', r.run1_s, r.run1_speed_kmh)}</td>
                 <td>${transitionCell(r.t1_s)}</td>
-                <td>${stageCell(r.bike_s, r.bike_speed_kmh)}</td>
+                <td>${stageCell('bike', r.bike_s, r.bike_speed_kmh)}</td>
                 <td>${transitionCell(r.t2_s)}</td>
-                <td>${stageCell(r.run2_s, r.run2_speed_kmh)}</td>
+                <td>${stageCell('run2', r.run2_s, r.run2_speed_kmh)}</td>
                 <td style="font-variant-numeric:tabular-nums;font-weight:700">${fmtS(r.total_s)}</td>
                 <td>${STATUS_LABEL[r.status] || r.status}</td>
             </tr>`;
@@ -320,7 +346,7 @@
         const ranked = buildStageRanking(stageCode, rows);
         const tbody = document.getElementById('stage-body-' + stageCode);
         if (!ranked.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
         tbody.innerHTML = ranked.map(r => {
@@ -328,16 +354,17 @@
             const rowStyle = `cursor:pointer;${isOut ? 'opacity:.55' : ''}`;
             const timeCell = r[timeKey] != null
                 ? `<span style="font-variant-numeric:tabular-nums">${fmtS(r[timeKey])}</span>`
-                : (r.current_stage === stageCode ? markCell(r) : '<span style="color:var(--tri-muted)">—</span>');
-            const speedStr = r[speedKey] != null ? `${r[speedKey].toFixed(1)} км/ч` : '—';
+                : '<span style="color:var(--tri-muted)">—</span>';
+            const paceStr = fmtPaceOrSpeed(stageCode, r[speedKey]);
             const gapStr = r._stageGap == null ? '—'
                 : (r._stageGap === 0 ? '<span style="color:var(--tri-green);font-weight:700">Лидер</span>' : '+' + fmtS(r._stageGap));
             return `<tr style="${rowStyle}" onclick="location.href='/duathlon222_${YEAR}/participant/${r.start_number}'">
                 <td class="tri-rank">${r._stageRank ?? '—'}</td>
                 <td class="tri-bib">${r.start_number}</td>
                 <td><span class="tri-name">${r.surname} ${r.name}</span></td>
+                <td>${stageMarkCell(stageCode, r)}</td>
                 <td>${timeCell}</td>
-                <td>${speedStr}</td>
+                <td>${paceStr}</td>
                 <td>${gapStr}</td>
                 <td>${STATUS_LABEL[r.status] || r.status}</td>
             </tr>`;
