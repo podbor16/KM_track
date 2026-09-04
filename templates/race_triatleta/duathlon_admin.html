@@ -129,8 +129,13 @@
                 sel.innerHTML = '<option value="">Нет отметок</option>';
                 return;
             }
+            // Отметка 0 (только Вело/Бег-2) — виртуальная, момент выхода из
+            // транзитки (см. _TRANSITION_START_COLUMN в service.py), не
+            // круг — подписываем словами, не "0/170 км" (сбивало бы с толку).
             sel.innerHTML = marks.map(m =>
-                `<option value="${m.lap_number}">${m.distance_km}/${STAGE_KM[stage]} км</option>`
+                m.lap_number === 0
+                    ? `<option value="0">Выход из транзитки</option>`
+                    : `<option value="${m.lap_number}">${m.distance_km}/${STAGE_KM[stage]} км</option>`
             ).join('');
             // Сохраняем прежний выбор, если он ещё существует в новом списке,
             // иначе — самая дальняя (последняя) отметка, как раньше по умолчанию.

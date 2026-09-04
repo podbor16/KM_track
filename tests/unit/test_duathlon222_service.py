@@ -6,6 +6,7 @@ from src.duathlon222.service import (
     _stage_start_s, _frontier_lap,
     _lap_distance_km, _lap_split_distance_km,
     _global_km, _live_gap_map,
+    _stage_mark_zero_broadcast,
 )
 
 
@@ -70,6 +71,24 @@ def test_stage_start_s_run2_is_bike_plus_t2():
 
 def test_stage_start_s_run2_none_when_bike_not_finished():
     assert _stage_start_s("run2", 2400, 60, None, None) is None
+
+
+def test_stage_start_s_bike_prefers_raw_bike_start_s_over_reconstruction():
+    # Сырое поле Copernico (bike0) точнее, чем run1_s+t1_s (та реконструкция
+    # теряет до 1-2с из-за раздельного округления run1_s и t1_s каждого до
+    # целых секунд, см. миграцию 004) — при наличии сырого значения оно
+    # ПРЕДПОЧИТАЕТСЯ, а не складывается/игнорируется.
+    assert _stage_start_s("bike", 2400, 60, None, None, bike_start_s=2461) == 2461
+
+
+def test_stage_start_s_run2_prefers_raw_run2_start_s_over_reconstruction():
+    assert _stage_start_s("run2", 2400, 60, 22800, 90, run2_start_s=22891) == 22891
+
+
+def test_stage_start_s_bike_falls_back_when_raw_missing():
+    # Обратная совместимость — строки без bike_start_s (например, тестовые
+    # участники, вписанные вручную SQL) считаются как раньше.
+    assert _stage_start_s("bike", 2400, 60, None, None, bike_start_s=None) == 2460
 
 
 def test_frontier_lap_returns_max():
@@ -408,3 +427,54 @@ def test_live_gap_map_no_leader_history_before_position_skips_follower():
     gaps = _live_gap_map(entries)
     assert gaps[1] == 0
     assert 2 not in gaps
+
+
+def test_stage_mark_zero_broadcast_ranks_by_raw_transition_start():
+    # "Отметка 0" — выход из транзитки (Т1→Вело) — ранжирование по сырому
+    # bike_start_s (Copernico bike0), не по реконструкции. Чистое время этапа
+    # тривиально 0 у всех (только что стартовали).
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M", "bike_start_s": 2575},
+        {"surname": "Тестов", "name": "Пётр", "gender": "M", "bike_start_s": 2880},
+    ]
+    d = _stage_mark_zero_broadcast("bike", None, participants)
+    assert d["lap_mark"] == 0
+    assert d["stage_km_at_mark"] == 0.0
+    entries = d["entries"]
+    assert entries[0]["name"] == "Иван"
+    assert entries[0]["race_elapsed_s"] == 2575
+    assert entries[0]["race_gap_s"] == 0
+    assert entries[1]["race_elapsed_s"] == 2880
+    assert entries[1]["race_gap_s"] == 305
+    assert entries[0]["elapsed_s"] == 0 and entries[1]["elapsed_s"] == 0
+
+
+def test_stage_mark_zero_broadcast_excludes_participants_without_raw_field():
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M", "bike_start_s": 2575},
+        {"surname": "Тестов", "name": "Пётр", "gender": "M", "bike_start_s": None},
+    ]
+    d = _stage_mark_zero_broadcast("bike", None, participants)
+    assert len(d["entries"]) == 1
+    assert d["entries"][0]["name"] == "Иван"
+
+
+def test_stage_mark_zero_broadcast_filters_by_gender():
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M", "bike_start_s": 2575},
+        {"surname": "Тестова", "name": "Мария", "gender": "F", "bike_start_s": 2600},
+    ]
+    d = _stage_mark_zero_broadcast("bike", "F", participants)
+    assert len(d["entries"]) == 1
+    assert d["entries"][0]["name"] == "Мария"
+
+
+def test_stage_mark_zero_broadcast_none_when_nobody_reached():
+    participants = [{"surname": "Тестов", "name": "Иван", "gender": "M", "bike_start_s": None}]
+    assert _stage_mark_zero_broadcast("bike", None, participants) is None
+
+
+def test_stage_mark_zero_broadcast_none_for_run1():
+    # run1 не имеет предшествующей транзитки — нет виртуальной отметки 0.
+    participants = [{"surname": "Тестов", "name": "Иван", "gender": "M"}]
+    assert _stage_mark_zero_broadcast("run1", None, participants) is None

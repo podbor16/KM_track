@@ -108,22 +108,36 @@ _STAGE_ORDER = ("run1", "bike", "run2")
 _STAGE_KM_BEFORE = {"run1": 0.0, "bike": STAGE_KM["run1"], "run2": STAGE_KM["run1"] + STAGE_KM["bike"]}
 
 
-def _stage_start_s(stage_code, run1_s, t1_s, bike_s, t2_s) -> Optional[int]:
+def _stage_start_s(
+    stage_code, run1_s, t1_s, bike_s, t2_s, bike_start_s=None, run2_start_s=None,
+) -> Optional[int]:
     """Кумулятивная отметка (сек от общего старта), с которой НАЧАЛСЯ этот
     этап — финиш предыдущего + транзит (Т1/Т2), а не сразу финиш предыдущего,
     иначе сплит/темп/прогноз включали бы транзитную зону, будто участник уже
     на трассе следующего этапа. None, если предыдущий этап ещё не завершён
-    (стартовая отметка этого этапа неизвестна)."""
+    (стартовая отметка этого этапа неизвестна).
+
+    bike_start_s/run2_start_s — СЫРЫЕ поля Copernico (bike0/
+    finish_T2-start_R2, см. миграцию 004), точный момент входа на этап;
+    ПРЕДПОЧИТАЮТСЯ реконструкции run1_s+t1_s/bike_s+t2_s — та реконструкция
+    теряет до 1-2с из-за раздельного округления run1_s и t1_s каждого до
+    целых секунд (найдено пользователем 2026-09-04). Опциональны (None) —
+    для обратной совместимости со строками, где эти колонки ещё не
+    заполнены (например, тестовые участники, вписанные вручную SQL)."""
     if stage_code == "run1":
         return 0
     if stage_code == "bike":
+        if bike_start_s is not None:
+            return bike_start_s
         return (run1_s + (t1_s or 0)) if run1_s is not None else None
     if stage_code == "run2":
+        if run2_start_s is not None:
+            return run2_start_s
         return (bike_s + (t2_s or 0)) if bike_s is not None else None
     return None
 
 
-def _current_stage(run1_s, t1_s, bike_s, t2_s, run2_s):
+def _current_stage(run1_s, t1_s, bike_s, t2_s, run2_s, bike_start_s=None, run2_start_s=None):
     """Какой этап сейчас в процессе (или завершён) + с какой кумулятивной
     отметки (сек от общего старта) он начался — для тикающих часов и
     прогноза на фронтенде. run1 — дефолт и для «ещё не стартовал»:
@@ -131,9 +145,9 @@ def _current_stage(run1_s, t1_s, bike_s, t2_s, run2_s):
     if run2_s is not None:
         return "finished", None
     if bike_s is not None:
-        return "run2", _stage_start_s("run2", run1_s, t1_s, bike_s, t2_s)
+        return "run2", _stage_start_s("run2", run1_s, t1_s, bike_s, t2_s, bike_start_s, run2_start_s)
     if run1_s is not None:
-        return "bike", _stage_start_s("bike", run1_s, t1_s, bike_s, t2_s)
+        return "bike", _stage_start_s("bike", run1_s, t1_s, bike_s, t2_s, bike_start_s, run2_start_s)
     return "run1", 0
 
 
@@ -269,7 +283,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             "SELECT id, start_number, surname, name, gender, status, "
-            "run1_s, t1_s, bike_s, t2_s, run2_s "
+            "run1_s, t1_s, bike_s, t2_s, run2_s, bike_start_s, run2_start_s "
             "FROM participants WHERE event_id=%s AND start_number=%s",
             (event_id, start_number),
         )
@@ -281,7 +295,8 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
         )
         current_stage, current_stage_start_s = _current_stage(
-            row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
+            row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"],
+            row["bike_start_s"], row["run2_start_s"],
         )
 
         cursor.execute(
@@ -338,7 +353,10 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         forecast_race_s = _forecast_race_finish(current_stage, forecast_s)
 
         stage_starts = {
-            stage_code: _stage_start_s(stage_code, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"])
+            stage_code: _stage_start_s(
+                stage_code, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"],
+                row["bike_start_s"], row["run2_start_s"],
+            )
             for stage_code in _STAGE_ORDER
         }
         stages_out = {
@@ -435,15 +453,39 @@ def _frontier_lap(lap_numbers: list[int]) -> Optional[int]:
     return max(lap_numbers) if lap_numbers else None
 
 
+# Виртуальная "отметка 0" (только Вело/Бег-2) — точный момент ВЫХОДА из
+# транзитки (не круг из checkpoints, там её нет вовсе) — сырые поля
+# Copernico напрямую (см. миграцию 004/_stage_start_s). Нужна для постов
+# трансляции сразу после Т1/Т2, когда до первого настоящего круга ещё
+# далеко (запрошено пользователем 2026-09-04).
+_TRANSITION_START_COLUMN = {"bike": "bike_start_s", "run2": "run2_start_s"}
+
+
 def get_available_marks(event_id: int, stage_code: str, gender: Optional[str] = None) -> list[dict]:
     """Список отметок этапа, которые уже кто-то прошёл (для выбора конкретной
     отметки в UI генератора постов — вместо всегда-последней "фронтир"-отметки).
-    Возвращает [{"lap_number", "distance_km", "reached_count"}], по возрастанию."""
+    Возвращает [{"lap_number", "distance_km", "reached_count"}], по возрастанию —
+    для Вело/Бег-2 первой (lap_number=0), если применимо, идёт виртуальная
+    "отметка 0" (выход из транзитки, см. _TRANSITION_START_COLUMN)."""
     conn = get_duathlon_connection()
     if not conn:
         return []
     try:
         cursor = conn.cursor(dictionary=True)
+        marks: list[dict] = []
+        start_col = _TRANSITION_START_COLUMN.get(stage_code)
+        if start_col:
+            gender_filter = "AND gender=%s" if gender else ""
+            params = [event_id] + ([gender] if gender else [])
+            cursor.execute(
+                f"SELECT COUNT(*) AS cnt FROM participants "
+                f"WHERE event_id=%s AND {start_col} IS NOT NULL {gender_filter}",
+                params,
+            )
+            reached_count = cursor.fetchone()["cnt"]
+            if reached_count:
+                marks.append({"lap_number": 0, "distance_km": 0.0, "reached_count": reached_count})
+
         gender_filter = "AND p.gender=%s" if gender else ""
         params = [event_id, stage_code] + ([gender] if gender else [])
         cursor.execute(f"""
@@ -452,17 +494,56 @@ def get_available_marks(event_id: int, stage_code: str, gender: Optional[str] = 
             WHERE p.event_id=%s AND c.stage=%s {gender_filter}
             GROUP BY c.lap_number ORDER BY c.lap_number
         """, params)
-        return [
+        marks.extend(
             {
                 "lap_number": row["lap_number"],
                 "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 1),
                 "reached_count": row["reached_count"],
             }
             for row in cursor.fetchall()
-        ]
+        )
+        return marks
     finally:
         cursor.close()
         conn.close()
+
+
+def _stage_mark_zero_broadcast(stage_code: str, gender: Optional[str], participants) -> Optional[dict]:
+    """Снимок для виртуальной "отметки 0" (выход из транзитки) — не круг из
+    checkpoints (там её нет), а прямое чтение bike_start_s/run2_start_s (см.
+    _TRANSITION_START_COLUMN/миграция 004). Чистое время этапа на этой точке
+    у всех тривиально 0:00 (только что стартовали) — смысл несёт только
+    race_elapsed_s (по часам гонки, кто раньше вышел из транзитки)."""
+    start_col = _TRANSITION_START_COLUMN.get(stage_code)
+    if not start_col:
+        return None
+    pool = [
+        p for p in participants
+        if (gender is None or p["gender"] == gender) and p[start_col] is not None
+    ]
+    if not pool:
+        return None
+    race_leader = min(p[start_col] for p in pool)
+    pool.sort(key=lambda p: p[start_col])
+    return {
+        "stage": stage_code,
+        "lap_mark": 0,
+        "stage_km_at_mark": 0.0,
+        "stage_total_km": STAGE_KM[stage_code],
+        "overall_km": round(_STAGE_KM_BEFORE[stage_code], 1),
+        "race_total_km": sum(STAGE_KM.values()),
+        "entries": [
+            {
+                "surname": p["surname"], "name": p["name"],
+                "elapsed_s": 0,
+                "gap_s": 0,
+                "race_elapsed_s": p[start_col],
+                "race_gap_s": p[start_col] - race_leader,
+                "speed_kmh": None,
+            }
+            for p in pool
+        ],
+    }
 
 
 def get_stage_mark_broadcast(
@@ -483,10 +564,14 @@ def get_stage_mark_broadcast(
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT id, surname, name, gender, run1_s, t1_s, bike_s, t2_s
+            SELECT id, surname, name, gender, run1_s, t1_s, bike_s, t2_s,
+                   bike_start_s, run2_start_s
             FROM participants WHERE event_id=%s
         """, (event_id,))
         participants = {r["id"]: r for r in cursor.fetchall()}
+
+        if lap_number == 0:
+            return _stage_mark_zero_broadcast(stage_code, gender, participants.values())
 
         gender_filter = "AND p.gender=%s" if gender else ""
         params = [event_id, stage_code] + ([gender] if gender else [])
@@ -506,7 +591,10 @@ def get_stage_mark_broadcast(
             if lr["lap_number"] != frontier:
                 continue
             p = participants.get(lr["participant_id"])
-            stage_start = _stage_start_s(stage_code, p["run1_s"], p["t1_s"], p["bike_s"], p["t2_s"])
+            stage_start = _stage_start_s(
+                stage_code, p["run1_s"], p["t1_s"], p["bike_s"], p["t2_s"],
+                p["bike_start_s"], p["run2_start_s"],
+            )
             if stage_start is None:
                 continue
             entries.append({
@@ -625,7 +713,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         params = [event_id, gender] if gender else [event_id]
         cursor.execute(f"""
             SELECT id, start_number, surname, name, gender, status,
-                   run1_s, t1_s, bike_s, t2_s, run2_s
+                   run1_s, t1_s, bike_s, t2_s, run2_s, bike_start_s, run2_start_s
             FROM participants
             WHERE event_id = %s {gender_filter}
         """, params)
@@ -660,7 +748,10 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         race_entries: list[dict] = []
         for row in rows:
             stage_starts = {
-                sc: _stage_start_s(sc, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"])
+                sc: _stage_start_s(
+                    sc, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"],
+                    row["bike_start_s"], row["run2_start_s"],
+                )
                 for sc in _STAGE_ORDER
             }
             race_points: list[tuple[float, int]] = []
@@ -684,7 +775,8 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
             )
             current_stage, current_stage_start_s = _current_stage(
-                row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
+                row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"],
+                row["bike_start_s"], row["run2_start_s"],
             )
             # "finished" — не настоящий этап в checkpoints (там только
             # run1/bike/run2) — для отметки финишировавшего берём последний

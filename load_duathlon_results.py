@@ -32,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger("DuathlonLoader")
 
 STAGE_COLUMNS = ("run1_s", "bike_s", "run2_s")
-TRANSITION_COLUMNS = ("t1_s", "t2_s")
+TRANSITION_COLUMNS = ("t1_s", "t2_s", "bike_start_s", "run2_start_s")
 
 _STATUS_MAP = {
     "notstarted": "active",
@@ -143,10 +143,17 @@ def _process_stages_and_transitions(
     t1_start_ms = runner.get(transition_fields.get("t1_start", ""))
     if t1_start_ms and stage_ms.get("run1"):
         updates["t1_s"] = int((t1_start_ms - stage_ms["run1"]) // 1000)
+    if t1_start_ms:
+        # Сырое значение (bike0) отдельной колонкой — точный момент входа на
+        # Вело, НЕ реконструкция run1_s+t1_s (та теряет до 1-2с из-за
+        # раздельного округления каждого до целых секунд, см. миграцию 004).
+        updates["bike_start_s"] = int(t1_start_ms // 1000)
 
     t2_start_ms = runner.get(transition_fields.get("t2_start", ""))
     if t2_start_ms and stage_ms.get("bike"):
         updates["t2_s"] = int((t2_start_ms - stage_ms["bike"]) // 1000)
+    if t2_start_ms:
+        updates["run2_start_s"] = int(t2_start_ms // 1000)
 
     if not updates:
         return 0
