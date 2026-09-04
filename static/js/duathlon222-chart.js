@@ -154,15 +154,14 @@ const CHART_COLORS = [
     '#FF8562', '#263146', '#18A558', '#DE0000', '#4B7BE5',
     '#F5A623', '#9B59B6', '#1ABC9C', '#E67E22', '#2C3E50',
 ];
-function chartColorForBib(bib, sortedRows) {
-    const idx = sortedRows.findIndex(r => r.start_number === bib);
-    return CHART_COLORS[(idx >= 0 ? idx : 0) % CHART_COLORS.length];
+function chartColorForBib(bib) {
+    return CHART_COLORS[Math.abs(bib) % CHART_COLORS.length];
 }
 function renderChartParticipantPickers(rows) {
     const sorted = rows.slice().sort((a, b) => a.surname.localeCompare(b.surname, 'ru'));
     const filtered = chartFilteredParticipants(sorted);
     const itemsHtml = filtered.map(r => {
-        const color = chartColorForBib(r.start_number, sorted);
+        const color = chartColorForBib(r.start_number);
         const isActive = _chartSelectedBibs.includes(r.start_number);
         return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
                      onclick="chartToggleSelect(${r.start_number});renderActiveChart()">
@@ -184,7 +183,7 @@ function renderChartParticipantPickers(rows) {
     chipsEl.innerHTML = _chartSelectedBibs.map(bib => {
         const r = sorted.find(rr => rr.start_number === bib);
         if (!r) return '';
-        const color = chartColorForBib(bib, sorted);
+        const color = chartColorForBib(bib);
         return `<div class="tri-chart-mobile-chip">
             <span class="tri-chart-mobile-chip-dot" style="background:${color}"></span>${r.surname}</div>`;
     }).join('');
@@ -317,7 +316,8 @@ const stageBoundaryPlugin = {
         ctx.strokeStyle = 'rgba(0,0,0,0.15)';
         ctx.setLineDash([4, 4]);
         ctx.font = '700 11px Onest, Arial, sans-serif';
-        ctx.fillStyle = 'var(--tri-muted)';
+        const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--tri-muted') || '#888888';
+        ctx.fillStyle = mutedColor;
         boundaries.forEach(b => {
             const px = scales.x.getPixelForValue(b.x);
             ctx.beginPath();
@@ -340,16 +340,18 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
             '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--tri-muted);font-size:14px;text-align:center;padding:24px">Нет данных</div>';
         return;
     }
-    if (!document.getElementById('duathlon-chart-canvas').isConnected) {
+    // wrap.children.length > 1, а не только isConnected — isConnected не
+    // ловит случай "canvas на месте, но рядом висит плейсхолдер от
+    // предыдущего пустого рендера" (нет данных -> есть данные).
+    if (wrap.children.length > 1 || !document.getElementById('duathlon-chart-canvas').isConnected) {
         wrap.innerHTML = '<canvas id="duathlon-chart-canvas"></canvas>';
     }
     const hasSelection = _chartSelectedBibs.length > 0;
     const chartDatasetBibs = datasets.map(d => d._bib);
-    const sortedForColor = datasets.slice().sort((a, b) => a._name.localeCompare(b._name, 'ru'));
 
     const chartDatasets = datasets.map(d => {
         const isSelected = hasSelection && _chartSelectedBibs.includes(d._bib);
-        const color = chartColorForBib(d._bib, sortedForColor.map(x => ({ start_number: x._bib })));
+        const color = chartColorForBib(d._bib);
         let borderColor, borderWidth;
         if (!hasSelection) { borderColor = '#c8c8c8'; borderWidth = 1; }
         else if (isSelected) { borderColor = color; borderWidth = 2.5; }
@@ -389,11 +391,11 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
     if (_duathlonChart) { _duathlonChart.destroy(); _duathlonChart = null; }
     _duathlonChart = new Chart(ctx, config);
     _duathlonChart._stageBoundaries = opts.boundaries || null;
-    if (!hasSelection) attachSpaghettiHover(_duathlonChart, chartDatasetBibs, opts.formatPoint);
+    if (!hasSelection) attachSpaghettiHover(_duathlonChart, chartDatasetBibs);
     attachSpaghettiClick(_duathlonChart, chartDatasetBibs);
 }
 
-function attachSpaghettiHover(chart, chartDatasetBibs, formatPoint) {
+function attachSpaghettiHover(chart, chartDatasetBibs) {
     chart.options.onHover = function (evt) {
         const activeIdx = nearestDatasetIndexAtPixel(this, evt.x, evt.y);
         this.data.datasets.forEach((d, i) => {
