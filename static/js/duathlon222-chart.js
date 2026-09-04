@@ -24,3 +24,32 @@ function kmToVirtualX(stageCode, km) {
     const frac = stageKm > 0 ? Math.min(1, Math.max(0, km / stageKm)) : 0;
     return seg.start + frac * (seg.end - seg.start);
 }
+
+// Ранг участника в каждой ЕГО СОБСТВЕННОЙ точке — среди всех остальных,
+// сравнивая elapsedS на момент этой же позиции (pos). У соперника берётся
+// его ПОСЛЕДНЯЯ известная точка с pos <= текущей (интерполяция "назад" —
+// тот же принцип, что у _live_gap_map на бэкенде, но здесь не гэп, а ранг).
+// participants: [{ bib, points: [{pos, elapsedS, plotX?}, ...] }], points
+// должны быть отсортированы по pos по возрастанию (гарантируется тем, что
+// checkpoints с бэкенда уже отсортированы по lap_number). plotX, если
+// указан, используется в возвращаемых точках вместо pos как x-координата
+// (нужно для виртуальных X-сегментов режима "вся гонка" — см. Task 6).
+function computeRanksAtPositions(participants) {
+    const result = new Map();
+    participants.forEach(p => result.set(p.bib, []));
+    participants.forEach(p => {
+        p.points.forEach(pt => {
+            const atPos = participants.map(pp => {
+                let val = null;
+                for (const c of pp.points) {
+                    if (c.pos <= pt.pos) val = c.elapsedS; else break;
+                }
+                return { bib: pp.bib, elapsedS: val };
+            }).filter(e => e.elapsedS != null);
+            atPos.sort((a, b) => a.elapsedS - b.elapsedS);
+            const rank = atPos.findIndex(e => e.bib === p.bib) + 1;
+            if (rank > 0) result.get(p.bib).push({ x: pt.plotX != null ? pt.plotX : pt.pos, y: rank });
+        });
+    });
+    return result;
+}
