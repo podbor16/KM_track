@@ -53,7 +53,10 @@ body {
     color: rgba(255, 255, 255, 0.45);
     margin-top: 6px;
 }
-.tri-elapsed-wrap { text-align: right; }
+/* flex-column + align-items:flex-start (не text-align:right) — подпись
+   выравнивается по ПЕРВОЙ цифре таймера (левый край блока), а не по
+   правому краю, где ширина подписи и числа обычно не совпадают. */
+.tri-elapsed-wrap { display: flex; flex-direction: column; align-items: flex-start; }
 .tri-elapsed-label { font-size: 11px; color: rgba(255, 255, 255, 0.4); margin-bottom: 2px; }
 .tri-elapsed {
     font-size: 32px;
