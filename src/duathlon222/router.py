@@ -279,7 +279,12 @@ async def duathlon_loader_init(user: str = Depends(api_require_auth)):
         for line in output.splitlines():
             if "Участников:" in line:
                 try:
-                    inserted = int(''.join(filter(str.isdigit, line.split(":")[1].split(",")[0])))
+                    # split(":") ломался на таймстемпе строки лога ("16:49:56"
+                    # тоже содержит ":") — брал минуты вместо счётчика после
+                    # "Участников:". Найдено 2026-09-04 при проверке фикса
+                    # пересинхронизации: admin-панель показывала "49" вместо
+                    # реальных 14. split() по самой метке — не по любому ":".
+                    inserted = int(''.join(filter(str.isdigit, line.split("Участников:", 1)[1].split(",")[0])))
                 except Exception:
                     pass
 
@@ -321,7 +326,12 @@ async def duathlon_loader_resync(user: str = Depends(api_require_auth)):
         for line in output.splitlines():
             if "Участников:" in line:
                 try:
-                    inserted = int(''.join(filter(str.isdigit, line.split(":")[1].split(",")[0])))
+                    # split(":") ломался на таймстемпе строки лога ("16:49:56"
+                    # тоже содержит ":") — брал минуты вместо счётчика после
+                    # "Участников:". Найдено 2026-09-04 при проверке фикса
+                    # пересинхронизации: admin-панель показывала "49" вместо
+                    # реальных 14. split() по самой метке — не по любому ":".
+                    inserted = int(''.join(filter(str.isdigit, line.split("Участников:", 1)[1].split(",")[0])))
                 except Exception:
                     pass
         return {"status": "ok" if success else "error", "inserted": inserted, "output": output[-3000:]}
