@@ -154,11 +154,14 @@
         const chipPct = Math.min(94, Math.max(6, fillPct));
         const b1 = STAGE_OFFSET.bike, b2 = STAGE_OFFSET.run2;
         const activeKey = d.current_stage === 'finished' ? 'run2' : d.current_stage;
+        // Финишный флаг скрыт, когда бегунок уже там — иначе подпись чипа
+        // ("Финиш") налезает на флаг у самого правого края (найдено
+        // пользователем 2026-09-04); чип и так говорит "Финиш", флаг избыточен.
         return `
         <div class="pb-outer">
             <div class="pb-track-wrap">
                 <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
-                <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+                ${fillPct < 100 ? '<span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>' : ''}
                 <div class="pb-chip" style="left:${chipPct}%">${chipText}</div>
                 <div class="pb-track">
                     <div class="pb-seg run1" style="width:${STAGE_SHARE.run1}%"></div>
@@ -194,11 +197,13 @@
             chipText = null;
         }
         const chipPct = Math.min(94, Math.max(6, fillPct));
+        // См. overallProgressBarHtml — финишный флаг скрыт при fillPct=100,
+        // иначе чип "Финиш этапа" налезает на флаг у правого края.
         return `
         <div class="pb-outer">
             <div class="pb-track-wrap">
                 <span class="pb-flag pb-flag-start" title="Старт">🏁</span>
-                <span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>
+                ${fillPct < 100 ? '<span class="pb-flag pb-flag-finish" title="Финиш">🏁</span>' : ''}
                 ${chipText ? `<div class="pb-chip" style="left:${chipPct}%">${chipText}</div>` : ''}
                 <div class="pb-track"><div class="pb-fill" style="width:${fillPct}%"></div></div>
                 <div class="pb-marker-dot" style="left:${fillPct}%"></div>
@@ -252,13 +257,45 @@
                 <td>—</td><td>—</td><td>—</td><td>—</td>
             </tr>`;
         }).join('');
+
+        // Официальный финиш этапа — ОТДЕЛЬНОЕ поле Copernico (не входит в
+        // info.marks вовсе, см. config/copernico/duathlon_222_2026.yaml).
+        // Отдельная строка нужна, только если последняя обычная отметка не
+        // дотягивает до полной дистанции этапа (сейчас — только Вело: 169.0
+        // против 170 км итого, 0.96 км до финиша не покрыты кругами вовсе;
+        // найдено пользователем 2026-09-04 — "куда делась отметка 170 км").
+        const lastMark = info.marks[info.marks.length - 1];
+        let finishRow = '';
+        if (lastMark && lastMark.distance_km < info.distance_km) {
+            const finishS = d[stageCode + '_s'];
+            const finishLabel = `${info.distance_km}/${info.distance_km} км · Финиш`;
+            let cumCell;
+            if (finishS != null) {
+                cumCell = fmtS(finishS);
+            } else {
+                cumCell = '—';
+                if (canForecastNext && d.current_stage_lap === lastMark.lap_number) {
+                    const forecastInStageS = d.current_stage_elapsed_s * (info.distance_km / d.current_stage_distance_km);
+                    const absS = d.current_stage_start_s + forecastInStageS;
+                    cumCell = `<span style="color:var(--tri-accent);font-weight:700">~${fmtS(absS)}</span>` +
+                              `<div style="font-size:10px;color:var(--tri-accent)">(${fmtClock(absS)})</div>`;
+                }
+            }
+            finishRow = `<tr style="${finishS != null ? '' : 'opacity:.5'}">
+                <td>${finishLabel}</td>
+                <td>—</td><td>—</td>
+                <td>${cumCell}</td>
+                <td>—</td><td>—</td><td>—</td><td>—</td>
+            </tr>`;
+        }
+
         return `<div class="table-wrap"><table class="cp-table">
             <thead><tr>
                 <th>Отметка</th><th>Сплит</th><th>Темп/Скорость</th><th>Общее время</th>
                 <th>Место (пол)</th><th>Отст. (пол)</th>
                 <th>Место (абс)</th><th>Отст. (абс)</th>
             </tr></thead>
-            <tbody>${rows}</tbody>
+            <tbody>${rows}${finishRow}</tbody>
         </table></div>`;
     }
 

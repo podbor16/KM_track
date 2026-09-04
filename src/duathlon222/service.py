@@ -227,7 +227,7 @@ def _build_stage_laps(
         r = ranks.get((participant_id, stage_code, lr["lap_number"]), {})
         laps.append({
             "lap_number": lr["lap_number"],
-            "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 2),
+            "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 1),
             "cumulative_s": cum,
             "split_s": split,
             "speed_kmh": speed_kmh,
@@ -296,7 +296,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         distance_km = _distance_covered_km(current_stage, lap_number)
         # Дистанция ИМЕННО этапа отметки (не всей гонки, в отличие от
         # distance_km выше) — для отображения "Отметка N/M км".
-        current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 2) if lap_number else None
+        current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 1) if lap_number else None
         # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
         # (не тикает), нужно и для темпа/скорости ниже, и карточке участника
         # для прогноза ближайшей непройденной отметки (см. duathlon_
@@ -330,7 +330,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
                 # "1..maxSeq" делает JS, здесь дистанция неравномерна из-за
                 # STAGE_LAP_OFFSET у вело, поэтому считаем на бэкенде).
                 "marks": [
-                    {"lap_number": n, "distance_km": round(_lap_distance_km(stage_code, n), 2)}
+                    {"lap_number": n, "distance_km": round(_lap_distance_km(stage_code, n), 1)}
                     for n in range(1, LAP_COUNT[stage_code] + 1)
                 ],
                 "laps": _build_stage_laps(
@@ -432,7 +432,7 @@ def get_available_marks(event_id: int, stage_code: str, gender: Optional[str] = 
         return [
             {
                 "lap_number": row["lap_number"],
-                "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 2),
+                "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 1),
                 "reached_count": row["reached_count"],
             }
             for row in cursor.fetchall()
@@ -504,7 +504,7 @@ def get_stage_mark_broadcast(
         race_leader_elapsed = min(e["race_elapsed_s"] for e in entries)
         entries.sort(key=lambda e: e["elapsed_s"])
 
-        stage_km_at_mark = round(_lap_distance_km(stage_code, frontier), 2)
+        stage_km_at_mark = round(_lap_distance_km(stage_code, frontier), 1)
         return {
             "stage": stage_code,
             "lap_mark": frontier,
@@ -665,7 +665,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             mark_stage = "run2" if current_stage == "finished" else current_stage
             lap_number, lap_cumulative_s = last_lap.get((row["id"], mark_stage), (None, None))
             distance_km = _distance_covered_km(current_stage, lap_number)
-            current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 2) if lap_number else None
+            current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 1) if lap_number else None
             # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
             # (не тикает), обновляется на каждую новую отметку (запрошено
             # пользователем 2026-09-04 — убрали живой секундомер по строкам).
