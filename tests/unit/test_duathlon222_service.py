@@ -7,6 +7,7 @@ from src.duathlon222.service import (
     _lap_distance_km, _lap_split_distance_km,
     _global_km, _live_gap_map,
     _stage_mark_zero_broadcast,
+    _build_checkpoint_series,
 )
 
 
@@ -478,3 +479,31 @@ def test_stage_mark_zero_broadcast_none_for_run1():
     # run1 не имеет предшествующей транзитки — нет виртуальной отметки 0.
     participants = [{"surname": "Тестов", "name": "Иван", "gender": "M"}]
     assert _stage_mark_zero_broadcast("run1", None, participants) is None
+
+
+def test_build_checkpoint_series_includes_stage_start_as_lap_zero():
+    stage_starts = {"run1": 0, "bike": 3720, "run2": None}
+    laps_by_key = {
+        (1, "run1"): [(1, 400), (8, 2600)],
+        (1, "bike"): [(1, 4380)],
+    }
+    result = _build_checkpoint_series(1, stage_starts, laps_by_key)
+    assert result["run1"][0] == {"lap": 0, "km": 0.0, "elapsed_s": 0}
+    assert result["run1"][1] == {"lap": 1, "km": 1.25, "elapsed_s": 400}
+    assert result["run1"][2] == {"lap": 8, "km": 9.98, "elapsed_s": 2600}
+    assert result["bike"][0] == {"lap": 0, "km": 0.0, "elapsed_s": 3720}
+    assert result["bike"][1] == {"lap": 1, "km": 3.4, "elapsed_s": 4380}
+
+
+def test_build_checkpoint_series_no_lap_zero_when_stage_start_unknown():
+    # run2 ещё не начат (run2_start_s=None) — нет виртуальной отметки 0, и
+    # нет вообще никаких отметок (нет записей в laps_by_key для run2).
+    stage_starts = {"run1": 0, "bike": 3720, "run2": None}
+    result = _build_checkpoint_series(1, stage_starts, {})
+    assert result["run2"] == []
+
+
+def test_build_checkpoint_series_empty_for_participant_with_no_laps():
+    stage_starts = {"run1": 0, "bike": None, "run2": None}
+    result = _build_checkpoint_series(1, stage_starts, {})
+    assert result == {"run1": [{"lap": 0, "km": 0.0, "elapsed_s": 0}], "bike": [], "run2": []}

@@ -647,6 +647,37 @@ def get_stage_mark_broadcast(
         conn.close()
 
 
+def _build_checkpoint_series(
+    participant_id: int,
+    stage_starts: dict[str, Optional[int]],
+    laps_by_key: dict[tuple[int, str], list[tuple[int, int]]],
+) -> dict[str, list[dict]]:
+    """Полная история отметок участника по каждому этапу — для графиков
+    «Позиция»/«Темп-скорость» (см. get_standings). elapsed_s — ВСЕГДА от
+    старта ГОНКИ (то же значение, что checkpoints.cumulative_s в БД — см.
+    load_duathlon_results.py), не от старта этапа: так один и тот же массив
+    годится и для живого ранга по гонке целиком, и для сплит-темпа внутри
+    этапа (разница cumulative_s между соседними точками не зависит от точки
+    отсчёта). lap=0 — виртуальная отметка выхода из транзитки (тот же
+    источник, что и _stage_mark_zero_broadcast), добавляется только если
+    старт этапа уже известен — даёт точную (не экстраполированную) первую
+    точку сплита вместо прежнего трюка "продлить линию плоско до X=0"."""
+    result: dict[str, list[dict]] = {}
+    for stage_code in _STAGE_ORDER:
+        points: list[dict] = []
+        start_s = stage_starts.get(stage_code)
+        if start_s is not None:
+            points.append({"lap": 0, "km": 0.0, "elapsed_s": start_s})
+        for lap_number, cumulative_s in laps_by_key.get((participant_id, stage_code), []):
+            points.append({
+                "lap": lap_number,
+                "km": round(_lap_distance_km(stage_code, lap_number), 2),
+                "elapsed_s": cumulative_s,
+            })
+        result[stage_code] = points
+    return result
+
+
 def _global_km(stage_code: str, lap_number: Optional[int]) -> float:
     """Кумулятивная дистанция (км) ОТ СТАРТА ГОНКИ (не этапа) на данной
     отметке — _STAGE_KM_BEFORE[stage] + позиция внутри этапа. Общая ось
