@@ -306,7 +306,14 @@
         const timeKey = stageCode + '_s';
         const speedKey = stageCode + '_speed_kmh';
         const stageTime = d[timeKey];
-        const isOpen = isCurrent || stageTime != null;
+        // Открыт только ТЕКУЩИЙ этап — раньше держали открытым ЛЮБОЙ уже
+        // пройденный (stageTime != null), из-за чего пройденные этапы
+        // никогда не сворачивались сами (найдено пользователем 2026-09-04:
+        // Бег-1 у финишировавшего его участника остался открытым, когда тот
+        // перешёл на Вело). Когда гонка вся закончена (current_stage ===
+        // 'finished', ни один этап уже не "текущий") — открыт Бег-2, чтобы
+        // финишная сводка не пряталась вся целиком.
+        const isOpen = isCurrent || (d.current_stage === 'finished' && stageCode === 'run2');
         const forecastHtml = (isCurrent && d.forecast_stage_finish_s != null)
             ? `<span class="stage-forecast">~${fmtClock(d.forecast_stage_finish_s)} прогноз финиша</span>`
             : '';
