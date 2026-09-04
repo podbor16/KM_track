@@ -246,3 +246,190 @@ function nearestDatasetIndexAtPixel(chart, xPixel, yPixel, maxDistPx = null) {
     if (bestIdx == null) return null;
     return (maxDistPx != null && bestDist > maxDistPx) ? null : bestIdx;
 }
+
+const CHART_STAGE_OPTIONS = {
+    position: [
+        { code: 'all', label: 'Вся гонка' },
+        { code: 'run1', label: 'Бег-1' },
+        { code: 'bike', label: 'Вело' },
+        { code: 'run2', label: 'Бег-2' },
+    ],
+    pace: [
+        { code: 'run1', label: 'Бег-1' },
+        { code: 'bike', label: 'Вело' },
+        { code: 'run2', label: 'Бег-2' },
+    ],
+};
+function switchChartMode(mode, btn) {
+    _chartMode = mode;
+    document.querySelectorAll('#chart-mode-group .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    _chartStage = mode === 'position' ? 'all' : 'run1';
+    renderChartStageButtons();
+    renderActiveChart();
+}
+function renderChartStageButtons() {
+    const group = document.getElementById('chart-stage-group');
+    group.innerHTML = CHART_STAGE_OPTIONS[_chartMode].map(opt =>
+        `<button class="filter-btn${opt.code === _chartStage ? ' active' : ''}" onclick="switchChartStage('${opt.code}', this)">${opt.label}</button>`
+    ).join('');
+}
+function switchChartStage(code, btn) {
+    _chartStage = code;
+    document.querySelectorAll('#chart-stage-group .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderActiveChart();
+}
+
+function getChartFilteredStandings() {
+    // allStandings уже отфильтрован по полу на бэкенде (см. setGenderFilter/
+    // loadStandings в инлайн-скрипте) — здесь дополнительно убираем тех, у
+    // кого вообще нет ни одной отметки (иначе на графике пустые линии).
+    return (typeof allStandings !== 'undefined' ? allStandings : [])
+        .filter(r => r.checkpoints && Object.values(r.checkpoints).some(arr => arr.length));
+}
+function onChartTabShown() {
+    if (!document.getElementById('chart-stage-group').innerHTML) renderChartStageButtons();
+    renderActiveChart();
+}
+function renderActiveChart() {
+    const rows = getChartFilteredStandings();
+    renderChartParticipantPickers(rows);
+    if (_chartMode === 'position') renderPositionChart(rows);
+    else renderPaceChart(rows);
+    const label = document.getElementById('chart-refresh-label');
+    if (label) label.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+}
+
+function chartStageBoundaries() {
+    return STAGE_ORDER.slice(0, -1).map(sc => ({
+        x: CHART_VIRTUAL_SEGMENTS[sc].end,
+        label: STAGE_LABEL[sc] + ' →',
+    }));
+}
+const stageBoundaryPlugin = {
+    id: 'stageBoundary',
+    afterDatasetsDraw(chart) {
+        const boundaries = chart._stageBoundaries;
+        if (!boundaries || !boundaries.length) return;
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea) return;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.setLineDash([4, 4]);
+        ctx.font = '700 11px Onest, Arial, sans-serif';
+        ctx.fillStyle = 'var(--tri-muted)';
+        boundaries.forEach(b => {
+            const px = scales.x.getPixelForValue(b.x);
+            ctx.beginPath();
+            ctx.moveTo(px, chartArea.top);
+            ctx.lineTo(px, chartArea.bottom);
+            ctx.stroke();
+            ctx.fillText(b.label, px + 4, chartArea.top + 12);
+        });
+        ctx.restore();
+    },
+};
+
+let _duathlonChart = null;
+
+function renderSpaghettiOrCompareChart(datasets, opts) {
+    const wrap = document.getElementById('duathlon-chart-canvas').parentElement;
+    if (!datasets.length) {
+        if (_duathlonChart) { _duathlonChart.destroy(); _duathlonChart = null; }
+        wrap.innerHTML = '<canvas id="duathlon-chart-canvas"></canvas>' +
+            '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--tri-muted);font-size:14px;text-align:center;padding:24px">Нет данных</div>';
+        return;
+    }
+    if (!document.getElementById('duathlon-chart-canvas').isConnected) {
+        wrap.innerHTML = '<canvas id="duathlon-chart-canvas"></canvas>';
+    }
+    const hasSelection = _chartSelectedBibs.length > 0;
+    const chartDatasetBibs = datasets.map(d => d._bib);
+    const sortedForColor = datasets.slice().sort((a, b) => a._name.localeCompare(b._name, 'ru'));
+
+    const chartDatasets = datasets.map(d => {
+        const isSelected = hasSelection && _chartSelectedBibs.includes(d._bib);
+        const color = chartColorForBib(d._bib, sortedForColor.map(x => ({ start_number: x._bib })));
+        let borderColor, borderWidth;
+        if (!hasSelection) { borderColor = '#c8c8c8'; borderWidth = 1; }
+        else if (isSelected) { borderColor = color; borderWidth = 2.5; }
+        else { borderColor = '#e8e8e8'; borderWidth = 1; }
+        return {
+            _bib: d._bib, label: d._name, data: d.data,
+            borderColor, backgroundColor: borderColor, borderWidth,
+            pointRadius: 2, pointHoverRadius: 5, tension: 0.15, spanGaps: true,
+        };
+    });
+
+    const ctx = document.getElementById('duathlon-chart-canvas').getContext('2d');
+    const config = {
+        type: 'line',
+        data: { datasets: chartDatasets },
+        plugins: [stageBoundaryPlugin],
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
+            plugins: {
+                legend: { display: hasSelection },
+                tooltip: {
+                    filter: (item) => !hasSelection || _chartSelectedBibs.includes(chartDatasetBibs[item.datasetIndex]),
+                    callbacks: { label: (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}` },
+                },
+            },
+            scales: {
+                x: opts.xScale || { type: 'linear' },
+                y: {
+                    reverse: !!opts.yReverse,
+                    title: { display: true, text: opts.yLabel },
+                    ticks: opts.yTickFormat ? { callback: v => opts.yTickFormat(v) } : {},
+                },
+            },
+        },
+    };
+    if (_duathlonChart) { _duathlonChart.destroy(); _duathlonChart = null; }
+    _duathlonChart = new Chart(ctx, config);
+    _duathlonChart._stageBoundaries = opts.boundaries || null;
+    if (!hasSelection) attachSpaghettiHover(_duathlonChart, chartDatasetBibs, opts.formatPoint);
+    attachSpaghettiClick(_duathlonChart, chartDatasetBibs);
+}
+
+function attachSpaghettiHover(chart, chartDatasetBibs, formatPoint) {
+    chart.options.onHover = function (evt) {
+        const activeIdx = nearestDatasetIndexAtPixel(this, evt.x, evt.y);
+        this.data.datasets.forEach((d, i) => {
+            const active = i === activeIdx;
+            d.borderColor = active ? getComputedStyle(document.documentElement).getPropertyValue('--tri-red') || '#DE0000' : '#c8c8c8';
+            d.borderWidth = active ? 2.5 : 1;
+        });
+        this.update('none');
+    };
+}
+function attachSpaghettiClick(chart, chartDatasetBibs) {
+    chart.options.onClick = function (evt) {
+        const idx = nearestDatasetIndexAtPixel(this, evt.x, evt.y, 30);
+        if (idx == null) return;
+        chartToggleSelect(chartDatasetBibs[idx]);
+        renderActiveChart();
+    };
+}
+
+function renderPositionChart(rows) {
+    const datasets = _chartStage === 'all'
+        ? buildPositionDatasetsWholeRace(rows)
+        : buildPositionDatasetsSingleStage(_chartStage, rows);
+    renderSpaghettiOrCompareChart(datasets, {
+        yLabel: 'Место', yReverse: true,
+        formatPoint: (x, y) => `место ${Math.round(y)}`,
+        boundaries: _chartStage === 'all' ? chartStageBoundaries() : null,
+    });
+}
+function renderPaceChart(rows) {
+    const datasets = buildPaceDatasets(_chartStage, rows);
+    renderSpaghettiOrCompareChart(datasets, {
+        yLabel: _chartStage === 'bike' ? 'Скорость, км/ч' : 'Темп',
+        yReverse: false,
+        formatPoint: (x, y) => fmtPaceOrSpeed(_chartStage, y),
+        yTickFormat: y => fmtPaceOrSpeed(_chartStage, y),
+        boundaries: null,
+    });
+}
