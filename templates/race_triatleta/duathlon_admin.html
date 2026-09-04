@@ -114,15 +114,16 @@
     // Список отметок этапа с числом уже дошедших до неё — заполняет
     // выпадающий список выбора КОНКРЕТНОЙ отметки для поста (раньше всегда
     // бралась только самая дальняя, "фронтир", без выбора).
-    async function loadMarks() {
+    async function loadMarks(retrying) {
         const stage = document.getElementById('post-stage').value;
         const category = document.getElementById('post-category').value;
         const sel = document.getElementById('post-mark');
         const prevValue = sel.value;
-        sel.innerHTML = '<option value="">Загрузка...</option>';
+        if (!retrying) sel.innerHTML = '<option value="">Загрузка...</option>';
         try {
             const url = `/api/duathlon222_${YEAR}/available-marks/${stage}` + (category ? `?gender=${category}` : '');
             const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const d = await r.json();
             const marks = d.marks || [];
             if (!marks.length) {
@@ -142,7 +143,14 @@
             const stillExists = marks.some(m => String(m.lap_number) === prevValue);
             sel.value = stillExists ? prevValue : marks[marks.length - 1].lap_number;
         } catch(e) {
-            sel.innerHTML = '<option value="">Ошибка загрузки</option>';
+            // Одна автоматическая попытка — частая причина сбоя здесь
+            // транзиентная (например, короткое окно недоступности бэкенда
+            // во время деплоя), а не реальная ошибка (найдено пользователем
+            // 2026-09-04). Если и повтор не удался — показываем ПРИЧИНУ
+            // (код/текст ошибки), а не голое "Ошибка загрузки" — раньше
+            // было невозможно понять, что именно сломалось.
+            if (!retrying) { setTimeout(() => loadMarks(true), 1500); return; }
+            sel.innerHTML = `<option value="">Ошибка загрузки (${e.message})</option>`;
         }
     }
 
