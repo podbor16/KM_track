@@ -274,12 +274,12 @@
             ? `<span class="stage-forecast">~${fmtClock(d.forecast_stage_finish_s)} прогноз финиша</span>`
             : '';
         const lapProgress = (isCurrent && d.current_stage_lap)
-            ? `<span class="stage-meta">отметка ${d.current_stage_lap}/${d.current_stage_lap_total}</span>`
+            ? `<span class="stage-meta">${d.current_stage_distance_km}/${info.distance_km} км</span>`
             : '';
         return `<details class="stage" ${isOpen ? 'open' : ''}>
             <summary>
                 <span class="stage-title">${label}</span>
-                <span class="stage-dist">${info.distance_km} км · до ${info.lap_count} отметок</span>
+                <span class="stage-dist">${info.distance_km} км</span>
                 <span class="stage-spacer"></span>
                 ${stageTime != null ? `<span class="stage-time">${fmtS(stageTime)}</span>` : ''}
                 ${stageTime != null && d[speedKey] != null ? `<span class="stage-meta">${d[speedKey].toFixed(1)} км/ч</span>` : ''}
