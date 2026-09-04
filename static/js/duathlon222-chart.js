@@ -46,6 +46,12 @@ function computeRanksAtPositions(participants) {
                 }
                 return { bib: pp.bib, elapsedS: val };
             }).filter(e => e.elapsedS != null);
+            // При точном совпадении elapsedS (реалистично — тайминг Copernico
+            // усечён до целой секунды) порядок между ними не определяется
+            // отдельно — стабильная сортировка оставляет их в порядке
+            // элементов исходного participants (без смысловой гарантии по
+            // месту), это осознанный компромисс: точная поминутная
+            // тай-брейк-политика не нужна для визуализации на графике.
             atPos.sort((a, b) => a.elapsedS - b.elapsedS);
             const rank = atPos.findIndex(e => e.bib === p.bib) + 1;
             if (rank > 0) result.get(p.bib).push({ x: pt.plotX != null ? pt.plotX : pt.pos, y: rank });
