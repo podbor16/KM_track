@@ -120,5 +120,44 @@ check('computeRanksAtPositions: точка участника без ни одн
     assert.strictEqual(JSON.stringify(ranks.get(1)), JSON.stringify([{ x: 5, y: 1 }]));
 });
 
+function mkRow(bib, checkpoints) {
+    return { start_number: bib, surname: `Уч${bib}`, name: 'Тест', checkpoints };
+}
+
+check('buildPositionDatasetsSingleStage: точки берутся из checkpoints[stage], x=km, y=ранг', () => {
+    const rows = [
+        mkRow(1, { run1: [{ lap: 0, km: 0, elapsed_s: 0 }, { lap: 1, km: 1.25, elapsed_s: 300 }] }),
+        mkRow(2, { run1: [{ lap: 0, km: 0, elapsed_s: 0 }, { lap: 1, km: 1.25, elapsed_s: 280 }] }),
+    ];
+    const datasets = sandbox.buildPositionDatasetsSingleStage('run1', rows);
+    const ds1 = datasets.find(d => d._bib === 1);
+    const ds2 = datasets.find(d => d._bib === 2);
+    assert.strictEqual(JSON.stringify(ds1.data), JSON.stringify([{ x: 0, y: 1 }, { x: 1.25, y: 2 }]));
+    assert.strictEqual(JSON.stringify(ds2.data), JSON.stringify([{ x: 0, y: 2 }, { x: 1.25, y: 1 }]));
+});
+check('buildPositionDatasetsSingleStage: участник без отметок этого этапа не попадает в датасеты', () => {
+    const rows = [mkRow(1, { run1: [] }), mkRow(2, { run1: [{ lap: 0, km: 0, elapsed_s: 0 }] })];
+    const datasets = sandbox.buildPositionDatasetsSingleStage('run1', rows);
+    assert.strictEqual(datasets.length, 1);
+    assert.strictEqual(datasets[0]._bib, 2);
+});
+check('buildPositionDatasetsWholeRace: км второго/третьего этапа считается от глобального накопления, x — виртуальный', () => {
+    const rows = [
+        mkRow(1, {
+            run1: [{ lap: 0, km: 0, elapsed_s: 0 }, { lap: 8, km: 9.98, elapsed_s: 3000 }],
+            bike: [{ lap: 0, km: 0, elapsed_s: 3100 }, { lap: 1, km: 3.4, elapsed_s: 3700 }],
+            run2: [],
+        }),
+    ];
+    const datasets = sandbox.buildPositionDatasetsWholeRace(rows);
+    const ds = datasets[0];
+    // run1: x = kmToVirtualX('run1', km); bike: x = kmToVirtualX('bike', km)
+    assert.strictEqual(ds.data[0].x, sandbox.kmToVirtualX('run1', 0));
+    assert.strictEqual(ds.data[1].x, sandbox.kmToVirtualX('run1', 9.98));
+    assert.strictEqual(ds.data[2].x, sandbox.kmToVirtualX('bike', 0));
+    assert.strictEqual(ds.data[3].x, sandbox.kmToVirtualX('bike', 3.4));
+    assert.strictEqual(ds.data.length, 4); // run2 пуст — 0 точек оттуда
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

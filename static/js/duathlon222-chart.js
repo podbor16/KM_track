@@ -59,3 +59,35 @@ function computeRanksAtPositions(participants) {
     });
     return result;
 }
+
+// Датасеты позиций на одиночном этапе: для каждого участника — точки (x=км этапа, y=его ранг)
+function buildPositionDatasetsSingleStage(stageCode, rows) {
+    const allParticipants = rows.map(r => ({
+        bib: r.start_number,
+        name: `${r.surname} ${r.name}`,
+        points: (r.checkpoints?.[stageCode] || []).map(cp => ({ pos: cp.km, elapsedS: cp.elapsed_s })),
+    }));
+    const ranks = computeRanksAtPositions(allParticipants);
+    return allParticipants.filter(p => p.points.length).map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
+}
+
+// Датасеты позиций на всей гонке: для каждого участника — точки всех этапов с виртуальной оси X
+function buildPositionDatasetsWholeRace(rows) {
+    const participants = rows.map(r => {
+        const points = [];
+        let globalBase = 0;
+        STAGE_ORDER.forEach(sc => {
+            (r.checkpoints?.[sc] || []).forEach(cp => {
+                points.push({
+                    pos: globalBase + cp.km,
+                    elapsedS: cp.elapsed_s,
+                    plotX: kmToVirtualX(sc, cp.km),
+                });
+            });
+            globalBase += STAGE_KM[sc];
+        });
+        return { bib: r.start_number, name: `${r.surname} ${r.name}`, points };
+    }).filter(p => p.points.length);
+    const ranks = computeRanksAtPositions(participants);
+    return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
+}
