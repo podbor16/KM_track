@@ -23,9 +23,9 @@
 
     <div class="tri-container">
         <div class="admin-tabs">
-            <button class="admin-tab active" onclick="switchTab('loader', this)">Загрузчик</button>
-            <button class="admin-tab" onclick="switchTab('preset', this)">Пресет Copernico</button>
-            <button class="admin-tab" onclick="switchTab('post', this)">📋 Пост</button>
+            <button class="admin-tab active" data-admtab="loader" onclick="switchTab('loader', this)">Загрузчик</button>
+            <button class="admin-tab" data-admtab="preset" onclick="switchTab('preset', this)">Пресет Copernico</button>
+            <button class="admin-tab" data-admtab="post" onclick="switchTab('post', this)">📋 Пост</button>
         </div>
 
         <!-- Загрузчик -->
@@ -92,13 +92,21 @@
     </div>
 
     <script>
+    // Активная вкладка — в URL (?tab=...), переживает F5 (запрошено
+    // пользователем 2026-09-04, та же проблема чинили и на странице
+    // результатов/по образцу Siberman).
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
+        (btn || document.querySelector(`.admin-tab[data-admtab="${name}"]`)).classList.add('active');
         document.getElementById('tab-' + name).classList.add('active');
         if (name === 'preset') loadPreset();
         if (name === 'post') loadMarks();
+        const params = new URLSearchParams();
+        if (name !== 'loader') params.set('tab', name);
+        const qs = params.toString();
+        const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
+        if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
     }
 
     // ---- Пост: выбор отметки ----
@@ -122,7 +130,7 @@
                 return;
             }
             sel.innerHTML = marks.map(m =>
-                `<option value="${m.lap_number}">${m.lap_number}/${marks.length} — ${m.distance_km} км (${m.reached_count} чел.)</option>`
+                `<option value="${m.lap_number}">${m.distance_km}/${STAGE_KM[stage]} км</option>`
             ).join('');
             // Сохраняем прежний выбор, если он ещё существует в новом списке,
             // иначе — самая дальняя (последняя) отметка, как раньше по умолчанию.
@@ -261,6 +269,9 @@
         btn.disabled = false;
     }
 
+    const _urlTab = new URLSearchParams(location.search).get('tab');
+    if (['preset', 'post'].includes(_urlTab)) switchTab(_urlTab);
+
     loadLoader();
     setInterval(loadLoader, 10000);
 
@@ -366,6 +377,7 @@
     // один зачёт (Абсолют/Мужчины/Женщины), генерируются по отдельности.
 
     const YEAR = 2026;
+    const STAGE_KM = { run1: 10, bike: 170, run2: 42 };
 
     const STAGE_PHRASE = {
         run1: 'первого бегового этапа',

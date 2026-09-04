@@ -201,22 +201,52 @@
         </div>`;
     }
 
+    // Показываем ВСЕ отметки этапа сразу (info.marks — 1..lap_count с
+    // дистанцией каждой, от бэкенда), а не только уже пройденные — заполняются
+    // постепенно по мере поступления данных, по аналогии с Siberman (там тот
+    // же цикл "1..maxSeq" в JS; здесь дистанция неравномерна у вело из-за
+    // "пролога", поэтому список марок готовит бэкенд). Для ближайшей ещё не
+    // пройденной отметки текущего этапа — прогноз по средней скорости (та же
+    // формула, что forecast_stage_finish_s на бэкенде, только с другой
+    // целевой дистанцией — считаем прямо тут, не гоняя лишний запрос).
     function lapTableHtml(stageCode, d) {
         const info = d.stages[stageCode];
-        if (!info.laps.length) {
-            return '<div class="p-empty" style="padding:16px">Отметок ещё нет</div>';
-        }
-        const rows = info.laps.map(lap => `
-            <tr>
-                <td>Отметка ${lap.lap_number}</td>
-                <td>${fmtS(lap.split_s)}</td>
-                <td>${fmtPaceOrSpeed(stageCode, lap.speed_kmh)}</td>
-                <td>${fmtS(lap.cumulative_s)}</td>
-                <td>${lap.rank_gender != null ? lap.rank_gender : '—'}</td>
-                <td>${fmtGap(lap.gap_gender)}</td>
-                <td>${lap.rank_abs != null ? lap.rank_abs : '—'}</td>
-                <td>${fmtGap(lap.gap_abs)}</td>
-            </tr>`).join('');
+        const byLap = {};
+        info.laps.forEach(lap => { byLap[lap.lap_number] = lap; });
+        const isCurrentStage = d.current_stage === stageCode;
+        const nextLapNumber = (isCurrentStage ? (d.current_stage_lap || 0) : 0) + 1;
+        const canForecastNext = isCurrentStage && d.status === 'active'
+            && d.current_stage_elapsed_s != null && d.current_stage_distance_km > 0
+            && d.current_stage_start_s != null;
+        const rows = info.marks.map(mark => {
+            const lap = byLap[mark.lap_number];
+            const markLabel = `${mark.distance_km}/${info.distance_km} км`;
+            if (lap) {
+                return `<tr>
+                    <td>${markLabel}</td>
+                    <td>${fmtS(lap.split_s)}</td>
+                    <td>${fmtPaceOrSpeed(stageCode, lap.speed_kmh)}</td>
+                    <td>${fmtS(lap.cumulative_s)}</td>
+                    <td>${lap.rank_gender != null ? lap.rank_gender : '—'}</td>
+                    <td>${fmtGap(lap.gap_gender)}</td>
+                    <td>${lap.rank_abs != null ? lap.rank_abs : '—'}</td>
+                    <td>${fmtGap(lap.gap_abs)}</td>
+                </tr>`;
+            }
+            let cumCell = '—';
+            if (canForecastNext && mark.lap_number === nextLapNumber) {
+                const forecastInStageS = d.current_stage_elapsed_s * (mark.distance_km / d.current_stage_distance_km);
+                const absS = d.current_stage_start_s + forecastInStageS;
+                cumCell = `<span style="color:var(--tri-accent);font-weight:700">~${fmtS(absS)}</span>` +
+                          `<div style="font-size:10px;color:var(--tri-accent)">(${fmtClock(absS)})</div>`;
+            }
+            return `<tr style="opacity:.5">
+                <td>${markLabel}</td>
+                <td>—</td><td>—</td>
+                <td>${cumCell}</td>
+                <td>—</td><td>—</td><td>—</td><td>—</td>
+            </tr>`;
+        }).join('');
         return `<div class="table-wrap"><table class="cp-table">
             <thead><tr>
                 <th>Отметка</th><th>Сплит</th><th>Темп/Скорость</th><th>Общее время</th>

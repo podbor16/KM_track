@@ -66,6 +66,11 @@ body {
 
 /* ---- Container ---- */
 .tri-container { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+/* Дуатлон 222: таблицы результатов — на всю ширину экрана (не 1100px),
+   по образцу Siberman (.content там вообще без max-width). Отдельный
+   модификатор, а не правка .tri-container — чтобы не задеть суточную
+   гонку (tri_results.html/tri_admin.html тоже используют .tri-container). */
+.tri-container--full { max-width: none; }
 
 /* ---- Toolbar (results page) ---- */
 .tri-toolbar {
@@ -96,6 +101,24 @@ body {
 .tri-search { width: 180px; }
 .tri-search::placeholder { color: var(--tri-muted); }
 .tri-results-count { margin-left: auto; font-size: 12px; color: var(--tri-muted); }
+
+/* Фильтр пола табами-пилюлями (по образцу .filter-group/.filter-btn у
+   Siberman) — не выпадающий список. */
+.filter-group { display: flex; gap: 4px; flex-wrap: wrap; }
+.filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #e0e0e0;
+    background: transparent;
+    color: var(--tri-muted);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Onest', Arial, sans-serif;
+    cursor: pointer;
+    transition: all .15s;
+}
+.filter-btn:hover { color: var(--tri-text); border-color: var(--tri-text); }
+.filter-btn.active { background: var(--tri-accent); border-color: var(--tri-accent); color: #000; }
 
 /* ---- Table ---- */
 .tri-table-wrap {
@@ -129,6 +152,14 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-speed { font-variant-numeric: tabular-nums; }
 /* Числовая колонка (место/время/темп) — по центру, по образцу Siberman. */
 .tri-table th.r, .tri-table td.r { text-align: center; }
+/* Колонка "Участник" закреплена слева при горизонтальном скролле широких
+   таблиц (по образцу Siberman) — иначе на мобильном при скролле вправо
+   теряется из виду, для кого показаны данные. Колонки левее (Место/№)
+   уезжают под неё. */
+.tri-table th.name-cell, .tri-table td.name-cell { position: sticky; left: 0; box-shadow: 1px 0 0 var(--tri-border); }
+.tri-table th.name-cell { z-index: 2; background: var(--tri-surface); }
+.tri-table td.name-cell { z-index: 1; background: var(--tri-surface); }
+.tri-table tr:hover td.name-cell { background: #fafafa; }
 
 /* ---- Badges ---- */
 .tri-badge {

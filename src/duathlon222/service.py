@@ -207,6 +207,7 @@ def _build_stage_laps(
         r = ranks.get((participant_id, stage_code, lr["lap_number"]), {})
         laps.append({
             "lap_number": lr["lap_number"],
+            "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 2),
             "cumulative_s": cum,
             "split_s": split,
             "speed_kmh": speed_kmh,
@@ -298,6 +299,16 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
                 "distance_km": STAGE_KM[stage_code],
                 "lap_km": LAP_KM[stage_code],
                 "lap_count": LAP_COUNT[stage_code],
+                # ВСЕ возможные отметки этапа (1..lap_count) с их дистанцией
+                # — независимо от того, дошёл ли до них участник. Карточка
+                # показывает их ВСЕ сразу (не только уже пройденные), заполняя
+                # постепенно — по аналогии с Siberman (там тот же цикл
+                # "1..maxSeq" делает JS, здесь дистанция неравномерна из-за
+                # STAGE_LAP_OFFSET у вело, поэтому считаем на бэкенде).
+                "marks": [
+                    {"lap_number": n, "distance_km": round(_lap_distance_km(stage_code, n), 2)}
+                    for n in range(1, LAP_COUNT[stage_code] + 1)
+                ],
                 "laps": _build_stage_laps(
                     stage_code, by_stage.get(stage_code, []),
                     stage_starts[stage_code], ranks, row["id"],

@@ -38,12 +38,12 @@
     <!-- Фильтры -->
     <div class="tri-toolbar">
         <div class="tri-filter-group">
-            <label class="tri-label">Пол:</label>
-            <select id="filter-gender" class="tri-select" onchange="loadStandings()">
-                <option value="">Все</option>
-                <option value="M">Мужчины</option>
-                <option value="F">Женщины</option>
-            </select>
+            <span class="tri-label">Пол:</span>
+            <div class="filter-group" id="gender-filter-group">
+                <button class="filter-btn active" data-gender="" onclick="setGenderFilter('')">Все</button>
+                <button class="filter-btn" data-gender="M" onclick="setGenderFilter('M')">Мужчины</button>
+                <button class="filter-btn" data-gender="F" onclick="setGenderFilter('F')">Женщины</button>
+            </div>
         </div>
         <div class="tri-filter-group">
             <input type="search" id="filter-search" class="tri-search"
@@ -53,7 +53,7 @@
         <span class="tri-results-count" id="results-count"></span>
     </div>
 
-    <div class="tri-container">
+    <div class="tri-container tri-container--full">
         <!-- Индикаторы: всего/финишировало/DNF+DSQ -->
         <div class="stats-v2" id="stats-row"></div>
 
@@ -72,6 +72,13 @@
     const STAGE_KM = { run1: 10, bike: 170, run2: 42 };
     const STAGE_LABEL = { run1: 'Бег-1', bike: 'Вело', run2: 'Бег-2' };
     let allStandings = [];
+    // Состояние — таб/фильтр пола, а не DOM value напрямую — нужно и для
+    // сохранения в URL (см. syncUrlFromState/readStateFromUrl), и чтобы
+    // восстановить их ДО первой загрузки данных (F5 не должен сбрасывать
+    // выбранную вкладку/пол — запрошено пользователем 2026-09-04, по
+    // аналогии с Siberman).
+    let _pageTab = 'overall';
+    let _genderFilter = '';
 
     /* ──────────────── Форматирование ──────────────── */
     function fmtS(totalSeconds) {
@@ -175,10 +182,11 @@
             ? `<span class="time-main muted">${fmtS(timeS)}</span>`
             : '<span class="muted">—</span>';
     }
-    // "Отметка N/M км" — строго это и ничего больше (не "N/M (X км)").
+    // "N/M км" — строго это и ничего больше (без слова "Отметка", оно уже
+    // есть в заголовке столбца, без названия этапа — это и так его вкладка).
     function stageMarkCell(stageCode, r) {
         if (r.current_stage !== stageCode || !r.current_stage_lap) return '<span class="muted">—</span>';
-        return `Отметка ${r.current_stage_distance_km}/${STAGE_KM[stageCode]} км`;
+        return `${r.current_stage_distance_km}/${STAGE_KM[stageCode]} км`;
     }
     function stageForecastCell(r) {
         if (r.forecast_stage_finish_s == null) return '';
@@ -196,7 +204,7 @@
         const label = isFinished ? STAGE_LABEL.run2 : STAGE_LABEL[r.current_stage];
         const stageKm = isFinished ? STAGE_KM.run2 : STAGE_KM[r.current_stage];
         const suffix = isFinished ? ' (Финиш)' : '';
-        return `<div>${label}</div><div class="muted-sub">Отметка ${r.current_stage_distance_km}/${stageKm} км${suffix}</div>`;
+        return `<div>${label}</div><div class="muted-sub">${r.current_stage_distance_km}/${stageKm} км${suffix}</div>`;
     }
     function totalCell(r) {
         const timeS = r.total_s ?? r.current_mark_race_elapsed_s;
@@ -210,12 +218,12 @@
 
     function buildOverallTable(rows) {
         if (!rows.length) return '<div class="empty" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</div>';
-        const showGenderRank = document.getElementById('filter-gender').value === '';
+        const showGenderRank = _genderFilter === '';
         const showForecast = rows.some(r => r.forecast_race_finish_s != null);
         assignGenderRanks(rows, 'rank');
         const thead = `<thead><tr>
             ${rankHeaderCells(showGenderRank)}
-            <th class="r">№</th><th>Участник</th>
+            <th class="r">№</th><th class="name-cell">Участник</th>
             <th class="r">Итого</th>
             ${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}
             <th class="r">Бег-1<br><span style="font-weight:400">10 км</span></th>
@@ -231,7 +239,7 @@
             return `<tr style="cursor:pointer;${isOut ? 'opacity:.55' : ''}" onclick="openParticipant(${r.start_number})">
                 ${rankBodyCells(showGenderRank, r.rank, r._genderRank, genderBadge(r.gender))}
                 <td class="tri-bib">${r.start_number}</td>
-                <td><span class="tri-name">${r.surname} ${r.name}</span> ${genderBadge(r.gender)}</td>
+                <td class="name-cell"><span class="tri-name">${r.surname} ${r.name}</span></td>
                 <td class="r">${totalCell(r)}</td>
                 ${showForecast ? `<td class="r">${raceForecastCell(r)}</td>` : ''}
                 <td class="r">${stageDisplayCell('run1', r)}</td>
@@ -275,12 +283,12 @@
     function buildStageTable(stageCode, rows) {
         const ranked = buildStageRanking(stageCode, rows);
         if (!ranked.length) return '<div class="empty" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</div>';
-        const showGenderRank = document.getElementById('filter-gender').value === '';
+        const showGenderRank = _genderFilter === '';
         const showForecast = ranked.some(r => r.current_stage === stageCode && r.forecast_stage_finish_s != null);
         assignGenderRanks(ranked, '_stageRank');
         const thead = `<thead><tr>
             ${rankHeaderCells(showGenderRank)}
-            <th class="r">№</th><th>Участник</th>
+            <th class="r">№</th><th class="name-cell">Участник</th>
             <th class="r">Время</th><th class="r">Темп/Скорость</th>
             ${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}
             <th>Отметка</th><th>Статус</th>
@@ -290,7 +298,7 @@
             return `<tr style="cursor:pointer;${isOut ? 'opacity:.55' : ''}" onclick="openParticipant(${r.start_number})">
                 ${rankBodyCells(showGenderRank, r._stageRank, r._genderRank, genderBadge(r.gender))}
                 <td class="tri-bib">${r.start_number}</td>
-                <td><span class="tri-name">${r.surname} ${r.name}</span> ${genderBadge(r.gender)}</td>
+                <td class="name-cell"><span class="tri-name">${r.surname} ${r.name}</span></td>
                 <td class="r">${stageDisplayCell(stageCode, r)}</td>
                 <td class="r">${paceCell(stageCode, r)}</td>
                 ${showForecast ? `<td class="r">${r.current_stage === stageCode ? stageForecastCell(r) : ''}</td>` : ''}
@@ -346,12 +354,21 @@
         });
     }
 
+    /* ──────────────── Фильтр пола (табы) ──────────────── */
+    function setGenderFilter(gender) {
+        _genderFilter = gender;
+        document.querySelectorAll('#gender-filter-group .filter-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.gender === gender);
+        });
+        syncUrlFromState();
+        loadStandings();
+    }
+
     /* ──────────────── Данные / рендер ──────────────── */
     async function loadStandings() {
-        const gender = document.getElementById('filter-gender').value;
         try {
             const base = `/api/duathlon222_${YEAR}/standings`;
-            const url = gender ? `${base}?gender=${gender}` : base;
+            const url = _genderFilter ? `${base}?gender=${_genderFilter}` : base;
             const r = await fetch(url);
             const data = await r.json();
             allStandings = data.standings || [];
@@ -387,13 +404,43 @@
     }
 
     function switchPageTab(name, btn) {
+        _pageTab = name;
         document.querySelectorAll('.tri-page-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        (btn || document.querySelector(`.tri-page-tab[data-tab="${name}"]`)).classList.add('active');
         ['overall', 'run1', 'bike', 'run2'].forEach(name2 => {
             document.getElementById('tab-' + name2).style.display = name2 === name ? '' : 'none';
         });
+        syncUrlFromState();
     }
 
+    /* ──────────────── Состояние в URL (переживает обновление страницы, F5) ────
+       Без этого F5 сбрасывал выбранную вкладку/пол на дефолт — запрошено
+       пользователем 2026-09-04, по аналогии с Siberman (history.replaceState,
+       не pushState — иначе "назад" браузера шагал бы по каждому клику). */
+    function syncUrlFromState() {
+        const params = new URLSearchParams();
+        if (_pageTab !== 'overall') params.set('tab', _pageTab);
+        if (_genderFilter) params.set('gender', _genderFilter);
+        const qs = params.toString();
+        const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
+        if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
+    }
+    function readStateFromUrl() {
+        const params = new URLSearchParams(location.search);
+        const tab = params.get('tab');
+        if (['overall', 'run1', 'bike', 'run2'].includes(tab)) _pageTab = tab;
+        const gender = params.get('gender');
+        if (gender === 'M' || gender === 'F') _genderFilter = gender;
+    }
+    function applyRestoredState() {
+        switchPageTab(_pageTab);
+        document.querySelectorAll('#gender-filter-group .filter-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.gender === _genderFilter);
+        });
+    }
+
+    readStateFromUrl();
+    applyRestoredState();
     loadStandings();
     setInterval(loadStandings, 30000);
     </script>
