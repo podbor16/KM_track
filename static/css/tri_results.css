@@ -935,6 +935,7 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 }
 .tri-laps-delta-pos { color: #27ae60; }
 .tri-laps-delta-neg { color: var(--tri-accent); }
+.tri-laps-star { color: #f39c12; }
 
 /* Поиск участника внутри сайдбара графика — тот же .tri-search, но на всю
    ширину узкого сайдбара (180px), с отступами по бокам вместо фикс. 180px. */
@@ -944,4 +945,3 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     margin: 0 12px 8px;
     display: block;
 }
-.tri-laps-star { color: #f39c12; }
