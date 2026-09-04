@@ -163,5 +163,32 @@ check('buildPositionDatasetsWholeRace: км второго/третьего эт
     assert.strictEqual(ds.data.length, 4); // run2 пуст — 0 точек оттуда
 });
 
+check('buildPaceDatasets: скорость всегда км/ч (dKm/dT*3600), даже для беговых этапов', () => {
+    const rows = [mkRow(1, { run1: [
+        { lap: 0, km: 0, elapsed_s: 0 },
+        { lap: 1, km: 1.25, elapsed_s: 300 }, // 1.25км за 300с = 15 км/ч
+    ] })];
+    const datasets = sandbox.buildPaceDatasets('run1', rows);
+    assert.strictEqual(datasets.length, 1);
+    assert.strictEqual(datasets[0].data.length, 1);
+    assert.strictEqual(datasets[0].data[0].x, 1.25);
+    assert.ok(Math.abs(datasets[0].data[0].y - 15) < 0.001);
+});
+check('buildPaceDatasets: меньше 2 отметок на этапе -> нет сплитов, участник не попадает в список', () => {
+    const rows = [mkRow(1, { run1: [{ lap: 0, km: 0, elapsed_s: 0 }] })];
+    const datasets = sandbox.buildPaceDatasets('run1', rows);
+    assert.strictEqual(datasets.length, 0);
+});
+check('buildPaceDatasets: нулевая/отрицательная дельта км или времени пропускается (защита от кривых данных)', () => {
+    const rows = [mkRow(1, { run1: [
+        { lap: 0, km: 0, elapsed_s: 0 },
+        { lap: 1, km: 0, elapsed_s: 300 },   // dKm=0 -> пропуск
+        { lap: 2, km: 2.5, elapsed_s: 600 }, // относительно lap=1: dKm=2.5, dT=300
+    ] })];
+    const datasets = sandbox.buildPaceDatasets('run1', rows);
+    assert.strictEqual(datasets[0].data.length, 1);
+    assert.strictEqual(datasets[0].data[0].x, 2.5);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

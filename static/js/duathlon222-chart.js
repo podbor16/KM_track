@@ -99,3 +99,26 @@ function buildPositionDatasetsWholeRace(rows) {
     const ranks = computeRanksAtPositions(participants);
     return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
 }
+
+// Датасеты для графика "Темп/Скорость" (одиночный этап): rows — строки
+// /standings. Y всегда км/ч (даже для беговых этапов) — единообразно с тем,
+// как уже хранится _speed_kmh/current_stage_speed_kmh на бэкенде; перевод в
+// темп (мин/км) — только на отображении, через уже существующий
+// fmtPaceOrSpeed(). Так не нужна условная инверсия оси Y между бегом/вело
+// (быстрее = больше км/ч = выше на графике, для обоих типов этапов одинаково).
+// x=км (после сплита), y=скорость в км/ч (dKm / (dT / 3600)). Если меньше
+// двух отметок на этапе или dKm <= 0 или dT <= 0 — участник не попадает
+// в датасеты (нечего рисовать).
+function buildPaceDatasets(stageCode, rows) {
+    return rows.map(r => {
+        const cps = r.checkpoints?.[stageCode] || [];
+        const pts = [];
+        for (let i = 1; i < cps.length; i++) {
+            const dKm = cps[i].km - cps[i - 1].km;
+            const dT = cps[i].elapsed_s - cps[i - 1].elapsed_s;
+            if (dKm <= 0 || dT <= 0) continue;
+            pts.push({ x: cps[i].km, y: dKm / (dT / 3600) });
+        }
+        return pts.length ? { _bib: r.start_number, _name: `${r.surname} ${r.name}`, data: pts } : null;
+    }).filter(Boolean);
+}
