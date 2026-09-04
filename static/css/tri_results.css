@@ -760,7 +760,7 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
 .stat-sub2 { font-size: 12px; color: var(--tri-red); font-weight: 600; }
 
 /* ---- Дуатлон 222/суточная гонка: общие бейджи пола/статуса участника ---- */
-.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .badge-m { background: rgba(38,49,70,.10); color: var(--tri-navy); }
 .badge-f { background: rgba(222,0,0,.10); color: var(--tri-red); }
 .badge-notstarted { background: rgba(0,0,0,.06); color: var(--tri-muted); }
