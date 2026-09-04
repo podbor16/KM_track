@@ -253,9 +253,11 @@ def test_distance_covered_km_within_bike_includes_completed_run1():
 
 
 def test_distance_covered_km_within_run2_includes_completed_run1_and_bike():
-    # Отметки Бег-2 — n*1.757 + 0.02 (реальные поля Copernico 1777/3534/...
-    # метров, не ровно n*1757 — см. STAGE_LAP_OFFSET).
-    assert round(_distance_covered_km("run2", 3), 3) == round(10.0 + 170.0 + 3 * 1.757 + 0.02, 3)
+    # Первая отметка Бег-2 короче полного шага (20м "пролог", см.
+    # STAGE_LAP_OFFSET, та же структура что и у Вело) — distance(3) =
+    # 3*1.757 + (0.02-1.757) = 3.534, реальное поле Copernico "3534" метров
+    # (лап 1="20", лап 2="1777", лап 3="3534").
+    assert round(_distance_covered_km("run2", 3), 3) == round(10.0 + 170.0 + (3 * 1.757 + (0.02 - 1.757)), 3)
 
 
 def test_distance_covered_km_finished_is_full_race():
@@ -346,9 +348,10 @@ def test_global_km_bike_adds_run1_prefix():
 
 
 def test_global_km_run2_adds_run1_and_bike_prefix():
-    # 10 + 170 = 180 км до старта бег-2, + 1.777 км первой отметки (1.757 +
-    # 0.02 — реальное поле Copernico "1777" метров, см. STAGE_LAP_OFFSET)
-    assert round(_global_km("run2", 1), 3) == 181.777
+    # 10 + 170 = 180 км до старта бег-2, + 0.02 км первой отметки (короткий
+    # "пролог" 20м, реальное поле Copernico "20", см. STAGE_LAP_OFFSET —
+    # та же структура, что у Вело)
+    assert round(_global_km("run2", 1), 3) == 180.02
 
 
 def test_live_gap_map_leader_gets_zero_and_follower_interpolated():
