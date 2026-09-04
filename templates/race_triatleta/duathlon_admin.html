@@ -52,6 +52,13 @@
             </div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
                 <div class="tri-filter-group">
+                    <label class="tri-label">Режим:</label>
+                    <select id="post-timebase" class="tri-select">
+                        <option value="race">Гонка целиком</option>
+                        <option value="stage">Этап отдельно</option>
+                    </select>
+                </div>
+                <div class="tri-filter-group">
                     <label class="tri-label">Этап:</label>
                     <select id="post-stage" class="tri-select" onchange="loadMarks()">
                         <option value="run1">Бег-1</option>
@@ -70,13 +77,6 @@
                 <div class="tri-filter-group">
                     <label class="tri-label">Отметка:</label>
                     <select id="post-mark" class="tri-select"></select>
-                </div>
-                <div class="tri-filter-group">
-                    <label class="tri-label">Время:</label>
-                    <select id="post-timebase" class="tri-select">
-                        <option value="stage">Чистое время этапа</option>
-                        <option value="race">С начала гонки</option>
-                    </select>
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">

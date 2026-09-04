@@ -38,23 +38,41 @@ LAP_COUNT = {"run1": 8, "bike": 42, "run2": 25}
 #     поля "8-й отметки" в сумме с финишем как у Вело/Бег-2 тут нет.
 STAGE_LAP_OFFSET = {"run1": 0.0, "bike": 3.4 - 4.04, "run2": 0.02 - 1.757}
 
+# Отметки, которые не ложатся на равномерную формулу "n*LAP_KM+OFFSET" вовсе
+# (не смещение всей последовательности, а ЕДИНИЧНОЕ отклонение одной
+# конкретной отметки) — сверено с точным именем поля Copernico. Сейчас
+# единственный случай: последняя (8-я) отметка Бег-1 — реальное поле
+# "9,98 km", а не ровно 10.0 (как дала бы формула n*1.25) — официальный
+# финиш Бег-1 (10 км) при этом ОТДЕЛЬНОЕ поле stage_fields.run1, та же
+# структура "финиш ≠ последняя отметка", что у Вело/Бег-2, просто разница
+# всего 20м (при округлении для показа пользователю 9.98 → 10.0, визуально
+# неотличимо от финиша, но ранги/сплит/темп на этой отметке теперь считаются
+# по настоящей дистанции). Найдено пользователем 2026-09-04.
+IRREGULAR_LAP_KM: dict[tuple[str, int], float] = {("run1", 8): 9.98}
+
 
 def _lap_distance_km(stage_code: str, lap_number: Optional[int]) -> float:
     """Кумулятивная дистанция (км) НА данной отметке этапа — не просто
     lap_number*LAP_KM: Вело стартует с более коротким "прологом" (см.
-    STAGE_LAP_OFFSET). 0.0, если отметка ещё не пройдена (lap_number=None)."""
+    STAGE_LAP_OFFSET), у Бег-1 последняя отметка — единичное отклонение (см.
+    IRREGULAR_LAP_KM). 0.0, если отметка ещё не пройдена (lap_number=None)."""
     if not lap_number:
         return 0.0
+    irregular = IRREGULAR_LAP_KM.get((stage_code, lap_number))
+    if irregular is not None:
+        return irregular
     return lap_number * LAP_KM[stage_code] + STAGE_LAP_OFFSET[stage_code]
 
 
 def _lap_split_distance_km(stage_code: str, lap_number: int) -> float:
     """Дистанция ИМЕННО этой отметки (не кумулятивно от старта этапа) — для
-    скорости/темпа сплита. Первая отметка включает смещение-"пролог" (см.
-    STAGE_LAP_OFFSET), остальные — постоянный шаг LAP_KM."""
+    скорости/темпа сплита. Разница соседних кумулятивных дистанций — общая
+    формула, корректно учитывает и "пролог" (первая отметка короче — сплит от
+    старта этапа, т.е. от 0), и единичные отклонения (IRREGULAR_LAP_KM) любой
+    отметки, не только первой."""
     if lap_number <= 1:
         return _lap_distance_km(stage_code, 1)
-    return LAP_KM[stage_code]
+    return _lap_distance_km(stage_code, lap_number) - _lap_distance_km(stage_code, lap_number - 1)
 
 
 def _stage_times(run1_s, t1_s, bike_s, t2_s, run2_s):
@@ -295,8 +313,13 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             lap_number, lap_cumulative_s = current_laps[-1]["lap_number"], current_laps[-1]["cumulative_s"]
         distance_km = _distance_covered_km(current_stage, lap_number)
         # Дистанция ИМЕННО этапа отметки (не всей гонки, в отличие от
-        # distance_km выше) — для отображения "Отметка N/M км".
-        current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 1) if lap_number else None
+        # distance_km выше) — для отображения "Отметка N/M км". СЫРАЯ
+        # (неокруглённая) версия — отдельно, для темпа/скорости ниже: округление
+        # до 1 знака только для показа пользователю НЕ должно влиять на расчёт
+        # (иначе, например, отметка "20 м" Бег-2 округляется до 0.0 км и делит
+        # на ноль — найдено пользователем 2026-09-04).
+        current_stage_distance_km_raw = _lap_distance_km(mark_stage, lap_number) if lap_number else None
+        current_stage_distance_km = round(current_stage_distance_km_raw, 1) if lap_number else None
         # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
         # (не тикает), нужно и для темпа/скорости ниже, и карточке участника
         # для прогноза ближайшей непройденной отметки (см. duathlon_
@@ -306,8 +329,8 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             if lap_cumulative_s is not None and current_stage_start_s is not None else None
         )
         current_stage_speed_kmh = None
-        if current_stage_distance_km and current_stage_elapsed_s:
-            current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km, current_stage_elapsed_s)
+        if current_stage_distance_km_raw and current_stage_elapsed_s:
+            current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km_raw, current_stage_elapsed_s)
         is_out = row["status"] in ("dnf", "dsq")
         forecast_s = None
         if current_stage != "finished" and not is_out:
@@ -504,13 +527,18 @@ def get_stage_mark_broadcast(
         race_leader_elapsed = min(e["race_elapsed_s"] for e in entries)
         entries.sort(key=lambda e: e["elapsed_s"])
 
-        stage_km_at_mark = round(_lap_distance_km(stage_code, frontier), 1)
+        # Сырая (неокруглённая) дистанция — для расчёта скорости и суммы с
+        # overall_km; округление до 1 знака — только в выводимых полях, не
+        # должно искажать сами вычисления (см. get_standings/get_participant,
+        # тот же принцип, найдено пользователем 2026-09-04).
+        stage_km_at_mark_raw = _lap_distance_km(stage_code, frontier)
+        stage_km_at_mark = round(stage_km_at_mark_raw, 1)
         return {
             "stage": stage_code,
             "lap_mark": frontier,
             "stage_km_at_mark": stage_km_at_mark,
             "stage_total_km": STAGE_KM[stage_code],
-            "overall_km": round(_STAGE_KM_BEFORE[stage_code] + stage_km_at_mark, 2),
+            "overall_km": round(_STAGE_KM_BEFORE[stage_code] + stage_km_at_mark_raw, 1),
             "race_total_km": sum(STAGE_KM.values()),
             "entries": [
                 {
@@ -519,7 +547,7 @@ def get_stage_mark_broadcast(
                     "gap_s": e["elapsed_s"] - stage_leader_elapsed,
                     "race_elapsed_s": e["race_elapsed_s"],
                     "race_gap_s": e["race_elapsed_s"] - race_leader_elapsed,
-                    "speed_kmh": _speed_kmh_for_distance(stage_km_at_mark, e["elapsed_s"]),
+                    "speed_kmh": _speed_kmh_for_distance(stage_km_at_mark_raw, e["elapsed_s"]),
                 }
                 for e in entries
             ],
@@ -665,7 +693,12 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             mark_stage = "run2" if current_stage == "finished" else current_stage
             lap_number, lap_cumulative_s = last_lap.get((row["id"], mark_stage), (None, None))
             distance_km = _distance_covered_km(current_stage, lap_number)
-            current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 1) if lap_number else None
+            # СЫРАЯ (неокруглённая) дистанция — отдельно от округлённой для
+            # показа: округление до 1 знака НЕ должно влиять на расчёт темпа/
+            # скорости (иначе, например, отметка "20 м" Бег-2 округляется до
+            # 0.0 км и делит на ноль — найдено пользователем 2026-09-04).
+            current_stage_distance_km_raw = _lap_distance_km(mark_stage, lap_number) if lap_number else None
+            current_stage_distance_km = round(current_stage_distance_km_raw, 1) if lap_number else None
             # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
             # (не тикает), обновляется на каждую новую отметку (запрошено
             # пользователем 2026-09-04 — убрали живой секундомер по строкам).
@@ -674,8 +707,8 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 if lap_cumulative_s is not None and current_stage_start_s is not None else None
             )
             current_stage_speed_kmh = None
-            if current_stage_distance_km and current_stage_elapsed_s:
-                current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km, current_stage_elapsed_s)
+            if current_stage_distance_km_raw and current_stage_elapsed_s:
+                current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km_raw, current_stage_elapsed_s)
             is_out = row["status"] in ("dnf", "dsq")
             forecast_s = None
             if current_stage != "finished" and not is_out:

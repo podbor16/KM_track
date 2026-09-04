@@ -13,7 +13,13 @@ def test_lap_distance_km_run1_uniform_no_offset():
     # Реальные отметки Copernico: 1.25, 2.5, 3.75, 5, 6.25, 7.5, 8.75, 9.98
     assert _lap_distance_km("run1", 1) == 1.25
     assert _lap_distance_km("run1", 4) == 5.0
-    assert _lap_distance_km("run1", 8) == 10.0
+
+
+def test_lap_distance_km_run1_last_lap_is_irregular():
+    # 8-я (последняя) отметка Бег-1 — единичное отклонение (IRREGULAR_LAP_KM),
+    # реальное поле Copernico "9,98 km", НЕ ровно 10.0 (что дала бы формула
+    # n*1.25) — официальный финиш (10 км) отдельное поле stage_fields.run1.
+    assert _lap_distance_km("run1", 8) == 9.98
 
 
 def test_lap_distance_km_bike_first_lap_shorter_prologue():
@@ -33,8 +39,17 @@ def test_lap_split_distance_km_bike_first_lap_is_the_prologue():
 
 
 def test_lap_split_distance_km_bike_later_laps_is_constant_step():
-    assert _lap_split_distance_km("bike", 2) == 4.04
-    assert _lap_split_distance_km("bike", 42) == 4.04
+    # round() — сплит теперь считается как разница соседних кумулятивных
+    # дистанций (не константа), плавающая точка даёт 4.039999999999999
+    # вместо 4.04 (см. _lap_split_distance_km).
+    assert round(_lap_split_distance_km("bike", 2), 2) == 4.04
+    assert round(_lap_split_distance_km("bike", 42), 2) == 4.04
+
+
+def test_lap_split_distance_km_run1_last_lap_is_shorter_than_regular_step():
+    # 8-я отметка Бег-1 — 9.98 (см. IRREGULAR_LAP_KM), 7-я — 8.75 (обычная
+    # формула) — сплит между ними короче обычных 1.25.
+    assert round(_lap_split_distance_km("run1", 8), 2) == 1.23
 
 
 def test_stage_start_s_run1_is_always_zero():
@@ -160,9 +175,12 @@ def test_current_stage_finished():
     assert start_s is None
 
 
-def test_forecast_stage_finish_full_stage_ratio_one():
-    # 8 из 8 отметок бег-1 (все 10 км, шаг 1.25км) за 2400с -> прогноз = факт
-    assert _forecast_stage_finish("run1", 8, 2400, 0) == 2400
+def test_forecast_stage_finish_last_lap_extrapolates_remaining_20m():
+    # 8-я (последняя) отметка Бег-1 — 9.98 км, не ровно 10.0 (см.
+    # IRREGULAR_LAP_KM) — прогноз финиша (10.0 км) НЕМНОГО больше сырого
+    # elapsed на этой отметке (экстраполяция оставшихся ~20м по факту
+    # средней скорости), не равен ему один-в-один.
+    assert _forecast_stage_finish("run1", 8, 2400, 0) == 2405
 
 
 def test_forecast_stage_finish_partial_progress():
