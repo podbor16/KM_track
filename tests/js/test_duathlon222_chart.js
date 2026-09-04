@@ -10,8 +10,10 @@ const assert = require('assert');
 const ROOT = path.resolve(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(ROOT, 'templates/race_triatleta/duathlon_results.html'), 'utf-8');
 let inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])[0];
-// Очищаем Jinja2-переменные для тестового контекста
-inlineScript = inlineScript.replace(/{{ year\|tojson }}/g, '2026').replace(/{{ v }}/g, '1');
+// Очищаем Jinja2-переменную для тестового контекста (регэксп выше матчит
+// только инлайн-скрипт без атрибутов — {{ v }} встречается лишь внутри
+// <script src="...?v={{ v }}">, туда этот regex не заходит).
+inlineScript = inlineScript.replace(/{{ year\|tojson }}/g, '2026');
 const chartJs = fs.readFileSync(path.join(ROOT, 'static/js/duathlon222-chart.js'), 'utf-8');
 
 const elementsById = {};
