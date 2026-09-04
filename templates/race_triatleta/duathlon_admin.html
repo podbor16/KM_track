@@ -384,6 +384,14 @@
         bike: 'велоэтапа',
         run2: 'второго бегового этапа',
     };
+    // Именительный падеж — для заголовка поста в режиме "Чистое время этапа"
+    // (см. generateAndShow), в отличие от STAGE_PHRASE (родительный, для
+    // вставки внутрь фразы "из Y км ...").
+    const STAGE_TITLE = {
+        run1: 'Первый беговой этап',
+        bike: 'Велоэтап',
+        run2: 'Второй беговой этап',
+    };
     const RATE_LABEL = { run1: 'Темп на этапе', bike: 'Скорость на этапе', run2: 'Темп на этапе' };
     const CATEGORY_TITLE = { '': 'Абсолют', M: 'Мужчины', F: 'Женщины' };
 
@@ -458,10 +466,23 @@
                        `${RATE_LABEL[stage]}: ${fmtPaceOrSpeed(stage, e.speed_kmh)}`;
             });
 
+            // Шапка поста по СВОЕМУ этапу ("Чистое время этапа") — отдельный
+            // заголовок с названием этапа и "(отдельно)" (это не место в
+            // общем зачёте гонки, только на этом этапе), одна строка с
+            // отметкой в километрах ИМЕННО этапа — по образцу, присланному
+            // пользователем 2026-09-04. Шапка "С начала гонки" осталась
+            // прежней (общий км по всей гонке + этап в скобках) — по
+            // решению пользователя, этот режим не трогаем.
+            const header = timebase === 'race'
+                ? `222 Дуатлон ${YEAR}. ${CATEGORY_TITLE[category]}.\n` +
+                  `📍 Отметка: ${d.overall_km} из ${d.race_total_km} км\n` +
+                  `(${d.stage_km_at_mark} из ${d.stage_total_km} км ${STAGE_PHRASE[stage]}).`
+                : `222 Дуатлон ${YEAR}. \n` +
+                  `${STAGE_TITLE[stage]} (отдельно). ${CATEGORY_TITLE[category]}.\n` +
+                  `📍 Отметка: ${d.stage_km_at_mark} из ${d.stage_total_km} км.`;
+
             const text =
-                `222 Дуатлон ${YEAR}. ${CATEGORY_TITLE[category]}.\n` +
-                `📍 Отметка: ${d.overall_km} из ${d.race_total_km} км\n` +
-                `(${d.stage_km_at_mark} из ${d.stage_total_km} км ${STAGE_PHRASE[stage]}).\n\n` +
+                header + '\n\n' +
                 lines.join('\n\n') +
                 `\n\n👉 Лайв-результаты и трансляция: https://live-race.triatleta.ru/duathlon222_${YEAR}`;
 
