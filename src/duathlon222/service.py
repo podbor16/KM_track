@@ -649,6 +649,37 @@ def get_stage_mark_broadcast(
         conn.close()
 
 
+def _build_checkpoint_series(
+    participant_id: int,
+    stage_starts: dict[str, Optional[int]],
+    laps_by_key: dict[tuple[int, str], list[tuple[int, int]]],
+) -> dict[str, list[dict]]:
+    """Полная история отметок участника по каждому этапу — для графиков
+    «Позиция»/«Темп-скорость» (см. get_standings). elapsed_s — ВСЕГДА от
+    старта ГОНКИ (то же значение, что checkpoints.cumulative_s в БД — см.
+    load_duathlon_results.py), не от старта этапа: так один и тот же массив
+    годится и для живого ранга по гонке целиком, и для сплит-темпа внутри
+    этапа (разница cumulative_s между соседними точками не зависит от точки
+    отсчёта). lap=0 — виртуальная отметка выхода из транзитки (тот же
+    источник, что и _stage_mark_zero_broadcast), добавляется только если
+    старт этапа уже известен — даёт точную (не экстраполированную) первую
+    точку сплита вместо прежнего трюка "продлить линию плоско до X=0"."""
+    result: dict[str, list[dict]] = {}
+    for stage_code in _STAGE_ORDER:
+        points: list[dict] = []
+        start_s = stage_starts.get(stage_code)
+        if start_s is not None:
+            points.append({"lap": 0, "km": 0.0, "elapsed_s": start_s})
+        for lap_number, cumulative_s in laps_by_key.get((participant_id, stage_code), []):
+            points.append({
+                "lap": lap_number,
+                "km": round(_lap_distance_km(stage_code, lap_number), 2),
+                "elapsed_s": cumulative_s,
+            })
+        result[stage_code] = points
+    return result
+
+
 def _global_km(stage_code: str, lap_number: Optional[int]) -> float:
     """Кумулятивная дистанция (км) ОТ СТАРТА ГОНКИ (не этапа) на данной
     отметке — _STAGE_KM_BEFORE[stage] + позиция внутри этапа. Общая ось
@@ -750,6 +781,11 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         # уже "глобальное" по построению checkpoints.cumulative_s).
         stage_entries: dict[str, list[dict]] = {sc: [] for sc in _STAGE_ORDER}
         race_entries: list[dict] = []
+        # Старты всех 3 этапов на участника — считаются один раз здесь и
+        # переиспользуются ниже (checkpoints), а не пересчитываются заново:
+        # два потребителя (stage_gaps/race_gaps и checkpoints) на один и тот
+        # же результат _stage_start_s для каждой пары (участник, этап).
+        stage_starts_by_id: dict[int, dict] = {}
         for row in rows:
             stage_starts = {
                 sc: _stage_start_s(
@@ -758,6 +794,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 )
                 for sc in _STAGE_ORDER
             }
+            stage_starts_by_id[row["id"]] = stage_starts
             race_points: list[tuple[float, int]] = []
             for sc in _STAGE_ORDER:
                 laps = laps_by_key.get((row["id"], sc))
@@ -782,6 +819,11 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"],
                 row["bike_start_s"], row["run2_start_s"],
             )
+            # Старт каждого из 3 этапов (не только текущего) — нужен для
+            # checkpoints (виртуальная отметка lap=0 в _build_checkpoint_series).
+            # Уже посчитан в цикле выше (для stage_gaps/race_gaps) —
+            # переиспользуем вместо повторного вызова _stage_start_s.
+            stage_starts_for_row = stage_starts_by_id[row["id"]]
             # "finished" — не настоящий этап в checkpoints (там только
             # run1/bike/run2) — для отметки финишировавшего берём последний
             # круг реального последнего этапа (run2), чтобы "Отметка"
@@ -851,6 +893,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "current_mark_race_elapsed_s": lap_cumulative_s,
                 "forecast_stage_finish_s": forecast_s,
                 "forecast_race_finish_s": forecast_race_s,
+                "checkpoints": _build_checkpoint_series(row["id"], stage_starts_for_row, laps_by_key),
                 "_is_out": is_out,
                 "_distance_km": distance_km,
                 "_elapsed_s": lap_cumulative_s if lap_cumulative_s is not None else (current_stage_start_s or 0),

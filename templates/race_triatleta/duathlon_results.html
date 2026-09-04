@@ -33,6 +33,7 @@
         <button class="tri-page-tab" data-tab="run1" onclick="switchPageTab('run1', this)">Бег-1</button>
         <button class="tri-page-tab" data-tab="bike" onclick="switchPageTab('bike', this)">Вело</button>
         <button class="tri-page-tab" data-tab="run2" onclick="switchPageTab('run2', this)">Бег-2</button>
+        <button class="tri-page-tab" data-tab="chart" onclick="switchPageTab('chart', this)">График</button>
     </div>
 
     <!-- Фильтры -->
@@ -62,6 +63,60 @@
         <div id="tab-bike" style="display:none"><div id="bike-table-wrap"></div></div>
         <div id="tab-run2" style="display:none"><div id="run2-table-wrap"></div></div>
     </div>
+
+    <div id="tab-chart" style="display:none">
+        <div style="padding:12px 16px 0">
+            <div class="filter-group" id="chart-mode-group">
+                <button class="filter-btn active" data-mode="position" onclick="switchChartMode('position', this)">Позиция</button>
+                <button class="filter-btn" data-mode="pace" onclick="switchChartMode('pace', this)">Темп/скорость</button>
+            </div>
+        </div>
+        <div style="padding:10px 16px 0">
+            <div class="filter-group" id="chart-stage-group"></div>
+        </div>
+        <div class="tri-chart-mobile-bar">
+            <div class="tri-chart-mobile-trigger" onclick="openChartSheet()">
+                <span class="tri-chart-mobile-label">Участники</span>
+                <span class="tri-chart-mobile-badge" id="chart-mobile-badge">0</span>
+                <span class="tri-chart-mobile-hint">нажмите для выбора ›</span>
+            </div>
+            <div class="tri-chart-mobile-chips" id="chart-mobile-chips"></div>
+        </div>
+        <div class="tri-chart-layout" style="padding:12px 16px">
+            <div class="tri-chart-sidebar">
+                <input type="search" class="tri-search" id="chart-search-input"
+                       placeholder="Поиск участника..." oninput="onChartSearchInput(this.value)">
+                <div class="tri-chart-sidebar__actions">
+                    <button class="tri-chart-select-btn" id="chart-select-all-btn" onclick="toggleSelectAllChartFromUi()">Выбрать всех</button>
+                </div>
+                <div id="chart-legend-list"></div>
+                <div class="tri-chart-sidebar__hint" id="chart-sidebar-hint">Выберите участников для сравнения</div>
+            </div>
+            <div class="tri-chart-main">
+                <div class="tri-chart-wrap">
+                    <canvas id="duathlon-chart-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="tri-refresh" id="chart-refresh-label"></div>
+        <div class="tri-chart-sheet-overlay" id="chart-sheet-overlay" onclick="closeChartSheet()"></div>
+        <div class="tri-chart-sheet" id="chart-sheet">
+            <div class="tri-chart-sheet-handle"></div>
+            <div class="tri-chart-sheet-header">
+                <span>Выбор участников</span>
+                <div class="tri-chart-sheet-header-actions">
+                    <button class="tri-chart-sheet-header-btn" id="chart-sheet-select-all-btn" onclick="toggleSelectAllChartFromUi()">Выбрать всех</button>
+                    <button class="tri-chart-sheet-header-btn" onclick="closeChartSheet()">Готово</button>
+                </div>
+            </div>
+            <input type="search" class="tri-search" id="chart-sheet-search-input"
+                   placeholder="Поиск участника..." oninput="onChartSearchInput(this.value)">
+            <div id="chart-sheet-list"></div>
+        </div>
+    </div>
+
+    <script src="/static/lib/chart4/chart.umd.min.js"></script>
+    <script src="/static/js/duathlon222-chart.js?v={{ v }}"></script>
 
     <script>
     const YEAR = {{ year|tojson }};
@@ -383,6 +438,7 @@
             const data = await r.json();
             allStandings = data.standings || [];
             renderFiltered();
+            if (_pageTab === 'chart') renderActiveChart();
             renderRaceTimer();
             applyLiveTabIndicator();
             document.getElementById('refresh-label').textContent =
@@ -417,9 +473,10 @@
         _pageTab = name;
         document.querySelectorAll('.tri-page-tab').forEach(b => b.classList.remove('active'));
         (btn || document.querySelector(`.tri-page-tab[data-tab="${name}"]`)).classList.add('active');
-        ['overall', 'run1', 'bike', 'run2'].forEach(name2 => {
+        ['overall', 'run1', 'bike', 'run2', 'chart'].forEach(name2 => {
             document.getElementById('tab-' + name2).style.display = name2 === name ? '' : 'none';
         });
+        if (name === 'chart') onChartTabShown();
         syncUrlFromState();
     }
 
@@ -438,7 +495,7 @@
     function readStateFromUrl() {
         const params = new URLSearchParams(location.search);
         const tab = params.get('tab');
-        if (['overall', 'run1', 'bike', 'run2'].includes(tab)) _pageTab = tab;
+        if (['overall', 'run1', 'bike', 'run2', 'chart'].includes(tab)) _pageTab = tab;
         const gender = params.get('gender');
         if (gender === 'M' || gender === 'F') _genderFilter = gender;
     }
