@@ -62,13 +62,13 @@ function computeRanksAtPositions(participants) {
 
 // Датасеты позиций на одиночном этапе: для каждого участника — точки (x=км этапа, y=его ранг)
 function buildPositionDatasetsSingleStage(stageCode, rows) {
-    const allParticipants = rows.map(r => ({
+    const participants = rows.map(r => ({
         bib: r.start_number,
         name: `${r.surname} ${r.name}`,
         points: (r.checkpoints?.[stageCode] || []).map(cp => ({ pos: cp.km, elapsedS: cp.elapsed_s })),
-    }));
-    const ranks = computeRanksAtPositions(allParticipants);
-    return allParticipants.filter(p => p.points.length).map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
+    })).filter(p => p.points.length);
+    const ranks = computeRanksAtPositions(participants);
+    return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
 }
 
 // Датасеты позиций на всей гонке: для каждого участника — точки всех этапов с виртуальной оси X
