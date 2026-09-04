@@ -215,11 +215,13 @@ function toggleSelectAllChartFromUi() {
 }
 function openChartSheet() {
     _chartSheetOpen = true;
+    document.body.style.overflow = 'hidden';
     document.getElementById('chart-sheet').classList.add('open');
     document.getElementById('chart-sheet-overlay').classList.add('open');
 }
 function closeChartSheet() {
     _chartSheetOpen = false;
+    document.body.style.overflow = '';
     document.getElementById('chart-sheet').classList.remove('open');
     document.getElementById('chart-sheet-overlay').classList.remove('open');
 }
@@ -294,8 +296,13 @@ function getChartFilteredStandings() {
     // allStandings уже отфильтрован по полу на бэкенде (см. setGenderFilter/
     // loadStandings в инлайн-скрипте) — здесь дополнительно убираем тех, у
     // кого вообще нет ни одной отметки (иначе на графике пустые линии).
+    // r.checkpoints.run1 всегда содержит виртуальную отметку lap=0 (старт
+    // гонки = момент 0, известен для ВСЕХ, даже для тех, кто ещё не
+    // стартовал) — проверки "есть хоть одна отметка" одной недостаточно,
+    // нужен явный статус (найдено на финальном ревью: без этого условия
+    // "Не стартовал" участники попадали и на график, и в список сравнения).
     return (typeof allStandings !== 'undefined' ? allStandings : [])
-        .filter(r => r.checkpoints && Object.values(r.checkpoints).some(arr => arr.length));
+        .filter(r => r.status !== 'notstarted' && r.checkpoints && Object.values(r.checkpoints).some(arr => arr.length));
 }
 function onChartTabShown() {
     if (!document.getElementById('chart-stage-group').innerHTML) renderChartStageButtons();
@@ -383,7 +390,12 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'nearest', intersect: false },
             plugins: {
-                legend: { display: hasSelection },
+                legend: {
+                    display: hasSelection,
+                    labels: {
+                        filter: (legendItem) => _chartSelectedBibs.includes(chartDatasetBibs[legendItem.datasetIndex]),
+                    },
+                },
                 tooltip: {
                     filter: (item) => !hasSelection || _chartSelectedBibs.includes(chartDatasetBibs[item.datasetIndex]),
                     callbacks: { label: (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}` },
@@ -419,6 +431,7 @@ function attachSpaghettiHover(chart, chartDatasetBibs) {
 }
 function attachSpaghettiClick(chart, chartDatasetBibs) {
     chart.options.onClick = function (evt) {
+        if (window.matchMedia('(pointer: coarse)').matches) return;
         const idx = nearestDatasetIndexAtPixel(this, evt.x, evt.y, 30);
         if (idx == null) return;
         chartToggleSelect(chartDatasetBibs[idx]);

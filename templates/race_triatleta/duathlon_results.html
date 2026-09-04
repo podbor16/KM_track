@@ -93,7 +93,6 @@
                 <div class="tri-chart-sidebar__hint" id="chart-sidebar-hint">Выберите участников для сравнения</div>
             </div>
             <div class="tri-chart-main">
-                <div class="tri-chart-mobile-info" id="chart-mobile-info" style="display:none"></div>
                 <div class="tri-chart-wrap">
                     <canvas id="duathlon-chart-canvas"></canvas>
                 </div>
@@ -107,6 +106,7 @@
                 <span>Выбор участников</span>
                 <div class="tri-chart-sheet-header-actions">
                     <button class="tri-chart-sheet-header-btn" id="chart-sheet-select-all-btn" onclick="toggleSelectAllChartFromUi()">Выбрать всех</button>
+                    <button class="tri-chart-sheet-header-btn" onclick="closeChartSheet()">Готово</button>
                 </div>
             </div>
             <input type="search" class="tri-search" id="chart-sheet-search-input"
