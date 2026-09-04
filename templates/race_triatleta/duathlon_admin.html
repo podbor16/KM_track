@@ -53,7 +53,7 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
                 <div class="tri-filter-group">
                     <label class="tri-label">Этап:</label>
-                    <select id="post-stage" class="tri-select">
+                    <select id="post-stage" class="tri-select" onchange="loadMarks()">
                         <option value="run1">Бег-1</option>
                         <option value="bike">Вело</option>
                         <option value="run2">Бег-2</option>
@@ -61,11 +61,15 @@
                 </div>
                 <div class="tri-filter-group">
                     <label class="tri-label">Зачёт:</label>
-                    <select id="post-category" class="tri-select">
+                    <select id="post-category" class="tri-select" onchange="loadMarks()">
                         <option value="">Абсолют</option>
                         <option value="M">Мужчины</option>
                         <option value="F">Женщины</option>
                     </select>
+                </div>
+                <div class="tri-filter-group">
+                    <label class="tri-label">Отметка:</label>
+                    <select id="post-mark" class="tri-select"></select>
                 </div>
                 <div class="tri-filter-group">
                     <label class="tri-label">Время:</label>
@@ -94,6 +98,39 @@
         btn.classList.add('active');
         document.getElementById('tab-' + name).classList.add('active');
         if (name === 'preset') loadPreset();
+        if (name === 'post') loadMarks();
+    }
+
+    // ---- Пост: выбор отметки ----
+
+    // Список отметок этапа с числом уже дошедших до неё — заполняет
+    // выпадающий список выбора КОНКРЕТНОЙ отметки для поста (раньше всегда
+    // бралась только самая дальняя, "фронтир", без выбора).
+    async function loadMarks() {
+        const stage = document.getElementById('post-stage').value;
+        const category = document.getElementById('post-category').value;
+        const sel = document.getElementById('post-mark');
+        const prevValue = sel.value;
+        sel.innerHTML = '<option value="">Загрузка...</option>';
+        try {
+            const url = `/api/duathlon222_${YEAR}/available-marks/${stage}` + (category ? `?gender=${category}` : '');
+            const r = await fetch(url);
+            const d = await r.json();
+            const marks = d.marks || [];
+            if (!marks.length) {
+                sel.innerHTML = '<option value="">Нет отметок</option>';
+                return;
+            }
+            sel.innerHTML = marks.map(m =>
+                `<option value="${m.lap_number}">${m.lap_number}/${marks.length} — ${m.distance_km} км (${m.reached_count} чел.)</option>`
+            ).join('');
+            // Сохраняем прежний выбор, если он ещё существует в новом списке,
+            // иначе — самая дальняя (последняя) отметка, как раньше по умолчанию.
+            const stillExists = marks.some(m => String(m.lap_number) === prevValue);
+            sel.value = stillExists ? prevValue : marks[marks.length - 1].lap_number;
+        } catch(e) {
+            sel.innerHTML = '<option value="">Ошибка загрузки</option>';
+        }
     }
 
     // ---- Загрузчик ----
@@ -371,6 +408,7 @@
         const ok  = document.getElementById('copy-ok');
         const stage = document.getElementById('post-stage').value;
         const category = document.getElementById('post-category').value;
+        const lap = document.getElementById('post-mark').value;
         const timebase = document.getElementById('post-timebase').value; // 'stage' | 'race'
         ta.value = 'Загрузка...';
         ta.style.display = '';
@@ -378,7 +416,11 @@
         ok.style.display  = 'none';
 
         try {
-            const url = `/api/duathlon222_${YEAR}/stage-mark/${stage}` + (category ? `?gender=${category}` : '');
+            const params = new URLSearchParams();
+            if (category) params.set('gender', category);
+            if (lap) params.set('lap', lap);
+            const qs = params.toString();
+            const url = `/api/duathlon222_${YEAR}/stage-mark/${stage}` + (qs ? `?${qs}` : '');
             const r = await fetch(url);
             const d = await r.json();
 

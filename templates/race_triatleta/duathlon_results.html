@@ -51,6 +51,9 @@
     </div>
 
     <div class="tri-container">
+        <!-- Индикаторы: всего/финишировало/DNF+DSQ -->
+        <div class="stats-v2" id="stats-row"></div>
+
         <!-- Таб: Итоги гонки -->
         <div id="tab-overall">
             <div class="tri-table-wrap">
@@ -61,18 +64,17 @@
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Этап</th>
-                            <th>Отметка</th>
+                            <th>Итого</th>
                             <th>Бег-1<br><span style="font-weight:400">10 км</span></th>
                             <th>Т1</th>
                             <th>Вело<br><span style="font-weight:400">170 км</span></th>
                             <th>Т2</th>
                             <th>Бег-2<br><span style="font-weight:400">42 км</span></th>
-                            <th>Итого</th>
                             <th>Статус</th>
                         </tr>
                     </thead>
                     <tbody id="standings-body">
-                        <tr><td colspan="12" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
+                        <tr><td colspan="11" style="text-align:center;color:var(--tri-muted);padding:24px">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -89,9 +91,8 @@
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Отметка</th>
-                            <th>Время (чист.)</th>
+                            <th>Время</th>
                             <th>Темп/Скорость</th>
-                            <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
                     </thead>
@@ -109,9 +110,8 @@
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Отметка</th>
-                            <th>Время (чист.)</th>
+                            <th>Время</th>
                             <th>Темп/Скорость</th>
-                            <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
                     </thead>
@@ -129,9 +129,8 @@
                             <th class="tri-bib">Номер</th>
                             <th>Участник</th>
                             <th>Отметка</th>
-                            <th>Время (чист.)</th>
+                            <th>Время</th>
                             <th>Темп/Скорость</th>
-                            <th>Отставание</th>
                             <th>Статус</th>
                         </tr>
                     </thead>
@@ -143,7 +142,10 @@
 
     <script>
     const YEAR = {{ year|tojson }};
-    const GUN_UTC_MS = new Date('2026-09-05T00:00:00Z').getTime(); // 07:00 Красноярск, подтверждено 2026-09-03
+    // ВРЕМЕННО для имитации гонки 04.09.2026 (до реального старта 05.09) —
+    // реальный gun_time будущего не даёт тикать часам/прогнозу. ОБЯЗАТЕЛЬНО
+    // вернуть на '2026-09-05T00:00:00Z' перед настоящим стартом.
+    const GUN_UTC_MS = new Date('2026-09-03T12:00:00Z').getTime();
     let allStandings = [];
 
     function updateElapsed() {
@@ -168,6 +170,20 @@
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
     }
 
+    function fmtGap(g) {
+        if (g == null) return null;
+        if (g === 0) return '<span style="color:var(--tri-green);font-weight:700">Лидер</span>';
+        return '+' + fmtS(g);
+    }
+
+    // Время + отставание в ОДНОЙ ячейке (по образцу timeGapCell у Siberman) —
+    // не отдельная колонка "Отставание". metaStr — доп. строка (темп/скорость).
+    function timeGapCell(timeStr, gapHtml, metaStr) {
+        const gapLine = gapHtml ? `<br><span style="font-size:10px;color:var(--tri-muted)">${gapHtml}</span>` : '';
+        const metaLine = metaStr ? `<br><span style="font-size:11px;color:var(--tri-muted)">${metaStr}</span>` : '';
+        return `<span style="font-variant-numeric:tabular-nums;font-weight:600">${timeStr}</span>${gapLine}${metaLine}`;
+    }
+
     const STATUS_LABEL = {
         notstarted: 'Не стартовал',
         active: 'На дистанции',
@@ -175,6 +191,16 @@
         dnf: 'DNF',
         dsq: 'DSQ',
     };
+    function genderBadge(g) {
+        if (g === 'M') return '<span class="badge badge-m">М</span>';
+        if (g === 'F') return '<span class="badge badge-f">Ж</span>';
+        return '';
+    }
+    function statusBadge(status) {
+        const cls = { notstarted: 'badge-notstarted', active: 'badge-active', finished: 'badge-finished',
+                      dnf: 'badge-dnf', dsq: 'badge-dsq' }[status] || '';
+        return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
+    }
 
     const STAGE_LABEL = {
         run1: 'Бег-1',
@@ -196,38 +222,45 @@
     }
     setInterval(tickStageTimers, 1000);
 
-    function stageCell(stageCode, timeS, speedKmh) {
-        if (timeS === null || timeS === undefined) {
-            return '<span style="color:var(--tri-muted)">—</span>';
-        }
-        const paceOrSpeed = fmtPaceOrSpeed(stageCode, speedKmh);
-        const metaStr = paceOrSpeed !== '—'
-            ? `<br><span style="font-size:11px;color:var(--tri-muted)">${paceOrSpeed}</span>`
-            : '';
-        return `<span style="font-variant-numeric:tabular-nums">${fmtS(timeS)}</span>${metaStr}`;
-    }
-
-    function transitionCell(timeS) {
-        return timeS != null
-            ? `<span style="font-variant-numeric:tabular-nums;color:var(--tri-muted)">${fmtS(timeS)}</span>`
-            : '<span style="color:var(--tri-muted)">—</span>';
-    }
-
     // Абсолютное время по часам для elapsed-от-старта секунд (прогноз финиша)
     function fmtClock(elapsedFromGunS) {
         const d = new Date(GUN_UTC_MS + elapsedFromGunS * 1000);
         return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    // Колонка «Этап» — только бейдж текущего этапа + тикающие часы
-    function badgeCell(r) {
+    // Бег — темп (мин/км), вело — скорость (км/ч)
+    function fmtPaceOrSpeed(stageCode, speedKmh) {
+        if (!speedKmh) return null;
+        if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
+        const secPerKm = 3600 / speedKmh;
+        const m = Math.floor(secPerKm / 60);
+        const s = Math.round(secPerKm % 60);
+        return `${m}:${String(s).padStart(2, '0')} /км`;
+    }
+
+    // Колонка «Этап» — бейдж (пульсирует, пока участник реально на трассе) +
+    // тикающие часы + отметка N/M (X.X км) + прогноз финиша ЭТАПА (длительность
+    // И часы — раньше показывались только часы, без длительности).
+    function etapCell(r) {
         const label = STAGE_LABEL[r.current_stage] || r.current_stage;
+        const isLive = r.current_stage !== 'finished' && r.status !== 'dnf' && r.status !== 'dsq' && r.current_stage_lap;
+        const badgeCls = isLive ? 'stage-badge stage-badge--live' : 'stage-badge';
         if (r.current_stage === 'finished' || r.current_stage_start_s === null) {
-            return `<span class="stage-badge">${label}</span>`;
+            return `<span class="${badgeCls}">${label}</span>`;
         }
-        return `<span class="stage-badge">${label}</span><br>` +
-               `<span class="stage-timer" data-start-s="${r.current_stage_start_s}" ` +
-               `style="font-size:11px;color:var(--tri-muted);font-variant-numeric:tabular-nums">--:--:--</span>`;
+        const timer = `<br><span class="stage-timer" data-start-s="${r.current_stage_start_s}" ` +
+                      `style="font-size:11px;color:var(--tri-muted);font-variant-numeric:tabular-nums">--:--:--</span>`;
+        let markStr = '';
+        if (r.current_stage_lap) {
+            const km = r.current_stage_distance_km != null ? ` (${r.current_stage_distance_km.toFixed(1)} км)` : '';
+            markStr = `<br><span style="font-size:11px">отметка ${r.current_stage_lap}/${r.current_stage_lap_total}${km}</span>`;
+        }
+        let forecastStr = '';
+        if (r.forecast_stage_finish_s != null) {
+            forecastStr = `<br><span style="font-size:11px;color:var(--tri-accent)" title="Прогноз финиша этапа">` +
+                          `~${fmtS(r.forecast_stage_finish_s)} (~${fmtClock(r.forecast_stage_finish_s)})</span>`;
+        }
+        return `<span class="${badgeCls}">${label}</span>${timer}${markStr}${forecastStr}`;
     }
 
     // Колонка «Итого» — реальное время, либо (после первой отметки на бег-2)
@@ -244,39 +277,29 @@
         return '<span style="color:var(--tri-muted)">—</span>';
     }
 
-    // Колонка «Отметка» — последняя пройденная отметка текущего этапа + прогноз.
-    // "Отметка", не "круг": current_stage_lap считает и промежуточные точки
-    // внутри круга (Бег-1/Бег-2) — само число кругов трассы не менялось.
-    function markCell(r) {
-        if (r.current_stage === 'finished' || !r.current_stage_lap) {
-            return '<span style="color:var(--tri-muted)">—</span>';
+    // Колонка одного этапа (Бег-1/Вело/Бег-2) на ИТОГОВОЙ таблице: финиш —
+    // чистое время+темп; сейчас на нём — ЖИВЫЕ тикающие время+темп (по факту
+    // последней отметки, обновляется на каждой отметке, не ждёт финиша этапа
+    // целиком — запрошено пользователем 2026-09-04); иначе — ещё не дошёл.
+    function overallStageCell(stageCode, r) {
+        const timeKey = stageCode + '_s';
+        const speedKey = stageCode + '_speed_kmh';
+        if (r[timeKey] != null) {
+            return timeGapCell(fmtS(r[timeKey]), null, fmtPaceOrSpeed(stageCode, r[speedKey]));
         }
-        const forecastStr = r.forecast_stage_finish_s != null
-            ? `<br><span style="font-size:11px;color:var(--tri-accent)" title="Прогноз финиша этапа">~${fmtClock(r.forecast_stage_finish_s)}</span>`
-            : '';
-        return `<span style="font-size:12px">отметка ${r.current_stage_lap}/${r.current_stage_lap_total}</span>${forecastStr}`;
+        if (r.current_stage === stageCode && r.current_stage_start_s != null) {
+            const paceStr = fmtPaceOrSpeed(stageCode, r.current_stage_speed_kmh);
+            const meta = paceStr ? `<br><span style="font-size:11px;color:var(--tri-muted)">${paceStr}</span>` : '';
+            return `<span class="stage-timer" data-start-s="${r.current_stage_start_s}" ` +
+                   `style="font-variant-numeric:tabular-nums;color:var(--tri-accent)">--:--:--</span>${meta}`;
+        }
+        return '<span style="color:var(--tri-muted)">—</span>';
     }
 
-    // Та же «Отметка», но для вкладки КОНКРЕТНОГО этапа — показываем только
-    // если участник СЕЙЧАС именно на этом этапе (иначе r.current_stage_lap
-    // относится к ДРУГОМУ этапу и показывать его здесь неверно — можно
-    // подумать, что человек ещё не финишировал этот этап, хотя он давно на
-    // следующем).
-    function stageMarkCell(stageCode, r) {
-        if (r.current_stage !== stageCode) {
-            return '<span style="color:var(--tri-muted)">—</span>';
-        }
-        return markCell(r);
-    }
-
-    // Бег — темп (мин/км), вело — скорость (км/ч)
-    function fmtPaceOrSpeed(stageCode, speedKmh) {
-        if (!speedKmh) return '—';
-        if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
-        const secPerKm = 3600 / speedKmh;
-        const m = Math.floor(secPerKm / 60);
-        const s = Math.round(secPerKm % 60);
-        return `${m}:${String(s).padStart(2, '0')} /км`;
+    function transitionCell(timeS) {
+        return timeS != null
+            ? `<span style="font-variant-numeric:tabular-nums;color:var(--tri-muted)">${fmtS(timeS)}</span>`
+            : '<span style="color:var(--tri-muted)">—</span>';
     }
 
     async function loadStandings() {
@@ -293,36 +316,52 @@
         } catch(e) { console.error('standings error', e); }
     }
 
+    function renderStats(rows) {
+        const total = rows.length;
+        const finished = rows.filter(r => r.status === 'finished').length;
+        const dnfDsq = rows.filter(r => r.status === 'dnf' || r.status === 'dsq').length;
+        document.getElementById('stats-row').innerHTML = `
+            <div class="stat-card">
+                <div class="stat-val">${total}</div><div class="stat-lbl">Всего</div>
+                <div class="stat-sub">${finished} финишировало</div>
+                <div class="stat-sub2">${dnfDsq} DNF/DSQ</div>
+            </div>`;
+    }
+
     function renderFiltered() {
         const search = document.getElementById('filter-search').value.trim().toLowerCase();
         const rows = allStandings.filter(r => !search || (r.surname || '').toLowerCase().includes(search));
         document.getElementById('results-count').textContent = rows.length ? `${rows.length} участн.` : '';
+        renderStats(rows);
         renderStandings(rows);
         ['run1', 'bike', 'run2'].forEach(stage => renderStageTable(stage, rows));
+    }
+
+    function openParticipant(startNumber) {
+        window.open(`/duathlon222_${YEAR}/participant/${startNumber}`, '_blank');
     }
 
     function renderStandings(rows) {
         const tbody = document.getElementById('standings-body');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             const isOut = r.status === 'dnf' || r.status === 'dsq';
             const rowStyle = `cursor:pointer;${isOut ? 'opacity:.55' : ''}`;
-            return `<tr style="${rowStyle}" onclick="location.href='/duathlon222_${YEAR}/participant/${r.start_number}'">
+            return `<tr style="${rowStyle}" onclick="openParticipant(${r.start_number})">
                 <td class="tri-rank">${r.rank ?? '—'}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td><span class="tri-name">${r.surname} ${r.name}</span></td>
-                <td>${badgeCell(r)}</td>
-                <td>${markCell(r)}</td>
-                <td>${stageCell('run1', r.run1_s, r.run1_speed_kmh)}</td>
-                <td>${transitionCell(r.t1_s)}</td>
-                <td>${stageCell('bike', r.bike_s, r.bike_speed_kmh)}</td>
-                <td>${transitionCell(r.t2_s)}</td>
-                <td>${stageCell('run2', r.run2_s, r.run2_speed_kmh)}</td>
+                <td><span class="tri-name">${r.surname} ${r.name}</span> ${genderBadge(r.gender)}</td>
+                <td>${etapCell(r)}</td>
                 <td>${totalCell(r)}</td>
-                <td>${STATUS_LABEL[r.status] || r.status}</td>
+                <td>${overallStageCell('run1', r)}</td>
+                <td>${transitionCell(r.t1_s)}</td>
+                <td>${overallStageCell('bike', r)}</td>
+                <td>${transitionCell(r.t2_s)}</td>
+                <td>${overallStageCell('run2', r)}</td>
+                <td>${statusBadge(r.status)}</td>
             </tr>`;
         }).join('');
         tickStageTimers();
@@ -330,7 +369,7 @@
 
     // Зачёт по ОДНОМУ этапу (чистое время, без Т1/Т2) — независимая
     // сортировка от общего зачёта: финишировавшие этап (по времени) →
-    // те, кто сейчас на нём (по кругу) → ещё не дошедшие → DNF/DSQ внизу
+    // те, кто сейчас на нём (по отметке) → ещё не дошедшие → DNF/DSQ внизу
     // всегда, независимо от частичного времени (rawStatus).
     function buildStageRanking(stageCode, rows) {
         const timeKey = stageCode + '_s';
@@ -356,33 +395,49 @@
         });
     }
 
+    // Отметка на вкладке КОНКРЕТНОГО этапа — показываем только если участник
+    // СЕЙЧАС именно на этом этапе (иначе r.current_stage_lap относится к
+    // ДРУГОМУ этапу).
+    function stageMarkCell(stageCode, r) {
+        if (r.current_stage !== stageCode || !r.current_stage_lap) {
+            return '<span style="color:var(--tri-muted)">—</span>';
+        }
+        const km = r.current_stage_distance_km != null ? ` (${r.current_stage_distance_km.toFixed(1)} км)` : '';
+        return `отметка ${r.current_stage_lap}/${r.current_stage_lap_total}${km}`;
+    }
+
     function renderStageTable(stageCode, rows) {
         const timeKey = stageCode + '_s';
         const speedKey = stageCode + '_speed_kmh';
         const ranked = buildStageRanking(stageCode, rows);
         const tbody = document.getElementById('stage-body-' + stageCode);
         if (!ranked.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tri-muted);padding:24px">Нет данных</td></tr>';
             return;
         }
         tbody.innerHTML = ranked.map(r => {
             const isOut = r.status === 'dnf' || r.status === 'dsq';
             const rowStyle = `cursor:pointer;${isOut ? 'opacity:.55' : ''}`;
-            const timeCell = r[timeKey] != null
-                ? `<span style="font-variant-numeric:tabular-nums">${fmtS(r[timeKey])}</span>`
-                : '<span style="color:var(--tri-muted)">—</span>';
-            const paceStr = fmtPaceOrSpeed(stageCode, r[speedKey]);
-            const gapStr = r._stageGap == null ? '—'
-                : (r._stageGap === 0 ? '<span style="color:var(--tri-green);font-weight:700">Лидер</span>' : '+' + fmtS(r._stageGap));
-            return `<tr style="${rowStyle}" onclick="location.href='/duathlon222_${YEAR}/participant/${r.start_number}'">
+            let timeCell;
+            if (r[timeKey] != null) {
+                timeCell = timeGapCell(fmtS(r[timeKey]), fmtGap(r._stageGap));
+            } else if (r.current_stage === stageCode && r.current_stage_start_s != null) {
+                timeCell = `<span class="stage-timer" data-start-s="${r.current_stage_start_s}" ` +
+                           `style="font-variant-numeric:tabular-nums;color:var(--tri-accent)">--:--:--</span>`;
+            } else {
+                timeCell = '<span style="color:var(--tri-muted)">—</span>';
+            }
+            const paceStr = r[timeKey] != null
+                ? (fmtPaceOrSpeed(stageCode, r[speedKey]) || '—')
+                : (fmtPaceOrSpeed(stageCode, r.current_stage_speed_kmh) || '—');
+            return `<tr style="${rowStyle}" onclick="openParticipant(${r.start_number})">
                 <td class="tri-rank">${r._stageRank ?? '—'}</td>
                 <td class="tri-bib">${r.start_number}</td>
-                <td><span class="tri-name">${r.surname} ${r.name}</span></td>
+                <td><span class="tri-name">${r.surname} ${r.name}</span> ${genderBadge(r.gender)}</td>
                 <td>${stageMarkCell(stageCode, r)}</td>
                 <td>${timeCell}</td>
                 <td>${paceStr}</td>
-                <td>${gapStr}</td>
-                <td>${STATUS_LABEL[r.status] || r.status}</td>
+                <td>${statusBadge(r.status)}</td>
             </tr>`;
         }).join('');
         tickStageTimers();

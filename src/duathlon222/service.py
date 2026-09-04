@@ -266,6 +266,18 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         if current_laps:
             lap_number, lap_cumulative_s = current_laps[-1]["lap_number"], current_laps[-1]["cumulative_s"]
         distance_km = _distance_covered_km(current_stage, lap_number)
+        # Дистанция ИМЕННО текущего этапа (не всей гонки, в отличие от
+        # distance_km выше) — для отображения "отметка N/M (X.X км)".
+        current_stage_distance_km = (
+            round(_lap_distance_km(current_stage, lap_number), 2) if current_stage != "finished" else None
+        )
+        # Темп/скорость ПО ФАКТУ последней отметки текущего (ещё не
+        # завершённого) этапа — обновляется на каждой новой отметке.
+        current_stage_speed_kmh = None
+        if current_stage_distance_km and lap_cumulative_s is not None and current_stage_start_s is not None:
+            current_stage_speed_kmh = _speed_kmh_for_distance(
+                current_stage_distance_km, lap_cumulative_s - current_stage_start_s
+            )
         is_out = row["status"] in ("dnf", "dsq")
         forecast_s = None
         if current_stage != "finished" and not is_out:
@@ -314,6 +326,8 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "current_stage_start_s": current_stage_start_s,
             "current_stage_lap": lap_number,
             "current_stage_lap_total": LAP_COUNT.get(current_stage),
+            "current_stage_distance_km": current_stage_distance_km,
+            "current_stage_speed_kmh": current_stage_speed_kmh,
             "forecast_stage_finish_s": forecast_s,
             "forecast_race_finish_s": forecast_race_s,
             "rank_abs": rank_abs,
@@ -357,15 +371,48 @@ def _frontier_lap(lap_numbers: list[int]) -> Optional[int]:
     return max(lap_numbers) if lap_numbers else None
 
 
-def get_stage_mark_broadcast(event_id: int, stage_code: str, gender: Optional[str] = None) -> Optional[dict]:
-    """Снимок «кто где был на текущей отметке» для поста трансляции (формат
-    Siberman): берём САМЫЙ ДАЛЬНИЙ круг, до которого дошёл хоть один участник
-    пула (весь пул, если gender=None), и показываем ВСЕХ, у кого есть
-    ЗАПИСЬ именно на этом круге (исторический сплит на этой отметке — не их
-    текущий прогресс, который мог уйти дальше), отсортированных по времени
-    восхождения к ней. Время/темп — ЧИСТЫЕ данные этапа (без Т1/Т2,
-    stage_start уже их исключает). None, если в пуле ещё никто не дошёл ни
-    до одного круга этого этапа."""
+def get_available_marks(event_id: int, stage_code: str, gender: Optional[str] = None) -> list[dict]:
+    """Список отметок этапа, которые уже кто-то прошёл (для выбора конкретной
+    отметки в UI генератора постов — вместо всегда-последней "фронтир"-отметки).
+    Возвращает [{"lap_number", "distance_km", "reached_count"}], по возрастанию."""
+    conn = get_duathlon_connection()
+    if not conn:
+        return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        gender_filter = "AND p.gender=%s" if gender else ""
+        params = [event_id, stage_code] + ([gender] if gender else [])
+        cursor.execute(f"""
+            SELECT c.lap_number, COUNT(*) AS reached_count
+            FROM checkpoints c JOIN participants p ON p.id = c.participant_id
+            WHERE p.event_id=%s AND c.stage=%s {gender_filter}
+            GROUP BY c.lap_number ORDER BY c.lap_number
+        """, params)
+        return [
+            {
+                "lap_number": row["lap_number"],
+                "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 2),
+                "reached_count": row["reached_count"],
+            }
+            for row in cursor.fetchall()
+        ]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_stage_mark_broadcast(
+    event_id: int, stage_code: str, gender: Optional[str] = None, lap_number: Optional[int] = None,
+) -> Optional[dict]:
+    """Снимок «кто где был на отметке» для поста трансляции (формат Siberman):
+    показывает ВСЕХ, у кого есть ЗАПИСЬ именно на этой отметке (исторический
+    сплит — не их текущий прогресс, который мог уйти дальше), отсортированных
+    по времени восхождения к ней. Время/темп — ЧИСТЫЕ данные этапа (без Т1/Т2,
+    stage_start уже их исключает). Если lap_number не передан — берётся САМЫЙ
+    ДАЛЬНИЙ круг, до которого дошёл хоть один участник пула (весь пул, если
+    gender=None) — прежнее поведение по умолчанию. None, если в пуле ещё
+    никто не дошёл ни до одного круга этого этапа (или явно указанной
+    отметки, если lap_number передан)."""
     conn = get_duathlon_connection()
     if not conn:
         return None
@@ -386,7 +433,7 @@ def get_stage_mark_broadcast(event_id: int, stage_code: str, gender: Optional[st
         """, params)
         laps = cursor.fetchall()
 
-        frontier = _frontier_lap([lr["lap_number"] for lr in laps])
+        frontier = lap_number if lap_number is not None else _frontier_lap([lr["lap_number"] for lr in laps])
         if frontier is None:
             return None
 
@@ -486,6 +533,17 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             )
             lap_number, lap_cumulative_s = last_lap.get((row["id"], current_stage), (None, None))
             distance_km = _distance_covered_km(current_stage, lap_number)
+            current_stage_distance_km = (
+                round(_lap_distance_km(current_stage, lap_number), 2) if current_stage != "finished" else None
+            )
+            # Темп/скорость ПО ФАКТУ последней отметки текущего (ещё не
+            # завершённого) этапа — обновляется на каждой новой отметке, не
+            # ждёт финиша этапа целиком (запрошено пользователем 2026-09-04).
+            current_stage_speed_kmh = None
+            if current_stage_distance_km and lap_cumulative_s is not None and current_stage_start_s is not None:
+                current_stage_speed_kmh = _speed_kmh_for_distance(
+                    current_stage_distance_km, lap_cumulative_s - current_stage_start_s
+                )
             is_out = row["status"] in ("dnf", "dsq")
             forecast_s = None
             if current_stage != "finished" and not is_out:
@@ -513,6 +571,8 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "current_stage_start_s": current_stage_start_s,
                 "current_stage_lap": lap_number,
                 "current_stage_lap_total": LAP_COUNT.get(current_stage),
+                "current_stage_distance_km": current_stage_distance_km,
+                "current_stage_speed_kmh": current_stage_speed_kmh,
                 "forecast_stage_finish_s": forecast_s,
                 "forecast_race_finish_s": forecast_race_s,
                 "_is_out": is_out,

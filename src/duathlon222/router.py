@@ -13,7 +13,7 @@ from src.config.event_loader import load_events_cached
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
-from src.duathlon222.service import get_standings, get_participant, get_stage_mark_broadcast
+from src.duathlon222.service import get_standings, get_participant, get_stage_mark_broadcast, get_available_marks
 
 _require_auth = require_auth_for("/duathlon222/login")
 
@@ -123,18 +123,34 @@ async def duathlon_standings(year: int, gender: str = None):
     return {"standings": rows}
 
 
-@router.get("/api/duathlon222_{year}/stage-mark/{stage}")
-async def duathlon_stage_mark(year: int, stage: str, gender: str = None, user: str = Depends(api_require_auth)):
-    """Снимок «кто где был на текущей отметке этапа» — для поста трансляции в
-    /duathlon222/admin. Авторизация как у остальной админки — не публичный
-    эндпоинт (не нужен на самой странице результатов)."""
+@router.get("/api/duathlon222_{year}/available-marks/{stage}")
+async def duathlon_available_marks(year: int, stage: str, gender: str = None, user: str = Depends(api_require_auth)):
+    """Список отметок этапа с данными — заполняет выпадающий список выбора
+    отметки в генераторе постов (/duathlon222/admin)."""
     if stage not in ("run1", "bike", "run2"):
         raise HTTPException(status_code=400, detail="stage: run1 | bike | run2")
     if gender not in (None, "M", "F"):
         raise HTTPException(status_code=400, detail="gender: M | F")
     if not _year_exists(year):
         raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
-    data = get_stage_mark_broadcast(_resolve_event_id(year), stage, gender)
+    return {"marks": get_available_marks(_resolve_event_id(year), stage, gender)}
+
+
+@router.get("/api/duathlon222_{year}/stage-mark/{stage}")
+async def duathlon_stage_mark(
+    year: int, stage: str, gender: str = None, lap: int = None, user: str = Depends(api_require_auth),
+):
+    """Снимок «кто где был на отметке этапа» — для поста трансляции в
+    /duathlon222/admin. Авторизация как у остальной админки — не публичный
+    эндпоинт (не нужен на самой странице результатов). lap не передан —
+    берётся самая дальняя (последняя) отметка пула, как раньше."""
+    if stage not in ("run1", "bike", "run2"):
+        raise HTTPException(status_code=400, detail="stage: run1 | bike | run2")
+    if gender not in (None, "M", "F"):
+        raise HTTPException(status_code=400, detail="gender: M | F")
+    if not _year_exists(year):
+        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+    data = get_stage_mark_broadcast(_resolve_event_id(year), stage, gender, lap)
     if data is None:
         return {"available": False}
     return {"available": True, **data}

@@ -660,6 +660,44 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     background: rgba(255, 133, 98, 0.12);
     color: var(--tri-accent);
 }
+/* Пульсирующая точка на бейдже АКТИВНОГО этапа (по образцу .tab-live у
+   Siberman) — единственный визуальный сигнал "участник реально сейчас на
+   трассе", не просто статичный бейдж. */
+.stage-badge--live::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tri-accent);
+    margin-right: 5px;
+    vertical-align: middle;
+    animation: stageLivePulse 1.6s ease-in-out infinite;
+}
+@keyframes stageLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* ---- Дуатлон 222: индикаторы «всего/финишировало/DNF+DSQ» над таблицей ---- */
+.stats-v2 { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.stat-card {
+    background: var(--tri-surface);
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    padding: 12px 20px;
+    min-width: 120px;
+}
+.stat-val { font-size: 26px; font-weight: 900; color: var(--tri-navy); line-height: 1.1; }
+.stat-lbl { font-size: 11px; color: var(--tri-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+.stat-sub { font-size: 12px; color: var(--tri-green); font-weight: 600; margin-top: 4px; }
+.stat-sub2 { font-size: 12px; color: var(--tri-red); font-weight: 600; }
+
+/* ---- Дуатлон 222/суточная гонка: общие бейджи пола/статуса участника ---- */
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.badge-m { background: rgba(38,49,70,.10); color: var(--tri-navy); }
+.badge-f { background: rgba(222,0,0,.10); color: var(--tri-red); }
+.badge-notstarted { background: rgba(0,0,0,.06); color: var(--tri-muted); }
+.badge-active      { background: rgba(255,133,98,.14); color: var(--tri-accent); }
+.badge-finished    { background: rgba(24,165,88,.12);   color: var(--tri-green); }
+.badge-dnf, .badge-dsq { background: rgba(222,0,0,.10); color: var(--tri-red); }
 
 /* ---- Admin: buttons ---- */
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
