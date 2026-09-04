@@ -50,6 +50,14 @@ jobs:
 
             # Применить systemd unit если изменился
             cp /opt/km_track/deploy/km_track.service /etc/systemd/system/km_track.service
+            # km_duathlon_loader@.service — раньше НЕ копировался деплоем вообще (найдено
+            # 2026-09-04, за день до гонки): unit-файл лежал в гите с самого начала проекта, но
+            # ни разу не был установлен в /etc/systemd/system — кнопка "Start" в админке падала
+            # с ошибкой sudo. Установлен вручную + добавлен sudoers-файл в этот день; здесь —
+            # чтобы будущие правки unit-файла реально долетали до сервера (тот же урок, что и
+            # с run_loader.sh выше).
+            cp /opt/km_track/deploy/km_duathlon_loader@.service /etc/systemd/system/km_duathlon_loader@.service
+            chmod +x /opt/km_track/deploy/run_duathlon_loader.sh
             systemctl daemon-reload
 
             # run_loader.sh — обёртка для km_race_loader@.service (WorkingDirectory=/opt/km_track,
@@ -68,6 +76,9 @@ jobs:
             systemctl restart km_track
             # Перезапустить загрузчик Triatleta если запущен
             systemctl is-active --quiet km_tri_loader@tri_24h && systemctl restart km_tri_loader@tri_24h || true
+            # Перезапустить загрузчик Дуатлона 222 если запущен (иначе уже
+            # запущенный процесс не подхватит новый код до ручного рестарта)
+            systemctl is-active --quiet km_duathlon_loader@duathlon_222 && systemctl restart km_duathlon_loader@duathlon_222 || true
             sleep 25
 
             # Проверить что поднялось
