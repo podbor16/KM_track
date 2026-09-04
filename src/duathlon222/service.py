@@ -277,13 +277,17 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         # Дистанция ИМЕННО этапа отметки (не всей гонки, в отличие от
         # distance_km выше) — для отображения "Отметка N/M км".
         current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 2) if lap_number else None
-        # Темп/скорость ПО ФАКТУ последней отметки текущего (ещё не
-        # завершённого) этапа — обновляется на каждой новой отметке.
+        # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
+        # (не тикает), нужно и для темпа/скорости ниже, и карточке участника
+        # для прогноза ближайшей непройденной отметки (см. duathlon_
+        # participant.html:lapTableHtml).
+        current_stage_elapsed_s = (
+            lap_cumulative_s - current_stage_start_s
+            if lap_cumulative_s is not None and current_stage_start_s is not None else None
+        )
         current_stage_speed_kmh = None
-        if current_stage_distance_km and lap_cumulative_s is not None and current_stage_start_s is not None:
-            current_stage_speed_kmh = _speed_kmh_for_distance(
-                current_stage_distance_km, lap_cumulative_s - current_stage_start_s
-            )
+        if current_stage_distance_km and current_stage_elapsed_s:
+            current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km, current_stage_elapsed_s)
         is_out = row["status"] in ("dnf", "dsq")
         forecast_s = None
         if current_stage != "finished" and not is_out:
@@ -343,6 +347,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "current_stage_lap": lap_number,
             "current_stage_lap_total": LAP_COUNT.get(mark_stage),
             "current_stage_distance_km": current_stage_distance_km,
+            "current_stage_elapsed_s": current_stage_elapsed_s,
             "current_stage_speed_kmh": current_stage_speed_kmh,
             "forecast_stage_finish_s": forecast_s,
             "forecast_race_finish_s": forecast_race_s,
