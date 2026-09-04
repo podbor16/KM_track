@@ -261,16 +261,21 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         """, (event_id,))
         ranks = _lap_ranks_from_rows(cursor.fetchall())
 
+        # "finished" — не настоящий этап в checkpoints (там только run1/
+        # bike/run2) — для отметки ФИНИШИРОВАВШЕГО берём последний круг
+        # реального последнего этапа (run2), чтобы "Отметка" по-прежнему
+        # показывала "42/42 км", а не пустоту (по аналогии с Siberman —
+        # там currentStage() у финишировавшего тоже указывает на последний
+        # РЕАЛЬНЫЙ этап, не на псевдо-статус).
+        mark_stage = "run2" if current_stage == "finished" else current_stage
         lap_number, lap_cumulative_s = None, None
-        current_laps = by_stage.get(current_stage, [])
+        current_laps = by_stage.get(mark_stage, [])
         if current_laps:
             lap_number, lap_cumulative_s = current_laps[-1]["lap_number"], current_laps[-1]["cumulative_s"]
         distance_km = _distance_covered_km(current_stage, lap_number)
-        # Дистанция ИМЕННО текущего этапа (не всей гонки, в отличие от
-        # distance_km выше) — для отображения "отметка N/M (X.X км)".
-        current_stage_distance_km = (
-            round(_lap_distance_km(current_stage, lap_number), 2) if current_stage != "finished" else None
-        )
+        # Дистанция ИМЕННО этапа отметки (не всей гонки, в отличие от
+        # distance_km выше) — для отображения "Отметка N/M км".
+        current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 2) if lap_number else None
         # Темп/скорость ПО ФАКТУ последней отметки текущего (ещё не
         # завершённого) этапа — обновляется на каждой новой отметке.
         current_stage_speed_kmh = None
@@ -325,7 +330,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "current_stage": current_stage,
             "current_stage_start_s": current_stage_start_s,
             "current_stage_lap": lap_number,
-            "current_stage_lap_total": LAP_COUNT.get(current_stage),
+            "current_stage_lap_total": LAP_COUNT.get(mark_stage),
             "current_stage_distance_km": current_stage_distance_km,
             "current_stage_speed_kmh": current_stage_speed_kmh,
             "forecast_stage_finish_s": forecast_s,
@@ -488,6 +493,60 @@ def get_stage_mark_broadcast(
         conn.close()
 
 
+def _global_km(stage_code: str, lap_number: Optional[int]) -> float:
+    """Кумулятивная дистанция (км) ОТ СТАРТА ГОНКИ (не этапа) на данной
+    отметке — _STAGE_KM_BEFORE[stage] + позиция внутри этапа. Общая ось
+    "положения в гонке" для живого отставания в колонке "Итого" (в отличие
+    от _distance_covered_km — та берёт CURRENT_STAGE конкретного участника,
+    эта считает для ЛЮБОЙ пары (этап, отметка), в т.ч. чужой/прошлой)."""
+    return _STAGE_KM_BEFORE[stage_code] + _lap_distance_km(stage_code, lap_number)
+
+
+def _live_gap_map(entries: list[dict]) -> dict[int, float]:
+    """Живое отставание от лидера пула — тот же принцип, что
+    computeStageGaps()/bikeCombinedGaps() у Siberman (static/js/
+    siberman-common.js): лидер — участник, дальше всех продвинувшийся ПРЯМО
+    СЕЙЧАС (по последней достигнутой позиции), не обязательно уже
+    завершивший дистанцию целиком. Отставание остальных — разница их
+    значения (времени) на своей последней позиции и значением, которое
+    ПОКАЗЫВАЛ ЛИДЕР на этой же самой позиции (интерполяция назад по истории
+    лидера: последняя его точка с position <= позиции отстающего) —
+    отставание "на равной дистанции", а не относительно текущего/финального
+    состояния лидера.
+
+    entries: [{"id", "status", "points": [(position, value), ...]}], points
+    отсортированы по возрастанию position. DNF/DSQ исключены из пула целиком
+    (не могут быть лидером и не получают отставания). Возвращает
+    {id: gap_seconds} — только для тех, у кого нашлась интерполируемая
+    точка лидера (обычно все, кроме случая "лидер начал позже отстающего",
+    структурно невозможного, т.к. лидер по определению дальше)."""
+    candidates = [e for e in entries if e["status"] not in ("dnf", "dsq") and e["points"]]
+    if not candidates:
+        return {}
+    leader = min(candidates, key=lambda e: (-e["points"][-1][0], e["points"][-1][1]))
+    leader_points = leader["points"]
+
+    def _leader_value_at_or_before(position: float) -> Optional[float]:
+        val = None
+        for pos, value in leader_points:
+            if pos <= position:
+                val = value
+            else:
+                break
+        return val
+
+    gaps: dict[int, float] = {}
+    for e in candidates:
+        own_position, own_value = e["points"][-1]
+        if e["id"] == leader["id"]:
+            gaps[e["id"]] = 0
+            continue
+        leader_value = _leader_value_at_or_before(own_position)
+        if leader_value is not None:
+            gaps[e["id"]] = own_value - leader_value
+    return gaps
+
+
 def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
     """Таблица результатов: живое место по факту пройденной дистанции (не
     только по завершённым этапам целиком — см. _rank_standings_rows), статус
@@ -510,18 +569,50 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
 
         # Последний пройденный круг каждого (участник, этап) — одним запросом
         # на всё событие, агрегируем в Python (объём данных мал: до ~100
-        # участников x 58 кругов максимум за всю гонку).
+        # участников x 58 кругов максимум за всю гонку). laps_by_key хранит
+        # ПОЛНУЮ историю (не только последний круг) — нужна для живого
+        # отставания (_live_gap_map ниже интерполирует историю лидера).
         cursor.execute("""
             SELECT c.participant_id, c.stage, c.lap_number, c.cumulative_s
             FROM checkpoints c
             JOIN participants p ON p.id = c.participant_id
             WHERE p.event_id = %s
+            ORDER BY c.participant_id, c.stage, c.lap_number
         """, (event_id,))
         last_lap: dict[tuple[int, str], tuple[int, int]] = {}
+        laps_by_key: dict[tuple[int, str], list[tuple[int, int]]] = {}
         for lap_row in cursor.fetchall():
             key = (lap_row["participant_id"], lap_row["stage"])
+            laps_by_key.setdefault(key, []).append((lap_row["lap_number"], lap_row["cumulative_s"]))
             if key not in last_lap or lap_row["lap_number"] > last_lap[key][0]:
                 last_lap[key] = (lap_row["lap_number"], lap_row["cumulative_s"])
+
+        # Живое отставание (см. _live_gap_map) — отдельно по каждому этапу
+        # (ось позиции — номер круга, значение — ЧИСТОЕ время этапа без
+        # транзита) и по гонке в целом (ось — кумулятивная дистанция от
+        # старта гонки через все 3 этапа, значение — сырое cumulative_s, оно
+        # уже "глобальное" по построению checkpoints.cumulative_s).
+        stage_entries: dict[str, list[dict]] = {sc: [] for sc in _STAGE_ORDER}
+        race_entries: list[dict] = []
+        for row in rows:
+            stage_starts = {
+                sc: _stage_start_s(sc, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"])
+                for sc in _STAGE_ORDER
+            }
+            race_points: list[tuple[float, int]] = []
+            for sc in _STAGE_ORDER:
+                laps = laps_by_key.get((row["id"], sc))
+                if not laps:
+                    continue
+                race_points.extend((_global_km(sc, ln), cum_s) for ln, cum_s in laps)
+                if stage_starts[sc] is not None:
+                    stage_entries[sc].append({
+                        "id": row["id"], "status": row["status"],
+                        "points": [(ln, cum_s - stage_starts[sc]) for ln, cum_s in laps],
+                    })
+            race_entries.append({"id": row["id"], "status": row["status"], "points": race_points})
+        stage_gaps = {sc: _live_gap_map(stage_entries[sc]) for sc in _STAGE_ORDER}
+        race_gaps = _live_gap_map(race_entries)
 
         enriched = []
         for row in rows:
@@ -531,19 +622,24 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             current_stage, current_stage_start_s = _current_stage(
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"]
             )
-            lap_number, lap_cumulative_s = last_lap.get((row["id"], current_stage), (None, None))
+            # "finished" — не настоящий этап в checkpoints (там только
+            # run1/bike/run2) — для отметки финишировавшего берём последний
+            # круг реального последнего этапа (run2), чтобы "Отметка"
+            # по-прежнему показывала "42/42 км" (см. get_participant).
+            mark_stage = "run2" if current_stage == "finished" else current_stage
+            lap_number, lap_cumulative_s = last_lap.get((row["id"], mark_stage), (None, None))
             distance_km = _distance_covered_km(current_stage, lap_number)
-            current_stage_distance_km = (
-                round(_lap_distance_km(current_stage, lap_number), 2) if current_stage != "finished" else None
+            current_stage_distance_km = round(_lap_distance_km(mark_stage, lap_number), 2) if lap_number else None
+            # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
+            # (не тикает), обновляется на каждую новую отметку (запрошено
+            # пользователем 2026-09-04 — убрали живой секундомер по строкам).
+            current_stage_elapsed_s = (
+                lap_cumulative_s - current_stage_start_s
+                if lap_cumulative_s is not None and current_stage_start_s is not None else None
             )
-            # Темп/скорость ПО ФАКТУ последней отметки текущего (ещё не
-            # завершённого) этапа — обновляется на каждой новой отметке, не
-            # ждёт финиша этапа целиком (запрошено пользователем 2026-09-04).
             current_stage_speed_kmh = None
-            if current_stage_distance_km and lap_cumulative_s is not None and current_stage_start_s is not None:
-                current_stage_speed_kmh = _speed_kmh_for_distance(
-                    current_stage_distance_km, lap_cumulative_s - current_stage_start_s
-                )
+            if current_stage_distance_km and current_stage_elapsed_s:
+                current_stage_speed_kmh = _speed_kmh_for_distance(current_stage_distance_km, current_stage_elapsed_s)
             is_out = row["status"] in ("dnf", "dsq")
             forecast_s = None
             if current_stage != "finished" and not is_out:
@@ -566,13 +662,26 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "run1_speed_kmh": _speed_kmh("run1", run1_time),
                 "bike_speed_kmh": _speed_kmh("bike", bike_time),
                 "run2_speed_kmh": _speed_kmh("run2", run2_time),
+                "run1_gap_s": stage_gaps["run1"].get(row["id"]),
+                "bike_gap_s": stage_gaps["bike"].get(row["id"]),
+                "run2_gap_s": stage_gaps["run2"].get(row["id"]),
                 "total_s": row["run2_s"],
+                # Живое отставание "Итого" — на эквивалентной дистанции (см.
+                # _live_gap_map), не только среди уже финишировавших всю
+                # гонку целиком (запрошено пользователем 2026-09-04, по
+                # аналогии с Siberman).
+                "race_gap_s": race_gaps.get(row["id"]),
                 "current_stage": current_stage,
                 "current_stage_start_s": current_stage_start_s,
                 "current_stage_lap": lap_number,
-                "current_stage_lap_total": LAP_COUNT.get(current_stage),
+                "current_stage_lap_total": LAP_COUNT.get(mark_stage),
                 "current_stage_distance_km": current_stage_distance_km,
+                "current_stage_elapsed_s": current_stage_elapsed_s,
                 "current_stage_speed_kmh": current_stage_speed_kmh,
+                # Итого "так, как есть сейчас" (зафиксировано на последней
+                # отметке, не тикает) — пока гонка не завершена целиком
+                # (total_s ещё null), это и есть значение колонки "Итого".
+                "current_mark_race_elapsed_s": lap_cumulative_s,
                 "forecast_stage_finish_s": forecast_s,
                 "forecast_race_finish_s": forecast_race_s,
                 "_is_out": is_out,

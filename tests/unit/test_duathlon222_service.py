@@ -5,6 +5,7 @@ from src.duathlon222.service import (
     _forecast_race_finish, _speed_kmh_for_distance,
     _stage_start_s, _frontier_lap,
     _lap_distance_km, _lap_split_distance_km,
+    _global_km, _live_gap_map,
 )
 
 
@@ -331,3 +332,55 @@ def test_forecast_race_finish_none_before_first_run2_lap():
     # "После первой отсечки на беге-2" — до неё forecast_stage_finish_s сам
     # уже None (см. _forecast_stage_finish), значит и прогноз гонки тоже.
     assert _forecast_race_finish("run2", None) is None
+
+
+def test_global_km_run1_no_prefix():
+    assert _global_km("run1", 4) == 5.0
+
+
+def test_global_km_bike_adds_run1_prefix():
+    # 10 км (весь бег-1) + 3.4 км (первая отметка вело, короткий "пролог")
+    assert _global_km("bike", 1) == 13.4
+
+
+def test_global_km_run2_adds_run1_and_bike_prefix():
+    # 10 + 170 = 180 км до старта бег-2, + 1.757 км первой отметки
+    assert round(_global_km("run2", 1), 3) == 181.757
+
+
+def test_live_gap_map_leader_gets_zero_and_follower_interpolated():
+    # Лидер (id=1) дальше всех (позиция 2), у follower (id=2) позиция 1 —
+    # отставание считается ОТНОСИТЕЛЬНО значения лидера НА ТОЙ ЖЕ позиции
+    # (100), а не относительно текущего значения лидера (200).
+    entries = [
+        {"id": 1, "status": "active", "points": [(1, 100), (2, 200)]},
+        {"id": 2, "status": "active", "points": [(1, 150)]},
+    ]
+    gaps = _live_gap_map(entries)
+    assert gaps == {1: 0, 2: 50}
+
+
+def test_live_gap_map_dnf_excluded_from_pool():
+    entries = [
+        {"id": 1, "status": "dnf", "points": [(5, 50)]},
+        {"id": 2, "status": "active", "points": [(1, 100)]},
+    ]
+    gaps = _live_gap_map(entries)
+    assert gaps == {2: 0}
+
+
+def test_live_gap_map_empty_entries_returns_empty():
+    assert _live_gap_map([]) == {}
+
+
+def test_live_gap_map_no_leader_history_before_position_skips_follower():
+    # follower дальше в прошлом, чем САМАЯ РАННЯЯ известная точка лидера —
+    # интерполировать нечем, follower остаётся без отставания (не 0/не
+    # фиктивное число).
+    entries = [
+        {"id": 1, "status": "active", "points": [(5, 500)]},
+        {"id": 2, "status": "active", "points": [(1, 10)]},
+    ]
+    gaps = _live_gap_map(entries)
+    assert gaps[1] == 0
+    assert 2 not in gaps

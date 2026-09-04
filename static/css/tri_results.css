@@ -127,6 +127,8 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tri-gap--behind { color: var(--tri-red); }
 .tri-gap--leader { color: var(--tri-green); font-weight: 700; }
 .tri-speed { font-variant-numeric: tabular-nums; }
+/* Числовая колонка (место/время/темп) — по центру, по образцу Siberman. */
+.tri-table th.r, .tri-table td.r { text-align: center; }
 
 /* ---- Badges ---- */
 .tri-badge {
@@ -527,6 +529,21 @@ table.tri-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     cursor: pointer;
 }
 .tri-page-tab.active { color: var(--tri-text); border-bottom-color: var(--tri-accent); }
+/* Пульсирующая точка "здесь сейчас гонка" — на самом ТАБЕ этапа (по образцу
+   .tab-live у Siberman), а не на бейдже строки участника (там раньше стояла
+   ошибочно — перенесено по просьбе пользователя 2026-09-04). Использует те
+   же keyframes stageLivePulse, что и .stage-badge--live выше. */
+.tri-page-tab.tab-live::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tri-accent);
+    margin-right: 6px;
+    vertical-align: middle;
+    animation: stageLivePulse 1.6s ease-in-out infinite;
+}
 
 /* ---- Splits ---- */
 .tri-splits { margin-top: 24px; }
@@ -675,6 +692,22 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     animation: stageLivePulse 1.6s ease-in-out infinite;
 }
 @keyframes stageLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Время + отставание в ОДНОЙ ячейке (timeGapCell) — по образцу Siberman,
+   заменяет отдельную колонку "Отставание". .muted-sub — вторая строка
+   мелким серым текстом (используется в "Отметке"/прогнозе). .rank-num —
+   число в колонке "Место"/"Место (пол)". .muted — просто приглушённый "—". */
+.time-main { font-variant-numeric: tabular-nums; font-weight: 600; }
+.time-gap-sub { display: block; font-size: 10px; color: var(--tri-muted); font-weight: 400; }
+.time-gap-sub.lead { color: var(--tri-green); font-weight: 700; }
+.muted-sub { font-size: 11px; color: var(--tri-muted); }
+.muted { color: var(--tri-muted); }
+.rank-num { font-weight: 800; color: var(--tri-navy); }
+/* Прогноз финиша (гонки/этапа) — отдельным цветом, отличным от времени и
+   отставания, тот же принцип, что и .forecast-cell/.forecast-clock у
+   Siberman. */
+.forecast-cell { color: var(--tri-accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.forecast-clock { display: block; font-size: 10px; color: var(--tri-accent); font-weight: 400; }
 
 /* ---- Дуатлон 222: индикаторы «всего/финишировало/DNF+DSQ» над таблицей ---- */
 .stats-v2 { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
