@@ -779,6 +779,11 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         # уже "глобальное" по построению checkpoints.cumulative_s).
         stage_entries: dict[str, list[dict]] = {sc: [] for sc in _STAGE_ORDER}
         race_entries: list[dict] = []
+        # Старты всех 3 этапов на участника — считаются один раз здесь и
+        # переиспользуются ниже (checkpoints), а не пересчитываются заново:
+        # два потребителя (stage_gaps/race_gaps и checkpoints) на один и тот
+        # же результат _stage_start_s для каждой пары (участник, этап).
+        stage_starts_by_id: dict[int, dict] = {}
         for row in rows:
             stage_starts = {
                 sc: _stage_start_s(
@@ -787,6 +792,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 )
                 for sc in _STAGE_ORDER
             }
+            stage_starts_by_id[row["id"]] = stage_starts
             race_points: list[tuple[float, int]] = []
             for sc in _STAGE_ORDER:
                 laps = laps_by_key.get((row["id"], sc))
@@ -813,13 +819,9 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             )
             # Старт каждого из 3 этапов (не только текущего) — нужен для
             # checkpoints (виртуальная отметка lap=0 в _build_checkpoint_series).
-            stage_starts_for_row = {
-                sc: _stage_start_s(
-                    sc, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"],
-                    row["bike_start_s"], row["run2_start_s"],
-                )
-                for sc in _STAGE_ORDER
-            }
+            # Уже посчитан в цикле выше (для stage_gaps/race_gaps) —
+            # переиспользуем вместо повторного вызова _stage_start_s.
+            stage_starts_for_row = stage_starts_by_id[row["id"]]
             # "finished" — не настоящий этап в checkpoints (там только
             # run1/bike/run2) — для отметки финишировавшего берём последний
             # круг реального последнего этапа (run2), чтобы "Отметка"
