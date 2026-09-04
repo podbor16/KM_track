@@ -19,6 +19,7 @@
         .p-card-hdr { padding: 16px 18px; border-bottom: 1px solid var(--tri-border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .p-bib { font-size: 13px; font-weight: 700; color: var(--tri-muted); }
         .p-name { font-size: 20px; font-weight: 800; }
+        .p-city { padding: 0 18px 14px; margin-top: -10px; font-size: 12px; color: var(--tri-muted); }
 
         /* .badge/.badge-m/.badge-f/.badge-active/.badge-notstarted/.badge-finished/
            .badge-dnf/.badge-dsq — теперь в общем tri_results.css, не дублируем. */
@@ -350,6 +351,13 @@
     function genderBadge(g) {
         return g === 'F' ? '<span class="badge badge-f">Ж</span>' : '<span class="badge badge-m">М</span>';
     }
+    // Тот же контракт, что cityLabel() в static/js/siberman-common.js и в
+    // duathlon_results.html.
+    function cityLabel(r) {
+        if (!r.city) return '';
+        if (r.country && r.country !== 'Россия') return `${r.country}, ${r.city}`;
+        return r.city;
+    }
     function statusBadge(status) {
         const cls = {
             notstarted: 'badge-notstarted', active: 'badge-active',
@@ -367,6 +375,7 @@
                 ${genderBadge(d.gender)}
                 ${statusBadge(d.status)}
             </div>
+            ${cityLabel(d) ? `<div class="p-city">${cityLabel(d)}</div>` : ''}
             ${overallProgressBarHtml(d)}
             <div class="stats-row">
                 <div class="stat">

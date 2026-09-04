@@ -284,7 +284,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id, start_number, surname, name, gender, status, "
+            "SELECT id, start_number, surname, name, gender, status, country, city, "
             "run1_s, t1_s, bike_s, t2_s, run2_s, bike_start_s, run2_start_s "
             "FROM participants WHERE event_id=%s AND start_number=%s",
             (event_id, start_number),
@@ -395,6 +395,8 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             "surname": row["surname"],
             "name": row["name"],
             "gender": row["gender"],
+            "country": row["country"],
+            "city": row["city"],
             "status": _display_status(row["status"], distance_km),
             "run1_s": run1_time,
             "t1_s": row["t1_s"],
@@ -714,7 +716,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
         gender_filter = "AND gender = %s" if gender else ""
         params = [event_id, gender] if gender else [event_id]
         cursor.execute(f"""
-            SELECT id, start_number, surname, name, gender, status,
+            SELECT id, start_number, surname, name, gender, status, country, city,
                    run1_s, t1_s, bike_s, t2_s, run2_s, bike_start_s, run2_start_s
             FROM participants
             WHERE event_id = %s {gender_filter}
@@ -816,6 +818,8 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "surname": row["surname"],
                 "name": row["name"],
                 "gender": row["gender"],
+                "country": row["country"],
+                "city": row["city"],
                 "status": _display_status(row["status"], distance_km),
                 "run1_s": run1_time,
                 "t1_s": row["t1_s"],

@@ -117,6 +117,15 @@
         if (gapSeconds === 0) return `<span class="time-main">${timeStr}</span><span class="time-gap-sub lead">Лидер</span>`;
         return `<span class="time-main">${timeStr}</span><span class="time-gap-sub">${fmtGap(gapSeconds)}</span>`;
     }
+    // Город участника — просто "Город" для россиян, "Страна, Город" для
+    // иностранцев (country по умолчанию "Россия" на сервере, миграция
+    // 005_country_city.sql), '' если города нет вовсе — тот же контракт,
+    // что cityLabel() в static/js/siberman-common.js.
+    function cityLabel(r) {
+        if (!r.city) return '';
+        if (r.country && r.country !== 'Россия') return `${r.country}, ${r.city}`;
+        return r.city;
+    }
     function genderBadge(g) {
         if (g === 'M') return '<span class="badge badge-m">М</span>';
         if (g === 'F') return '<span class="badge badge-f">Ж</span>';
@@ -240,7 +249,7 @@
             return `<tr style="cursor:pointer;${isOut ? 'opacity:.55' : ''}" onclick="openParticipant(${r.start_number})">
                 ${rankBodyCells(showGenderRank, r.rank, r._genderRank, genderBadge(r.gender))}
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="name-cell"><span class="tri-name">${r.surname} ${r.name}</span></td>
+                <td class="name-cell"><div class="tri-name-stack"><span class="tri-name">${r.surname} ${r.name}</span>${cityLabel(r) ? `<span class="tri-name-city">${cityLabel(r)}</span>` : ''}</div></td>
                 <td class="r">${totalCell(r)}</td>
                 ${showForecast ? `<td class="r">${raceForecastCell(r)}</td>` : ''}
                 <td class="r">${stageDisplayCell('run1', r)}</td>
@@ -299,7 +308,7 @@
             return `<tr style="cursor:pointer;${isOut ? 'opacity:.55' : ''}" onclick="openParticipant(${r.start_number})">
                 ${rankBodyCells(showGenderRank, r._stageRank, r._genderRank, genderBadge(r.gender))}
                 <td class="tri-bib">${r.start_number}</td>
-                <td class="name-cell"><span class="tri-name">${r.surname} ${r.name}</span></td>
+                <td class="name-cell"><div class="tri-name-stack"><span class="tri-name">${r.surname} ${r.name}</span>${cityLabel(r) ? `<span class="tri-name-city">${cityLabel(r)}</span>` : ''}</div></td>
                 <td class="r">${stageDisplayCell(stageCode, r)}</td>
                 <td class="r">${paceCell(stageCode, r)}</td>
                 ${showForecast ? `<td class="r">${r.current_stage === stageCode ? stageForecastCell(r) : ''}</td>` : ''}

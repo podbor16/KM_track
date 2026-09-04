@@ -165,6 +165,25 @@ def _process_stages_and_transitions(
     return 1
 
 
+def _prune_removed_participants(cursor, event_id: int, touched_pids: set) -> int:
+    """Удаляет участников события, которых не было в последнем ответе
+    Copernico (touched_pids) — иначе снятый/удалённый в Copernico участник
+    остаётся в БД навсегда: и --init, и --resync, и обычный цикл раньше
+    только вставляли/обновляли строки из ответа, но никогда не убирали те,
+    что из ответа пропали (см. _get_or_create_participant). checkpoints
+    участника удалятся каскадно (FK ON DELETE CASCADE, 002_checkpoints.sql).
+    Пустой touched_pids ничего не удаляет — пустой/сломанный ответ Copernico
+    не должен стирать весь список участников."""
+    if not touched_pids:
+        return 0
+    placeholders = ",".join(["%s"] * len(touched_pids))
+    cursor.execute(
+        f"DELETE FROM participants WHERE event_id=%s AND id NOT IN ({placeholders})",
+        (event_id, *touched_pids),
+    )
+    return cursor.rowcount
+
+
 def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fields: dict) -> int:
     """Обновляет таблицу checkpoints (круги внутри каждого этапа) из
     кумулятивных мс Copernico (-> целые секунды, от общего старта гонки).
@@ -224,17 +243,23 @@ def _run_once(config_path: str) -> int:
     touched = 0
     changed = 0
     laps_changed = 0
+    touched_pids = set()
     for runner in runners:
         pid = _get_or_create_participant(cursor, event_id, runner, field_map)
         if pid is None:
             continue
         touched += 1
+        touched_pids.add(pid)
         changed += _process_stages_and_transitions(cursor, pid, runner, stage_fields, transition_fields)
         laps_changed += _process_stage_laps(cursor, pid, runner, stage_lap_fields)
+    removed = _prune_removed_participants(cursor, event_id, touched_pids)
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info(f"Участников: {touched}, обновлений этапов: {changed}, обновлений кругов: {laps_changed}")
+    logger.info(
+        f"Участников: {touched}, обновлений этапов: {changed}, "
+        f"обновлений кругов: {laps_changed}, удалено: {removed}"
+    )
     return touched
 
 
