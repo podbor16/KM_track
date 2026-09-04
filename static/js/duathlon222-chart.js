@@ -122,3 +122,36 @@ function buildPaceDatasets(stageCode, rows) {
         return pts.length ? { _bib: r.start_number, _name: `${r.surname} ${r.name}`, data: pts } : null;
     }).filter(Boolean);
 }
+
+// Какая ЛИНИЯ ближе всего к пикселю курсора/клика — по Y на прямой между
+// двумя соседними по X точками ЭТОГО датасета, интерполированной РОВНО в X
+// курсора (так же, как Chart.js физически рисует линию), а не по ближайшей
+// одиночной точке. Портировано из templates/siberman/results.html
+// (nearestDatasetIndexAtPixel) — тот же риск (редкие отметки на этапе
+// Дуатлона 222, особенно Бег-1/Бег-2 с 8-25 точками на ~15 участников).
+function nearestDatasetIndexAtPixel(chart, xPixel, yPixel, maxDistPx = null) {
+    const xScale = chart.scales?.x, yScale = chart.scales?.y;
+    if (!xScale || !yScale) return null;
+    const cursorX = xScale.getValueForPixel(xPixel);
+    let bestIdx = null, bestDist = Infinity;
+    chart.data.datasets.forEach((ds, i) => {
+        const pts = ds.data;
+        if (!pts || pts.length === 0) return;
+        let p0 = null, p1 = null;
+        for (let k = 0; k < pts.length - 1; k++) {
+            if (pts[k].x <= cursorX && cursorX <= pts[k + 1].x) { p0 = pts[k]; p1 = pts[k + 1]; break; }
+        }
+        let yAtCursor;
+        if (p0 && p1) {
+            const frac = p1.x === p0.x ? 0 : (cursorX - p0.x) / (p1.x - p0.x);
+            yAtCursor = p0.y + frac * (p1.y - p0.y);
+        } else {
+            const edge = cursorX < pts[0].x ? pts[0] : pts[pts.length - 1];
+            yAtCursor = edge.y;
+        }
+        const dist = Math.abs(yScale.getPixelForValue(yAtCursor) - yPixel);
+        if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    });
+    if (bestIdx == null) return null;
+    return (maxDistPx != null && bestDist > maxDistPx) ? null : bestIdx;
+}

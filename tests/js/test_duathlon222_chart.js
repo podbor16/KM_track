@@ -190,5 +190,30 @@ check('buildPaceDatasets: нулевая/отрицательная дельта
     assert.strictEqual(datasets[0].data[0].x, 2.5);
 });
 
+check('nearestDatasetIndexAtPixel: курсор точно на линии участника 2 -> выбирает участника 2', () => {
+    const chart = new ChartStub(null, { data: { datasets: [
+        { data: [{ x: 0, y: 10 }, { x: 10, y: 20 }] },
+        { data: [{ x: 0, y: 0 }, { x: 10, y: 0 }] },
+    ] } });
+    // ChartStub: 1px=1 единица, x=5 -> курсор между точками датасета 0
+    // (y интерполируется в 15), датасета 1 (y=0). Курсор на y=15 -> ближе к 0-му.
+    const idx = sandbox.nearestDatasetIndexAtPixel(chart, 5, 15);
+    assert.strictEqual(idx, 0);
+});
+check('nearestDatasetIndexAtPixel: курсор левее первой точки -> берёт крайнюю левую точку линии', () => {
+    const chart = new ChartStub(null, { data: { datasets: [
+        { data: [{ x: 5, y: 50 }, { x: 10, y: 60 }] },
+    ] } });
+    const idx = sandbox.nearestDatasetIndexAtPixel(chart, 0, 50);
+    assert.strictEqual(idx, 0);
+});
+check('nearestDatasetIndexAtPixel: maxDistPx ограничивает клик — далёкий клик мимо всех линий -> null', () => {
+    const chart = new ChartStub(null, { data: { datasets: [
+        { data: [{ x: 0, y: 0 }, { x: 10, y: 0 }] },
+    ] } });
+    const idx = sandbox.nearestDatasetIndexAtPixel(chart, 5, 500, 30);
+    assert.strictEqual(idx, null);
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
