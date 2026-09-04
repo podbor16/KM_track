@@ -44,10 +44,12 @@ STAGE_LAP_OFFSET = {"run1": 0.0, "bike": 3.4 - 4.04, "run2": 0.02 - 1.757}
 # единственный случай: последняя (8-я) отметка Бег-1 — реальное поле
 # "9,98 km", а не ровно 10.0 (как дала бы формула n*1.25) — официальный
 # финиш Бег-1 (10 км) при этом ОТДЕЛЬНОЕ поле stage_fields.run1, та же
-# структура "финиш ≠ последняя отметка", что у Вело/Бег-2, просто разница
-# всего 20м (при округлении для показа пользователю 9.98 → 10.0, визуально
-# неотличимо от финиша, но ранги/сплит/темп на этой отметке теперь считаются
-# по настоящей дистанции). Найдено пользователем 2026-09-04.
+# структура "финиш ≠ последняя отметка", что у Вело/Бег-2. Показывается
+# пользователю как есть, 9.98 (округление до 2 знаков, не до 1 — иначе
+# 9.98 слилось бы визуально с финишем 10.0, что и вызывало путаницу до
+# 2026-09-04), поэтому в карточке участника у Бег-1 теперь тоже появляется
+# отдельная строка "10.0/10.0 км · Финиш" (см. duathlon_participant.html),
+# как у Вело/Бег-2.
 IRREGULAR_LAP_KM: dict[tuple[str, int], float] = {("run1", 8): 9.98}
 
 
@@ -259,7 +261,7 @@ def _build_stage_laps(
         r = ranks.get((participant_id, stage_code, lr["lap_number"]), {})
         laps.append({
             "lap_number": lr["lap_number"],
-            "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 1),
+            "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 2),
             "cumulative_s": cum,
             "split_s": split,
             "speed_kmh": speed_kmh,
@@ -334,7 +336,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
         # (иначе, например, отметка "20 м" Бег-2 округляется до 0.0 км и делит
         # на ноль — найдено пользователем 2026-09-04).
         current_stage_distance_km_raw = _lap_distance_km(mark_stage, lap_number) if lap_number else None
-        current_stage_distance_km = round(current_stage_distance_km_raw, 1) if lap_number else None
+        current_stage_distance_km = round(current_stage_distance_km_raw, 2) if lap_number else None
         # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
         # (не тикает), нужно и для темпа/скорости ниже, и карточке участника
         # для прогноза ближайшей непройденной отметки (см. duathlon_
@@ -371,7 +373,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
                 # "1..maxSeq" делает JS, здесь дистанция неравномерна из-за
                 # STAGE_LAP_OFFSET у вело, поэтому считаем на бэкенде).
                 "marks": [
-                    {"lap_number": n, "distance_km": round(_lap_distance_km(stage_code, n), 1)}
+                    {"lap_number": n, "distance_km": round(_lap_distance_km(stage_code, n), 2)}
                     for n in range(1, LAP_COUNT[stage_code] + 1)
                 ],
                 "laps": _build_stage_laps(
@@ -497,7 +499,7 @@ def get_available_marks(event_id: int, stage_code: str, gender: Optional[str] = 
         marks.extend(
             {
                 "lap_number": row["lap_number"],
-                "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 1),
+                "distance_km": round(_lap_distance_km(stage_code, row["lap_number"]), 2),
                 "reached_count": row["reached_count"],
             }
             for row in cursor.fetchall()
@@ -620,13 +622,13 @@ def get_stage_mark_broadcast(
         # должно искажать сами вычисления (см. get_standings/get_participant,
         # тот же принцип, найдено пользователем 2026-09-04).
         stage_km_at_mark_raw = _lap_distance_km(stage_code, frontier)
-        stage_km_at_mark = round(stage_km_at_mark_raw, 1)
+        stage_km_at_mark = round(stage_km_at_mark_raw, 2)
         return {
             "stage": stage_code,
             "lap_mark": frontier,
             "stage_km_at_mark": stage_km_at_mark,
             "stage_total_km": STAGE_KM[stage_code],
-            "overall_km": round(_STAGE_KM_BEFORE[stage_code] + stage_km_at_mark_raw, 1),
+            "overall_km": round(_STAGE_KM_BEFORE[stage_code] + stage_km_at_mark_raw, 2),
             "race_total_km": sum(STAGE_KM.values()),
             "entries": [
                 {
@@ -790,7 +792,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             # скорости (иначе, например, отметка "20 м" Бег-2 округляется до
             # 0.0 км и делит на ноль — найдено пользователем 2026-09-04).
             current_stage_distance_km_raw = _lap_distance_km(mark_stage, lap_number) if lap_number else None
-            current_stage_distance_km = round(current_stage_distance_km_raw, 1) if lap_number else None
+            current_stage_distance_km = round(current_stage_distance_km_raw, 2) if lap_number else None
             # Чистое время ТЕКУЩЕГО этапа на последней отметке — ЗАФИКСИРОВАНО
             # (не тикает), обновляется на каждую новую отметку (запрошено
             # пользователем 2026-09-04 — убрали живой секундомер по строкам).
