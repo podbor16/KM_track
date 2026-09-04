@@ -215,5 +215,32 @@ check('nearestDatasetIndexAtPixel: maxDistPx ограничивает клик �
     assert.strictEqual(idx, null);
 });
 
+check('chartToggleSelect: добавляет/убирает bib из выбора', () => {
+    vm.runInContext('_chartSelectedBibs = []; _chartSearchQuery = "";', sandbox);
+    sandbox.chartToggleSelect(9001);
+    assert.strictEqual(JSON.stringify(vm.runInContext('_chartSelectedBibs', sandbox)), JSON.stringify([9001]));
+    sandbox.chartToggleSelect(9001);
+    assert.strictEqual(JSON.stringify(vm.runInContext('_chartSelectedBibs', sandbox)), JSON.stringify([]));
+});
+check('chartFilteredParticipants: поиск фильтрует по фамилии (регистронезависимо)', () => {
+    vm.runInContext('_chartSearchQuery = "иван";', sandbox);
+    const rows = [mkRow(1, {}), mkRow(2, {})];
+    rows[0].surname = 'Иванов'; rows[1].surname = 'Петров';
+    const filtered = sandbox.chartFilteredParticipants(rows);
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].start_number, 1);
+    vm.runInContext('_chartSearchQuery = "";', sandbox);
+});
+check('toggleSelectAllChart: если ничего не выбрано -> выбирает всех отфильтрованных; если все выбраны -> очищает', () => {
+    vm.runInContext('_chartSelectedBibs = [];', sandbox);
+    const rows = [mkRow(1, {}), mkRow(2, {})];
+    rows.forEach(r => r.surname = 'Т');
+    sandbox.toggleSelectAllChart(rows);
+    const sel1 = vm.runInContext('_chartSelectedBibs', sandbox);
+    assert.strictEqual(JSON.stringify(sel1.sort()), JSON.stringify([1, 2]));
+    sandbox.toggleSelectAllChart(rows);
+    assert.strictEqual(JSON.stringify(vm.runInContext('_chartSelectedBibs', sandbox)), JSON.stringify([]));
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

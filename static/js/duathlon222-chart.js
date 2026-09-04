@@ -7,6 +7,12 @@
 
 const STAGE_ORDER = ['run1', 'bike', 'run2'];
 
+let _chartMode = 'position';       // 'position' | 'pace'
+let _chartStage = 'all';           // 'all'|'run1'|'bike'|'run2' (position) или 'run1'|'bike'|'run2' (pace)
+let _chartSelectedBibs = [];       // номера участников, выбранных для сравнения
+let _chartSearchQuery = '';
+let _chartSheetOpen = false;       // мобильный bottom-sheet
+
 // «Раздутые» сегменты оси X в режиме «Вся гонка» (см. спеку, раздел 3) —
 // фиксированные доли ширины НЕЗАВИСИМО от реальных км этапа, иначе Бег-1
 // (10км) и Бег-2 (42км) схлопнутся в нечитаемые полоски рядом с Вело (170км).
@@ -121,6 +127,91 @@ function buildPaceDatasets(stageCode, rows) {
         }
         return pts.length ? { _bib: r.start_number, _name: `${r.surname} ${r.name}`, data: pts } : null;
     }).filter(Boolean);
+}
+
+function chartToggleSelect(bib) {
+    const idx = _chartSelectedBibs.indexOf(bib);
+    if (idx !== -1) _chartSelectedBibs.splice(idx, 1);
+    else _chartSelectedBibs.push(bib);
+}
+function chartFilteredParticipants(rows) {
+    const q = _chartSearchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => (r.surname || '').toLowerCase().includes(q));
+}
+function toggleSelectAllChart(rows) {
+    const filtered = chartFilteredParticipants(rows);
+    const allSelected = filtered.length > 0 && filtered.every(r => _chartSelectedBibs.includes(r.start_number));
+    if (allSelected) {
+        const filteredBibs = new Set(filtered.map(r => r.start_number));
+        _chartSelectedBibs = _chartSelectedBibs.filter(bib => !filteredBibs.has(bib));
+    } else {
+        filtered.forEach(r => { if (!_chartSelectedBibs.includes(r.start_number)) _chartSelectedBibs.push(r.start_number); });
+    }
+}
+
+const CHART_COLORS = [
+    '#FF8562', '#263146', '#18A558', '#DE0000', '#4B7BE5',
+    '#F5A623', '#9B59B6', '#1ABC9C', '#E67E22', '#2C3E50',
+];
+function chartColorForBib(bib, sortedRows) {
+    const idx = sortedRows.findIndex(r => r.start_number === bib);
+    return CHART_COLORS[(idx >= 0 ? idx : 0) % CHART_COLORS.length];
+}
+function renderChartParticipantPickers(rows) {
+    const sorted = rows.slice().sort((a, b) => a.surname.localeCompare(b.surname, 'ru'));
+    const filtered = chartFilteredParticipants(sorted);
+    const itemsHtml = filtered.map(r => {
+        const color = chartColorForBib(r.start_number, sorted);
+        const isActive = _chartSelectedBibs.includes(r.start_number);
+        return `<div class="tri-chart-legend-item${isActive ? ' active' : ''}"
+                     onclick="chartToggleSelect(${r.start_number});renderActiveChart()">
+            <span class="tri-chart-legend-dot" style="background:${color}"></span>
+            <span>${r.surname} ${r.name}</span>
+        </div>`;
+    }).join('') || '<div class="tri-chart-sidebar__hint">Ничего не найдено</div>';
+    const selectAllLabel = filtered.length && filtered.every(r => _chartSelectedBibs.includes(r.start_number))
+        ? 'Очистить всех' : 'Выбрать всех';
+
+    document.getElementById('chart-legend-list').innerHTML = itemsHtml;
+    document.getElementById('chart-sheet-list').innerHTML = itemsHtml;
+    document.getElementById('chart-select-all-btn').textContent = selectAllLabel;
+    document.getElementById('chart-sheet-select-all-btn').textContent = selectAllLabel;
+    document.getElementById('chart-sidebar-hint').style.display = _chartSelectedBibs.length ? 'none' : '';
+    document.getElementById('chart-mobile-badge').textContent = _chartSelectedBibs.length;
+
+    const chipsEl = document.getElementById('chart-mobile-chips');
+    chipsEl.innerHTML = _chartSelectedBibs.map(bib => {
+        const r = sorted.find(rr => rr.start_number === bib);
+        if (!r) return '';
+        const color = chartColorForBib(bib, sorted);
+        return `<div class="tri-chart-mobile-chip">
+            <span class="tri-chart-mobile-chip-dot" style="background:${color}"></span>${r.surname}</div>`;
+    }).join('');
+}
+function onChartSearchInput(value) {
+    _chartSearchQuery = value;
+    renderActiveChart();
+}
+// toggleSelectAllChart() принимает rows явным параметром (нужно для
+// юнит-теста без обращения к allStandings) — разметке нужен вызов без
+// аргументов, отсюда обёртка (использует getChartFilteredStandings() —
+// появится в Task 10, но вызывается только по клику пользователя, не при
+// загрузке скрипта, так что порядок объявления функций в файле не важен —
+// function-декларации поднимаются в область видимости целиком).
+function toggleSelectAllChartFromUi() {
+    toggleSelectAllChart(getChartFilteredStandings());
+    renderActiveChart();
+}
+function openChartSheet() {
+    _chartSheetOpen = true;
+    document.getElementById('chart-sheet').classList.add('open');
+    document.getElementById('chart-sheet-overlay').classList.add('open');
+}
+function closeChartSheet() {
+    _chartSheetOpen = false;
+    document.getElementById('chart-sheet').classList.remove('open');
+    document.getElementById('chart-sheet-overlay').classList.remove('open');
 }
 
 // Какая ЛИНИЯ ближе всего к пикселю курсора/клика — по Y на прямой между
