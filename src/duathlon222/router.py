@@ -93,7 +93,7 @@ async def duathlon_participant_page_redirect(start_number: int):
 @router.get("/duathlon222_{year}/", response_class=HTMLResponse)
 async def duathlon_home(request: Request, year: int):
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     return templates.TemplateResponse("race_triatleta/duathlon_results.html", {
         "request": request,
         "year": year,
@@ -103,7 +103,7 @@ async def duathlon_home(request: Request, year: int):
 @router.get("/duathlon222_{year}/participant/{start_number}", response_class=HTMLResponse)
 async def duathlon_participant_page(request: Request, year: int, start_number: int):
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     return templates.TemplateResponse("race_triatleta/duathlon_participant.html", {
         "request": request,
         "year": year,
@@ -118,7 +118,7 @@ async def duathlon_participant_page(request: Request, year: int, start_number: i
 @router.get("/api/duathlon222_{year}/standings")
 async def duathlon_standings(year: int, gender: str = None):
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     rows = get_standings(_resolve_event_id(year), gender or None)
     return {"standings": rows}
 
@@ -132,7 +132,7 @@ async def duathlon_available_marks(year: int, stage: str, gender: str = None, us
     if gender not in (None, "M", "F"):
         raise HTTPException(status_code=400, detail="gender: M | F")
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     return {"marks": get_available_marks(_resolve_event_id(year), stage, gender)}
 
 
@@ -149,7 +149,7 @@ async def duathlon_stage_mark(
     if gender not in (None, "M", "F"):
         raise HTTPException(status_code=400, detail="gender: M | F")
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     data = get_stage_mark_broadcast(_resolve_event_id(year), stage, gender, lap)
     if data is None:
         return {"available": False}
@@ -159,7 +159,7 @@ async def duathlon_stage_mark(
 @router.get("/api/duathlon222_{year}/participant/{start_number}")
 async def duathlon_participant_api(year: int, start_number: int):
     if not _year_exists(year):
-        raise HTTPException(status_code=404, detail=f"Дуатлон 222 за {year} год не найден")
+        raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
     data = get_participant(_resolve_event_id(year), start_number)
     if data is None:
         raise HTTPException(status_code=404, detail="Участник не найден")
