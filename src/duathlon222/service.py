@@ -811,6 +811,15 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"],
                 row["bike_start_s"], row["run2_start_s"],
             )
+            # Старт каждого из 3 этапов (не только текущего) — нужен для
+            # checkpoints (виртуальная отметка lap=0 в _build_checkpoint_series).
+            stage_starts_for_row = {
+                sc: _stage_start_s(
+                    sc, row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"],
+                    row["bike_start_s"], row["run2_start_s"],
+                )
+                for sc in _STAGE_ORDER
+            }
             # "finished" — не настоящий этап в checkpoints (там только
             # run1/bike/run2) — для отметки финишировавшего берём последний
             # круг реального последнего этапа (run2), чтобы "Отметка"
@@ -878,6 +887,7 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
                 "current_mark_race_elapsed_s": lap_cumulative_s,
                 "forecast_stage_finish_s": forecast_s,
                 "forecast_race_finish_s": forecast_race_s,
+                "checkpoints": _build_checkpoint_series(row["id"], stage_starts_for_row, laps_by_key),
                 "_is_out": is_out,
                 "_distance_km": distance_km,
                 "_elapsed_s": lap_cumulative_s if lap_cumulative_s is not None else (current_stage_start_s or 0),
