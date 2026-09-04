@@ -132,6 +132,10 @@ check('buildPositionDatasetsSingleStage: точки берутся из checkpoi
     const datasets = sandbox.buildPositionDatasetsSingleStage('run1', rows);
     const ds1 = datasets.find(d => d._bib === 1);
     const ds2 = datasets.find(d => d._bib === 2);
+    // x=0 (lap=0, виртуальный старт этапа) — тай по elapsedS=0 у обоих:
+    // computeRanksAtPositions не делит ранг, стабильная сортировка оставляет
+    // порядок исходного participants (bib=1 первый) -> bib=1 ранг 1, bib=2
+    // ранг 2 (см. тесты computeRanksAtPositions выше про тай-брейк).
     assert.strictEqual(JSON.stringify(ds1.data), JSON.stringify([{ x: 0, y: 1 }, { x: 1.25, y: 2 }]));
     assert.strictEqual(JSON.stringify(ds2.data), JSON.stringify([{ x: 0, y: 2 }, { x: 1.25, y: 1 }]));
 });

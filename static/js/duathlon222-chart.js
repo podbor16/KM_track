@@ -60,7 +60,12 @@ function computeRanksAtPositions(participants) {
     return result;
 }
 
-// Датасеты позиций на одиночном этапе: для каждого участника — точки (x=км этапа, y=его ранг)
+// Датасеты для графика "Позиция" (одиночный этап): rows — строки /standings
+// (нужны r.start_number/r.surname/r.name/r.checkpoints[stageCode]). x=реальный
+// км этапа, y=ранг (см. computeRanksAtPositions). Возврат — то же самое
+// {_bib, _name, data} для каждого участника, что и у buildPositionDatasetsWholeRace
+// и buildPaceDatasets (Task 7) — общая форма, которую рендер (Task 10) уже
+// умеет отрисовывать одинаково для всех трёх.
 function buildPositionDatasetsSingleStage(stageCode, rows) {
     const participants = rows.map(r => ({
         bib: r.start_number,
@@ -71,7 +76,10 @@ function buildPositionDatasetsSingleStage(stageCode, rows) {
     return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
 }
 
-// Датасеты позиций на всей гонке: для каждого участника — точки всех этапов с виртуальной оси X
+// То же самое, но для режима "Вся гонка": ранг считается по ГЛОБАЛЬНОМУ км
+// (globalBase — накопленная сумма STAGE_KM предыдущих этапов, растёт
+// монотонно run1->bike->run2 в порядке STAGE_ORDER), а рисуется точка — по
+// виртуальному X (kmToVirtualX) — эти две величины разные и не совпадают.
 function buildPositionDatasetsWholeRace(rows) {
     const participants = rows.map(r => {
         const points = [];
