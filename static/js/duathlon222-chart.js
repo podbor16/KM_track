@@ -155,7 +155,18 @@ const CHART_COLORS = [
     '#F5A623', '#9B59B6', '#1ABC9C', '#E67E22', '#2C3E50',
 ];
 function chartColorForBib(bib) {
-    return CHART_COLORS[Math.abs(bib) % CHART_COLORS.length];
+    // Простое умножение/модуль по bib давало бы структурные коллизии —
+    // номера, отличающиеся ровно на CHART_COLORS.length (10, 20...),
+    // гарантированно получали бы один цвет при КАЖДОМ рендере (частая
+    // практика — нумеровать старты блоками по категориям/волнам, тогда
+    // совпадение читалось бы как системное, найдено на code review). Тот же
+    // DJB2-подобный хэш по строке номера, что уже используется для этой же
+    // задачи в templates/siberman/results.html (chartColorSlot) — здесь
+    // цвет вместо слота, но принцип идентичен.
+    const s = String(bib);
+    let hash = 5381;
+    for (let i = 0; i < s.length; i++) hash = ((hash * 33) ^ s.charCodeAt(i)) >>> 0;
+    return CHART_COLORS[hash % CHART_COLORS.length];
 }
 function renderChartParticipantPickers(rows) {
     const sorted = rows.slice().sort((a, b) => a.surname.localeCompare(b.surname, 'ru'));
