@@ -885,13 +885,31 @@ def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
             race_points: list[tuple[float, int]] = []
             for sc in _STAGE_ORDER:
                 laps = laps_by_key.get((row["id"], sc))
-                if not laps:
+                finish_raw = row[_STAGE_TIME_COLUMN[sc]]
+                if not laps and finish_raw is None:
                     continue
-                race_points.extend((_global_km(sc, ln), cum_s) for ln, cum_s in laps)
+                if laps:
+                    race_points.extend((_global_km(sc, ln), cum_s) for ln, cum_s in laps)
+                if finish_raw is not None:
+                    # Официальный финиш этапа — последний реальный круг
+                    # физически не дотягивает до полной дистанции (см.
+                    # IRREGULAR_LAP_KM/STAGE_LAP_OFFSET), а Copernico иногда
+                    # вовсе не записывает конкретный круг для конкретного
+                    # участника, даже когда официальный финиш уже есть —
+                    # без этой точки "лидер этапа" мог определиться по
+                    # позиции в кругах (у кого их больше сохранилось), а не
+                    # по реальному времени финиша (найдено пользователем
+                    # 2026-09-05 — Хазов реально быстрее всех, но лидером
+                    # считался Подлесный, у которого просто не потерялся
+                    # круг 8). Глобальный км — конец этапа целиком.
+                    race_points.append((_STAGE_KM_BEFORE[sc] + STAGE_KM[sc], finish_raw))
                 if stage_starts[sc] is not None:
+                    points = [(ln, cum_s - stage_starts[sc]) for ln, cum_s in (laps or [])]
+                    if finish_raw is not None:
+                        points.append((LAP_COUNT[sc] + 1, finish_raw - stage_starts[sc]))
                     stage_entries[sc].append({
                         "id": row["id"], "status": row["status"],
-                        "points": [(ln, cum_s - stage_starts[sc]) for ln, cum_s in laps],
+                        "points": points,
                     })
             race_entries.append({"id": row["id"], "status": row["status"], "points": race_points})
         stage_gaps = {sc: _live_gap_map(stage_entries[sc]) for sc in _STAGE_ORDER}
