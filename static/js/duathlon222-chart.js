@@ -199,8 +199,17 @@ function renderChartParticipantPickers(rows) {
     const selectAllLabel = filtered.length && filtered.every(r => _chartSelectedBibs.includes(r.start_number))
         ? 'Очистить всех' : 'Выбрать всех';
 
-    document.getElementById('chart-legend-list').innerHTML = itemsHtml;
-    document.getElementById('chart-sheet-list').innerHTML = itemsHtml;
+    // Скролл списка сохраняется через innerHTML-перерисовку — иначе список
+    // прыгал наверх на каждое автообновление (раз в 30с), мешая долистать
+    // и выбрать нужного участника (запрошено пользователем 2026-09-05).
+    const legendListEl = document.getElementById('chart-legend-list');
+    const sheetListEl = document.getElementById('chart-sheet-list');
+    const legendScroll = legendListEl.scrollTop;
+    const sheetScroll = sheetListEl.scrollTop;
+    legendListEl.innerHTML = itemsHtml;
+    sheetListEl.innerHTML = itemsHtml;
+    legendListEl.scrollTop = legendScroll;
+    sheetListEl.scrollTop = sheetScroll;
     document.getElementById('chart-select-all-btn').textContent = selectAllLabel;
     document.getElementById('chart-sheet-select-all-btn').textContent = selectAllLabel;
     document.getElementById('chart-sidebar-hint').style.display = _chartSelectedBibs.length ? 'none' : '';
@@ -365,20 +374,31 @@ const stageBoundaryPlugin = {
 };
 
 let _duathlonChart = null;
+// "Форма" последнего рендера (режим+этап+наличие сравнения) — пока она не
+// меняется, повторный вызов (обычный автоопрос раз в 30с) обновляет данные
+// УЖЕ существующего графика (chart.update), не пересоздавая его — полное
+// пересоздание на каждое автообновление закрывало открытый тултип, сбрасывало
+// наведение курсора и визуально "дёргало" график, из-за чего было невозможно
+// спокойно задержаться и проанализировать его между обновлениями (запрошено
+// пользователем 2026-09-05).
+let _lastChartKey = null;
 
 function renderSpaghettiOrCompareChart(datasets, opts) {
     const wrap = document.getElementById('duathlon-chart-canvas').parentElement;
     if (!datasets.length) {
-        if (_duathlonChart) { _duathlonChart.destroy(); _duathlonChart = null; }
+        if (_duathlonChart) { _duathlonChart.destroy(); _duathlonChart = null; _lastChartKey = null; }
         wrap.innerHTML = '<canvas id="duathlon-chart-canvas"></canvas>' +
             '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--tri-muted);font-size:14px;text-align:center;padding:24px">Нет данных</div>';
         return;
     }
     // wrap.children.length > 1, а не только isConnected — isConnected не
     // ловит случай "canvas на месте, но рядом висит плейсхолдер от
-    // предыдущего пустого рендера" (нет данных -> есть данные).
+    // предыдущего пустого рендера" (нет данных -> есть данные). Canvas
+    // пересоздан — старый Chart-инстанс больше не привязан к живому canvas.
     if (wrap.children.length > 1 || !document.getElementById('duathlon-chart-canvas').isConnected) {
         wrap.innerHTML = '<canvas id="duathlon-chart-canvas"></canvas>';
+        _duathlonChart = null;
+        _lastChartKey = null;
     }
     const hasSelection = _chartSelectedBibs.length > 0;
     const chartDatasetBibs = datasets.map(d => d._bib);
@@ -397,6 +417,42 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
         };
     });
 
+    // По умолчанию Chart.js подписывает заголовок тултипа сырым x — в режиме
+    // "Вся гонка" x виртуальный (см. kmToVirtualX), не км, показывать его
+    // пользователю напрямую неверно (баг найден на реальной гонке 05.09.2026
+    // — "18.75" вместо настоящих 7.5 км). Если точка данных несёт realKm/
+    // stage (Позиция) — берём их; иначе (Темп/скорость — там x и так уже
+    // реальный км этапа) просто показываем x как есть.
+    const tooltipTitle = (items) => {
+        const raw = items[0]?.raw;
+        if (raw && raw.realKm != null) {
+            const stageLabel = raw.stage && STAGE_LABEL[raw.stage] ? `${STAGE_LABEL[raw.stage]}, ` : '';
+            return `${stageLabel}${raw.realKm} км`;
+        }
+        return items[0] ? `${items[0].parsed.x} км` : '';
+    };
+    const tooltipLabel = (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}`;
+    const tooltipFilter = (item) => !hasSelection || _chartSelectedBibs.includes(chartDatasetBibs[item.datasetIndex]);
+    const legendFilter = (legendItem) => _chartSelectedBibs.includes(chartDatasetBibs[legendItem.datasetIndex]);
+
+    // Ключ формы: режим/этап уже однозначно определяют оси/границы (см.
+    // renderPositionChart/renderPaceChart) — hasSelection добавлен отдельно,
+    // т.к. переключает легенду/раскраску (спагетти <-> сравнение).
+    const chartKey = `${_chartMode}|${_chartStage}|${hasSelection}`;
+
+    if (_duathlonChart && chartKey === _lastChartKey) {
+        _duathlonChart.data.datasets = chartDatasets;
+        _duathlonChart.options.plugins.legend.labels.filter = legendFilter;
+        _duathlonChart.options.plugins.tooltip.filter = tooltipFilter;
+        _duathlonChart.options.plugins.tooltip.callbacks.title = tooltipTitle;
+        _duathlonChart.options.plugins.tooltip.callbacks.label = tooltipLabel;
+        _duathlonChart._stageBoundaries = opts.boundaries || null;
+        if (!hasSelection) attachSpaghettiHover(_duathlonChart, chartDatasetBibs);
+        attachSpaghettiClick(_duathlonChart, chartDatasetBibs);
+        _duathlonChart.update('none');
+        return;
+    }
+
     const ctx = document.getElementById('duathlon-chart-canvas').getContext('2d');
     const config = {
         type: 'line',
@@ -406,34 +462,8 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'nearest', intersect: false },
             plugins: {
-                legend: {
-                    display: hasSelection,
-                    labels: {
-                        filter: (legendItem) => _chartSelectedBibs.includes(chartDatasetBibs[legendItem.datasetIndex]),
-                    },
-                },
-                tooltip: {
-                    filter: (item) => !hasSelection || _chartSelectedBibs.includes(chartDatasetBibs[item.datasetIndex]),
-                    callbacks: {
-                        // По умолчанию Chart.js подписывает заголовок тултипа
-                        // сырым x — в режиме "Вся гонка" x виртуальный (см.
-                        // kmToVirtualX), не км, показывать его пользователю
-                        // напрямую неверно (баг найден на реальной гонке
-                        // 05.09.2026 — "18.75" вместо настоящих 7.5 км). Если
-                        // точка данных несёт realKm/stage (Позиция) — берём
-                        // их; иначе (Темп/скорость — там x и так уже реальный
-                        // км этапа) просто показываем x как есть.
-                        title: (items) => {
-                            const raw = items[0]?.raw;
-                            if (raw && raw.realKm != null) {
-                                const stageLabel = raw.stage && STAGE_LABEL[raw.stage] ? `${STAGE_LABEL[raw.stage]}, ` : '';
-                                return `${stageLabel}${raw.realKm} км`;
-                            }
-                            return items[0] ? `${items[0].parsed.x} км` : '';
-                        },
-                        label: (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}`,
-                    },
-                },
+                legend: { display: hasSelection, labels: { filter: legendFilter } },
+                tooltip: { filter: tooltipFilter, callbacks: { title: tooltipTitle, label: tooltipLabel } },
             },
             scales: {
                 x: {
@@ -461,6 +491,7 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
     _duathlonChart._stageBoundaries = opts.boundaries || null;
     if (!hasSelection) attachSpaghettiHover(_duathlonChart, chartDatasetBibs);
     attachSpaghettiClick(_duathlonChart, chartDatasetBibs);
+    _lastChartKey = chartKey;
 }
 
 function attachSpaghettiHover(chart, chartDatasetBibs) {
