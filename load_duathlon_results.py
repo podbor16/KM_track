@@ -10,6 +10,7 @@ run2_s); (2) круги ВНУТРИ каждого этапа — таблиц�
 вычитание/сборка — в src/duathlon222/service.py, не здесь.
 """
 import argparse
+import gzip
 import logging
 import os
 import time
@@ -77,7 +78,14 @@ def _fetch_copernico(race_id: str, login: str, preset: str, event: str) -> list:
     logger.info(f"📡 Copernico: {url}")
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=20) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+        raw = resp.read()
+        # CDN перед Copernico иногда отдаёт тело gzip-сжатым даже без нашего
+        # запроса на это (Content-Encoding не был запрошен) — сырые байты
+        # тогда начинаются с magic-number \x1f\x8b, и .decode("utf-8") падает
+        # с "invalid start byte" (найдено в проде 2026-09-05, реальная гонка).
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        data = json.loads(raw.decode("utf-8"))
     if isinstance(data, list):
         return data
     return data.get("results", data.get("data", []))
