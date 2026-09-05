@@ -9,6 +9,7 @@ from src.duathlon222.service import (
     _stage_mark_zero_broadcast,
     _build_checkpoint_series,
     _stage_mark_finish_broadcast,
+    _build_finish_point, FINISH_LAP_NUMBER,
 )
 
 
@@ -300,6 +301,36 @@ def test_build_stage_laps_stage_cumulative_s_none_when_stage_start_unknown():
     assert laps[0]["cumulative_s"] == 500
     assert laps[0]["stage_cumulative_s"] is None
     assert laps[0]["split_s"] is None
+
+
+def test_build_finish_point_computes_split_speed_and_rank():
+    # Пример Хазова 2026-09-05: последний круг Вело (169.04 км) в 19034с
+    # (сырое), финиш (170 км) — 16421с чистого времени этапа, старт Вело —
+    # 2628с. Раньше строка "Финиш" всегда показывала прочерки в Сплите/
+    # Скорости/Месте (найдено пользователем на всех трёх этапах).
+    lap_rows = [{"lap_number": 42, "cumulative_s": 19034}]
+    ranks = {(1, "bike", FINISH_LAP_NUMBER): {
+        "rank_abs": 1, "gap_abs": 0, "rank_gender": 1, "gap_gender": 0,
+    }}
+    fin = _build_finish_point("bike", lap_rows, 2628, 16421, ranks, participant_id=1)
+    assert fin["cumulative_s"] == 2628 + 16421
+    assert fin["stage_cumulative_s"] == 16421
+    assert fin["split_s"] == (2628 + 16421) - 19034
+    assert fin["speed_kmh"] is not None
+    assert fin["rank_abs"] == 1
+    assert fin["gap_abs"] == 0
+
+
+def test_build_finish_point_none_when_stage_not_finished_yet():
+    lap_rows = [{"lap_number": 42, "cumulative_s": 19034}]
+    fin = _build_finish_point("bike", lap_rows, 2628, None, {}, participant_id=1)
+    assert fin is None
+
+
+def test_build_finish_point_none_when_last_lap_already_covers_full_distance():
+    lap_rows = [{"lap_number": 9, "cumulative_s": 999}]  # искусственно: дистанция уже >= полной (guard-условие)
+    fin = _build_finish_point("run1", lap_rows, 0, 999, {}, participant_id=1)
+    assert fin is None
 
 
 def test_distance_covered_km_within_run1():

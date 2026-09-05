@@ -294,6 +294,51 @@ def _build_stage_laps(
     return laps
 
 
+# Сентинел для "виртуального" круга-финиша в ranks (см. _lap_ranks_from_rows/
+# get_participant) — то же значение, что и в get_available_marks/
+# get_stage_mark_broadcast для отметки "Финиш" (lap_mark: -1), для единообразия.
+FINISH_LAP_NUMBER = -1
+
+
+def _build_finish_point(
+    stage_code: str, lap_rows: list[dict], stage_start_s: Optional[int],
+    stage_time_s: Optional[int], ranks: dict[tuple[int, str, int], dict], participant_id: int,
+) -> Optional[dict]:
+    """Официальный финиш этапа — ОТДЕЛЬНОЕ поле Copernico (run1_s/bike_s/
+    run2_s), не круг из checkpoints. Нужен отдельной строкой в карточке
+    участника, только если последний РЕАЛЬНЫЙ круг не дотягивает до полной
+    дистанции этапа (см. IRREGULAR_LAP_KM/STAGE_LAP_OFFSET — Бег-1 9.98/10,
+    Вело 169.04/170, Бег-2 42.19/42.2) — иначе (или пока финиш ещё не
+    наступил) None, фронтенд сам рисует прогноз/пусто.
+
+    Раньше строка "Финиш" всегда показывала прочерки в Сплите/Скорости/Месте/
+    Отставании — эти поля никогда не считались для неё, только для кругов
+    checkpoints (найдено пользователем 2026-09-05 на всех трёх этапах: Бег-1
+    9.98, Вело 169.04, Бег-2 42.19). Считаем их и здесь по тому же принципу:
+    сплит/скорость — от последнего реального круга (или старта этапа, если
+    кругов не было вовсе) до финиша; место/отставание — через ranks по
+    виртуальному lap_number=FINISH_LAP_NUMBER, который добавляется в тот же
+    SQL, что и обычные круги (см. get_participant)."""
+    last_distance = _lap_distance_km(stage_code, lap_rows[-1]["lap_number"]) if lap_rows else 0.0
+    if last_distance >= STAGE_KM[stage_code] or stage_time_s is None:
+        return None
+    raw_cum = (stage_start_s + stage_time_s) if stage_start_s is not None else None
+    prev_raw = lap_rows[-1]["cumulative_s"] if lap_rows else stage_start_s
+    split = (raw_cum - prev_raw) if (raw_cum is not None and prev_raw is not None) else None
+    speed_kmh = _speed_kmh_for_distance(STAGE_KM[stage_code] - last_distance, split)
+    r = ranks.get((participant_id, stage_code, FINISH_LAP_NUMBER), {})
+    return {
+        "cumulative_s": raw_cum,
+        "stage_cumulative_s": stage_time_s,
+        "split_s": split,
+        "speed_kmh": speed_kmh,
+        "rank_abs": r.get("rank_abs"),
+        "gap_abs": r.get("gap_abs"),
+        "rank_gender": r.get("rank_gender"),
+        "gap_gender": r.get("gap_gender"),
+    }
+
+
 def get_participant(event_id: int, start_number: int) -> Optional[dict]:
     """Данные для карточки участника: этапы + круги внутри каждого этапа
     (сплиты, места, отставания), общее место (абсолют/пол) — переиспользует
@@ -334,7 +379,13 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             SELECT c.participant_id, c.stage, c.lap_number, c.cumulative_s, p.gender
             FROM checkpoints c JOIN participants p ON p.id = c.participant_id
             WHERE p.event_id = %s
-        """, (event_id,))
+            UNION ALL
+            SELECT id, 'run1', %s, run1_s, gender FROM participants WHERE event_id = %s AND run1_s IS NOT NULL
+            UNION ALL
+            SELECT id, 'bike', %s, bike_s, gender FROM participants WHERE event_id = %s AND bike_s IS NOT NULL
+            UNION ALL
+            SELECT id, 'run2', %s, run2_s, gender FROM participants WHERE event_id = %s AND run2_s IS NOT NULL
+        """, (event_id, FINISH_LAP_NUMBER, event_id, FINISH_LAP_NUMBER, event_id, FINISH_LAP_NUMBER, event_id))
         ranks = _lap_ranks_from_rows(cursor.fetchall())
 
         # "finished" — не настоящий этап в checkpoints (там только run1/
@@ -381,6 +432,7 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
             )
             for stage_code in _STAGE_ORDER
         }
+        stage_clean_times = {"run1": run1_time, "bike": bike_time, "run2": run2_time}
         stages_out = {
             stage_code: {
                 "distance_km": STAGE_KM[stage_code],
@@ -405,6 +457,15 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
                 "laps": _build_stage_laps(
                     stage_code, by_stage.get(stage_code, []),
                     stage_starts[stage_code], ranks, row["id"],
+                ),
+                # Сплит/скорость/место на официальном финише этапа (когда
+                # последний круг не дотягивает до полной дистанции) — см.
+                # _build_finish_point. None, если строка "Финиш" не нужна
+                # вовсе или финиш ещё не наступил (фронтенд сам решает, что
+                # показать в этом случае — прочерк/прогноз).
+                "finish": _build_finish_point(
+                    stage_code, by_stage.get(stage_code, []), stage_starts[stage_code],
+                    stage_clean_times[stage_code], ranks, row["id"],
                 ),
             }
             for stage_code in ("run1", "bike", "run2")

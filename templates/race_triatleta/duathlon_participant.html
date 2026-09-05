@@ -303,10 +303,25 @@
         if (lastMark && lastMark.distance_km < info.distance_km) {
             const finishS = d[stageCode + '_s']; // ВСЕГДА чистое время этапа
             const finishLabel = `${info.distance_km}/${info.distance_km} км · Финиш`;
-            let cumCell;
+            // Сплит/скорость/место на финише — отдельное поле Copernico, не
+            // круг checkpoints, поэтому раньше здесь всегда были прочерки
+            // (найдено пользователем 2026-09-05 на Бег-1/Вело/Бег-2 сразу).
+            // Теперь бэкенд считает их так же, как для обычных кругов (см.
+            // _build_finish_point) и отдаёт в info.finish.
+            const fin = info.finish;
+            let cumCell, splitCell = '—', speedCell = '—';
+            let rankGenderCell = '—', gapGenderCell = '—', rankAbsCell = '—', gapAbsCell = '—';
             if (finishS != null) {
                 const finishDisplay = (isRace && info.stage_start_s != null) ? info.stage_start_s + finishS : finishS;
                 cumCell = fmtS(finishDisplay);
+                if (fin) {
+                    splitCell = fmtS(fin.split_s);
+                    speedCell = fmtPaceOrSpeed(stageCode, fin.speed_kmh);
+                    rankGenderCell = fin.rank_gender != null ? fin.rank_gender : '—';
+                    gapGenderCell = fmtGap(fin.gap_gender);
+                    rankAbsCell = fin.rank_abs != null ? fin.rank_abs : '—';
+                    gapAbsCell = fmtGap(fin.gap_abs);
+                }
             } else {
                 cumCell = '—';
                 if (canForecastNext && d.current_stage_lap === lastMark.lap_number) {
@@ -316,9 +331,9 @@
             }
             finishRow = `<tr style="${finishS != null ? '' : 'opacity:.5'}">
                 <td>${finishLabel}</td>
-                <td>—</td><td>—</td>
+                <td>${splitCell}</td><td>${speedCell}</td>
                 <td>${cumCell}</td>
-                <td>—</td><td>—</td><td>—</td><td>—</td>
+                <td>${rankGenderCell}</td><td>${gapGenderCell}</td><td>${rankAbsCell}</td><td>${gapAbsCell}</td>
             </tr>`;
         }
 
