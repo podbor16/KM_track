@@ -197,16 +197,17 @@ def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fie
     кумулятивных мс Copernico (-> целые секунды, от общего старта гонки).
     stage_lap_fields[stage] — ТОЧНЫЙ список имён полей по порядку (не
     шаблон "{n}" — реальные отметки Copernico не равномерны, см.
-    config/copernico/duathlon_222_2026.yaml). Останавливается на первом
-    отсутствующем круге — Copernico отдаёт круги последовательно, дальше
-    проверять бессмысленно (тот же принцип, что _process_laps в
-    load_tri_results.py)."""
+    config/copernico/duathlon_222_2026.yaml). Пропускает (не прерывает
+    цикл на) отсутствующий круг — антенна на конкретной отметке может не
+    считать чип (реальный случай на гонке 05.09.2026: отметка "1.25 km"
+    пуста, а "2.5 km" уже есть у того же участника), это не значит, что
+    участник не бежит и не значит, что дальнейшие отметки тоже пусты."""
     changed = 0
     for stage_code, field_names in stage_lap_fields.items():
         for n, field_name in enumerate(field_names, start=1):
             val_ms = runner.get(field_name)
             if val_ms is None or val_ms == 0:
-                break
+                continue
             cumulative_s = int(val_ms // 1000)
             cursor.execute(
                 """INSERT INTO checkpoints (participant_id, stage, lap_number, cumulative_s)
