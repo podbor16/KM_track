@@ -220,6 +220,27 @@ def set_maintenance_enabled(enabled: bool) -> None:
     _MAINTENANCE_MODE_FILE.write_text("true" if enabled else "false", encoding="utf-8")
 
 
+_DUATHLON222_MAINTENANCE_MODE_FILE = Path(__file__).parent.parent.parent / "config" / "duathlon222_maintenance_mode.local"
+
+
+def get_duathlon222_maintenance_enabled() -> bool:
+    """Независимая заглушка техработ ТОЛЬКО для путей /duathlon222*,
+    /api/duathlon222* (см. app.py::duathlon222_maintenance_middleware) — не
+    затрагивает Красмарафон/Siberman/суточную гонку, которые делят один
+    физический домен с Дуатлоном 222. В отличие от get_maintenance_enabled()
+    выше — файл отсутствует -> ВЫКЛЮЧЕНО (безопасный дефолт: фича добавлена
+    во время идущей гонки 05.09.2026, включать сразу нельзя). Переключается
+    из /duathlon222/admin (POST /api/duathlon222/admin/maintenance-toggle)."""
+    try:
+        return _DUATHLON222_MAINTENANCE_MODE_FILE.read_text(encoding="utf-8").strip().lower() == "true"
+    except FileNotFoundError:
+        return False
+
+
+def set_duathlon222_maintenance_enabled(enabled: bool) -> None:
+    _DUATHLON222_MAINTENANCE_MODE_FILE.write_text("true" if enabled else "false", encoding="utf-8")
+
+
 def get_active_event(
     events: dict[str, "EventConfig"],
 ) -> Optional["EventConfig"]:

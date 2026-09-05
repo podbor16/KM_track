@@ -9,7 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from src.config import settings
-from src.config.event_loader import load_events_cached
+from src.config.event_loader import (
+    load_events_cached, get_duathlon222_maintenance_enabled, set_duathlon222_maintenance_enabled,
+)
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
@@ -224,6 +226,17 @@ def _duathlon_systemctl(action: str, timeout: int = 30) -> tuple[bool, str]:
         return r.returncode == 0, (r.stdout + r.stderr).strip()
     except Exception as e:
         return False, str(e)
+
+
+@router.get("/api/duathlon222/admin/maintenance-status")
+async def duathlon_maintenance_status(user: str = Depends(api_require_auth)) -> dict:
+    return {"enabled": get_duathlon222_maintenance_enabled()}
+
+
+@router.post("/api/duathlon222/admin/maintenance-toggle")
+async def duathlon_maintenance_toggle(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
+    set_duathlon222_maintenance_enabled(enabled)
+    return {"enabled": enabled}
 
 
 @router.get("/api/duathlon222/admin/loader")

@@ -18,7 +18,7 @@ import time as _time
 from pathlib import Path
 
 from src.config import settings
-from src.config.event_loader import get_maintenance_enabled
+from src.config.event_loader import get_maintenance_enabled, get_duathlon222_maintenance_enabled
 from src.core.dependencies import init_app_state
 from src.core.exceptions import KMTrackException
 from src.analytics.db_connection_optimized import initialize_connection_pool
@@ -495,6 +495,56 @@ async def maintenance_mode_middleware(request: Request, call_next):
         domain = _maintenance_domain(request)
         return HTMLResponse(
             _MAINTENANCE_PAGES[domain],
+            status_code=503,
+            headers={"Retry-After": "3600"},
+        )
+    return await call_next(request)
+
+
+# --- ТЕХНИЧЕСКИЕ РАБОТЫ — ТОЛЬКО ДУАТЛОН 222 ---
+# Независимый флаг от maintenance_mode_middleware выше — Дуатлон 222 делит
+# домен live-race.triatleta.ru с суточной гонкой (та же "triatleta" ветка
+# _maintenance_domain), поэтому общий флаг задел бы обе гонки разом.
+# Переключается из /duathlon222/admin, см.
+# get_duathlon222_maintenance_enabled()/set_duathlon222_maintenance_enabled()
+# в event_loader.py и POST /api/duathlon222/admin/maintenance-toggle.
+_DUATHLON222_PATH_PREFIXES = ("/duathlon222", "/api/duathlon222")
+_DUATHLON222_MAINTENANCE_ALLOWED_PREFIXES = (
+    "/duathlon222/admin",
+    "/duathlon222/login",
+    "/duathlon222/logout",
+    "/api/duathlon222/admin",
+)
+_DUATHLON222_MAINTENANCE_PAGE = f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Технические работы — 222 Дуатлон</title>
+<style>
+:root {{ --bg: #f5f5f5; --surface: #fff; --border: #e8e8e8; --accent: #FF8562; --text: #050505; --muted: #888; --header-bg: linear-gradient(135deg, #050505 0%, #263146 100%); }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }}
+.topbar {{ background: var(--header-bg); border-bottom: 3px solid var(--accent); padding: 16px 24px; color: #fff; font-weight: 800; letter-spacing: 1px; }}
+.wrap {{ flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 16px; }}
+.card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 40px 32px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.06); }}
+.icon {{ width: 44px; height: 44px; margin: 0 auto 18px; color: var(--accent); }}
+h1 {{ color: var(--text); font-size: 18px; font-weight: 700; margin-bottom: 10px; }}
+p {{ color: var(--muted); font-size: 14px; line-height: 1.55; }}
+</style></head><body>
+<div class="topbar">222 ДУАТЛОН</div>
+<div class="wrap"><div class="card">{_MAINTENANCE_ICON_SVG}<h1>{_MAINTENANCE_TITLE}</h1><p>{_MAINTENANCE_TEXT}</p></div></div>
+</body></html>"""
+
+
+@app.middleware("http")
+async def duathlon222_maintenance_middleware(request: Request, call_next):
+    path = request.url.path
+    if (
+        path.startswith(_DUATHLON222_PATH_PREFIXES)
+        and not path.startswith(_DUATHLON222_MAINTENANCE_ALLOWED_PREFIXES)
+        and get_duathlon222_maintenance_enabled()
+    ):
+        return HTMLResponse(
+            _DUATHLON222_MAINTENANCE_PAGE,
             status_code=503,
             headers={"Retry-After": "3600"},
         )

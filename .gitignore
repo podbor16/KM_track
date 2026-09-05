@@ -99,6 +99,7 @@ tests/fixtures/tilda_export_sample.xlsx
 config/active_event.local
 config/history_enabled.local
 config/maintenance_mode.local
+config/duathlon222_maintenance_mode.local
 
 # Мокапы brainstorming-скилла (визуальный компаньон) — локальный черновой вывод
 .superpowers/

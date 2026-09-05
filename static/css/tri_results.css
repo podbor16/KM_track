@@ -841,6 +841,14 @@ input[type=range] { accent-color: var(--tri-accent); width: 140px; }
     margin-bottom: 16px;
     max-width: 700px;
 }
+.admin-section-note--danger { border-color: var(--tri-red); }
+.admin-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--tri-text);
+}
 
 
 /* ---- Logout (header) ---- */

@@ -21,6 +21,19 @@
         <a href="/duathlon222/logout" class="logout-btn">Выйти</a>
     </div>
 
+    <div class="tri-container" style="padding-top:16px">
+        <!-- Заглушка техработ ТОЛЬКО для /duathlon222*, /api/duathlon222* —
+             переключается мгновенно, без деплоя, см.
+             config/duathlon222_maintenance_mode.local. Не задевает
+             Красмарафон/Siberman/суточную гонку. -->
+        <div class="admin-section-note admin-section-note--danger">
+            <label class="admin-checkbox-label">
+                <input type="checkbox" id="duathlon-maintenance-toggle" onchange="onDuathlonMaintenanceToggle()">
+                Показывать заглушку технических работ на 222 Дуатлон (только его страницы и API)
+            </label>
+        </div>
+    </div>
+
     <div class="tri-container">
         <div class="admin-tabs">
             <button class="admin-tab active" data-admtab="loader" onclick="switchTab('loader', this)">Загрузчик</button>
@@ -291,6 +304,36 @@
 
     loadLoader();
     setInterval(loadLoader, 10000);
+
+    // ---- Заглушка техработ (только Дуатлон 222) ----
+    async function loadDuathlonMaintenanceToggle() {
+        try {
+            const r = await fetch('/api/duathlon222/admin/maintenance-status');
+            const data = await r.json();
+            document.getElementById('duathlon-maintenance-toggle').checked = !!data.enabled;
+        } catch (e) {
+            console.error('loadDuathlonMaintenanceToggle error:', e);
+        }
+    }
+    async function onDuathlonMaintenanceToggle() {
+        const checkbox = document.getElementById('duathlon-maintenance-toggle');
+        const enabled = checkbox.checked;
+        checkbox.disabled = true;
+        try {
+            const r = await fetch(`/api/duathlon222/admin/maintenance-toggle?enabled=${enabled}`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert('Ошибка: ' + (err.detail || r.status));
+                checkbox.checked = !enabled;
+            }
+        } catch (e) {
+            alert('Ошибка: ' + e.message);
+            checkbox.checked = !enabled;
+        } finally {
+            checkbox.disabled = false;
+        }
+    }
+    loadDuathlonMaintenanceToggle();
 
     // ---- Пресет ----
 
