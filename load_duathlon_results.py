@@ -201,12 +201,20 @@ def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fie
     цикл на) отсутствующий круг — антенна на конкретной отметке может не
     считать чип (реальный случай на гонке 05.09.2026: отметка "1.25 km"
     пуста, а "2.5 km" уже есть у того же участника), это не значит, что
-    участник не бежит и не значит, что дальнейшие отметки тоже пусты."""
+    участник не бежит и не значит, что дальнейшие отметки тоже пусты.
+    Если поле пустое, но у НАС уже есть значение для этого круга — Copernico
+    отозвал ранее ошибочно записанную отметку (реальный случай той же гонки:
+    аномальный скачок скорости на Вело у двух участников — старое кривое
+    значение осталось в БД навсегда, хотя Copernico сам его уже обнулил) —
+    такие круги удаляются одним запросом на этап (не по одному на каждый
+    пустой круг — большинство из них никогда не существовали)."""
     changed = 0
     for stage_code, field_names in stage_lap_fields.items():
+        null_laps = []
         for n, field_name in enumerate(field_names, start=1):
             val_ms = runner.get(field_name)
             if val_ms is None or val_ms == 0:
+                null_laps.append(n)
                 continue
             cumulative_s = int(val_ms // 1000)
             cursor.execute(
@@ -217,6 +225,13 @@ def _process_stage_laps(cursor, participant_id: int, runner: dict, stage_lap_fie
             )
             if cursor.rowcount:
                 changed += 1
+        if null_laps:
+            placeholders = ",".join(["%s"] * len(null_laps))
+            cursor.execute(
+                f"DELETE FROM checkpoints WHERE participant_id=%s AND stage=%s AND lap_number IN ({placeholders})",
+                (participant_id, stage_code, *null_laps),
+            )
+            changed += cursor.rowcount
     return changed
 
 
