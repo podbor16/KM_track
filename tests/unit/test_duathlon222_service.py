@@ -280,6 +280,25 @@ def test_build_stage_laps_includes_ranks():
     assert laps[0]["rank_gender"] == 1
 
 
+def test_build_stage_laps_cumulative_s_is_stage_clean_not_race_raw():
+    # cumulative_s из checkpoints — от старта ГОНКИ (Бег-1+Т1+Вело-так-далеко
+    # для Вело), а не от старта конкретного этапа — карточка участника должна
+    # показывать ЧИСТОЕ время этапа (то же, что "Время"/bike_s везде на
+    # сайте), иначе соседние строки таблицы кругов "прыгали" между разными
+    # системами отсчёта (найдено пользователем 2026-09-05).
+    lap_rows = [{"lap_number": 1, "cumulative_s": 2900}]
+    laps = _build_stage_laps("bike", lap_rows, 2400, {}, participant_id=1)
+    assert laps[0]["cumulative_s"] == 500  # 2900 (от старта гонки) - 2400 (старт Вело)
+    assert laps[0]["split_s"] == 500  # сплит по сырым значениям не меняется
+
+
+def test_build_stage_laps_cumulative_s_falls_back_to_raw_when_stage_start_unknown():
+    lap_rows = [{"lap_number": 1, "cumulative_s": 500}]
+    laps = _build_stage_laps("run1", lap_rows, None, {}, participant_id=1)
+    assert laps[0]["cumulative_s"] == 500
+    assert laps[0]["split_s"] is None
+
+
 def test_distance_covered_km_within_run1():
     assert _distance_covered_km("run1", 2) == 2.5  # шаг 1.25км (см. LAP_KM)
     assert _distance_covered_km("run1", None) == 0.0
