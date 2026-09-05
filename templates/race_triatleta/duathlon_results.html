@@ -251,7 +251,14 @@
     }
     // "N/M км" — строго это и ничего больше (без слова "Отметка", оно уже
     // есть в заголовке столбца, без названия этапа — это и так его вкладка).
+    // Официально финишировавший этап (есть r[stageCode+'_s']) — ВСЕГДА
+    // показывает полную отметку "N/N км", даже если участник уже ушёл на
+    // следующий этап (r.current_stage !== stageCode) — раньше эта проверка
+    // шла ПЕРВОЙ и обнуляла отметку сразу после смены этапа, хотя "Время"
+    // в соседней колонке уже показывало финишное время (найдено пользователем
+    // на реальной гонке 05.09.2026 — "не вижу отметку финиша Бег-1").
     function stageMarkCell(stageCode, r) {
+        if (r[stageCode + '_s'] != null) return `${STAGE_KM[stageCode]}/${STAGE_KM[stageCode]} км`;
         if (r.current_stage !== stageCode || !r.current_stage_lap) return '<span class="muted">—</span>';
         return `${r.current_stage_distance_km}/${STAGE_KM[stageCode]} км`;
     }
@@ -266,7 +273,20 @@
     // запрошено пользователем 2026-09-04). Показывается и для уже
     // финишировавших (последняя отметка последнего этапа, Бег-2).
     function overallMarkCell(r) {
-        if (!r.current_stage_lap) return '<span class="muted">—</span>';
+        // Сразу после смены этапа (на новом ещё нет ни одной реальной
+        // отметки, r.current_stage_lap===null) показываем полную отметку
+        // ТОЛЬКО ЧТО завершённого этапа вместо пустоты — тот же провал, что
+        // чинили в stageMarkCell (найдено пользователем на реальной гонке
+        // 05.09.2026 — "Отметка" пропадала между финишем Бег-1 и первой КТ Вело).
+        if (!r.current_stage_lap) {
+            if (r.current_stage === 'bike' && r.run1_s != null) {
+                return `<div>${STAGE_LABEL.run1}</div><div class="muted-sub">${STAGE_KM.run1}/${STAGE_KM.run1} км</div>`;
+            }
+            if (r.current_stage === 'run2' && r.bike_s != null) {
+                return `<div>${STAGE_LABEL.bike}</div><div class="muted-sub">${STAGE_KM.bike}/${STAGE_KM.bike} км</div>`;
+            }
+            return '<span class="muted">—</span>';
+        }
         const isFinished = r.current_stage === 'finished';
         const label = isFinished ? STAGE_LABEL.run2 : STAGE_LABEL[r.current_stage];
         const stageKm = isFinished ? STAGE_KM.run2 : STAGE_KM[r.current_stage];
