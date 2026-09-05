@@ -280,22 +280,25 @@ def test_build_stage_laps_includes_ranks():
     assert laps[0]["rank_gender"] == 1
 
 
-def test_build_stage_laps_cumulative_s_is_stage_clean_not_race_raw():
-    # cumulative_s из checkpoints — от старта ГОНКИ (Бег-1+Т1+Вело-так-далеко
-    # для Вело), а не от старта конкретного этапа — карточка участника должна
-    # показывать ЧИСТОЕ время этапа (то же, что "Время"/bike_s везде на
-    # сайте), иначе соседние строки таблицы кругов "прыгали" между разными
-    # системами отсчёта (найдено пользователем 2026-09-05).
+def test_build_stage_laps_exposes_both_race_and_stage_cumulative():
+    # cumulative_s — сырое (от старта ГОНКИ, для Вело включает Бег-1+Т1);
+    # stage_cumulative_s — то же самое минус старт этапа (ЧИСТОЕ время
+    # внутри этапа). Карточка участника показывает то или другое по
+    # переключателю "Гонка"/"Этап" (найдено пользователем 2026-09-05—
+    # раньше отдавалось только одно значение, и оно "прыгало" относительно
+    # отдельной строки "Финиш", которая всегда чистая).
     lap_rows = [{"lap_number": 1, "cumulative_s": 2900}]
     laps = _build_stage_laps("bike", lap_rows, 2400, {}, participant_id=1)
-    assert laps[0]["cumulative_s"] == 500  # 2900 (от старта гонки) - 2400 (старт Вело)
+    assert laps[0]["cumulative_s"] == 2900
+    assert laps[0]["stage_cumulative_s"] == 500  # 2900 (от старта гонки) - 2400 (старт Вело)
     assert laps[0]["split_s"] == 500  # сплит по сырым значениям не меняется
 
 
-def test_build_stage_laps_cumulative_s_falls_back_to_raw_when_stage_start_unknown():
+def test_build_stage_laps_stage_cumulative_s_none_when_stage_start_unknown():
     lap_rows = [{"lap_number": 1, "cumulative_s": 500}]
     laps = _build_stage_laps("run1", lap_rows, None, {}, participant_id=1)
     assert laps[0]["cumulative_s"] == 500
+    assert laps[0]["stage_cumulative_s"] is None
     assert laps[0]["split_s"] is None
 
 

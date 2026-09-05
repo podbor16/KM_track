@@ -113,6 +113,24 @@
         dsq: 'DSQ',
     };
 
+    // Переключатель "Гонка"/"Этап" для таблицы кругов (по образцу Siberman,
+    // templates/siberman/participant.html:_mode/modeToggle) — "Гонка"
+    // (по умолчанию) показывает "Общее время" НАКОПИТЕЛЬНО с начала гонки
+    // (в т.ч. предыдущие этапы+транзит), "Этап" — ЧИСТОЕ время внутри этапа.
+    // Раньше колонка всегда показывала чистое время этапа под заголовком
+    // "Общее время" — заголовок вводил в заблуждение (запрошено пользователем
+    // 2026-09-05). Данные для обоих режимов уже приходят с бэкенда
+    // (lap.cumulative_s/lap.stage_cumulative_s, stages[stage].stage_start_s)
+    // — переключение не требует нового запроса, только render(_lastData).
+    let _mode = 'race';
+    let _lastData = null;
+    function modeToggle() {
+        return `<div class="filter-group" style="padding:0 18px 14px">
+            <button class="filter-btn${_mode === 'race' ? ' active' : ''}" onclick="_mode='race'; render(_lastData)">Гонка</button>
+            <button class="filter-btn${_mode === 'stage' ? ' active' : ''}" onclick="_mode='stage'; render(_lastData)">Этап</button>
+        </div>`;
+    }
+
     function fmtS(totalSeconds) {
         if (totalSeconds === null || totalSeconds === undefined) return '—';
         const s = Math.max(0, Math.floor(totalSeconds));
@@ -219,6 +237,18 @@
     // пройденной отметки текущего этапа — прогноз по средней скорости (та же
     // формула, что forecast_stage_finish_s на бэкенде, только с другой
     // целевой дистанцией — считаем прямо тут, не гоняя лишний запрос).
+    // Прогноз в ячейке "Общее время" — "Гонка": накопительно с начала гонки
+    // (плюс астрономические часы, т.к. это реальная точка на оси времени
+    // суток); "Этап": чистая длительность БЕЗ часов (абсолютное время суток
+    // для "прошло X от старта ЭТАПА" не несёт смысла само по себе — тот же
+    // принцип, что у forecastCellWithBase/prefixedForecastCellWithBase в
+    // Siberman, две разные функции ради этого же различия).
+    function forecastCellHtml(forecastInStageS, currentStageStartS, isRace) {
+        const absS = isRace ? (currentStageStartS + forecastInStageS) : forecastInStageS;
+        const clockLine = isRace ? `<div style="font-size:10px;color:var(--tri-accent)">(${fmtClock(absS)})</div>` : '';
+        return `<span style="color:var(--tri-accent);font-weight:700">~${fmtS(absS)}</span>${clockLine}`;
+    }
+
     function lapTableHtml(stageCode, d) {
         const info = d.stages[stageCode];
         const byLap = {};
@@ -228,15 +258,21 @@
         const canForecastNext = isCurrentStage && d.status === 'active'
             && d.current_stage_elapsed_s != null && d.current_stage_distance_km > 0
             && d.current_stage_start_s != null;
+        // "Гонка" (по умолчанию) — cumulative_s накопительно с начала гонки
+        // (включает предыдущие этапы+транзит); "Этап" — stage_cumulative_s,
+        // чистое время внутри этапа. Оба уже приходят с бэкенда на каждый
+        // круг (см. _build_stage_laps) — переключение не требует запроса.
+        const isRace = _mode === 'race';
         const rows = info.marks.map(mark => {
             const lap = byLap[mark.lap_number];
             const markLabel = `${mark.distance_km}/${info.distance_km} км`;
             if (lap) {
+                const cum = isRace ? lap.cumulative_s : lap.stage_cumulative_s;
                 return `<tr>
                     <td>${markLabel}</td>
                     <td>${fmtS(lap.split_s)}</td>
                     <td>${fmtPaceOrSpeed(stageCode, lap.speed_kmh)}</td>
-                    <td>${fmtS(lap.cumulative_s)}</td>
+                    <td>${fmtS(cum)}</td>
                     <td>${lap.rank_gender != null ? lap.rank_gender : '—'}</td>
                     <td>${fmtGap(lap.gap_gender)}</td>
                     <td>${lap.rank_abs != null ? lap.rank_abs : '—'}</td>
@@ -246,9 +282,7 @@
             let cumCell = '—';
             if (canForecastNext && mark.lap_number === nextLapNumber) {
                 const forecastInStageS = d.current_stage_elapsed_s * (mark.distance_km / d.current_stage_distance_km);
-                const absS = d.current_stage_start_s + forecastInStageS;
-                cumCell = `<span style="color:var(--tri-accent);font-weight:700">~${fmtS(absS)}</span>` +
-                          `<div style="font-size:10px;color:var(--tri-accent)">(${fmtClock(absS)})</div>`;
+                cumCell = forecastCellHtml(forecastInStageS, d.current_stage_start_s, isRace);
             }
             return `<tr style="opacity:.5">
                 <td>${markLabel}</td>
@@ -267,18 +301,17 @@
         const lastMark = info.marks[info.marks.length - 1];
         let finishRow = '';
         if (lastMark && lastMark.distance_km < info.distance_km) {
-            const finishS = d[stageCode + '_s'];
+            const finishS = d[stageCode + '_s']; // ВСЕГДА чистое время этапа
             const finishLabel = `${info.distance_km}/${info.distance_km} км · Финиш`;
             let cumCell;
             if (finishS != null) {
-                cumCell = fmtS(finishS);
+                const finishDisplay = (isRace && info.stage_start_s != null) ? info.stage_start_s + finishS : finishS;
+                cumCell = fmtS(finishDisplay);
             } else {
                 cumCell = '—';
                 if (canForecastNext && d.current_stage_lap === lastMark.lap_number) {
                     const forecastInStageS = d.current_stage_elapsed_s * (info.distance_km / d.current_stage_distance_km);
-                    const absS = d.current_stage_start_s + forecastInStageS;
-                    cumCell = `<span style="color:var(--tri-accent);font-weight:700">~${fmtS(absS)}</span>` +
-                              `<div style="font-size:10px;color:var(--tri-accent)">(${fmtClock(absS)})</div>`;
+                    cumCell = forecastCellHtml(forecastInStageS, d.current_stage_start_s, isRace);
                 }
             }
             finishRow = `<tr style="${finishS != null ? '' : 'opacity:.5'}">
@@ -289,9 +322,13 @@
             </tr>`;
         }
 
+        // Заголовок отражает режим — "Общее время" (по гонке) вводило в
+        // заблуждение, когда таблица уже показывала чистое время этапа
+        // (найдено пользователем 2026-09-05).
+        const timeHeader = isRace ? 'Общее время' : 'Время этапа';
         return `<div class="table-wrap"><table class="cp-table">
             <thead><tr>
-                <th>Отметка</th><th>Сплит</th><th>Темп/Скорость</th><th>Общее время</th>
+                <th>Отметка</th><th>Сплит</th><th>Темп/Скорость</th><th>${timeHeader}</th>
                 <th>Место (пол)</th><th>Отст. (пол)</th>
                 <th>Место (абс)</th><th>Отст. (абс)</th>
             </tr></thead>
@@ -391,6 +428,7 @@
                     <div class="stat-lbl">Место (абсолют)</div>
                 </div>
             </div>
+            ${modeToggle()}
             ${stageSectionHtml('run1', d)}
             ${stageSectionHtml('bike', d)}
             ${stageSectionHtml('run2', d)}
@@ -407,6 +445,7 @@
                 return;
             }
             const data = await r.json();
+            _lastData = data;
             render(data);
         } catch(e) {
             document.getElementById('app').innerHTML = `<div class="p-empty">Ошибка: ${e.message}</div>`;

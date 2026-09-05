@@ -257,28 +257,32 @@ def _build_stage_laps(
 ) -> list[dict]:
     """Круги одного этапа участника: сплит (от предыдущего круга/старта
     этапа), скорость круга, место+отставание (абсолют/пол) на этом круге.
-    cumulative_s в ВЫВОДЕ — ЧИСТОЕ время ЭТАПА (от stage_start_s), а не
-    сырое checkpoints.cumulative_s (то — от общего старта ГОНКИ, для Вело
-    включает Бег-1+Т1 и т.д.). Раньше отдавалось сырое значение — на
-    карточке участника соседние строки таблицы кругов "прыгали" между двумя
-    разными системами отсчёта: реальные круги показывали сырое время от
-    гонки, а отдельная строка "Финиш" (bike_s, УЖЕ чистое время этапа) —
-    заметно МЕНЬШЕЕ число, будто время пошло назад (найдено пользователем
-    2026-09-05 на примере Хазова: 169.04км -> 05:17:14, а 170км/Финиш ->
-    04:33:41). split_s считается по сырым значениям (см. prev_raw) — разница
-    двух точек не зависит от точки отсчёта, менять не нужно."""
+    Отдаёт ОБА варианта накопленного времени на каждый круг — cumulative_s
+    (сырое checkpoints.cumulative_s, от общего старта ГОНКИ — для Вело уже
+    включает Бег-1+Т1 и т.д.) и stage_cumulative_s (то же самое минус
+    stage_start_s, т.е. ЧИСТОЕ время внутри этапа) — карточка участника
+    показывает то или другое по переключателю "Гонка"/"Этап" (см.
+    lapTableHtml/modeToggle в duathlon_participant.html, по образцу
+    Siberman). Раньше отдавалось только сырое значение вперемешку со строкой
+    "Финиш" (bike_s — ЧИСТОЕ время), из-за чего казалось, что время идёт
+    назад (найдено пользователем 2026-09-05 на примере Хазова: 169.04км ->
+    05:17:14, а 170км/Финиш -> 04:33:41) — тот фикс сузили здесь до полного
+    переключателя по отдельному запросу пользователя. split_s считается по
+    сырым значениям (см. prev_raw) — разница двух точек не зависит от точки
+    отсчёта, от режима не зависит тоже."""
     laps = []
     prev_raw = stage_start_s
     for lr in lap_rows:
         raw_cum = lr["cumulative_s"]
         split = (raw_cum - prev_raw) if prev_raw is not None else None
-        clean_cum = (raw_cum - stage_start_s) if stage_start_s is not None else raw_cum
+        stage_cum = (raw_cum - stage_start_s) if stage_start_s is not None else None
         speed_kmh = _speed_kmh_for_distance(_lap_split_distance_km(stage_code, lr["lap_number"]), split)
         r = ranks.get((participant_id, stage_code, lr["lap_number"]), {})
         laps.append({
             "lap_number": lr["lap_number"],
             "distance_km": round(_lap_distance_km(stage_code, lr["lap_number"]), 2),
-            "cumulative_s": clean_cum,
+            "cumulative_s": raw_cum,
+            "stage_cumulative_s": stage_cum,
             "split_s": split,
             "speed_kmh": speed_kmh,
             "rank_abs": r.get("rank_abs"),
@@ -382,6 +386,12 @@ def get_participant(event_id: int, start_number: int) -> Optional[dict]:
                 "distance_km": STAGE_KM[stage_code],
                 "lap_km": LAP_KM[stage_code],
                 "lap_count": LAP_COUNT[stage_code],
+                # Старт ЭТОГО этапа (сек от начала гонки) — нужен фронтенду,
+                # чтобы пересчитать строку "Финиш" (d[stage+'_s'], уже чистое
+                # время) в race-cumulative для режима "Гонка" переключателя
+                # (stage_start_s + d[stage+'_s']), по аналогии с реальными
+                # кругами (см. _build_stage_laps).
+                "stage_start_s": stage_starts[stage_code],
                 # ВСЕ возможные отметки этапа (1..lap_count) с их дистанцией
                 # — независимо от того, дошёл ли до них участник. Карточка
                 # показывает их ВСЕ сразу (не только уже пройденные), заполняя
