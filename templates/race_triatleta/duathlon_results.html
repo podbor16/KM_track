@@ -17,7 +17,7 @@
         <div>
             <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон</div>
             <div class="tri-header__title">222 Дуатлон<br>5 сентября 2026</div>
-            <div class="tri-header__meta">Красноярск · Бег 10 км → Вело 170 км → Бег 42 км</div>
+            <div class="tri-header__meta">Красноярск · Бег 10 км → Вело 170 км → Бег 42.2 км</div>
         </div>
         <div class="tri-elapsed-wrap">
             <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
@@ -127,7 +127,7 @@
     // (реальный выстрел, а не расписание). Обновлено 2026-09-05 сразу после
     // старта — до этого был плановый 00:00:00Z.
     const GUN_UTC_MS = new Date('2026-09-05T00:01:51.797Z').getTime();
-    const STAGE_KM = { run1: 10, bike: 170, run2: 42 };
+    const STAGE_KM = { run1: 10, bike: 170, run2: 42.2 };
     const STAGE_LABEL = { run1: 'Бег-1', bike: 'Вело', run2: 'Бег-2' };
     let allStandings = [];
     // Состояние — таб/фильтр пола, а не DOM value напрямую — нужно и для
@@ -297,7 +297,7 @@
             <th class="r">Т1</th>
             <th class="r">Вело<br><span style="font-weight:400">170 км</span></th>
             <th class="r">Т2</th>
-            <th class="r">Бег-2<br><span style="font-weight:400">42 км</span></th>
+            <th class="r">Бег-2<br><span style="font-weight:400">42.2 км</span></th>
             <th>Отметка</th>
             <th>Статус</th>
         </tr></thead>`;

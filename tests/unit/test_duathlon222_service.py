@@ -299,13 +299,13 @@ def test_distance_covered_km_within_run2_includes_completed_run1_and_bike():
 
 
 def test_distance_covered_km_finished_is_full_race():
-    assert _distance_covered_km("finished", None) == 222.0
+    assert _distance_covered_km("finished", None) == 222.2
 
 
 def test_display_status_terminal_states_pass_through():
     assert _display_status("dnf", 50.0) == "dnf"
     assert _display_status("dsq", 0.0) == "dsq"
-    assert _display_status("finished", 222.0) == "finished"
+    assert _display_status("finished", 222.2) == "finished"
 
 
 def test_display_status_derived_from_progress_not_raw_db_value():

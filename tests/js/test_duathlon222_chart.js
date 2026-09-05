@@ -79,8 +79,8 @@ check('kmToVirtualX: run1 km=10 (весь этап) -> конец сегмент
 check('kmToVirtualX: bike km=85 (половина 170) -> середина сегмента bike (50)', () => {
     assert.strictEqual(sandbox.kmToVirtualX('bike', 85), 50);
 });
-check('kmToVirtualX: run2 km=42 (весь этап) -> конец сегмента (100)', () => {
-    assert.strictEqual(sandbox.kmToVirtualX('run2', 42), 100);
+check('kmToVirtualX: run2 km=42.2 (весь этап) -> конец сегмента (100)', () => {
+    assert.strictEqual(sandbox.kmToVirtualX('run2', 42.2), 100);
 });
 check('kmToVirtualX: км за пределами этапа (баг данных) не вылезает за границу сегмента', () => {
     assert.strictEqual(sandbox.kmToVirtualX('run1', 999), 25);
@@ -136,8 +136,16 @@ check('buildPositionDatasetsSingleStage: точки берутся из checkpoi
     // computeRanksAtPositions не делит ранг, стабильная сортировка оставляет
     // порядок исходного participants (bib=1 первый) -> bib=1 ранг 1, bib=2
     // ранг 2 (см. тесты computeRanksAtPositions выше про тай-брейк).
-    assert.strictEqual(JSON.stringify(ds1.data), JSON.stringify([{ x: 0, y: 1 }, { x: 1.25, y: 2 }]));
-    assert.strictEqual(JSON.stringify(ds2.data), JSON.stringify([{ x: 0, y: 2 }, { x: 1.25, y: 1 }]));
+    // realKm/stage — для тултипа графика (не должен показывать сырой x
+    // виртуальной оси, см. buildPositionDatasetsWholeRace).
+    assert.strictEqual(JSON.stringify(ds1.data), JSON.stringify([
+        { x: 0, y: 1, realKm: 0, stage: 'run1' },
+        { x: 1.25, y: 2, realKm: 1.25, stage: 'run1' },
+    ]));
+    assert.strictEqual(JSON.stringify(ds2.data), JSON.stringify([
+        { x: 0, y: 2, realKm: 0, stage: 'run1' },
+        { x: 1.25, y: 1, realKm: 1.25, stage: 'run1' },
+    ]));
 });
 check('buildPositionDatasetsSingleStage: участник без отметок этого этапа не попадает в датасеты', () => {
     const rows = [mkRow(1, { run1: [] }), mkRow(2, { run1: [{ lap: 0, km: 0, elapsed_s: 0 }] })];
@@ -161,6 +169,14 @@ check('buildPositionDatasetsWholeRace: км второго/третьего эт
     assert.strictEqual(ds.data[2].x, sandbox.kmToVirtualX('bike', 0));
     assert.strictEqual(ds.data[3].x, sandbox.kmToVirtualX('bike', 3.4));
     assert.strictEqual(ds.data.length, 4); // run2 пуст — 0 точек оттуда
+    // realKm/stage — реальный км ВНУТРИ этапа (не виртуальный x и не
+    // глобальный км) + код этапа, для тултипа (баг найден пользователем на
+    // реальной гонке 05.09.2026 — тултип показывал виртуальный x "18.75"
+    // вместо настоящих 7.5 км).
+    assert.strictEqual(ds.data[1].realKm, 9.98);
+    assert.strictEqual(ds.data[1].stage, 'run1');
+    assert.strictEqual(ds.data[3].realKm, 3.4);
+    assert.strictEqual(ds.data[3].stage, 'bike');
 });
 
 check('buildPaceDatasets: скорость всегда км/ч (dKm/dT*3600), даже для беговых этапов', () => {

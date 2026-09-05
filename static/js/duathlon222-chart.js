@@ -76,10 +76,16 @@ function buildPositionDatasetsSingleStage(stageCode, rows) {
     const participants = rows.map(r => ({
         bib: r.start_number,
         name: `${r.surname} ${r.name}`,
-        points: (r.checkpoints?.[stageCode] || []).map(cp => ({ pos: cp.km, elapsedS: cp.elapsed_s })),
+        points: (r.checkpoints?.[stageCode] || []).map(cp => ({ pos: cp.km, elapsedS: cp.elapsed_s, realKm: cp.km, stage: stageCode })),
     })).filter(p => p.points.length);
     const ranks = computeRanksAtPositions(participants);
-    return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
+    // computeRanksAtPositions отдаёт {x,y} на КАЖДУЮ точку p.points в ТОМ ЖЕ
+    // порядке — дописываем realKm/stage для тултипа (x у "Вся гонка" ниже —
+    // виртуальный, показывать его напрямую пользователю бессмысленно).
+    return participants.map(p => ({
+        _bib: p.bib, _name: p.name,
+        data: ranks.get(p.bib).map((pt, i) => ({ x: pt.x, y: pt.y, realKm: p.points[i].realKm, stage: p.points[i].stage })),
+    }));
 }
 
 // То же самое, но для режима "Вся гонка": ранг считается по ГЛОБАЛЬНОМУ км
@@ -96,6 +102,8 @@ function buildPositionDatasetsWholeRace(rows) {
                     pos: globalBase + cp.km,
                     elapsedS: cp.elapsed_s,
                     plotX: kmToVirtualX(sc, cp.km),
+                    realKm: cp.km,
+                    stage: sc,
                 });
             });
             globalBase += STAGE_KM[sc];
@@ -103,7 +111,15 @@ function buildPositionDatasetsWholeRace(rows) {
         return { bib: r.start_number, name: `${r.surname} ${r.name}`, points };
     }).filter(p => p.points.length);
     const ranks = computeRanksAtPositions(participants);
-    return participants.map(p => ({ _bib: p.bib, _name: p.name, data: ranks.get(p.bib) }));
+    // realKm/stage — реальный км ВНУТРИ этапа для тултипа (см. комментарий в
+    // buildPositionDatasetsSingleStage) — x на этом графике виртуальный
+    // (kmToVirtualX), сам по себе он не километраж и не должен показываться
+    // пользователю напрямую (баг найден пользователем на реальной гонке
+    // 05.09.2026 — тултип показывал "18.75" вместо настоящих "7.5 км").
+    return participants.map(p => ({
+        _bib: p.bib, _name: p.name,
+        data: ranks.get(p.bib).map((pt, i) => ({ x: pt.x, y: pt.y, realKm: p.points[i].realKm, stage: p.points[i].stage })),
+    }));
 }
 
 // Датасеты для графика "Темп/Скорость" (одиночный этап): rows — строки
@@ -398,15 +414,44 @@ function renderSpaghettiOrCompareChart(datasets, opts) {
                 },
                 tooltip: {
                     filter: (item) => !hasSelection || _chartSelectedBibs.includes(chartDatasetBibs[item.datasetIndex]),
-                    callbacks: { label: (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}` },
+                    callbacks: {
+                        // По умолчанию Chart.js подписывает заголовок тултипа
+                        // сырым x — в режиме "Вся гонка" x виртуальный (см.
+                        // kmToVirtualX), не км, показывать его пользователю
+                        // напрямую неверно (баг найден на реальной гонке
+                        // 05.09.2026 — "18.75" вместо настоящих 7.5 км). Если
+                        // точка данных несёт realKm/stage (Позиция) — берём
+                        // их; иначе (Темп/скорость — там x и так уже реальный
+                        // км этапа) просто показываем x как есть.
+                        title: (items) => {
+                            const raw = items[0]?.raw;
+                            if (raw && raw.realKm != null) {
+                                const stageLabel = raw.stage && STAGE_LABEL[raw.stage] ? `${STAGE_LABEL[raw.stage]}, ` : '';
+                                return `${stageLabel}${raw.realKm} км`;
+                            }
+                            return items[0] ? `${items[0].parsed.x} км` : '';
+                        },
+                        label: (item) => ` ${item.dataset.label}: ${opts.formatPoint(item.parsed.x, item.parsed.y)}`,
+                    },
                 },
             },
             scales: {
-                x: opts.xScale || { type: 'linear' },
+                x: {
+                    type: 'linear',
+                    min: opts.xMin,
+                    max: opts.xMax,
+                    title: { display: !!opts.xLabel, text: opts.xLabel || '' },
+                },
                 y: {
                     reverse: !!opts.yReverse,
                     title: { display: true, text: opts.yLabel },
-                    ticks: opts.yTickFormat ? { callback: v => opts.yTickFormat(v) } : {},
+                    ticks: {
+                        ...(opts.yTickFormat ? { callback: v => opts.yTickFormat(v) } : {}),
+                        // Место — всегда целое число, дробные деления оси
+                        // (1.2, 1.4...) бессмысленны (найдено пользователем
+                        // на реальном графике во время гонки 05.09.2026).
+                        ...(opts.yStepSize ? { stepSize: opts.yStepSize, precision: 0 } : {}),
+                    },
                 },
             },
         },
@@ -440,13 +485,22 @@ function attachSpaghettiClick(chart, chartDatasetBibs) {
 }
 
 function renderPositionChart(rows) {
-    const datasets = _chartStage === 'all'
+    const isWholeRace = _chartStage === 'all';
+    const datasets = isWholeRace
         ? buildPositionDatasetsWholeRace(rows)
         : buildPositionDatasetsSingleStage(_chartStage, rows);
     renderSpaghettiOrCompareChart(datasets, {
-        yLabel: 'Место', yReverse: true,
+        yLabel: 'Место', yReverse: true, yStepSize: 1,
         formatPoint: (x, y) => `место ${Math.round(y)}`,
-        boundaries: _chartStage === 'all' ? chartStageBoundaries() : null,
+        boundaries: isWholeRace ? chartStageBoundaries() : null,
+        // "Вся гонка" — ось X виртуальная (раздутые сегменты, не км), полная
+        // разметка по реальному километражу на ней невозможна линейно (см.
+        // спеку) — границы этапов уже подписаны stageBoundaryPlugin, доп.
+        // подпись оси не добавляем, чтобы не вводить в заблуждение. Для
+        // одиночного этапа ось X — реальные км, границы 0..STAGE_KM целиком.
+        xLabel: isWholeRace ? '' : `${STAGE_LABEL[_chartStage]}, км`,
+        xMin: isWholeRace ? undefined : 0,
+        xMax: isWholeRace ? undefined : STAGE_KM[_chartStage],
     });
 }
 function renderPaceChart(rows) {
