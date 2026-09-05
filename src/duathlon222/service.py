@@ -315,23 +315,27 @@ def _build_finish_point(
     Отставании — эти поля никогда не считались для неё, только для кругов
     checkpoints (найдено пользователем 2026-09-05 на всех трёх этапах: Бег-1
     9.98, Вело 169.04, Бег-2 42.19). Считаем их и здесь по тому же принципу:
-    сплит/скорость — от последнего реального круга (или старта этапа, если
-    кругов не было вовсе) до финиша; место/отставание — через ranks по
-    виртуальному lap_number=FINISH_LAP_NUMBER, который добавляется в тот же
-    SQL, что и обычные круги (см. get_participant)."""
+    сплит — от последнего реального круга (или старта этапа, если кругов не
+    было вовсе) до финиша; место/отставание — через ranks по виртуальному
+    lap_number=FINISH_LAP_NUMBER, который добавляется в тот же SQL, что и
+    обычные круги (см. get_participant). Скорость НЕ считаем — остаток до
+    финиша всегда меньше 1 км (0.01-0.96 км в этой гонке), а время округлено
+    Copernico до целой секунды, поэтому скорость на таком огрызке дистанции
+    получается случайной величиной в сотни км/ч, а не измерением (найдено
+    в той же live-проверке — 0.96 км за 15с дало 230 км/ч на реально
+    финишировавшем лидере)."""
     last_distance = _lap_distance_km(stage_code, lap_rows[-1]["lap_number"]) if lap_rows else 0.0
     if last_distance >= STAGE_KM[stage_code] or stage_time_s is None:
         return None
     raw_cum = (stage_start_s + stage_time_s) if stage_start_s is not None else None
     prev_raw = lap_rows[-1]["cumulative_s"] if lap_rows else stage_start_s
     split = (raw_cum - prev_raw) if (raw_cum is not None and prev_raw is not None) else None
-    speed_kmh = _speed_kmh_for_distance(STAGE_KM[stage_code] - last_distance, split)
     r = ranks.get((participant_id, stage_code, FINISH_LAP_NUMBER), {})
     return {
         "cumulative_s": raw_cum,
         "stage_cumulative_s": stage_time_s,
         "split_s": split,
-        "speed_kmh": speed_kmh,
+        "speed_kmh": None,
         "rank_abs": r.get("rank_abs"),
         "gap_abs": r.get("gap_abs"),
         "rank_gender": r.get("rank_gender"),

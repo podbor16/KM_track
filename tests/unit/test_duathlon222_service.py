@@ -316,7 +316,10 @@ def test_build_finish_point_computes_split_speed_and_rank():
     assert fin["cumulative_s"] == 2628 + 16421
     assert fin["stage_cumulative_s"] == 16421
     assert fin["split_s"] == (2628 + 16421) - 19034
-    assert fin["speed_kmh"] is not None
+    # Скорость на огрызке дистанции до финиша (<1 км, округление Copernico до
+    # целой секунды) сознательно не считаем — даёт случайные сотни км/ч, не
+    # измерение (см. _build_finish_point).
+    assert fin["speed_kmh"] is None
     assert fin["rank_abs"] == 1
     assert fin["gap_abs"] == 0
 
