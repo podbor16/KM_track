@@ -146,9 +146,12 @@
     function fmtPaceOrSpeed(stageCode, speedKmh) {
         if (!speedKmh) return '—';
         if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
-        const secPerKm = 3600 / speedKmh;
-        const m = Math.floor(secPerKm / 60);
-        const s = Math.round(secPerKm % 60);
+        // Округляем секунды ЦЕЛИКОМ один раз, потом делим на мин/сек — иначе
+        // независимое округление минут (floor) и секунд (round) даёт "4:60"
+        // вместо "5:00" на границе минуты (найдено пользователем 2026-09-05).
+        const totalSec = Math.round(3600 / speedKmh);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
         return `${m}:${String(s).padStart(2, '0')} /км`;
     }
     function fmtGap(g) {

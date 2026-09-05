@@ -258,5 +258,9 @@ check('toggleSelectAllChart: если ничего не выбрано -> выб
     assert.strictEqual(JSON.stringify(vm.runInContext('_chartSelectedBibs', sandbox)), JSON.stringify([]));
 });
 
+check('fmtPaceOrSpeed: округление секунд у границы минуты не даёт "4:60" (найдено в посте 2026-09-05 — минуты/секунды округлялись независимо)', () => {
+    assert.strictEqual(sandbox.fmtPaceOrSpeed('run1', 3600 / 299.6), '5:00 /км');
+});
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

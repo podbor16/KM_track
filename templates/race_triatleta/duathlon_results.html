@@ -161,9 +161,12 @@
     function fmtPaceOrSpeed(stageCode, speedKmh) {
         if (!speedKmh) return '—';
         if (stageCode === 'bike') return `${speedKmh.toFixed(1)} км/ч`;
-        const secPerKm = 3600 / speedKmh;
-        const m = Math.floor(secPerKm / 60);
-        const s = Math.round(secPerKm % 60);
+        // Округляем секунды ЦЕЛИКОМ один раз, потом делим на мин/сек — иначе
+        // независимое округление минут (floor) и секунд (round) даёт "4:60"
+        // вместо "5:00" на границе минуты (найдено пользователем 2026-09-05).
+        const totalSec = Math.round(3600 / speedKmh);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
         return `${m}:${String(s).padStart(2, '0')} /км`;
     }
     // Время + отставание в ОДНОЙ ячейке (по образцу timeGapCell у Siberman) —
@@ -486,21 +489,39 @@
         } catch(e) { console.error('standings error', e); }
     }
 
+    // На вкладке конкретного этапа индикаторы должны отражать ИМЕННО этот
+    // этап, а не гонку целиком — иначе на "Вело" видно, сколько финишировало
+    // ВСЮ гонку (найдено пользователем 2026-09-05). "Финишировало" — по тому
+    // же полю r[stage+'_s'], что и бейдж "Финишировал" в buildStageTable.
+    // "DNF/DSQ" — только те, кто сошёл/дисквалифицирован ИМЕННО на этом этапе
+    // (current_stage — стадия, на которой участник застыл, если не дошёл до
+    // финиша гонки; см. _current_stage в service.py), иначе, например, сошедший
+    // на Бег-1 засчитывался бы в DNF и на вкладке Вело тоже.
     function renderStats(rows) {
         const total = rows.length;
-        const finished = rows.filter(r => r.status === 'finished').length;
-        const dnfDsq = rows.filter(r => r.status === 'dnf' || r.status === 'dsq').length;
+        const stageCode = ['run1', 'bike', 'run2'].includes(_pageTab) ? _pageTab : null;
+        const finished = stageCode
+            ? rows.filter(r => r[stageCode + '_s'] != null).length
+            : rows.filter(r => r.status === 'finished').length;
+        const dnfDsq = stageCode
+            ? rows.filter(r => (r.status === 'dnf' || r.status === 'dsq') && r.current_stage === stageCode).length
+            : rows.filter(r => r.status === 'dnf' || r.status === 'dsq').length;
+        const finishedLabel = stageCode ? `${finished} финишировало этап` : `${finished} финишировало`;
         document.getElementById('stats-row').innerHTML = `
             <div class="stat-card">
                 <div class="stat-val">${total}</div><div class="stat-lbl">Всего</div>
-                <div class="stat-sub">${finished} финишировало</div>
+                <div class="stat-sub">${finishedLabel}</div>
                 <div class="stat-sub2">${dnfDsq} DNF/DSQ</div>
             </div>`;
     }
 
-    function renderFiltered() {
+    function filteredRows() {
         const search = document.getElementById('filter-search').value.trim().toLowerCase();
-        const rows = allStandings.filter(r => !search || (r.surname || '').toLowerCase().includes(search));
+        return allStandings.filter(r => !search || (r.surname || '').toLowerCase().includes(search));
+    }
+
+    function renderFiltered() {
+        const rows = filteredRows();
         document.getElementById('results-count').textContent = rows.length ? `${rows.length} участн.` : '';
         renderStats(rows);
         document.getElementById('overall-table-wrap').innerHTML = buildOverallTable(rows);
@@ -516,6 +537,7 @@
         ['overall', 'run1', 'bike', 'run2', 'chart'].forEach(name2 => {
             document.getElementById('tab-' + name2).style.display = name2 === name ? '' : 'none';
         });
+        renderStats(filteredRows());
         if (name === 'chart') onChartTabShown();
         syncUrlFromState();
     }
