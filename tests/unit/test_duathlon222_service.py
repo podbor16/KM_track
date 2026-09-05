@@ -8,6 +8,7 @@ from src.duathlon222.service import (
     _global_km, _live_gap_map,
     _stage_mark_zero_broadcast,
     _build_checkpoint_series,
+    _stage_mark_finish_broadcast,
 )
 
 
@@ -507,3 +508,64 @@ def test_build_checkpoint_series_empty_for_participant_with_no_laps():
     stage_starts = {"run1": 0, "bike": None, "run2": None}
     result = _build_checkpoint_series(1, stage_starts, {})
     assert result == {"run1": [{"lap": 0, "km": 0.0, "elapsed_s": 0}], "bike": [], "run2": []}
+
+
+def test_stage_mark_finish_broadcast_computes_clean_elapsed_and_gaps():
+    # run1 не имеет предыдущего этапа — чистое время = сырое run1_s.
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M",
+         "run1_s": 2622, "t1_s": None, "bike_s": None, "t2_s": None},
+        {"surname": "Тестов", "name": "Пётр", "gender": "M",
+         "run1_s": 2700, "t1_s": None, "bike_s": None, "t2_s": None},
+    ]
+    d = _stage_mark_finish_broadcast("run1", None, participants)
+    assert d["lap_mark"] == -1
+    assert d["stage_km_at_mark"] == 10.0
+    assert d["stage_total_km"] == 10.0
+    entries = d["entries"]
+    assert entries[0]["name"] == "Иван" and entries[0]["elapsed_s"] == 2622 and entries[0]["gap_s"] == 0
+    assert entries[1]["name"] == "Пётр" and entries[1]["elapsed_s"] == 2700 and entries[1]["gap_s"] == 78
+    # У run1 чистое время совпадает с гоночным (нет предыдущего этапа/транзита).
+    assert entries[0]["race_elapsed_s"] == 2622 and entries[1]["race_elapsed_s"] == 2700
+
+
+def test_stage_mark_finish_broadcast_prefers_raw_bike_start_s_for_clean_time():
+    # bike_start_s=2650 (точный) должен использоваться вместо реконструкции
+    # run1_s+t1_s=2672 — тот же принцип точности, что у _stage_start_s.
+    participants = [{
+        "surname": "Тестов", "name": "Иван", "gender": "M",
+        "run1_s": 2622, "t1_s": 50, "bike_s": 9622, "t2_s": None,
+        "bike_start_s": 2650,
+    }]
+    d = _stage_mark_finish_broadcast("bike", None, participants)
+    assert d["entries"][0]["elapsed_s"] == 9622 - 2650
+
+
+def test_stage_mark_finish_broadcast_excludes_participants_without_time():
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M",
+         "run1_s": 2622, "t1_s": None, "bike_s": None, "t2_s": None},
+        {"surname": "Тестов", "name": "Пётр", "gender": "M",
+         "run1_s": None, "t1_s": None, "bike_s": None, "t2_s": None},
+    ]
+    d = _stage_mark_finish_broadcast("run1", None, participants)
+    assert len(d["entries"]) == 1
+    assert d["entries"][0]["name"] == "Иван"
+
+
+def test_stage_mark_finish_broadcast_filters_by_gender():
+    participants = [
+        {"surname": "Тестов", "name": "Иван", "gender": "M",
+         "run1_s": 2622, "t1_s": None, "bike_s": None, "t2_s": None},
+        {"surname": "Тестова", "name": "Мария", "gender": "F",
+         "run1_s": 2700, "t1_s": None, "bike_s": None, "t2_s": None},
+    ]
+    d = _stage_mark_finish_broadcast("run1", "F", participants)
+    assert len(d["entries"]) == 1
+    assert d["entries"][0]["name"] == "Мария"
+
+
+def test_stage_mark_finish_broadcast_none_when_nobody_finished():
+    participants = [{"surname": "Иван", "name": "Т", "gender": "M",
+                      "run1_s": None, "t1_s": None, "bike_s": None, "t2_s": None}]
+    assert _stage_mark_finish_broadcast("run1", None, participants) is None

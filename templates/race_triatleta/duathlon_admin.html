@@ -133,11 +133,15 @@
             // Отметка 0 (только Вело/Бег-2) — виртуальная, момент выхода из
             // транзитки (см. _TRANSITION_START_COLUMN в service.py), не
             // круг — подписываем словами, не "0/170 км" (сбивало бы с толку).
-            sel.innerHTML = marks.map(m =>
-                m.lap_number === 0
-                    ? `<option value="0">Выход из транзитки</option>`
-                    : `<option value="${m.lap_number}">${m.distance_km}/${STAGE_KM[stage]} км</option>`
-            ).join('');
+            // Отметка -1 — виртуальная "финиш этапа" (последний реальный
+            // круг не дотягивает до официальной дистанции — см.
+            // _stage_mark_finish_broadcast), появляется, как только у
+            // кого-то есть официальное время финиша этапа.
+            sel.innerHTML = marks.map(m => {
+                if (m.lap_number === 0) return `<option value="0">Выход из транзитки</option>`;
+                if (m.lap_number === -1) return `<option value="-1">Финиш (${STAGE_KM[stage]}/${STAGE_KM[stage]} км)</option>`;
+                return `<option value="${m.lap_number}">${m.distance_km}/${STAGE_KM[stage]} км</option>`;
+            }).join('');
             // Сохраняем прежний выбор, если он ещё существует в новом списке,
             // иначе — самая дальняя (последняя) отметка, как раньше по умолчанию.
             const stillExists = marks.some(m => String(m.lap_number) === prevValue);
