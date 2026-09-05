@@ -307,7 +307,16 @@
         const label = isFinished ? STAGE_LABEL.run2 : STAGE_LABEL[r.current_stage];
         const stageKm = isFinished ? STAGE_KM.run2 : STAGE_KM[r.current_stage];
         const suffix = isFinished ? ' (Финиш)' : '';
-        return `<div>${label}</div><div class="muted-sub">${r.current_stage_distance_km}/${stageKm} км${suffix}</div>`;
+        // Для уже финишировавших — ВСЕГДА полная дистанция (42.2/42.2), а не
+        // последняя РЕАЛЬНАЯ отметка круга (r.current_stage_distance_km):
+        // последний круг Бег-2 не дотягивает до полной дистанции (см.
+        // IRREGULAR_LAP_KM/STAGE_LAP_OFFSET, официальный финиш — отдельное
+        // поле Copernico run2_s) — раньше здесь показывалось "40.43/42.2 км
+        // (Финиш)" вместо "42.2/42.2 км (Финиш)" (найдено пользователем
+        // 2026-09-05 на Родионове, тот же класс бага, что и stageMarkCell/
+        // _build_finish_point чинили для других колонок).
+        const distanceShown = isFinished ? stageKm : r.current_stage_distance_km;
+        return `<div>${label}</div><div class="muted-sub">${distanceShown}/${stageKm} км${suffix}</div>`;
     }
     function totalCell(r) {
         const timeS = r.total_s ?? r.current_mark_race_elapsed_s;
