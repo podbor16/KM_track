@@ -197,6 +197,19 @@
                       dnf: 'badge-dnf', dsq: 'badge-dsq' }[status] || '';
         return `<span class="badge ${cls}">${STATUS_LABEL[status] || status}</span>`;
     }
+    // Статус на вкладке КОНКРЕТНОГО этапа — если этап официально финиширован
+    // (r[stageCode+'_s'] уже есть), показываем "Финишировал" НЕЗАВИСИМО от
+    // статуса всей гонки (r.status ещё "active" — участник давно ушёл на
+    // следующий этап) — та же логика, что уже применена к ячейке "Отметка"
+    // (stageMarkCell). Раньше здесь показывался statusBadge(r.status)
+    // напрямую — глобальный статус гонки, который на вкладке отдельного
+    // этапа вводил в заблуждение (найдено пользователем 2026-09-05 — Хазов
+    // давно финишировал Вело и бежит Бег-2, а вкладка "Вело" всё ещё
+    // показывала "На дистанции").
+    function stageStatusBadge(stageCode, r) {
+        if (r[stageCode + '_s'] != null) return `<span class="badge badge-finished">Финишировал</span>`;
+        return statusBadge(r.status);
+    }
     function openParticipant(startNumber) {
         window.open(`/duathlon222_${YEAR}/participant/${startNumber}`, '_blank');
     }
@@ -390,7 +403,7 @@
                 <td class="r">${paceCell(stageCode, r)}</td>
                 ${showForecast ? `<td class="r">${r.current_stage === stageCode ? stageForecastCell(r) : ''}</td>` : ''}
                 <td>${stageMarkCell(stageCode, r)}</td>
-                <td>${statusBadge(r.status)}</td>
+                <td>${stageStatusBadge(stageCode, r)}</td>
             </tr>`;
         }).join('');
         return `<div class="tri-table-wrap"><table class="tri-table">${thead}<tbody>${body}</tbody></table></div>`;
