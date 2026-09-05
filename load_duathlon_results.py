@@ -134,43 +134,46 @@ def _process_stages_and_transitions(
     cursor, participant_id: int, runner: dict, stage_fields: dict, transition_fields: dict,
 ) -> int:
     """Обновляет run1_s/bike_s/run2_s (финиш этапа целиком, кумулятивные мс
-    Copernico -> целые секунды) И t1_s/t2_s. В отличие от run1_s/bike_s/
-    run2_s, Т1/Т2 Copernico не отдаёт готовой ДЛИТЕЛЬНОСТЬЮ — только
-    кумулятивные отметки старта транзита (transition_fields), поэтому
-    длительность считается здесь же: старт транзита минус финиш
-    ПРЕДЫДУЩЕГО этапа (тот же raw-словарь runner, оба поля читаются один
-    раз за вызов)."""
+    Copernico -> целые секунды) И t1_s/t2_s/bike_start_s/run2_start_s. В
+    отличие от run1_s/bike_s/run2_s, Т1/Т2 Copernico не отдаёт готовой
+    ДЛИТЕЛЬНОСТЬЮ — только кумулятивные отметки старта транзита
+    (transition_fields), поэтому длительность считается здесь же: старт
+    транзита минус финиш ПРЕДЫДУЩЕГО этапа (тот же raw-словарь runner, оба
+    поля читаются один раз за вызов). Поле пишется NULL, если Copernico
+    сейчас его не отдаёт (не просто пропускается) — иначе ранее ошибочно
+    записанное и потом самой Copernico отозванное значение осталось бы в БД
+    навсегда (тот же класс бага, что уже чинили для промежуточных кругов в
+    _process_stage_laps — найдено пользователем 2026-09-05, Мерзликин Роман
+    ошибочно продолжал считаться финишировавшим Вело)."""
     stage_ms = {code: runner.get(field) for code, field in stage_fields.items()}
 
     updates = {}
     for stage_code, val_ms in stage_ms.items():
         col = f"{stage_code}_s"
-        if col in STAGE_COLUMNS and val_ms is not None and val_ms != 0:
-            updates[col] = int(val_ms // 1000)
+        if col in STAGE_COLUMNS:
+            updates[col] = int(val_ms // 1000) if (val_ms is not None and val_ms != 0) else None
 
     t1_start_ms = runner.get(transition_fields.get("t1_start", ""))
-    if t1_start_ms and stage_ms.get("run1"):
-        updates["t1_s"] = int((t1_start_ms - stage_ms["run1"]) // 1000)
-    if t1_start_ms:
-        # Сырое значение (bike0) отдельной колонкой — точный момент входа на
-        # Вело, НЕ реконструкция run1_s+t1_s (та теряет до 1-2с из-за
-        # раздельного округления каждого до целых секунд, см. миграцию 004).
-        updates["bike_start_s"] = int(t1_start_ms // 1000)
+    updates["t1_s"] = (
+        int((t1_start_ms - stage_ms["run1"]) // 1000) if (t1_start_ms and stage_ms.get("run1")) else None
+    )
+    # Сырое значение (bike0) отдельной колонкой — точный момент входа на
+    # Вело, НЕ реконструкция run1_s+t1_s (та теряет до 1-2с из-за
+    # раздельного округления каждого до целых секунд, см. миграцию 004).
+    updates["bike_start_s"] = int(t1_start_ms // 1000) if t1_start_ms else None
 
     t2_start_ms = runner.get(transition_fields.get("t2_start", ""))
-    if t2_start_ms and stage_ms.get("bike"):
-        updates["t2_s"] = int((t2_start_ms - stage_ms["bike"]) // 1000)
-    if t2_start_ms:
-        updates["run2_start_s"] = int(t2_start_ms // 1000)
+    updates["t2_s"] = (
+        int((t2_start_ms - stage_ms["bike"]) // 1000) if (t2_start_ms and stage_ms.get("bike")) else None
+    )
+    updates["run2_start_s"] = int(t2_start_ms // 1000) if t2_start_ms else None
 
-    if not updates:
-        return 0
     set_clause = ", ".join(f"{col}=%s" for col in updates)
     cursor.execute(
         f"UPDATE participants SET {set_clause} WHERE id=%s",
         (*updates.values(), participant_id),
     )
-    return 1
+    return 1 if cursor.rowcount else 0
 
 
 def _prune_removed_participants(cursor, event_id: int, touched_pids: set) -> int:
