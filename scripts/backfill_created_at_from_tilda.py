@@ -86,22 +86,30 @@ def _event_month_histogram(cur, events):
         return
     ph_n = ",".join(["%s"] * len(names))
     ph_y = ",".join(["%s"] * len(years))
+    # формат-строку передаём ПАРАМЕТРОМ — иначе '%Y-%m' в тексте запроса
+    # конфликтует с paramstyle mysql-connector и уходит в MySQL как литерал
     cur.execute(
-        # %% — литеральный процент для mysql-connector (paramstyle pyformat)
-        f"SELECT DATE_FORMAT(created_at, '%%Y-%%m') m, COUNT(*) c "
+        f"SELECT DATE_FORMAT(created_at, %s) m, COUNT(*) c "
         f"FROM leads WHERE event_name IN ({ph_n}) AND event_year IN ({ph_y}) "
         f"GROUP BY m ORDER BY m",
-        names + years,
+        ["%Y-%m"] + names + years,
     )
     hist = Counter({r["m"]: r["c"] for r in cur.fetchall()})
     print(f"  ({', '.join(names)} / {', '.join(map(str, years))}):")
     _histogram(hist, indent="    ")
 
 
-def _analyze_file(cur, path: Path):
+def _analyze_file(cur, path: Path, min_per_event: int = 5):
     """Разбор одного файла + матчинг. Возвращает dict со сводкой и списком
-    (lead_id, reg_dt) к обновлению. БД не меняет."""
+    (lead_id, reg_dt) к обновлению. БД не меняет. Группы (event_name,
+    event_year) с числом строк меньше min_per_event отбрасываются как шум
+    разбора product-блоба (напр. 1 строка «Весна 2026» в выгрузке Жары)."""
     result = parse_tilda_export(path.read_bytes(), filename=path.name)
+
+    grp = Counter((r.event_name, r.event_year) for r in result.rows)
+    noise = {ev for ev, c in grp.items() if c < min_per_event}
+    rows = [r for r in result.rows if (r.event_name, r.event_year) not in noise]
+    dropped_noise = sorted(f"{n} {y} ({grp[(n, y)]})" for n, y in noise)
 
     with_date = 0
     matched_rows = 0
@@ -110,7 +118,7 @@ def _analyze_file(cur, path: Path):
     file_month_hist = Counter()
     events = set()
 
-    for row in result.rows:
+    for row in rows:
         reg_dt = parse_tilda_datetime(row.registered_at)
         if reg_dt is None:
             continue
@@ -144,6 +152,8 @@ def _analyze_file(cur, path: Path):
     return {
         "name": path.name,
         "parsed": len(result.rows),
+        "kept": len(rows),
+        "dropped_noise": dropped_noise,
         "with_date": with_date,
         "failed": len(result.failed_rows),
         "unknown_headers": result.unknown_headers,
@@ -160,6 +170,8 @@ def _analyze_file(cur, path: Path):
 def _print_summary(s):
     print(f"\n=== {s['name']} ===")
     print(f"  строк разобрано        : {s['parsed']}")
+    if s["dropped_noise"]:
+        print(f"  ! отброшено (шум)      : {', '.join(s['dropped_noise'])}")
     print(f"  из них с датой (Date)  : {s['with_date']}")
     print(f"  не разобрано (failed)  : {s['failed']}")
     if s["unknown_headers"]:
@@ -181,6 +193,9 @@ def main():
     ap.add_argument("paths", nargs="+", help="файлы выгрузок Tilda или папки с ними")
     ap.add_argument("--apply", action="store_true",
                     help="применить изменения (без флага — только отчёт)")
+    ap.add_argument("--min-per-event", type=int, default=5,
+                    help="отбросить группы (событие, год) с числом строк меньше "
+                         "этого (шум разбора product); по умолчанию 5")
     args = ap.parse_args()
 
     files = _collect_files(args.paths)
@@ -198,7 +213,7 @@ def main():
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
 
-        summaries = [_analyze_file(cur, f) for f in files]
+        summaries = [_analyze_file(cur, f, args.min_per_event) for f in files]
         all_events = set()
         for s in summaries:
             all_events |= s["events"]

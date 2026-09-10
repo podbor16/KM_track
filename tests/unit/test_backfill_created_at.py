@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
+
 def _load(name):
     spec = importlib.util.spec_from_file_location(
         name, Path(__file__).parents[2] / "scripts" / f"{name}.py")
@@ -41,7 +42,7 @@ def test_analyze_file_queues_update_and_counts_move_when_db_date_is_later(tmp_pa
         [{"id": 5, "created_at": datetime(2026, 8, 14, 3, 0, 0)}],
     ]
 
-    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW))
+    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW), min_per_event=1)
 
     assert s["with_date"] == 1
     assert s["matched_rows"] == 1
@@ -60,7 +61,7 @@ def test_analyze_file_no_move_when_db_date_already_earlier(tmp_path):
         [{"id": 7, "created_at": datetime(2026, 3, 1, 0, 0, 0)}],  # раньше даты файла
     ]
 
-    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW))
+    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW), min_per_event=1)
 
     assert s["updates"] == [(7, datetime(2026, 5, 1, 10, 0, 0))]
     assert s["would_move"] == 0
@@ -71,7 +72,7 @@ def test_analyze_file_counts_unmatched_rows(tmp_path):
     cur = MagicMock()
     cur.fetchall.side_effect = [[]]  # _find_lead_matches — ничего не нашёл
 
-    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW))
+    s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW), min_per_event=1)
 
     assert s["matched_rows"] == 0
     assert s["unmatched_rows"] == 1
@@ -82,7 +83,7 @@ def test_analyze_file_skips_rows_without_parseable_date(tmp_path):
     cur = MagicMock()
     text = _ROW.replace("2026-05-01 10:00:00", "")  # пустая Date
 
-    s = backfill._analyze_file(cur, _csv_file(tmp_path, text))
+    s = backfill._analyze_file(cur, _csv_file(tmp_path, text), min_per_event=1)
 
     assert s["with_date"] == 0
     assert s["updates"] == []
