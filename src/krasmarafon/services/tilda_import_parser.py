@@ -24,7 +24,7 @@ ImportResult.unknown_headers — сигнал, что Tilda добавила/п�
 колонку и это стоит проверить вручную, а не тихо потерять данные.
 """
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 import csv
 import io
@@ -64,6 +64,13 @@ class ImportRow:
                                  # организатором заранее (не результат гонки,
                                  # см. migrations/add_leads_start_number.sql).
                                  # Сырая строка, int-конвертация в bulk_import_leads()
+    registered_at: str = ""     # колонка "Date" выгрузки Tilda — момент подачи
+                                 # заявки. Сырая строка; парсинг в
+                                 # parse_tilda_datetime(), пишется в
+                                 # leads.created_at (INSERT) / LEAST(created_at, ...)
+                                 # (UPDATE). Без неё created_at у импортных строк =
+                                 # момент импорта → ломает аналитику динамики
+                                 # регистраций.
 
 
 @dataclass
@@ -118,6 +125,11 @@ _HEADER_ALIASES = {
     "order_id": "order_id",
     "tranid": "transaction_id",
     "способ оплаты": "payment_system",
+    # "Date" — время подачи заявки (не оплаты). Единственный источник реальной
+    # даты регистрации при импорте: без неё leads.created_at у импортных строк =
+    # DEFAULT CURRENT_TIMESTAMP = момент импорта, что ломает чарты динамики
+    # регистраций в DataLens. Парсинг — parse_tilda_datetime().
+    "date": "registered_at",
     # Стартовый номер (bib) — не из штатной выгрузки Tilda, а из "обработанного"
     # организатором файла (номера расставлены вручную поверх экспорта), см.
     # migrations/add_leads_start_number.sql. Опциональная колонка.
@@ -129,13 +141,13 @@ _HEADER_ALIASES = {
 # (ma_* — интеграция с сервисом email-маркетинга, utm_* — метки кампаний,
 # formid/formname/Stage — служебные поля CRM-воронки Tilda, file_discount* и
 # field13/field14 — generic-поля конструктора форм без зафиксированного
-# смысла) или дублирующие уже покрытое (Date/phone_2/ma_email/Checkbox
+# смысла) или дублирующие уже покрытое (phone_2/ma_email/Checkbox
 # — не нужны для сопоставления/создания лида). Перечислены явно, чтобы
 # parse_tilda_export() мог отличить "мы осознанно не берём эту колонку" от
 # "в файле появилась НОВАЯ колонка, которую мы никогда не видели" — второе
 # репортится через ImportResult.unknown_headers.
 _KNOWN_IGNORED_HEADERS = {
-    "date", "phone_2", "ma_email", "checkbox",
+    "phone_2", "ma_email", "checkbox",
     "utm_source", "utm_medium", "utm_campaign",
     "ma_id", "ma_name", "ma_phone", "formid", "formname",
     "file_discount", "file_discount_0", "file_discount_1",
@@ -144,6 +156,10 @@ _KNOWN_IGNORED_HEADERS = {
     # 2026-08-19), в leads нет соответствующей колонки, не участвует
     # в сопоставлении/создании заявки.
     "size",
+    # "Дата оплаты" — время оплаты (на минуты-часы позже "Date"/подачи); для
+    # аналитики берём именно "Date". "Местоположение" — гео-строка Tilda, в
+    # leads нет колонки. Обе появились в выгрузке ~2026, поэтому явно в игнор.
+    "дата оплаты", "местоположение",
 }
 
 
@@ -161,6 +177,54 @@ def _read_csv_rows(file_bytes: bytes):
     return (rows[0], rows[1:]) if rows else ([], [])
 
 
+_TILDA_DT_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",   # боевой формат колонки "Date" (проверено на Жаре 2026)
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d",
+    "%d.%m.%Y %H:%M:%S",
+    "%d.%m.%Y %H:%M",
+    "%d.%m.%Y",
+)
+_TILDA_DT_MIN = datetime(2013, 1, 1)  # раньше Красмарафона в системе ничего нет
+
+
+def parse_tilda_datetime(raw) -> Optional[datetime]:
+    """Момент подачи заявки из колонки "Date" выгрузки Tilda.
+
+    Боевой формат — ISO "YYYY-MM-DD HH:MM:SS". Запасные форматы и unix-epoch —
+    на случай другого экспорта. Значение вне разумного диапазона (до 2013 или
+    сильно в будущем) — мусор, возвращаем None: вызывающий подставит now()
+    (INSERT) либо просто не тронет created_at (UPDATE ... LEAST)."""
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        dt = raw
+    elif isinstance(raw, date):
+        dt = datetime(raw.year, raw.month, raw.day)
+    else:
+        s = str(raw).strip()
+        if not s:
+            return None
+        dt = None
+        if s.isdigit() and len(s) >= 9:  # unix timestamp в секундах
+            try:
+                dt = datetime.fromtimestamp(int(s))
+            except (ValueError, OSError, OverflowError):
+                dt = None
+        if dt is None:
+            for fmt in _TILDA_DT_FORMATS:
+                try:
+                    dt = datetime.strptime(s, fmt)
+                    break
+                except ValueError:
+                    continue
+        if dt is None:
+            return None
+    if dt < _TILDA_DT_MIN or dt > datetime.now() + timedelta(days=2):
+        return None
+    return dt
+
+
 def _normalize_xlsx_cell(value):
     """Ячейки с датой (напр. "Дата рождения", если колонка отформатирована
     в Excel как дата) openpyxl отдаёт как datetime.datetime/date, не строку
@@ -169,8 +233,14 @@ def _normalize_xlsx_cell(value):
     голая "1985-03-11" или "11.03.1985"), и строка целиком браковалась как
     "не распознано ФИО/дата рождения" — найдено на реальном импорте
     2026-08-18 (3611 из 3627 строк). CSV этой проблемы не имеет — там ячейки
-    всегда текст."""
+    всегда текст.
+
+    Дата рождения — всегда полночь → остаётся "YYYY-MM-DD" (поведение не
+    изменилось). Колонка "Date" (подача заявки) со временем — сохраняем время
+    целиком, оно нужно только для parse_tilda_datetime()."""
     if isinstance(value, datetime):
+        if (value.hour, value.minute, value.second) != (0, 0, 0):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
         return value.strftime("%Y-%m-%d")
     if isinstance(value, date):
         return value.strftime("%Y-%m-%d")
@@ -339,6 +409,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 payment_system=str(get("payment_system") or "").strip(),
                 is_name_suspicious=is_name_suspicious(surname, name),
                 start_number=str(get("start_number") or "").strip(),
+                registered_at=str(get("registered_at") or "").strip(),
             ))
         except Exception as e:
             reason = f"непредвиденная ошибка парсинга — {e}"

@@ -1,5 +1,6 @@
 """Тесты для bulk_import_leads() / preview_leads_import_matches() —
 сопоставление строк Tilda-импорта с leads по surname+name+birthday+событие."""
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from src.analytics.db_results import bulk_import_leads, preview_leads_import_matches
@@ -449,6 +450,79 @@ def test_matched_row_update_applies_is_name_suspicious(mock_get_conn):
     sql, params = update_call.args
     assert "is_name_suspicious" in sql
     assert 1 in params
+
+
+# --- created_at из колонки "Date" файла Tilda -----------------------------
+# Без неё created_at у импортных строк = момент импорта (DEFAULT
+# CURRENT_TIMESTAMP), что ломает чарты динамики регистраций в DataLens
+# (найдено 2026-09-10: у Жары-2026 все 3508 заявок с датой в августе).
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_sets_created_at_from_registered_at(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(registered_at="2026-05-01 10:23:45")])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    assert "created_at" in insert_call.args[0]
+    assert insert_call.args[1]["created_at"] == datetime(2026, 5, 1, 10, 23, 45)
+
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_created_at_falls_back_to_now_when_date_absent_or_garbage(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    before = datetime.now()
+    bulk_import_leads([_row(registered_at="не дата")])
+    after = datetime.now()
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    created_at = insert_call.args[1]["created_at"]
+    assert isinstance(created_at, datetime)
+    assert before <= created_at <= after
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_moves_created_at_back_via_least(mock_get_conn):
+    """Реальную раннюю дату из вебхука LEAST не двигает вперёд; поздний
+    импорт-штамп (created_at = момент прошлого импорта) чинит назад к дате
+    подачи из файла."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(registered_at="2026-05-01 10:23:45")])
+
+    update_call = next(c for c in cur.execute.call_args_list
+                       if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    sql, params = update_call.args
+    assert "created_at = LEAST(created_at, %s)" in sql
+    # datetime идёт ПЕРЕД id в списке параметров
+    assert params[-2] == datetime(2026, 5, 1, 10, 23, 45)
+    assert params[-1] == 101
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_does_not_touch_created_at_without_date(mock_get_conn):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row()])  # registered_at по умолчанию "" в _row()
+
+    update_call = next(c for c in cur.execute.call_args_list
+                       if "UPDATE leads SET" in c.args[0] and "start_number" not in c.args[0])
+    assert "created_at" not in update_call.args[0]
 
 
 @patch("src.analytics.db_results.get_pooled_connection")

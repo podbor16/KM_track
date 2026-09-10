@@ -1812,11 +1812,18 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
     updated = created = deleted = 0
     errors: list = []
     present_ids: set = set()
+    from src.krasmarafon.services.tilda_import_parser import parse_tilda_datetime
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         for row in rows:
             matches = _find_lead_matches(cur, row)
             present_ids.update(m['id'] for m in matches)
+
+            # Момент подачи заявки из колонки "Date" выгрузки Tilda. Пишется
+            # в leads.created_at: без него у импортных строк created_at =
+            # DEFAULT CURRENT_TIMESTAMP = момент импорта, что ломает чарты
+            # динамики регистраций в DataLens (найдено 2026-09-10).
+            reg_dt = parse_tilda_datetime(getattr(row, 'registered_at', ''))
 
             if matches:
                 values = {
@@ -1845,6 +1852,13 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                 # возраста»" — фикс из прошлого коммита применялся только к
                 # НОВЫМ заявкам, не к обновлённым существующим).
                 set_clause = ", ".join(f"{c} = %s" for c in _IMPORT_UPDATABLE) + ", source = 'import'"
+                # created_at — только НАЗАД к дате из файла: реальную раннюю
+                # дату вебхук-заявки LEAST не двигает, поздний импорт-штамп
+                # (created_at = момент прошлого импорта) чинит. Колонка NOT NULL
+                # → COALESCE не нужен. Без reg_dt поле не трогаем вовсе.
+                created_at_frag = ""
+                if reg_dt is not None:
+                    created_at_frag = ", created_at = LEAST(created_at, %s)"
                 # start_number — намеренно ВНЕ _IMPORT_UPDATABLE/блока "or None"
                 # выше: та логика на пустом значении из файла тихо стирает
                 # существующее значение в БД (годится для club/phone и т.п. —
@@ -1855,8 +1869,10 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                 start_number = int(row.start_number) if row.start_number.strip().isdigit() else None
                 for m in matches:
                     cur.execute(
-                        f"UPDATE leads SET {set_clause} WHERE id = %s",
-                        [values[c] for c in _IMPORT_UPDATABLE] + [m['id']],
+                        f"UPDATE leads SET {set_clause}{created_at_frag} WHERE id = %s",
+                        [values[c] for c in _IMPORT_UPDATABLE]
+                        + ([reg_dt] if created_at_frag else [])
+                        + [m['id']],
                     )
                     if start_number is not None:
                         cur.execute(
@@ -1879,13 +1895,13 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event, source
+                        status, is_new, is_new_event, source, created_at
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
-                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import'
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s
                     )
                     """,
                     {
@@ -1896,6 +1912,10 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                         # задаём явно, а не полагаемся на DEFAULT (сработал бы,
                         # только если колонку вообще не передавать в INSERT).
                         'birthday': row.birthday or '1900-01-01',
+                        # created_at — реальная дата подачи из файла Tilda;
+                        # при отсутствии/мусоре — now() (колонка NOT NULL,
+                        # тот же эффект что DEFAULT CURRENT_TIMESTAMP).
+                        'created_at': reg_dt or datetime.datetime.now(),
                         'email': row.email or 'example@mail.ru', 'phone': row.phone or None,
                         'event_name': row.event_name, 'event_distance': row.event_distance,
                         'event_year': row.event_year,

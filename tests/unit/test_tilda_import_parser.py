@@ -9,9 +9,13 @@
 паттерны (в т.ч. ~14% строк без года в тексте product — закрыто
 slug-фоллбэком в parse_products(), см. tilda_webhook.py).
 """
+from datetime import date, datetime
+
 import pytest
 
-from src.krasmarafon.services.tilda_import_parser import parse_tilda_export, ImportResult, ImportRow
+from src.krasmarafon.services.tilda_import_parser import (
+    parse_tilda_export, ImportResult, ImportRow, parse_tilda_datetime,
+)
 
 
 def _csv_bytes(rows: str) -> bytes:
@@ -727,3 +731,112 @@ def test_parse_detects_genuinely_unknown_header():
     )
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert result.unknown_headers == ["НоваяКолонкаТильды"]
+
+
+# ---------------------------------------------------------------------------
+# Колонка "Date" (момент подачи заявки) → ImportRow.registered_at →
+# leads.created_at. Без неё created_at у импортных строк = момент импорта, что
+# ломает чарты динамики регистраций в DataLens (найдено 2026-09-10).
+# ---------------------------------------------------------------------------
+
+def test_parse_reads_date_column_into_registered_at():
+    csv_text = (
+        "surname;Name;birthday;product;Date\r\n"
+        "Тестов;Иван;01.05.1990;"
+        "\"5 км Жара 2026 (zhara2026-5, Выберите категорию: Основная категория)\";"
+        "2026-07-01 14:23:05\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+
+    assert result.errors == []
+    assert len(result.rows) == 1
+    assert result.rows[0].registered_at == "2026-07-01 14:23:05"
+
+
+def test_parse_missing_date_column_leaves_registered_at_empty():
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows[0].registered_at == ""
+
+
+def test_parse_date_column_is_not_reported_as_unknown_header():
+    """Раньше "Date" была в _KNOWN_IGNORED_HEADERS (осознанно выбрасывалась);
+    теперь это алиас registered_at — по-прежнему не должна попадать в
+    unknown_headers."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,Date\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027,2027-01-02 10:00:00\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.unknown_headers == []
+
+
+def test_parse_new_tilda_columns_dataoplaty_and_location_ignored_without_warning():
+    """"Дата оплаты" и "Местоположение" появились в выгрузке Tilda ~2026;
+    в leads нет соответствующих колонок — явно в _KNOWN_IGNORED_HEADERS,
+    не должны попадать в unknown_headers."""
+    csv_text = (
+        "Фамилия;Имя;Дата рождения;Событие;Дистанция;Год;Date;Дата оплаты;Местоположение\r\n"
+        "Иванов;Иван;01.05.1990;Весна;5 км;2027;2027-01-02 10:00:00;2027-01-02 10:05:00;\"Красноярск, Россия\"\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.unknown_headers == []
+
+
+def test_parse_xlsx_native_datetime_date_cell_preserves_time():
+    """Колонка "Date" в xlsx может быть datetime-ячейкой — _normalize_xlsx_cell
+    сохраняет время (нужно для parse_tilda_datetime), в отличие от даты
+    рождения (всегда полночь → остаётся "YYYY-MM-DD")."""
+    import io
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Фамилия", "Имя", "Дата рождения", "Событие", "Дистанция", "Год", "Date"])
+    ws.append(["Сидоров", "Семён", date(1990, 5, 1), "Весна", "5 км", 2027,
+               datetime(2027, 1, 2, 10, 30, 15)])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    result = parse_tilda_export(buf.getvalue(), filename="export.xlsx")
+
+    assert result.errors == []
+    assert result.rows[0].birthday == "1990-05-01"
+    assert result.rows[0].registered_at == "2027-01-02 10:30:15"
+
+
+# ---------------------------------------------------------------------------
+# parse_tilda_datetime — разбор значения колонки "Date"
+# ---------------------------------------------------------------------------
+
+def test_parse_tilda_datetime_iso_format_from_real_export():
+    assert parse_tilda_datetime("2026-07-01 14:23:05") == datetime(2026, 7, 1, 14, 23, 5)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("2026-07-01", datetime(2026, 7, 1)),
+    ("2026-07-01 14:23", datetime(2026, 7, 1, 14, 23)),
+    ("01.07.2026 14:23:05", datetime(2026, 7, 1, 14, 23, 5)),
+    ("01.07.2026", datetime(2026, 7, 1)),
+])
+def test_parse_tilda_datetime_fallback_formats(raw, expected):
+    assert parse_tilda_datetime(raw) == expected
+
+
+def test_parse_tilda_datetime_accepts_datetime_and_date_objects():
+    assert parse_tilda_datetime(datetime(2026, 7, 1, 9, 0)) == datetime(2026, 7, 1, 9, 0)
+    assert parse_tilda_datetime(date(2026, 7, 1)) == datetime(2026, 7, 1)
+
+
+@pytest.mark.parametrize("raw", ["", None, "   ", "не дата", "yes", "2026", "0"])
+def test_parse_tilda_datetime_garbage_returns_none(raw):
+    assert parse_tilda_datetime(raw) is None
+
+
+def test_parse_tilda_datetime_out_of_range_returns_none():
+    assert parse_tilda_datetime("1999-01-01 00:00:00") is None          # до 2013
+    future = datetime(datetime.now().year + 5, 1, 1).strftime("%Y-%m-%d %H:%M:%S")
+    assert parse_tilda_datetime(future) is None
