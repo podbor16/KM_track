@@ -13,6 +13,14 @@ from starlette.testclient import TestClient
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# .env.local (если есть, гитигнор) — локальная изолированная БД вместо прода,
+# см. dev.ps1/README. override=True: должен победить .env, который settings.py
+# загрузит следом при импорте app. ДО импорта app — иначе settings.py успеет
+# прочитать .env первым, а load_dotenv не перезаписывает уже выставленные
+# переменные окружения.
+from dotenv import load_dotenv
+load_dotenv(project_root / ".env.local", override=True)
+
 from app import app
 
 
