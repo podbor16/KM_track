@@ -9,10 +9,18 @@ async function initMap() {
     map = L.map('map').setView([CONFIG.START_LAT, CONFIG.START_LON], 15);
     map.attributionControl.setPrefix('');
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19
+    // CartoDB basemaps.cartocdn.com перестал отдавать тайлы без API-ключа
+    // (2026-09) — весь сайт показывал водяной знак "API KEY REQUIRED" вместо
+    // карты. Esri World Light Gray Base — бесплатно, без ключа, похожий
+    // светлый минималистичный стиль. Порядок {z}/{y}/{x} (не {z}/{x}/{y}) —
+    // так у ArcGIS REST tile API. maxNativeZoom — за пределами Красноярска
+    // сервис не хранит более детальных тайлов глубже z16, дальше отдаёт то
+    // же изображение растянутым; Leaflet сам увеличивает картинку клиентом
+    // вместо повторных одинаковых запросов к серверу.
+    L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; <a href="https://www.esri.com">Esri</a> — Esri, HERE, Garmin, © OpenStreetMap contributors',
+        maxZoom: 19,
+        maxNativeZoom: 16
     }).addTo(map);
 
     map.on('click', hideRunnerPanel);
