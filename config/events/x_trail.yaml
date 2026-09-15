@@ -6,26 +6,26 @@ is_active: false              # ← АКТИВНЫЙ забег: true у одн�
 start_lat: null               # ← заполнить перед стартом
 start_lon: null               # ← заполнить перед стартом
 gun_time: null                # ← заполнить перед стартом
-description: "Забег Икс | Дистанция: 10 км"
+description: "Забег Икс | Дистанция: 5 км"
 
 distances:
-  - distance: "10 км"
-    distance_km: 10.0
+  - distance: "5 км"
+    distance_km: 5.0
     db_event_id: null         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
-    gpx_file: null            # ← заполнить перед стартом
+    gpx_file: "static/map/2026/xtrail_griva.gpx"
     event_date: null          # ← заполнить перед стартом
     route:
       laps: 1
-      total_km: 10.0
+      total_km: 5.0
     copernico:
       race_id: null           # ← заполнить перед стартом
       login: "podbor250718@gmail.com"
       preset: "km_analytics"
-      event: "10 км"
+      event: "5 км"
 
   - distance: "2 км"
     distance_km: 2.0

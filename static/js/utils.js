@@ -7,7 +7,7 @@ window.KMUtils = {
         'girlseven':  'Женская семерка',
         'zhara':      'Жара',
         'kids':       'Детский забег',
-        'xtrailrun':  'Х Трейл',
+        'xtrailrun':  'Забег Икс',
         'snow7':      'Снежная семерка',
         'pervomay':   'Первомайский полумарафон',
         'dostigaya_tseli': 'Достигая цели'
