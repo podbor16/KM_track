@@ -6,7 +6,8 @@ const CONFIG = {
     UPDATE_INTERVAL: 2000,
     MAX_SELECTED: 5,
     EVENT_NAME: 'night_run',
-    EVENT_DB_NAME: 'Ночной забег',
+    EVENT_DB_NAME: 'Ночной забег',       // ТОЧНО event_name в БД — только для запросов к /api/event-results, НЕ для показа
+    EVENT_DISPLAY_NAME: 'Ночной забег',  // для показа пользователю (заголовок, статус-бар, аналитика)
     EVENT_YEAR: new Date().getFullYear(),
     EVENT_ID: 67,
     CURRENT_DISTANCE: '',
@@ -295,6 +296,7 @@ async function init() {
         if (cfg.start_lon)    CONFIG.START_LON     = cfg.start_lon;
         if (cfg.event)        CONFIG.EVENT_NAME    = cfg.event;
         if (cfg.name)         CONFIG.EVENT_DB_NAME = cfg.name;
+        if (cfg.display_name) CONFIG.EVENT_DISPLAY_NAME = cfg.display_name;
         if (cfg.year)         CONFIG.EVENT_YEAR    = cfg.year;
         if (cfg.storage_key)  CONFIG.STORAGE_KEY   = cfg.storage_key;
 
@@ -347,14 +349,14 @@ async function init() {
     updateEventTitle();
     setInterval(loadAnalytics, 30000);
 
-    updateStatus(`Трекер запущен (${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
+    updateStatus(`Трекер запущен (${CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR})`);
 }
 
 
 function updateEventTitle() {
     const h1 = document.getElementById('eventTitle');
     if (!h1) return;
-    const name = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || '';
+    const name = CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || '';
     const year = CONFIG.EVENT_YEAR || '';
     const dist = CONFIG.CURRENT_DISTANCE ? `, ${CONFIG.CURRENT_DISTANCE}` : '';
     h1.textContent = `Трекер забега. «${name}» ${year}${dist}.`;
@@ -632,7 +634,7 @@ function refreshAnalyticsFromMemory() {
 function updateAnalyticsHeading() {
     const analyticsH2 = document.querySelector('#analyticsPanel h2');
     if (!analyticsH2) return;
-    const evName = CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
+    const evName = CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME || CONFIG.EVENT_NAME || 'Забег';
     const evYear = CONFIG.EVENT_YEAR || new Date().getFullYear();
     const distStr = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
     analyticsH2.textContent = `${evName} ${evYear}${distStr}`;
@@ -767,7 +769,7 @@ function startAutoUpdate() {
     source.onmessage = async (e) => {
         updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
-        updateStatus(`Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
+        updateStatus(`Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
         if (isProcessing) return;
         isProcessing = true;

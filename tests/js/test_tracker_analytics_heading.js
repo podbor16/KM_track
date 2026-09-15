@@ -42,13 +42,25 @@ function check(name, fn) {
 }
 
 check('updateAnalyticsHeading() — событие+год+дистанция в h2 (розовая строка)', () => {
-    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Жара'; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '5 км';`, sandbox);
+    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Жара'; CONFIG.EVENT_DISPLAY_NAME = 'Жара'; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '5 км';`, sandbox);
     sandbox.updateAnalyticsHeading();
     assert.strictEqual(h2Stub.textContent, 'Жара 2026 | 5 км');
 });
 
 check('updateAnalyticsHeading() — без дистанции не добавляет " | "', () => {
-    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Жара'; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '';`, sandbox);
+    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Жара'; CONFIG.EVENT_DISPLAY_NAME = 'Жара'; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '';`, sandbox);
+    sandbox.updateAnalyticsHeading();
+    assert.strictEqual(h2Stub.textContent, 'Жара 2026');
+});
+
+check('updateAnalyticsHeading() — показывает display_name, а не event_name из БД (Забег Икс/Х Трейл)', () => {
+    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Х Трейл'; CONFIG.EVENT_DISPLAY_NAME = 'Забег Икс'; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '5 км';`, sandbox);
+    sandbox.updateAnalyticsHeading();
+    assert.strictEqual(h2Stub.textContent, 'Забег Икс 2026 | 5 км');
+});
+
+check('updateAnalyticsHeading() — без display_name падает обратно на EVENT_DB_NAME', () => {
+    vm.runInContext(`CONFIG.EVENT_DB_NAME = 'Жара'; CONFIG.EVENT_DISPLAY_NAME = ''; CONFIG.EVENT_YEAR = 2026; CONFIG.CURRENT_DISTANCE = '';`, sandbox);
     sandbox.updateAnalyticsHeading();
     assert.strictEqual(h2Stub.textContent, 'Жара 2026');
 });

@@ -62,7 +62,8 @@ class CurrentEventResponse(BaseModel):
 
     event: str = Field(..., description="ID текущего события")
     storage_key: str = Field(..., description="Ключ localStorage для сохранения выбора")
-    name: str = Field(..., description="Название события")
+    name: str = Field(..., description="Название события — ТОЧНО как event_name в БД, используется фронтендом для запросов результатов/аналитики (не для отображения, см. display_name)")
+    display_name: str = Field(..., description="Название события для показа пользователю (может отличаться от name/event_name в БД)")
     title: str = Field(..., description="Заголовок события")
     description: str = Field(..., description="Описание события")
     route_type: str = Field(..., description="Тип маршрута (shuttle/loop)")
@@ -79,6 +80,7 @@ class CurrentEventResponse(BaseModel):
                 "event": "night_run",
                 "storage_key": "night_run_selected_runners",
                 "name": "Ночной забег",
+                "display_name": "Ночной забег",
                 "title": "Ночной забег. Трекер",
                 "description": "Набережная, Красноярск",
                 "route_type": "shuttle",

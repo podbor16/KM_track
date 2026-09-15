@@ -90,6 +90,7 @@ async def get_current_event() -> CurrentEventResponse:
         event=code,
         storage_key=f"{code}_selected_runners",
         name=event.name,
+        display_name=event.display_name,
         title=event.title,
         description=event.description,
         route_type=route_type,
