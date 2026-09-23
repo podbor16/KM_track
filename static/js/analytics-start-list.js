@@ -101,7 +101,13 @@ function populateYearSelector() {
     const sel = document.getElementById('yearStartSelector');
     if (!sel) return;
     const now = new Date().getFullYear();
-    for (let y = now + 1; y >= 2020; y--) {
+    // Нижняя граница 2013, а не 2020 — в leads есть исторические заявки с
+    // 2013 года (импорт "Бум.xlsx", scripts/import_boom_historical.py).
+    // Точный список годов с данными по конкретному событию отдаёт
+    // /api/registered-runners-years (используется для выбора дефолтного
+    // года); здесь диапазон общий, как было и раньше — год без заявок
+    // просто покажет пустой список.
+    for (let y = now + 1; y >= 2013; y--) {
         const opt = document.createElement('option');
         opt.value = y;
         opt.textContent = y;

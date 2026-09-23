@@ -485,7 +485,50 @@ def main():
             pass
 
     print(f"\nВставлено: {inserted}, пропущено (уже есть): {skipped_existing}, ошибок: {errors}")
+
+    if inserted:
+        _recompute_client_lead_dates()
+
     return 0 if errors == 0 else 1
+
+
+def _recompute_client_lead_dates():
+    """Пересчёт clients.first_lead_date/last_lead_date из фактических leads.
+
+    Зачем: триггер trg_leads_after_insert ставит first_lead_date только при
+    ПЕРВОЙ заявке клиента и никогда не двигает её назад — он рассчитан на
+    realtime-вставки, где каждая следующая заявка заведомо позже. При
+    импорте задним числом строки идут не в хронологическом порядке, поэтому
+    у клиента, чья заявка 2020 года вставилась раньше заявки 2016 года,
+    first_lead_date осталась 2020-й. count_leads/total_amount этим не
+    затронуты — они инкрементальные, от порядка не зависят.
+    """
+    conn = get_pooled_connection()
+    if not conn:
+        print("! Не удалось пересчитать first_lead_date/last_lead_date — нет соединения с БД")
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE clients c
+            JOIN (
+                SELECT client_id, MIN(created_at) AS mn, MAX(created_at) AS mx
+                FROM leads WHERE client_id != 0 GROUP BY client_id
+            ) l ON c.id = l.client_id
+            SET c.first_lead_date = l.mn, c.last_lead_date = l.mx
+            WHERE c.first_lead_date != l.mn OR c.last_lead_date != l.mx
+               OR c.first_lead_date IS NULL OR c.last_lead_date IS NULL
+            """
+        )
+        conn.commit()
+        print(f"Пересчитано first_lead_date/last_lead_date у клиентов: {cur.rowcount}")
+        cur.close()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
