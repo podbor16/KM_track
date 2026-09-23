@@ -50,8 +50,30 @@ sys.path.insert(0, str(project_root))
 
 import openpyxl
 
-from src.analytics.db_pool import get_pooled_connection
+import mysql.connector
+
+from src.config import settings
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious, normalize_name
+
+
+def get_connection():
+    """ОДНО прямое соединение, а не пул.
+
+    На проде max_connections=20, из них ~17 постоянно заняты приложением
+    (3 воркера × pool_size=10, пул наполняется лениво). get_pooled_connection()
+    пытается открыть сразу 10 штук и падает с 1040 "Too many connections" —
+    поймано при первом запуске импорта на проде (до записи, БД не пострадала).
+    Батч-импорту пул не нужен: одна долгоживущая сессия на весь прогон.
+    """
+    return mysql.connector.connect(
+        host=settings.DB_HOST,
+        port=settings.DB_PORT,
+        database=settings.DB_NAME,
+        user=settings.DB_USER,
+        password=settings.DB_PASSWORD,
+        charset="utf8mb4",
+        autocommit=False,
+    )
 
 DEFAULT_BOOM_FILE = r"C:\Users\podbo\Downloads\Бум.xlsx"
 DEFAULT_FIXES_FILE = r"C:\Users\podbo\Downloads\Бум_разбор_ФИО.xlsx"
@@ -433,7 +455,7 @@ def main():
         print("\nЭто был dry-run. Повтори с --apply, чтобы применить.")
         return 0
 
-    conn = get_pooled_connection()
+    conn = get_connection()
     if not conn:
         print("Нет соединения с БД (проверь DB_* в .env/.env.local).")
         return 1
@@ -503,7 +525,7 @@ def _recompute_client_lead_dates():
     first_lead_date осталась 2020-й. count_leads/total_amount этим не
     затронуты — они инкрементальные, от порядка не зависят.
     """
-    conn = get_pooled_connection()
+    conn = get_connection()
     if not conn:
         print("! Не удалось пересчитать first_lead_date/last_lead_date — нет соединения с БД")
         return
