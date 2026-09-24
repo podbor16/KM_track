@@ -56,7 +56,7 @@ from src.config import settings
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious, normalize_name
 
 
-def get_connection():
+def get_connection(time_zone=None):
     """ОДНО прямое соединение, а не пул.
 
     На проде max_connections=20, из них ~17 постоянно заняты приложением
@@ -65,7 +65,7 @@ def get_connection():
     поймано при первом запуске импорта на проде (до записи, БД не пострадала).
     Батч-импорту пул не нужен: одна долгоживущая сессия на весь прогон.
     """
-    return mysql.connector.connect(
+    conn = mysql.connector.connect(
         host=settings.DB_HOST,
         port=settings.DB_PORT,
         database=settings.DB_NAME,
@@ -74,6 +74,13 @@ def get_connection():
         charset="utf8mb4",
         autocommit=False,
     )
+    if time_zone:
+        # leads.created_at — TIMESTAMP: наивное значение трактуется в часовом
+        # поясе сессии (прод — MSK, локально — Красноярск)
+        cur = conn.cursor()
+        cur.execute("SET time_zone = %s", (time_zone,))
+        cur.close()
+    return conn
 
 DEFAULT_BOOM_FILE = r"C:\Users\podbo\Downloads\Бум.xlsx"
 DEFAULT_FIXES_FILE = r"C:\Users\podbo\Downloads\Бум_разбор_ФИО.xlsx"
@@ -467,10 +474,10 @@ def main():
     return 0 if errors == 0 else 1
 
 
-def insert_leads(rows):
+def insert_leads(rows, time_zone=None):
     """INSERT-only с проверкой «уже есть» (идемпотентно).
     -> (inserted, skipped_existing, errors); inserted=None, если нет соединения."""
-    conn = get_connection()
+    conn = get_connection(time_zone)
     if not conn:
         print("Нет соединения с БД (проверь DB_* в .env/.env.local).")
         return None, 0, 0
