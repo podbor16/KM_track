@@ -167,10 +167,8 @@ function _setPageTitleSubtitleVisible(visible) {
     if (subtitle) subtitle.style.display = visible ? '' : 'none';
 }
 
-// Годы, в которых у события реально есть заявки (leads) или уже
-// сконфигурирована дистанция в events (см. get_leads_filter_options на
-// бэкенде), по убыванию — список селектора года; первый — дефолт при смене
-// события.
+// Годы, в которых у события есть заявки (leads), по убыванию — список
+// селектора года; первый — дефолт при смене события.
 async function fetchYearsForEvent(event) {
     const eventName = KMUtils.eventDbName(event);
     if (!eventName) return [];

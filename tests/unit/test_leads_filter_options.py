@@ -74,3 +74,20 @@ def test_no_connection_returns_empty_lists(mock_get_conn):
     mock_get_conn.return_value = None
     result = get_leads_filter_options()
     assert result == {"event_names": [], "years": [], "distances": []}
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_years_from_leads_only_for_start_list(mock_get_conn):
+    """Стартовый список: год без заявок (событие только заведено в events,
+    напр. Х Трейл 2024) открыл бы пустую таблицу — в селекторе только годы
+    с заявками."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = [(2026,), (2025,)]
+
+    result = get_leads_filter_options(event_name="Х Трейл", years_from_leads_only=True)
+
+    assert result["years"] == [2026, 2025]
+    years_call = cur.execute.call_args_list[1]
+    assert "FROM events" not in years_call.args[0]
+    assert years_call.args[1] == ("Х Трейл",)

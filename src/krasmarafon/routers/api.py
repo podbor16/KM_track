@@ -424,14 +424,12 @@ async def get_registered_runners(
 
 @router.get("/api/registered-runners-years")
 async def get_registered_runners_years(event_name: str = Query(...)) -> dict:
-    """Годы, для которых у события есть заявки (leads) или уже
-    сконфигурирована дистанция в events — используется на /start_list для
-    дефолтного выбора года при смене события (последний год с реальными
-    данными, а не текущий календарный)."""
+    """Годы, в которых у события есть заявки (leads), по убыванию — список
+    селектора года на /start_list (первый — дефолт при смене события)."""
     from src.analytics.db_results import get_leads_filter_options
 
     opts = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: get_leads_filter_options(event_name=event_name)
+        None, lambda: get_leads_filter_options(event_name=event_name, years_from_leads_only=True)
     )
     return {"years": opts["years"]}
 

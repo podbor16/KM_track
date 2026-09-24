@@ -1529,7 +1529,7 @@ def get_leads_admin(
             pass
 
 
-def get_leads_filter_options(event_name: str = None, event_year: int = None) -> dict:
+def get_leads_filter_options(event_name: str = None, event_year: int = None, years_from_leads_only: bool = False) -> dict:
     """Distinct значения для каскадных фильтров (event_names, years, distances).
 
     event_names/years объединяются (UNION) с таблицей events — иначе только
@@ -1540,7 +1540,10 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None) -> 
     upload_leads_import) — нельзя (реальный случай, Детский забег 2026,
     2026-08-19). distances НЕ объединяем — events.event_distance хранит
     число (км, напр. 1.0), а leads.event_distance — отформатированную
-    строку ("1 км"), несовместимые форматы."""
+    строку ("1 км"), несовместимые форматы.
+
+    years_from_leads_only — годы только с реальными заявками (стартовый
+    список: год без заявок открыл бы пустую таблицу)."""
     conn = get_pooled_connection()
     if not conn:
         return {"event_names": [], "years": [], "distances": []}
@@ -1555,12 +1558,19 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None) -> 
 
         years: list = []
         if event_name:
-            cur.execute(
-                "SELECT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL "
-                "UNION SELECT event_year FROM events WHERE event_name = %s AND event_year IS NOT NULL "
-                "ORDER BY event_year DESC",
-                (event_name, event_name),
-            )
+            if years_from_leads_only:
+                cur.execute(
+                    "SELECT DISTINCT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL "
+                    "ORDER BY event_year DESC",
+                    (event_name,),
+                )
+            else:
+                cur.execute(
+                    "SELECT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL "
+                    "UNION SELECT event_year FROM events WHERE event_name = %s AND event_year IS NOT NULL "
+                    "ORDER BY event_year DESC",
+                    (event_name, event_name),
+                )
             years = [r[0] for r in cur.fetchall()]
 
         distances: list = []
