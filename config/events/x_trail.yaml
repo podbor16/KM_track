@@ -16,6 +16,15 @@ distances:
     has_start_list: true
     checkpoint_distances: []
     checkpoints: []           # ← заполнить перед стартом
+    diploma:
+      # Дистанция "5 км" уже впечатана в картинку. Плашки: x 102–980,
+      # y 910–1222 и 1281–1593 (картинка 1080×1960)
+      background: "static/images/diplomas/xtrail/5km/background.jpg"
+      width_px: 1080
+      height_px: 1960
+      name_box:  {top: 46.43, left: 9.44, width: 81.30, height: 15.92}
+      ranks_box: {top: 65.36, left: 9.44, width: 81.30, height: 15.92}
+      text_color: "#fff"
     gpx_file: "static/map/2026/xtrail_griva.gpx"
     event_date: null          # ← заполнить перед стартом
     route:
@@ -29,10 +38,19 @@ distances:
 
   - distance: "2 км"
     distance_km: 2.0
-    db_event_id: null
+    db_event_id: 118
     tracked: false
     has_start_list: true
     checkpoint_distances: []
+    diploma:
+      # Без хронометража — диплом участника по заявке (кнопка в стартовом
+      # списке): в верхнюю плашку только ФИ, текст нижней уже в картинке
+      background: "static/images/diplomas/xtrail/2km/background.jpg"
+      width_px: 1080
+      height_px: 1960
+      participant_only: true
+      name_box:  {top: 46.43, left: 9.44, width: 81.30, height: 15.92}
+      text_color: "#fff"
     route:
       laps: 1
       total_km: 2.0

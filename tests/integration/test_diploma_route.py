@@ -60,3 +60,52 @@ class TestDiplomaRoute:
              patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=_fake_rows()):
             r = client.get("/diploma/555/101")
         assert 'Ж45' in r.text
+
+
+def _fake_xtrail_event():
+    box = DiplomaBoxConfig(top=46.43, left=9.44, width=81.3, height=15.92)
+    return EventConfig(
+        code="xtrailrun", name="Х Трейл", display_name="Забег Икс", year=2026,
+        distances=[
+            DistanceConfig(
+                distance="2 км", distance_km=2.0, db_event_id=118,
+                diploma=DiplomaConfig(
+                    background="static/images/diplomas/xtrail/2km/background.jpg",
+                    width_px=1080, height_px=1960, name_box=box, participant_only=True,
+                ),
+            ),
+        ],
+    )
+
+
+class TestParticipantDiplomaRoute:
+    """/diploma/lead/{lead_id} — диплом по заявке для дистанций без результатов."""
+
+    def test_200_shows_name_without_time_and_ranks(self, client):
+        lead = {'surname': 'Иванова', 'name': 'Анна', 'event_id': 118}
+        with patch('src.config.settings.EVENTS', {'xtrailrun': _fake_xtrail_event()}), \
+             patch('src.krasmarafon.routers.pages.get_participant_diploma_data', return_value=lead):
+            r = client.get("/diploma/lead/42")
+        assert r.status_code == 200
+        assert 'ИВАНОВА' in r.text and 'АННА' in r.text
+        assert 'Абсолют' not in r.text and 'diploma-time' not in r.text.split('<body>')[1]
+
+    def test_404_for_unknown_lead(self, client):
+        with patch('src.config.settings.EVENTS', {'xtrailrun': _fake_xtrail_event()}), \
+             patch('src.krasmarafon.routers.pages.get_participant_diploma_data', return_value=None):
+            r = client.get("/diploma/lead/42")
+        assert r.status_code == 404
+
+    def test_404_for_lead_of_result_diploma_distance(self, client):
+        """Заявка на дистанцию с дипломом по результату (women7) — по заявке
+        диплом не отдаём, только по результату."""
+        lead = {'surname': 'Аристархова', 'name': 'Наталья', 'event_id': 555}
+        with patch('src.config.settings.EVENTS', {'women7': _fake_event()}), \
+             patch('src.krasmarafon.routers.pages.get_participant_diploma_data', return_value=lead):
+            r = client.get("/diploma/lead/42")
+        assert r.status_code == 404
+
+    def test_result_route_404_for_participant_only_distance(self, client):
+        with patch('src.config.settings.EVENTS', {'xtrailrun': _fake_xtrail_event()}):
+            r = client.get("/diploma/118/101")
+        assert r.status_code == 404

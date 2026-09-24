@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 try:
     import yaml
@@ -61,7 +61,12 @@ class DiplomaConfig(BaseModel):
     width_px: int
     height_px: int
     name_box: DiplomaBoxConfig    # блок ФИО + время
-    ranks_box: DiplomaBoxConfig   # блок мест
+    ranks_box: DiplomaBoxConfig | None = None   # блок мест (обязателен, если не participant_only)
+    # Диплом участника без результатов (напр. 2 км Забега Икс 2026 — без
+    # хронометража): данные берутся из заявки (leads), а не из results; на
+    # дипломе только ФИ, остальной текст уже впечатан в фон. Ссылка —
+    # /diploma/lead/{lead_id}, кнопка — в стартовом списке, не в результатах.
+    participant_only: bool = False
     # Цвет текста плейсхолдеров — фон плашки у каждого дизайна свой (тёмный/
     # цветной у одних событий, светлый у других), единого цвета, читаемого
     # везде, не существует. Дефолт #fff сохраняет поведение уже настроенных
@@ -77,6 +82,12 @@ class DiplomaConfig(BaseModel):
     # под новую строку distance_box_bg, чтобы перекрыть след старой надписи).
     distance_box: DiplomaBoxConfig | None = None
     distance_box_bg: str | None = None
+
+    @model_validator(mode="after")
+    def _ranks_box_required_for_results(self):
+        if not self.participant_only and self.ranks_box is None:
+            raise ValueError("ranks_box обязателен для диплома по результатам (participant_only=false)")
+        return self
 
 
 class DistanceConfig(BaseModel):

@@ -90,6 +90,8 @@ class RegisteredRunnerInfo(BaseModel):
     distance: Optional[str] = Field(None, description="Дистанция забега (км)")
     registration_date: Optional[str] = Field(None, description="Дата регистрации")
     start_number: Optional[int] = Field(None, description="Стартовый номер (bib), если присвоен заранее организатором")
+    lead_id: Optional[int] = Field(None, description="id заявки (leads.id) — для диплома участника /diploma/lead/{lead_id}")
+    event_id: Optional[int] = Field(None, description="id события-дистанции (events.id)")
 
 
 class RegisteredRunnersListResponse(BaseModel):

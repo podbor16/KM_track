@@ -62,3 +62,22 @@ def test_event_config_with_yaml_style_dict_parses():
     cfg = EventConfig(**raw)
     assert cfg.distances[0].diploma.background.endswith("background.png")
     assert cfg.distances[1].diploma is None
+
+
+def test_participant_only_diploma_does_not_need_ranks_box():
+    """Диплом участника без результатов (2 км Забега Икс) — только ФИ,
+    блока мест нет."""
+    d = DistanceConfig(
+        distance="2 км", distance_km=2.0, db_event_id=118,
+        diploma={k: v for k, v in _DIPLOMA_DICT.items() if k != "ranks_box"} | {"participant_only": True},
+    )
+    assert d.diploma.participant_only is True
+    assert d.diploma.ranks_box is None
+
+
+def test_result_diploma_still_requires_ranks_box():
+    with pytest.raises(Exception):
+        DistanceConfig(
+            distance="5 км", distance_km=5.0,
+            diploma={k: v for k, v in _DIPLOMA_DICT.items() if k != "ranks_box"},
+        )

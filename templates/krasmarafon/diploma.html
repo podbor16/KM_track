@@ -45,10 +45,12 @@
             top: {{ distance.diploma.name_box.top }}%; left: {{ distance.diploma.name_box.left }}%;
             width: {{ distance.diploma.name_box.width }}%; height: {{ distance.diploma.name_box.height }}%;
         }
+        {% if distance.diploma.ranks_box %}
         .diploma-slot--ranks {
             top: {{ distance.diploma.ranks_box.top }}%; left: {{ distance.diploma.ranks_box.left }}%;
             width: {{ distance.diploma.ranks_box.width }}%; height: {{ distance.diploma.ranks_box.height }}%;
         }
+        {% endif %}
         {% if distance.diploma.distance_box %}
         .diploma-slot--distance {
             top: {{ distance.diploma.distance_box.top }}%; left: {{ distance.diploma.distance_box.left }}%;
@@ -58,6 +60,8 @@
         .diploma-distance-row { display: flex; justify-content: space-between; width: 100%; padding: 0 8%; font-weight: 700; font-size: clamp(12px, 4.2cqw, 18px); }
         {% endif %}
         .diploma-name { font-size: clamp(11px, 4.2cqw, 18px); font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
+        /* Диплом участника (без результата): в плашке только ФИ — крупнее */
+        .diploma-name--solo { font-size: clamp(14px, 6.5cqw, 28px); font-weight: 800; padding: 0 6%; max-width: 100%; }
         .diploma-time { font-size: clamp(20px, 7.5cqw, 32px); font-weight: 800; margin-top: 4px; }
         .diploma-ranks { width: 100%; font-size: clamp(10px, 3.8cqw, 15px); padding: 0 8%; }
         .diploma-rank-row { display: flex; justify-content: space-between; padding: 2px 0; }
@@ -97,9 +101,14 @@
         </div>
         {% endif %}
         <div class="diploma-slot diploma-slot--name">
+            {% if distance.diploma.participant_only %}
+            <div class="diploma-name diploma-name--solo">{{ (diploma.surname or '').upper() }}<br>{{ (diploma.name or '').upper() }}</div>
+            {% else %}
             <div class="diploma-name">{{ (diploma.surname or '').upper() }} {{ (diploma.name or '').upper() }}</div>
             <div class="diploma-time">{{ diploma.time_display }}</div>
+            {% endif %}
         </div>
+        {% if distance.diploma.ranks_box and not distance.diploma.participant_only %}
         <div class="diploma-slot diploma-slot--ranks">
             <div class="diploma-ranks">
                 <div class="diploma-rank-row"><span>Абсолют</span><span>{{ diploma.rank_absolute or '-' }}</span></div>
@@ -111,6 +120,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     <div class="diploma-actions">
@@ -120,6 +130,16 @@
 
     <script src="/static/lib/html2canvas/html2canvas.min.js"></script>
     <script>
+        // Длинные фамилии не должны вылезать за плашку: уменьшаем шрифт,
+        // пока самое длинное слово не поместится по ширине (не ниже 10px)
+        document.querySelectorAll('.diploma-name--solo').forEach(el => {
+            let size = parseFloat(getComputedStyle(el).fontSize);
+            while (el.scrollWidth > el.clientWidth && size > 10) {
+                size -= 1;
+                el.style.fontSize = size + 'px';
+            }
+        });
+
         document.getElementById('btnPrint').addEventListener('click', () => window.print());
 
         document.getElementById('btnDownload').addEventListener('click', async () => {

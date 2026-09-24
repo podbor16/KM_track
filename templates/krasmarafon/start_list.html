@@ -114,6 +114,7 @@
                         <th class="km-th km-th--c km-th--sort" onclick="sortTable('category')">Возрастная группа</th>
                         <th class="km-th km-th--l km-th--sort" onclick="sortTable('city')">Город</th>
                         <th class="km-th km-th--l km-th--sort" onclick="sortTable('club')">Клуб</th>
+                        <th class="km-th km-th--c">Диплом</th>
                     </tr>
                 </thead>
                 <tbody id="startListBody">
@@ -123,6 +124,11 @@
         </div>
     </div>
 
+    <script>
+        // Дистанции с дипломом участника (без результатов, participant_only) —
+        // кнопка диплома в строке стартового списка, см. pages.py
+        const PARTICIPANT_DIPLOMA_EVENT_IDS = new Set({{ participant_diploma_event_ids | tojson }});
+    </script>
     <script src="/static/js/utils.js?v={{ v }}"></script>
     <script src="/static/js/realtime.js?v={{ v }}"></script>
     <script src="/static/js/analytics-start-list.js?v={{ v }}"></script>

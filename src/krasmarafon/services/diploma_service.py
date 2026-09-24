@@ -8,6 +8,7 @@
 from typing import Optional
 from datetime import timedelta
 
+from src.analytics.db_pool import get_pooled_connection
 from src.analytics.db_results import get_race_results_by_event_id
 
 # 'fifnished' — не опечатка в этом файле, а реальное значение в БД
@@ -53,6 +54,22 @@ def format_finish_time(td: Optional[timedelta]) -> str:
     if hours > 0:
         return f"{hours}:{minutes:02d}:{seconds:02d}"
     return f"{minutes}:{seconds:02d}"
+
+
+def get_participant_diploma_data(lead_id: int) -> Optional[dict]:
+    """Диплом участника без результатов (DiplomaConfig.participant_only):
+    ФИ и event_id из заявки. None — заявки нет."""
+    conn = get_pooled_connection()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT surname, name, event_id FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
+    return row
 
 
 def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:

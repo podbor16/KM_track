@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.config import settings
 from src.config.event_loader import get_event_by_name, get_event_by_db_id, get_history_enabled
-from src.krasmarafon.services.diploma_service import get_diploma_data
+from src.krasmarafon.services.diploma_service import get_diploma_data, get_participant_diploma_data
 from src.core.auth import (
     COOKIE_NAME,
     EXPIRY_SECONDS,
@@ -166,6 +166,7 @@ async def start_list_page(request: Request):
     return templates.TemplateResponse("krasmarafon/start_list.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
+        "participant_diploma_event_ids": _diploma_event_ids(participant_only=True),
     })
 
 
@@ -175,15 +176,16 @@ async def analytics_page():
     return RedirectResponse("/admin", status_code=302)
 
 
-def _diploma_event_ids() -> list[int]:
-    """event_id всех дистанций, у которых включена печать диплома — общий
-    список, нужен и /athlete-profile (история спортсмена), и /results
-    (кнопка диплома прямо в результатах забега)."""
+def _diploma_event_ids(participant_only: bool = False) -> list[int]:
+    """event_id дистанций с включённым дипломом. По результатам — для
+    /athlete-profile и /results (кнопка в строке результата); participant_only
+    (без результатов) — для /start_list (кнопка в строке заявки)."""
     return [
         d.db_event_id
         for event in settings.EVENTS.values()
         for d in event.distances
         if d.diploma is not None and d.db_event_id is not None
+        and d.diploma.participant_only == participant_only
     ]
 
 
@@ -217,6 +219,24 @@ async def athlete_profile_page(request: Request):
     })
 
 
+@router.get("/diploma/lead/{lead_id}", response_class=HTMLResponse)
+async def participant_diploma_page(request: Request, lead_id: int):
+    """Диплом участника дистанции без результатов (participant_only) — по
+    заявке, а не по результату: только ФИ, остальное впечатано в фон."""
+    lead = get_participant_diploma_data(lead_id)
+    event_cfg, distance_cfg = get_event_by_db_id(settings.EVENTS, lead["event_id"]) if lead else (None, None)
+    if (distance_cfg is None or distance_cfg.diploma is None
+            or not distance_cfg.diploma.participant_only):
+        raise HTTPException(status_code=404, detail="Диплом участника недоступен")
+
+    return templates.TemplateResponse("krasmarafon/diploma.html", {
+        "request": request,
+        "event": event_cfg,
+        "distance": distance_cfg,
+        "diploma": {"surname": lead["surname"], "name": lead["name"]},
+    })
+
+
 @router.get("/diploma/{event_id}/{bib}", response_class=HTMLResponse)
 async def diploma_page(request: Request, event_id: int, bib: str):
     """Публичный диплом участника — фон+медаль от дизайнера (per-дистанция
@@ -224,7 +244,8 @@ async def diploma_page(request: Request, event_id: int, bib: str):
     и без общей шапки сайта — самостоятельная полноэкранная страница,
     можно переслать прямой ссылкой."""
     event_cfg, distance_cfg = get_event_by_db_id(settings.EVENTS, event_id)
-    if event_cfg is None or distance_cfg is None or distance_cfg.diploma is None:
+    if (event_cfg is None or distance_cfg is None or distance_cfg.diploma is None
+            or distance_cfg.diploma.participant_only):
         raise HTTPException(status_code=404, detail="Диплом для этого события/дистанции недоступен")
 
     data = get_diploma_data(event_id, bib)

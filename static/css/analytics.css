@@ -224,6 +224,12 @@ h1 {
 #startListTable.km-table--show-start-number td:nth-child(2) {
   display: table-cell;
 }
+/* "Диплом" — только у событий с дипломом участника (participant_only) */
+#startListTable th:nth-child(11), #startListTable td:nth-child(11) { display: none; }
+#startListTable.km-table--show-diploma th:nth-child(11),
+#startListTable.km-table--show-diploma td:nth-child(11) {
+  display: table-cell;
+}
 .km-tr { cursor: pointer; }
 .km-tr:hover .km-td { background: #e3f2fd !important; }
 .km-td {
