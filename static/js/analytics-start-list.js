@@ -64,7 +64,6 @@ function syncUrlFromState() {
 // анонимная в addEventListener) — чтобы её можно было вызвать напрямую из
 // тестов.
 async function initStartListPage() {
-    populateYearSelector();
     readStateFromUrl();
     try {
         const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
@@ -85,6 +84,11 @@ async function initStartListPage() {
         currentEvent = availableEvents[0];
     }
     eventSel.value = currentEvent;
+    const years = await fetchYearsForEvent(currentEvent);
+    populateYearSelector(years);
+    // Год из URL/активного события, которого нет среди лет с заявками, —
+    // показываем последний год с данными
+    if (years.length && !years.includes(currentYear)) currentYear = years[0];
     const ySel = document.getElementById('yearStartSelector');
     if (ySel) ySel.value = currentYear;
     updateEventThemeColor();
@@ -97,23 +101,20 @@ async function initStartListPage() {
 }
 document.addEventListener('DOMContentLoaded', initStartListPage);
 
-function populateYearSelector() {
+// Только годы, в которых у события есть заявки (или уже заведены дистанции)
+// — список от /api/registered-runners-years, по убыванию. Без данных
+// (ошибка API) — один текущий год, чтобы селектор не был пустым.
+function populateYearSelector(years) {
     const sel = document.getElementById('yearStartSelector');
     if (!sel) return;
-    const now = new Date().getFullYear();
-    // Нижняя граница 2013, а не 2020 — в leads есть исторические заявки с
-    // 2013 года (импорт "Бум.xlsx", scripts/import_boom_historical.py).
-    // Точный список годов с данными по конкретному событию отдаёт
-    // /api/registered-runners-years (используется для выбора дефолтного
-    // года); здесь диапазон общий, как было и раньше — год без заявок
-    // просто покажет пустой список.
-    for (let y = now + 1; y >= 2013; y--) {
+    sel.innerHTML = '';
+    const list = years && years.length ? years : [new Date().getFullYear()];
+    list.forEach(y => {
         const opt = document.createElement('option');
         opt.value = y;
         opt.textContent = y;
         sel.appendChild(opt);
-    }
-    sel.value = now;
+    });
 }
 
 // Функция обновления цвета темы в зависимости от события
@@ -166,18 +167,18 @@ function _setPageTitleSubtitleVisible(visible) {
     if (subtitle) subtitle.style.display = visible ? '' : 'none';
 }
 
-// Последний год, для которого у события реально есть заявки (leads) или
-// уже сконфигурирована дистанция в events (см. get_leads_filter_options на
-// бэкенде) — дефолт года при смене СОБЫТИЯ, а не текущий календарный год,
-// у которого может вообще не быть данных для новостыранного события.
-async function fetchLatestYearForEvent(event) {
+// Годы, в которых у события реально есть заявки (leads) или уже
+// сконфигурирована дистанция в events (см. get_leads_filter_options на
+// бэкенде), по убыванию — список селектора года; первый — дефолт при смене
+// события.
+async function fetchYearsForEvent(event) {
     const eventName = KMUtils.eventDbName(event);
-    if (!eventName) return null;
+    if (!eventName) return [];
     try {
         const data = await KMUtils.fetchFresh(`/api/registered-runners-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
-        return Array.isArray(data.years) && data.years.length ? data.years[0] : null;
+        return Array.isArray(data.years) ? data.years : [];
     } catch {
-        return null;
+        return [];
     }
 }
 
@@ -191,7 +192,9 @@ async function switchEvent(trigger) {
     const ySel = document.getElementById('yearStartSelector');
 
     if (trigger === 'event') {
-        const latestYear = await fetchLatestYearForEvent(currentEvent);
+        const years = await fetchYearsForEvent(currentEvent);
+        populateYearSelector(years);
+        const latestYear = years.length ? years[0] : null;
         if (latestYear) {
             currentYear = latestYear;
             if (ySel) ySel.value = latestYear;
