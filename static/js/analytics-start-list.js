@@ -471,9 +471,6 @@ function applyFilters() {
     // чтобы колонка не мигала при смене фильтров пола/дистанции/группы).
     const hasStartNumbers = allRunners.some(r => r.start_number);
     document.getElementById('startListTable').classList.toggle('km-table--show-start-number', hasStartNumbers);
-    // "Диплом" — по тому же принципу: колонка есть, только если хоть у кого-то
-    // из участников события дистанция с дипломом участника (participant_only)
-    document.getElementById('startListTable').classList.toggle('km-table--show-diploma', allRunners.some(hasParticipantDiploma));
 
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
@@ -670,7 +667,9 @@ function renderStartList(runners) {
         let rowHTML = `
             <td class="km-td km-td--c ${rowBg}">${index + 1}</td>
             <td class="km-td km-td--c ${rowBg}">${runner.start_number || ''}</td>
-            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div></td>
+            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div>${hasParticipantDiploma(runner)
+                ? `<a href="/diploma/lead/${runner.lead_id}" class="km-btn-profile km-btn-profile--under-name" target="_blank" onclick="event.stopPropagation()">🏅 Диплом</a>`
+                : ''}</td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${firstName}</div></td>
             <td class="km-td km-td--c ${rowBg}">${birthYear}</td>
             <td class="km-td km-td--c ${rowBg}">${distance}</td>
@@ -678,9 +677,6 @@ function renderStartList(runners) {
             <td class="km-td km-td--c ${rowBg}"><span class="${categoryTagClass}">${category}</span></td>
             <td class="km-td km-td--l ${rowBg}">${city}</td>
             <td class="km-td km-td--l ${rowBg}">${club}</td>
-            <td class="km-td km-td--c ${rowBg}">${hasParticipantDiploma(runner)
-                ? `<a href="/diploma/lead/${runner.lead_id}" class="km-btn-profile" target="_blank" onclick="event.stopPropagation()">🏅 Диплом</a>`
-                : ''}</td>
         `;
         
         row.innerHTML = rowHTML;
