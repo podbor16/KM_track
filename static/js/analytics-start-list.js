@@ -145,7 +145,7 @@ function updateEventBanner() {
         _setPageTitleSubtitleVisible(true);
         return;
     }
-    const imageUrl = `/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`;
+    const imageUrl = KMUtils.versioned(`/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`);
     const img = new Image();
     img.onload = () => {
         banner.style.backgroundImage = `url('${imageUrl}')`;
@@ -611,7 +611,9 @@ function renderStartList(runners) {
     
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
-        row.className = 'km-tr';
+        // Кнопка диплома под фамилией делает строку выше — прижимаем ячейки
+        // к верху, чтобы фамилия и имя шли на одной линии
+        row.className = hasParticipantDiploma(runner) ? 'km-tr km-tr--diploma' : 'km-tr';
         
         // Фамилия, имя
         let firstName = runner.name || 'N/A';

@@ -227,6 +227,7 @@ h1 {
 /* Диплом участника (participant_only) — кнопка сразу под фамилией в стартовом
    списке: строки стартового списка не раскрываются, как в результатах */
 .km-btn-profile--under-name { display: inline-block; margin-top: 4px; }
+.km-tr--diploma .km-td { vertical-align: top; }
 .km-tr { cursor: pointer; }
 .km-tr:hover .km-td { background: #e3f2fd !important; }
 .km-td {

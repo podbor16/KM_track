@@ -287,7 +287,7 @@ function updateEventBanner() {
         _setPageTitleSubtitleVisible(true);
         return;
     }
-    const imageUrl = `/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`;
+    const imageUrl = KMUtils.versioned(`/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`);
     const img = new Image();
     img.onload = () => {
         banner.style.backgroundImage = `url('${imageUrl}')`;

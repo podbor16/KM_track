@@ -1,5 +1,15 @@
 // Общие утилиты KM_Track — доступны через window.KMUtils
 window.KMUtils = {
+    // Версия деплоя из ?v= самого utils.js — для адресов картинок, которые
+    // заменяются без смены имени файла (баннеры событий): иначе браузер
+    // неделю показывает старую из кэша (Cache-Control: max-age=604800).
+    STATIC_V: (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
+        ? (new URL(document.currentScript.src).searchParams.get('v') || '') : '',
+
+    versioned(url) {
+        return this.STATIC_V ? `${url}?v=${this.STATIC_V}` : url;
+    },
+
     EVENT_NAMES: {
         'night_run':  'Ночной забег',
         'vesna':      'Весна',
