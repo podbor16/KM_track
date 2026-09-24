@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.config import settings
 from src.config.event_loader import get_event_by_name, get_event_by_db_id, get_history_enabled
-from src.krasmarafon.services.diploma_service import get_diploma_data, get_participant_diploma_data
+from src.krasmarafon.services.diploma_service import get_diploma_data, get_participant_diploma_data, participant_phrase
 from src.core.auth import (
     COOKIE_NAME,
     EXPIRY_SECONDS,
@@ -233,7 +233,10 @@ async def participant_diploma_page(request: Request, lead_id: int):
         "request": request,
         "event": event_cfg,
         "distance": distance_cfg,
-        "diploma": {"surname": lead["surname"], "name": lead["name"]},
+        "diploma": {
+            "surname": lead["surname"], "name": lead["name"],
+            "phrase": participant_phrase(distance_cfg.diploma, lead.get("sex")),
+        },
     })
 
 

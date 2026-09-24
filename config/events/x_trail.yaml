@@ -44,12 +44,17 @@ distances:
     checkpoint_distances: []
     diploma:
       # Без хронометража — диплом участника по заявке (кнопка в стартовом
-      # списке): в верхнюю плашку только ФИ, текст нижней уже в картинке
+      # списке): в верхней плашке ФИ, в нижней — фраза по полу участника.
+      # Картинка 705×1280 (та же раскладка, что 1080×1960 у 5 км — плашки
+      # в тех же процентах)
       background: "static/images/diplomas/xtrail/2km/background.jpg"
-      width_px: 1080
-      height_px: 1960
+      width_px: 705
+      height_px: 1280
       participant_only: true
+      participant_text_male: "Бегал в лесу\nи понравилось"
+      participant_text_female: "Бегала в лесу\nи понравилось"
       name_box:  {top: 46.43, left: 9.44, width: 81.30, height: 15.92}
+      ranks_box: {top: 65.36, left: 9.44, width: 81.30, height: 15.92}
       text_color: "#fff"
     route:
       laps: 1

@@ -172,3 +172,14 @@ def test_get_diploma_data_shows_category_row_when_real_age_category():
     with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=rows):
         data = get_diploma_data(event_id=1, bib='101')
     assert data['show_category_rank'] is True
+
+
+def test_participant_phrase_by_sex():
+    from types import SimpleNamespace
+    from src.krasmarafon.services.diploma_service import participant_phrase
+    cfg = SimpleNamespace(participant_text_male="Бегал в лесу\nи понравилось",
+                          participant_text_female="Бегала в лесу\nи понравилось")
+    assert participant_phrase(cfg, "Женщина").startswith("Бегала")
+    assert participant_phrase(cfg, "Мужчина").startswith("Бегал ")
+    assert participant_phrase(cfg, "").startswith("Бегал ")      # пол не указан — мужская форма
+    assert participant_phrase(SimpleNamespace(participant_text_male=None, participant_text_female=None), "Женщина") is None

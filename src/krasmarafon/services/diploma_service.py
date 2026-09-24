@@ -56,6 +56,14 @@ def format_finish_time(td: Optional[timedelta]) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
+def participant_phrase(diploma_cfg, sex: Optional[str]) -> Optional[str]:
+    """Фраза нижней плашки диплома участника по полу: женская — если пол
+    женский, иначе мужская (пол не указан — мужская форма)."""
+    is_female = _gender_label(sex) == 'Женщины'
+    return (diploma_cfg.participant_text_female if is_female else diploma_cfg.participant_text_male) \
+        or diploma_cfg.participant_text_male
+
+
 def get_participant_diploma_data(lead_id: int) -> Optional[dict]:
     """Диплом участника без результатов (DiplomaConfig.participant_only):
     ФИ и event_id из заявки. None — заявки нет."""
@@ -64,7 +72,7 @@ def get_participant_diploma_data(lead_id: int) -> Optional[dict]:
         return None
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT surname, name, event_id FROM leads WHERE id = %s", (lead_id,))
+        cur.execute("SELECT surname, name, sex, event_id FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
         cur.close()
     finally:
