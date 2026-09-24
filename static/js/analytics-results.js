@@ -287,7 +287,7 @@ function updateEventBanner() {
         _setPageTitleSubtitleVisible(true);
         return;
     }
-    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const imageUrl = `/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`;
     const img = new Image();
     img.onload = () => {
         banner.style.backgroundImage = `url('${imageUrl}')`;
@@ -352,7 +352,7 @@ async function loadRunnersData(silent = false) {
             }
         } else {
             // Для неизвестных комбинаций загружаем из legacy API
-            const eventName = eventNameMap[currentEvent] || 'Ночной забег';
+            const eventName = KMUtils.eventDbName(currentEvent) || 'Ночной забег';
             const apiUrl = `/api/race-results?event_name=${encodeURIComponent(eventName)}&year=${currentYear}`;
             console.log('Запрос к ' + apiUrl);
             

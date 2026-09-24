@@ -145,7 +145,7 @@ function updateEventBanner() {
         _setPageTitleSubtitleVisible(true);
         return;
     }
-    const imageUrl = `/static/images/events/${encodeURIComponent(eventDisplayName)}.png`;
+    const imageUrl = `/static/images/events/${encodeURIComponent(KMUtils.eventDbName(currentEvent))}.png`;
     const img = new Image();
     img.onload = () => {
         banner.style.backgroundImage = `url('${imageUrl}')`;
@@ -171,7 +171,7 @@ function _setPageTitleSubtitleVisible(visible) {
 // бэкенде) — дефолт года при смене СОБЫТИЯ, а не текущий календарный год,
 // у которого может вообще не быть данных для новостыранного события.
 async function fetchLatestYearForEvent(event) {
-    const eventName = eventNameMap[event];
+    const eventName = KMUtils.eventDbName(event);
     if (!eventName) return null;
     try {
         const data = await KMUtils.fetchFresh(`/api/registered-runners-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
@@ -253,7 +253,7 @@ async function loadRunnersData(silent = false) {
 
     try {
         // Загружаем зарегистрированных участников из БД с фильтром по событию
-        const eventName = eventNameMap[currentEvent] || 'Ночной забег';
+        const eventName = KMUtils.eventDbName(currentEvent) || 'Ночной забег';
         const url = `/api/registered-runners?event_name=${encodeURIComponent(eventName)}&event_year=${currentYear}`;
         const data = await KMUtils.fetchFresh(url).then(r => r.json());
 

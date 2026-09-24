@@ -39,10 +39,11 @@
                 <div class="km-filter-group">
                     <label class="km-label" for="eventSelector">Событие:</label>
                     <!-- Временно (2026-08-20, по решению пользователя) показываем в
-                         этом селекте только Жару и Детский забег — остальные
-                         события скрыты со стартового списка до отдельного решения
-                         вернуть полный список. -->
+                         этом селекте не все события — остальные скрыты со
+                         стартового списка до отдельного решения вернуть полный
+                         список. Забег Икс возвращён 2026-09-24. -->
                     <select id="eventSelector" onchange="switchEvent('event')" class="km-select">
+                        <option value="xtrailrun">Забег Икс</option>
                         <option value="zhara">Жара</option>
                         <option value="kids">Детский забег</option>
                     </select>

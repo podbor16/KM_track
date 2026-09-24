@@ -11,6 +11,16 @@ window.KMUtils = {
         'snow7':      'Снежная семерка'
     },
 
+    // event_name в БД, если отличается от отображаемого имени (EVENT_NAMES) —
+    // нужен для запросов к API и имён файлов баннеров static/images/events/.
+    EVENT_DB_NAMES: {
+        'xtrailrun':  'Х Трейл'
+    },
+
+    eventDbName(code) {
+        return this.EVENT_DB_NAMES[code] || this.EVENT_NAMES[code];
+    },
+
     EVENT_COLORS: {
         'night_run':  '#1c2c55',
         'vesna':      '#85c6e2',
