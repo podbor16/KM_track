@@ -24,7 +24,7 @@ ImportResult.unknown_headers — сигнал, что Tilda добавила/п�
 колонку и это стоит проверить вручную, а не тихо потерять данные.
 """
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 import csv
 import io
@@ -32,6 +32,7 @@ import re
 
 import openpyxl
 
+from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.services.tilda_webhook import convert_birthday, normalize_name, parse_products, is_name_suspicious
 
 
@@ -64,9 +65,9 @@ class ImportRow:
                                  # организатором заранее (не результат гонки,
                                  # см. migrations/add_leads_start_number.sql).
                                  # Сырая строка, int-конвертация в bulk_import_leads()
-    registered_at: str = ""     # колонка "Date" выгрузки Tilda — момент подачи
-                                 # заявки. Сырая строка; парсинг в
-                                 # parse_tilda_datetime(), пишется в
+    registered_at: str = ""     # момент регистрации по красноярскому времени
+                                 # ("Дата оплаты", запасной вариант — "Date"),
+                                 # см. tilda_registered_at(). Пишется в
                                  # leads.created_at (INSERT) / LEAST(created_at, ...)
                                  # (UPDATE). Без неё created_at у импортных строк =
                                  # момент импорта → ломает аналитику динамики
@@ -125,11 +126,13 @@ _HEADER_ALIASES = {
     "order_id": "order_id",
     "tranid": "transaction_id",
     "способ оплаты": "payment_system",
-    # "Date" — время подачи заявки (не оплаты). Единственный источник реальной
-    # даты регистрации при импорте: без неё leads.created_at у импортных строк =
-    # DEFAULT CURRENT_TIMESTAMP = момент импорта, что ломает чарты динамики
-    # регистраций в DataLens. Парсинг — parse_tilda_datetime().
-    "date": "registered_at",
+    # Дата регистрации: без неё leads.created_at у импортных строк = момент
+    # импорта, что ломает чарты динамики регистраций в DataLens. "Дата оплаты"
+    # — по Москве (сверено с временем вебхука, 2026-09-24), "Date" CRM-выгрузки
+    # — UTC−7 (запасной источник). Обе переводятся в красноярское время —
+    # tilda_registered_at().
+    "дата оплаты": "registered_at",
+    "date": "registered_at_fallback",
     # Стартовый номер (bib) — не из штатной выгрузки Tilda, а из "обработанного"
     # организатором файла (номера расставлены вручную поверх экспорта), см.
     # migrations/add_leads_start_number.sql. Опциональная колонка.
@@ -156,10 +159,8 @@ _KNOWN_IGNORED_HEADERS = {
     # 2026-08-19), в leads нет соответствующей колонки, не участвует
     # в сопоставлении/создании заявки.
     "size",
-    # "Дата оплаты" — время оплаты (на минуты-часы позже "Date"/подачи); для
-    # аналитики берём именно "Date". "Местоположение" — гео-строка Tilda, в
-    # leads нет колонки. Обе появились в выгрузке ~2026, поэтому явно в игнор.
-    "дата оплаты", "местоположение",
+    # "Местоположение" — гео-строка Tilda, в leads нет колонки.
+    "местоположение",
 }
 
 
@@ -223,6 +224,20 @@ def parse_tilda_datetime(raw) -> Optional[datetime]:
     if dt < _TILDA_DT_MIN or dt > datetime.now() + timedelta(days=2):
         return None
     return dt
+
+
+_TILDA_PAID_TZ = timezone(timedelta(hours=3))    # "Дата оплаты" — Москва
+_TILDA_DATE_TZ = timezone(timedelta(hours=-7))   # "Date" CRM-выгрузки — UTC−7
+
+
+def tilda_registered_at(paid_raw, date_raw) -> str:
+    """Момент регистрации по красноярскому времени, "YYYY-MM-DD HH:MM:SS"
+    (пул соединений работает в сессии +07:00), либо "" если дат нет."""
+    for raw, tz in ((paid_raw, _TILDA_PAID_TZ), (date_raw, _TILDA_DATE_TZ)):
+        dt = parse_tilda_datetime(raw)
+        if dt:
+            return dt.replace(tzinfo=tz).astimezone(KRASNOYARSK_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    return ""
 
 
 def _normalize_xlsx_cell(value):
@@ -409,7 +424,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 payment_system=str(get("payment_system") or "").strip(),
                 is_name_suspicious=is_name_suspicious(surname, name),
                 start_number=str(get("start_number") or "").strip(),
-                registered_at=str(get("registered_at") or "").strip(),
+                registered_at=tilda_registered_at(get("registered_at"), get("registered_at_fallback")),
             ))
         except Exception as e:
             reason = f"непредвиденная ошибка парсинга — {e}"

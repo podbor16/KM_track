@@ -8,6 +8,7 @@ from scripts.import_tilda_google_registrations import (
 )
 
 BATCH = datetime.datetime(2025, 1, 21, 4, 50)
+IS_BATCH = lambda db: db["created_at"] == BATCH
 
 
 @pytest.mark.parametrize("product, expected", [
@@ -67,18 +68,18 @@ def test_merge_year_takes_date_and_amount_from_tilda_then_neighbor():
 def test_plan_updates_all_batch_duplicates_and_leaves_webhook_rows():
     d = datetime.datetime(2025, 2, 1)
     db = [db_row(1), db_row(2), db_row(3, created_at=datetime.datetime(2024, 5, 1), amount=1890, surname="Петров")]
-    ins, upd, sus = plan([rec(date=d, amount=500.0), rec(surname="Петров", date=d, amount=500.0)], *index(db), BATCH)
+    ins, upd, sus = plan([rec(date=d, amount=500.0), rec(surname="Петров", date=d, amount=500.0)], *index(db), IS_BATCH)
     assert ins == [] and sus == []
     assert sorted((u[0]["id"], u[1], u[2]) for u in upd) == [(1, d, 500.0), (2, d, 500.0)]
 
 
 def test_plan_matches_glued_fio_by_contact_instead_of_inserting():
     glued = rec(surname="Иван Иванов", name="Иван Иванов", date=datetime.datetime(2025, 3, 1))
-    ins, upd, sus = plan([glued], *index([db_row(7)]), BATCH)
+    ins, upd, sus = plan([glued], *index([db_row(7)]), IS_BATCH)
     assert ins == [] and len(sus) == 1 and upd[0][0]["id"] == 7
     assert is_fio_glued(glued)
 
 
 def test_plan_inserts_unknown_person():
-    ins, upd, _ = plan([rec(surname="Новый", email="new@example.com")], *index([db_row(1)]), BATCH)
+    ins, upd, _ = plan([rec(surname="Новый", email="new@example.com")], *index([db_row(1)]), IS_BATCH)
     assert len(ins) == 1 and upd == []

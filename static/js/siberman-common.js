@@ -420,13 +420,19 @@ function forecastFromLastSegment(passedPoints, targetDist) {
 // "сколько осталось" от прогноза, а не сам прогноз целиком) — плюс "сейчас"
 // даёт момент по часам, когда участник должен там оказаться. Этапы гонки
 // не переходят за полночь (лимит прохождения на каждый), поэтому только
-// часы:минуты:секунды, без даты. Локальное время браузера зрителя — то же
-// самое, что и остальные "живые" часы на этой странице (никакого сравнения
-// часовых поясов на сервере нет).
+// часы:минуты:секунды, без даты, по красноярскому времени (krsClock).
+// Часы:минуты:секунды момента (epoch мс) по красноярскому времени — единый
+// пояс проекта, независимо от пояса устройства зрителя.
+const KRS_OFFSET_MS = 7 * 3600 * 1000;
+function krsClock(epochMs) {
+    return new Date(epochMs).toLocaleTimeString('ru-RU', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Krasnoyarsk',
+    });
+}
+
 function fmtClock(remainingS) {
     if (remainingS == null) return null;
-    const d = new Date(Date.now() + remainingS * 1000);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    return krsClock(Date.now() + remainingS * 1000);
 }
 
 // Готовая разметка ячейки прогноза — "~ЧЧ:ММ:СС" первой строкой + "(ЧЧ:ММ:СС)"
@@ -451,8 +457,7 @@ function forecastCellWithBase(distSoFarKm, elapsedS, targetDistKm, baseEpoch) {
     let clockStr;
     if (baseEpoch != null) {
         const absTime = baseEpoch + fs * 1000;
-        const d = new Date(absTime);
-        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        clockStr = krsClock(absTime);
     } else {
         clockStr = fmtClock(fs - elapsedS);
     }
@@ -476,8 +481,7 @@ function prefixedForecastCellWithBase(prefixS, distSoFarKm, elapsedS, targetDist
     let clockStr;
     if (baseEpoch != null) {
         const absTime = baseEpoch + fs * 1000;
-        const d = new Date(absTime);
-        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        clockStr = krsClock(absTime);
     } else {
         clockStr = fmtClock(fs - elapsedS);
     }
@@ -494,8 +498,7 @@ function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
     if (baseEpoch != null) {
         // Для Вело Дня 2: baseEpoch — время старта участника, fs — прогноз от старта этапа
         const absTime = baseEpoch + fs * 1000;
-        const d = new Date(absTime);
-        clockStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        clockStr = krsClock(absTime);
     } else {
         // Для остальных этапов — относительно текущего времени
         clockStr = fmtClock(fs - last.time);
@@ -959,8 +962,9 @@ function stagePos(row, dbStage) {
 // календарные сутки СРАЗУ ПОСЛЕ дня старта гонки (двухдневная гонка).
 function bike2StartEpoch(raceStartEpoch, bike2StartS) {
     if (raceStartEpoch == null || bike2StartS == null) return null;
-    const day1 = new Date(raceStartEpoch);
-    const day2Midnight = new Date(day1.getFullYear(), day1.getMonth(), day1.getDate() + 1).getTime();
+    // полночь следующих суток по красноярскому времени
+    const day1 = Math.floor((raceStartEpoch + KRS_OFFSET_MS) / 86400000);
+    const day2Midnight = (day1 + 1) * 86400000 - KRS_OFFSET_MS;
     return day2Midnight + bike2StartS * 1000;
 }
 

@@ -735,7 +735,7 @@ function exportStartListPdf() {
   @page{margin:15mm}
 </style></head><body>
 <h2>${title}</h2>
-<p>${sorted.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
+<p>${sorted.length} участников · ${new Date().toLocaleDateString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })}</p>
 <table><thead><tr>
   <th>№</th>${numberHeader}<th>Фамилия</th><th>Имя</th><th>Год рожд.</th>
   <th>Дистанция</th><th>Пол</th><th>Возрастная группа</th><th>Город</th>

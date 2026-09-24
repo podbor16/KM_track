@@ -3097,11 +3097,11 @@ check('forecastTime() — target_dist == dist_so_far возвращает то �
 // строка в скобках под "~ЧЧ:ММ:СС" (2026-08-06). Date.now() мокается ЧЕРЕЗ
 // vm.runInContext (не прямым sandbox.Date.now=...) — сборка globalThis.Date
 // в контексте vm иначе не видна снаружи до первого runInContext-вызова.
-// new Date(y,m,d,h,mi,s) конструируется в локальной таймзоне ЭТОГО же
-// процесса, что и getHours()/getMinutes() внутри sandbox (общая система) —
-// тест детерминирован независимо от того, в каком часовом поясе он запущен.
+// fixedNow задан в UTC, fmtClock() форматирует по Красноярску (UTC+7) —
+// тест не зависит от часового пояса машины, на которой запущен.
+
 check('fmtClock() — секунды до события + "сейчас" → часы:минуты:секунды по местному времени', () => {
-    const fixedNow = new Date(2026, 0, 1, 10, 0, 0).getTime();
+    const fixedNow = Date.UTC(2026, 0, 1, 3, 0, 0);  // 10:00 по Красноярску
     vm.runInContext(`Date.now = () => ${fixedNow};`, sandbox);
     // 8484с = 2ч21м24с → 10:00:00 + 2:21:24 = 12:21:24.
     assert.strictEqual(sandbox.fmtClock(8484), '12:21:24');
@@ -3111,7 +3111,7 @@ check('fmtClock() — remainingS=null возвращает null', () => {
     assert.strictEqual(sandbox.fmtClock(null), null);
 });
 check('forecastCellHtml() — две строки: "~ЧЧ:ММ:СС" и "(ЧЧ:ММ:СС)" астрономического времени', () => {
-    const fixedNow = new Date(2026, 0, 1, 10, 0, 0).getTime();
+    const fixedNow = Date.UTC(2026, 0, 1, 3, 0, 0);  // 10:00 по Красноярску
     vm.runInContext(`Date.now = () => ${fixedNow};`, sandbox);
     // forecastTime(72, 8368, 145) = 16852с (см. тест forecastTime() выше).
     // remaining = 16852 - 8368 = 8484с → 10:00:00 + 2:21:24 = 12:21:24.

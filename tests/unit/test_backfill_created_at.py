@@ -47,7 +47,7 @@ def test_analyze_file_queues_update_and_counts_move_when_db_date_is_later(tmp_pa
     assert s["with_date"] == 1
     assert s["matched_rows"] == 1
     assert s["unmatched_rows"] == 0
-    assert s["updates"] == [(5, datetime(2026, 5, 1, 10, 0, 0))]
+    assert s["updates"] == [(5, datetime(2026, 5, 2, 0, 0, 0))]  # Date UTC−7 → Красноярск
     assert s["would_move"] == 1
     assert s["already_ok"] == 0
     assert s["file_month_hist"] == {"2026-05": 1}
@@ -63,7 +63,7 @@ def test_analyze_file_no_move_when_db_date_already_earlier(tmp_path):
 
     s = backfill._analyze_file(cur, _csv_file(tmp_path, _ROW), min_per_event=1)
 
-    assert s["updates"] == [(7, datetime(2026, 5, 1, 10, 0, 0))]
+    assert s["updates"] == [(7, datetime(2026, 5, 2, 0, 0, 0))]
     assert s["would_move"] == 0
     assert s["already_ok"] == 1
 
@@ -115,7 +115,7 @@ def test_gen_sql_emits_transaction_temp_table_and_least_updates(tmp_path):
     # order_id=0 → NULL (заглушка Tilda, не настоящий номер)
     assert "(111, 'Тестов'" in sql
     assert "(NULL, 'Петров'" in sql
-    assert "'2026-05-01 10:00:00'" in sql
+    assert "'2026-05-02 00:00:00'" in sql
 
 
 def test_gen_sql_str_escapes_apostrophe():

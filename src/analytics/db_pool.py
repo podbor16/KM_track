@@ -55,6 +55,7 @@ def initialize_connection_pool(pool_size: int = 10) -> Optional[pooling.MySQLCon
             charset='utf8mb4',
             autocommit=True,
             connection_timeout=10,
+            time_zone=settings.DB_TIME_ZONE,
         )
 
         logger.info(f"✅ Пул соединений инициализирован (размер: {pool_size})")

@@ -1848,7 +1848,7 @@ function exportResultsPdf() {
   @page{margin:15mm;size:landscape}
 </style></head><body>
 <h2>${title}</h2>
-<p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU')}</p>
+<p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })}</p>
 <table><thead><tr>
   <th>№</th><th>Участник</th><th>Дистанция</th><th>Категория</th>
   ${timeHeaders}

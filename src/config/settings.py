@@ -5,6 +5,7 @@
 import os
 import sys
 import logging
+from datetime import timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -88,6 +89,12 @@ DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_NAME = os.getenv("DB_NAME", "krasmarafon")
 DB_USER = os.getenv("DB_USER", "km_analytic")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
+
+# Единый часовой пояс проекта — Красноярск (UTC+7, без перехода на летнее
+# время). Сессия MySQL — в нём же: TIMESTAMP-колонки (leads.created_at) читаются
+# и пишутся по красноярскому времени независимо от пояса сервера.
+KRASNOYARSK_TZ = timezone(timedelta(hours=7))
+DB_TIME_ZONE = "+07:00"
 
 # Таблицы БД
 DB_RUNNERS_TABLE = os.getenv("DB_RUNNERS_TABLE", "runners")           # Таблица с участниками

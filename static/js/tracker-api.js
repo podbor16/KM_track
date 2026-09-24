@@ -769,7 +769,7 @@ function startAutoUpdate() {
     source.onmessage = async (e) => {
         updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
-        updateStatus(`Обновлено ${new Date().toLocaleTimeString()} | ${CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
+        updateStatus(`Обновлено ${new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })} | ${CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
         if (isProcessing) return;
         isProcessing = true;

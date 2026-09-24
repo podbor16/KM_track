@@ -265,7 +265,7 @@ function buildPopupContent(runner) {
         const offset = runner.time_clear_start_s ?? 0;
         const startUnix = raceGunUnixMs + offset * 1000;
         startTimeStr = new Date(startUnix).toLocaleTimeString('ru-RU', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Krasnoyarsk'
         });
     }
 
@@ -480,7 +480,7 @@ function buildPopupContent(runner) {
 
     if (finishEtaMs) {
         const astroStr = new Date(finishEtaMs).toLocaleTimeString('ru-RU', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Krasnoyarsk'
         });
         let resultStr = '';
         if (raceGunUnixMs) {

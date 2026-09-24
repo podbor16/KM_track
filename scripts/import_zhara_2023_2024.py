@@ -198,7 +198,7 @@ def main():
         print("\nЭто был dry-run. Повтори с --apply, чтобы применить.")
         return 0
 
-    inserted, skipped, errors = insert_leads(rows)
+    inserted, skipped, errors = insert_leads(rows, "+00:00")  # sent — UTC
     if inserted is None:
         return 1
     print(f"\nВставлено: {inserted}, пропущено (уже есть): {skipped}, ошибок: {errors}")

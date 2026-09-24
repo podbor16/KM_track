@@ -339,7 +339,7 @@ function renderActiveChart() {
     if (_chartMode === 'position') renderPositionChart(rows);
     else renderPaceChart(rows);
     const label = document.getElementById('chart-refresh-label');
-    if (label) label.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`;
+    if (label) label.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })}`;
 }
 
 function chartStageBoundaries() {

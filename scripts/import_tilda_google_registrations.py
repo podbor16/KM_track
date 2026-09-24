@@ -22,8 +22,10 @@
       --tilda-csv "...csv" --tilda-year 2025 --google-xlsx "...xlsx" --sheets 2025 2024 \\
       --batch-created-at "2025-01-21 04:50:00" [--apply --backup /root/backups/x.tsv]
 
-Все даты — UTC (sent в Google, "Дата оплаты" в Tilda; сессия БД — +00:00),
-поэтому и --batch-created-at задаётся в UTC.
+Все даты пишутся в UTC-сессии (sent в Google — UTC, "Дата оплаты" в Tilda —
+Москва, переводится), поэтому и --batch-created-at задаётся в UTC.
+--reapply-ids <бэкап.tsv> — пересчитать строки, уже исправленные прошлым
+прогоном (их id из бэкапа), например после исправления часового пояса.
 """
 
 import argparse
@@ -51,8 +53,10 @@ from scripts.import_boom_historical import (
 from scripts.import_zhara_2023_2024 import _float, fill_missing_dates, parse_birthday, registered_at
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious, normalize_name
 
-# Даты в источниках (sent в Google, "Дата оплаты" в Tilda) — UTC; сессия БД тоже в UTC
+# sent в Google — UTC, "Дата оплаты" в Tilda — Москва (переводится в UTC);
+# сессия БД — UTC
 UTC = "+00:00"
+MSK_TO_UTC = datetime.timedelta(hours=3)
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 _SKU_RE = re.compile(r"\(([a-z]+?)(\d+)[a-z]*-(\d{4})")
@@ -110,9 +114,9 @@ def parse_tilda_csv(path, event_name, event_year):
         low = {str(k).strip().lower(): v for k, v in raw.items()}
         get = lambda f: low.get(f)
         low.setdefault("product", low.get("дистанция исходник"))
-        # "Дата оплаты" — UTC, как sent в Google; "Date" выгрузки CRM сдвинута на -10 ч
+        # "Дата оплаты" — по Москве (сверено с временем вебхука) -> UTC сессии
         paid = (low.get("дата оплаты") or "").strip()
-        date = datetime.datetime.strptime(paid[:19], "%Y-%m-%d %H:%M:%S") if paid else None
+        date = datetime.datetime.strptime(paid[:19], "%Y-%m-%d %H:%M:%S") - MSK_TO_UTC if paid else None
         rec = _record(get, event_name, event_year, "product", date, "сумма заказа")
         if rec:
             rows.append(rec)
@@ -191,7 +195,7 @@ def is_fio_glued(r):
     return r["surname"].lower() == r["name"].lower() and " " in r["surname"].strip()
 
 
-def plan(rows, by_key, by_fio, by_contact, batch_ts):
+def plan(rows, by_key, by_fio, by_contact, is_batch):
     """Строки пачки обновляются все (дубли одного человека в БД получают одну
     дату). Нет совпадения по ФИО+ДР — ищем того же человека по ФИО+дистанции
     (другая дата рождения) или по email+ДР+дистанции (ФИО в файле склеено):
@@ -206,7 +210,7 @@ def plan(rows, by_key, by_fio, by_contact, batch_ts):
                 continue
             suspicious.append(r)
         for db in existing:
-            if batch_ts and db["created_at"] == batch_ts and db["id"] not in {u[0]["id"] for u in to_update}:
+            if is_batch(db) and db["id"] not in {u[0]["id"] for u in to_update}:
                 new_amount = r["amount"] if not float(db["amount"] or 0) and r["amount"] else float(db["amount"] or 0)
                 to_update.append((db, r["registered_at"], new_amount))
     return to_insert, to_update, suspicious
@@ -247,6 +251,7 @@ def main():
     ap.add_argument("--batch-created-at", help="created_at строк, загруженных в БД пачкой, в UTC (их даты/суммы исправляются)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--backup", help="куда сохранить id/created_at/amount исправляемых строк (обязательно с --apply)")
+    ap.add_argument("--reapply-ids", help="бэкап прошлого прогона: его строки снова считаются строками пачки")
     args = ap.parse_args()
     batch_ts = datetime.datetime.strptime(args.batch_created_at, "%Y-%m-%d %H:%M:%S") if args.batch_created_at else None
     print(f"{args.event_name}: {args.sheets} | Режим: {'ПРИМЕНЕНИЕ' if args.apply else 'DRY-RUN'}")
@@ -272,8 +277,13 @@ def main():
     conn = get_connection(UTC)
     try:
         by_key, by_fio, by_contact = load_db_leads(conn, args.event_name, args.sheets)
-        to_insert, to_update, suspicious = plan(rows, by_key, by_fio, by_contact, batch_ts)
-        remaining_batch = sum(1 for lst in by_key.values() for db in lst if batch_ts and db["created_at"] == batch_ts) - len(to_update)
+        reapply = set()
+        if args.reapply_ids:
+            with open(args.reapply_ids, encoding="utf-8") as f:
+                reapply = {int(line.split("	")[0]) for line in f if line[:1].isdigit()}
+        is_batch = lambda db: (batch_ts is not None and db["created_at"] == batch_ts) or db["id"] in reapply
+        to_insert, to_update, suspicious = plan(rows, by_key, by_fio, by_contact, is_batch)
+        remaining_batch = sum(1 for lst in by_key.values() for db in lst if is_batch(db)) - len(to_update)
         print(f"\nВ БД сейчас: {sum(map(len, by_key.values()))}")
         print(f"К вставке: {len(to_insert)} {dict(Counter((r['event_year'], r['event_distance']) for r in to_insert))}")
         print(f"Исправить дату/сумму у строк пачки: {len(to_update)} (из них сумма с 0: "

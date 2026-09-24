@@ -7,9 +7,10 @@ import logging
 import threading
 import time
 from typing import Optional
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, timedelta
 
 from src.config.event_loader import EventConfig, get_event_by_name
+from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.models.analytics import RaceResultsResponse
 
 logger = logging.getLogger(__name__)
@@ -215,14 +216,12 @@ def _do_build(
         _event_cfg_for_gun = get_event_by_name(events, ev_name)
         if _event_cfg_for_gun and _event_cfg_for_gun.gun_time and race_date:
             try:
-                # gun_time в YAML указан в красноярском времени (UTC+7) — сервер
-                # (VPS) живёт в Europe/Moscow (UTC+3), наивный datetime.timestamp()
-                # интерпретировал бы его как московское и сдвигал на 4 часа.
+                # gun_time в YAML указан в красноярском времени — привязываем пояс
+                # явно, чтобы не зависеть от пояса сервера.
                 _rd = race_date if isinstance(race_date, date) else date.today()
-                _krat_tz = timezone(timedelta(hours=7))
                 _gun_krat = datetime.combine(
                     _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time(),
-                    tzinfo=_krat_tz,
+                    tzinfo=KRASNOYARSK_TZ,
                 )
                 race_gun_unix_ms = int(_gun_krat.timestamp() * 1000)
                 gun_start_dt = _gun_krat.astimezone().replace(tzinfo=None)

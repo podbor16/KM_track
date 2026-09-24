@@ -398,7 +398,9 @@ def parse_boom_file(boom_path, fio_fix, drop_rows):
             "event_distance": event_distance,
             "event_year": event_year,
             "amount": amount,
-            "registered_at": pay_dt,
+            # Payment date — UTC; пишем по красноярскому времени (сессия +07:00),
+            # в нём же заглушка 01.01 года события, см. insert_leads()
+            "registered_at": pay_dt + datetime.timedelta(hours=7) if pay_dt else None,
             "is_name_suspicious": int(is_name_suspicious(surname, name)),
         }
         rows_out.append(rec)
@@ -462,7 +464,7 @@ def main():
         print("\nЭто был dry-run. Повтори с --apply, чтобы применить.")
         return 0
 
-    inserted, skipped_existing, errors = insert_leads(rows)
+    inserted, skipped_existing, errors = insert_leads(rows, settings.DB_TIME_ZONE)
     if inserted is None:
         return 1
 

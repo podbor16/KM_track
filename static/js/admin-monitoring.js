@@ -137,7 +137,7 @@ function renderHistoryCharts(points) {
     MON_CHART_CANVAS_IDS.forEach(canvasId => monHideEmptyChart(canvasId));
 
     const labels = points.map(p => new Date(p.ts * 1000).toLocaleString('ru-RU', {
-        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Krasnoyarsk',
     }));
 
     monRenderLineChart('mon-chart-cpu', labels, points.map(p => p.cpu_percent), 'CPU %', 'rgba(238,45,98,0.9)');
