@@ -455,10 +455,25 @@ def main():
         print("\nЭто был dry-run. Повтори с --apply, чтобы применить.")
         return 0
 
+    inserted, skipped_existing, errors = insert_leads(rows)
+    if inserted is None:
+        return 1
+
+    print(f"\nВставлено: {inserted}, пропущено (уже есть): {skipped_existing}, ошибок: {errors}")
+
+    if inserted:
+        _recompute_client_lead_dates()
+
+    return 0 if errors == 0 else 1
+
+
+def insert_leads(rows):
+    """INSERT-only с проверкой «уже есть» (идемпотентно).
+    -> (inserted, skipped_existing, errors); inserted=None, если нет соединения."""
     conn = get_connection()
     if not conn:
         print("Нет соединения с БД (проверь DB_* в .env/.env.local).")
-        return 1
+        return None, 0, 0
 
     inserted = skipped_existing = errors = 0
     try:
@@ -489,11 +504,11 @@ def main():
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
-                        %(event_year)s, '', %(amount)s, '', 0, NULL, '', '',
+                        %(event_year)s, '', %(amount)s, %(promocode)s, %(discount)s, NULL, '', '',
                         %(is_name_suspicious)s, NULL, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s
                     )
                     """,
-                    {**r, "created_at": created_at},
+                    {"promocode": "", "discount": 0, **r, "created_at": created_at},
                 )
                 inserted += 1
             except Exception as e:
@@ -505,13 +520,7 @@ def main():
             conn.close()
         except Exception:
             pass
-
-    print(f"\nВставлено: {inserted}, пропущено (уже есть): {skipped_existing}, ошибок: {errors}")
-
-    if inserted:
-        _recompute_client_lead_dates()
-
-    return 0 if errors == 0 else 1
+    return inserted, skipped_existing, errors
 
 
 def _recompute_client_lead_dates():
