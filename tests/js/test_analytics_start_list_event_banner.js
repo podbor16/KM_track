@@ -76,7 +76,7 @@ check('updateEventBanner() — показывает баннер, если фо�
 
 check('updateEventBanner() — прячет баннер, если фото не загрузилось (onerror)', () => {
     for (const k of Object.keys(elementsById)) delete elementsById[k];
-    setCurrentEvent('dostigaya_tseli');
+    setCurrentEvent('snow7');
     SUCCESS_URLS = new Set();
     sandbox.updateEventBanner();
     const banner = domStub('eventBanner');

@@ -1,3 +1,28 @@
+# Задача: Удалить старты не из Красмарафона (Первомайский, «Достигая цели», «Красноярский марафон»)
+
+**Статус:** в работе (2026-09-24). Решение пользователя — вариант Б: удалить данные из БД и убрать старты из кода.
+
+Затронутые события: 142, 143 (Первомайский 5 / 21.1), 152 («Достигая цели»), 146 («Красноярский марафон», тестовая запись).
+Строки на проде: results 2228, result_segments 18595, leads 1, age_group_configs 10, participant_photos 0.
+Клиенты: у 962 `last_result_id` указывает на удаляемый результат; 1 клиент с `first_event_id` в этом наборе; у 403 клиентов после удаления не останется ни заявок, ни результатов.
+
+## Код
+- [ ] Удалить: config/events/{pervomay,dostigaya_tseli}.yaml, config/copernico/km_{pervomay_5km,pervomay_21km,rzd_5km}_2026.yaml, config/loader/dostigaya_tseli_5km.env, static/map/2026/pervomay_{5,21}.gpx, static/images/diplomas/dostigaya_tseli/, scripts/fix_post_race.py, docs/runbooks/pervomay_2026.md
+- [ ] Убрать из: templates/krasmarafon/results.html (option), static/js/utils.js (EVENT_NAMES/COLORS), static/js/analytics-results.js (eventYearToIdMap)
+- [ ] JS-тесты баннера: заменить 'dostigaya_tseli' на старт Красмарафона
+- [ ] Прогнать unit + JS тесты, проверить /results локально
+- [ ] Коммит → деплой (ДО удаления данных, чтобы на страницах не остались ссылки на пустые старты)
+
+## Прод (только после подтверждения)
+- [ ] Остановить/проверить systemd-лоадеры по этим конфигам
+- [ ] Бэкап mysqldump --where всех удаляемых строк + затронутых clients → /root/backups на VPS
+- [ ] В транзакции: DELETE result_segments → results → leads (триггер пересчитает клиента) → age_group_configs → events
+- [ ] Пересчитать clients.last_result_id (MAX(results.id) или NULL), first_event_id/name
+- [ ] Клиенты-сироты (403) — по решению пользователя
+- [ ] Проверка: 0 строк по id, /results и /start_list отдают 200, сброс кеша Redis при необходимости
+
+---
+
 # Задача: Импорт исторических регистраций 2013-2022 («Бум.xlsx»)
 
 **Статус:** ✅ ГОТОВО — импортировано на прод 2026-09-23 (20 809 строк, 0 ошибок)

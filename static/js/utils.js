@@ -8,9 +8,7 @@ window.KMUtils = {
         'zhara':      'Жара',
         'kids':       'Детский забег',
         'xtrailrun':  'Забег Икс',
-        'snow7':      'Снежная семерка',
-        'pervomay':   'Первомайский полумарафон',
-        'dostigaya_tseli': 'Достигая цели'
+        'snow7':      'Снежная семерка'
     },
 
     EVENT_COLORS: {
@@ -21,9 +19,7 @@ window.KMUtils = {
         'zhara':      '#ee2d62',
         'kids':       '#ee2d62',
         'xtrailrun':  '#562872',
-        'snow7':      '#00BFDF',
-        'pervomay':   '#d0393b',
-        'dostigaya_tseli': '#c1272d'
+        'snow7':      '#00BFDF'
     },
 
     // Общий парсер длительности → секунды. Принимает строку "H:MM:SS"/"MM:SS",
