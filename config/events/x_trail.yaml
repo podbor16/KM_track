@@ -11,7 +11,7 @@ description: "Забег Икс | Дистанция: 5 км"
 distances:
   - distance: "5 км"
     distance_km: 5.0
-    db_event_id: null         # ← заполнить перед стартом
+    db_event_id: 117          # events.id, дистанция исправлена 10 → 5 км (2026-09-24)
     tracked: true
     has_start_list: true
     checkpoint_distances: []
