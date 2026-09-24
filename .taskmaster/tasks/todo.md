@@ -1,25 +1,31 @@
 # Задача: Удалить старты не из Красмарафона (Первомайский, «Достигая цели», «Красноярский марафон»)
 
-**Статус:** в работе (2026-09-24). Решение пользователя — вариант Б: удалить данные из БД и убрать старты из кода.
+**Статус:** ✅ ГОТОВО (2026-09-24). Решение пользователя — вариант Б: удалить данные из БД и убрать старты из кода. 403 клиента-сироты тоже удалены (по решению пользователя).
+
+## Ревью
+- Код: `541d60b`, деплой прошёл, /, /results, /start_list отдают 200 и больше не упоминают удалённые старты. Unit 524/524. 3 JS-теста падают и на main, к этой задаче не относятся (`document.querySelector` в DOM-стабе баннера, siberman merge)
+- Прод: пробный прогон с ROLLBACK, затем COMMIT, результаты совпали. Удалено: results 2228, result_segments 18595, leads 1, age_group_configs 10, events 4, clients 403. Итог: results 10882, leads 38607, clients 22537, events 125
+- Бэкап: `/root/backups/non_km_events_20260924_122425.sql.gz` (chmod 600, gzip -t ok). Число строк по каждой таблице совпадает с удалённым; clients — все 1884 затронутых в состоянии ДО изменений. Восстановление: `zcat ... | mysql -u root <db>`, это INSERT без DDL и без триггеров
+- Замечено вне задачи: у 3708 клиентов `last_result_id` указывает на несуществующий результат. Так было и до удаления (3752), поле в коде не читается. Лоадер `km_race_loader@zhara_21km` всё ещё running, хотя Жара прошла 23.08
 
 Затронутые события: 142, 143 (Первомайский 5 / 21.1), 152 («Достигая цели»), 146 («Красноярский марафон», тестовая запись).
 Строки на проде: results 2228, result_segments 18595, leads 1, age_group_configs 10, participant_photos 0.
 Клиенты: у 962 `last_result_id` указывает на удаляемый результат; 1 клиент с `first_event_id` в этом наборе; у 403 клиентов после удаления не останется ни заявок, ни результатов.
 
 ## Код
-- [ ] Удалить: config/events/{pervomay,dostigaya_tseli}.yaml, config/copernico/km_{pervomay_5km,pervomay_21km,rzd_5km}_2026.yaml, config/loader/dostigaya_tseli_5km.env, static/map/2026/pervomay_{5,21}.gpx, static/images/diplomas/dostigaya_tseli/, scripts/fix_post_race.py, docs/runbooks/pervomay_2026.md
-- [ ] Убрать из: templates/krasmarafon/results.html (option), static/js/utils.js (EVENT_NAMES/COLORS), static/js/analytics-results.js (eventYearToIdMap)
-- [ ] JS-тесты баннера: заменить 'dostigaya_tseli' на старт Красмарафона
-- [ ] Прогнать unit + JS тесты, проверить /results локально
-- [ ] Коммит → деплой (ДО удаления данных, чтобы на страницах не остались ссылки на пустые старты)
+- [x] Удалить: config/events/{pervomay,dostigaya_tseli}.yaml, config/copernico/km_{pervomay_5km,pervomay_21km,rzd_5km}_2026.yaml, config/loader/dostigaya_tseli_5km.env, static/map/2026/pervomay_{5,21}.gpx, static/images/diplomas/dostigaya_tseli/, scripts/fix_post_race.py, docs/runbooks/pervomay_2026.md
+- [x] Убрать из: templates/krasmarafon/results.html (option), static/js/utils.js (EVENT_NAMES/COLORS), static/js/analytics-results.js (eventYearToIdMap)
+- [x] JS-тесты баннера: заменить 'dostigaya_tseli' на старт Красмарафона
+- [x] Прогнать unit + JS тесты, проверить /results локально
+- [x] Коммит → деплой (ДО удаления данных, чтобы на страницах не остались ссылки на пустые старты)
 
 ## Прод (только после подтверждения)
-- [ ] Остановить/проверить systemd-лоадеры по этим конфигам
-- [ ] Бэкап mysqldump --where всех удаляемых строк + затронутых clients → /root/backups на VPS
-- [ ] В транзакции: DELETE result_segments → results → leads (триггер пересчитает клиента) → age_group_configs → events
-- [ ] Пересчитать clients.last_result_id (MAX(results.id) или NULL), first_event_id/name
-- [ ] Клиенты-сироты (403) — по решению пользователя
-- [ ] Проверка: 0 строк по id, /results и /start_list отдают 200, сброс кеша Redis при необходимости
+- [x] Остановить/проверить systemd-лоадеры по этим конфигам
+- [x] Бэкап mysqldump --where всех удаляемых строк + затронутых clients → /root/backups на VPS
+- [x] В транзакции: DELETE result_segments → results → leads (триггер пересчитает клиента) → age_group_configs → events
+- [x] Пересчитать clients.last_result_id (MAX(results.id) или NULL), first_event_id/name
+- [x] Клиенты-сироты (403) — по решению пользователя
+- [x] Проверка: 0 строк по id, /results и /start_list отдают 200, сброс кеша Redis при необходимости
 
 ---
 
