@@ -74,7 +74,28 @@ def _lookup_event_name_by_slug(slug_text: str) -> str:
     return event.name if event else ""
 
 
+# Одно событие в БД под разными названиями продукта в Tilda (переименование
+# «Х Трейл» → «Забег Икс» в 2026, латинское «X Trail» в старых продуктах).
+# Ключ — название в нижнем регистре, значение — event_name в БД.
+_EVENT_NAME_ALIASES = {
+    "забег икс": "Х Трейл",
+    "x trail": "Х Трейл",
+    "xtrail": "Х Трейл",
+}
+
+
+def _canonical_event_name(name: str) -> str:
+    return _EVENT_NAME_ALIASES.get(name.strip().lower(), name)
+
+
 def parse_products(products, birthday=None):
+    info = _parse_products(products, birthday)
+    if info["event_name"]:
+        info["event_name"] = _canonical_event_name(info["event_name"])
+    return info
+
+
+def _parse_products(products, birthday=None):
     empty = {"event_distance": "", "event_name": "", "event_year": ""}
     if not products:
         _log.warning(f"parse_products: пустой products={products!r}")

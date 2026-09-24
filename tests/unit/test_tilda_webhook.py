@@ -162,3 +162,17 @@ def test_transform_full_payload():
     assert result["is_name_suspicious"] == 0
     assert result["client_id"] == 0
     assert result["event_id"] == 0
+
+
+@pytest.mark.parametrize("product, expected_distance", [
+    ("5 км Забег Икс 2026 (xtrail5-2026, Гравировка на медали + 470 р.: Не нужно)", "5 км"),
+    ("2 км Забег Икс северная ходьба 2026 (xtrail2w-2026, ...)", "2 км"),
+    ("10 км X Trail (xtrail10-2026, Гравировка на медали + 470 рублей: Нет)", "10 км"),
+    ("2 км Х Трейл 2026 (xtrail2y-2026, ...)", "2 км"),
+])
+def test_parse_products_xtrail_aliases_resolve_to_db_event_name(product, expected_distance):
+    """«Забег Икс» (2026) и «X Trail» — то же событие, что «Х Трейл» в БД."""
+    info = parse_products([product])
+    assert info["event_name"] == "Х Трейл"
+    assert info["event_distance"] == expected_distance
+    assert info["event_year"] == "2026"
