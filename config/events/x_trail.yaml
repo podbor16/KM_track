@@ -3,8 +3,8 @@ display_name: "Забег Икс"    # показывается пользова
 year: 2026
 code: "xtrailrun"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: null               # ← заполнить перед стартом
-start_lon: null               # ← заполнить перед стартом
+start_lat: 56.007746             # старт/финиш — первая точка GPX (круг 5.18 км)
+start_lon: 92.72311
 gun_time: null                # ← заполнить перед стартом
 description: "Забег Икс | Дистанция: 5 км"
 
@@ -14,8 +14,11 @@ distances:
     db_event_id: 117          # events.id, дистанция исправлена 10 → 5 км (2026-09-24)
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
+    # Промежуточных КТ пока нет (информации от организатора ещё нет) — только старт/финиш
+    checkpoint_distances: [0, 5.0]
+    checkpoints:
+      - {name: "Старт", distance_km: 0.0, lat: 56.007746, lon: 92.72311}
+      - {name: "Финиш", distance_km: 5.0, lat: 56.007746, lon: 92.72311}
     diploma:
       # Дистанция "5 км" уже впечатана в картинку. Плашки: x 102–980,
       # y 910–1222 и 1281–1593 (картинка 1080×1960)
@@ -26,15 +29,15 @@ distances:
       ranks_box: {top: 65.36, left: 9.44, width: 81.30, height: 15.92}
       text_color: "#fff"
     gpx_file: "static/map/2026/xtrail_griva.gpx"
-    event_date: null          # ← заполнить перед стартом
+    event_date: "2026-09-27"
     route:
       laps: 1
       total_km: 5.0
     copernico:
-      race_id: null           # ← заполнить перед стартом
+      race_id: "--2026-13854"
       login: "podbor250718@gmail.com"
-      preset: "km_analytics"
-      event: "5 км"
+      preset: "km_xtrail_5km_2026"
+      event: "5km"
 
   - distance: "2 км"
     distance_km: 2.0

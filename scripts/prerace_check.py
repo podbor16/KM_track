@@ -350,6 +350,9 @@ def check_preset_fields(dist_cfg):
         fail("G", "Поля API", f"Ошибка: {e}")
         return
 
+    if isinstance(body, dict) and body.get("error"):
+        fail("G", "Поля API", f"Copernico: {body['error']} — пресет «{preset_name}» не создан в Copernico")
+        return
     runners = body.get("data", body) if isinstance(body, dict) else body
     if not runners:
         warn("G", "Поля API", "Copernico вернул пустой список")
@@ -400,6 +403,11 @@ def inspect_preset(dist_cfg):
         print(f"FAIL: {e.reason}")
         sys.exit(1)
 
+    if isinstance(body, dict) and body.get("error"):
+        # {"error": "No preset"} — пресета с таким именем нет в аккаунте
+        # Copernico: его нужно создать в интерфейсе Copernico
+        print(f"FAIL: Copernico: {body['error']} — проверьте, что пресет создан в Copernico")
+        sys.exit(1)
     runners = body.get("data", body) if isinstance(body, dict) else body
     if not runners:
         print("Copernico вернул пустой список участников.")
