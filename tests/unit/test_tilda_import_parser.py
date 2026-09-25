@@ -851,3 +851,52 @@ def test_parse_tilda_datetime_out_of_range_returns_none():
     assert parse_tilda_datetime("1999-01-01 00:00:00") is None          # до 2013
     future = datetime(datetime.now().year + 5, 1, 1).strftime("%Y-%m-%d %H:%M:%S")
     assert parse_tilda_datetime(future) is None
+
+
+# ---------------------------------------------------------------------------
+# Обработанный организатором файл Забега Икс 2026: бесплатные/ручные
+# регистрации без продукта или с голой дистанцией в продукте, дистанция — в
+# колонке без заголовка. Раньше такие строки (146 шт.) терялись при импорте.
+# ---------------------------------------------------------------------------
+
+def _xtrail_xlsx(rows):
+    import io
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Номер", "surname", "Name", "birthday", "", "product", "Гравировка", "Взнос"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_empty_or_bare_product_uses_unnamed_distance_column_and_admin_event():
+    data = _xtrail_xlsx([
+        [101, "Иванов", "Иван", "01.05.1990", "5 км", None, None, None],
+        [102, "Петрова", "Анна", "01.05.1991", "2 км", "2 км", None, None],
+        [103, "Сидоров", "Олег", "01.05.1992", "5 км", "5 км Забег Икс 2026", None, None],
+        [104, None, None, None, "2 км", None, None, None],  # зарезервированный номер без участника
+    ])
+    result = parse_tilda_export(data, filename="x.xlsx", fallback_event_name="Х Трейл", fallback_event_year=2026)
+
+    assert result.unknown_headers == []
+    assert [(r.surname, r.event_name, r.event_year, r.event_distance, r.start_number) for r in result.rows] == [
+        ("Иванов", "Х Трейл", 2026, "5 км", "101"),
+        ("Петрова", "Х Трейл", 2026, "2 км", "102"),
+        ("Сидоров", "Х Трейл", 2026, "5 км", "103"),
+    ]
+    assert len(result.failed_rows) == 1  # строка без ФИО
+
+
+def test_parse_empty_product_without_admin_event_stays_an_error():
+    data = _xtrail_xlsx([[101, "Иванов", "Иван", "01.05.1990", "5 км", None, None, None]])
+    result = parse_tilda_export(data, filename="x.xlsx")
+    assert result.rows == [] and len(result.failed_rows) == 1
+
+
+def test_unnamed_column_with_non_distance_values_is_not_used_as_distance():
+    data = _xtrail_xlsx([[101, "Иванов", "Иван", "01.05.1990", "Основная категория", None, None, None]])
+    result = parse_tilda_export(data, filename="x.xlsx", fallback_event_name="Х Трейл", fallback_event_year=2026)
+    assert result.rows == []

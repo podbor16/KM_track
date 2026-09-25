@@ -176,3 +176,14 @@ def test_parse_products_xtrail_aliases_resolve_to_db_event_name(product, expecte
     assert info["event_name"] == "Х Трейл"
     assert info["event_distance"] == expected_distance
     assert info["event_year"] == "2026"
+
+
+def test_parse_products_without_slug_tail_year_at_end():
+    """«5 км Забег Икс 2026» — продукт без служебного хвоста Tilda в скобках."""
+    info = parse_products(["5 км Забег Икс 2026"])
+    assert (info["event_name"], info["event_year"], info["event_distance"]) == ("Х Трейл", "2026", "5 км")
+
+
+def test_parse_products_amount_at_end_is_not_taken_as_year():
+    info = parse_products(["5 км Жара (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1390"])
+    assert (info["event_name"], info["event_year"]) == ("Жара", "2026")

@@ -103,9 +103,12 @@ def _parse_products(products, birthday=None):
 
     products_str = products[0] if isinstance(products, list) else str(products)
 
+    # "(" после года — служебный хвост Tilda ("(slug, опции)"); в
+    # обработанных организатором файлах его бывает нет вовсе ("5 км Забег
+    # Икс 2026") — год тогда в конце строки.
     match = re.match(
-        r"^(\d+(?:\.\d+)?)\s+(км|km)\s+(.+?)\s+(\d{4})\s*\(",
-        products_str,
+        r"^(\d+(?:\.\d+)?)\s+(км|km)\s+([^(]+?)\s+(20\d{2})\s*(?:\(|$)",
+        products_str.strip(),
         re.IGNORECASE,
     )
     if match:

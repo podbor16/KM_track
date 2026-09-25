@@ -161,6 +161,9 @@ _KNOWN_IGNORED_HEADERS = {
     "size",
     # "Местоположение" — гео-строка Tilda, в leads нет колонки.
     "местоположение",
+    # Допы и взнос, разнесённые организатором по колонкам в обработанном
+    # файле (Забег Икс 2026) — в leads нет соответствующих колонок.
+    "гравировка", "баф", "пояс", "взнос",
 }
 
 
@@ -322,12 +325,42 @@ def _extract_event_info(get, col_map: dict, birthday: str,
             except (ValueError, IndexError):
                 pass
 
-    if "event_distance" in col_map and fallback_event_name and fallback_event_year:
-        distance = str(get("event_distance") or "").strip().replace(",", ".")
-        if distance:
-            return fallback_event_name, fallback_event_year, distance
+    # Продукт — голая дистанция ("5 км") или пуст (бесплатные/ручные
+    # регистрации в обработанном организатором файле, Забег Икс 2026 —
+    # 146 таких строк): событие/год — выбранные в /admin, дистанция — из
+    # самого продукта или из колонки дистанции.
+    if fallback_event_name and fallback_event_year:
+        product = str(get("products") or "").strip() if "products" in col_map else ""
+        if _DISTANCE_RE.match(product):
+            return fallback_event_name, fallback_event_year, _normalize_distance(product)
+        if "event_distance" in col_map:
+            distance = str(get("event_distance") or "").strip()
+            if distance:
+                return fallback_event_name, fallback_event_year, _normalize_distance(distance)
 
     return "", None, ""
+
+
+_DISTANCE_RE = re.compile(r"^\d+(?:[.,]\d+)?\s*(км|м)$", re.IGNORECASE)
+
+
+def _normalize_distance(value: str) -> str:
+    """'21,1 км' -> '21.1 км', '5км' -> '5 км'."""
+    m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(км|м)$", value.strip(), re.IGNORECASE)
+    return f"{m.group(1).replace(',', '.')} {m.group(2).lower()}" if m else value.strip().replace(",", ".")
+
+
+def _detect_distance_column(headers, data_rows) -> Optional[int]:
+    """Колонка дистанции без заголовка (обработанный организатором файл,
+    Забег Икс 2026: пустой заголовок, значения "5 км"/"2 км" у всех строк)
+    — по содержимому: все непустые значения выглядят как дистанция."""
+    for i, h in enumerate(headers):
+        if str(h or "").strip():
+            continue
+        values = [str(r[i]).strip() for r in data_rows if i < len(r) and r[i] not in (None, "")]
+        if values and all(_DISTANCE_RE.match(v) for v in values):
+            return i
+    return None
 
 
 def parse_tilda_export(file_bytes: bytes, filename: str,
@@ -350,6 +383,11 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
             col_map[field_name] = i
         elif normalized and normalized not in _KNOWN_IGNORED_HEADERS:
             unknown_headers.append(str(h).strip())
+
+    if "event_distance" not in col_map:
+        detected = _detect_distance_column(headers, data_rows)
+        if detected is not None:
+            col_map["event_distance"] = detected
 
     missing = {"surname", "name", "birthday"} - col_map.keys()
     if missing:
