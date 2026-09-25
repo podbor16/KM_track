@@ -5,7 +5,7 @@ code: "xtrailrun"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
 start_lat: 56.007746             # старт/финиш — первая точка GPX (круг 5.18 км)
 start_lon: 92.72311
-gun_time: null                # ← заполнить перед стартом
+gun_time: "11:00:00"          # старт 27.09.2026 11:00 Красноярск (gunTime в Copernico 04:00 UTC)
 description: "Забег Икс | Дистанция: 5 км"
 
 distances:
@@ -14,7 +14,7 @@ distances:
     db_event_id: 117          # events.id, дистанция исправлена 10 → 5 км (2026-09-24)
     tracked: true
     has_start_list: true
-    # Промежуточных КТ пока нет (информации от организатора ещё нет) — только старт/финиш
+    # Промежуточных КТ нет (подтверждено организатором) — только старт/финиш
     checkpoint_distances: [0, 5.0]
     checkpoints:
       - {name: "Старт", distance_km: 0.0, lat: 56.007746, lon: 92.72311}
