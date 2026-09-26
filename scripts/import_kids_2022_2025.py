@@ -27,6 +27,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.import_boom_historical import _BIRTHDAY_SENTINEL
 from scripts.import_colorrun_2023_2025 import main
 
+EVENT = "Детский забег"
+REG_SHEETS = {2022: "2022", 2023: "2023", 2024: "2024", 2025: "LeadsFromTilda"}
+START_SHEETS = {2025: "Стартовый 2025"}
 _KIDS_SKU_RE = re.compile(r"\(kids\d{4}-(\d+)", re.IGNORECASE)
 
 
@@ -39,9 +42,9 @@ def kids_distance(birthday, event_year, get):
 
 if __name__ == "__main__":
     sys.exit(main(
-        event="Детский забег",
-        reg_sheets={2022: "2022", 2023: "2023", 2024: "2024", 2025: "LeadsFromTilda"},
-        start_sheets={2025: "Стартовый 2025"},
+        event=EVENT,
+        reg_sheets=REG_SHEETS,
+        start_sheets=START_SHEETS,
         batch=("2026-02-24 10:44:00", "2026-02-24 10:46:00"),
         doc=__doc__,
         distance_fn=kids_distance,

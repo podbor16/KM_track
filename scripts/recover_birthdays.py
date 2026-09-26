@@ -66,6 +66,37 @@ def classify(lead, known):
     return ("C" if dates else "D"), None, None
 
 
+def set_birthdays(conn, plan):
+    """plan: [(lead{id, surname, name, client_id}, дата)]. Заявке — дата и
+    карточка клиента с такими ФИО и датой; если такой карточки нет — дата
+    ставится её текущей карточке (с заглушкой). Затем удаляются опустевшие
+    карточки. -> (перепривязано, дата карточке, удалено карточек)."""
+    cur = conn.cursor(dictionary=True)
+    relinked = kept = 0
+    for lead, bd in plan:
+        cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s LIMIT 1",
+                    (lead["surname"], lead["name"], bd))
+        target = cur.fetchone()
+        if target:
+            cur.execute("UPDATE leads SET birthday = %s, client_id = %s WHERE id = %s", (bd, target["id"], lead["id"]))
+            relinked += 1
+        else:
+            cur.execute("UPDATE leads SET birthday = %s WHERE id = %s", (bd, lead["id"]))
+            cur.execute("UPDATE clients SET birthday = %s WHERE id = %s AND birthday = %s",
+                        (bd, lead["client_id"], SENTINEL))
+            kept += 1
+    conn.commit()
+    # то же, что migrations/cleanup_orphan_clients.sql
+    cur.execute(
+        "DELETE c FROM clients c WHERE c.id <> 0 "
+        "AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id) "
+        "AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)"
+    )
+    orphans = cur.rowcount
+    conn.commit()
+    return relinked, kept, orphans
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--apply", action="store_true")
@@ -107,26 +138,7 @@ def main():
         return 1
     Path(args.backup).write_text(json.dumps(
         [{"id": l["id"], "client_id": l["client_id"], "birthday": SENTINEL} for l, _ in plan]), encoding="utf-8")
-    relinked = kept = 0
-    for lead, bd in plan:
-        cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s LIMIT 1",
-                    (lead["surname"], lead["name"], bd))
-        target = cur.fetchone()
-        if target:
-            cur.execute("UPDATE leads SET birthday = %s, client_id = %s WHERE id = %s", (bd, target["id"], lead["id"]))
-            relinked += 1
-        else:
-            cur.execute("UPDATE leads SET birthday = %s WHERE id = %s", (bd, lead["id"]))
-            kept += 1
-    conn.commit()
-    # то же, что migrations/cleanup_orphan_clients.sql
-    cur.execute(
-        "DELETE c FROM clients c WHERE c.id <> 0 "
-        "AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id) "
-        "AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)"
-    )
-    orphans = cur.rowcount
-    conn.commit()
+    relinked, kept, orphans = set_birthdays(conn, plan)
     conn.close()
     print(f"Дата восстановлена: {len(plan)} (перепривязано к карточке: {relinked}, без перепривязки: {kept}), "
           f"удалено пустых карточек: {orphans}, бэкап: {args.backup}")
