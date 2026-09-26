@@ -4,11 +4,14 @@
 (2026-09-26, первым — Х Трейл 2025, 10 км). Нужны трекеру следующего года:
 личный темп и средний темп категорий (results_service — исторический кеш).
 
-Колонки: #, Bib, Tag, Surname, Name, Club, Phone, Date of Birth (дд/мм/гггг),
-Gender (Male/Female), Category, Status, Start, Finish, чистое время («Finish чистое» или
-«чистое»). Гандикап (Снежная семёрка): Start — задержка волны, Finish — от первого
-выстрела (порядок прихода = места), «чистое» — своё время бега.
-Промежуточная отметка kt2 не загружается — дистанция КТ неизвестна.
+Колонки: Bib, Surname, Name, Date of Birth (дд/мм/гггг), Status, Start,
+[Gender (Male/Female) — иначе пол из категории], [Category], время финиша. Колонок финиша в выгрузках бывает
+несколько с одинаковым названием («Finish» — чистое / официальное / темп): время
+определяется по содержимому (чч:мм:сс, темп «3'14"/km» отбрасывается), чистое —
+колонка со словом «чист», иначе меньшая из двух; чистое > официального хоть у
+одного — ошибка. Гандикап (Снежная семёрка): Start — задержка волны, официальное —
+от первого выстрела (порядок прихода = места).
+Промежуточные отметки не загружаются — дистанции КТ неизвестны.
 Места считаются заново: абсолютное/пол/категория по времени выстрела и по
 чистому времени. client_id подставляет trg_results_before_insert.
 
@@ -61,24 +64,54 @@ def _hms(s):
     return None if s is None else f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
+def finish_columns(h, rows):
+    """-> (чистое, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
+    low = [x.lower().replace('"', "").replace("«", "").replace("»", "") for x in h]
+    cand = [k for k, x in enumerate(low) if x.startswith("finish") or "чист" in x]
+    timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")])
+             and sum(_secs(v) is not None for v in vals) >= 0.9 * len(vals)]
+    if not timed or len(timed) > 2:
+        raise ValueError(f"не удалось определить колонки финиша: {[h[k] for k in cand]}")
+    if len(timed) == 1:
+        return timed[0], timed[0]
+    a, b = timed
+    named = [k for k in timed if "чист" in low[k]]
+    if named:
+        clean = named[0]
+    else:
+        pairs = [(_secs(r[a]), _secs(r[b])) for r in rows if _secs(r[a]) and _secs(r[b])]
+        clean = a if sum(x for x, _ in pairs) <= sum(y for _, y in pairs) else b
+    gun = b if clean == a else a
+    bad = sum(1 for r in rows if _secs(r[clean]) and _secs(r[gun]) and _secs(r[clean]) > _secs(r[gun]))
+    if bad:
+        raise ValueError(f"чистое время больше официального у {bad} строк: «{h[clean]}» / «{h[gun]}»")
+    return clean, gun
+
+
 def parse(path):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
     h = [str(x or "").strip() for x in rows[0]]
-    i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Gender", "Category", "Status",
-                                 "Start", "Finish")}
-    i["clean"] = next(h.index(k) for k in ("Finish чистое", "чистое") if k in h)
+    i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Status", "Start")}
+    sex_i = h.index("Gender") if "Gender" in h else None
+    i["clean"], i["Finish"] = finish_columns(h, rows[1:])
+    cat_i = h.index("Category") if "Category" in h else None
     out = []
     for r in rows[1:]:
         if not r or not r[i["Surname"]] or not str(r[i["Bib"]] or "").strip().isdigit():
             continue
+        category = str(r[cat_i] or "").strip() if cat_i is not None else ""
+        sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
+        if not sex and category[:1].upper() in "МЖ":                   # нет Gender — пол из категории
+            sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
         status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
         clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
         finished = status == "Finished" and clean and gun
         out.append({
             "surname": str(r[i["Surname"]]).strip(), "name": str(r[i["Name"]] or "").strip(),
-            "birthday": _birthday(r[i["Date of Birth"]]), "sex": SEX.get(str(r[i["Gender"]] or "").strip(), ""),
-            "start_number": int(r[i["Bib"]]), "category": str(r[i["Category"]] or "").strip(),
+            "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
+            "start_number": int(r[i["Bib"]]),
+            "category": category,
             "race_status": status, "start": _secs(r[i["Start"]]),
             "gun": gun if finished else None, "clean": clean if finished else None,
         })
