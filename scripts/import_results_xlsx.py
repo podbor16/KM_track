@@ -5,7 +5,9 @@
 личный темп и средний темп категорий (results_service — исторический кеш).
 
 Колонки: #, Bib, Tag, Surname, Name, Club, Phone, Date of Birth (дд/мм/гггг),
-Gender (Male/Female), Category, Status, Event, Start, kt2, Finish чистое, Finish.
+Gender (Male/Female), Category, Status, Start, Finish, чистое время («Finish чистое» или
+«чистое»). Гандикап (Снежная семёрка): Start — задержка волны, Finish — от первого
+выстрела (порядок прихода = места), «чистое» — своё время бега.
 Промежуточная отметка kt2 не загружается — дистанция КТ неизвестна.
 Места считаются заново: абсолютное/пол/категория по времени выстрела и по
 чистому времени. client_id подставляет trg_results_before_insert.
@@ -31,6 +33,7 @@ from scripts.import_boom_historical import get_connection
 
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
+STATUS = {"Disqualified": "DSQ"}                     # как в остальных результатах БД
 
 
 def _secs(v):
@@ -63,13 +66,14 @@ def parse(path):
     rows = list(ws.iter_rows(values_only=True))
     h = [str(x or "").strip() for x in rows[0]]
     i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Gender", "Category", "Status",
-                                 "Start", "Finish чистое", "Finish")}
+                                 "Start", "Finish")}
+    i["clean"] = next(h.index(k) for k in ("Finish чистое", "чистое") if k in h)
     out = []
     for r in rows[1:]:
         if not r or not r[i["Surname"]] or not str(r[i["Bib"]] or "").strip().isdigit():
             continue
-        status = str(r[i["Status"]] or "").strip()
-        clean, gun = _secs(r[i["Finish чистое"]]), _secs(r[i["Finish"]])
+        status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
+        clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
         finished = status == "Finished" and clean and gun
         out.append({
             "surname": str(r[i["Surname"]]).strip(), "name": str(r[i["Name"]] or "").strip(),
