@@ -44,9 +44,11 @@ SENTINELS = {"1900-01-01", "1905-01-01"}
 
 _INVISIBLE = re.compile("[​-‏⁠﻿­̀́]")
 _HOMOGLYPH = str.maketrans("aAeEoOpPcCxXyYkKmMtTHBh", "аАеЕоОрРсСхХуУкКмМтТНВһ")
+_TO_LATIN = str.maketrans("аАеЕоОрРсСхХуУкКмМтТНВ", "aAeEoOpPcCxXyYkKmMtTHB")
 _CYR = re.compile(r"[а-яё]", re.I)
 _LAT = re.compile(r"[a-z]", re.I)
-_PATRONYMIC = re.compile(r"(вич|вна|ична|инична)$", re.I)
+_PATR_FEMALE = re.compile(r"(вна|ична)$", re.I)     # фамилий с такими окончаниями почти нет
+_PATR_MALE = re.compile(r"вич$", re.I)               # «Валисевич», «Богданкевич» — фамилии
 
 _TRANSLIT = [
     ("shch", "щ"), ("sch", "щ"), ("iia", "ия"), ("zh", "ж"), ("kh", "х"), ("ts", "ц"), ("tz", "ц"),
@@ -67,6 +69,10 @@ def norm(s):
 def translit(word):
     w, out, i = word.lower(), [], 0
     while i < len(w):
+        if w[i] in "aeou" and w[i + 1:i + 2] == "y" and w[i + 2:i + 3] in tuple("aeiou"):
+            out.append(dict(zip("aeou", "аеоу"))[w[i]])   # «Troyakova» -> «Троякова»
+            i += 1
+            continue
         if w[i] == "y" and not w.startswith(("ya", "yu", "yo", "ye", "yi"), i):
             # конечная y после согласной — «ий» (Dmitry), иначе «ы»
             out.append("ий" if i == len(w) - 1 and i and w[i - 1] not in "aeiou" else "ы")
@@ -91,15 +97,16 @@ def title(word):
 
 
 def lev(a, b, limit=2):
+    """Расстояние Дамерау (перестановка соседних букв — одна правка: «Adnrei»)."""
     if abs(len(a) - len(b)) > limit:
         return limit + 1
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        cur = [i]
-        for j, cb in enumerate(b, 1):
-            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
-        prev = cur
-    return prev[-1]
+    d = [[i + j if not i * j else 0 for j in range(len(b) + 1)] for i in range(len(a) + 1)]
+    for i in range(1, len(a) + 1):
+        for j in range(1, len(b) + 1):
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] != b[j - 1]))
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + 1)
+    return d[-1][-1]
 
 
 def tokens(field):
@@ -109,10 +116,13 @@ def tokens(field):
     out = []
     for t in s.split():
         t = t.strip("-'’")
-        if _CYR.search(t) and _LAT.search(t):          # «Нинa», «ЛаZученко», «Светланd»
-            t = "".join(ch if not _LAT.match(ch) else
-                        ch.translate(_HOMOGLYPH) if ch.translate(_HOMOGLYPH) != ch else translit(ch)
-                        for ch in t)
+        if _CYR.search(t) and _LAT.search(t):
+            if len(_LAT.findall(t)) > len(_CYR.findall(t)):  # «Моrotskiy» — латиница с кириллическими М, о
+                t = translit(t.translate(_TO_LATIN))
+            else:                                            # «Нинa», «ЛаZученко», «Светланd»
+                t = "".join(ch if not _LAT.match(ch) else
+                            ch.translate(_HOMOGLYPH) if ch.translate(_HOMOGLYPH) != ch else translit(ch)
+                            for ch in t)
         if t:
             out.append(t)
     return out
@@ -132,32 +142,27 @@ class Names:
                 surn_f[norm(t)] += 1
         self.first = {n: k for n, k in name_f.items() if k >= 5 and surn_f[n] < k / 3 and _CYR.search(n)}
         self.sex = {n: sex[n].most_common(1)[0][0] for n in self.first}
-        self.surnames = {s: k for s, k in surn_f.items() if k >= 2 and _CYR.search(s)}
 
     def is_first(self, t):
         return norm(t) in self.first
 
     def match_first(self, lat, sex=""):
-        """Латинское имя -> частотное русское имя того же пола (или None)."""
+        """Латинское имя -> частотное русское имя (или None). Точное совпадение
+        транслита (в т.ч. с «ь»: Igor -> Игорь) — без учёта пола; близкое —
+        только того же пола («Petra» не «Петр»)."""
         c = translit(lat)
-        limit = 0 if len(c) <= 3 else 1 if len(c) <= 5 else 2
+        for exact in (c, c + "ь"):
+            if exact in self.first:
+                return exact
+        limit = 0 if len(c) <= 4 else 1 if len(c) == 5 else 2
         best = None
         for n, k in self.first.items():
-            d = lev(n, c, limit)
+            d = lev(n, c, limit) if limit else 1
             if d > limit or (sex and self.sex[n] in "МЖ" and self.sex[n] != sex[:1].upper()):
                 continue
             if best is None or (d, -k) < best[0]:
                 best = ((d, -k), n)
         return best[1] if best else None
-
-    def match_surname(self, lat):
-        """Латинская фамилия -> известная фамилия на расстоянии 1 или транслит."""
-        c = translit(lat)
-        if c in self.surnames:
-            return c
-        cands = [(lev(s, c, 1), -k, s) for s, k in self.surnames.items() if abs(len(s) - len(c)) <= 1]
-        cands = [x for x in cands if x[0] <= 1]
-        return min(cands)[2] if cands else c
 
 
 def canonical_fio(surname, name, names, sex=""):
@@ -168,43 +173,67 @@ def canonical_fio(surname, name, names, sex=""):
             w = title(ts[0]) if ts else ""
             return w, w, ["одно слово в обоих полях"]
         tn = []                                         # ФИО целиком в обоих полях
-    words = [("s", t) for t in ts] + [("n", t) for t in tn]
     notes = []
-
-    # латиница: русское ФИ -> кириллица, иностранное остаётся
-    if any(not _CYR.search(t) for _, t in words):
-        first_lat = {t: names.match_first(t, sex) for _, t in words if not _CYR.search(t) and len(t) > 1}
-        if any(_CYR.search(t) for _, t in words) or any(first_lat.values()):
-            conv = [(f, t if _CYR.search(t) else first_lat[t] or names.match_surname(t))
-                    for f, t in words if _CYR.search(t) or len(t) > 1]
-            words = []
-            for f, t in conv:                            # «Прусаков … Prusakov Vladimir»
-                if norm(t) not in {norm(u) for _, u in words}:
-                    words.append((f, t))
-            notes.append("латиница -> кириллица")
-        else:
-            notes.append("иностранное ФИ")
-
-    initials = [x for x in words if len(x[1]) == 1]
-    words = [x for x in words if len(x[1]) > 1]
-    if initials:
+    # инициалы: «С.», «К.», «ЕП»
+    initial = lambda t: len(t) == 1 or (len(t) == 2 and t.isupper())
+    if any(initial(t) for t in ts + tn):
         notes.append("инициал убран")
-    # отчество убираем, если кроме него остаётся фамилия («Наталия Валисевич» — фамилия)
-    patr = [x for x in words if _PATRONYMIC.search(x[1]) and not names.is_first(x[1]) and len(x[1]) > 5]
-    rest = [x for x in words if x not in patr]
-    if patr and any(not names.is_first(t) for _, t in rest):
-        words = rest
-        notes.append("отчество убрано")
+    ts, tn = [t for t in ts if not initial(t)], [t for t in tn if not initial(t)]
+    # отчество: -вна/-ична — всегда; -вич — сразу после имени и если есть другая фамилия
+    # («Наталия Валисевич», «Богданкевич Ратибор» — фамилии)
+    other_surname = lambda x: any(u != x and not names.is_first(u) and not _PATR_MALE.search(u)
+                                  and not _PATR_FEMALE.search(u) for u in ts + tn)
+    kept = []
+    for field in (ts, tn):
+        out = []
+        for k, t in enumerate(field):
+            male = _PATR_MALE.search(t) and k > 0 and names.is_first(field[k - 1]) and other_surname(t)
+            if len(t) > 5 and not names.is_first(t) and (_PATR_FEMALE.search(t) or male):
+                notes.append("отчество убрано")
+            else:
+                out.append(t)
+        kept.append(out)
+    ts, tn = kept
+    words = [("s", t) for t in ts] + [("n", t) for t in tn]
+
+    # латиница: русское ФИ -> кириллица (транслит), иностранное остаётся
+    if any(not _CYR.search(t) for _, t in words):
+        cyr = [t for _, t in words if _CYR.search(t)]
+        if any(names.is_first(t) for t in cyr) and any(not names.is_first(t) for t in cyr):
+            words = [x for x in words if _CYR.search(x[1])]          # «Прусаков … Prusakov Vladimir»
+            notes.append("латинский дубль ФИО убран")
+        else:
+            # имя ищем сначала в поле имени; в поле фамилии — только если в поле имени его нет
+            fm = {}
+            for field in ("n", "s"):
+                if field == "s" and (any(names.is_first(t) for f, t in words if f == "n" and _CYR.search(t))
+                                     or any(fm.values())):
+                    break
+                for f, t in words:
+                    if f == field and not _CYR.search(t):
+                        fm[t] = names.match_first(t, sex)
+            if cyr or any(fm.values()):
+                words = [(f, t if _CYR.search(t) else fm.get(t) or title(translit(t))) for f, t in words]
+                notes.append("латиница -> кириллица")
+            else:
+                notes.append("иностранное ФИ")
 
     # имя: частотное имя из поля имени, иначе из поля фамилии, иначе поле имени
     firsts = [x for x in words if names.is_first(x[1])]
     pick = (next((x for x in firsts if x[0] == "n"), None) or (firsts[0] if firsts else None)
             or next((x for x in words if x[0] == "n"), None))
+    if pick and not names.is_first(pick[1]) and len([f for f, _ in words if f == "n"]) > 1:
+        return "", "", notes + ["не удалось разобрать имя"]     # «Алмазная Крошка»
+    new_name = title(pick[1]) if pick else ""
+    if "-" in new_name:                                          # «Есения-Принцесса» -> «Есения»
+        parts = new_name.split("-")
+        if any(names.is_first(p) for p in parts) and not all(names.is_first(p) for p in parts):
+            new_name = "-".join(p for p in parts if names.is_first(p))
     left = [x for x in words if x is not pick]
     # фамилия: не-имена, сначала из поля фамилии; лишние имена (родителя) отбрасываются
     cand = [x for x in left if not names.is_first(x[1])] or left
     parts = [t for f, t in cand if f == "s"] or [t for f, t in cand]
-    if pick and pick[0] == "s" and all(f == "n" for f, _ in cand) and cand:
+    if pick and pick[0] == "s" and cand and all(f == "n" for f, _ in cand):
         notes.append("имя и фамилия переставлены")
     uniq = []
     for t in parts:
@@ -212,7 +241,9 @@ def canonical_fio(surname, name, names, sex=""):
             uniq.append(t)
     if len(words) > 2 or len(uniq) + (1 if pick else 0) < len(words):
         notes.append("лишние слова убраны")
-    return " ".join(title(t) for t in uniq), title(pick[1]) if pick else "", notes
+    if not uniq:
+        notes.append("нет фамилии")
+    return " ".join(title(t) for t in uniq), new_name, notes
 
 
 # ---------------------------------------------------------------- дубли
