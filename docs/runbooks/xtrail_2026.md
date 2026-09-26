@@ -17,7 +17,10 @@
 - [x] Промежуточных КТ не будет — только старт/финиш (подтверждено 2026-09-25)
 - [x] Участники загружены в Copernico (671), `--inspect` пройден: dorsal, surname, name, gender, status, category, club, start/finish (official)
 - [x] Поле `birthdate` добавлено в пресет Copernico (2026-09-25), prerace_check: 6 OK, 0 FAIL
-- [ ] `--init` (загрузка стартового списка в results) — делает пользователь через админку
+- [x] `--init` сделан пользователем через админку: в results 671 участник, номера у всех, дублей нет
+- [x] Предстартовая проверка 26.09 вечером: `prerace_check --server` — 9 OK, 0 FAIL; сайт/трекер/результаты/диплом 2 км — 200
+- [x] 26.09 20:30 сервис сайта перезапущен (пул соединений одного воркера был исчерпан 16:02–18:52, память 0.5 → 1.75 ГБ свободно)
+- Номера в заявках расходятся с Copernico у 9 человек + Тымко Олег без номера — по решению пользователя не меняем (результаты идут по Copernico). Нет в Copernico: Овсянникова Маргарита (5 км, №672), Рязанцева Ирина (2 и 5 км без номера); Тарабанько Анна — заявка 2 км, в Copernico 5 км №532
 
 ## Когда пресет создан и в Copernico есть участники
 
@@ -37,8 +40,13 @@ python load_race_results.py --config config/events/x_trail.yaml --distance "5 к
 ## День старта
 
 ```bash
+# утром, до 10:30 — чистый пул соединений и память
+sudo systemctl restart km_track
+# лоадер
 sudo systemctl start km_race_loader@xtrail_5km
 journalctl -u km_race_loader@xtrail_5km -f
+# во время гонки: если счётчик растёт — sudo systemctl restart km_track (2–3 с простоя, лоадер не затрагивается)
+journalctl -u km_track --since "-5 min" | grep -c "пул\|Failed getting"
 ```
 
 Проверить `/tracker`, `/results` (5 км), кнопку диплома в результатах после финиша. После гонки — `systemctl stop km_race_loader@xtrail_5km` (или остановить из админки).
