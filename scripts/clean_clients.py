@@ -146,14 +146,16 @@ class Names:
     def is_first(self, t):
         return norm(t) in self.first
 
-    def match_first(self, lat, sex=""):
+    def match_first(self, lat, sex="", exact=False):
         """Латинское имя -> частотное русское имя (или None). Точное совпадение
-        транслита (в т.ч. с «ь»: Igor -> Игорь) — без учёта пола; близкое —
-        только того же пола («Petra» не «Петр»)."""
+        транслита (в т.ч. с «ь»: Igor -> Игорь, Olga -> Ольга) — без учёта пола;
+        близкое — только того же пола («Petra» не «Петр»)."""
         c = translit(lat)
-        for exact in (c, c + "ь"):
-            if exact in self.first:
-                return exact
+        for v in [c] + [c[:i] + "ь" + c[i:] for i in range(1, len(c) + 1)]:
+            if v in self.first:
+                return v
+        if exact:
+            return None
         limit = 0 if len(c) <= 4 else 1 if len(c) == 5 else 2
         best = None
         for n, k in self.first.items():
@@ -179,6 +181,31 @@ def canonical_fio(surname, name, names, sex=""):
     if any(initial(t) for t in ts + tn):
         notes.append("инициал убран")
     ts, tn = [t for t in ts if not initial(t)], [t for t in tn if not initial(t)]
+    # латиница: русское ФИ -> кириллица (транслит), иностранное остаётся
+    words = [("s", t) for t in ts] + [("n", t) for t in tn]
+    if any(not _CYR.search(t) for _, t in words):
+        cyr = [t for _, t in words if _CYR.search(t)]
+        if any(names.is_first(t) for t in cyr) and any(not names.is_first(t) for t in cyr):
+            words = [x for x in words if _CYR.search(x[1])]          # «Прусаков … Prusakov Vladimir»
+            notes.append("латинский дубль ФИО убран")
+        else:
+            # имя ищем сначала в поле имени; в поле фамилии — только если в поле имени его нет
+            fm = {}
+            for field in ("n", "s"):
+                if field == "s" and (any(names.is_first(t) for f, t in words if f == "n" and _CYR.search(t))
+                                     or any(fm.values())):
+                    break
+                for f, t in words:
+                    if f == field and not _CYR.search(t):
+                        fm[t] = names.match_first(t, sex, exact=field == "s")   # «Slawson» — не «Самсон»
+            if cyr or any(fm.values()):
+                words = [(f, t if _CYR.search(t) else fm.get(t) or title(translit(t))) for f, t in words]
+                notes.append("латиница -> кириллица")
+            else:
+                notes.append("иностранное ФИ")
+
+    ts, tn = [t for f, t in words if f == "s"], [t for f, t in words if f == "n"]
+
     # отчество: -вна/-ична — всегда; -вич — сразу после имени и если есть другая фамилия
     # («Наталия Валисевич», «Богданкевич Ратибор» — фамилии)
     other_surname = lambda x: any(u != x and not names.is_first(u) and not _PATR_MALE.search(u)
@@ -195,28 +222,6 @@ def canonical_fio(surname, name, names, sex=""):
         kept.append(out)
     ts, tn = kept
     words = [("s", t) for t in ts] + [("n", t) for t in tn]
-
-    # латиница: русское ФИ -> кириллица (транслит), иностранное остаётся
-    if any(not _CYR.search(t) for _, t in words):
-        cyr = [t for _, t in words if _CYR.search(t)]
-        if any(names.is_first(t) for t in cyr) and any(not names.is_first(t) for t in cyr):
-            words = [x for x in words if _CYR.search(x[1])]          # «Прусаков … Prusakov Vladimir»
-            notes.append("латинский дубль ФИО убран")
-        else:
-            # имя ищем сначала в поле имени; в поле фамилии — только если в поле имени его нет
-            fm = {}
-            for field in ("n", "s"):
-                if field == "s" and (any(names.is_first(t) for f, t in words if f == "n" and _CYR.search(t))
-                                     or any(fm.values())):
-                    break
-                for f, t in words:
-                    if f == field and not _CYR.search(t):
-                        fm[t] = names.match_first(t, sex)
-            if cyr or any(fm.values()):
-                words = [(f, t if _CYR.search(t) else fm.get(t) or title(translit(t))) for f, t in words]
-                notes.append("латиница -> кириллица")
-            else:
-                notes.append("иностранное ФИ")
 
     # имя: частотное имя из поля имени, иначе из поля фамилии, иначе поле имени
     firsts = [x for x in words if names.is_first(x[1])]
