@@ -514,10 +514,10 @@ def insert_leads(rows, time_zone=None):
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '', %(amount)s, %(promocode)s, %(discount)s, NULL, '', '',
-                        %(is_name_suspicious)s, NULL, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s
                     )
                     """,
-                    {"promocode": "", "discount": 0, **r, "created_at": created_at},
+                    {"promocode": "", "discount": 0, "start_number": None, **r, "created_at": created_at},
                 )
                 inserted += 1
             except Exception as e:

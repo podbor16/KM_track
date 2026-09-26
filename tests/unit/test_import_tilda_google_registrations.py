@@ -83,3 +83,8 @@ def test_plan_matches_glued_fio_by_contact_instead_of_inserting():
 def test_plan_inserts_unknown_person():
     ins, upd, _ = plan([rec(surname="Новый", email="new@example.com")], *index([db_row(1)]), IS_BATCH)
     assert len(ins) == 1 and upd == []
+
+
+def test_distance_from_sku_case_insensitive_and_suffix_after_year():
+    assert distance_from_sku("5 км Весна (Vesna5-2025y, Выберите категорию") == "5 км"
+    assert distance_from_sku("2 км Северная ходьба (Vesna2w-2025, ...") == "2 км"

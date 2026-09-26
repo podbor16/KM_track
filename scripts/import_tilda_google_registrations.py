@@ -59,7 +59,7 @@ UTC = "+00:00"
 MSK_TO_UTC = datetime.timedelta(hours=3)
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
-_SKU_RE = re.compile(r"\(([a-z]+?)(\d+)[a-z]*-(\d{4})")
+_SKU_RE = re.compile(r"\(([a-z]+?)(\d+)[a-z]*-(\d{4})", re.IGNORECASE)  # "Vesna5-2025y" — с заглавной
 
 
 def distance_from_sku(product):
