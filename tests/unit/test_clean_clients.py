@@ -1,0 +1,88 @@
+import pytest
+
+from scripts.clean_clients import Names, canonical_fio, find_groups, resolve_group, title, tokens, translit
+
+_ROWS = (
+    [("Иванов", n, "Мужчина") for n in ("Иван", "Андрей", "Александр", "Дмитрий", "Евгений", "Сергей", "Владимир",
+                                        "Константин", "Максим", "Петр", "Денис", "Олег", "Лука")] * 6
+    + [("Иванова", n, "Женщина") for n in ("Мария", "Елена", "Наталия", "Ольга", "Екатерина", "Ксения", "Алина",
+                                           "Анна", "Татьяна", "Юлия", "Светлана", "Дарья")] * 6
+    + [(s, "Иван", "Мужчина") for s in ("Молодцов", "Молодцов", "Буров", "Буров", "Кольга", "Кольга")]
+)
+NAMES = Names(_ROWS)
+
+
+@pytest.mark.parametrize("lat, cyr", [
+    ("Aleksandr", "александр"), ("Dmitry", "дмитрий"), ("Iuliia", "юлия"), ("Oshchepkov", "ощепков"),
+    ("Zhukov", "жуков"), ("Andrey", "андрей"), ("Vyacheslav", "вячеслав"),
+])
+def test_translit(lat, cyr):
+    assert translit(lat) == cyr
+
+
+def test_tokens_cleanup():
+    assert tokens("⁠Петрова") == ["Петрова"]
+    assert tokens("Деменкова ✅") == ["Деменкова"]
+    assert tokens("Петров- Дельверс") == ["Петров-Дельверс"]
+    assert tokens("Нинa") == ["Нина"]            # латинская a
+    assert tokens("ЛаZученко") == ["Лазученко"]
+    assert tokens("Пи́санов") == ["Писанов"]
+    assert tokens("Ксения69_") == ["Ксения"]
+
+
+def test_title():
+    assert title("КРАВЧУК") == "Кравчук"
+    assert title("мария-луиза") == "Мария-Луиза"
+    assert title("МакКой") == "МакКой"
+
+
+@pytest.mark.parametrize("s, n, sex, exp", [
+    ("Артур_нет", "Иванов", "", None),
+    ("Андрей", "Буров", "М", ("Буров", "Андрей")),                               # перестановка
+    ("Буров", "Андрей Буров", "М", ("Буров", "Андрей")),                         # фамилия в имени
+    ("Буров Андрей Сергеевич", "Буров Андрей Сергеевич", "М", ("Буров", "Андрей")),
+    ("Иванова", "Мария Сергеевна", "Ж", ("Иванова", "Мария")),                   # отчество
+    ("Наталия Валисевич", "Наталия Валисевич", "Ж", ("Валисевич", "Наталия")),   # -вич — фамилия
+    ("Иванов Андрей", "Лука", "М", ("Иванов", "Лука")),                          # имя родителя в фамилии
+    ("КРАВЧУК", "мария", "Ж", ("Кравчук", "Мария")),
+    ("Molodsov", "Aleksandr", "М", ("Молодцов", "Александр")),                  # транслит + известная фамилия
+    ("Konstantin", "Kudashkin", "М", ("Кудашкин", "Константин")),               # транслит + перестановка
+    ("Retief", "Nicci", "Ж", ("Retief", "Nicci")),                               # иностранное ФИ
+    ("Pelser", "Petra", "Ж", ("Pelser", "Petra")),                               # «Петр» — другой пол
+    ("Прусаков Владимир Сергеевич Prusakov Vladimir", "Прусаков Владимир Сергеевич Prusakov Vladimir", "М",
+     ("Прусаков", "Владимир")),
+    ("Крысанов", "Алексей К.", "М", ("Крысанов", "Алексей")),                     # инициал
+    ("Олеся_нет", "Олеся_нет", "Ж", None),
+])
+def test_canonical_fio(s, n, sex, exp):
+    got = canonical_fio(s, n, NAMES, sex)
+    if exp:
+        assert got[:2] == exp
+
+
+def test_one_word_in_both_fields():
+    s, n, notes = canonical_fio("Мария", "Мария", NAMES, "Ж")
+    assert "одно слово в обоих полях" in notes
+
+
+def _card(i, s, n, bd, nl=1, nr=0, sex="М", contacts=()):
+    return {"id": i, "s0": s, "n0": n, "s": s, "n": n, "bd": bd, "sex": sex, "nl": nl, "nr": nr,
+            "contacts": set(contacts), "notes": [], "one_word": False}
+
+
+def test_groups_and_resolution():
+    cards = {c["id"]: c for c in [
+        _card(1, "Буров", "Андрей", "1990-01-01", nl=5, nr=2, contacts=["b@y.ru"]),
+        _card(2, "Андрей", "Буров", "1990-01-01"),                              # D2
+        _card(3, "Буров", "Андрей", "1900-01-01", contacts=["b@y.ru"]),         # заглушка + общий контакт
+        _card(4, "Буров", "Андрей", "1990-01-11"),                              # одна цифра
+        _card(5, "Иванов", "Мария", "1985-05-05", sex="Ж", nl=3),
+        _card(6, "Иванова", "Мария", "1985-05-05", sex="Ж"),                    # -а
+        _card(7, "Буров", "Андрей", "1960-03-03", contacts=["x@y.ru"]),         # другой человек, контакта нет
+    ]}
+    groups = {frozenset(ids): cats for ids, cats in find_groups(cards)}
+    assert frozenset({1, 2, 3, 4}) in groups
+    assert frozenset({5, 6}) in groups
+    assert not any(7 in g for g in groups)
+    assert resolve_group({1, 2, 3, 4}, cards, NAMES) == (1, "Буров", "Андрей", "1990-01-01")
+    assert resolve_group({5, 6}, cards, NAMES)[1] == "Иванова"
