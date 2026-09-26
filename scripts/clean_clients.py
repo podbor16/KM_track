@@ -441,11 +441,18 @@ def plan_changes(cards, names):
     return final, merged_into, group_info, clash
 
 
-def apply(conn, cards, final, merged_into, backup):
+def apply(conn, cards, final, merged_into, backup, drop_leads=()):
+    """drop_leads — карточки, чьи заявки удаляются (решение пользователя); карточка
+    удаляется, если у неё не осталось ни заявок, ни результатов."""
     cur = conn.cursor(dictionary=True)
     touched = sorted(set(final) | set(merged_into))
     ph = lambda ids: ",".join(str(int(i)) for i in ids)
     snap = {}
+    if drop_leads:
+        cur.execute(f"SELECT * FROM leads WHERE client_id IN ({ph(drop_leads)})")
+        snap["dropped_leads"] = cur.fetchall()
+        cur.execute(f"SELECT * FROM clients WHERE id IN ({ph(drop_leads)})")
+        snap["dropped_clients"] = cur.fetchall()
     for chunk in (touched[i:i + 2000] for i in range(0, len(touched), 2000)):
         cur.execute(f"SELECT * FROM clients WHERE id IN ({ph(chunk)})")
         snap.setdefault("clients", []).extend(cur.fetchall())
@@ -475,6 +482,11 @@ def apply(conn, cards, final, merged_into, backup):
             cur.execute("UPDATE results SET surname = %s, name = %s, birthday = %s WHERE client_id = %s", (s, n, bd, i))
         for chunk in (ids[i:i + 1000] for i in range(0, len(ids), 1000)):
             recompute_aggregates(cur, chunk)
+        if drop_leads:
+            cur.execute(f"DELETE FROM leads WHERE client_id IN ({ph(drop_leads)})")
+            cur.execute(f"""DELETE c FROM clients c WHERE c.id IN ({ph(drop_leads)})
+                            AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
+                            AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)""")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -744,6 +756,8 @@ def main():
             print(f"По решениям: удалится карточек {len(merged_into)}, изменится ФИО/ДР {len(final)}, "
                   f"уже нет в БД {len(missing)}, исключено {len(dec['exclude'])}, "
                   f"склеено по совпадению после правок {len(auto)}")
+            print(f"Заявки удаляются у карточек: {dec.get('drop_leads', [])} "
+                  f"(заявок {sum(cards[i]['nl'] for i in dec.get('drop_leads', []) if i in cards)})")
             for surv, ids in auto:
                 print(f"  совпали {ids} -> {surv} «{final[surv][0]} {final[surv][1]}» {final[surv][2]}")
         else:
@@ -758,7 +772,8 @@ def main():
         if not args.backup or clash:
             print("Нужен --backup." if not args.backup else "Совпадения ФИО+ДР после чистки — не применяю.")
             return 1
-        nl, nr = apply(conn, cards, final, merged_into, args.backup)
+        drop = [i for i in (dec.get("drop_leads", []) if args.decisions else []) if i in cards]
+        nl, nr = apply(conn, cards, final, merged_into, args.backup, drop)
         print(f"Применено: склеено карточек {len(merged_into)}, изменено {len(final)}; заявок затронуто {nl}, "
               f"результатов {nr}. Бэкап: {args.backup}")
     finally:
