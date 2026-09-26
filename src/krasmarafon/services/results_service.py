@@ -168,7 +168,7 @@ def _do_build(
         get_category_avg_paces,
         get_prev_year_results,
     )
-    from src.krasmarafon.services.runners_service import calculate_live_position
+    from src.krasmarafon.services.runners_service import _resolve_speed, calculate_live_position
     from src.krasmarafon.services.pace_calculator import parse_pace_to_kmh
     from fastapi import HTTPException
 
@@ -307,11 +307,13 @@ def _do_build(
         runner_key = f"{(runner.get('surname') or '').strip()}|{(runner.get('name') or '').strip()}|{bday_str}".upper()
 
         cat_norm = (runner.get('category') or '').strip().split(' (')[0].strip()
+        # категории разных лет называются по-разному («М12-49» / «Мужчины до 49 лет») — через _CAT_MAP
+        cat_hist_speed = _resolve_speed(cat_norm, hist_data['category_avg'], 0.0)
         if runner_key in hist_data['personal']:
             r_hist_speed = hist_data['personal'][runner_key]
             r_hist_source = 'personal'
-        elif cat_norm in hist_data['category_avg']:
-            r_hist_speed = hist_data['category_avg'][cat_norm]
+        elif cat_hist_speed > 0:
+            r_hist_speed = cat_hist_speed
             r_hist_source = 'category'
         else:
             r_hist_speed = None

@@ -294,3 +294,12 @@ class TestAfterKT2:
         # KT1: dist=5.0 (финиш), time=15мин → speed=5.0/0.25=20 км/ч
         # KT2 не должен участвовать (cp_idx=2 >= len=2)
         assert speed == pytest.approx(20.0, rel=0.05)
+
+
+def test_resolve_speed_maps_2026_xtrail_categories_to_2025_names():
+    from src.krasmarafon.services.runners_service import _resolve_speed
+    hist = {"Мужчины до 49 лет": 9.3, "Женщины до 49 лет": 7.8, "Мужчины 50-59 лет": 9.5}
+    assert _resolve_speed("М12-49", hist, 0.0) == 9.3
+    assert _resolve_speed("Ж 12-49", hist, 0.0) == 7.8
+    assert _resolve_speed("М 50-59", hist, 0.0) == 9.5
+    assert _resolve_speed("Ж 65-69", hist, 0.0) == 0.0          # в 2025 такой категории нет
