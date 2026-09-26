@@ -140,6 +140,41 @@ def parse_google_sheet(ws, event_name, event_year):
     return rows, skipped
 
 
+_BARE_DIST_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*км\s*$", re.IGNORECASE)
+
+
+def parse_start_list(ws, event_name, event_year, stats):
+    """Итоговый стартовый список организатора (без дат): номер, фамилия, имя,
+    дистанция. Колонка дистанции — «Дистанция» или колонка, где все значения
+    вида «N км» (в листах бывает подписана «product»). Строки без ФИО
+    (зарезервированные номера) и с нецифровым номером пропускаются."""
+    it = ws.iter_rows(values_only=True)
+    headers = [str(h).strip().lower() if h is not None else "" for h in next(it)]
+    rows = [r for r in it if any(v is not None and str(v).strip() != "" for v in r)]
+    col = {h: i for i, h in reversed(list(enumerate(headers))) if h}
+    pick = lambda *names: next((col[n] for n in names if n in col), None)
+    dist_i = pick("дистанция")
+    if dist_i is None:
+        dist_i = next(i for i in range(len(headers))
+                      if (vals := [str(r[i]) for r in rows if i < len(r) and r[i] not in (None, "")])
+                      and sum(bool(_BARE_DIST_RE.match(v)) for v in vals) >= 0.95 * len(vals))
+    idx = {"surname": pick("фамилия", "surname"), "name": pick("имя", "name"), "bib": pick("номер", "bib"),
+           **{f: pick(f) for f in ("sex", "city", "club", "birthday", "phone", "email")}}
+    out = []
+    for r in rows:
+        get = lambda f: r[idx[f]] if idx.get(f) is not None and idx[f] < len(r) else None
+        m = _BARE_DIST_RE.match(str(r[dist_i] or "")) if dist_i < len(r) else None
+        sku = f"(v{m.group(1).replace(',', '.')}-2000)" if m else None
+        rec = _record(lambda f: sku if f == "product" else get(f), event_name, event_year, "product", None, "amount")
+        bib = str(get("bib") or "").strip()
+        if rec and bib.isdigit():
+            rec["start_number"] = int(bib)
+            out.append(rec)
+        else:
+            stats[f"{event_year}: стартовый лист, пропущено (нет ФИО/номера/дистанции)"] += 1
+    return out
+
+
 def merge_year(google_rows, tilda_rows, stats):
     """Даты строк Google без sent — из Tilda; остальное — соседняя строка
     выше. Строки Tilda, которых нет в Google, добавляются в конец."""
