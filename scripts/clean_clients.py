@@ -613,12 +613,33 @@ def plan_from_decisions(cards, dec):
         s, n, bd = final[i]
         if (s, n, bd) == (cards[i]["s0"], cards[i]["n0"], cards[i]["bd"]) and i not in merged_into.values():
             del final[i]
-    keys = collections.Counter()
+    # после правок ФИО+ДР совпали с другой карточкой — это тот же человек: склеиваем
+    # (выживает карточка с большим числом результатов, затем заявок, с учётом склеенных в неё)
+    weight = collections.Counter()
+    for i, c in cards.items():
+        weight[merged_into.get(i, i)] += 1000 * c["nr"] + c["nl"]
+    by_key = collections.defaultdict(list)
     for i, c in cards.items():
         if i not in merged_into:
             s, n, bd = final.get(i, (c["s0"], c["n0"], c["bd"]))
-            keys[(norm(s), norm(n), bd)] += 1
-    return final, merged_into, missing, [k for k, v in keys.items() if v > 1]
+            by_key[(norm(s), norm(n), bd)].append(i)
+    auto = []
+    for k, ids in by_key.items():
+        if len(ids) < 2:
+            continue
+        surv = max(ids, key=lambda i: (weight[i], -i))
+        values = final.get(surv) or next(final[i] for i in ids if i in final)
+        for o in ids:
+            if o == surv:
+                continue
+            for m, t in list(merged_into.items()):
+                if t == o:
+                    merged_into[m] = surv
+            merged_into[o] = surv
+            final.pop(o, None)
+        final[surv] = values
+        auto.append((surv, sorted(ids)))
+    return final, merged_into, missing, auto
 
 
 # ---------------------------------------------------------------- отчёт
@@ -718,11 +739,13 @@ def main():
             if dec["errors"]:
                 print("В решениях есть ошибки — не применяю.")
                 return 1
-            final, merged_into, missing, clash = plan_from_decisions(cards, dec)
+            final, merged_into, missing, auto = plan_from_decisions(cards, dec)
+            clash = []
             print(f"По решениям: удалится карточек {len(merged_into)}, изменится ФИО/ДР {len(final)}, "
-                  f"уже нет в БД {len(missing)}, исключено {len(dec['exclude'])}, совпадений после чистки {len(clash)}")
-            for k in clash[:10]:
-                print("  совпадение:", k)
+                  f"уже нет в БД {len(missing)}, исключено {len(dec['exclude'])}, "
+                  f"склеено по совпадению после правок {len(auto)}")
+            for surv, ids in auto:
+                print(f"  совпали {ids} -> {surv} «{final[surv][0]} {final[surv][1]}» {final[surv][2]}")
         else:
             final, merged_into, group_info, clash = plan_changes(cards, names)
             write_report(args.report, cards, final, merged_into, group_info, clash)
