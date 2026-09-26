@@ -62,11 +62,15 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 _SKU_RE = re.compile(r"\(([a-z]+?)(\d+)[a-z]*-(\d{4})", re.IGNORECASE)  # "Vesna5-2025y" — с заглавной
 
 
+_TEXT_DIST_RE = re.compile(r"(\d+)\s*км", re.IGNORECASE)
+
+
 def distance_from_sku(product):
-    m = _SKU_RE.search(str(product or ""))
+    # без SKU с годом ("(Girlrun2022", "(girl7,") — дистанция из текста продукта
+    m = _SKU_RE.search(str(product or "")) or _TEXT_DIST_RE.search(str(product or ""))
     if not m:
         return None
-    n = m.group(2)
+    n = m.group(2) if m.re is _SKU_RE else m.group(1)
     return "21.1 км" if n == "21" else f"{n} км"
 
 

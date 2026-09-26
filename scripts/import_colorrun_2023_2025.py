@@ -71,11 +71,14 @@ def attach_bibs(rows, start_rows, stats, year):
     return extra
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
+         batch=("2025-01-17 18:09:00", "2025-01-17 18:15:00"), doc=__doc__, drop=lambda r: False):
+    """Общий ход для стартов «регистрации по годам + стартовые листы» (листа
+    стартового списка у года может не быть)."""
+    ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--google-xlsx", required=True)
-    ap.add_argument("--batch-from", default="2025-01-17 18:09:00", help="начало «пачки» 2025 в БД, UTC")
-    ap.add_argument("--batch-to", default="2025-01-17 18:15:00", help="конец «пачки» 2025 в БД, UTC")
+    ap.add_argument("--batch-from", default=batch[0], help="начало «пачки» 2025 в БД, UTC")
+    ap.add_argument("--batch-to", default=batch[1], help="конец «пачки» 2025 в БД, UTC")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--backup")
     args = ap.parse_args()
@@ -83,22 +86,26 @@ def main():
 
     wb = openpyxl.load_workbook(args.google_xlsx, data_only=True, read_only=True)
     conn = get_connection(UTC)
-    by_key, by_fio, by_contact = load_db_leads(conn, EVENT, list(REG_SHEETS))
+    by_key, by_fio, by_contact = load_db_leads(conn, event, list(reg_sheets))
     db_last = {}
     for lst in by_key.values():
         for db in lst:
             db_last[db["event_year"]] = max(db_last.get(db["event_year"], db["created_at"]), db["created_at"])
     stats, rows_by_year, extras = Counter(), {}, []
-    for year, sheet in REG_SHEETS.items():
-        regs, skipped = parse_google_sheet(wb[sheet], EVENT, year)
+    for year, sheet in reg_sheets.items():
+        regs, skipped = parse_google_sheet(wb[sheet], event, year)
         stats[f"{year}: регистраций"] = len(regs)
         stats[f"{year}: пропущено строк регистраций"] = skipped
+        stats[f"{year}: исключено вручную"] = sum(map(drop, regs))
+        regs = [r for r in regs if not drop(r)]
+        for r in regs:
+            r["own_date"] = r["registered_at"] is not None
         regs = merge_year(regs, [], stats)                  # даты соседних строк
         regs, dup = dedupe(sorted(regs, key=lambda r: r["registered_at"] or datetime.datetime.min))
         stats[f"{year}: дублей убрано"] = dup
         # последний день регистрации года — по файлу и по заявкам вебхука в БД
         last_reg = max([r["registered_at"] for r in regs if r["registered_at"]] + ([db_last[year]] if year in db_last else []))
-        start = parse_start_list(wb[START_SHEETS[year]], EVENT, year, stats)
+        start = parse_start_list(wb[start_sheets[year]], event, year, stats) if year in start_sheets else []
         for s in attach_bibs(regs, start, stats, year):
             s["registered_at"], s["amount"] = last_reg, 0.0
             extras.append(s)
@@ -108,7 +115,7 @@ def main():
     try:
         in_batch = lambda db: db["event_year"] == 2025 and b_from <= db["created_at"] < b_to
         to_insert, to_update, suspicious = plan(
-            [r for y in REG_SHEETS for r in rows_by_year[y]], by_key, by_fio, by_contact, in_batch)
+            [r for y in reg_sheets for r in rows_by_year[y]], by_key, by_fio, by_contact, in_batch)
         # участники стартовых листов без регистрации — только вставка, если их
         # нет в БД; даты существующих заявок они не меняют
         extra_insert, _, extra_known = plan(extras, by_key, by_fio, by_contact, lambda db: False)
@@ -116,8 +123,12 @@ def main():
         stats["стартовый лист: тот же человек в БД под другими ДР/ФИО"] = len(extra_known)
         to_insert += extra_insert
         batch_total = sum(1 for lst in by_key.values() for db in lst if in_batch(db))
+        # сколько строк пачки получат дату из самого файла, а не от соседней строки
+        own = {db["id"] for r in rows_by_year.get(2025, []) if r["own_date"]
+               for db in (by_key.get(_key(r)) or by_fio.get(_fio_key(r)) or by_contact.get(_contact_key(r)) or [])
+               if in_batch(db)}
         bib_updates = []
-        for r in rows_by_year[2025] + [e for e in extras if e["event_year"] == 2025]:
+        for r in rows_by_year.get(2025, []) + [e for e in extras if e["event_year"] == 2025]:
             if not r.get("start_number"):
                 continue
             existing = by_key.get(_key(r)) or by_fio.get(_fio_key(r)) or by_contact.get(_contact_key(r)) or []
@@ -127,7 +138,8 @@ def main():
             print(f"  {k}: {stats[k]}")
         print("К вставке:", dict(Counter((r["event_year"], r["event_distance"]) for r in to_insert)),
               "| со стартовым номером:", sum(1 for r in to_insert if r.get("start_number")))
-        print(f"Пачка 2025: {batch_total}, исправить дату/сумму: {len(to_update)}, без пары в файле: {batch_total - len(to_update)}")
+        print(f"Пачка 2025: {batch_total}, исправить дату/сумму: {len(to_update)} (дата из файла: {len(own)}), "
+              f"без пары в файле: {batch_total - len(to_update)}")
         print(f"Тот же человек в БД под другими ДР/ФИО (не вставлены): {len(suspicious)}")
         print(f"Номер в существующие заявки 2025: {len(bib_updates)}")
         if not args.apply:
