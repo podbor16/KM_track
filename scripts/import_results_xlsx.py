@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Импорт результатов Забега Икс (в БД — «Х Трейл») 2025, 10 км, из выгрузки
-Copernico в xlsx (2026-09-26). Нужны трекеру 2026: личный темп прошлого года
-и средний темп категорий (results_service — исторический кеш).
+Импорт результатов прошедшего старта из выгрузки Copernico в xlsx
+(2026-09-26, первым — Х Трейл 2025, 10 км). Нужны трекеру следующего года:
+личный темп и средний темп категорий (results_service — исторический кеш).
 
 Колонки: #, Bib, Tag, Surname, Name, Club, Phone, Date of Birth (дд/мм/гггг),
 Gender (Male/Female), Category, Status, Event, Start, kt2, Finish чистое, Finish.
@@ -10,8 +10,8 @@ Gender (Male/Female), Category, Status, Event, Start, kt2, Finish чистое, 
 Места считаются заново: абсолютное/пол/категория по времени выстрела и по
 чистому времени. client_id подставляет trg_results_before_insert.
 
-  python scripts/import_results_xtrail2025.py --xlsx …            # dry-run
-  python scripts/import_results_xtrail2025.py --xlsx … --apply
+  python scripts/import_results_xlsx.py --event-id 95 --xlsx …            # dry-run
+  python scripts/import_results_xlsx.py --event-id 95 --xlsx … --apply
 """
 
 import argparse
@@ -29,8 +29,6 @@ import openpyxl
 
 from scripts.import_boom_historical import get_connection
 
-EVENT_ID = 95                      # Х Трейл, 2025, 10 км
-DISTANCE_KM = 10.0
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
 
@@ -97,6 +95,7 @@ def rank(rows):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--xlsx", required=True)
+    ap.add_argument("--event-id", type=int, required=True, help="событие в БД (дистанция берётся из events)")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
 
@@ -112,32 +111,33 @@ def main():
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT event_name, event_year, event_distance FROM events WHERE id = %s", (EVENT_ID,))
+        cur.execute("SELECT event_name, event_year, event_distance FROM events WHERE id = %s", (args.event_id,))
         ev = cur.fetchone()
-        cur.execute("SELECT COUNT(*) FROM results WHERE event_id = %s", (EVENT_ID,))
+        cur.execute("SELECT COUNT(*) FROM results WHERE event_id = %s", (args.event_id,))
         existing = cur.fetchone()[0]
-        print(f"Событие {EVENT_ID}: {ev}, результатов в БД: {existing}")
-        if not ev or float(ev[2]) != DISTANCE_KM or existing:
-            print("Событие не то или результаты уже есть — не загружаю.")
+        print(f"Событие {args.event_id}: {ev}, результатов в БД: {existing}")
+        if not ev or not ev[2] or existing:
+            print("Нет события, нет дистанции или результаты уже есть — не загружаю.")
             return 1
+        distance_km = float(ev[2])
         if not args.apply:
             print("\ndry-run. Повтори с --apply.")
             return 0
-        pace = lambda s: _hms(round(s / DISTANCE_KM)) if s else None
+        pace = lambda s: _hms(round(s / distance_km)) if s else None
         cur.executemany(
             """INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status, time_gun_start, time_gun_finish, time_clear_finish, rank_absolute, rank_sex,
                    rank_category, rank_absolute_clean, rank_sex_clean, rank_category_clean, finish_pace_avg_gun,
                    finish_pace_avg_clean, time_gun_finish_ms, time_clear_finish_ms)
                VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            [(r["surname"], r["name"], r["birthday"], EVENT_ID, r["sex"], r["start_number"], r["category"],
+            [(r["surname"], r["name"], r["birthday"], args.event_id, r["sex"], r["start_number"], r["category"],
               r["race_status"], _hms(r["start"]), _hms(r["gun"]), _hms(r["clean"]), r.get("rank_absolute"),
               r.get("rank_sex"), r.get("rank_category"), r.get("rank_absolute_clean"), r.get("rank_sex_clean"),
               r.get("rank_category_clean"), pace(r["gun"]), pace(r["clean"]),
               r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None) for r in rows])
         conn.commit()
         cur.execute("SELECT COUNT(*), SUM(client_id = 0), SUM(race_status = 'Finished') FROM results WHERE event_id = %s",
-                    (EVENT_ID,))
+                    (args.event_id,))
         print("Загружено (всего, без клиента, финишировали):", cur.fetchone())
     finally:
         conn.close()
