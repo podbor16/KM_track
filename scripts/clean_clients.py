@@ -201,8 +201,8 @@ def canonical_fio(surname, name, names, sex=""):
             if cyr or any(fm.values()):
                 words = [(f, t if _CYR.search(t) else fm.get(t) or title(translit(t))) for f, t in words]
                 notes.append("латиница -> кириллица")
-            else:
-                notes.append("иностранное ФИ")
+            else:                                    # иностранное ФИ — как есть, только регистр
+                return " ".join(title(t) for t in ts), " ".join(title(t) for t in tn), notes + ["иностранное ФИ"]
 
     ts, tn = [t for f, t in words if f == "s"], [t for f, t in words if f == "n"]
 

@@ -101,3 +101,7 @@ def test_groups_and_resolution():
     assert not any(7 in g for g in groups)
     assert resolve_group({1, 2, 3, 4}, cards, NAMES) == (1, "Буров", "Андрей", "1990-01-01")
     assert resolve_group({5, 6}, cards, NAMES)[1] == "Иванова"
+
+
+def test_foreign_multiword_kept():
+    assert canonical_fio("Fakhry", "Sherif Ashraf", NAMES, "М")[:2] == ("Fakhry", "Sherif Ashraf")
