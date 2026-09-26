@@ -19,10 +19,10 @@
    убрал бы обе заявки из выгрузки стартового списка.
 
   python scripts/clean_clients.py --report /tmp/review.xlsx                              # dry-run
-  python scripts/clean_clients.py --review /tmp/review.xlsx --report /tmp/r2.xlsx --apply --backup /root/backups/x.json
 
---review — проверенный пользователем файл: колонки «Станет фамилия/имя»
-листов «Латиница» и «ФИО» заменяют вычисленные.
+После проверки отчёта пользователем:
+  python scripts/clean_clients.py --make-decisions review.xlsx --orig report.xlsx --out decisions.json   # без БД
+  python scripts/clean_clients.py --decisions decisions.json [--apply --backup /root/backups/x.json]
 """
 
 import argparse
@@ -110,7 +110,7 @@ def lev(a, b, limit=2):
 
 
 def tokens(field):
-    s = _INVISIBLE.sub("", field or "").replace(" ", " ")
+    s = _INVISIBLE.sub("", field or "").replace(" ", " ").replace("ë", "ё").replace("Ë", "Ё")
     s = re.sub(r"\s*-\s*", "-", s)                     # «Петров- Дельверс»
     s = re.sub(r"[^\w\s\-'’]|[\d_]", " ", s)          # «Салимжанов.», «✅», «Ксения69_»
     out = []
@@ -295,6 +295,8 @@ def find_groups(cards):
     by_fi, by_nb, by_sb, by_word = (collections.defaultdict(list) for _ in range(4))
     for i, c in cards.items():
         fi = (norm(c["s"]), norm(c["n"]))
+        if not fi[0] or not fi[1]:                    # ФИО не разобрано — только правило «одно слово»
+            continue
         by_fi[fi].append(i)
         if c["bd"] not in SENTINELS:
             by_nb[(fi[1], c["bd"])].append(i)
@@ -392,7 +394,7 @@ def load(conn):
     return clients, leads, results
 
 
-def build_cards(clients, leads, results, names, overrides):
+def build_cards(clients, leads, results, names):
     sex = collections.defaultdict(collections.Counter)
     contacts = collections.defaultdict(set)
     for r in leads:
@@ -406,9 +408,6 @@ def build_cards(clients, leads, results, names, overrides):
         x.pop("", None)
         sx = x.most_common(1)[0][0] if x else ""
         s, n, notes = canonical_fio(c["surname"], c["name"], names, sx)
-        if c["id"] in overrides:
-            s, n = overrides[c["id"]]
-            notes = notes + ["проверено вручную"]
         cards[c["id"]] = {
             "id": c["id"], "s0": c["surname"], "n0": c["name"], "s": s, "n": n, "notes": notes,
             "bd": str(c["birthday"]), "sex": sx, "nl": c["nl"], "nr": c["nr"],
@@ -503,23 +502,126 @@ def recompute_aggregates(cur, ids):
         WHERE c.id IN ({ph})""")
 
 
-# ---------------------------------------------------------------- отчёт
+# ---------------------------------------------------------------- решения пользователя
 
-def read_overrides(path):
+_GROUP_SHEETS = ("Склейка", "Склейка ДР ±15 лет")
+_RED = "FFFF0000"
+
+
+def _fix_letters(v):
+    """«Михалëва» — латинская ë -> ё."""
+    return str(v or "").strip().replace("ë", "ё").replace("Ë", "Ё")
+
+
+def make_decisions(user_path, orig_path):
+    """Проверенный пользователем xlsx + исходный отчёт -> решения по id карточек:
+    groups — [{id выжившей: фамилия, имя, ДР, члены}], renames — {id: (фамилия, имя)},
+    exclude — «Не решено» + строки, выделенные красным (их не трогаем).
+    Правило группы: строки «Выживает: да» — отдельные карточки со своими
+    «Станет …»; остальные строки — к выжившей с той же «Станет ДР» (или к
+    единственной). Правка имени на листе «Латиница»/«ФИО» важнее «Станет»
+    группы, если строку выжившей в листе склейки не правили."""
     import openpyxl
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    out = {}
-    for sheet in ("Латиница", "ФИО"):
-        if sheet not in wb.sheetnames:
-            continue
-        rows = list(wb[sheet].iter_rows(values_only=True))
-        h = [str(x) for x in rows[0]]
-        i_id, i_s, i_n = h.index("id"), h.index("Станет фамилия"), h.index("Станет имя")
-        for r in rows[1:]:
-            if r[i_id]:
-                out[int(r[i_id])] = (str(r[i_s] or "").strip(), str(r[i_n] or "").strip())
-    return out
+    u = openpyxl.load_workbook(user_path)
+    o = openpyxl.load_workbook(orig_path, read_only=True)
+    vals = lambda wb, s: [r for r in wb[s].iter_rows(min_row=2, values_only=True) if any(v not in (None, "") for v in r)]
+    errors, exclude = [], set()
+    for ws in u.worksheets:                                   # красные строки
+        id_col = 2 if ws.title in _GROUP_SHEETS else 0
+        for r in ws.iter_rows(min_row=2):
+            if any(c.fill is not None and c.fill.fill_type == "solid" and c.fill.fgColor.type == "rgb"
+                   and c.fill.fgColor.rgb == _RED for c in r) and r[id_col].value:
+                exclude.add(int(r[id_col].value))
+    exclude |= {int(r[0]) for r in vals(u, "Не решено")}
 
+    same = lambda a, b: [str(x or "") for x in a] == [str(x or "") for x in b]
+    orig_g = {(r[0], r[2]): r for r in vals(o, "Склейка")}
+    final_g, edited_g = dict(orig_g), set()
+    for s in _GROUP_SHEETS:
+        for r in vals(u, s):
+            k = (r[0], r[2])
+            if k in orig_g and not same(r, orig_g[k]):
+                if k in edited_g and not same(r, final_g[k]):
+                    errors.append(f"группа {k[0]}, id {k[1]}: разные правки на листах склейки")
+                final_g[k] = r
+                edited_g.add(k)
+    ov, ov_orig = {}, {}
+    for s in ("Латиница", "ФИО"):
+        ov.update({int(r[0]): (_fix_letters(r[3]), _fix_letters(r[4])) for r in vals(u, s)})
+        ov_orig.update({int(r[0]): (_fix_letters(r[3]), _fix_letters(r[4])) for r in vals(o, s)})
+    ov_edited = {i for i, v in ov.items() if ov_orig.get(i) != v}
+
+    by_group = collections.defaultdict(list)
+    for (g, i), r in final_g.items():
+        by_group[g].append(r)
+    groups, grouped = [], set()
+    for g, rs in sorted(by_group.items()):
+        rs = [r for r in rs if int(r[2]) not in exclude]
+        surv = [r for r in rs if str(r[3] or "").strip().lower() == "да"]
+        if len(rs) < 2 and not surv:
+            continue
+        if all(not r[7] and not r[8] for r in rs):             # ФИО не разобрано — как «Не решено»
+            exclude |= {int(r[2]) for r in rs}
+            continue
+        if not surv:
+            errors.append(f"группа {g}: нет выжившей карточки")
+            continue
+        subs = {int(r[2]): {"s": _fix_letters(r[7]), "n": _fix_letters(r[8]), "bd": str(r[9])[:10], "members": [int(r[2])],
+                            "edited": (g, r[2]) in edited_g} for r in surv}
+        for r in rs:
+            if r in surv:
+                continue
+            to = [i for i, x in subs.items() if x["bd"] == str(r[9])[:10]] if len(subs) > 1 else list(subs)
+            if len(to) != 1:
+                errors.append(f"группа {g}, id {r[2]}: непонятно, к какой карточке присоединить")
+                continue
+            subs[to[0]]["members"].append(int(r[2]))
+        for sid, x in subs.items():
+            edits = {ov[m] for m in x["members"] if m in ov_edited}
+            if edits and not x["edited"]:
+                if len(edits) > 1:
+                    errors.append(f"группа {g}: разные правки ФИО у карточек {x['members']}")
+                else:
+                    x["s"], x["n"] = edits.pop()
+            if not x["s"] or not x["n"]:
+                errors.append(f"группа {g}, id {sid}: пустые фамилия или имя")
+            groups.append({"survivor": sid, "surname": x["s"], "name": x["n"], "birthday": x["bd"], "members": x["members"]})
+            grouped |= set(x["members"])
+    renames = {i: v for i, v in ov.items() if i not in grouped and i not in exclude and v[0] and v[1]}
+    return {"groups": groups, "renames": renames, "exclude": sorted(exclude), "errors": errors}
+
+
+def plan_from_decisions(cards, dec):
+    """Решения -> (final, merged_into, пропущено: id, которых уже нет в БД)."""
+    final, merged_into, missing = {}, {}, []
+    for g in dec["groups"]:
+        ids = [i for i in g["members"] if i in cards]
+        missing += [i for i in g["members"] if i not in cards]
+        if g["survivor"] not in cards:
+            continue
+        for i in ids:
+            if i != g["survivor"]:
+                merged_into[i] = g["survivor"]
+        final[g["survivor"]] = (g["surname"], g["name"], g["birthday"])
+    for i, (s, n) in dec["renames"].items():
+        i = int(i)
+        if i not in cards:
+            missing.append(i)
+        elif (s, n) != (cards[i]["s0"], cards[i]["n0"]):
+            final[i] = (s, n, cards[i]["bd"])
+    for i in list(final):                                      # без изменений — не трогаем
+        s, n, bd = final[i]
+        if (s, n, bd) == (cards[i]["s0"], cards[i]["n0"], cards[i]["bd"]) and i not in merged_into.values():
+            del final[i]
+    keys = collections.Counter()
+    for i, c in cards.items():
+        if i not in merged_into:
+            s, n, bd = final.get(i, (c["s0"], c["n0"], c["bd"]))
+            keys[(norm(s), norm(n), bd)] += 1
+    return final, merged_into, missing, [k for k, v in keys.items() if v > 1]
+
+
+# ---------------------------------------------------------------- отчёт
 
 def write_report(path, cards, final, merged_into, group_info, clash):
     import openpyxl
@@ -587,29 +689,51 @@ def write_report(path, cards, final, merged_into, group_info, clash):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--report", required=True, help="xlsx было/станет")
-    ap.add_argument("--review", help="проверенный пользователем xlsx (правки «Станет …»)")
+    ap.add_argument("--report", help="xlsx было/станет (расчёт по правилам)")
+    ap.add_argument("--make-decisions", metavar="XLSX", help="проверенный пользователем отчёт -> --out json (без БД)")
+    ap.add_argument("--orig", help="исходный отчёт (для --make-decisions)")
+    ap.add_argument("--out", help="json решений (для --make-decisions)")
+    ap.add_argument("--decisions", help="json решений: применять их, а не расчёт")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--backup")
     args = ap.parse_args()
+
+    if args.make_decisions:
+        dec = make_decisions(args.make_decisions, args.orig)
+        Path(args.out).write_text(json.dumps(dec, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"Групп: {len(dec['groups'])} (карточек в них {sum(len(g['members']) for g in dec['groups'])}), "
+              f"переименований: {len(dec['renames'])}, исключено: {len(dec['exclude'])}, ошибок: {len(dec['errors'])}")
+        for e in dec["errors"]:
+            print("  !", e)
+        return 1 if dec["errors"] else 0
 
     from scripts.import_boom_historical import get_connection
     conn = get_connection()
     try:
         clients, leads, results = load(conn)
         names = Names([(r["surname"], r["name"], r["sex"]) for r in leads + results])
-        overrides = read_overrides(args.review) if args.review else {}
-        cards = build_cards(clients, leads, results, names, overrides)
-        final, merged_into, group_info, clash = plan_changes(cards, names)
-        write_report(args.report, cards, final, merged_into, group_info, clash)
-        print(f"Карточек: {len(cards)}, групп склейки: {len(group_info)}, удалится карточек: {len(merged_into)}, "
-              f"изменится ФИО/ДР: {len(final)}, правок из файла: {len(overrides)}, совпадений после чистки: {len(clash)}")
-        print(f"Отчёт: {args.report}")
+        cards = build_cards(clients, leads, results, names)
+        if args.decisions:
+            dec = json.loads(Path(args.decisions).read_text(encoding="utf-8"))
+            if dec["errors"]:
+                print("В решениях есть ошибки — не применяю.")
+                return 1
+            final, merged_into, missing, clash = plan_from_decisions(cards, dec)
+            print(f"По решениям: удалится карточек {len(merged_into)}, изменится ФИО/ДР {len(final)}, "
+                  f"уже нет в БД {len(missing)}, исключено {len(dec['exclude'])}, совпадений после чистки {len(clash)}")
+            for k in clash[:10]:
+                print("  совпадение:", k)
+        else:
+            final, merged_into, group_info, clash = plan_changes(cards, names)
+            write_report(args.report, cards, final, merged_into, group_info, clash)
+            print(f"Карточек: {len(cards)}, групп склейки: {len(group_info)}, удалится карточек: {len(merged_into)}, "
+                  f"изменится ФИО/ДР: {len(final)}, совпадений после чистки: {len(clash)}")
+            print(f"Отчёт: {args.report}")
         if not args.apply:
-            print("\ndry-run. Повтори с --review <файл> --apply --backup <путь>.")
+            print("\ndry-run. Повтори с --apply --backup <путь>.")
             return 0
         if not args.backup or clash:
-            print("Нужен --backup." if not args.backup else f"Совпадения ФИО+ДР после чистки: {clash[:5]} — не применяю.")
+            print("Нужен --backup." if not args.backup else "Совпадения ФИО+ДР после чистки — не применяю.")
             return 1
         nl, nr = apply(conn, cards, final, merged_into, args.backup)
         print(f"Применено: склеено карточек {len(merged_into)}, изменено {len(final)}; заявок затронуто {nl}, "

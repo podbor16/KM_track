@@ -105,3 +105,47 @@ def test_groups_and_resolution():
 
 def test_foreign_multiword_kept():
     assert canonical_fio("Fakhry", "Sherif Ashraf", NAMES, "М")[:2] == ("Fakhry", "Sherif Ashraf")
+
+
+def test_make_decisions(tmp_path):
+    import openpyxl
+    from openpyxl.styles import PatternFill
+    from scripts.clean_clients import make_decisions
+    gh = ["Группа", "Что совпало", "id", "Выживает", "Было фамилия", "Было имя", "Было ДР", "Станет фамилия",
+          "Станет имя", "Станет ДР", "Пол", "Заявок", "Результатов"]
+    fh = ["id", "Было фамилия", "Было имя", "Станет фамилия", "Станет имя", "ДР", "Пол", "Заявок", "Результатов", "Что сделано"]
+
+    def book(path, groups, latin, red=None):
+        wb = openpyxl.Workbook()
+        for title_, head, rows in (("Латиница", fh, latin), ("ФИО", fh, []), ("Склейка", gh, groups),
+                                   ("Склейка ДР ±15 лет", gh, []), ("Не решено", fh, [[9, "Павел", "Павел"]])):
+            ws = wb.create_sheet(title_)
+            ws.append(head)
+            for r in rows:
+                ws.append(r)
+                if red and r[0] == red:
+                    ws.cell(ws.max_row, 1).fill = PatternFill("solid", fgColor="FFFF0000")
+        wb.save(path)
+
+    orig = [[1, "", 10, "да", "", "", "1984-01-01", "Иванов", "Иван", "2009-05-09"],
+            [1, "", 11, None, "", "", "2009-05-09", "Иванов", "Иван", "2009-05-09"],
+            [1, "", 12, None, "", "", "2009-05-09", "Иванов", "Иван", "2009-05-09"],
+            [2, "", 20, "да", "", "", "1990-01-01", "Салников", "Родион", "1990-01-01"],
+            [2, "", 21, None, "", "", "1990-01-01", "Салников", "Родион", "1990-01-01"]]
+    latin = [[21, "Salnikov", "Rodion", "Салников", "Родион"], [30, "Weber", "Aleksandr", "Вебер", "Александр"],
+             [31, "Test", "Runner", "Test", "Runner"]]
+    user = [list(r) for r in orig]
+    user[0][9] = "1984-01-01"                  # 10 — отдельный человек (родитель)
+    user[1][3] = "да"                          # 11 — ребёнок, к нему 12
+    user_latin = [list(r) for r in latin]
+    user_latin[0][3] = "Сальников"
+    book(tmp_path / "o.xlsx", orig, latin)
+    book(tmp_path / "u.xlsx", user, user_latin, red=31)
+    d = make_decisions(tmp_path / "u.xlsx", tmp_path / "o.xlsx")
+    assert not d["errors"]
+    g = {x["survivor"]: x for x in d["groups"]}
+    assert g[10]["members"] == [10] and g[10]["birthday"] == "1984-01-01"
+    assert sorted(g[11]["members"]) == [11, 12]
+    assert g[20]["surname"] == "Сальников"     # правка на листе «Латиница» важнее группы
+    assert d["renames"] == {30: ("Вебер", "Александр")}
+    assert d["exclude"] == [9, 31]
