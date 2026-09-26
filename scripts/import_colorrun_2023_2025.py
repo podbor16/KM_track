@@ -75,7 +75,8 @@ def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
          batch=("2025-01-17 18:09:00", "2025-01-17 18:15:00"), doc=__doc__, drop=lambda r: False,
          distance_fn=None):
     """Общий ход для стартов «регистрации по годам + стартовые листы» (листа
-    стартового списка у года может не быть)."""
+    стартового списка у года может не быть; вместо имени листа — функция
+    wb -> лист, если лист нужно подготовить)."""
     ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--google-xlsx", required=True)
     ap.add_argument("--batch-from", default=batch[0], help="начало «пачки» 2025 в БД, UTC")
@@ -107,8 +108,9 @@ def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
         stats[f"{year}: дублей убрано"] = dup
         # последний день регистрации года — по файлу и по заявкам вебхука в БД
         last_reg = max([r["registered_at"] for r in regs if r["registered_at"]] + ([db_last[year]] if year in db_last else []))
-        start = (parse_start_list(wb[start_sheets[year]], event, year, stats, distance_fn)
-                 if year in start_sheets else [])
+        sheet = start_sheets.get(year)
+        start = (parse_start_list(sheet(wb) if callable(sheet) else wb[sheet], event, year, stats, distance_fn)
+                 if sheet else [])
         for s in attach_bibs(regs, start, stats, year):
             s["registered_at"], s["amount"] = last_reg, 0.0
             extras.append(s)
