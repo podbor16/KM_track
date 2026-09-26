@@ -72,7 +72,8 @@ def attach_bibs(rows, start_rows, stats, year):
 
 
 def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
-         batch=("2025-01-17 18:09:00", "2025-01-17 18:15:00"), doc=__doc__, drop=lambda r: False):
+         batch=("2025-01-17 18:09:00", "2025-01-17 18:15:00"), doc=__doc__, drop=lambda r: False,
+         distance_fn=None):
     """Общий ход для стартов «регистрации по годам + стартовые листы» (листа
     стартового списка у года может не быть)."""
     ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -83,17 +84,18 @@ def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
     ap.add_argument("--backup")
     args = ap.parse_args()
     b_from, b_to = (datetime.datetime.strptime(v, "%Y-%m-%d %H:%M:%S") for v in (args.batch_from, args.batch_to))
+    in_batch = lambda db: db["event_year"] == 2025 and b_from <= db["created_at"] < b_to
 
     wb = openpyxl.load_workbook(args.google_xlsx, data_only=True, read_only=True)
     conn = get_connection(UTC)
     by_key, by_fio, by_contact = load_db_leads(conn, event, list(reg_sheets))
-    db_last = {}
+    db_last = {}  # последняя заявка года в БД; дата пачки — не дата регистрации
     for lst in by_key.values():
-        for db in lst:
+        for db in (d for d in lst if not in_batch(d)):
             db_last[db["event_year"]] = max(db_last.get(db["event_year"], db["created_at"]), db["created_at"])
     stats, rows_by_year, extras = Counter(), {}, []
     for year, sheet in reg_sheets.items():
-        regs, skipped = parse_google_sheet(wb[sheet], event, year)
+        regs, skipped = parse_google_sheet(wb[sheet], event, year, distance_fn)
         stats[f"{year}: регистраций"] = len(regs)
         stats[f"{year}: пропущено строк регистраций"] = skipped
         stats[f"{year}: исключено вручную"] = sum(map(drop, regs))
@@ -105,7 +107,8 @@ def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
         stats[f"{year}: дублей убрано"] = dup
         # последний день регистрации года — по файлу и по заявкам вебхука в БД
         last_reg = max([r["registered_at"] for r in regs if r["registered_at"]] + ([db_last[year]] if year in db_last else []))
-        start = parse_start_list(wb[start_sheets[year]], event, year, stats) if year in start_sheets else []
+        start = (parse_start_list(wb[start_sheets[year]], event, year, stats, distance_fn)
+                 if year in start_sheets else [])
         for s in attach_bibs(regs, start, stats, year):
             s["registered_at"], s["amount"] = last_reg, 0.0
             extras.append(s)
@@ -113,7 +116,6 @@ def main(event=EVENT, reg_sheets=REG_SHEETS, start_sheets=START_SHEETS,
         rows_by_year[year] = regs
 
     try:
-        in_batch = lambda db: db["event_year"] == 2025 and b_from <= db["created_at"] < b_to
         to_insert, to_update, suspicious = plan(
             [r for y in reg_sheets for r in rows_by_year[y]], by_key, by_fio, by_contact, in_batch)
         # участники стартовых листов без регистрации — только вставка, если их

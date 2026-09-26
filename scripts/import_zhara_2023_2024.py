@@ -60,7 +60,7 @@ _SEX = {"Мужчина": "Мужчина", "Мужской": "Мужчина", 
         "Женщина": "Женщина", "Женский": "Женщина", "Ж": "Женщина"}
 
 
-def parse_birthday(raw, event_year):
+def parse_birthday(raw, event_year, min_age=_MIN_AGE):
     if isinstance(raw, str):
         raw = raw.strip()
         m = _MDY_RE.match(raw)
@@ -76,7 +76,7 @@ def parse_birthday(raw, event_year):
             if m and int(m.group(2)) in _TYPO_YEAR_FIX:
                 raw = f"{m.group(1)}{_TYPO_YEAR_FIX[int(m.group(2))]}"
     birthday = _parse_birthday(raw)
-    if birthday != _BIRTHDAY_SENTINEL and not _MIN_BIRTH_YEAR <= int(birthday[:4]) <= event_year - _MIN_AGE:
+    if birthday != _BIRTHDAY_SENTINEL and not _MIN_BIRTH_YEAR <= int(birthday[:4]) <= event_year - min_age:
         return _BIRTHDAY_SENTINEL
     return birthday
 

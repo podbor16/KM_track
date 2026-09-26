@@ -80,8 +80,15 @@ def normalize_sex(raw):
     return "Женщина" if s.startswith("ж") else "Мужчина" if s.startswith("м") else ""
 
 
-def _record(get, event_name, event_year, product_col, date, amount_col):
-    distance = distance_from_sku(get(product_col))
+def _record(get, event_name, event_year, product_col, date, amount_col, distance_fn=None):
+    """distance_fn(birthday, event_year, get) — дистанция по возрасту (детский забег);
+    тогда допустим любой детский возраст. Иначе дистанция — из продукта."""
+    if distance_fn:
+        birthday = parse_birthday(get("birthday"), event_year, min_age=0)
+        distance = distance_fn(birthday, event_year, get)
+    else:
+        birthday = parse_birthday(get("birthday"), event_year)
+        distance = distance_from_sku(get(product_col))
     surname = normalize_name(_clean_text(get("surname")))
     name = normalize_name(_clean_text(get("name")))
     if distance is None or not surname or not name:
@@ -92,7 +99,7 @@ def _record(get, event_name, event_year, product_col, date, amount_col):
         "sex": normalize_sex(get("sex")),
         "city": _clean_text(get("city")),
         "club": _clean_text(get("club")) or None,
-        "birthday": parse_birthday(get("birthday"), event_year),
+        "birthday": birthday,
         "phone": _clean_phone(get("phone")),
         "email": _clean_email(get("email")),
         "event_name": event_name,
@@ -127,16 +134,17 @@ def parse_tilda_csv(path, event_name, event_year):
     return rows
 
 
-def parse_google_sheet(ws, event_name, event_year):
+def parse_google_sheet(ws, event_name, event_year, distance_fn=None):
     it = ws.iter_rows(values_only=True)
-    cols = {str(h).strip(): i for i, h in enumerate(next(it)) if h}
+    # при повторе заголовка — первая колонка («birthday» в Детском 2022 — дважды)
+    cols = {str(h).strip(): i for i, h in reversed(list(enumerate(next(it)))) if h}
     low = {k.lower(): i for k, i in cols.items()}
     rows, skipped = [], 0
     for row in it:
         if not any(v is not None and str(v).strip() != "" for v in row):
             continue
         get = lambda f: row[low[f]] if f in low and low[f] < len(row) else None
-        rec = _record(get, event_name, event_year, "product", registered_at(row, cols), "total amount")
+        rec = _record(get, event_name, event_year, "product", registered_at(row, cols), "total amount", distance_fn)
         if rec is None:
             skipped += 1
         else:
@@ -147,7 +155,7 @@ def parse_google_sheet(ws, event_name, event_year):
 _BARE_DIST_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*км\s*$", re.IGNORECASE)
 
 
-def parse_start_list(ws, event_name, event_year, stats):
+def parse_start_list(ws, event_name, event_year, stats, distance_fn=None):
     """Итоговый стартовый список организатора (без дат): номер, фамилия, имя,
     дистанция. Колонка дистанции — «Дистанция» или колонка, где все значения
     вида «N км» (в листах бывает подписана «product»). Строки без ФИО
@@ -158,18 +166,22 @@ def parse_start_list(ws, event_name, event_year, stats):
     col = {h: i for i, h in reversed(list(enumerate(headers))) if h}
     pick = lambda *names: next((col[n] for n in names if n in col), None)
     dist_i = pick("дистанция")
-    if dist_i is None:
+    if dist_i is None and not distance_fn:
         dist_i = next(i for i in range(len(headers))
                       if (vals := [str(r[i]) for r in rows if i < len(r) and r[i] not in (None, "")])
                       and sum(bool(_BARE_DIST_RE.match(v)) for v in vals) >= 0.95 * len(vals))
-    idx = {"surname": pick("фамилия", "surname"), "name": pick("имя", "name"), "bib": pick("номер", "bib"),
+    bib_i = pick("номер", "bib")
+    if bib_i is None and rows and sum(str(r[0] or "").strip().isdigit() for r in rows) >= 0.95 * len(rows):
+        bib_i = 0  # номер без заголовка в первой колонке («Стартовый 2025» Детского)
+    idx = {"surname": pick("фамилия", "surname"), "name": pick("имя", "name"), "bib": bib_i,
            **{f: pick(f) for f in ("sex", "city", "club", "birthday", "phone", "email")}}
     out = []
     for r in rows:
         get = lambda f: r[idx[f]] if idx.get(f) is not None and idx[f] < len(r) else None
-        m = _BARE_DIST_RE.match(str(r[dist_i] or "")) if dist_i < len(r) else None
+        m = _BARE_DIST_RE.match(str(r[dist_i] or "")) if dist_i is not None and dist_i < len(r) else None
         sku = f"(v{m.group(1).replace(',', '.')}-2000)" if m else None
-        rec = _record(lambda f: sku if f == "product" else get(f), event_name, event_year, "product", None, "amount")
+        rec = _record(lambda f: sku if f == "product" else get(f), event_name, event_year, "product", None, "amount",
+                      distance_fn)
         bib = str(get("bib") or "").strip()
         if rec and bib.isdigit():
             rec["start_number"] = int(bib)
