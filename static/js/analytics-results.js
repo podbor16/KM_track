@@ -1766,7 +1766,9 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
 
         const rankBadge = (rank) => {
             const clr = getRankColor(rank);
-            return `<span class="seg-rank-badge" style="background:${clr}">${rank}</span>`;
+            // Забег Икс: тёмно-фиолетовый фон темы — тёмный текст не читается (призовые — светлые, их не трогаем)
+            const txt = currentEvent === 'xtrailrun' && clr === 'var(--primary-color)' ? ';color:#fff' : '';
+            return `<span class="seg-rank-badge" style="background:${clr}${txt}">${rank}</span>`;
         };
 
         const tr = document.createElement('tr');
