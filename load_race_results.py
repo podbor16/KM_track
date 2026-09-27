@@ -49,6 +49,10 @@ from src.analytics.db_connection_optimized import create_connection, calculate_a
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 UPDATE_INTERVAL = int(os.getenv("CONTINUOUS_UPDATE_INTERVAL", "5"))
+# Забег Икс 27.09.2026: успешный ответ Copernico — 0.3–0.6с, но ~половина запросов
+# виснет на проблемном IP; короткий read-timeout + 3 попытки = быстрее к рабочему IP
+API_READ_TIMEOUT = int(os.getenv("COPERNICO_READ_TIMEOUT", "8"))
+API_ATTEMPTS = int(os.getenv("COPERNICO_ATTEMPTS", "3"))
 BATCH_SIZE = 1000
 
 # Синтетические start_number для участников без числового dorsal (напр. "Зам" —
@@ -411,7 +415,7 @@ class RaceLoader:
         # резолвится заново на каждый вызов requests.get(), поэтому
         # немедленный повтор той же попытки часто сразу попадает на
         # рабочий IP, а не ждёт следующего планового цикла (5-30с).
-        for attempt in range(2):
+        for attempt in range(API_ATTEMPTS):
             suffix = " (повтор)" if attempt else ""
             self.logger.info(f"📡 Запрос к Copernico API: {url}{suffix}")
             try:
@@ -419,7 +423,7 @@ class RaceLoader:
                 # проблемный IP открывает соединение, но не отвечает вовсе;
                 # короткий таймаут даёт быстрее перейти к повтору/следующему
                 # циклу вместо многоминутного ожидания мёртвого соединения.
-                response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(10, 20))
+                response = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=(5, API_READ_TIMEOUT))
                 if response.status_code == 429:
                     retry_after = response.headers.get('Retry-After')
                     self.logger.warning(
@@ -446,7 +450,7 @@ class RaceLoader:
                 self.logger.info(f"✅ Получено {len(runners)} участников из API (event={event})")
                 return runners, gun_time
             except Exception as e:
-                self.logger.error(f"❌ Ошибка при запросе к API (event={event}, попытка {attempt + 1}/2): {e}")
+                self.logger.error(f"❌ Ошибка при запросе к API (event={event}, попытка {attempt + 1}/{API_ATTEMPTS}): {e}")
                 continue
         return [], None
 
