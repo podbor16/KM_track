@@ -1,12 +1,12 @@
 name: "Х Трейл"              # ТОЧНО как event_name в БД
-display_name: "Забег Икс"    # показывается пользователям
+display_name: "Х Трейл"      # показывается пользователям (раньше «Забег Икс»)
 year: 2026
 code: "xtrailrun"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
 start_lat: 56.007746             # старт/финиш — первая точка GPX (круг 5.18 км)
 start_lon: 92.72311
 gun_time: "11:00:00"          # старт 27.09.2026 11:00 Красноярск (gunTime в Copernico 04:00 UTC)
-description: "Забег Икс | Дистанция: 5 км"
+description: "Х Трейл | Дистанция: 5 км"
 
 distances:
   - distance: "5 км"
