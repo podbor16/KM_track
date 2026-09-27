@@ -112,35 +112,35 @@ function resetSortStateForEvent() {
     updateTimeColumnHeaders();
 }
 
-// Маппинг событие + год на event_id в БД
-const eventYearToIdMap = {
-    'night_run_2025': 67,
-    'night_run_2026': 104,
-    'vesna_2025': 71,
-    'vesna_2026': 106,
-    'colorrun_2025': 75,
-    'colorrun_2026': 108,
-    'girlseven_2025': 79,
-    'girlseven_2026': 110,
-    'kids_2025': 83,
-    'kids_2026': 113,
-    'zhara_2025': [89, 91, 93],       // три дистанции
-    'zhara_2026': [115, 116, 117],    // три дистанции
-    'xtrailrun_2025': 95,
-    'xtrailrun_2026': 117,
-    'snow7_2025': 99,
-    'snow7_2026': 119
-};
+// Годы с результатами и их event_id — из БД (/api/results-years), кэш по
+// событию: {event: [{year, event_ids}], …}. Раньше была хардкод-таблица
+// event_id — в неё попадали годы без результатов и чужие event_id.
+const resultsYearsCache = {};
 
-// Последний год, для которого у события есть настроенный event_id
-// (eventYearToIdMap) — прокси для "есть данные в БД", используется и как
-// дефолт при первой загрузке страницы, и при смене события в селекторе.
-function latestConfiguredYearForEvent(event) {
-    const years = Object.keys(eventYearToIdMap)
-        .filter(key => key.startsWith(`${event}_`))
-        .map(key => parseInt(key.slice(event.length + 1), 10))
-        .filter(y => !isNaN(y));
-    return years.length ? Math.max(...years) : null;
+async function fetchResultsYears(event) {
+    if (resultsYearsCache[event]) return resultsYearsCache[event];
+    const eventName = KMUtils.eventDbName(event);
+    if (!eventName) return [];
+    try {
+        const data = await KMUtils.fetchFresh(`/api/results-years?event_name=${encodeURIComponent(eventName)}`).then(r => r.json());
+        resultsYearsCache[event] = Array.isArray(data.years) ? data.years : [];
+    } catch {
+        return [];
+    }
+    return resultsYearsCache[event];
+}
+
+// event_id дистанций события за год (пусто — результатов нет)
+function eventIdsFor(event, year) {
+    const hit = (resultsYearsCache[event] || []).find(y => y.year === Number(year));
+    return hit ? hit.event_ids : [];
+}
+
+// Последний год, в котором у события есть результаты (кэш fetchResultsYears) —
+// дефолт при первой загрузке страницы и при смене события в селекторе.
+function latestResultsYearForEvent(event) {
+    const years = resultsYearsCache[event] || [];
+    return years.length ? years[0].year : null;
 }
 
 // Инициализация страницы — дефолт: активный забег + последний год с
@@ -148,13 +148,14 @@ function latestConfiguredYearForEvent(event) {
 // ссылке. Именованная функция (не анонимная в addEventListener) — чтобы её
 // можно было вызвать напрямую из тестов (см. analytics-start-list.js).
 async function initResultsPage() {
-    populateYearSelector();
     readStateFromUrl();
     try {
         const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
         currentEvent = _urlEvent || cfg.event || 'night_run';
         const cfgYear = cfg.year || new Date().getFullYear();
-        currentYear = _urlYear || latestConfiguredYearForEvent(currentEvent) || cfgYear;
+        await fetchResultsYears(currentEvent);
+        const urlYearOk = _urlYear && eventIdsFor(currentEvent, _urlYear).length;
+        currentYear = (urlYearOk ? _urlYear : null) || latestResultsYearForEvent(currentEvent) || cfgYear;
 
         // Дефолтная дистанция по дате — только для события, которое сейчас
         // реально активно (cfg.distances — данные именно про cfg.event, не
@@ -166,8 +167,10 @@ async function initResultsPage() {
         _liveEventDistances = cfg.distances || null;
     } catch {
         currentEvent = _urlEvent || 'night_run';
-        currentYear  = _urlYear || (new Date().getFullYear() - 1);
+        await fetchResultsYears(currentEvent);
+        currentYear  = _urlYear || latestResultsYearForEvent(currentEvent) || (new Date().getFullYear() - 1);
     }
+    populateYearSelector((resultsYearsCache[currentEvent] || []).map(y => y.year));
     document.getElementById('eventResultsSelector').value = currentEvent;
     document.getElementById('yearResultsSelector').value  = currentYear;
     updateEventThemeColor();
@@ -178,8 +181,7 @@ async function initResultsPage() {
 
     new SSEClient('/api/sse/notify', {
         results_updated: (msg) => {
-            const eventIds = eventYearToIdMap[`${currentEvent}_${currentYear}`];
-            const ids = Array.isArray(eventIds) ? eventIds : [eventIds];
+            const ids = eventIdsFor(currentEvent, currentYear);
             if (!msg.event_id || ids.includes(msg.event_id)) loadRunnersData(true);
         }
     });
@@ -202,21 +204,19 @@ function updateEventThemeColor() {
     document.documentElement.style.setProperty('--primary-color', color);
 }
 
-// Функция для заполнения селектора годов
-function populateYearSelector() {
+// Селектор годов — только годы, в которых у события есть результаты
+// (fetchResultsYears); нет ни одного — текущий год (пустая таблица).
+function populateYearSelector(years) {
     const yearSelector = document.getElementById('yearResultsSelector');
-    const currentYear = new Date().getFullYear();
-
-    // +1 чтобы включать следующий год (предрегистрация на будущие события)
-    for (let year = currentYear + 1; year >= 2020; year--) {
+    if (!yearSelector) return;
+    yearSelector.innerHTML = '';
+    const list = years && years.length ? years : [new Date().getFullYear()];
+    list.forEach(year => {
         const option = document.createElement('option');
         option.value = year;
         option.textContent = year;
         yearSelector.appendChild(option);
-    }
-    
-    // Устанавливаем текущий год по умолчанию
-    yearSelector.value = currentYear;
+    });
 }
 
 // Функция переключения события и года. trigger различает, какой селектор
@@ -228,9 +228,11 @@ async function switchEventResults(trigger) {
     const yearSel = document.getElementById('yearResultsSelector');
 
     if (trigger === 'event') {
-        const latestYear = latestConfiguredYearForEvent(currentEvent);
-        currentYear = latestYear || parseInt(yearSel.value);
-        if (latestYear) yearSel.value = latestYear;
+        const years = await fetchResultsYears(currentEvent);
+        populateYearSelector(years.map(y => y.year));
+        const latestYear = latestResultsYearForEvent(currentEvent);
+        currentYear = latestYear || new Date().getFullYear();
+        yearSel.value = currentYear;
     } else {
         currentYear = parseInt(yearSel.value);
     }
@@ -322,17 +324,12 @@ async function loadRunnersData(silent = false) {
     try {
         let rawData = [];
         
-        // Получаем event_id из маппинга события+года
-        const mapKey = `${currentEvent}_${currentYear}`;
-        const eventIdOrIds = eventYearToIdMap[mapKey];
-        
-        if (eventIdOrIds !== undefined) {
-            // Загружаем из БД через API с правильным event_id
+        // event_id дистанций события за год — из /api/results-years
+        const eventIds = eventIdsFor(currentEvent, currentYear);
+
+        if (eventIds.length) {
             console.log('Загрузка результатов из БД через API');
-            
-            // Если это массив дистанций (для Жары), загружаем все вместе
-            const eventIds = Array.isArray(eventIdOrIds) ? eventIdOrIds : [eventIdOrIds];
-            
+
             for (const eventId of eventIds) {
                 const response = await KMUtils.fetchFresh(`/api/event-results?event_id=${eventId}`);
                 

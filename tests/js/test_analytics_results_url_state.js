@@ -208,6 +208,9 @@ check('syncUrlFromState() — не пишет gender/ageGroup/search в URL, е�
             if (String(url).includes('/api/current-event')) {
                 return Promise.resolve({ json: () => Promise.resolve({ event: 'kids', year: 2026 }) });
             }
+            if (String(url).includes('/api/results-years')) {
+                return Promise.resolve({ json: () => Promise.resolve({ years: [{ year: 2026, event_ids: [115] }, { year: 2025, event_ids: [89] }] }) });
+            }
             return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
         };
 
@@ -232,6 +235,26 @@ check('syncUrlFromState() — не пишет gender/ageGroup/search в URL, е�
         await sandbox.initResultsPage();
 
         assert.strictEqual(vm.runInContext('currentEvent', sandbox), 'kids');
+    });
+
+    await checkAsync('initResultsPage() — год из URL без результатов не выбирается, берётся последний год с результатами', async () => {
+        resetDom();
+        vm.runInContext('for (const k of Object.keys(resultsYearsCache)) delete resultsYearsCache[k];', sandbox);
+        sandbox.location.search = '?event=zhara&year=2027';
+        fetchMock = (url) => {
+            if (String(url).includes('/api/current-event')) {
+                return Promise.resolve({ json: () => Promise.resolve({ event: 'kids', year: 2026 }) });
+            }
+            if (String(url).includes('/api/results-years')) {
+                return Promise.resolve({ json: () => Promise.resolve({ years: [{ year: 2026, event_ids: [115] }] }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({ results: [] }) });
+        };
+
+        await sandbox.initResultsPage();
+
+        assert.strictEqual(vm.runInContext('currentYear', sandbox), 2026);
+        assert.deepStrictEqual(domStub('yearResultsSelector').options.map(o => o.value), [2026]);
     });
 
     console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);

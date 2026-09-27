@@ -1,9 +1,7 @@
-// Тесты для static/js/analytics-results.js:
-// latestConfiguredYearForEvent() + switchEventResults(trigger) — год
-// автоматически переключается на последний год, для которого у события
-// есть настроенный event_id (eventYearToIdMap, прокси "есть данные в БД"),
-// но ТОЛЬКО при смене события (trigger==='event'), не при ручном выборе
-// года (trigger==='year').
+// Тесты для static/js/analytics-results.js: селектор года на /results —
+// только годы, в которых у события есть результаты (/api/results-years);
+// при смене события (trigger==='event') год переключается на последний
+// такой, при ручном выборе года (trigger==='year') — не перебивается.
 // В проекте нет JS-тест-фреймворка — используется node:vm.
 // Запуск: node tests/js/test_analytics_results_year_default.js
 const fs = require('fs');
@@ -41,7 +39,14 @@ class FakeImage {
 
 const sandbox = {
     console,
-    fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ results: [] }) }),
+    fetch: (url) => {
+        const body = String(url).includes('/api/results-years')
+            ? (String(url).includes(encodeURIComponent('Детский забег'))
+                ? { years: [{ year: 2026, event_ids: [113] }] }
+                : { years: [{ year: 2026, event_ids: [115, 116] }, { year: 2024, event_ids: [134] }] })
+            : { results: [] };
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    },
     document: {
         getElementById: domStub,
         createElement: (tag) => makeElement(tag),
@@ -71,22 +76,23 @@ async function checkAsync(name, fn) {
     catch (e) { failures++; console.log(`FAIL ${name}: ${e.message}`); }
 }
 
-check('latestConfiguredYearForEvent() — возвращает максимальный год из eventYearToIdMap для события', () => {
-    // zhara_2025 и zhara_2026 оба заданы в eventYearToIdMap
-    assert.strictEqual(sandbox.latestConfiguredYearForEvent('zhara'), 2026);
-});
-
-check('latestConfiguredYearForEvent() — событие без записей в eventYearToIdMap возвращает null', () => {
-    assert.strictEqual(sandbox.latestConfiguredYearForEvent('несуществующее_событие'), null);
-});
-
 (async () => {
-    await checkAsync('switchEventResults("event") — переключает год на последний сконфигурированный для нового события', async () => {
+    await checkAsync('fetchResultsYears() + eventIdsFor() — годы и event_id из API', async () => {
+        const years = await sandbox.fetchResultsYears('zhara');
+        assert.deepStrictEqual(years.map(y => y.year), [2026, 2024]);
+        assert.deepStrictEqual(Array.from(sandbox.eventIdsFor('zhara', 2026)), [115, 116]);
+        assert.deepStrictEqual(Array.from(sandbox.eventIdsFor('zhara', 2025)), []);   // года без результатов нет
+        assert.strictEqual(sandbox.latestResultsYearForEvent('zhara'), 2026);
+        assert.strictEqual(sandbox.latestResultsYearForEvent('несуществующее_событие'), null);
+    });
+
+    await checkAsync('switchEventResults("event") — в селекторе только годы с результатами, выбран последний', async () => {
         resetDom();
-        domStub('eventResultsSelector').value = 'kids'; // kids_2025 и kids_2026 в eventYearToIdMap
+        domStub('eventResultsSelector').value = 'kids';
         domStub('yearResultsSelector').value = '2024';
         await sandbox.switchEventResults('event');
         assert.strictEqual(domStub('yearResultsSelector').value, 2026);
+        assert.deepStrictEqual(domStub('yearResultsSelector').options.map(o => o.value), [2026]);
     });
 
     await checkAsync('switchEventResults("year") — год берётся из селектора как есть, без автопереключения', async () => {

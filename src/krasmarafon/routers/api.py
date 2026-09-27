@@ -434,6 +434,15 @@ async def get_registered_runners_years(event_name: str = Query(...)) -> dict:
     return {"years": opts["years"]}
 
 
+@router.get("/api/results-years")
+async def get_results_years_api(event_name: str = Query(...)) -> dict:
+    """Годы с результатами события и их event_id — селектор года на /results."""
+    from src.analytics.db_results import get_results_years
+
+    years = await asyncio.get_event_loop().run_in_executor(None, lambda: get_results_years(event_name))
+    return {"years": years}
+
+
 @router.get("/api/event-results")
 async def get_event_results(
     event_id: int = Query(None, description="ID события в БД"),

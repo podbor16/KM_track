@@ -1529,6 +1529,39 @@ def get_leads_admin(
             pass
 
 
+def get_results_years(event_name: str) -> List[Dict[str, Any]]:
+    """Годы, в которых у события есть хотя бы одна строка в results (после
+    --init лоадера или импорта), по убыванию, с event_id дистанций по
+    возрастанию дистанции: [{"year": 2026, "event_ids": [115, 116]}, …].
+    Селектор года на /results — год без результатов выбрать нельзя."""
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """
+            SELECT e.event_year, e.id FROM events e
+            WHERE e.event_name = %s AND EXISTS (SELECT 1 FROM results r WHERE r.event_id = e.id)
+            ORDER BY e.event_year DESC, e.event_distance ASC
+            """,
+            (event_name,),
+        )
+        years: Dict[int, List[int]] = {}
+        for row in cur.fetchall():
+            years.setdefault(int(row["event_year"]), []).append(int(row["id"]))
+        cur.close()
+        return [{"year": y, "event_ids": ids} for y, ids in years.items()]
+    except Exception as e:
+        logger.error(f"get_results_years error: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def get_leads_filter_options(event_name: str = None, event_year: int = None, years_from_leads_only: bool = False) -> dict:
     """Distinct значения для каскадных фильтров (event_names, years, distances).
 
