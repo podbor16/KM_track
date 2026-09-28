@@ -912,3 +912,14 @@ def test_delete_scope_limits_reconciliation_to_selected_event_year():
     assert pairs == {("Детский забег", 2027)}
     pairs_all, _ = _leads_to_delete_context(rows, [])
     assert pairs_all == {("Детский забег", 2027), ("Детский забег", 2026)}
+
+
+def test_admin_resolve_import_years_prefers_selected_year(monkeypatch):
+    from types import SimpleNamespace
+    import src.krasmarafon.routers.webhook as wh
+    from src.krasmarafon.routers.admin import _resolve_import_years
+    monkeypatch.setattr(wh, "first_race_date", lambda n, y: None)
+    row = SimpleNamespace(event_name="Детский забег", event_year=2027, event_distance="1 км", birthday="2021-05-05",
+                          registered_at="2026-08-23 20:06:10", year_candidates=[2026, 2027])
+    _resolve_import_years([row], ("Детский забег", 2026))
+    assert (row.event_year, row.event_distance) == (2026, "500 м")

@@ -33,7 +33,9 @@ import re
 import openpyxl
 
 from src.config.settings import KRASNOYARSK_TZ
-from src.krasmarafon.services.tilda_webhook import convert_birthday, normalize_name, parse_products, is_name_suspicious
+from src.krasmarafon.services.tilda_webhook import (
+    convert_birthday, normalize_name, parse_products, is_name_suspicious, year_candidates,
+)
 
 
 @dataclass
@@ -72,6 +74,9 @@ class ImportRow:
                                  # (UPDATE). Без неё created_at у импортных строк =
                                  # момент импорта → ломает аналитику динамики
                                  # регистраций.
+    year_candidates: list = field(default_factory=list)  # годы из названия и slug товара
+                                 # (tilda_webhook.year_candidates) — уточнение в /admin,
+                                 # см. admin.upload_leads_import()
 
 
 @dataclass
@@ -463,6 +468,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 is_name_suspicious=is_name_suspicious(surname, name),
                 start_number=str(get("start_number") or "").strip(),
                 registered_at=tilda_registered_at(get("registered_at"), get("registered_at_fallback")),
+                year_candidates=year_candidates([str(get("products") or "")]) if "products" in col_map else [],
             ))
         except Exception as e:
             reason = f"непредвиденная ошибка парсинга — {e}"

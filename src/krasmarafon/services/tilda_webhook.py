@@ -92,24 +92,57 @@ def _canonical_event_name(name: str) -> str:
 _SLUG_YEAR_RE = re.compile(r"\(\s*[a-z]+(?:\d+[a-z]*-)?(20\d{2})", re.IGNORECASE)
 
 
+_TITLE_YEAR_RE = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
+
+
+def year_candidates(products) -> list:
+    """Годы продукта Tilda — из названия (до «(») и из slug товара в скобках.
+    Ненадёжны оба: страницу копируют с прошлого года, не правя то название
+    («…Детском забеге 2026 (kids2027…»), то slug («(zhara2024-5…» у слотов на
+    2025). Выбор — resolve_event_year() по дате покупки."""
+    raw = products[0] if isinstance(products, list) and products else str(products or "")
+    title = _TITLE_YEAR_RE.search(raw.split("(")[0])
+    slug = _SLUG_YEAR_RE.search(raw)
+    return sorted({int(m.group(1)) for m in (title, slug) if m})
+
+
+def _kids_distance(event_year, birthday):
+    try:
+        return "500 м" if int(event_year) - int(birthday[:4]) < 6 else "1 км"
+    except (TypeError, ValueError, IndexError):
+        return ""
+
+
 def parse_products(products, birthday=None):
     info = _parse_products(products, birthday)
     if info["event_name"]:
         info["event_name"] = _canonical_event_name(info["event_name"])
-        # Год — из slug товара ("(kids2027, …"), а не из названия: название
-        # копируют с прошлогодней страницы и не правят (Детский забег: «…забеге
-        # 2026 (kids2027, …» — 8 заявок 2027 ушли в 2026, 2026-09-28).
-        raw = products[0] if isinstance(products, list) and products else str(products or "")
-        slug = _SLUG_YEAR_RE.search(raw)
-        if slug and slug.group(1) != str(info["event_year"]):
-            info["event_year"] = slug.group(1)
+        cands = year_candidates(products)
+        info["year_candidates"] = cands
+        # без даты покупки — больший год (новые продажи идут на следующий старт)
+        if cands and str(max(cands)) != str(info["event_year"]):
+            info["event_year"] = str(max(cands))
             if info["event_name"] == "Детский забег" and birthday:
-                try:
-                    age = int(info["event_year"]) - int(birthday[:4])
-                    info["event_distance"] = "500 м" if age < 6 else "1 км"
-                except (ValueError, IndexError):
-                    pass
+                info["event_distance"] = _kids_distance(info["event_year"], birthday) or info["event_distance"]
     return info
+
+
+def resolve_event_year(event_name, candidates, purchased_on, first_race_date):
+    """Год заявки по дате покупки: ближайший из candidates, старт которого
+    ещё не наступил (день старта — уже прошедший: онлайн-регистрация к нему
+    закрыта, в этот день покупают только следующий сезон — все ≈250 таких
+    покупок с 2024 года). Все прошли — следующий за последним. Года без
+    события в БД (опечатка «night2-2076») не выбираются, пока есть другой.
+    first_race_date(event_name, year) -> date | None."""
+    cands = sorted(int(y) for y in candidates)
+    if not cands:
+        return None
+    for year in cands:
+        race = first_race_date(event_name, year)
+        if race is not None and purchased_on < race:
+            return year
+    known = [y for y in cands if first_race_date(event_name, y) is not None]
+    return (max(known) + 1) if known else max(cands)
 
 
 def _parse_products(products, birthday=None):
@@ -221,7 +254,9 @@ def parse_payment(payment_raw):
     return result
 
 
-def transform_tilda_payload(body: dict) -> dict:
+def transform_tilda_payload(body: dict, first_race_date=None, purchased_on=None) -> dict:
+    """first_race_date/purchased_on — уточнение года по дате покупки
+    (resolve_event_year); без них — год из parse_products()."""
     payment_raw = body.get("payment", "")
     payment = parse_payment(payment_raw)
 
@@ -231,6 +266,12 @@ def transform_tilda_payload(body: dict) -> dict:
         products_list if isinstance(products_list, list) else [products_list],
         birthday=birthday,
     )
+    if first_race_date and purchased_on and event_info["event_name"] and event_info.get("year_candidates"):
+        year = resolve_event_year(event_info["event_name"], event_info["year_candidates"], purchased_on, first_race_date)
+        if year and str(year) != str(event_info["event_year"]):
+            event_info["event_year"] = str(year)
+            if event_info["event_name"] == "Детский забег" and birthday:
+                event_info["event_distance"] = _kids_distance(year, birthday) or event_info["event_distance"]
 
     surname = normalize_name(body.get("surname", ""))
     name = normalize_name(body.get("name", ""))

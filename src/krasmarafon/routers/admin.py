@@ -569,6 +569,34 @@ async def delete_participant_photo_endpoint(
     return {"status": "ok"}
 
 
+def _resolve_import_years(rows, scope) -> None:
+    """Название и slug товара расходятся по году («…забеге 2026 (kids2027…»):
+    год, выбранный в /admin, если он среди кандидатов; иначе — по дате покупки
+    из файла (resolve_event_year, как в вебхуке). Даты в файле бывают
+    ненастоящими (пусто, время загрузки) — поэтому выбор в /admin первичен."""
+    from datetime import datetime
+    from src.krasmarafon.routers.webhook import first_race_date
+    from src.krasmarafon.services.tilda_webhook import _kids_distance, resolve_event_year
+
+    for r in rows:
+        cands = getattr(r, "year_candidates", None) or []
+        if len(cands) < 2:
+            continue
+        year = None
+        if scope and r.event_name == scope[0] and int(scope[1]) in cands:
+            year = int(scope[1])
+        elif r.registered_at:
+            try:
+                bought = datetime.strptime(r.registered_at[:10], "%Y-%m-%d").date()
+                year = resolve_event_year(r.event_name, cands, bought, first_race_date)
+            except ValueError:
+                pass
+        if year and year != r.event_year:
+            r.event_year = year
+            if r.event_name == "Детский забег" and r.birthday:
+                r.event_distance = _kids_distance(year, r.birthday) or r.event_distance
+
+
 @router.post("/api/admin/leads/import/upload")
 async def upload_leads_import(
     file: UploadFile = File(...),
@@ -598,6 +626,7 @@ async def upload_leads_import(
         raise HTTPException(status_code=422, detail=str(e))
 
     scope = (event_name, event_year) if event_name and event_year else None
+    await asyncio.get_event_loop().run_in_executor(None, lambda: _resolve_import_years(parsed.rows, scope))
     parsed.delete_scope = scope          # apply удаляет в тех же границах, что показал превью
     other = sorted({(r.event_name, r.event_year) for r in parsed.rows} - ({scope} if scope else set()), key=str)
     if scope and other:

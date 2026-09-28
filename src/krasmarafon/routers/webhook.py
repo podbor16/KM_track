@@ -5,6 +5,8 @@ POST /webhook/tilda/{token}
 
 import json
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -44,7 +46,7 @@ async def tilda_webhook(token: str, request: Request):
         return JSONResponse({"ok": False, "error": "bad body"})
 
     try:
-        data = transform_tilda_payload(body)
+        data = transform_tilda_payload(body, first_race_date, datetime.now(ZoneInfo("Asia/Krasnoyarsk")).date())
     except Exception as e:
         _log.error(f"tilda_webhook: ошибка трансформации: {e}", exc_info=True)
         return JSONResponse({"ok": False, "error": "transform failed"})
@@ -60,6 +62,22 @@ async def tilda_webhook(token: str, request: Request):
         return JSONResponse({"ok": False, "error": "db error"})
 
     return JSONResponse({"ok": True})
+
+
+def first_race_date(event_name: str, event_year: int):
+    """Дата первого дня старта (MIN event_date по дистанциям) или None."""
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT MIN(event_date) FROM events WHERE event_name = %s AND event_year = %s",
+                    (event_name, int(event_year)))
+        row = cur.fetchone()
+        cur.close()
+        return row[0] if row else None
+    finally:
+        conn.close()
 
 
 def _insert_lead(data: dict):

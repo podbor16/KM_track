@@ -203,3 +203,36 @@ def test_parse_products_slug_year_other_events():
     assert (result["event_name"], result["event_year"], result["event_distance"]) == ("Красочный забег", "2027", "5 км")
     same = parse_products(["21.1 км Жара 2026 (zhara2026-21, …)"])
     assert same["event_year"] == "2026"
+
+
+from datetime import date
+
+_RACES = {("Детский забег", 2026): date(2026, 8, 22), ("Детский забег", 2027): date(2027, 8, 28),
+          ("Жара", 2024): date(2024, 8, 24), ("Жара", 2025): date(2025, 8, 23),
+          ("Снежная семерка", 2024): date(2024, 12, 1), ("Снежная семерка", 2025): date(2025, 12, 7),
+          ("Ночной забег", 2027): date(2027, 3, 27)}
+_race = lambda name, year: _RACES.get((name, int(year)))
+
+
+@pytest.mark.parametrize("name, cands, bought, expected", [
+    ("Детский забег", [2026, 2027], date(2026, 8, 23), 2027),     # название 2026, slug 2027, куплен после старта 2026
+    ("Детский забег", [2026, 2027], date(2026, 8, 1), 2026),      # до старта 2026 — ближайший ещё не прошедший
+    ("Жара", [2024], date(2024, 8, 26), 2025),                    # slug zhara2024 после Жары 2024 -> 2025
+    ("Снежная семерка", [2024], date(2024, 12, 1), 2025),         # в день старта — следующий сезон
+    ("Ночной забег", [2027, 2076], date(2026, 3, 29), 2027),      # опечатка в slug
+    ("Весна", [2028], date(2027, 6, 1), 2028),                    # события 2028 в БД ещё нет
+])
+def test_resolve_event_year(name, cands, bought, expected):
+    from src.krasmarafon.services.tilda_webhook import resolve_event_year
+    assert resolve_event_year(name, cands, bought, _race) == expected
+
+
+def test_transform_uses_purchase_date_for_year_and_kids_distance():
+    import json
+    from src.krasmarafon.services.tilda_webhook import transform_tilda_payload
+    body = {"surname": "Иванов", "name": "Петр", "birthday": "05.05.2021",
+            "payment": json.dumps({"products": ["Слот на участие в Детском забеге 2026 (kids2026, Основная)"]})}
+    early = transform_tilda_payload(body, _race, date(2026, 8, 1))
+    assert (early["event_year"], early["event_distance"]) == (2026, "500 м")      # 2026-2021 = 5
+    late = transform_tilda_payload(body, _race, date(2026, 8, 23))
+    assert (late["event_year"], late["event_distance"]) == (2027, "1 км")        # 2027-2021 = 6
