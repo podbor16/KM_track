@@ -1774,7 +1774,7 @@ def _find_lead_matches(cur, row) -> list:
     return cur.fetchall()
 
 
-def _leads_to_delete_context(rows: list, failed_rows: list) -> tuple:
+def _leads_to_delete_context(rows: list, failed_rows: list, scope: tuple = None) -> tuple:
     """(event_pairs, protected_names) — общий расчёт для превью и apply
     реконсиляции "файл — источник истины" (см. _find_leads_to_delete()).
     event_pairs — (event_name, event_year) всех успешно разобранных строк
@@ -1783,6 +1783,11 @@ def _leads_to_delete_context(rows: list, failed_rows: list) -> tuple:
     — если строка не распозналась (не пустая, а сломанная), мы не знаем,
     что с человеком, и не должны его удалять только из-за бага парсинга."""
     event_pairs = {(r.event_name, r.event_year) for r in rows}
+    # scope — событие/год, выбранные в /admin: удаляем только в них. Строки,
+    # распознанные в другой год (продукт «…забеге 2026 (kids2027…»), не должны
+    # удалять заявки чужого года (превью Детского 2027 -> «удалится 910» из 2026).
+    if scope and all(scope):
+        event_pairs = {p for p in event_pairs if p == tuple(scope)}
     protected_names = {(r.surname, r.name) for r in rows}
     protected_names |= {
         (fr.get('surname', ''), fr.get('name', '')) for fr in (failed_rows or [])
@@ -1814,7 +1819,7 @@ def _find_leads_to_delete(cur, event_pairs: set, present_ids: set, protected_nam
     return to_delete
 
 
-def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
+def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None) -> Dict[str, Any]:
     """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads.
 
     Сопоставление — см. _find_lead_matches() (двухуровневое: order_id, затем
@@ -1980,7 +1985,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
                     recompute_duplicate_flag(client_id=new_row['client_id'], event_id=new_row['event_id'])
                 created += 1
 
-        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows)
+        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows, scope)
         to_delete = _find_leads_to_delete(cur, event_pairs, present_ids, protected_names)
         if to_delete:
             cur.execute(
@@ -2007,7 +2012,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None) -> Dict[str, Any]:
             pass
 
 
-def preview_leads_import_matches(rows: list, failed_rows: list = None) -> dict:
+def preview_leads_import_matches(rows: list, failed_rows: list = None, scope: tuple = None) -> dict:
     """Только чтение — для каждой row возвращает matched_count (0 = будет
     создана новая заявка при bulk_import_leads), используется для превью
     перед подтверждением импорта в admin UI. Плюс to_delete — заявки,
@@ -2039,7 +2044,7 @@ def preview_leads_import_matches(rows: list, failed_rows: list = None) -> dict:
                 "matched_count": cnt, "will": "update" if cnt >= 1 else "create",
             })
 
-        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows)
+        event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows, scope)
         to_delete = _find_leads_to_delete(cur, event_pairs, present_ids, protected_names)
 
         cur.close()

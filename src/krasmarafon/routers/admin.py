@@ -597,8 +597,17 @@ async def upload_leads_import(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    scope = (event_name, event_year) if event_name and event_year else None
+    parsed.delete_scope = scope          # apply удаляет в тех же границах, что показал превью
+    other = sorted({(r.event_name, r.event_year) for r in parsed.rows} - ({scope} if scope else set()), key=str)
+    if scope and other:
+        parsed.errors.append(
+            "Часть строк распознана не в выбранный старт/год: "
+            + ", ".join(f"{n} {y}" for n, y in other)
+            + " — они будут обновлены/созданы, но удаление по ним не выполняется."
+        )
     preview = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: preview_leads_import_matches(parsed.rows, parsed.failed_rows)
+        None, lambda: preview_leads_import_matches(parsed.rows, parsed.failed_rows, scope)
     )
     preview_rows = preview["rows"]
     to_delete = preview["to_delete"]
@@ -661,7 +670,7 @@ async def apply_leads_import(
         parsed = pickle.load(f)
 
     summary = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows)
+        None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows, getattr(parsed, "delete_scope", None))
     )
     path.unlink(missing_ok=True)
     await _notify_startlist_updated()

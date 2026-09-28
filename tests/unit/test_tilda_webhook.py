@@ -187,3 +187,19 @@ def test_parse_products_without_slug_tail_year_at_end():
 def test_parse_products_amount_at_end_is_not_taken_as_year():
     info = parse_products(["5 км Жара (zhara2026-5, Выберите категорию: Основная категория) x 1 ≡ 1390"])
     assert (info["event_name"], info["event_year"]) == ("Жара", "2026")
+
+
+def test_parse_products_slug_year_wins_over_title_year():
+    """Страницу продукта скопировали с прошлого года: в названии 2026, в slug 2027."""
+    products = ["Слот на участие в Детском забеге 2026 (kids2027, Выберите категорию: Основная категория)"]
+    result = parse_products(products, birthday="2021-05-01")
+    assert result["event_name"] == "Детский забег"
+    assert result["event_year"] == "2027"
+    assert result["event_distance"] == "1 км"          # 2027 - 2021 = 6 лет
+
+
+def test_parse_products_slug_year_other_events():
+    result = parse_products(["5 км Красочный забег 2026 (color5-2027, Выберите категорию)"])
+    assert (result["event_name"], result["event_year"], result["event_distance"]) == ("Красочный забег", "2027", "5 км")
+    same = parse_products(["21.1 км Жара 2026 (zhara2026-21, …)"])
+    assert same["event_year"] == "2026"

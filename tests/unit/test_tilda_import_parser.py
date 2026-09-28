@@ -900,3 +900,15 @@ def test_unnamed_column_with_non_distance_values_is_not_used_as_distance():
     data = _xtrail_xlsx([[101, "Иванов", "Иван", "01.05.1990", "Основная категория", None, None, None]])
     result = parse_tilda_export(data, filename="x.xlsx", fallback_event_name="Х Трейл", fallback_event_year=2026)
     assert result.rows == []
+
+
+def test_delete_scope_limits_reconciliation_to_selected_event_year():
+    """Строки файла, распознанные в другой год, не расширяют удаление на чужой год."""
+    from types import SimpleNamespace
+    from src.analytics.db_results import _leads_to_delete_context
+    rows = [SimpleNamespace(event_name="Детский забег", event_year=2027, surname="А", name="Б"),
+            SimpleNamespace(event_name="Детский забег", event_year=2026, surname="В", name="Г")]
+    pairs, _ = _leads_to_delete_context(rows, [], ("Детский забег", 2027))
+    assert pairs == {("Детский забег", 2027)}
+    pairs_all, _ = _leads_to_delete_context(rows, [])
+    assert pairs_all == {("Детский забег", 2027), ("Детский забег", 2026)}

@@ -88,10 +88,27 @@ def _canonical_event_name(name: str) -> str:
     return _EVENT_NAME_ALIASES.get(name.strip().lower(), name)
 
 
+# kids2027, zhara2026-21, color5-2027, night2walkb-2025, Vesna5-2026y
+_SLUG_YEAR_RE = re.compile(r"\(\s*[a-z]+(?:\d+[a-z]*-)?(20\d{2})", re.IGNORECASE)
+
+
 def parse_products(products, birthday=None):
     info = _parse_products(products, birthday)
     if info["event_name"]:
         info["event_name"] = _canonical_event_name(info["event_name"])
+        # Год — из slug товара ("(kids2027, …"), а не из названия: название
+        # копируют с прошлогодней страницы и не правят (Детский забег: «…забеге
+        # 2026 (kids2027, …» — 8 заявок 2027 ушли в 2026, 2026-09-28).
+        raw = products[0] if isinstance(products, list) and products else str(products or "")
+        slug = _SLUG_YEAR_RE.search(raw)
+        if slug and slug.group(1) != str(info["event_year"]):
+            info["event_year"] = slug.group(1)
+            if info["event_name"] == "Детский забег" and birthday:
+                try:
+                    age = int(info["event_year"]) - int(birthday[:4])
+                    info["event_distance"] = "500 м" if age < 6 else "1 км"
+                except (ValueError, IndexError):
+                    pass
     return info
 
 
