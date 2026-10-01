@@ -23,7 +23,7 @@ echo "=== Обновление зависимостей ==="
 venv/bin/pip install -r requirements.txt --quiet
 
 echo "=== Перезапуск сервиса ==="
-systemctl restart km_track
+systemctl is-active --quiet km_track && systemctl reload km_track || systemctl restart km_track   # reload — без простоя (HUP gunicorn)
 sleep 2
 systemctl status km_track --no-pager
 
