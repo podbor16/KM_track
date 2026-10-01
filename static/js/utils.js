@@ -31,6 +31,12 @@ window.KMUtils = {
         return this.EVENT_DB_NAMES[code] || this.EVENT_NAMES[code];
     },
 
+    // Ключ поиска по ФИО: без регистра, «ё» = «е» (как collation БД) —
+    // «Семенов» находит «Семёнова» и наоборот.
+    searchNorm(s) {
+        return String(s || '').trim().toLowerCase().replace(/ё/g, 'е');
+    },
+
     EVENT_COLORS: {
         'night_run':  '#1c2c55',
         'vesna':      '#85c6e2',

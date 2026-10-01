@@ -807,7 +807,7 @@ function applyFilters() {
     const genderFilter = getGenderFilterValue();
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const distanceFilter = document.getElementById('distanceFilter').value;
-    const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
+    const surnameSearch = KMUtils.searchNorm(document.getElementById('surnameSearch').value);
     
     console.log('Применение фильтров:', { genderFilter, ageGroupFilter, distanceFilter, surnameSearch, totalRunners: allRunners.length });
     
@@ -821,7 +821,7 @@ function applyFilters() {
                     return false;
                 }
             } else {
-                const runnerSurname = (runner.surname || '').toLowerCase();
+                const runnerSurname = KMUtils.searchNorm(runner.surname);
                 if (!runnerSurname.startsWith(surnameSearch)) {
                     return false;
                 }

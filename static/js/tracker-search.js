@@ -103,7 +103,7 @@ function searchRunners() {
     const query = document.getElementById('searchInput');
     if (!query) return;
 
-    const searchText = query.value.trim().toLowerCase();
+    const searchText = KMUtils.searchNorm(query.value);
     const resultsDiv = document.getElementById('searchResults');
 
     if (!searchText) {
@@ -119,7 +119,7 @@ function searchRunners() {
 
     const results = allRunners.filter(runner => isNumericQuery
         ? String(runner.start_number).includes(searchText)
-        : runner.surname.toLowerCase().startsWith(searchText)
+        : KMUtils.searchNorm(runner.surname).startsWith(searchText)
     ).sort((a, b) => isNumericQuery
         ? a.start_number - b.start_number
         : a.full_name.localeCompare(b.full_name, 'ru')

@@ -480,6 +480,22 @@ def apply(conn, cards, final, merged_into, backup, drop_leads=()):
             cur.execute("UPDATE clients SET surname = %s, name = %s, birthday = %s WHERE id = %s", (s, n, bd, i))
             cur.execute("UPDATE leads SET surname = %s, name = %s, birthday = %s WHERE client_id = %s", (s, n, bd, i))
             cur.execute("UPDATE results SET surname = %s, name = %s, birthday = %s WHERE client_id = %s", (s, n, bd, i))
+        # trg_leads_after_update переписывает phone/email карточки данными каждой
+        # обновлённой заявки — возвращаем: переименованным — как было, склеенным —
+        # из самой свежей заявки с непустым значением (как при вставке заявки)
+        before = {c["id"]: c for c in snap.get("clients", [])}
+        for i in ids:
+            if i in by_survivor:
+                cur.execute("""
+                    UPDATE clients c SET
+                      c.phone = COALESCE((SELECT l.phone FROM leads l WHERE l.client_id = c.id AND l.phone <> ''
+                                          ORDER BY l.created_at DESC, l.id DESC LIMIT 1), c.phone),
+                      c.email = COALESCE((SELECT l.email FROM leads l WHERE l.client_id = c.id AND l.email <> ''
+                                          ORDER BY l.created_at DESC, l.id DESC LIMIT 1), c.email)
+                    WHERE c.id = %s""", (i,))
+            elif i in before:
+                cur.execute("UPDATE clients SET phone = %s, email = %s WHERE id = %s",
+                            (before[i]["phone"], before[i]["email"], i))
         for chunk in (ids[i:i + 1000] for i in range(0, len(ids), 1000)):
             recompute_aggregates(cur, chunk)
         if drop_leads:

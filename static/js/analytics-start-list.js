@@ -474,14 +474,14 @@ function applyFilters() {
     document.getElementById('startListTable').classList.toggle('km-table--show-start-number', hasStartNumbers);
 
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
-    const surnameSearch = document.getElementById('surnameSearch').value.toLowerCase().trim();
+    const surnameSearch = KMUtils.searchNorm(document.getElementById('surnameSearch').value);
     
     console.log('Применение фильтров:', { genderFilter, ageGroupFilter, distanceFilter, surnameSearch, totalRunners: allRunners.length });
     
     filteredRunners = allRunners.filter(runner => {
         // Фильтр по фамилии - поиск с начала фамилии
         if (surnameSearch !== '') {
-            const runnerSurname = (runner.surname || '').toLowerCase();
+            const runnerSurname = KMUtils.searchNorm(runner.surname);
             if (!runnerSurname.startsWith(surnameSearch)) {
                 return false;
             }
