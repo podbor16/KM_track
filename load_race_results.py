@@ -273,11 +273,17 @@ def normalize_time(t: Optional[str]) -> Optional[str]:
     return t
 
 
-def _time_str_to_seconds(t: Optional[str]) -> Optional[float]:
-    """'HH:MM:SS' → total seconds. None если невалидно или None."""
-    if not t:
+def _time_str_to_seconds(t) -> Optional[float]:
+    """'HH:MM:SS' / timedelta / time → total seconds. None если невалидно или None.
+    timedelta — кэш, загруженный из БД (mysql-connector отдаёт TIME так): раньше
+    падало на .split(), лоадер Икса 2026 перезапускался по кругу с 27.09."""
+    if t is None or t == '':
         return None
-    parts = t.split(':')
+    if isinstance(t, timedelta):
+        return t.total_seconds()
+    if hasattr(t, 'hour') and hasattr(t, 'minute'):
+        return t.hour * 3600 + t.minute * 60 + t.second
+    parts = str(t).split(':')
     if len(parts) != 3:
         return None
     try:
