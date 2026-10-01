@@ -1,9 +1,10 @@
 """Проверки привязки к карточкам — на реальных случаях аудита 2026-10-01."""
 import pytest
 
-from scripts.clean_clients import Names
-from scripts.data_quality import (Data, check_category, check_duplicates, check_hygiene, check_lead_on_other_card,
-                                  check_twins, compatible_bd, merge_blockers, names_compatible, propose_birthday)
+from src.analytics.data_quality import (Data, check_category, check_duplicates, check_hygiene,
+                                        check_lead_on_other_card, check_twins, compatible_bd, merge_blockers, names_compatible,
+                                        propose_birthday, run_checks)
+from src.common.names import Names
 
 _FILL = ([("Иванов", n, "Мужчина") for n in ("Виктор", "Сергей", "Владимир", "Вадим", "Иван", "Матвей")] * 6
          + [("Иванова", n, "Женщина") for n in ("Виктория", "Ирина", "Анна", "Марина", "Юлия", "Дарья", "Мария")] * 6)
@@ -192,3 +193,11 @@ def test_hygiene_case():
     d = data([C(1, "Галинин", "Вадим", "1983-06-30")], results=[R(1, 1, "галинин", "вадим", "1983-06-30", 4, 630)])
     [f] = check_hygiene(d, d.results)
     assert "Галинин Вадим" in f.message
+
+
+def test_event_scope_checks_twins_of_lead_cards():
+    # импорт заявок: «Катя» пришла новой карточкой рядом с «Екатериной» — результатов ещё нет
+    d = data([C(1, "Сташкевич", "Екатерина", "2013-08-13"), C(2, "Сташкевич", "Катя", "2013-08-13")],
+             leads=[L(1, 2, "Сташкевич", "Катя", "2013-08-13", 2)])
+    assert [f.client_ids for f in run_checks(d, {2})] == [(1, 2)]
+    assert run_checks(d) == []          # полный прогон — только карточки с результатами

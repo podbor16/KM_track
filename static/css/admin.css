@@ -39,9 +39,11 @@
     gap: 4px;
     border-bottom: 2px solid var(--km-border-light);
     margin-bottom: 24px;
+    overflow-x: auto;           /* 10 вкладок шире телефона — прокрутка внутри ряда, а не всей страницы */
 }
 
 .admin-tab {
+    flex-shrink: 0;
     padding: 10px 20px;
     border: none;
     background: none;
@@ -501,3 +503,36 @@
     .admin-yaml-editor { min-height: 180px; font-size: 0.75rem; }
     .admin-leads-toolbar { flex-direction: column; align-items: flex-start; }
 }
+
+/* ------- Качество данных ------- */
+
+.dq-summary { margin: 8px 0; color: var(--km-text-secondary); font-size: 0.9rem; }
+.dq-item {
+    border: 1px solid var(--km-border-light);
+    border-left: 4px solid var(--km-border-light);
+    border-radius: var(--km-radius-card);
+    background: var(--km-bg-card);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+.dq-item--high { border-left-color: #c0392b; }
+.dq-item--medium { border-left-color: #e0a800; }
+.dq-item--done { opacity: 0.6; }
+.dq-item-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.dq-code { font-weight: 600; }
+.dq-muted { color: var(--km-text-secondary); font-size: 0.85rem; }
+.dq-sev--high { background: #f8d7da; color: #721c24; }
+.dq-sev--medium { background: #fff3cd; color: #856404; }
+.dq-sev--low { background: #f0f0f0; color: var(--km-text-secondary); }
+.dq-message { margin-bottom: 8px; overflow-wrap: anywhere; }
+.dq-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.dq-card { background: var(--km-bg, #fafafa); border: 1px solid var(--km-border-light); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.dq-card-title { font-weight: 600; margin-bottom: 4px; }
+.dq-card-list { font-size: 0.85rem; overflow-wrap: anywhere; }
+.dq-card-list span { color: var(--km-text-secondary); }
+.dq-blockers { margin-top: 8px; color: #721c24; font-size: 0.9rem; }
+.dq-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.dq-merge { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dq-merge .admin-select { width: 150px; }
+.dq-status { font-size: 0.9rem; color: #721c24; }
+.dq-status--ok { color: #155724; }

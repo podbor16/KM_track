@@ -3,6 +3,8 @@ import logging
 import math
 import re
 
+from src.common.names import normalize_person_name
+
 _log = logging.getLogger(__name__)
 
 # Подозрительное имя: содержит не-кирилличные символы, пробелы, цифры, латиницу и т.п.
@@ -51,9 +53,8 @@ def convert_birthday(birthday):
 
 
 def normalize_name(s):
-    if not s or not isinstance(s, str):
-        return s
-    return " ".join(w.capitalize() for w in s.strip().split())
+    """Единая нормализация ФИО заявок (вебхук, импорт /admin, скрипты) — см. normalize_person_name."""
+    return normalize_person_name(s)
 
 
 def _lookup_event_name_by_slug(slug_text: str) -> str:

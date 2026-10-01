@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from src.common.ntfy import header_value
+
 _log = logging.getLogger(__name__)
 
 _IS_LINUX = platform.system() == "Linux"
@@ -363,7 +365,7 @@ class MetricsCollector:
         body = "\n".join(body_lines).encode("utf-8")
 
         req = urllib.request.Request(self._ntfy_url, data=body, method="POST")
-        req.add_header("Title", f"KM_track — {point['load_label']} нагрузка")
+        req.add_header("Title", header_value(f"KM_track — {point['load_label']} нагрузка"))
         req.add_header("Priority", "urgent" if point["load_label"] == "Критическая" else "high")
         req.add_header("Tags", "warning,server")
         req.add_header("Content-Type", "text/plain; charset=utf-8")

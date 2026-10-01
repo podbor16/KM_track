@@ -1,0 +1,13 @@
+[Unit]
+Description=KM Track - data quality check daily at 04:30 Krasnoyarsk
+
+# Установка (юниты systemd ставятся вручную, не деплоем):
+#   cp deploy/km_data_quality.service deploy/km_data_quality.timer /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now km_data_quality.timer
+#   systemctl list-timers km_data_quality.timer
+[Timer]
+OnCalendar=*-*-* 04:30:00 Asia/Krasnoyarsk
+Persistent=true
+
+[Install]
+WantedBy=timers.target

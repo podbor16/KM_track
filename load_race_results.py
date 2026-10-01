@@ -44,6 +44,7 @@ except ImportError:
     sys.exit(1)
 
 from src.analytics.db_connection_optimized import create_connection, calculate_age_group
+from src.common.names import normalize_person_name
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
@@ -572,7 +573,8 @@ class RaceLoader:
                     dorsal = str(row_dict['start_number'])
                     self.existing_results[dorsal] = row_dict
                     if row_dict['start_number'] >= SWEEPER_NUMBER_OFFSET:
-                        self.existing_results_by_name[(row_dict['surname'], row_dict['name'])] = row_dict
+                        self.existing_results_by_name[(normalize_person_name(row_dict['surname']),
+                                                       normalize_person_name(row_dict['name']))] = row_dict
                 else:
                     self.logger.warning(f"⚠️ Пропущен участник {row_dict['surname']} {row_dict['name']} из-за отсутствия start_number")
             self.logger.info(f"✅ Кэш загружен: {len(self.existing_results)} результатов")
@@ -608,7 +610,7 @@ class RaceLoader:
         numeric_dorsals = [int(r.get('dorsal')) for r in runners if is_valid_dorsal(r.get('dorsal'))]
         next_sweeper_number = (max(numeric_dorsals) if numeric_dorsals else 0) + SWEEPER_NUMBER_OFFSET
         assigned_sweepers = {
-            (row['surname'], row['name']): row['start_number']
+            (normalize_person_name(row['surname']), normalize_person_name(row['name'])): row['start_number']
             for row in existing_rows
             if row['start_number'] and row['start_number'] >= SWEEPER_NUMBER_OFFSET
         }
@@ -638,8 +640,8 @@ class RaceLoader:
         try:
             for idx, runner in enumerate(runners, 1):
                 dorsal = runner.get('dorsal')
-                surname = (runner.get('surname') or '').strip()
-                name = (runner.get('name') or '').strip()
+                surname = normalize_person_name(runner.get('surname') or '')
+                name = normalize_person_name(runner.get('name') or '')
                 birthdate = normalize_birthdate(runner.get('birthdate'))
 
                 if not dorsal or not surname or not name:
@@ -925,8 +927,8 @@ class RaceLoader:
 
         for runner in runners:
             raw_dorsal = runner.get('dorsal')
-            surname = (runner.get('surname') or '').strip()
-            name = (runner.get('name') or '').strip()
+            surname = normalize_person_name(runner.get('surname') or '')
+            name = normalize_person_name(runner.get('name') or '')
 
             # Copernico иногда отдаёт две записи с одним и тем же dorsal одновременно
             # (плейсхолдер "Dorsal sin datos" + реальный участник, пока организатор

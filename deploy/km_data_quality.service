@@ -1,0 +1,16 @@
+[Unit]
+Description=KM Track - nightly data quality check (leads/results to client cards)
+After=network.target mysql.service
+
+# Запускается таймером km_data_quality.timer. Вручную: systemctl start km_data_quality
+# Лог: journalctl -u km_data_quality
+[Service]
+Type=oneshot
+User=km
+Group=km
+WorkingDirectory=/opt/km_track
+EnvironmentFile=/opt/km_track/.env
+ExecStart=/opt/km_track/venv/bin/python scripts/data_quality.py --apply-auto --notify
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=km_data_quality

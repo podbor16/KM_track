@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 from scripts.import_boom_historical import get_connection
+from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
@@ -108,7 +109,7 @@ def parse(path):
         clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
         finished = status == "Finished" and clean and gun
         out.append({
-            "surname": str(r[i["Surname"]]).strip(), "name": str(r[i["Name"]] or "").strip(),
+            "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
             "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
             "start_number": int(r[i["Bib"]]),
             "category": category,

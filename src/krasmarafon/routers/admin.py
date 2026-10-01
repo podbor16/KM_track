@@ -703,7 +703,36 @@ async def apply_leads_import(
     )
     path.unlink(missing_ok=True)
     await _notify_startlist_updated()
-    return LeadImportApplyResponse(**summary).model_dump()
+    out = LeadImportApplyResponse(**summary).model_dump()
+    events = {(r.event_name, int(r.event_year)) for r in parsed.rows if r.event_name and str(r.event_year).isdigit()}
+    out["data_quality"] = await asyncio.get_event_loop().run_in_executor(None, lambda: _data_quality_after_import(events))
+    return out
+
+
+def _data_quality_after_import(events) -> Optional[dict]:
+    """Проверка привязки к карточкам по импортированным событиям (новые двойники карточек,
+    заявки на чужих карточках) — сколько находок ждёт решения во вкладке «Качество данных»."""
+    from src.analytics import data_quality as dq
+    from src.analytics.db_connection_optimized import get_pooled_connection
+
+    if not events:
+        return None
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM events WHERE " + " OR ".join(["(event_name = %s AND event_year = %s)"] * len(events)),
+                    [v for e in sorted(events) for v in e])
+        ids = {row[0] for row in cur.fetchall()}
+        cur.close()
+        findings, _ = dq.pending_findings(conn, ids)
+        return {"findings": len(findings), "high": sum(f.severity == "high" for f in findings)}
+    except Exception as e:
+        logger.warning(f"Проверка качества данных после импорта не выполнена: {e}")
+        return None
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

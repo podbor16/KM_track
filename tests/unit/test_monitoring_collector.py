@@ -212,6 +212,28 @@ def test_send_ntfy_alert_omits_recommendations_block_when_no_suggestions(mock_ur
     assert "Рекомендации:" not in body_text
 
 
+@patch("src.monitoring.collector.urllib.request.urlopen")
+def test_send_ntfy_alert_headers_are_latin1_encodable(mock_urlopen, tmp_path):
+    """Регрессия: Title «KM_track — Критическая нагрузка» (кириллица) ронял
+    http.client UnicodeEncodeError внутри urlopen — алерт не уходил, а мок
+    urlopen этого не видел. Заголовки должны кодироваться в latin-1."""
+    collector = MetricsCollector(db_path=str(tmp_path / "metrics.db"))
+    collector._ntfy_url = "https://ntfy.sh/test-topic"
+    point = {
+        "ts": int(time.time()), "load_score": 85.0, "load_label": "Критическая",
+        "cpu_percent": 95.0, "ram_used_mb": 500, "ram_total_mb": 2972,
+        "sse_connections": 5, "unique_ips": 10, "total_requests": 100,
+        "http_errors": 0, "avg_response_ms": 100,
+    }
+
+    collector._send_ntfy_alert(point, ram_pct=16.8)
+
+    sent_request = mock_urlopen.call_args_list[0].args[0]
+    for _, value in sent_request.header_items():
+        value.encode("latin-1")
+    assert sent_request.get_header("Title").startswith("=?UTF-8?B?")
+
+
 # --- MetricsCollector.current_snapshot() ---------------------------------
 
 def test_current_snapshot_includes_sse_connections_from_last_flush(tmp_path):

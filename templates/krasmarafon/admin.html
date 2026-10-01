@@ -56,6 +56,7 @@
             <button class="admin-tab" onclick="switchTab('analytics', this)">Аналитика</button>
             <button class="admin-tab" onclick="switchTab('broadcast', this)">Трансляция</button>
             <button class="admin-tab" onclick="switchTab('monitoring', this)">Мониторинг</button>
+            <button class="admin-tab" onclick="switchTab('data-quality', this)">Качество данных</button>
         </div>
 
         <!-- ================================================================ -->
@@ -146,6 +147,36 @@
             <div class="admin-leads-pagination" id="leads-pagination" style="display:none">
                 <button class="km-btn km-btn--secondary" id="leads-more-btn" onclick="loadLeadsMore()">Показать ещё</button>
             </div>
+        </div>
+        <!-- ================================================================ -->
+        <!-- ВКЛАДКА: КАЧЕСТВО ДАННЫХ (привязка заявок/результатов к карточкам) -->
+        <!-- ================================================================ -->
+        <div id="tab-data-quality" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Проверка привязки заявок и результатов к карточкам клиентов: двойники карточек
+                (дата-заглушка, опечатка, «Катя/Екатерина»), заявка на забег у другой карточки,
+                «Not started» со старым номером, ДР не по категории. Дата рождения при склейке —
+                по хронометражу. «Разные люди» и «Оставить как есть» запоминаются — находка больше
+                не показывается. Очевидное (без предохранителей) каждую ночь применяется автоматически.
+            </div>
+            <div class="admin-leads-toolbar">
+                <div class="admin-leads-filters">
+                    <select id="dq-event" class="admin-select" onchange="dqRender()"><option value="">Все забеги</option></select>
+                    <select id="dq-severity" class="admin-select" onchange="dqRender()">
+                        <option value="">Любая важность</option>
+                        <option value="high">важно</option>
+                        <option value="medium">проверить</option>
+                        <option value="low">скорее норма</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="km-btn km-btn--secondary" onclick="loadDataQualityTab()">Проверить заново</button>
+                    <button class="km-btn km-btn--primary" onclick="dqApplyAuto(this)">Применить очевидное</button>
+                </div>
+            </div>
+            <div class="dq-summary" id="dq-summary"></div>
+            <div class="dq-summary" id="dq-auto-result"></div>
+            <div id="dq-content"><div class="admin-loading">Загрузка…</div></div>
         </div>
         <!-- ================================================================ -->
         <!-- ВКЛАДКА: ВОЗРАСТНЫЕ ГРУППЫ                                       -->
@@ -382,6 +413,7 @@
          (включая несвязанный loadHistoryToggle() в его хвосте). -->
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
+    <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
     <script>
     // ========================================================================
     // Tab switching
@@ -410,6 +442,7 @@
             if (name === 'photos') loadPhotosTab();
             if (name === 'analytics') loadAnalyticsTab();
             if (name === 'monitoring') loadMonitoringTab();
+            if (name === 'data-quality') loadDataQualityTab();
         }
     }
 
@@ -1301,7 +1334,10 @@
                 return;
             }
             const summary = await r.json();
-            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}`);
+            const dq = summary.data_quality;
+            const dqText = dq && dq.findings
+                ? `\n\nПроверка карточек: ${dq.findings} находок (важных ${dq.high}) — вкладка «Качество данных».` : '';
+            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}${dqText}`);
             previewEl.style.display = 'none';
             loadLeads(true);
         } catch(e) {
