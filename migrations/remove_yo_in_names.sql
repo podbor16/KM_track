@@ -1,4 +1,5 @@
--- «ё» -> «е» в фамилии и имени (clients, leads, results) — решение пользователя
+-- «ё» -> «е» в фамилии и имени (clients, leads, results) — решение пользователя;
+-- латинская «ë» (U+00EB, «Алëна» из копипаста) — тоже в «е» (2026-10-01)
 -- 2026-09-27: «ё» неудобно искать с клавиатуры. Город и клуб не трогаем.
 -- Collation utf8mb4_0900_ai_ci и так не различает е/ё (поиск в SQL, uk_client,
 -- триггеры сопоставления) — коллизий уникальности нет; мешал поиск в браузере.
@@ -17,35 +18,35 @@ DROP TRIGGER IF EXISTS trg_results_yo_bu;
 DELIMITER //
 CREATE TRIGGER trg_clients_yo_bi BEFORE INSERT ON clients FOR EACH ROW
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 CREATE TRIGGER trg_clients_yo_bu BEFORE UPDATE ON clients FOR EACH ROW
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 -- до trg_leads_before_insert / trg_results_before_insert: карточка клиента
 -- ищется и создаётся уже по нормализованным ФИО
 CREATE TRIGGER trg_leads_yo_bi BEFORE INSERT ON leads FOR EACH ROW PRECEDES trg_leads_before_insert
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 CREATE TRIGGER trg_leads_yo_bu BEFORE UPDATE ON leads FOR EACH ROW
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 CREATE TRIGGER trg_results_yo_bi BEFORE INSERT ON results FOR EACH ROW PRECEDES trg_results_before_insert
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 CREATE TRIGGER trg_results_yo_bu BEFORE UPDATE ON results FOR EACH ROW
 BEGIN
-    SET NEW.surname = REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'),
-        NEW.name = REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е');
+    SET NEW.surname = REPLACE(REPLACE(REPLACE(REPLACE(NEW.surname, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е'),
+        NEW.name = REPLACE(REPLACE(REPLACE(REPLACE(NEW.name, 'ё', 'е'), 'Ё', 'Е'), 'ë', 'е'), 'Ë', 'Е');
 END//
 DELIMITER ;
 
@@ -55,13 +56,16 @@ DELIMITER ;
 DROP TEMPORARY TABLE IF EXISTS _yo_client_contacts;
 CREATE TEMPORARY TABLE _yo_client_contacts AS SELECT id, phone, email FROM clients;
 UPDATE clients SET surname = surname
-WHERE surname LIKE BINARY '%ё%' OR surname LIKE BINARY '%Ё%' OR name LIKE BINARY '%ё%' OR name LIKE BINARY '%Ё%';
+WHERE CONCAT(surname, ' ', name) LIKE BINARY '%ё%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ё%'
+   OR CONCAT(surname, ' ', name) LIKE BINARY '%ë%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ë%';
 SELECT 'clients', ROW_COUNT();
 UPDATE leads SET surname = surname
-WHERE surname LIKE BINARY '%ё%' OR surname LIKE BINARY '%Ё%' OR name LIKE BINARY '%ё%' OR name LIKE BINARY '%Ё%';
+WHERE CONCAT(surname, ' ', name) LIKE BINARY '%ё%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ё%'
+   OR CONCAT(surname, ' ', name) LIKE BINARY '%ë%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ë%';
 SELECT 'leads', ROW_COUNT();
 UPDATE results SET surname = surname
-WHERE surname LIKE BINARY '%ё%' OR surname LIKE BINARY '%Ё%' OR name LIKE BINARY '%ё%' OR name LIKE BINARY '%Ё%';
+WHERE CONCAT(surname, ' ', name) LIKE BINARY '%ё%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ё%'
+   OR CONCAT(surname, ' ', name) LIKE BINARY '%ë%' OR CONCAT(surname, ' ', name) LIKE BINARY '%Ë%';
 SELECT 'results', ROW_COUNT();
 
 -- сравнение побайтовое: collation ai_ci не видит разницу регистра

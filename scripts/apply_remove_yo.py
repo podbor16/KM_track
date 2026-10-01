@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.import_boom_historical import get_connection
 
 SQL = Path(__file__).parent.parent / "migrations" / "remove_yo_in_names.sql"
-YO = "(surname LIKE BINARY '%ё%' OR surname LIKE BINARY '%Ё%' OR name LIKE BINARY '%ё%' OR name LIKE BINARY '%Ё%')"
+YO = "(" + " OR ".join(f"CONCAT(surname, ' ', name) LIKE BINARY '%{ch}%'" for ch in "ёЁëË") + ")"
 
 
 def statements(sql):
