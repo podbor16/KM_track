@@ -93,6 +93,8 @@ def get_pooled_connection() -> Optional[mysql.connector.MySQLConnection]:
             if connection and connection.is_connected():
                 logger.debug("✅ Соединение получено из пула")
                 return connection
+            if connection:
+                connection.close()      # иначе выданное, но «мёртвое» соединение навсегда выпадает из пула
         except Error as e:
             if attempt == 0:
                 logger.warning(f"⚠️ Пул соединений временно исчерпан, повтор через 100мс: {e}")

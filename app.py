@@ -91,11 +91,13 @@ async def lifespan(app: FastAPI):
             conn = get_pooled_connection()
             if not conn:
                 return
-            cur = conn.cursor(dictionary=True)
-            cur.execute("SELECT DISTINCT event_id FROM results ORDER BY event_id")
-            event_ids = [row['event_id'] for row in cur.fetchall()]
-            cur.close()
-            conn.close()
+            try:
+                cur = conn.cursor(dictionary=True)
+                cur.execute("SELECT DISTINCT event_id FROM results ORDER BY event_id")
+                event_ids = [row['event_id'] for row in cur.fetchall()]
+                cur.close()
+            finally:
+                conn.close()
             for eid in event_ids:
                 await asyncio.get_event_loop().run_in_executor(
                     None, build_event_results, eid, None, None, settings.EVENTS
@@ -179,6 +181,22 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[Redis] tracker subscriber error, reconnecting: {_e}")
                 await asyncio.sleep(1)
 
+    def _count_by_event(table: str) -> list[tuple[int, int]]:
+        """COUNT(*) по event_id. Соединение закрывается в finally и не держится через
+        await (публикацию в Redis) — иначе ошибка между get и close теряла его из пула
+        лидер-воркера навсегда (исчерпание пула 26–27.09.2026, потерянные вебхуки)."""
+        conn = get_pooled_connection()
+        if not conn:
+            return []
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT event_id, COUNT(*) FROM {table} GROUP BY event_id")
+            rows = cur.fetchall()
+            cur.close()
+            return rows
+        finally:
+            conn.close()
+
     async def _results_watcher():
         """Лидер-воркер: следит за новыми финишами, публикует уведомление в Redis."""
         last: dict[int, int] = {}
@@ -186,22 +204,14 @@ async def lifespan(app: FastAPI):
             try:
                 current = await redis_client.get("tracker:leader")
                 if current and current.decode() == worker_id:
-                    conn = get_pooled_connection()
-                    if conn:
-                        cur = conn.cursor(dictionary=True)
-                        cur.execute(
-                            "SELECT event_id, COUNT(*) AS cnt FROM results GROUP BY event_id"
-                        )
-                        for row in cur.fetchall():
-                            eid, cnt = row["event_id"], row["cnt"]
-                            if eid in last and last[eid] != cnt:
-                                await redis_client.publish(
-                                    "tracker:notification",
-                                    json.dumps({"type": "results_updated", "event_id": eid})
-                                )
-                            last[eid] = cnt
-                        cur.close()
-                        conn.close()
+                    rows = _count_by_event("results")
+                    for eid, cnt in rows:
+                        if eid in last and last[eid] != cnt:
+                            await redis_client.publish(
+                                "tracker:notification",
+                                json.dumps({"type": "results_updated", "event_id": eid})
+                            )
+                        last[eid] = cnt
             except Exception as _e:
                 settings.logger.warning(f"[SSE] results_watcher error: {_e}")
             await asyncio.sleep(5)
@@ -213,22 +223,14 @@ async def lifespan(app: FastAPI):
             try:
                 current = await redis_client.get("tracker:leader")
                 if current and current.decode() == worker_id:
-                    conn = get_pooled_connection()
-                    if conn:
-                        cur = conn.cursor(dictionary=True)
-                        cur.execute(
-                            "SELECT event_id, COUNT(*) AS cnt FROM leads GROUP BY event_id"
-                        )
-                        for row in cur.fetchall():
-                            eid, cnt = row["event_id"], row["cnt"]
-                            if eid in last and last[eid] != cnt:
-                                await redis_client.publish(
-                                    "tracker:notification",
-                                    json.dumps({"type": "startlist_updated"})
-                                )
-                            last[eid] = cnt
-                        cur.close()
-                        conn.close()
+                    rows = _count_by_event("leads")
+                    for eid, cnt in rows:
+                        if eid in last and last[eid] != cnt:
+                            await redis_client.publish(
+                                "tracker:notification",
+                                json.dumps({"type": "startlist_updated"})
+                            )
+                        last[eid] = cnt
             except Exception as _e:
                 settings.logger.warning(f"[SSE] startlist_watcher error: {_e}")
             await asyncio.sleep(15)
@@ -340,6 +342,33 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[Redis] notification subscriber error, reconnecting: {_e}")
                 await asyncio.sleep(1)
 
+    async def _webhook_spool_replayer():
+        """Лидер-воркер: каждые 5 минут повторяет заявки Tilda, не записанные с первого раза
+        (спул src/krasmarafon/routers/webhook.py). Застряли дольше 30 минут или тело не
+        разбирается — алерт в ntfy (не чаще раза в час)."""
+        from src.common import ntfy
+        from src.krasmarafon.routers.webhook import SPOOL_DIR, replay_spool
+        last_alert = 0.0
+        while True:
+            await asyncio.sleep(300)
+            try:
+                current = await redis_client.get("tracker:leader")
+                if not (current and current.decode() == worker_id):
+                    continue
+                done = await asyncio.get_event_loop().run_in_executor(None, replay_spool)
+                if done["replayed"] or done["failed"]:
+                    settings.logger.info(f"[webhook] спул: {done}")
+                stuck = done["oldest_failed_age_s"] > 1800
+                if (stuck or done.get("bad")) and _time.time() - last_alert > 3600:
+                    last_alert = _time.time()
+                    lines = [f"Не записаны в БД: {done['failed']} (старейшая — {done['oldest_failed_age_s'] // 60} мин)",
+                             f"Не разбираются (failed/): {done.get('bad', 0)}",
+                             f"Спул: {SPOOL_DIR}"]
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: ntfy.send("KM_track — заявки Tilda не записываются", lines, priority="high"))
+            except Exception as _e:
+                settings.logger.warning(f"[webhook] spool replayer error: {_e}")
+
     async def _metrics_flusher():
         """Каждые 60с снимает bucket метрик и пишет в SQLite."""
         while True:
@@ -357,11 +386,12 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_redis_notification_subscriber()),
             asyncio.create_task(_siberman_copernico_run_poller()),
             asyncio.create_task(_siberman_google_sheet_poller()),
+            asyncio.create_task(_webhook_spool_replayer()),
         ]
         settings.logger.info(
             "[SSE] Background tasks started: tracker_broadcast, redis_tracker_subscriber, "
             "results_watcher, startlist_watcher, redis_notification_subscriber, metrics_flusher, "
-            "siberman_copernico_run_poller, siberman_google_sheet_poller"
+            "siberman_copernico_run_poller, siberman_google_sheet_poller, webhook_spool_replayer"
         )
     else:
         settings.logger.warning("[SSE] Redis unavailable — SSE tasks skipped (DEBUG mode)")

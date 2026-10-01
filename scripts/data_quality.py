@@ -17,9 +17,7 @@ import argparse
 import collections
 import dataclasses
 import json
-import os
 import sys
-import urllib.request
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -28,24 +26,9 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.analytics.data_quality import apply_auto, pending_findings  # noqa: E402
-from src.common.ntfy import header_value  # noqa: E402
+from src.common import ntfy  # noqa: E402
 
 ORDER = {"high": 0, "medium": 1, "low": 2}
-
-
-def notify(title, lines):
-    url = os.environ.get("NTFY_URL", "")
-    if not url:
-        print("ntfy: NTFY_URL не задан — уведомление не отправлено")
-        return
-    req = urllib.request.Request(url, data="\n".join(lines).encode("utf-8"), method="POST")
-    req.add_header("Title", header_value(title))
-    req.add_header("Tags", "card_index_dividers")
-    req.add_header("Content-Type", "text/plain; charset=utf-8")
-    try:
-        urllib.request.urlopen(req, timeout=10)
-    except Exception as e:
-        print(f"ntfy: ошибка отправки: {e}")
 
 
 def main():
@@ -86,7 +69,7 @@ def main():
             lines.append(f'Исправлено автоматически: удалено «Not started» {len(done["deleted"])}, '
                          f'склеено карточек (групп) {len(done["merged"])}')
         lines.append(f"Ждут решения: {len(findings)} (важных {high}) — /admin → «Качество данных»")
-        notify("KM_track — качество данных", lines)
+        ntfy.send("KM_track — качество данных", lines, tags="card_index_dividers")
     return 0
 
 

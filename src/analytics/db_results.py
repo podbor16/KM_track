@@ -159,6 +159,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
         logger.error("❌ Не удалось установить соединение")
         return []
 
+    cursor = None
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
 
@@ -232,6 +233,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
                 cursor.close()
         except Exception:
             pass
+        connection.close()      # без close() соединение не возвращается в пул (утечка до рестарта воркера)
 
 
 def get_checkpoint_distances(event_id: int) -> List[float]:
@@ -531,6 +533,7 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
         return {}
 
     cursor = None
+    cursor = None
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
 
@@ -687,6 +690,7 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
                 cursor.close()
         except Exception:
             pass
+        connection.close()      # без close() соединение не возвращается в пул (утечка до рестарта воркера)
 
 
 # ============================================================
