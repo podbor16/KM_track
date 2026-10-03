@@ -361,8 +361,14 @@ def check_twins(data, card_ids):
         if not c:
             continue
         key = fio_key(c)
-        for b in data.cards_by_fio[key] + data.cards_by_fio.get(key[::-1], []):
-            if b != a and (why := twin_reason(c["birthday"], data.clients[b]["birthday"])):
+        swapped = data.cards_by_fio.get(key[::-1], []) if key != key[::-1] else []
+        for b in data.cards_by_fio[key] + swapped:
+            if b == a:
+                continue
+            why = twin_reason(c["birthday"], data.clients[b]["birthday"])
+            if not why and b in swapped and c["birthday"] == data.clients[b]["birthday"]:
+                why = "имя и фамилия переставлены"          # «Андрей Сафонов» из формы Tilda
+            if why:
                 add(a, b, why)
         if real_bd(c["birthday"]):
             for b in by_bd[c["birthday"]]:

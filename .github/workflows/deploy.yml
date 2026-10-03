@@ -57,6 +57,8 @@ jobs:
             # чтобы будущие правки unit-файла реально долетали до сервера (тот же урок, что и
             # с run_loader.sh выше).
             cp /opt/km_track/deploy/km_duathlon_loader@.service /etc/systemd/system/km_duathlon_loader@.service
+            # km_race_loader@ — тоже из репозитория (Restart=on-failure для автоостановки после гонки, 2026-10-03)
+            cp /opt/km_track/deploy/km_race_loader@.service /etc/systemd/system/km_race_loader@.service
             chmod +x /opt/km_track/deploy/run_duathlon_loader.sh
             systemctl daemon-reload
 

@@ -201,3 +201,11 @@ def test_event_scope_checks_twins_of_lead_cards():
              leads=[L(1, 2, "Сташкевич", "Катя", "2013-08-13", 2)])
     assert [f.client_ids for f in run_checks(d, {2})] == [(1, 2)]
     assert run_checks(d) == []          # полный прогон — только карточки с результатами
+
+
+def test_twins_swapped_fields_same_birthday():
+    # форма Tilda: «Андрей» в поле фамилии — триггер создаёт отдельную карточку
+    d = data([C(1, "Сафонов", "Андрей", "1968-06-07"), C(2, "Андрей", "Сафонов", "1968-06-07")],
+             results=[R(1, 1, "Сафонов", "Андрей", "1968-06-07", 2, 7)])
+    [f] = check_twins(d, [1])
+    assert f.client_ids == (1, 2) and "переставлены" in f.message

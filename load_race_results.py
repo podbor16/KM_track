@@ -21,7 +21,8 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Tuple, Any, Union
 import os
 
@@ -101,6 +102,29 @@ def _load_event_config(config_path: str, distance: str) -> Dict[str, Any]:
         f"Дистанция '{distance}' не найдена в {config_path}. "
         f"Доступные: {available}"
     )
+
+
+# === АВТООСТАНОВКА ПОСЛЕ ГОНКИ ===
+# Непрерывный режим без остановки крутился неделями после старта (Жара 21.1: 21.08–24.09.2026,
+# перезапуск каждые ~3 мин, каждый запуск — свой пул соединений с БД). Решение пользователя
+# 2026-10-03: через 5 дней после даты старта загрузчик выключается сам (выход 0;
+# km_race_loader@.service — Restart=on-failure, штатный выход не перезапускается).
+LOADER_STOP_AFTER_DAYS = 5
+
+
+def loader_should_stop(event_date, today: date) -> bool:
+    """True, если с даты старта прошло больше LOADER_STOP_AFTER_DAYS дней. Нет даты — False."""
+    if not event_date:
+        return False
+    try:
+        d = event_date if isinstance(event_date, date) else datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    return today > d + timedelta(days=LOADER_STOP_AFTER_DAYS)
+
+
+def _today_krasnoyarsk() -> date:
+    return datetime.now(ZoneInfo("Asia/Krasnoyarsk")).date()
 
 
 # === МАРШРУТИЗАЦИЯ ===
@@ -705,7 +729,8 @@ class RaceLoader:
                 self.connection.rollback()
             return False
 
-    def continuous_mode(self, runners: List[Dict], interval: int, reset_cache_interval: int = 15) -> None:
+    def continuous_mode(self, runners: List[Dict], interval: int, reset_cache_interval: int = 15,
+                        event_date=None) -> None:
         """РЕЖИМ CONTINUOUS: Постоянное обновление до Ctrl+C"""
         self.logger.info("\n" + "="*70)
         self.logger.info("🔄 РЕЖИМ НЕПРЕРЫВНОГО ОБНОВЛЕНИЯ (CONTINUOUS)")
@@ -729,6 +754,10 @@ class RaceLoader:
 
         try:
             while True:
+                if loader_should_stop(event_date, _today_krasnoyarsk()):
+                    self.logger.info(f"🏁 Прошло больше {LOADER_STOP_AFTER_DAYS} дней после старта ({event_date}) — "
+                                     f"загрузчик остановлен")
+                    return
                 self.update_cycles += 1
                 cycle_start = time.time()
 
@@ -839,6 +868,12 @@ class RaceLoader:
             self.logger.info(f"   Всего обновлено results: {self.updated_results_count} записей")
             self.logger.info(f"   Всего обновлено segments: {self.updated_segments_count} записей")
             self.logger.info("="*70 + "\n")
+
+    def get_event_date(self):
+        """Дата старта из events (для запуска без конфига события)."""
+        self.cursor.execute("SELECT event_date FROM events WHERE id = %s", (self.event_id,))
+        row = self.cursor.fetchone()
+        return row["event_date"] if row else None
 
     def write_waiting_placeholder(self, distance_label: str, event_date: Optional[str]) -> None:
         """Пишет плейсхолдер "ждём старта" в broadcast_json_path, ЕСЛИ
@@ -1744,6 +1779,12 @@ def main():
         if not loader.connect():
             return 1
 
+        event_date = dist_cfg.get("event_date") if args.config else loader.get_event_date()
+        if not args.init and loader_should_stop(event_date, _today_krasnoyarsk()):
+            logger.info(f"🏁 Прошло больше {LOADER_STOP_AFTER_DAYS} дней после старта ({event_date}) — "
+                        f"непрерывный режим не запускается")
+            return 0
+
         # Первая загрузка данных (из API или файла)
         runners = loader.load_race_data()
         if not runners and args.init:
@@ -1757,7 +1798,7 @@ def main():
             loader.load_existing_results()
             if args.config:
                 loader.write_waiting_placeholder(args.distance, dist_cfg.get("event_date"))
-            loader.continuous_mode(runners or [], args.interval, args.reset_cache)
+            loader.continuous_mode(runners or [], args.interval, args.reset_cache, event_date)
 
         return 0
 

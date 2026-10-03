@@ -9,7 +9,9 @@ Group=km
 WorkingDirectory=/opt/km_track
 EnvironmentFile=/opt/km_track/.env
 ExecStart=/opt/km_track/run_loader.sh %i
-Restart=always
+# on-failure: штатный выход (через 5 дней после старта, load_race_results.py) не перезапускается;
+# падения и ошибки подключения к БД — перезапуск, как раньше
+Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
