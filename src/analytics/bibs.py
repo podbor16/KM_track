@@ -31,6 +31,16 @@ class Group:
         return f"{self.distance}, {self.key} г.р." if self.key else self.distance
 
 
+def first_lead_per_person(leads):
+    """Одна заявка на человека на дистанции — самая ранняя (created_at, id): та же, что получает
+    номер. Для «Экспорт CSV»: фильтр is_duplicate=0 выкидывал человека с дублем целиком (флаг
+    ставится на все его заявки) — он не попадал в Copernico (решение пользователя 2026-10-05)."""
+    first = {}
+    for lead in sorted(leads, key=lambda l: (str(l.get("created_at")), l["id"])):
+        first.setdefault((lead["client_id"], lead["event_id"]), lead)
+    return list(first.values())
+
+
 def _has_bib(lead):
     return bool(lead.get("start_number"))
 
@@ -130,11 +140,24 @@ def overview(conn, event_name, event_year):
     saved = load_ranges(conn, event_name)
     return {
         "groups": [{"distance": g.distance, "key": g.key, "label": g.label, "need": len(g.leads), "with_bib": g.with_bib,
-                    "duplicates": g.duplicates, "range": list(saved[(g.distance, g.key)]) if (g.distance, g.key) in saved else None}
+                    "duplicates": g.duplicates, "range": list(saved[(g.distance, g.key)]) if (g.distance, g.key) in saved else None,
+                    "warning": _group_warning(event_name, event_year, g)}
                    for g in groups],
         "skipped": sorted(d for e, d in NO_BIB_DISTANCES if e == event_name),
         "taken": len(taken),
     }
+
+
+KIDS_MAX_AGE = 14
+
+
+def _group_warning(event_name, event_year, g):
+    """Детский: год рождения группы даёт не детский возраст — почти всегда ДР родителя в заявке."""
+    if event_name == KIDS_EVENT and g.key.isdigit():
+        age = int(event_year) - int(g.key)
+        if age < 1 or age > KIDS_MAX_AGE:
+            return f"возраст {age} — проверьте даты рождения в заявках (вкладка «Качество данных»)"
+    return ""
 
 
 def preview(conn, event_name, event_year, ranges):

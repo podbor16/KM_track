@@ -77,3 +77,11 @@ def test_kids_by_birth_year_and_500m_skipped():
 def test_nothing_to_assign_needs_no_range():
     rows, assign, ok = run([L(1, 10, bib=7)], {})
     assert ok and assign == []
+
+
+def test_first_lead_per_person_keeps_earliest_and_people_with_duplicates():
+    # раньше экспорт брал is_duplicate=0 и выкидывал человека с дублем целиком
+    from src.analytics.bibs import first_lead_per_person
+    leads = [L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01", bib=7), L(3, 11, created="2026-10-02"),
+             L(4, 10, dist="2 км", created="2026-10-03")]      # тот же человек на другой дистанции — отдельно
+    assert sorted(l["id"] for l in first_lead_per_person(leads)) == [2, 3, 4]

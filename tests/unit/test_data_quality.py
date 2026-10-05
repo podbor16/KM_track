@@ -209,3 +209,22 @@ def test_twins_swapped_fields_same_birthday():
              results=[R(1, 1, "Сафонов", "Андрей", "1968-06-07", 2, 7)])
     [f] = check_twins(d, [1])
     assert f.client_ids == (1, 2) and "переставлены" in f.message
+
+
+def test_kids_leads_parent_birthday_and_distance_by_age():
+    from src.analytics.data_quality import check_kids_leads
+    d = data([C(1, "Иванов", "Петя", "2019-05-01"), C(2, "Сидоров", "Ваня", "1986-03-03"), C(3, "Котов", "Миша", "2023-01-01")],
+             leads=[L(1, 1, "Иванов", "Петя", "2019-05-01", 9), L(2, 2, "Сидоров", "Ваня", "1986-03-03", 9),
+                    L(3, 3, "Котов", "Миша", "2023-01-01", 9)])
+    d.events[9] = {"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2027}
+    for l in d.leads:
+        l["event_distance"] = "1 км"
+    found = {f.lead_id: (f.code, f.severity) for f in check_kids_leads(d)}
+    assert found == {2: ("L-KID", "medium"), 3: ("L-KID", "low")}   # 1986 г.р.; 4 года на 1 км (нужно 500 м)
+
+
+def test_kids_check_skips_past_years_in_full_run():
+    from src.analytics.data_quality import check_kids_leads
+    d = data([C(2, "Сидоров", "Ваня", "1986-03-03")], leads=[L(2, 2, "Сидоров", "Ваня", "1986-03-03", 9)])
+    d.events[9] = {"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2024}
+    assert check_kids_leads(d, from_year=2026) == [] and len(check_kids_leads(d, {9})) == 1

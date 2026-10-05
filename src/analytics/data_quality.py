@@ -10,6 +10,7 @@
 
 import collections
 import dataclasses
+from datetime import datetime
 import itertools
 import json
 import os
@@ -42,11 +43,12 @@ class Finding:
     result_id: int = None
     event_id: int = None
     auto: bool = False                  # можно исправить без ревью
+    lead_id: int = None
 
     @property
     def key(self):
         """Стабильный ключ находки — для запомненных решений (dq_decisions)."""
-        rid = f"r{self.result_id}" if self.result_id else ""
+        rid = f"r{self.result_id}" if self.result_id else (f"l{self.lead_id}" if self.lead_id else "")
         return f'{self.code}:{rid}:{"-".join(map(str, sorted(self.client_ids)))}'
 
 
@@ -387,6 +389,40 @@ def check_hygiene(data, results):
     return out
 
 
+KIDS_EVENT = "Детский забег"
+KIDS_MAX_AGE = 14
+
+
+def check_kids_leads(data, event_ids=None, from_year=None):
+    """Заявки Детского забега: возраст не детский (часто — ДР родителя: «ребёнок» 1986 г.р.) или
+    дистанция не по возрасту (младше 6 на 31.12 года старта — 500 м, иначе 1 км). Без event_ids —
+    только старты from_year и позже (прошлые уже не исправить). Решение пользователя 2026-10-05:
+    подсвечивать, исправлять вручную."""
+    from src.krasmarafon.services.tilda_webhook import _kids_distance
+    out = []
+    for l in data.leads:
+        ev = data.events.get(l["event_id"]) or {}
+        if ev.get("event_name") != KIDS_EVENT or (event_ids and l["event_id"] not in event_ids):
+            continue
+        year = int(ev.get("event_year") or 0)
+        if not event_ids and from_year and year < from_year:
+            continue
+        who = f'{data.event_label(l["event_id"])}: {l["surname"]} {l["name"]} {l["birthday"]}'
+        if not real_bd(l["birthday"]):
+            sev, why = "medium", "нет даты рождения"
+        else:
+            age = year - int(l["birthday"][:4])
+            expected = _kids_distance(year, l["birthday"])
+            if age < 1 or age > KIDS_MAX_AGE:
+                sev, why = "medium", f"возраст {age} — не детский (возможно, ДР родителя)"
+            elif expected and str(l["event_distance"]).strip() != expected:
+                sev, why = "low", f"дистанция {l['event_distance']}, а по возрасту ({age}) — {expected}"
+            else:
+                continue
+        out.append(Finding("L-KID", sev, f"{who} — {why}", (l["client_id"],), event_id=l["event_id"], lead_id=l["id"]))
+    return out
+
+
 def run_checks(data, event_ids=None):
     """Без event_ids — вся база (двойники — для карточек с результатами); с event_ids —
     результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта)."""
@@ -396,7 +432,8 @@ def run_checks(data, event_ids=None):
         cards |= {l["client_id"] for l in data.leads if l["event_id"] in event_ids}
     cards = sorted(cards)
     return (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
-            + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results))
+            + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results)
+            + check_kids_leads(data, event_ids, from_year=datetime.now().year))
 
 
 # ---------------------------------------------------------------- решения и действия (dq_decisions, dq_actions)

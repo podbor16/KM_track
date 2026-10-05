@@ -6,6 +6,7 @@ JSON API эндпоинты KM_track.
 import asyncio
 import csv
 import io
+from urllib.parse import quote
 import logging
 import json
 import time
@@ -970,18 +971,26 @@ async def get_startlist(event_id: int = PathParam(..., description="ID собы�
     return StartlistResponse(items=items, count=len(items)).model_dump()
 
 
+def _export_rows(rows):
+    """Одна заявка на человека (самая ранняя — та же, что получает номер), по номеру, затем ФИО."""
+    from src.analytics.bibs import first_lead_per_person
+    return sorted(first_lead_per_person(rows),
+                  key=lambda r: (r.get('start_number') or 10**9, r.get('surname') or '', r.get('name') or ''))
+
+
 @router.get("/api/export/startlist/{event_id}")
 async def export_startlist_csv(
     event_id: int = PathParam(..., description="ID события в БД"),
     user: str = Depends(api_require_auth),
 ):
-    """CSV-выгрузка стартового списка (is_duplicate=0). Требует авторизации."""
+    """CSV-выгрузка стартового списка: по одной заявке на человека (самой ранней). Требует авторизации."""
     from fastapi.responses import StreamingResponse
     from src.analytics.db_results import get_leads_by_event
 
     rows = await asyncio.get_event_loop().run_in_executor(
-        None, get_leads_by_event, event_id, False
+        None, get_leads_by_event, event_id, True
     )
+    rows = _export_rows(rows)
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
@@ -1018,7 +1027,7 @@ async def export_startlist_csv_by_name(
     event_distance: Optional[str] = None,
     user: str = Depends(api_require_auth),
 ):
-    """CSV-экспорт по event_name/year/distance (is_duplicate=0)."""
+    """CSV-экспорт по event_name/year/distance: по одной заявке на человека (самой ранней)."""
     from fastapi.responses import StreamingResponse
     from src.analytics.db_results import get_leads_admin
 
@@ -1026,9 +1035,10 @@ async def export_startlist_csv_by_name(
         None,
         lambda: get_leads_admin(
             event_name=event_name, event_year=event_year,
-            event_distance=event_distance, is_duplicate=False, limit=10000,
+            event_distance=event_distance, is_duplicate=None, limit=10000,
         ),
     )
+    rows = _export_rows(rows)
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
@@ -1054,7 +1064,10 @@ async def export_startlist_csv_by_name(
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type='text/csv; charset=utf-8',
-        headers={'Content-Disposition': f'attachment; filename="{fname}"'},
+        # кириллица в заголовке HTTP (latin-1) роняла ответ UnicodeEncodeError — экспорт падал для
+        # любого события с русским названием; RFC 5987: ASCII-имя + filename* в UTF-8 (2026-10-05)
+        headers={'Content-Disposition': f'attachment; filename="startlist_{event_year or "all"}.csv"; '
+                                        f"filename*=UTF-8''{quote(fname)}"},
     )
 
 

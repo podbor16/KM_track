@@ -53,7 +53,7 @@ function renderBibsForm(data) {
     const panel = document.getElementById('bibs-panel');
     const rows = data.groups.map((g, i) => `
         <tr>
-            <td>${bibsEsc(g.label)}</td>
+            <td>${bibsEsc(g.label)}${g.warning ? `<div class="dq-status">⚠ ${bibsEsc(g.warning)}</div>` : ''}</td>
             <td class="bibs-num">${g.need}</td>
             <td class="bibs-num">${g.with_bib}</td>
             <td class="bibs-num">${g.duplicates || ''}</td>
