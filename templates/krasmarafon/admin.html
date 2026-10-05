@@ -1473,73 +1473,110 @@
 
     function renderAgeGroups(items) {
         const content = document.getElementById('age-groups-content');
-        const bySex = { M: items.filter(i => i.sex === 'M'), F: items.filter(i => i.sex === 'F') };
-        const pre = agDraftPrefix();
-        const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-
-        const columnHtml = (sex) => {
-            const rows = bySex[sex].sort((a, b) => a.min_age - b.min_age).map(row => `
-                <tr data-id="${row.id}">
-                    <td><input type="number" class="admin-select ag-input ag-min" value="${row.min_age}" data-draft="${pre}${row.id}:min"></td>
-                    <td><input type="number" class="admin-select ag-input ag-max" value="${row.max_age ?? ''}" placeholder="∞"
-                               title="Пусто — без верхней границы" data-draft="${pre}${row.id}:max"></td>
-                    <td><input type="text" class="admin-select ag-input ag-input--label ag-label" value="${esc(row.label)}" data-draft="${pre}${row.id}:label"></td>
-                    <td><button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id}, this)">Удалить</button></td>
-                </tr>
-            `).join('');
-            return `
-                <h3 style="margin:16px 0 8px">${AG_SEX_LABEL[sex]}</h3>
-                <table class="admin-loader-table" data-sex="${sex}">
-                    <thead><tr><th>От</th><th>До</th><th>Метка</th><th></th></tr></thead>
-                    <tbody>${rows || '<tr class="ag-empty"><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
-                    <tfoot>
-                        <!-- новая граница — строкой таблицы, поля ровно под колонками; сохраняется общей кнопкой -->
-                        <tr class="ag-new-row">
-                            <td><input type="number" class="admin-select ag-input ag-min" placeholder="От" data-draft="${pre}new-${sex}:min"></td>
-                            <td><input type="number" class="admin-select ag-input ag-max" placeholder="До (∞)"
-                                       title="Пусто — без верхней границы" data-draft="${pre}new-${sex}:max"></td>
-                            <td><input type="text" class="admin-select ag-input ag-input--label ag-label" placeholder="Метка, напр. ${sex === 'M' ? 'М49' : 'Ж49'}" data-draft="${pre}new-${sex}:label"></td>
-                            <td class="dq-muted">новая граница</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            `;
-        };
-
-        content.innerHTML = columnHtml('M') + columnHtml('F') + `
-            <div class="dq-actions ag-save-bar">
-                <button class="km-btn km-btn--primary" onclick="saveAgeGroups(this)">Сохранить</button>
-                <span class="dq-status" id="ag-status"></span>
-            </div>`;
-        adminApplyDrafts(content);
+        content.innerHTML = ['M', 'F'].map(sex => `<div class="ag-col" id="ag-col-${sex}"></div>`).join('');
+        ['M', 'F'].forEach(sex => renderAgeGroupTable(sex, items.filter(i => i.sex === sex)));
     }
 
-    // Общая кнопка «Сохранить»: все правки и заполненные новые границы обоих полов — одним
-    // запросом (одна транзакция, ошибка — ничего не записано). Удаление — у каждой строки.
-    async function saveAgeGroups(btn) {
-        const content = document.getElementById('age-groups-content');
-        const status = document.getElementById('ag-status');
+    // Таблица одного пола: свои строки, новые границы (одна пустая всегда есть, «+ Добавить
+    // границу» — ещё одна) и своя кнопка «Сохранить». Перерисовка одной таблицы не трогает
+    // несохранённые правки в другой.
+    function renderAgeGroupTable(sex, rows) {
+        const col = document.getElementById(`ag-col-${sex}`);
+        const pre = agDraftPrefix();
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        const rowsHtml = rows.sort((a, b) => a.min_age - b.min_age).map(row => `
+            <tr data-id="${row.id}">
+                <td><input type="number" class="admin-select ag-input ag-min" value="${row.min_age}" data-draft="${pre}${row.id}:min"></td>
+                <td><input type="number" class="admin-select ag-input ag-max" value="${row.max_age ?? ''}" placeholder="∞"
+                           title="Пусто — без верхней границы" data-draft="${pre}${row.id}:max"></td>
+                <td><input type="text" class="admin-select ag-input ag-input--label ag-label" value="${esc(row.label)}" data-draft="${pre}${row.id}:label"></td>
+                <td><button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id}, this)">Удалить</button></td>
+            </tr>
+        `).join('');
+        col.innerHTML = `
+            <h3 style="margin:16px 0 8px">${AG_SEX_LABEL[sex]}</h3>
+            <table class="admin-loader-table" data-sex="${sex}">
+                <thead><tr><th>От</th><th>До</th><th>Метка</th><th></th></tr></thead>
+                <tbody>${rowsHtml || '<tr class="ag-empty"><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
+                <tfoot></tfoot>
+            </table>
+            <div class="dq-actions ag-save-bar">
+                <button class="km-btn km-btn--primary" onclick="saveAgeGroups('${sex}', this)">Сохранить</button>
+                <span class="dq-status" id="ag-status-${sex}"></span>
+            </div>`;
+        // новые строки из черновиков (после F5), минимум одна пустая
+        const idx = new Set();
+        const newPre = `${pre}new-${sex}-`;
+        Object.keys(adminState.drafts).filter(k => k.startsWith(newPre))
+            .forEach(k => idx.add(parseInt(k.slice(newPre.length), 10)));
+        if (!idx.size) idx.add(0);
+        [...idx].sort((a, b) => a - b).forEach(n => addAgeGroupNewRow(sex, n, false));
+        adminApplyDrafts(col);
+    }
+
+    function addAgeGroupNewRow(sex, n, focus) {
+        const tfoot = document.querySelector(`#ag-col-${sex} tfoot`);
+        if (n === undefined) {
+            n = Math.max(-1, ...[...tfoot.querySelectorAll('tr')].map(tr => Number(tr.dataset.n))) + 1;
+        }
+        const pre = `${agDraftPrefix()}new-${sex}-${n}`;
+        const tr = document.createElement('tr');
+        tr.className = 'ag-new-row';
+        tr.dataset.n = n;
+        tr.innerHTML = `
+            <td><input type="number" class="admin-select ag-input ag-min" placeholder="От" data-draft="${pre}:min"></td>
+            <td><input type="number" class="admin-select ag-input ag-max" placeholder="До (∞)"
+                       title="Пусто — без верхней границы" data-draft="${pre}:max"></td>
+            <td><input type="text" class="admin-select ag-input ag-input--label ag-label" placeholder="Метка, напр. ${sex === 'M' ? 'М49' : 'Ж49'}" data-draft="${pre}:label"></td>
+            <td class="ag-new-actions"></td>`;
+        tfoot.appendChild(tr);
+        agNewRowActions(sex);
+        if (focus) tr.querySelector('.ag-min').focus();
+    }
+
+    // «+ Добавить границу» — у последней новой строки; «Убрать» — у остальных новых строк
+    function agNewRowActions(sex) {
+        const rows = [...document.querySelectorAll(`#ag-col-${sex} tfoot tr`)];
+        rows.forEach((tr, i) => {
+            const cell = tr.querySelector('.ag-new-actions');
+            const remove = rows.length > 1
+                ? `<button class="km-btn km-btn--secondary" onclick="removeAgeGroupNewRow('${sex}', this)">Убрать</button>` : '';
+            const add = i === rows.length - 1
+                ? `<button class="km-btn km-btn--secondary" onclick="addAgeGroupNewRow('${sex}', undefined, true)">+ Добавить границу</button>` : '';
+            cell.innerHTML = add + remove;
+        });
+    }
+
+    function removeAgeGroupNewRow(sex, btn) {
+        const tr = btn.closest('tr');
+        adminClearDrafts(`${agDraftPrefix()}new-${sex}-${tr.dataset.n}:`);
+        tr.remove();
+        agNewRowActions(sex);
+    }
+
+    // «Сохранить» таблицы одного пола: её правки и заполненные новые границы — одним
+    // запросом (одна транзакция, ошибка — ничего не записано). Другая таблица не трогается.
+    async function saveAgeGroups(sex, btn) {
+        const col = document.getElementById(`ag-col-${sex}`);
+        const status = document.getElementById(`ag-status-${sex}`);
         const items = [], errors = [];
-        content.querySelectorAll('table[data-sex]').forEach(table => {
-            const sex = table.dataset.sex;
-            table.querySelectorAll('tbody tr[data-id], tfoot tr.ag-new-row').forEach(tr => {
-                const minRaw = tr.querySelector('.ag-min').value.trim();
-                const maxRaw = tr.querySelector('.ag-max').value.trim();
-                const label = tr.querySelector('.ag-label').value.trim();
-                const isNew = !tr.dataset.id;
-                if (isNew && !minRaw && !maxRaw && !label) return;
-                if (minRaw === '' || !label) {
-                    errors.push(`${AG_SEX_LABEL[sex]}: заполните «От» и «Метку»${isNew ? ' у новой границы' : ''}`);
-                    return;
-                }
-                items.push({
-                    id: isNew ? null : Number(tr.dataset.id), sex, label,
-                    min_age: parseInt(minRaw, 10), max_age: maxRaw === '' ? null : parseInt(maxRaw, 10),
-                });
+        col.querySelectorAll('tbody tr[data-id], tfoot tr.ag-new-row').forEach(tr => {
+            const minRaw = tr.querySelector('.ag-min').value.trim();
+            const maxRaw = tr.querySelector('.ag-max').value.trim();
+            const label = tr.querySelector('.ag-label').value.trim();
+            const isNew = !tr.dataset.id;
+            if (isNew && !minRaw && !maxRaw && !label) return;
+            if (minRaw === '' || !label) {
+                errors.push(`заполните «От» и «Метку»${isNew ? ' у новой границы' : ''}`);
+                return;
+            }
+            items.push({
+                id: isNew ? null : Number(tr.dataset.id), sex, label,
+                min_age: parseInt(minRaw, 10), max_age: maxRaw === '' ? null : parseInt(maxRaw, 10),
             });
         });
         status.className = 'dq-status';
-        if (errors.length) { status.textContent = errors.join('; '); return; }
+        if (errors.length) { status.textContent = [...new Set(errors)].join('; '); return; }
         btn.disabled = true;
         status.textContent = 'Сохранение…';
         try {
@@ -1553,11 +1590,13 @@
             });
             const data = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : r.statusText);
-            adminClearDrafts(agDraftPrefix());
-            const release = adminHoldHeight(content);
-            renderAgeGroups(data.items);
+            const pre = agDraftPrefix();
+            col.querySelectorAll('[data-draft]').forEach(el => adminClearDrafts(el.dataset.draft));
+            adminClearDrafts(`${pre}new-${sex}-`);
+            const release = adminHoldHeight(col);
+            renderAgeGroupTable(sex, data.items.filter(i => i.sex === sex));
             release();
-            const done = document.getElementById('ag-status');
+            const done = document.getElementById(`ag-status-${sex}`);
             done.className = 'dq-status dq-status--ok';
             done.textContent = 'Сохранено';
         } catch(e) {

@@ -551,7 +551,12 @@
 .ag-input { width: 96px; box-sizing: border-box; }
 .ag-input--label { width: 170px; }
 .ag-new-row td { border-top: 2px solid var(--km-border-light); padding-top: 10px; }
-.ag-save-bar { margin-top: 16px; }
+.ag-save-bar { margin-top: 12px; }
+/* М и Ж — отдельные таблицы: одинаковые колонки, чтобы «До»/«Метка» стояли друг под другом */
+.ag-col table { table-layout: fixed; }
+.ag-col th:nth-child(1), .ag-col th:nth-child(2) { width: 130px; }
+.ag-col th:nth-child(3) { width: 210px; }
+.ag-new-actions .km-btn + .km-btn { margin-left: 6px; }
 
 /* Несохранённый ввод, восстановленный из черновика или ещё не сохранённый (static/js/admin-state.js) */
 .admin-draft { outline: 2px solid #f0b429; outline-offset: -1px; }

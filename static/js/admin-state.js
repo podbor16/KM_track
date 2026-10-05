@@ -156,14 +156,23 @@ function adminHoldHeight(el) {
 
 // ---- Черновики: поля с data-draft="ключ" ----
 
+// Исходное значение поля из разметки — с ним черновик не нужен
+function adminDefaultValue(el) {
+    return el.type === 'checkbox' ? (el.defaultChecked ? '1' : '') : el.defaultValue;
+}
+
 function adminApplyDrafts(root) {
     (root || document).querySelectorAll('[data-draft]').forEach(el => {
         const key = el.dataset.draft;
-        if (key in adminState.drafts) {
-            adminSetField(el, adminState.drafts[key]);
-            el.classList.add('admin-draft');
+        if (!(key in adminState.drafts)) return;
+        if (adminState.drafts[key] === adminDefaultValue(el)) {
+            delete adminState.drafts[key];
+            return;
         }
+        adminSetField(el, adminState.drafts[key]);
+        el.classList.add('admin-draft');
     });
+    adminPersist();
 }
 
 function adminSetDraft(key, value) {
@@ -189,8 +198,16 @@ function adminSetExtra(key, value) {
 
 document.addEventListener('input', e => {
     const el = e.target;
-    if (el && el.dataset && el.dataset.draft) {
-        adminSetDraft(el.dataset.draft, adminFieldValue(el));
+    if (!el || !el.dataset || !el.dataset.draft) return;
+    const value = adminFieldValue(el);
+    // стёрли ввод / вернули как было — это уже не несохранённая правка
+    // (YAML-редактор заполняется из JS, его исходное значение в разметке пустое)
+    const unchanged = value === adminDefaultValue(el) && el.tagName !== 'TEXTAREA';
+    if (unchanged) {
+        adminClearDrafts(el.dataset.draft);
+        el.classList.remove('admin-draft');
+    } else {
+        adminSetDraft(el.dataset.draft, value);
         el.classList.add('admin-draft');
     }
 });
