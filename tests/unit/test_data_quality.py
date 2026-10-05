@@ -228,3 +228,26 @@ def test_kids_check_skips_past_years_in_full_run():
     d = data([C(2, "Сидоров", "Ваня", "1986-03-03")], leads=[L(2, 2, "Сидоров", "Ваня", "1986-03-03", 9)])
     d.events[9] = {"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2024}
     assert check_kids_leads(d, from_year=2026) == [] and len(check_kids_leads(d, {9})) == 1
+
+
+def test_checks_use_only_columns_that_load_selects():
+    """Регрессия 2026-10-05: L-KID читал event_distance заявки, а load() его не выбирал — вкладка
+    «Качество данных» падала 500 (тест строил заявки вручную и это скрывал)."""
+    import re
+    from unittest.mock import MagicMock
+    from src.analytics.data_quality import Data, load, run_checks
+    conn = MagicMock()
+    conn.cursor.return_value.fetchall.return_value = []
+    load(conn)
+    sql = [c.args[0] for c in conn.cursor.return_value.execute.call_args_list]
+    cols = {name: [c.strip() for c in re.search(r"SELECT (.+?) FROM", q, re.S).group(1).split(",")]
+            for name in ("leads", "results", "clients", "events") for q in sql if re.search(rf"FROM {name}\b", q)}
+    only = lambda row, table: {k: row[k] for k in cols[table]}
+    kid = {"id": 1, "client_id": 1, "surname": "Сидоров", "name": "Ваня", "birthday": "2027-01-01", "sex": "",
+           "event_id": 9, "event_distance": "1 км", "start_number": None}
+    d = Data([only({"id": 1, "surname": "Сидоров", "name": "Ваня", "birthday": "2027-01-01"}, "clients")],
+             [only(kid, "leads")], [],
+             [only({"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2030}, "events")])
+    d.names = NAMES
+    # 3 года на 1 км — проверка обязана прочитать дистанцию заявки
+    assert [(f.code, f.severity) for f in run_checks(d, {9})] == [("L-KID", "low")]

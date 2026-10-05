@@ -94,7 +94,7 @@ def load(conn):
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, surname, name, birthday FROM clients WHERE id <> 0")
     clients = cur.fetchall()
-    cur.execute("SELECT id, client_id, surname, name, birthday, sex, event_id, start_number FROM leads")
+    cur.execute("SELECT id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number FROM leads")
     leads = cur.fetchall()
     cur.execute("""SELECT id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status
                    FROM results""")
