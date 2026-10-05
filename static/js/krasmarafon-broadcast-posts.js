@@ -125,6 +125,7 @@ async function bcpOnDistanceChange() {
             opt.textContent = cp.label;
             cpSel.appendChild(opt);
         });
+        if (typeof adminRestoreValue === 'function') adminRestoreValue('bcp-checkpoint');   // /admin: после F5
     } catch (e) {
         bcpShowError(true);
     }

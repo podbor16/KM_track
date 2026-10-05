@@ -38,11 +38,9 @@
             <div class="km-filters">
                 <div class="km-filter-group">
                     <label class="km-label" for="eventSelector">Событие:</label>
-                    <!-- Временно (2026-08-20, по решению пользователя) показываем в
-                         этом селекте не все события — остальные скрыты со
-                         стартового списка до отдельного решения вернуть полный
-                         список. Забег Икс возвращён 2026-09-24, Снежная семерка — 2026-10-05
-                         (открыта регистрация на 06.12.2026). -->
+                    <!-- Варианты заполняет populateEventSelector() (analytics-start-list.js):
+                         события с заявками на текущий год и позже, по дате ближайшего старта.
+                         Ниже — запасной список на случай ошибки API. -->
                     <select id="eventSelector" onchange="switchEvent('event')" class="km-select">
                         <option value="snow7">Снежная семерка</option>
                         <option value="xtrailrun">Х Трейл</option>

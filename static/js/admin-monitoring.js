@@ -238,7 +238,9 @@ async function monLoadAlerts() {
 
 // ---- Инициализация вкладки (вызывается из switchTab() в admin.html) ----
 function loadMonitoringTab() {
-    monLoadHistory(24);
+    // диапазон — выбранный (восстанавливается после F5, admin-state.js), по умолчанию 24 ч
+    const sel = document.getElementById('mon-range');
+    monLoadHistory(hoursForRange(sel && sel.value));
     monLoadAlerts();
     monSubscribeLive();
     monStartLivePolling();

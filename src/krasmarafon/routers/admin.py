@@ -22,7 +22,7 @@ from src.krasmarafon.models.startlist import (
     LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
     LeadImportFailedRow, LeadImportDeleteRow,
 )
-from src.krasmarafon.models.age_groups import AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
+from src.krasmarafon.models.age_groups import AgeGroupBulkSave, AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
 from src.krasmarafon.models.participant_photos import DbEvent, ParticipantPhoto, ParticipantPhotoUpsert
 
 from src.config import settings
@@ -482,6 +482,23 @@ async def create_age_group_endpoint(
     if created is None:
         raise HTTPException(status_code=400, detail="Не удалось создать границу (возможно, дубликат)")
     return AgeGroupConfig.model_validate(created).model_dump()
+
+
+@router.put("/api/admin/age-groups")
+async def save_age_groups_endpoint(
+    body: AgeGroupBulkSave, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import save_age_groups
+
+    try:
+        rows = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: save_age_groups(body.event_name, body.event_distance,
+                                    [it.model_dump() for it in body.items]),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"items": [AgeGroupConfig.model_validate(r).model_dump() for r in rows]}
 
 
 @router.patch("/api/admin/age-groups/{config_id}")

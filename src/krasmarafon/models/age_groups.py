@@ -4,7 +4,7 @@ src/analytics/db_results.py: list_age_groups()/create_age_group()/
 update_age_group()/delete_age_group(), get_age_group_label().
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -44,3 +44,21 @@ class AgeGroupPatch(BaseModel):
 
     def non_null_fields(self) -> Dict[str, Any]:
         return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class AgeGroupItem(BaseModel):
+    """Строка общей кнопки «Сохранить»: id есть — правка, нет — новая граница."""
+
+    id: Optional[int] = None
+    sex: Literal['M', 'F']
+    min_age: int
+    max_age: Optional[int] = None
+    label: str
+
+
+class AgeGroupBulkSave(BaseModel):
+    """Тело PUT /api/admin/age-groups — все границы дистанции разом."""
+
+    event_name: str
+    event_distance: str
+    items: List[AgeGroupItem]

@@ -37,6 +37,7 @@ async function dqRequest(url, body) {
 
 async function loadDataQualityTab() {
     const box = document.getElementById('dq-content');
+    const release = adminHoldHeight(box);
     box.innerHTML = '<div class="admin-loading">Проверка базы…</div>';
     try {
         dqFindings = (await dqRequest('/api/admin/data-quality')).findings;
@@ -44,6 +45,8 @@ async function loadDataQualityTab() {
         dqRender();
     } catch (e) {
         box.innerHTML = `<div class="admin-error">Ошибка проверки: ${dqEsc(e.message)}</div>`;
+    } finally {
+        release();
     }
 }
 
@@ -53,7 +56,7 @@ function dqFillEventFilter() {
     const events = [...new Set(dqFindings.map(f => f.event).filter(Boolean))].sort();
     sel.innerHTML = '<option value="">Все забеги</option>'
         + events.map(e => `<option value="${dqEsc(e)}">${dqEsc(e)}</option>`).join('');
-    if (events.includes(current)) sel.value = current;
+    if (!adminRestoreValue('dq-event') && events.includes(current)) sel.value = current;
 }
 
 function dqVisible() {

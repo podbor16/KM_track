@@ -272,3 +272,72 @@ def test_list_age_groups_filters_by_event(mock_get_conn):
     select_call = cur.execute.call_args_list[0]
     assert "event_name = %s" in select_call.args[0]
     assert "Жара" in select_call.args[1]
+
+
+# --- общая кнопка «Сохранить» (save_age_groups) ----------------------------
+
+from src.analytics.db_results import save_age_groups, validate_age_groups  # noqa: E402
+import pytest  # noqa: E402
+
+
+def test_validate_age_groups_reports_problems():
+    errors = validate_age_groups([
+        {"sex": "M", "min_age": 0, "max_age": 49, "label": "М49"},
+        {"sex": "M", "min_age": 0, "max_age": 59, "label": "М50"},
+        {"sex": "F", "min_age": 50, "max_age": 40, "label": "Ж50"},
+        {"sex": "F", "min_age": 60, "max_age": None, "label": " "},
+    ])
+    assert any("две границы начинаются с 0" in e for e in errors)
+    assert any("«До» меньше «От»" in e for e in errors)
+    assert any("не заполнена метка" in e for e in errors)
+
+
+def test_validate_age_groups_same_min_for_different_sex_ok():
+    assert validate_age_groups([
+        {"sex": "M", "min_age": 0, "max_age": None, "label": "М"},
+        {"sex": "F", "min_age": 0, "max_age": None, "label": "Ж"},
+    ]) == []
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_save_age_groups_invalid_writes_nothing(mock_get_conn):
+    with pytest.raises(ValueError):
+        save_age_groups("Жара", "5 км", [{"sex": "M", "min_age": 10, "max_age": 5, "label": "М"}])
+    mock_get_conn.assert_not_called()
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_save_age_groups_shifts_then_updates_then_inserts_in_one_transaction(mock_get_conn):
+    conn, cur = _mock_conn()
+    conn.in_transaction = False
+    cur.rowcount = 1
+    cur.fetchall.return_value = []
+    mock_get_conn.return_value = conn
+    save_age_groups("Жара", "5 км", [
+        {"id": 1, "sex": "M", "min_age": 50, "max_age": None, "label": "М50+"},   # обмен «От» с id=2
+        {"id": 2, "sex": "M", "min_age": 0, "max_age": 49, "label": "М49"},
+        {"sex": "F", "min_age": 0, "max_age": None, "label": "Ж"},
+    ])
+    sqls = [c.args[0] for c in cur.execute.call_args_list]
+    shift = [i for i, s in enumerate(sqls) if "min_age + %s" in s]
+    final = [i for i, s in enumerate(sqls) if s.startswith("UPDATE age_group_configs SET sex")]
+    insert = [i for i, s in enumerate(sqls) if s.startswith("INSERT")]
+    assert len(shift) == 2 and len(final) == 2 and len(insert) == 1
+    assert max(shift) < min(final) < max(final) < insert[0]
+    # пустое «До» уходит в БД как NULL — раньше PATCH его отбрасывал
+    assert cur.execute.call_args_list[final[0]].args[1][2] is None
+    conn.start_transaction.assert_called_once()
+    conn.rollback.assert_not_called()
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_save_age_groups_missing_row_rolls_back(mock_get_conn):
+    conn, cur = _mock_conn()
+    conn.in_transaction = False
+    cur.rowcount = 0
+    mock_get_conn.return_value = conn
+    with pytest.raises(ValueError, match="не найдена"):
+        save_age_groups("Жара", "5 км", [{"id": 7, "sex": "M", "min_age": 0, "max_age": None, "label": "М"}])
+    conn.rollback.assert_called_once()
+    conn.commit.assert_not_called()
+    conn.close.assert_called()

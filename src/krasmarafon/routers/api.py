@@ -435,6 +435,18 @@ async def get_registered_runners_years(event_name: str = Query(...)) -> dict:
     return {"years": opts["years"]}
 
 
+@router.get("/api/start-list-events")
+async def get_start_list_events_api() -> dict:
+    """События селектора /start_list: с заявками на текущий год и позже, по дате ближайшего старта."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from src.analytics.db_results import get_start_list_events
+
+    today = datetime.now(ZoneInfo("Asia/Krasnoyarsk")).date()
+    events = await asyncio.get_event_loop().run_in_executor(None, lambda: get_start_list_events(today))
+    return {"events": events}
+
+
 @router.get("/api/results-years")
 async def get_results_years_api(event_name: str = Query(...)) -> dict:
     """Годы с результатами события и их event_id — селектор года на /results."""

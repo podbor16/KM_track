@@ -1216,6 +1216,76 @@ def delete_age_group(config_id: int) -> bool:
             pass
 
 
+def validate_age_groups(items: List[Dict[str, Any]]) -> List[str]:
+    """Ошибки набора границ одной дистанции (пусто — можно сохранять)."""
+    errors, seen = [], set()
+    for it in items:
+        sex_label = "Мужчины" if it["sex"] == "M" else "Женщины"
+        if not str(it.get("label") or "").strip():
+            errors.append(f"{sex_label}, от {it['min_age']}: не заполнена метка")
+        if it["min_age"] < 0:
+            errors.append(f"{sex_label}: «От» не может быть отрицательным")
+        if it.get("max_age") is not None and it["max_age"] < it["min_age"]:
+            errors.append(f"{sex_label}, {it['label']}: «До» меньше «От»")
+        if (it["sex"], it["min_age"]) in seen:
+            errors.append(f"{sex_label}: две границы начинаются с {it['min_age']}")
+        seen.add((it["sex"], it["min_age"]))
+    return errors
+
+
+_AGE_TEMP_SHIFT = 1_000_000
+
+
+def save_age_groups(event_name: str, event_distance: str, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Общая кнопка «Сохранить» вкладки «Возрастные группы»: правки существующих границ (с id)
+    и новые (без id) — одной транзакцией, ошибка — ничего не записано. Существующие границы
+    сначала сдвигаются за пределы возрастов: иначе обмен «От» между двумя строками упирается
+    в uq_bracket посреди обновления. Пустое «До» записывается как NULL (без верхней границы)."""
+    errors = validate_age_groups(items)
+    if errors:
+        raise ValueError("; ".join(errors))
+    conn = get_pooled_connection()
+    if not conn:
+        raise RuntimeError("нет соединения с БД")
+    cur = conn.cursor(dictionary=True, buffered=True)
+    try:
+        if conn.in_transaction:
+            conn.commit()
+        conn.start_transaction()
+        existing = [it for it in items if it.get("id")]
+        for it in existing:
+            cur.execute(
+                "UPDATE age_group_configs SET min_age = min_age + %s "
+                "WHERE id = %s AND event_name = %s AND event_distance = %s",
+                (_AGE_TEMP_SHIFT, it["id"], event_name, event_distance),
+            )
+            if cur.rowcount != 1:
+                raise ValueError(f"граница {it['id']} не найдена — обновите страницу")
+        for it in existing:
+            cur.execute(
+                "UPDATE age_group_configs SET sex = %s, min_age = %s, max_age = %s, label = %s WHERE id = %s",
+                (it["sex"], it["min_age"], it.get("max_age"), it["label"].strip(), it["id"]),
+            )
+        for it in items:
+            if not it.get("id"):
+                cur.execute(
+                    "INSERT INTO age_group_configs (event_name, event_distance, sex, min_age, max_age, label) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (event_name, event_distance, it["sex"], it["min_age"], it.get("max_age"), it["label"].strip()),
+                )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        if getattr(e, "errno", None) == 1062:
+            raise ValueError("граница с таким «От» уже есть у этой дистанции") from e
+        raise
+    finally:
+        cur.close()
+        conn.close()
+    _invalidate_age_group_cache()
+    return list_age_groups(event_name, event_distance)
+
+
 def calculate_age_group(birthdate_or_age, sex: str = None) -> str:
     """
     Возрастная группа по дате рождения/возрасту и полу — дефолт, когда для
@@ -1626,6 +1696,65 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None, yea
     except Exception as e:
         logger.error(f"get_leads_filter_options error: {e}")
         return {"event_names": [], "years": [], "distances": []}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def order_start_list_events(rows: List[Dict[str, Any]], today: datetime.date) -> List[Dict[str, Any]]:
+    """rows: (event_name, event_year, first_date, last_date) — пары с заявками на текущий год и позже.
+    Одно событие — один пункт: ближайший ещё не прошедший старт, иначе последний прошедший.
+    Порядок: предстоящие по дате, затем прошедшие (свежие выше), затем без даты в events."""
+    best: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        upcoming = r["last_date"] is not None and r["last_date"] >= today
+        item = {"event_name": r["event_name"], "year": r["event_year"], "date": r["first_date"], "upcoming": upcoming}
+        cur = best.get(r["event_name"])
+        if cur is None:
+            best[r["event_name"]] = item
+        elif item["upcoming"] != cur["upcoming"]:
+            if item["upcoming"]:
+                best[r["event_name"]] = item
+        elif item["date"] is not None and (cur["date"] is None or
+                                           (item["date"] < cur["date"]) == item["upcoming"]):
+            best[r["event_name"]] = item
+
+    def key(it):
+        if it["date"] is None:
+            return (2, 0, it["event_name"])
+        if it["upcoming"]:
+            return (0, it["date"].toordinal(), it["event_name"])
+        return (1, -it["date"].toordinal(), it["event_name"])
+
+    return [{"event_name": it["event_name"], "year": it["year"],
+             "date": it["date"].isoformat() if it["date"] else None}
+            for it in sorted(best.values(), key=key)]
+
+
+def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
+    """Селектор события на /start_list: события с хотя бы одной заявкой на текущий год или
+    будущие (решение пользователя 2026-10-05), по дате ближайшего старта."""
+    conn = get_pooled_connection()
+    if not conn:
+        return []
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute(
+            "SELECT l.event_name, l.event_year, MIN(e.event_date) AS first_date, MAX(e.event_date) AS last_date "
+            "FROM (SELECT DISTINCT event_name, event_year FROM leads "
+            "      WHERE event_year >= %s AND event_name IS NOT NULL) l "
+            "LEFT JOIN events e ON e.event_name = l.event_name AND e.event_year = l.event_year "
+            "GROUP BY l.event_name, l.event_year",
+            (today.year,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return order_start_list_events(rows, today)
+    except Exception as e:
+        logger.error(f"get_start_list_events error: {e}")
+        return []
     finally:
         try:
             conn.close()

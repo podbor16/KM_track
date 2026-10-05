@@ -122,7 +122,7 @@
                            style="min-width:180px" onkeydown="if(event.key==='Enter')loadLeads(true)">
                 </div>
                 <div class="admin-leads-actions">
-                    <button class="km-btn km-btn--secondary" onclick="loadLeads(true)">Обновить</button>
+                    <button class="km-btn km-btn--secondary" onclick="loadLeads(true, _leadsData.length)">Обновить</button>
                     <button class="km-btn km-btn--secondary" onclick="openBibsPanel()">Присвоить номера</button>
                     <button class="km-btn km-btn--primary" id="leads-export-btn" onclick="exportLeadsCsv()" disabled>Экспорт CSV</button>
                     <input type="file" id="leads-import-file" accept=".csv,.xlsx" style="display:none" onchange="onLeadsImportFileChosen()">
@@ -416,6 +416,7 @@
          страницы падала с ReferenceError, обрывая весь инлайн-скрипт
          (включая несвязанный loadHistoryToggle() в его хвосте). -->
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
+    <script src="/static/js/admin-state.js?v={{ v }}"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
     <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
     <script src="/static/js/admin-bibs.js?v={{ v }}"></script>
@@ -426,17 +427,14 @@
 
     const _tabLoaded = { events: false, presets: false, loader: false, leads: false, analytics: false, monitoring: false };
 
-    // Запоминаем активную вкладку в localStorage, чтобы обновление страницы
-    // не сбрасывало пользователя на «События» — тот же приём, что уже в
-    // templates/siberman/admin.html (ADMIN_TAB_STORAGE_KEY).
-    const ADMIN_TAB_STORAGE_KEY = 'krasmarafon_admin_active_tab';
+    // Вкладка, фильтры, прокрутка и черновики переживают F5 и сохранения —
+    // static/js/admin-state.js (adminOnTabSwitch, adminRestoreValue, data-draft).
 
     function switchTab(name, btn) {
         document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('admin-tab--active'));
         document.getElementById('tab-' + name).style.display = '';
         btn.classList.add('admin-tab--active');
-        localStorage.setItem(ADMIN_TAB_STORAGE_KEY, name);
         if (!_tabLoaded[name]) {
             _tabLoaded[name] = true;
             if (name === 'events') loadEvents();
@@ -449,6 +447,30 @@
             if (name === 'monitoring') loadMonitoringTab();
             if (name === 'data-quality') loadDataQualityTab();
         }
+        adminOnTabSwitch(name);
+    }
+
+    // Черновик YAML-редактора: несохранённый текст переживает F5 и сворачивание,
+    // «Отмена» и успешное сохранение его удаляют.
+    function setupYamlDraft(card, key) {
+        const editor = card.querySelector('.admin-editor');
+        const textarea = card.querySelector('.admin-yaml-editor');
+        const btnEdit = card.querySelector('.admin-btn-edit');
+        textarea.dataset.draft = key;
+        const clear = () => { adminClearDrafts(key); textarea.classList.remove('admin-draft'); };
+        const open = () => {
+            const draft = adminGetDraft(key);
+            if (draft === null) return false;
+            textarea.value = draft;
+            textarea.classList.add('admin-draft');
+            textarea.title = 'Несохранённый черновик — «Отмена» его удалит';
+            editor.style.display = '';
+            btnEdit.textContent = 'Свернуть';
+            return true;
+        };
+        card.querySelector('.admin-btn-cancel').addEventListener('click', clear);
+        open();
+        return { open, clear };
     }
 
     // ========================================================================
@@ -499,6 +521,8 @@
         const textarea = card.querySelector('.admin-yaml-editor');
         const errBox = card.querySelector('.admin-editor__error');
 
+        const draft = setupYamlDraft(card, `yaml:event:${ev.code}|`);
+
         if (ev.is_active) {
             btnActivate.disabled = true;
             btnActivate.title = 'Уже активно';
@@ -510,6 +534,7 @@
                 btnEdit.textContent = 'Редактировать';
                 return;
             }
+            if (draft.open()) return;
             btnEdit.textContent = 'Загрузка...';
             try {
                 const r = await fetch(`/api/admin/events/${ev.code}/yaml`);
@@ -550,6 +575,7 @@
                     errBox.textContent = data.detail || 'Ошибка сохранения';
                     errBox.style.display = '';
                 } else {
+                    draft.clear();
                     editor.style.display = 'none';
                     btnEdit.textContent = 'Редактировать';
                 }
@@ -618,6 +644,7 @@
         const editor = card.querySelector('.admin-editor');
         const textarea = card.querySelector('.admin-yaml-editor');
         const errBox = card.querySelector('.admin-editor__error');
+        const draft = setupYamlDraft(card, `yaml:preset:${name}|`);
 
         btnEdit.addEventListener('click', async () => {
             if (editor.style.display !== 'none') {
@@ -625,6 +652,7 @@
                 btnEdit.textContent = 'Редактировать';
                 return;
             }
+            if (draft.open()) return;
             btnEdit.textContent = 'Загрузка...';
             try {
                 const r = await fetch(`/api/admin/presets/${name}/yaml`);
@@ -665,6 +693,7 @@
                     errBox.textContent = data.detail || 'Ошибка';
                     errBox.style.display = '';
                 } else {
+                    draft.clear();
                     editor.style.display = 'none';
                     btnEdit.textContent = 'Редактировать';
                 }
@@ -820,11 +849,17 @@
                 opt.textContent = name;
                 sel.appendChild(opt);
             });
+            if (adminRestoreValue('leads-event-name')) {
+                await onLeadsEventChange(adminState.extra['leads-loaded']);
+                const bibsKey = `${sel.value}|${document.getElementById('leads-year-filter').value}`;
+                if (adminState.extra['bibs-open'] === bibsKey) openBibsPanel();
+            }
         } catch(e) { /* silent */ }
     }
 
     // ---- Каскадные фильтры ----
-    async function onLeadsEventChange() {
+    // restoreCount — сколько заявок было подгружено до F5 (восстановление вкладки)
+    async function onLeadsEventChange(restoreCount) {
         const eventName = document.getElementById('leads-event-name').value;
         const yearSel = document.getElementById('leads-year-filter');
         const distSel = document.getElementById('leads-distance-filter');
@@ -846,13 +881,14 @@
                 opt.value = y; opt.textContent = y;
                 yearSel.appendChild(opt);
             });
-            // Автовыбор единственного года
-            if (data.years.length === 1) {
+            if (adminRestoreValue('leads-year-filter')) {
+                await _loadDistances();
+            } else if (data.years.length === 1) {          // автовыбор единственного года
                 yearSel.value = data.years[0];
                 await _loadDistances();
             }
         } catch(e) { /* silent */ }
-        loadLeads(true);
+        loadLeads(true, restoreCount);
     }
 
     async function onLeadsYearChange() {
@@ -878,11 +914,14 @@
                 distSel.appendChild(opt);
             });
             distSel.disabled = data.distances.length === 0;
+            adminRestoreValue('leads-distance-filter');
         } catch(e) { /* silent */ }
     }
 
     // ---- Загрузка заявок ----
-    async function loadLeads(reset) {
+    // keepCount — подгрузить сразу столько заявок (обновление после сохранения, F5),
+    // чтобы список не укорачивался до первой страницы и прокрутка оставалась на месте.
+    async function loadLeads(reset, keepCount) {
         const eventName = document.getElementById('leads-event-name').value;
         const wrap = document.getElementById('leads-table-wrap');
         const countBar = document.getElementById('leads-count-bar');
@@ -895,7 +934,9 @@
         }
         document.getElementById('leads-export-btn').disabled = false;
 
-        if (reset) { _leadsOffset = 0; _leadsData = []; }
+        const limit = reset ? Math.min(500, Math.max(_leadsLimit, keepCount || 0)) : _leadsLimit;
+        if (reset) { _leadsOffset = limit - _leadsLimit; _leadsData = []; }
+        const release = adminHoldHeight(wrap);
         if (reset) wrap.innerHTML = '<div class="admin-loading">Загрузка...</div>';
 
         const year = document.getElementById('leads-year-filter').value;
@@ -904,7 +945,7 @@
         const suspFilter = document.getElementById('leads-suspicious-filter').checked;
         const search = document.getElementById('leads-search').value.trim();
 
-        let url = `/api/admin/leads?event_name=${encodeURIComponent(eventName)}&limit=${_leadsLimit}&offset=${_leadsOffset}`;
+        let url = `/api/admin/leads?event_name=${encodeURIComponent(eventName)}&limit=${limit}&offset=${reset ? 0 : _leadsOffset}`;
         if (year) url += `&event_year=${year}`;
         if (dist) url += `&event_distance=${encodeURIComponent(dist)}`;
         if (dupFilter !== '') url += `&is_duplicate=${dupFilter}`;
@@ -931,8 +972,12 @@
             const moreBtn = document.getElementById('leads-more-btn');
             pagination.style.display = _leadsData.length < data.total ? '' : 'none';
             if (moreBtn) moreBtn.disabled = false;
+            adminSetExtra('leads-loaded', _leadsData.length);
+            adminSaveFilters('leads');
         } catch(e) {
             if (reset) wrap.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        } finally {
+            release();
         }
     }
 
@@ -999,7 +1044,8 @@
         }
         const tbody = document.getElementById('leads-tbody');
         if (reset) tbody.innerHTML = '';
-        for (let i = 0; i < _leadsData.length; i++) {
+        // «Загрузить ещё» — дорисовываем только новые заявки, не весь список заново
+        for (let i = tbody.children.length; i < _leadsData.length; i++) {
             tbody.appendChild(buildLeadRow(_leadsData[i]));
         }
     }
@@ -1344,7 +1390,7 @@
                 ? `\n\nПроверка карточек: ${dq.findings} находок (важных ${dq.high}) — вкладка «Качество данных».` : '';
             alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}${dqText}`);
             previewEl.style.display = 'none';
-            loadLeads(true);
+            loadLeads(true, _leadsData.length);
         } catch(e) {
             previewEl.innerHTML = savedHtml;
             alert('Ошибка: ' + e.message);
@@ -1368,6 +1414,7 @@
                 opt.value = name; opt.textContent = name;
                 sel.appendChild(opt);
             });
+            if (adminRestoreValue('ag-event-name')) await onAgEventChange();
         } catch(e) { /* silent */ }
     }
 
@@ -1388,7 +1435,9 @@
                 distSel.appendChild(opt);
             });
             distSel.disabled = false;
-            if (data.distances.length === 1) {
+            if (adminRestoreValue('ag-distance') && distSel.value) {
+                loadAgeGroups();
+            } else if (data.distances.length === 1) {
                 distSel.value = data.distances[0];
                 loadAgeGroups();
             }
@@ -1403,6 +1452,7 @@
             content.innerHTML = '<div class="admin-loading">Выберите событие и дистанцию</div>';
             return;
         }
+        const release = adminHoldHeight(content);
         content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
         try {
             const url = `/api/admin/age-groups?event_name=${encodeURIComponent(eventName)}&event_distance=${encodeURIComponent(distance)}`;
@@ -1411,98 +1461,126 @@
             renderAgeGroups(data.items);
         } catch(e) {
             content.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        } finally {
+            release();
         }
+    }
+
+    // Ключ черновиков вкладки: правки не сохранены — переживают F5 (admin-state.js)
+    function agDraftPrefix() {
+        return `ag:${document.getElementById('ag-event-name').value}|${document.getElementById('ag-distance').value}:`;
     }
 
     function renderAgeGroups(items) {
         const content = document.getElementById('age-groups-content');
         const bySex = { M: items.filter(i => i.sex === 'M'), F: items.filter(i => i.sex === 'F') };
+        const pre = agDraftPrefix();
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
         const columnHtml = (sex) => {
             const rows = bySex[sex].sort((a, b) => a.min_age - b.min_age).map(row => `
                 <tr data-id="${row.id}">
-                    <td><input type="number" class="admin-select ag-input ag-min" value="${row.min_age}"></td>
+                    <td><input type="number" class="admin-select ag-input ag-min" value="${row.min_age}" data-draft="${pre}${row.id}:min"></td>
                     <td><input type="number" class="admin-select ag-input ag-max" value="${row.max_age ?? ''}" placeholder="∞"
-                               title="Пусто — без верхней границы"></td>
-                    <td><input type="text" class="admin-select ag-input ag-input--label ag-label" value="${row.label}"></td>
-                    <td>
-                        <button class="km-btn km-btn--secondary" onclick="saveAgeGroupRow(${row.id}, this)">Сохранить</button>
-                        <button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id})">Удалить</button>
-                    </td>
+                               title="Пусто — без верхней границы" data-draft="${pre}${row.id}:max"></td>
+                    <td><input type="text" class="admin-select ag-input ag-input--label ag-label" value="${esc(row.label)}" data-draft="${pre}${row.id}:label"></td>
+                    <td><button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id}, this)">Удалить</button></td>
                 </tr>
             `).join('');
             return `
                 <h3 style="margin:16px 0 8px">${AG_SEX_LABEL[sex]}</h3>
-                <table class="admin-loader-table">
+                <table class="admin-loader-table" data-sex="${sex}">
                     <thead><tr><th>От</th><th>До</th><th>Метка</th><th></th></tr></thead>
-                    <tbody>${rows || '<tr><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr class="ag-empty"><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
                     <tfoot>
-                        <!-- новая граница — строкой таблицы, поля ровно под колонками -->
+                        <!-- новая граница — строкой таблицы, поля ровно под колонками; сохраняется общей кнопкой -->
                         <tr class="ag-new-row">
-                            <td><input type="number" class="admin-select ag-input" id="ag-new-min-${sex}" placeholder="От"></td>
-                            <td><input type="number" class="admin-select ag-input" id="ag-new-max-${sex}" placeholder="До (∞)"
-                                       title="Пусто — без верхней границы"></td>
-                            <td><input type="text" class="admin-select ag-input ag-input--label" id="ag-new-label-${sex}" placeholder="Метка, напр. ${sex === 'M' ? 'М49' : 'Ж49'}"></td>
-                            <td><button class="km-btn km-btn--primary" onclick="addAgeGroupRow('${sex}')">Добавить границу</button></td>
+                            <td><input type="number" class="admin-select ag-input ag-min" placeholder="От" data-draft="${pre}new-${sex}:min"></td>
+                            <td><input type="number" class="admin-select ag-input ag-max" placeholder="До (∞)"
+                                       title="Пусто — без верхней границы" data-draft="${pre}new-${sex}:max"></td>
+                            <td><input type="text" class="admin-select ag-input ag-input--label ag-label" placeholder="Метка, напр. ${sex === 'M' ? 'М49' : 'Ж49'}" data-draft="${pre}new-${sex}:label"></td>
+                            <td class="dq-muted">новая граница</td>
                         </tr>
                     </tfoot>
                 </table>
             `;
         };
 
-        content.innerHTML = columnHtml('M') + columnHtml('F');
+        content.innerHTML = columnHtml('M') + columnHtml('F') + `
+            <div class="dq-actions ag-save-bar">
+                <button class="km-btn km-btn--primary" onclick="saveAgeGroups(this)">Сохранить</button>
+                <span class="dq-status" id="ag-status"></span>
+            </div>`;
+        adminApplyDrafts(content);
     }
 
-    async function saveAgeGroupRow(id, btn) {
-        const tr = btn.closest('tr');
-        const min_age = parseInt(tr.querySelector('.ag-min').value, 10);
-        const maxRaw = tr.querySelector('.ag-max').value.trim();
-        const label = tr.querySelector('.ag-label').value.trim();
-        if (isNaN(min_age) || !label) { alert('Заполните "От" и "Метку"'); return; }
-        try {
-            const r = await fetch(`/api/admin/age-groups/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ min_age, max_age: maxRaw === '' ? null : parseInt(maxRaw, 10), label }),
+    // Общая кнопка «Сохранить»: все правки и заполненные новые границы обоих полов — одним
+    // запросом (одна транзакция, ошибка — ничего не записано). Удаление — у каждой строки.
+    async function saveAgeGroups(btn) {
+        const content = document.getElementById('age-groups-content');
+        const status = document.getElementById('ag-status');
+        const items = [], errors = [];
+        content.querySelectorAll('table[data-sex]').forEach(table => {
+            const sex = table.dataset.sex;
+            table.querySelectorAll('tbody tr[data-id], tfoot tr.ag-new-row').forEach(tr => {
+                const minRaw = tr.querySelector('.ag-min').value.trim();
+                const maxRaw = tr.querySelector('.ag-max').value.trim();
+                const label = tr.querySelector('.ag-label').value.trim();
+                const isNew = !tr.dataset.id;
+                if (isNew && !minRaw && !maxRaw && !label) return;
+                if (minRaw === '' || !label) {
+                    errors.push(`${AG_SEX_LABEL[sex]}: заполните «От» и «Метку»${isNew ? ' у новой границы' : ''}`);
+                    return;
+                }
+                items.push({
+                    id: isNew ? null : Number(tr.dataset.id), sex, label,
+                    min_age: parseInt(minRaw, 10), max_age: maxRaw === '' ? null : parseInt(maxRaw, 10),
+                });
             });
-            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-            loadAgeGroups();
+        });
+        status.className = 'dq-status';
+        if (errors.length) { status.textContent = errors.join('; '); return; }
+        btn.disabled = true;
+        status.textContent = 'Сохранение…';
+        try {
+            const r = await fetch('/api/admin/age-groups', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event_name: document.getElementById('ag-event-name').value,
+                    event_distance: document.getElementById('ag-distance').value, items,
+                }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : r.statusText);
+            adminClearDrafts(agDraftPrefix());
+            const release = adminHoldHeight(content);
+            renderAgeGroups(data.items);
+            release();
+            const done = document.getElementById('ag-status');
+            done.className = 'dq-status dq-status--ok';
+            done.textContent = 'Сохранено';
         } catch(e) {
-            alert('Ошибка сохранения: ' + e.message);
+            status.textContent = 'Ошибка сохранения: ' + e.message;
+            btn.disabled = false;
         }
     }
 
-    async function removeAgeGroupRow(id) {
+    // Удаление сразу пишется в БД; строка убирается на месте — несохранённые правки
+    // других строк не теряются.
+    async function removeAgeGroupRow(id, btn) {
         if (!confirm('Удалить эту границу?')) return;
         try {
             const r = await fetch(`/api/admin/age-groups/${id}`, { method: 'DELETE' });
             if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-            loadAgeGroups();
+            adminClearDrafts(`${agDraftPrefix()}${id}:`);
+            const tbody = btn.closest('tbody');
+            btn.closest('tr').remove();
+            if (!tbody.querySelector('tr')) {
+                tbody.innerHTML = '<tr class="ag-empty"><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>';
+            }
         } catch(e) {
             alert('Ошибка удаления: ' + e.message);
-        }
-    }
-
-    async function addAgeGroupRow(sex) {
-        const eventName = document.getElementById('ag-event-name').value;
-        const distance = document.getElementById('ag-distance').value;
-        const min_age = parseInt(document.getElementById(`ag-new-min-${sex}`).value, 10);
-        const maxRaw = document.getElementById(`ag-new-max-${sex}`).value.trim();
-        const label = document.getElementById(`ag-new-label-${sex}`).value.trim();
-        if (isNaN(min_age) || !label) { alert('Заполните "От" и "Метку"'); return; }
-        try {
-            const r = await fetch('/api/admin/age-groups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    event_name: eventName, event_distance: distance, sex,
-                    min_age, max_age: maxRaw === '' ? null : parseInt(maxRaw, 10), label,
-                }),
-            });
-            if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-            loadAgeGroups();
-        } catch(e) {
-            alert('Ошибка создания: ' + e.message);
         }
     }
 
@@ -1530,6 +1608,7 @@
                     opt.textContent = `${ev.event_name} ${ev.event_distance} км (${ev.event_year})`;
                     sel.appendChild(opt);
                 });
+            if (adminRestoreValue('ph-event')) loadParticipantPhotos();
         } catch(e) { /* silent */ }
     }
 
@@ -1540,6 +1619,7 @@
             content.innerHTML = '<div class="admin-loading">Выберите событие</div>';
             return;
         }
+        const release = adminHoldHeight(content);
         content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
         try {
             const r = await fetch(`/api/admin/participant-photos?event_id=${eventId}`);
@@ -1547,15 +1627,22 @@
             renderParticipantPhotos(data.items);
         } catch(e) {
             content.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
+        } finally {
+            release();
         }
+    }
+
+    function phDraftPrefix() {
+        return `ph:${document.getElementById('ph-event').value}:`;
     }
 
     function renderParticipantPhotos(items) {
         const content = document.getElementById('photos-content');
+        const pre = phDraftPrefix();
         const rows = items.map(row => `
             <tr data-id="${row.id}">
                 <td>${row.start_number}</td>
-                <td><input type="text" class="admin-select ph-url" value="${row.photo_url}" style="width:320px"></td>
+                <td><input type="text" class="admin-select ph-url" value="${row.photo_url}" style="width:320px" data-draft="${pre}${row.start_number}"></td>
                 <td>
                     <button class="km-btn km-btn--secondary" onclick="saveParticipantPhotoRow(${row.start_number}, this)">Сохранить</button>
                     <button class="km-btn km-btn--secondary" onclick="removeParticipantPhoto(${row.id})">Удалить</button>
@@ -1568,11 +1655,12 @@
                 <tbody>${rows || '<tr><td colspan="3">Фото ещё не добавлены</td></tr>'}</tbody>
             </table>
             <div class="admin-leads-toolbar" style="margin-top:8px">
-                <input type="number" class="admin-select" id="ph-new-number" placeholder="Номер участника" style="width:180px">
-                <input type="text" class="admin-select" id="ph-new-url" placeholder="Ссылка на фото" style="width:320px">
+                <input type="number" class="admin-select" id="ph-new-number" placeholder="Номер участника" style="width:180px" data-draft="${pre}new-number">
+                <input type="text" class="admin-select" id="ph-new-url" placeholder="Ссылка на фото" style="width:320px" data-draft="${pre}new-url">
                 <button class="km-btn km-btn--primary" onclick="addParticipantPhoto()">Сохранить</button>
             </div>
         `;
+        adminApplyDrafts(content);
     }
 
     async function saveParticipantPhotoRow(startNumber, btn) {
@@ -1587,6 +1675,7 @@
                 body: JSON.stringify({ event_id: eventId, start_number: startNumber, photo_url }),
             });
             if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            adminClearDrafts(`${phDraftPrefix()}${startNumber}`);
             loadParticipantPhotos();
         } catch(e) {
             alert('Ошибка сохранения: ' + e.message);
@@ -1616,6 +1705,7 @@
                 body: JSON.stringify({ event_id: eventId, start_number, photo_url }),
             });
             if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+            adminClearDrafts(`${phDraftPrefix()}new-`);
             loadParticipantPhotos();
         } catch(e) {
             alert('Ошибка сохранения: ' + e.message);
@@ -1751,14 +1841,10 @@
     // Инициализация — восстанавливаем последнюю активную вкладку
     // (localStorage), иначе открываем «События» по умолчанию
     // ========================================================================
-    const savedTab = localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+    const savedTab = adminInitialTab();
     const savedBtn = savedTab && document.querySelector(`.admin-tab[onclick*="'${savedTab}'"]`);
-    if (savedBtn) {
-        switchTab(savedTab, savedBtn);
-    } else {
-        _tabLoaded.events = true;
-        loadEvents();
-    }
+    if (savedBtn) switchTab(savedTab, savedBtn);
+    else switchTab('events', document.querySelector(`.admin-tab[onclick*="'events'"]`));
     loadHistoryToggle();
     loadMaintenanceToggle();
     </script>

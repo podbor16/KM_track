@@ -44,21 +44,29 @@ async function openBibsPanel() {
         bibsState = { event_name: eventName, event_year: Number(year), groups: data.groups };
         bibsPreviewKey = '';
         renderBibsForm(data);
+        adminApplyDrafts(panel);
+        adminSetExtra('bibs-open', `${eventName}|${year}`);
     } catch (e) {
         panel.innerHTML = `<div class="admin-error">Ошибка: ${bibsEsc(e.message)}</div>`;
     }
 }
 
+// Несохранённые диапазоны — черновик (admin-state.js), очищается после присвоения
+function bibsDraftPrefix() {
+    return `bibs:${bibsState.event_name}|${bibsState.event_year}:`;
+}
+
 function renderBibsForm(data) {
     const panel = document.getElementById('bibs-panel');
+    const draft = (g, side) => bibsEsc(`${bibsDraftPrefix()}${g.distance}|${g.key}:${side}`);
     const rows = data.groups.map((g, i) => `
         <tr>
             <td>${bibsEsc(g.label)}${g.warning ? `<div class="dq-status">⚠ ${bibsEsc(g.warning)}</div>` : ''}</td>
             <td class="bibs-num">${g.need}</td>
             <td class="bibs-num">${g.with_bib}</td>
             <td class="bibs-num">${g.duplicates || ''}</td>
-            <td><input type="number" min="1" class="admin-select bibs-start" data-i="${i}" value="${g.range ? g.range[0] : ''}" oninput="bibsChanged()"></td>
-            <td><input type="number" min="1" class="admin-select bibs-end" data-i="${i}" value="${g.range ? g.range[1] : ''}" oninput="bibsChanged()"></td>
+            <td><input type="number" min="1" class="admin-select bibs-start" data-i="${i}" value="${g.range ? g.range[0] : ''}" oninput="bibsChanged()" data-draft="${draft(g, 'start')}"></td>
+            <td><input type="number" min="1" class="admin-select bibs-end" data-i="${i}" value="${g.range ? g.range[1] : ''}" oninput="bibsChanged()" data-draft="${draft(g, 'end')}"></td>
             <td class="bibs-result" id="bibs-result-${i}"></td>
         </tr>`).join('');
     const skipped = data.skipped.length ? `<div class="dq-muted">Без номеров: ${data.skipped.map(bibsEsc).join(', ')}</div>` : '';
@@ -141,7 +149,9 @@ async function assignBibs(btn) {
         status.className = 'dq-status dq-status--ok';
         status.textContent = `Присвоено номеров: ${r.assigned}`;
         bibsPreviewKey = '';
-        if (typeof loadLeads === 'function') loadLeads(true);
+        adminClearDrafts(bibsDraftPrefix());
+        document.querySelectorAll('#bibs-panel .admin-draft').forEach(el => el.classList.remove('admin-draft'));
+        if (typeof loadLeads === 'function') loadLeads(true, _leadsData.length);
     } catch (e) {
         if (e.payload && e.payload.groups) renderBibsResult(e.payload.groups);
         status.className = 'dq-status';
@@ -154,4 +164,5 @@ function closeBibsPanel() {
     panel.style.display = 'none';
     panel.innerHTML = '';
     bibsState = null;
+    adminSetExtra('bibs-open', null);
 }

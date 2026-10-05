@@ -20,6 +20,7 @@ const eventColorMap = KMUtils.EVENT_COLORS;
 // успешного применения, чтобы не перебивать дальнейший ручной выбор
 // пользователя при каждом ре-рендере фильтров.
 let _urlEvent = null;
+let _urlEventRaw = null;   // событие из URL как есть — может оказаться в селекторе (populateEventSelector)
 let _urlYear = null;
 let _urlDistance = null;
 let _urlAgeGroup = null;
@@ -28,6 +29,7 @@ function readStateFromUrl() {
     const params = new URLSearchParams(location.search);
     const event = params.get('event');
     _urlEvent = event && eventNameMap[event] ? event : null;
+    _urlEventRaw = event;
     const yearParam = parseInt(params.get('year'), 10);
     _urlYear = Number.isFinite(yearParam) ? yearParam : null;
     _urlDistance = params.get('distance') || null;
@@ -65,6 +67,8 @@ function syncUrlFromState() {
 // тестов.
 async function initStartListPage() {
     readStateFromUrl();
+    await populateEventSelector();
+    if (!_urlEvent && _urlEventRaw && eventNameMap[_urlEventRaw]) _urlEvent = _urlEventRaw;
     try {
         const cfg = await KMUtils.fetchFresh('/api/current-event').then(r => r.json());
         currentEvent = _urlEvent || cfg.event || 'night_run';
@@ -100,6 +104,36 @@ async function initStartListPage() {
     });
 }
 document.addEventListener('DOMContentLoaded', initStartListPage);
+
+// Селектор события — все события с заявками на текущий год и позже, по дате ближайшего
+// старта (/api/start-list-events, решение 2026-10-05). Событие, которого нет в
+// KMUtils.EVENT_NAMES, получает код = своё название в БД. Ошибка API — остаются
+// варианты из разметки.
+async function populateEventSelector() {
+    const sel = document.getElementById('eventSelector');
+    let events;
+    try {
+        const data = await KMUtils.fetchFresh('/api/start-list-events').then(r => r.json());
+        events = Array.isArray(data.events) ? data.events : [];
+    } catch {
+        return;
+    }
+    if (!events.length) return;
+    const codeByDbName = {};
+    Object.keys(eventNameMap).forEach(code => { codeByDbName[KMUtils.eventDbName(code)] = code; });
+    sel.innerHTML = '';
+    events.forEach(ev => {
+        let code = codeByDbName[ev.event_name];
+        if (!code) {
+            code = ev.event_name;
+            eventNameMap[code] = ev.event_name;
+        }
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = eventNameMap[code];
+        sel.appendChild(opt);
+    });
+}
 
 // Только годы, в которых у события есть заявки (или уже заведены дистанции)
 // — список от /api/registered-runners-years, по убыванию. Без данных
