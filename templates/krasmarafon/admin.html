@@ -94,7 +94,7 @@
         <!-- ================================================================ -->
         <div id="tab-leads" class="admin-tab-content" style="display:none">
             <div class="admin-section-note">
-                Просмотр и редактирование заявок участников. Экспорт CSV — только записи без дубликатов, совместим с Copernico.
+                Просмотр и редактирование заявок участников. Экспорт CSV — только записи без дубликатов, с номерами, совместим с Copernico. «Присвоить номера» — по выбранным мероприятию и году.
             </div>
 
             <!-- Фильтры и действия -->
@@ -123,11 +123,15 @@
                 </div>
                 <div class="admin-leads-actions">
                     <button class="km-btn km-btn--secondary" onclick="loadLeads(true)">Обновить</button>
+                    <button class="km-btn km-btn--secondary" onclick="openBibsPanel()">Присвоить номера</button>
                     <button class="km-btn km-btn--primary" id="leads-export-btn" onclick="exportLeadsCsv()" disabled>Экспорт CSV</button>
                     <input type="file" id="leads-import-file" accept=".csv,.xlsx" style="display:none" onchange="onLeadsImportFileChosen()">
                     <button class="km-btn km-btn--secondary" id="leads-import-btn" onclick="document.getElementById('leads-import-file').click()">Импорт из Tilda</button>
                 </div>
             </div>
+
+            <!-- Присвоение стартовых номеров (static/js/admin-bibs.js) -->
+            <div id="bibs-panel" class="admin-section-note bibs-panel" style="display:none"></div>
 
             <!-- Превью bulk-импорта из Tilda -->
             <div id="leads-import-preview" class="admin-section-note" style="display:none"></div>
@@ -414,6 +418,7 @@
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
     <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
+    <script src="/static/js/admin-bibs.js?v={{ v }}"></script>
     <script>
     // ========================================================================
     // Tab switching

@@ -994,7 +994,7 @@ async def export_startlist_csv(
         bday = r.get('birthday')
         bday_str = bday.isoformat()[:10] if hasattr(bday, 'isoformat') else (str(bday) if bday else '')
         writer.writerow({
-            'bib': '',
+            'bib': r.get('start_number') or '',     # номер — для Copernico (присвоение в /admin)
             'chip': '',
             'surname': r.get('surname') or '',
             'name': r.get('name') or '',
@@ -1040,7 +1040,7 @@ async def export_startlist_csv_by_name(
         bday = r.get('birthday')
         bday_str = bday.isoformat()[:10] if hasattr(bday, 'isoformat') else (str(bday) if bday else '')
         writer.writerow({
-            'bib': '', 'chip': '',
+            'bib': r.get('start_number') or '', 'chip': '',     # номер — для Copernico (присвоение в /admin)
             'surname': r.get('surname') or '',
             'name': r.get('name') or '',
             'birthday': bday_str,

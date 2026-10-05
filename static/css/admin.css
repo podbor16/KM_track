@@ -536,3 +536,12 @@
 .dq-merge .admin-select { width: 150px; }
 .dq-status { font-size: 0.9rem; color: #721c24; }
 .dq-status--ok { color: #155724; }
+
+/* ------- Присвоение номеров ------- */
+
+.bibs-panel { background: var(--km-bg-card); }
+.bibs-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
+.bibs-table-wrap { overflow-x: auto; margin-top: 10px; }
+.bibs-table input.admin-select { width: 90px; }
+.bibs-num { text-align: right; }
+.bibs-result { min-width: 220px; font-size: 0.9rem; }
