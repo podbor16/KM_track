@@ -545,3 +545,9 @@
 .bibs-table input.admin-select { width: 90px; }
 .bibs-num { text-align: right; }
 .bibs-result { min-width: 220px; font-size: 0.9rem; }
+
+/* ------- Возрастные группы: поля ввода ------- */
+
+.ag-input { width: 96px; box-sizing: border-box; }
+.ag-input--label { width: 170px; }
+.ag-new-row td { border-top: 2px solid var(--km-border-light); padding-top: 10px; }

@@ -1421,9 +1421,10 @@
         const columnHtml = (sex) => {
             const rows = bySex[sex].sort((a, b) => a.min_age - b.min_age).map(row => `
                 <tr data-id="${row.id}">
-                    <td><input type="number" class="admin-select ag-min" value="${row.min_age}" style="width:64px"></td>
-                    <td><input type="number" class="admin-select ag-max" value="${row.max_age ?? ''}" placeholder="∞" style="width:64px"></td>
-                    <td><input type="text" class="admin-select ag-label" value="${row.label}" style="width:90px"></td>
+                    <td><input type="number" class="admin-select ag-input ag-min" value="${row.min_age}"></td>
+                    <td><input type="number" class="admin-select ag-input ag-max" value="${row.max_age ?? ''}" placeholder="∞"
+                               title="Пусто — без верхней границы"></td>
+                    <td><input type="text" class="admin-select ag-input ag-input--label ag-label" value="${row.label}"></td>
                     <td>
                         <button class="km-btn km-btn--secondary" onclick="saveAgeGroupRow(${row.id}, this)">Сохранить</button>
                         <button class="km-btn km-btn--secondary" onclick="removeAgeGroupRow(${row.id})">Удалить</button>
@@ -1435,13 +1436,17 @@
                 <table class="admin-loader-table">
                     <thead><tr><th>От</th><th>До</th><th>Метка</th><th></th></tr></thead>
                     <tbody>${rows || '<tr><td colspan="4">Границы не заданы — используется стандартный формат</td></tr>'}</tbody>
+                    <tfoot>
+                        <!-- новая граница — строкой таблицы, поля ровно под колонками -->
+                        <tr class="ag-new-row">
+                            <td><input type="number" class="admin-select ag-input" id="ag-new-min-${sex}" placeholder="От"></td>
+                            <td><input type="number" class="admin-select ag-input" id="ag-new-max-${sex}" placeholder="До (∞)"
+                                       title="Пусто — без верхней границы"></td>
+                            <td><input type="text" class="admin-select ag-input ag-input--label" id="ag-new-label-${sex}" placeholder="Метка, напр. ${sex === 'M' ? 'М49' : 'Ж49'}"></td>
+                            <td><button class="km-btn km-btn--primary" onclick="addAgeGroupRow('${sex}')">Добавить границу</button></td>
+                        </tr>
+                    </tfoot>
                 </table>
-                <div class="admin-leads-toolbar" style="margin-top:8px">
-                    <input type="number" class="admin-select" id="ag-new-min-${sex}" placeholder="От" style="width:64px">
-                    <input type="number" class="admin-select" id="ag-new-max-${sex}" placeholder="До (пусто = без верхней границы)" style="width:64px">
-                    <input type="text" class="admin-select" id="ag-new-label-${sex}" placeholder="Метка, напр. М49" style="width:120px">
-                    <button class="km-btn km-btn--primary" onclick="addAgeGroupRow('${sex}')">Добавить границу</button>
-                </div>
             `;
         };
 
