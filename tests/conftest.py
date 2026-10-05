@@ -24,6 +24,13 @@ load_dotenv(project_root / ".env.local", override=True)
 from app import app
 
 
+@pytest.fixture(autouse=True)
+def _no_real_notifications(monkeypatch):
+    """Тесты никогда не шлют в боевой ntfy: .env на машине разработчика содержит рабочий
+    NTFY_URL (2026-10-05 тесты вебхука отправили пользователю тестовые «заявки»)."""
+    monkeypatch.delenv("NTFY_URL", raising=False)
+
+
 @pytest.fixture(scope="session")
 def client():
     """TestClient с полным lifecycle приложения (lifespan)."""

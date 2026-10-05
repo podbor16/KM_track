@@ -12,6 +12,7 @@ POST /webhook/tilda/{token}
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime
@@ -22,6 +23,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
+from src.common import ntfy
 from src.config import settings
 from src.analytics.db_connection_optimized import get_pooled_connection
 from src.analytics.db_results import recompute_duplicate_flag
@@ -33,6 +35,7 @@ _log = logging.getLogger(__name__)
 KRS = ZoneInfo("Asia/Krasnoyarsk")
 SPOOL_DIR = Path(os.environ.get("WEBHOOK_SPOOL_DIR") or Path(__file__).resolve().parents[3] / "var" / "webhook_spool")
 REPLAY_MIN_AGE_S = 120          # свежий файл может ещё обрабатываться живым запросом
+ALERT_EVERY_S = 120             # не чаще одного сообщения о сбое на все воркеры; остальные — сводкой
 
 
 @router.post("/tilda/{token}")
@@ -71,10 +74,13 @@ async def tilda_webhook(token: str, request: Request):
         _log.error(f"tilda_webhook: ошибка трансформации: {e}", exc_info=True)
         if spool_file:
             _spool_fail(spool_file)
+        alert_unsaved(lead_summary(body=body), "failed", spool_file)
         return JSONResponse({"ok": False, "error": "transform failed"})
     except Exception as e:
         where = "в спуле, повторим" if spool_file else "спула нет"
         _log.error(f"tilda_webhook: ошибка обработки ({where}): {e}", exc_info=True)
+        summary = lead_summary(data=getattr(e, "data", None), body=body)
+        alert_unsaved(summary, "retry" if spool_file else "lost", spool_file)
         if spool_file:
             return JSONResponse({"ok": False, "error": "queued for retry"})
         return JSONResponse({"ok": False, "error": "db error"}, status_code=500)
@@ -101,6 +107,14 @@ class BadPayload(Exception):
     """Тело не превращается в заявку — повтор не поможет (в отличие от ошибок БД)."""
 
 
+class SaveFailed(Exception):
+    """Заявка разобрана, но не записана (БД) — data нужна для уведомления."""
+
+    def __init__(self, data: dict, cause: Exception):
+        super().__init__(str(cause))
+        self.data = data
+
+
 def process_tilda_body(body: dict, received_at: datetime) -> dict:
     """Заявка из тела вебхука -> leads. Повтор безопасен: уже записанную заявку
     (тот же transaction_id/order_id и ФИ на том же событии) не дублирует."""
@@ -109,9 +123,79 @@ def process_tilda_body(body: dict, received_at: datetime) -> dict:
     except Exception as e:
         raise BadPayload(str(e)) from e
     data["created_at"] = received_at
-    if not _lead_exists(data):
-        _insert_lead(data)
+    try:
+        if not _lead_exists(data):
+            _insert_lead(data)
+    except Exception as e:
+        raise SaveFailed(data, e) from e
     return data
+
+
+# ---------------------------------------------------------------- уведомления (ntfy, с маской)
+# ntfy.sh — публичный сервер без токена: email и ДР целиком не отправляем (решение
+# пользователя 2026-10-05) — email маской, от ДР только год. Найти заявку — по ФИ и времени.
+
+def mask_email(email) -> str:
+    email = str(email or "").strip()
+    if "@" not in email:
+        return "email —"
+    local, domain = email.split("@", 1)
+    return f"{local[:1]}***@{domain}"
+
+
+def birth_year(birthday) -> str:
+    m = re.search(r"(?:19|20)\d{2}", str(birthday or ""))
+    return f"{m.group(0)} г.р." if m else "ДР —"
+
+
+def lead_summary(data: dict = None, body: dict = None) -> str:
+    """«Снежная семерка 2026, 7 км — Иванов Иван, i***@mail.ru, 1990 г.р.»"""
+    src = data or body or {}
+    event = (f'{data.get("event_name")} {data.get("event_year")}, {data.get("event_distance")}'
+             if data else "событие не разобрано")
+    fio = f'{src.get("surname", "")} {src.get("name", "")}'.strip() or "ФИ —"
+    return f"{event} — {fio}, {mask_email(src.get('email'))}, {birth_year(src.get('birthday'))}"
+
+
+_ALERT_TEXT = {
+    "retry": ("Заявка Tilda не записана в БД", "Сохранена на сервере, повтор каждые 5 минут."),
+    "failed": ("Заявка Tilda не разбирается",
+               "Не записана: тело не превращается в заявку — разобрать вручную (var/webhook_spool/failed)."),
+    "lost": ("Заявка Tilda потеряна", "Не записана и не сохранена на диск — восстановить из «Заявок» Tilda."),
+}
+
+
+def alert_unsaved(summary: str, kind: str, spool_file: Path = None) -> None:
+    """Сразу в ntfy. Сбой БД обычно массовый — не чаще раза в ALERT_EVERY_S на все воркеры;
+    не отправленные сейчас попадут в сводку следующего цикла повтора (поле notified в спуле)."""
+    _spool_mark(spool_file, lead=summary, notified=False)
+    marker = SPOOL_DIR / ".last_alert"
+    if kind == "retry" and marker.exists() and time.time() - marker.stat().st_mtime < ALERT_EVERY_S:
+        return
+    title, action = _ALERT_TEXT[kind]
+    try:
+        SPOOL_DIR.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass
+    if ntfy.send(title, [summary, action], priority="high"):
+        _spool_mark(spool_file, notified=True)
+
+
+def _spool_mark(path: Path, **fields) -> None:
+    if not path:
+        return
+    for candidate in (path, SPOOL_DIR / "failed" / path.name):        # файл мог уже уехать в failed/
+        if candidate.exists():
+            try:
+                rec = json.loads(candidate.read_text(encoding="utf-8"))
+                rec.update(fields)
+                tmp = candidate.with_suffix(".tmp")
+                tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+                tmp.replace(candidate)
+            except Exception as e:
+                _log.warning(f"tilda_webhook: не удалось обновить {candidate.name}: {e}")
+            return
 
 
 # ---------------------------------------------------------------- спул
@@ -151,26 +235,40 @@ def replay_spool(min_age_s: int = REPLAY_MIN_AGE_S) -> dict:
     if not SPOOL_DIR.exists():
         return done
     now = time.time()
+    recovered, still_unnotified = [], []
     for path in sorted(SPOOL_DIR.glob("*.json")):
         age = now - path.stat().st_mtime
         if age < min_age_s:
             continue
+        rec, body = {}, {}
         try:
             rec = json.loads(path.read_text(encoding="utf-8"))
             body = rec.get("body") or parse_body(rec["raw"].encode("utf-8"), rec.get("content_type", ""))
             data = process_tilda_body(body, datetime.fromisoformat(rec["received_at"]))
             path.unlink(missing_ok=True)
             done["replayed"] += 1
+            recovered.append(rec.get("lead") or lead_summary(data=data))
             _log.info(f"tilda_webhook: повтор из спула {path.name} — {data.get('surname')} {data.get('name')}, "
                       f"event={data.get('event_name')} {data.get('event_year')}")
         except BadPayload as e:
             _spool_fail(path)
             done["bad"] = done.get("bad", 0) + 1
             _log.error(f"tilda_webhook: {path.name} не превращается в заявку — в failed/: {e}")
+            alert_unsaved(lead_summary(body=body), "failed", path)
         except Exception as e:
             done["failed"] += 1
             done["oldest_failed_age_s"] = max(done["oldest_failed_age_s"], int(age))
             _log.error(f"tilda_webhook: повтор {path.name} не удался: {e}")
+            if not rec.get("notified"):
+                lead = rec.get("lead") or lead_summary(data=getattr(e, "data", None), body=body)
+                still_unnotified.append((path, lead))
+    if still_unnotified:
+        lines = [lead for _, lead in still_unnotified] + ["Сохранены на сервере, повтор каждые 5 минут."]
+        if ntfy.send(f"Заявки Tilda не записаны в БД: {len(still_unnotified)}", lines, priority="high"):
+            for path, _ in still_unnotified:
+                _spool_mark(path, notified=True)
+    if recovered:
+        ntfy.send(f"Заявки Tilda записаны после повтора: {len(recovered)}", recovered, tags="white_check_mark")
     return done
 
 

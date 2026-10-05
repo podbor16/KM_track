@@ -88,3 +88,53 @@ def test_lead_exists_closes_connection():
         assert webhook._lead_exists({"surname": "И", "name": "И", "event_name": "Е", "event_year": 2027,
                                      "transaction_id": "tx", "order_id": None}) is True
     conn.close.assert_called_once()
+
+
+# ---------------------------------------------------------------- уведомления (решение пользователя 2026-10-05)
+
+@pytest.mark.parametrize("email, masked", [("podbor250718@yandex.ru", "p***@yandex.ru"), ("", "email —"), ("bad", "email —")])
+def test_mask_email(email, masked):
+    assert webhook.mask_email(email) == masked
+
+
+def test_summary_masks_personal_data():
+    data = {"event_name": "Снежная семерка", "event_year": 2026, "event_distance": "7 км", "surname": "Иванов",
+            "name": "Иван", "email": "ivan@mail.ru", "birthday": "1990-03-15"}
+    s = webhook.lead_summary(data=data)
+    assert s == "Снежная семерка 2026, 7 км — Иванов Иван, i***@mail.ru, 1990 г.р."
+    assert "ivan@" not in s and "03-15" not in s
+
+
+def test_db_failure_alerts_immediately_with_lead(spool):
+    data = {"event_name": "Х Трейл", "event_year": 2027, "event_distance": "5 км", "surname": "Сафонов",
+            "name": "Андрей", "email": "a@b.ru", "birthday": "1968-06-07"}
+    with patch(f"{W}.process_tilda_body", side_effect=webhook.SaveFailed(data, RuntimeError("pool"))), \
+            patch(f"{W}.ntfy.send", return_value=True) as send:
+        post()
+    title, lines = send.call_args.args
+    assert title == "Заявка Tilda не записана в БД" and lines[0].startswith("Х Трейл 2027, 5 км — Сафонов Андрей, a***@b.ru, 1968")
+
+
+def test_mass_failure_throttled_then_summarized_and_recovery_reported(spool):
+    data = {"event_name": "Х Трейл", "event_year": 2027, "event_distance": "5 км", "surname": "А", "name": "Б",
+            "email": "", "birthday": ""}
+    with patch(f"{W}.process_tilda_body", side_effect=webhook.SaveFailed(data, RuntimeError("pool"))), \
+            patch(f"{W}.ntfy.send", return_value=True) as send:
+        post(), post(), post()
+    assert send.call_count == 1                       # первый — сразу, остальные ждут сводки
+    with patch(f"{W}.process_tilda_body", side_effect=webhook.SaveFailed(data, RuntimeError("pool"))), \
+            patch(f"{W}.ntfy.send", return_value=True) as send:
+        webhook.replay_spool(min_age_s=0)
+    [(title, lines)] = [c.args for c in send.call_args_list]
+    assert title == "Заявки Tilda не записаны в БД: 2"
+    with patch(f"{W}.process_tilda_body", return_value=data), patch(f"{W}.ntfy.send", return_value=True) as send:
+        webhook.replay_spool(min_age_s=0)
+    [(title, lines)] = [c.args for c in send.call_args_list]
+    assert title == "Заявки Tilda записаны после повтора: 3" and len(lines) == 3
+
+
+def test_bad_payload_always_alerts(spool):
+    with patch(f"{W}.transform_tilda_payload", side_effect=ValueError("нет продукта")), \
+            patch(f"{W}.ntfy.send", return_value=True) as send:
+        post()
+    assert send.call_args.args[0] == "Заявка Tilda не разбирается"
