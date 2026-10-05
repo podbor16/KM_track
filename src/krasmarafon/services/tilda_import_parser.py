@@ -34,7 +34,7 @@ import openpyxl
 
 from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.services.tilda_webhook import (
-    convert_birthday, normalize_name, parse_products, is_name_suspicious, year_candidates,
+    _canonical_event_name, convert_birthday, normalize_name, parse_products, is_name_suspicious, year_candidates,
 )
 
 
@@ -300,7 +300,7 @@ def _extract_event_info(get, col_map: dict, birthday: str,
     if "event_name" in col_map and "event_distance" in col_map:
         yr = str(get("event_year") or "").strip()
         event_year = int(yr) if yr.isdigit() else None
-        return str(get("event_name") or "").strip(), event_year, str(get("event_distance") or "").strip()
+        return _canonical_event_name(str(get("event_name") or "")), event_year, str(get("event_distance") or "").strip()
 
     if "products" in col_map:
         info = parse_products([str(get("products") or "")], birthday=birthday)

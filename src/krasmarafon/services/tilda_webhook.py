@@ -3,7 +3,7 @@ import logging
 import math
 import re
 
-from src.common.names import normalize_person_name
+from src.common.names import normalize_event_name, normalize_person_name
 
 _log = logging.getLogger(__name__)
 
@@ -86,7 +86,8 @@ _EVENT_NAME_ALIASES = {
 
 
 def _canonical_event_name(name: str) -> str:
-    return _EVENT_NAME_ALIASES.get(name.strip().lower(), name)
+    name = normalize_event_name(name.strip())
+    return _EVENT_NAME_ALIASES.get(name.lower(), name)
 
 
 # kids2027, zhara2026-21, color5-2027, night2walkb-2025, Vesna5-2026y

@@ -242,3 +242,12 @@ def normalize_person_name(value):
         t = t.replace("ё", "е").replace("Ё", "Е")
         words.append("-".join(p[:1].upper() + p[1:].lower() for p in t.split("-")))
     return " ".join(words)
+
+
+def normalize_event_name(value):
+    """Название события: латинские буквы-двойники в кириллическом слове -> кириллица.
+    «Cнежная семерка» (латинская C в товаре Tilda) заводила отдельное событие-двойник
+    рядом с «Снежная семерка» (2026-10-05: 25 заявок на 2 км ушли «мимо» Снежной)."""
+    if not value or not isinstance(value, str):
+        return value
+    return " ".join(w.translate(_HOMOGLYPH) if _CYR.search(w) and _LAT.search(w) else w for w in value.split())
