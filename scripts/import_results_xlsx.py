@@ -56,7 +56,7 @@ _GROUP = re.compile(r"^\s*(мужчины|юноши|мальчики|женщи
 STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не стартовал": "Not started",
           "Не финишировал": "DNF", "Дисквалификация": "DSQ", "Сошел": "Withdrawn", "Сошёл": "Withdrawn",
           "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ"}
-_GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
+_GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
 
 
 def _secs(v):
