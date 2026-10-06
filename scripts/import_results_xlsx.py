@@ -46,7 +46,7 @@ import openpyxl
 
 from scripts.import_boom_historical import get_connection
 from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
-from src.common.categories import canonical_category
+from src.common.categories import age_category, canonical_category
 from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
@@ -236,40 +236,66 @@ def _name_key(text):
 
 def fill_from_leads(cur, event_id, rows):
     """--from-leads (решение 2026-10-06): номера нет в протоколе (Женская 2024) — номер из заявки
-    того же забега с тем же ФИО и ДР; только год рождения (Жара 2024) — полная дата из заявки с
-    тем же ФИО и годом. Берётся только однозначное совпадение; не нашлось — «01.01.год».
-    -> {что сделано: число}, [не найдено]."""
+    того же забега; только год рождения (Жара 2024) — полная дата из заявки с тем же ФИО и годом.
+    Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → фамилия+имя → фамилия (уменьшительные имена
+    «Юлька», опечатки в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
+    сторон. Не нашлось — ДР «01.01.год», номер служебный.
+    -> {что сделано: число}, [не найдено], [найдено не по ФИО+ДР — на проверку]."""
     cur.execute("SELECT surname, name, birthday, start_number FROM leads WHERE event_id = %s", (event_id,))
+    leads = [(_name_key(s), _name_key(n), bd, bib) for s, n, bd, bib in cur.fetchall()]
     by_name = collections.defaultdict(list)
-    for surname, name, bd, bib in cur.fetchall():
-        by_name[(_name_key(surname), _name_key(name))].append((bd, bib))
-    done, missing = collections.Counter(), []
+    for surname, name, bd, bib in leads:
+        by_name[(surname, name)].append((bd, bib))
+    done, missing, loose = collections.Counter(), [], []
     for r in rows:
-        need_bd = r["birthday"] == SENTINEL and r.get("birth_year")
-        need_bib = r["start_number"] is None and not r["bib"]
-        if not (need_bd or need_bib):
+        if not (r["birthday"] == SENTINEL and r.get("birth_year")):
             continue
-        cands = by_name.get((_name_key(r["surname"]), _name_key(r["name"])), [])
-        if r["birthday"] != SENTINEL:
-            cands = [c for c in cands if str(c[0]) == r["birthday"]]
-        elif r.get("birth_year"):
-            cands = [c for c in cands if c[0] and c[0].year == r["birth_year"]]
-        if need_bib:
-            cands = [c for c in cands if c[1]]
+        cands = [c for c in by_name.get((_name_key(r["surname"]), _name_key(r["name"])), [])
+                 if c[0] and c[0].year == r["birth_year"]]
         if len(cands) == 1:
-            bd, bib = cands[0]
-            if need_bd:
-                r["birthday"] = str(bd)
-                done["ДР из заявки"] += 1
-            if need_bib:
-                r["start_number"] = int(bib)
-                done["номер из заявки"] += 1
-            continue
-        if need_bd:
+            r["birthday"] = str(cands[0][0])
+            done["ДР из заявки"] += 1
+        else:
             r["birthday"] = f"{r['birth_year']}-01-01"
-        missing.append(f"{r['surname']} {r['name']} {r.get('birth_year') or r['birthday']} {r['race_status']}"
-                       f" — {'несколько заявок' if cands else 'нет заявки'}")
-    return done, missing
+            missing.append(f"{r['surname']} {r['name']} {r['birth_year']} {r['race_status']}"
+                           f" — {'несколько заявок' if cands else 'нет заявки'}")
+
+    used = {r["start_number"] for r in rows if r["start_number"]}
+    pending = [r for r in rows if r["start_number"] is None and not r["bib"]]
+    stages = (("ФИО+ДР", lambda s, n, bd: (s, n, bd)), ("фамилия+ДР", lambda s, n, bd: (s, bd)),
+              ("фамилия+имя", lambda s, n, bd: (s, n)), ("фамилия", lambda s, n, bd: (s,)))
+    for label, key in stages:
+        free = collections.defaultdict(list)
+        for surname, name, bd, bib in leads:
+            if bib and int(bib) not in used:
+                free[key(surname, name, str(bd))].append((surname, name, bd, int(bib)))
+        row_key = lambda r: key(_name_key(r["surname"]), _name_key(r["name"]), r["birthday"])
+        rows_per_key = collections.Counter(row_key(r) for r in pending)
+        for r in list(pending):
+            cands = free.get(row_key(r), [])
+            if len(cands) != 1 or rows_per_key[row_key(r)] != 1:
+                continue
+            surname, name, bd, bib = cands[0]
+            r["start_number"] = bib
+            used.add(bib)
+            pending.remove(r)
+            done["номер из заявки" + ("" if label == "ФИО+ДР" else f" ({label})")] += 1
+            if label != "ФИО+ДР":
+                loose.append(f"{r['surname']} {r['name']} {r['birthday']} → №{bib}: заявка "
+                             f"{surname.capitalize()} {name.capitalize()} {bd}")
+    missing += [f"{r['surname']} {r['name']} {r['birthday']} {r['race_status']} — нет заявки" for r in pending]
+    return done, missing, loose
+
+
+def drop_protocol_duplicates(rows):
+    """Один человек дважды в протоколе (Женская 2024: «финишировала» и «не стартовала») — ФИО, ДР
+    и номер (или его отсутствие) совпадают; остаётся строка с результатом. -> (строки, [убранные])."""
+    key = lambda r: (_name_key(r["surname"]), _name_key(r["name"]), r["birthday"], r.get("birth_year"), r["start_number"])
+    best = {}
+    for r in rows:
+        if key(r) not in best or (r["race_status"] == "Finished" and best[key(r)]["race_status"] != "Finished"):
+            best[key(r)] = r
+    return [r for r in rows if best[key(r)] is r], [r for r in rows if best[key(r)] is not r]
 
 
 def write_checkpoints(cur, event_id, distance_km, rows):
@@ -307,6 +333,9 @@ def main():
     ap.add_argument("--checkpoints-only", action="store_true", help="только дописать отметки в уже загруженные результаты")
     ap.add_argument("--from-leads", action="store_true",
                     help="нет номера / только год рождения — взять из заявок этого забега (по ФИО)")
+    ap.add_argument("--sex", help="пол тем, у кого его нет в протоколе (Женская семёрка — «Женщина»)")
+    ap.add_argument("--age-categories", action="store_true",
+                    help="нет категорий в протоколе — по возрасту в год старта (как Женская 2025)")
     ap.add_argument("--add-missing", action="store_true",
                     help="догрузить строки, которых нет в БД (по номеру), и пересчитать места всех по файлу")
     args = ap.parse_args()
@@ -321,11 +350,23 @@ def main():
             print(f"Нет события {args.event_id}")
             return 1
         rows = [row for path in args.xlsx for row in parse(path, int(ev[1]), overrides)]
+        rows, dropped = drop_protocol_duplicates(rows)
+        for r in dropped:
+            print(f"Повтор в протоколе убран: {r['surname']} {r['name']} {r['birthday']} {r['race_status']}")
         if args.from_leads:
-            done, missing = fill_from_leads(cur, args.event_id, rows)
+            done, missing, loose = fill_from_leads(cur, args.event_id, rows)
             print(f"Из заявок: {dict(done)}; не найдено однозначно: {len(missing)}")
             for line in missing:
                 print("   ", line)
+            print(f"Номер не по ФИО+ДР (проверить): {len(loose)}")
+            for line in loose:
+                print("   ", line)
+        year = int(ev[1])
+        for r in rows:
+            if args.sex and not r["sex"]:
+                r["sex"] = args.sex
+            if args.age_categories and not r["category"] and r["sex"] and r["birthday"] != SENTINEL:
+                r["category"] = age_category(r["sex"][:1], year - int(r["birthday"][:4]))
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
@@ -339,7 +380,7 @@ def main():
         print(f"Строк: {len(rows)}, по статусам: {dict(collections.Counter(r['race_status'] for r in rows))}, "
               f"без даты рождения: {sum(r['birthday'] == SENTINEL for r in rows)}, без пола: {sum(not r['sex'] for r in rows)}, "
               f"элита: {sum(r['is_elite'] for r in rows)} (основные диапазоны: {ranges or 'не заданы'}), "
-              f"текст вместо номера не-элиты: {[r['bib'] for r in rows if not r['bib'].isdigit() and not r['is_elite']]}, "
+              f"текст вместо номера не-элиты: {[r['bib'] for r in rows if r['bib'] and not r['bib'].isdigit() and not r['is_elite']]}, "
               f"повторы номеров: {dup}")
         print("Категории:", dict(sorted(collections.Counter(r["category"] for r in rows).items())))
         kt_count = collections.Counter(km for r in rows for km in r["kt"])

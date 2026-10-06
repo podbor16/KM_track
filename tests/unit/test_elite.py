@@ -90,8 +90,47 @@ def test_fill_from_leads():
         {"surname": "Петрова", "name": "Анна", "birthday": "1990-01-02", "birth_year": None, "start_number": None, "bib": "", "race_status": "Finished"},
         {"surname": "Иванов", "name": "Иван", "birthday": SENTINEL, "birth_year": 1980, "start_number": 5, "bib": "5", "race_status": "Finished"},
     ]
-    done, missing = fill_from_leads(cur, 1, rows)
+    done, missing, loose = fill_from_leads(cur, 1, rows)
     assert rows[0]["birthday"] == "2001-07-05"                    # «ё» в имени — не помеха
     assert rows[1]["start_number"] == 77
     assert rows[2]["birthday"] == "1980-01-01" and len(missing) == 1  # две заявки — неоднозначно
-    assert done == {"ДР из заявки": 1, "номер из заявки": 1}
+    assert done == {"ДР из заявки": 1, "номер из заявки": 1} and loose == []
+
+
+def _row(surname, name, birthday, status="Finished"):
+    return {"surname": surname, "name": name, "birthday": birthday, "birth_year": None,
+            "start_number": None, "bib": "", "race_status": status}
+
+
+def test_fill_from_leads_bib_stages():
+    # Женская 2024: уменьшительное имя, опечатка в ДР, заглушка ДР в заявке; номер — однозначно
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("Лопатеева", "Юлия", datetime.date(1979, 3, 3), 203),
+        ("Носкова", "Надежда", datetime.date(2012, 3, 14), 130),
+        ("Калькина", "Гульнара", datetime.date(1900, 1, 1), 262),
+        ("Лата", "Олеся", datetime.date(1987, 9, 16), 129),
+        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77), ("Петрова", "Анна", datetime.date(1991, 1, 2), 78),
+        ("Кощеева", "Дарья", datetime.date(1999, 2, 28), None),
+    ]
+    rows = [_row("Лопатеева", "Юлька", "1979-03-03"), _row("Носкова", "Надежда", "2012-03-23"),
+            _row("Калькина", "Гульнара", "1998-05-19"), _row("Лата", "Олеся", "1987-09-15"),
+            _row("Петрова", "Анна", "1985-05-05"), _row("Сидорова", "Ольга", "1970-01-01")]
+    done, missing, loose = fill_from_leads(cur, 1, rows)
+    assert [r["start_number"] for r in rows] == [203, 130, 262, 129, None, None]
+    assert done == {"номер из заявки (фамилия+ДР)": 1, "номер из заявки (фамилия+имя)": 3}
+    assert len(loose) == 4 and len(missing) == 2                  # две Петровы — неоднозначно; Сидоровой нет
+
+
+def test_drop_protocol_duplicates_keeps_finished():
+    from scripts.import_results_xlsx import drop_protocol_duplicates
+    rows = [_row("Яковлева", "Дарья", "1989-08-17", "Not started"), _row("Яковлева", "Дарья", "1989-08-17"),
+            _row("Яковлева", "Дарья", "1990-01-01")]
+    keep, dropped = drop_protocol_duplicates(rows)
+    assert [r["race_status"] for r in keep] == ["Finished", "Finished"]
+    assert [r["race_status"] for r in dropped] == ["Not started"]
+    rows[0]["start_number"], rows[1]["start_number"] = 5, 6       # разные номера — разные люди
+    assert len(drop_protocol_duplicates(rows[:2])[0]) == 2
