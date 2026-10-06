@@ -112,12 +112,25 @@ def _number(bib):
     return int(m.group(1)) if m else None
 
 
+_KIDS = {"мальчики": "Мальчики", "девочки": "Девочки"}
+
+
+def group_sex(category) -> str:
+    """Пол по названию группы протокола («Девочки 2016 г.р.» → «Женщина»); иначе ''."""
+    m = _GROUP.match(category or "")
+    if not m:
+        return ""
+    return "Мужчина" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Женщина"
+
+
 def short_category(category, year):
-    """«Мужчины 1986−1990 г. р.» → «М35-39» (возраст в год старта); одиночный год —
-    «Мальчики 2014 г.р.» → «М11». Остальное — как есть."""
+    """«Мужчины 1986−1990 г. р.» → «М35-39» (возраст в год старта). Детский забег — как в
+    результатах 2026 (Copernico): «Мальчики 2014 г.р.» (решение 2026-10-06). Остальное — как есть."""
     m = _GROUP.match(category or "")
     if not m:
         return category
+    if m.group(1).lower() in _KIDS:
+        return f"{_KIDS[m.group(1).lower()]} {m.group(2)} г.р."
     sex = "М" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Ж"
     y1, y2 = int(m.group(2)), int(m.group(3) or m.group(2))
     young, old = year - max(y1, y2), year - min(y1, y2)
@@ -136,13 +149,19 @@ def parse(path, year):
     i["clean"], i["Finish"] = finish_columns(h, rows[1:])
     cat_i = h.index("Category") if "Category" in h else None
     out = []
+    group = ""                                       # текущий заголовок группы протокола «по группам»
     for r in rows[1:]:
         if not r or not r[i["Surname"]]:                               # пусто / заголовок группы
+            if r and r[0] and _GROUP.match(str(r[0])):
+                group = str(r[0]).strip()
             continue
         bib = str(r[i["Bib"]] or "").strip()
-        category = short_category(str(r[cat_i] or "").strip(), year) if cat_i is not None else ""
+        raw_category = (str(r[cat_i] or "").strip() if cat_i is not None else "") or group
+        category = short_category(raw_category, year)
         sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
-        if not sex and category[:1].upper() in ("М", "Ж"):              # нет Gender — пол из категории (пустая — нет)
+        if not sex:                                                     # нет Gender — пол из группы/категории
+            sex = group_sex(raw_category)
+        if not sex and category[:1].upper() in ("М", "Ж"):
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
         status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
         clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
@@ -171,7 +190,7 @@ def rank(rows):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--xlsx", required=True)
+    ap.add_argument("--xlsx", required=True, nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
     ap.add_argument("--event-id", type=int, required=True, help="событие в БД (дистанция берётся из events)")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
@@ -184,7 +203,7 @@ def main():
         if not ev:
             print(f"Нет события {args.event_id}")
             return 1
-        rows = parse(args.xlsx, int(ev[1]))
+        rows = [row for path in args.xlsx for row in parse(path, int(ev[1]))]
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:

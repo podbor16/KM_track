@@ -44,3 +44,11 @@ def test_import_protocol_helpers():
     assert short_category("Женщины 1960 г.р. и старше", 2025) == "Ж65+"
     assert short_category("Мужчины 1950 г.р. и старше", 2025) == "М75+"
     assert short_category("Мужчины 1976-2007 г. р.", 2025) == "М18-49"
+
+
+def test_kids_and_group_sex():
+    from scripts.import_results_xlsx import group_sex, short_category
+    assert short_category("Мальчики 2014 г.р.", 2025) == "Мальчики 2014 г.р."      # как Детский 2026
+    assert short_category("Девочки  2016 г. р.", 2025) == "Девочки 2016 г.р."
+    assert group_sex("Девочки 2016 г.р.") == "Женщина" and group_sex(" Юноши 2012-2013 г.р.") == "Мужчина"
+    assert group_sex("Unknown") == ""
