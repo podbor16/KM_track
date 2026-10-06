@@ -21,9 +21,10 @@ def is_elite_text(dorsal) -> bool:
 
 
 def is_pacer(dorsal) -> bool:
-    """«Пейсер» в bib Copernico/протокола (пейсмейкеры, Жара 21,1 км) — на сайте «Пейсер»."""
-    low = str(dorsal or "").lower()
-    return "пейс" in low or "pacer" in low
+    """Пейсмейкеры и замыкающие («Пейсер», «Замыкающий», «Зам» в bib Copernico/протокола) —
+    на сайте «Пейсер» (решение пользователя 2026-10-06: замыкающая Жары 2026 — тоже «Пейсер»)."""
+    low = str(dorsal or "").strip().lower()
+    return "пейс" in low or "pacer" in low or "замык" in low or low == "зам"
 
 
 def main_ranges(cur, event_name, distance) -> list:

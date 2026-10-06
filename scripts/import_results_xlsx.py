@@ -78,7 +78,7 @@ def _hms(s):
 def finish_columns(h, rows):
     """-> (чистое, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
     low = [x.lower().replace('"', "").replace("«", "").replace("»", "") for x in h]
-    cand = [k for k, x in enumerate(low) if x.startswith("finish") or "чист" in x]
+    cand = [k for k, x in enumerate(low) if x.startswith("finish") or "чист" in x or x.startswith("результат")]
     timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")])
              and sum(_secs(v) is not None for v in vals) >= 0.9 * len(vals)]
     if not timed or len(timed) > 2:
@@ -99,6 +99,19 @@ def finish_columns(h, rows):
     return clean, gun
 
 
+HEADER_ALIASES = {"номер": "Bib", "фамилия": "Surname", "имя": "Name",      # протоколы с русскими
+                  "дата рождения": "Date of Birth", "статус": "Status"}       # заголовками (Жара 2025, 10 км)
+_LETTER_BIB = re.compile(r"^(\d+)[а-яa-z]$", re.I)
+
+
+def _number(bib):
+    """«1859» и «1859а» (буква — пометка организатора) → номер; текст («Элита», «Замыкающий») → None."""
+    if bib.isdigit():
+        return int(bib)
+    m = _LETTER_BIB.match(bib)
+    return int(m.group(1)) if m else None
+
+
 def short_category(category, year):
     """«Мужчины 1986−1990 г. р.» → «М35-39» (возраст в год старта); одиночный год —
     «Мальчики 2014 г.р.» → «М11». Остальное — как есть."""
@@ -108,13 +121,15 @@ def short_category(category, year):
     sex = "М" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Ж"
     y1, y2 = int(m.group(2)), int(m.group(3) or m.group(2))
     young, old = year - max(y1, y2), year - min(y1, y2)
+    if "старше" in category.lower():                    # «Женщины 1960 г.р. и старше» → «Ж65+»
+        return f"{sex}{old}+"
     return f"{sex}{young}" if young == old else f"{sex}{young}-{old}"
 
 
 def parse(path, year):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
-    h = [str(x or "").strip() for x in rows[0]]
+    h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[0]]
     i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Status")}
     start_i = h.index("Start") if "Start" in h else None
     sex_i = h.index("Gender") if "Gender" in h else None
@@ -127,7 +142,7 @@ def parse(path, year):
         bib = str(r[i["Bib"]] or "").strip()
         category = short_category(str(r[cat_i] or "").strip(), year) if cat_i is not None else ""
         sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
-        if not sex and category[:1].upper() in "МЖ":                   # нет Gender — пол из категории
+        if not sex and category[:1].upper() in ("М", "Ж"):              # нет Gender — пол из категории (пустая — нет)
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
         status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
         clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
@@ -135,7 +150,7 @@ def parse(path, year):
         out.append({
             "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
             "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
-            "bib": bib, "start_number": int(bib) if bib.isdigit() else None,
+            "bib": bib, "start_number": _number(bib),
             "category": category,
             "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
             "gun": gun if finished else None, "clean": clean if finished else None,

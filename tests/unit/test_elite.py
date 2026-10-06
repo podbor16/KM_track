@@ -33,5 +33,14 @@ def test_main_ranges_only_for_elite_cluster():
 def test_pacer_text():
     from src.analytics.elite import is_pacer
     assert is_pacer("Пейсер") and is_pacer("пейсмейкер 1:30") and is_pacer("Pacer")
-    assert not is_pacer("Элита") and not is_pacer("Зам") and not is_pacer("150")
+    assert is_pacer("ЗАМЫКАЮЩИЙ") and is_pacer("Зам")                      # замыкающие — тоже «Пейсер»
+    assert not is_pacer("Элита") and not is_pacer("150") and not is_pacer("Замятин")
     assert not is_elite("Пейсер", [], surname="Пцарев")
+
+
+def test_import_protocol_helpers():
+    from scripts.import_results_xlsx import _number, short_category
+    assert [_number(b) for b in ("1859", "1859а", "ЗАМЫКАЮЩИЙ", "ПОПОВ")] == [1859, 1859, None, None]
+    assert short_category("Женщины 1960 г.р. и старше", 2025) == "Ж65+"
+    assert short_category("Мужчины 1950 г.р. и старше", 2025) == "М75+"
+    assert short_category("Мужчины 1976-2007 г. р.", 2025) == "М18-49"
