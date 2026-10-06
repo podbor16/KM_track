@@ -57,6 +57,9 @@ class LeadAdminItem(BaseModel):
     is_new_event: Optional[int] = None
     category: Optional[str] = None
     start_number: Optional[int] = None
+    created_at: Optional[str] = None   # дата заявки — видно, какая основная (самая поздняя)
+    dup_main: Optional[int] = None     # «Сделать основной» — ручной выбор
+    name_ok: Optional[int] = None      # «Имя в порядке»
 
     @model_validator(mode='before')
     @classmethod
@@ -66,6 +69,9 @@ class LeadAdminItem(BaseModel):
             bday = values.get('birthday')
             if bday is not None and hasattr(bday, 'isoformat'):
                 values['birthday'] = bday.isoformat()[:10]
+            created = values.get('created_at')
+            if created is not None and hasattr(created, 'isoformat'):
+                values['created_at'] = created.isoformat(sep=' ')[:16]
         return values
 
     class Config:
@@ -88,7 +94,6 @@ class LeadPatch(BaseModel):
     surname: Optional[str] = None
     name: Optional[str] = None
     event_distance: Optional[str] = None
-    is_duplicate: Optional[int] = None
     status: Optional[Any] = None
     birthday: Optional[str] = None
 

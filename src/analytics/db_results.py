@@ -1510,20 +1510,9 @@ def _leads_where(
         conds.append("event_distance = %s"); params.append(event_distance)
     if is_duplicate is not None:
         if is_duplicate:
-            # Показываем ВСЕ записи людей с дублями — по триплету (surname, name, birthday)
-            # в том же мероприятии/году
-            sub_conds = ["is_duplicate = 1", "surname IS NOT NULL", "name IS NOT NULL", "birthday IS NOT NULL"]
-            sub_params: list = []
-            if event_name is not None:
-                sub_conds.append("event_name = %s"); sub_params.append(event_name)
-            if event_year is not None:
-                sub_conds.append("event_year = %s"); sub_params.append(event_year)
-            sub_where = "WHERE " + " AND ".join(sub_conds)
-            conds.append(
-                f"(surname, name, birthday) IN "
-                f"(SELECT DISTINCT surname, name, birthday FROM leads {sub_where})"
-            )
-            params.extend(sub_params)
+            # вся группа человека на дистанцию — основная заявка рядом с дублями
+            # (решение пользователя 2026-10-06); группа = та же, что у recompute_duplicates()
+            conds.append("(client_id, event_id) IN (SELECT client_id, event_id FROM leads WHERE is_duplicate = 1)")
         else:
             conds.append("is_duplicate = %s"); params.append(0)
     if is_name_suspicious is not None:
@@ -1581,8 +1570,11 @@ def get_leads_admin(
             is_name_suspicious=is_name_suspicious, search=search,
         )
         cur = conn.cursor(dictionary=True, buffered=True)
+        # дубликаты — группами по человеку и дистанции, внутри группы новые выше
+        order = ("surname, name, client_id, event_id, created_at DESC, id DESC" if is_duplicate
+                 else "id DESC")
         cur.execute(
-            f"SELECT * FROM leads {where} ORDER BY id DESC LIMIT %s OFFSET %s",
+            f"SELECT * FROM leads {where} ORDER BY {order} LIMIT %s OFFSET %s",
             params + [limit, offset],
         )
         rows = cur.fetchall()
@@ -1764,7 +1756,9 @@ def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
 
 def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Partial UPDATE leads по leads.id. Поля — только из whitelist."""
-    ALLOWED = {'surname', 'name', 'event_distance', 'is_duplicate', 'status', 'birthday'}
+    # is_duplicate не правится руками — его считает recompute_duplicates() (основная заявка
+    # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu
+    ALLOWED = {'surname', 'name', 'event_distance', 'status', 'birthday'}
     safe = {k: v for k, v in fields.items() if k in ALLOWED}
     if not safe:
         return None
@@ -1773,18 +1767,6 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         return None
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
-        if 'surname' in safe or 'name' in safe:
-            # Правка ФИО вручную в админке должна пересчитывать
-            # is_name_suspicious — иначе после исправления "Kazakov"->"Казаков"
-            # флаг остаётся застрявшим на старом значении (реальная находка:
-            # 1547 записей с чистым кириллическим ФИО, но is_name_suspicious=1,
-            # т.к. этот путь никогда его не пересчитывал).
-            cur.execute("SELECT surname, name FROM leads WHERE id = %s", (lead_id,))
-            current = cur.fetchone()
-            if current:
-                new_surname = safe.get('surname', current['surname'])
-                new_name = safe.get('name', current['name'])
-                safe['is_name_suspicious'] = int(is_name_suspicious(new_surname, new_name))
         set_clause = ", ".join(f"{col} = %s" for col in safe)
         cur.execute(
             f"UPDATE leads SET {set_clause} WHERE id = %s",
@@ -1810,51 +1792,108 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
             pass
 
 
-def recompute_duplicate_flag(client_id: int, event_id: int) -> int:
-    """Пересчитать is_duplicate для ВСЕХ строк группы (client_id, event_id):
-    1, если в группе >1 строки, иначе 0 — включая первую заявку, не только
-    повторные (trg_leads_before_insert делает `SET NEW.is_duplicate = 0;`
-    безусловно на каждой вставке — мёртвый код, is_duplicate никогда не
-    считался автоматически). Вызывается из webhook._insert_lead после
-    INSERT и из bulk-импорта Tilda-заявок.
+# Основная заявка человека на дистанцию (группа client_id + event_id) — одна, остальные
+# дубли (решение пользователя 2026-10-06): ручной выбор «Сделать основной» (dup_main),
+# затем заявка с уже присвоенным номером, затем самая поздняя. То же правило —
+# src/analytics/bibs.main_lead_key (номера, «Экспорт CSV»).
+_MAIN_LEAD_ORDER = "dup_main DESC, (COALESCE(start_number, 0) > 0) DESC, created_at DESC, id DESC"
 
-    Один атомарный UPDATE с производной таблицей (MySQL не разрешает
-    `UPDATE leads SET ... WHERE ... IN (SELECT ... FROM leads)` напрямую по
-    той же таблице — оборачиваем в derived table), устраняет гонку между
-    параллельными вызовами вместо read-then-write.
-    """
-    if not client_id or not event_id:
+
+def recompute_duplicates(cur, client_ids=None) -> int:
+    """Пересчитать is_duplicate: 0 — основной заявке группы, 1 — остальным. client_ids —
+    только группы этих карточек (после вставки/склейки), None — вся таблица (ночная
+    проверка). Меняются только строки, где флаг расходится. Коммит — за вызывающим."""
+    cond = ""
+    params: list = []
+    if client_ids is not None:
+        ids = sorted({int(i) for i in client_ids if i})
+        if not ids:
+            return 0
+        cond = f" AND client_id IN ({','.join(['%s'] * len(ids))})"
+        params = ids
+    cur.execute(
+        f"""UPDATE leads l JOIN (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY client_id, event_id ORDER BY {_MAIN_LEAD_ORDER}) > 1 AS dup
+                FROM leads WHERE client_id != 0 AND event_id != 0{cond}
+            ) t ON t.id = l.id
+            SET l.is_duplicate = t.dup
+            WHERE l.is_duplicate <> t.dup""",
+        params,
+    )
+    return cur.rowcount
+
+
+def recompute_duplicate_flag(client_id: int, event_id: int = None) -> int:
+    """recompute_duplicates() для одной карточки на своём соединении — после вставки
+    заявки (вебхук, импорт)."""
+    if not client_id:
         return 0
     conn = get_pooled_connection()
     if not conn:
         return 0
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            UPDATE leads
-            SET is_duplicate = (
-                SELECT cnt > 1 FROM (
-                    SELECT COUNT(*) AS cnt FROM leads
-                    WHERE client_id = %s AND event_id = %s
-                ) t
-            )
-            WHERE client_id = %s AND event_id = %s
-            """,
-            (client_id, event_id, client_id, event_id),
-        )
+        updated = recompute_duplicates(cur, [client_id])
         conn.commit()
-        updated = cur.rowcount
         cur.close()
         return updated
     except Exception as e:
-        logger.error(f"recompute_duplicate_flag error (client_id={client_id}, event_id={event_id}): {e}")
+        logger.error(f"recompute_duplicate_flag error (client_id={client_id}): {e}")
         return 0
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+
+def set_lead_main(lead_id: int) -> Optional[int]:
+    """«Сделать основной»: выбор запоминается (dup_main), остальные заявки человека на эту
+    дистанцию — дубли. -> client_id или None, если заявки нет."""
+    conn = get_pooled_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT client_id, event_id FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        client_id, event_id = row
+        if conn.in_transaction:
+            conn.commit()
+        conn.start_transaction()
+        cur.execute("UPDATE leads SET dup_main = (id = %s) WHERE client_id = %s AND event_id = %s",
+                    (lead_id, client_id, event_id))
+        recompute_duplicates(cur, [client_id])
+        conn.commit()
+        cur.close()
+        invalidate_start_list_cache()
+        return client_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def set_lead_name_ok(lead_id: int) -> bool:
+    """«Имя в порядке»: снимает флаг подозрительного ФИО (триггер trg_leads_name_flag_bu);
+    смена ФИО заявки сбрасывает отметку."""
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM leads WHERE id = %s", (lead_id,))
+        found = cur.fetchone() is not None
+        if found:
+            cur.execute("UPDATE leads SET name_ok = 1 WHERE id = %s", (lead_id,))
+            conn.commit()
+        cur.close()
+        return found
+    finally:
+        conn.close()
 
 
 _IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone', 'event_distance', 'is_name_suspicious', 'birthday')

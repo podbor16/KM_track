@@ -984,9 +984,9 @@ async def get_startlist(event_id: int = PathParam(..., description="ID собы�
 
 
 def _export_rows(rows):
-    """Одна заявка на человека (самая ранняя — та же, что получает номер), по номеру, затем ФИО."""
-    from src.analytics.bibs import first_lead_per_person
-    return sorted(first_lead_per_person(rows),
+    """Одна заявка на человека (основная — та же, что получает номер), по номеру, затем ФИО."""
+    from src.analytics.bibs import main_lead_per_person
+    return sorted(main_lead_per_person(rows),
                   key=lambda r: (r.get('start_number') or 10**9, r.get('surname') or '', r.get('name') or ''))
 
 
@@ -995,7 +995,7 @@ async def export_startlist_csv(
     event_id: int = PathParam(..., description="ID события в БД"),
     user: str = Depends(api_require_auth),
 ):
-    """CSV-выгрузка стартового списка: по одной заявке на человека (самой ранней). Требует авторизации."""
+    """CSV-выгрузка стартового списка: по одной заявке на человека (основной). Требует авторизации."""
     from fastapi.responses import StreamingResponse
     from src.analytics.db_results import get_leads_by_event
 
@@ -1039,7 +1039,7 @@ async def export_startlist_csv_by_name(
     event_distance: Optional[str] = None,
     user: str = Depends(api_require_auth),
 ):
-    """CSV-экспорт по event_name/year/distance: по одной заявке на человека (самой ранней)."""
+    """CSV-экспорт по event_name/year/distance: по одной заявке на человека (основной)."""
     from fastapi.responses import StreamingResponse
     from src.analytics.db_results import get_leads_admin
 

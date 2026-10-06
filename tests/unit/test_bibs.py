@@ -4,9 +4,9 @@ from src.analytics.bibs import build_groups, plan
 EV = "Снежная семерка"
 
 
-def L(i, client, dist="7 км", created="2026-10-01 10:00:00", bib=None, bd="1990-01-01", event_id=None):
+def L(i, client, dist="7 км", created="2026-10-01 10:00:00", bib=None, bd="1990-01-01", event_id=None, main=0):
     return {"id": i, "client_id": client, "event_id": event_id or (119 if dist == "7 км" else 120),
-            "event_distance": dist, "birthday": bd, "created_at": created, "start_number": bib}
+            "event_distance": dist, "birthday": bd, "created_at": created, "start_number": bib, "dup_main": main}
 
 
 def run(leads, ranges, event=EV):
@@ -27,10 +27,17 @@ def test_existing_bibs_kept_and_taken():
     assert ok and assign == [(2, 2), (4, 4)]           # 1 и 3 заняты — первые свободные
 
 
-def test_duplicates_one_bib_per_person_earliest():
+def test_duplicates_one_bib_per_person_latest():
+    # основная заявка — самая поздняя (решение 2026-10-06); номера — по времени основных заявок
     leads = [L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01"), L(3, 11, created="2026-10-02")]
     rows, assign, ok = run(leads, {("7 км", ""): (1, 100)})
-    assert assign == [(2, 1), (3, 2)] and rows[0]["duplicates"] == 1
+    assert assign == [(3, 1), (1, 2)] and rows[0]["duplicates"] == 1
+
+
+def test_manual_main_lead_wins_over_latest():
+    leads = [L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01", main=1)]
+    _, assign, ok = run(leads, {("7 км", ""): (1, 100)})
+    assert ok and assign == [(2, 1)]
 
 
 def test_person_with_bib_on_other_lead_gets_none():
@@ -79,9 +86,17 @@ def test_nothing_to_assign_needs_no_range():
     assert ok and assign == []
 
 
-def test_first_lead_per_person_keeps_earliest_and_people_with_duplicates():
+def test_main_lead_per_person_keeps_people_with_duplicates():
     # раньше экспорт брал is_duplicate=0 и выкидывал человека с дублем целиком
-    from src.analytics.bibs import first_lead_per_person
-    leads = [L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01", bib=7), L(3, 11, created="2026-10-02"),
+    from src.analytics.bibs import main_lead_per_person
+    leads = [L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01"), L(3, 11, created="2026-10-02"),
              L(4, 10, dist="2 км", created="2026-10-03")]      # тот же человек на другой дистанции — отдельно
-    assert sorted(l["id"] for l in first_lead_per_person(leads)) == [2, 3, 4]
+    assert sorted(l["id"] for l in main_lead_per_person(leads)) == [1, 3, 4]
+
+
+def test_main_lead_order_manual_then_bib_then_latest():
+    from src.analytics.bibs import main_lead_per_person
+    pick = lambda leads: main_lead_per_person(leads)[0]["id"]
+    assert pick([L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-01", bib=7)]) == 2      # номер — у основной
+    assert pick([L(1, 10, created="2026-10-05", bib=8), L(2, 10, created="2026-10-01", main=1)]) == 2
+    assert pick([L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-05")]) == 2             # равное время — больший id

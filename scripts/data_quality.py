@@ -26,6 +26,7 @@ if hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.analytics.data_quality import apply_auto, pending_findings  # noqa: E402
+from src.analytics.db_results import recompute_duplicates  # noqa: E402
 from src.common import ntfy  # noqa: E402
 
 ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -43,6 +44,13 @@ def main():
     conn = get_connection()
     try:
         done = apply_auto(conn, "nightly") if args.apply_auto else None
+        if args.apply_auto:
+            # страховка: флаг «Дубль» по всей базе (правки мимо вебхука/импорта/склеек)
+            cur = conn.cursor()
+            dup_fixed = recompute_duplicates(cur)
+            conn.commit()
+            cur.close()
+            print(f"Флаг «Дубль» пересчитан: исправлено заявок {dup_fixed}")
         findings, _ = pending_findings(conn, set(args.event_id or []))
     finally:
         conn.close()

@@ -4,7 +4,8 @@
 - диапазон номеров — на дистанцию; у Детского забега — на год рождения (мальчики и
   девочки вместе, как в 2026: 2019 г.р. — 9000+), 500 м Детского — без номеров;
 - диапазоны задаются в админке перед присвоением и запоминаются для события (bib_ranges);
-- номер — одному человеку на дистанции: самая ранняя заявка (created_at, id), дубли — без номера;
+- номер — одному человеку на дистанции: основной заявке (main_lead_key — ручной выбор, заявка
+  с номером, самая поздняя; решение 2026-10-06), дубли — без номера;
 - уже присвоенные номера не трогаются и заняты; новым — первые свободные номера диапазона
   в порядке подачи заявок; номер уникален на всё событие года (все дистанции);
 - не хватает номеров или не задан диапазон — ничего не записывается, ошибка по группе.
@@ -31,14 +32,20 @@ class Group:
         return f"{self.distance}, {self.key} г.р." if self.key else self.distance
 
 
-def first_lead_per_person(leads):
-    """Одна заявка на человека на дистанции — самая ранняя (created_at, id): та же, что получает
-    номер. Для «Экспорт CSV»: фильтр is_duplicate=0 выкидывал человека с дублем целиком (флаг
-    ставится на все его заявки) — он не попадал в Copernico (решение пользователя 2026-10-05)."""
-    first = {}
-    for lead in sorted(leads, key=lambda l: (str(l.get("created_at")), l["id"])):
-        first.setdefault((lead["client_id"], lead["event_id"]), lead)
-    return list(first.values())
+def main_lead_key(lead):
+    """Чем больше, тем «основнее» (сортировать с reverse=True) — то же правило, что
+    db_results._MAIN_LEAD_ORDER (is_duplicate в БД): ручной выбор «Сделать основной»,
+    заявка с номером, самая поздняя."""
+    return (int(lead.get("dup_main") or 0), int(_has_bib(lead)), str(lead.get("created_at")), lead["id"])
+
+
+def main_lead_per_person(leads):
+    """Одна заявка на человека на дистанции — основная (main_lead_key): та же, что получает номер
+    и не помечена дублем. Для «Экспорт CSV» (решение пользователя 2026-10-05)."""
+    main = {}
+    for lead in sorted(leads, key=main_lead_key, reverse=True):
+        main.setdefault((lead["client_id"], lead["event_id"]), lead)
+    return list(main.values())
 
 
 def _has_bib(lead):
@@ -56,7 +63,7 @@ def build_groups(event_name, leads):
     groups = {}
     taken = set()
     by_person = {}
-    for lead in sorted(leads, key=lambda l: (str(l["created_at"]), l["id"])):
+    for lead in sorted(leads, key=main_lead_key, reverse=True):
         if (event_name, lead["event_distance"]) in NO_BIB_DISTANCES:
             continue
         if _has_bib(lead):
@@ -120,7 +127,7 @@ def plan(groups, ranges, taken):
 
 def load_leads(conn, event_name, event_year):
     cur = conn.cursor(dictionary=True)
-    cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number
+    cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main
                    FROM leads WHERE event_name = %s AND event_year = %s""", (event_name, int(event_year)))
     rows = cur.fetchall()
     cur.close()

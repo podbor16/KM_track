@@ -1,7 +1,7 @@
 // static/js/admin-bibs.js
 // /admin → «Стартовый список» → «Присвоить номера». Правила — src/analytics/bibs.py:
 // диапазон на дистанцию (Детский — на год рождения, 500 м без номеров), уже присвоенные
-// номера не трогаются, номер — самой ранней заявке человека, не хватает номеров — ничего
+// номера не трогаются, номер — основной заявке человека (не дублю), не хватает номеров — ничего
 // не записывается. Диапазоны запоминаются для события. API: src/krasmarafon/routers/bibs.py
 
 let bibsState = null;          // {event_name, event_year, groups}
@@ -73,7 +73,7 @@ function renderBibsForm(data) {
     panel.innerHTML = `
         <div class="bibs-head"><b>Присвоение номеров — ${bibsEsc(bibsState.event_name)} ${bibsState.event_year}</b>
             <button class="km-btn km-btn--secondary" onclick="closeBibsPanel()">Закрыть</button></div>
-        <div class="dq-muted">Номер получает самая ранняя заявка человека; уже присвоенные номера не меняются и не выдаются повторно.
+        <div class="dq-muted">Номер получает основная заявка человека (не дубль); уже присвоенные номера не меняются и не выдаются повторно.
             Диапазоны запоминаются для события. Если где-то не хватает номеров — ничего не записывается.</div>
         ${skipped}
         ${data.groups.length ? `

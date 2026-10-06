@@ -7,6 +7,8 @@ import collections
 import json
 from pathlib import Path
 
+from src.analytics.db_results import recompute_duplicates
+
 
 def apply(conn, cards, final, merged_into, backup, drop_leads=()):
     """drop_leads — карточки, чьи заявки удаляются (решение пользователя); карточка
@@ -65,6 +67,8 @@ def apply(conn, cards, final, merged_into, backup, drop_leads=()):
                             (before[i]["phone"], before[i]["email"], i))
         for chunk in (ids[i:i + 1000] for i in range(0, len(ids), 1000)):
             recompute_aggregates(cur, chunk)
+        # заявки склеенных карточек на одну дистанцию — теперь одна основная, остальные дубли
+        recompute_duplicates(cur, ids)
         if drop_leads:
             cur.execute(f"DELETE FROM leads WHERE client_id IN ({ph(drop_leads)})")
             cur.execute(f"""DELETE c FROM clients c WHERE c.id IN ({ph(drop_leads)})

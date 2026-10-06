@@ -94,7 +94,7 @@
         <!-- ================================================================ -->
         <div id="tab-leads" class="admin-tab-content" style="display:none">
             <div class="admin-section-note">
-                Просмотр и редактирование заявок участников. Экспорт CSV — по одной заявке на человека (самой ранней), с номерами, совместим с Copernico. «Присвоить номера» — по выбранным мероприятию и году.
+                Просмотр и редактирование заявок участников. Экспорт CSV — по одной заявке на человека (основной — не дубль), с номерами, совместим с Copernico. «Присвоить номера» — по выбранным мероприятию и году.
             </div>
 
             <!-- Фильтры и действия -->
@@ -993,7 +993,7 @@
         {label:'Дистанция', col:'event_distance'}, {label:'Категория', col:'category'},
         {label:'Дата рожд.', col:'birthday'}, {label:'Email', col:'email'},
         {label:'Телефон', col:'phone'}, {label:'Order ID', col:'order_id'},
-        {label:'Дубликат', col:'is_duplicate'}, {label:'Статус', col:'status'},
+        {label:'Дубликат', col:'is_duplicate'}, {label:'Дата заявки', col:'created_at'}, {label:'Статус', col:'status'},
         {label:'Действия', col:null},
     ];
 
@@ -1068,8 +1068,9 @@
             <td class="leads-col-phone"></td>
             <td class="leads-col-orderid"></td>
             <td class="leads-col-dup"><span class="admin-badge"></span></td>
+            <td class="leads-col-created"></td>
             <td class="leads-col-status"></td>
-            <td><button class="km-btn km-btn--secondary leads-btn-edit">Изменить</button></td>`;
+            <td class="leads-col-actions"><button class="km-btn km-btn--secondary leads-btn-edit">Изменить</button></td>`;
 
         tr.querySelector('.leads-col-id').textContent = lead.id;
         tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
@@ -1082,16 +1083,56 @@
         tr.querySelector('.leads-col-email').textContent = lead.email || '—';
         tr.querySelector('.leads-col-phone').textContent = lead.phone || '—';
         tr.querySelector('.leads-col-orderid').textContent = lead.order_id ?? '—';
-        const dupBadge = tr.querySelector('.leads-col-dup .admin-badge');
-        dupBadge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
-        dupBadge.textContent = lead.is_duplicate ? 'Дубль' : 'Ок';
+        _renderDupBadge(tr, lead);
+        tr.querySelector('.leads-col-created').textContent = _fmtCreated(lead.created_at);
         tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
 
         tr.querySelector('.leads-btn-edit').addEventListener('click', () => {
             if (tr.dataset.editing === '1') cancelLeadEdit(tr, lead);
             else startLeadEdit(tr, lead);
         });
+        // Основная заявка человека на дистанцию — самая поздняя, пока не выбрана вручную;
+        // «Имя в порядке» снимает флаг подозрительного ФИО до следующей правки ФИО
+        const actions = tr.querySelector('.leads-col-actions');
+        if (lead.is_duplicate) actions.appendChild(_leadActionBtn('Сделать основной', `/api/admin/leads/${lead.id}/main`));
+        if (lead.is_name_suspicious) actions.appendChild(_leadActionBtn('Имя в порядке', `/api/admin/leads/${lead.id}/name-ok`));
         return tr;
+    }
+
+    function _renderDupBadge(tr, lead) {
+        const cell = tr.querySelector('.leads-col-dup');
+        cell.innerHTML = '';
+        const badge = document.createElement('span');
+        badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
+        badge.textContent = lead.is_duplicate ? 'Дубль' : (lead.dup_main ? 'Основная' : 'Ок');
+        if (lead.dup_main) badge.title = 'Выбрана основной вручную';
+        cell.appendChild(badge);
+    }
+
+    function _fmtCreated(v) {
+        if (!v) return '—';
+        const [d, t] = String(v).split(/[ T]/);
+        const [y, m, dd] = d.split('-');
+        return `${dd}.${m}.${y}${t ? ' ' + t.slice(0, 5) : ''}`;
+    }
+
+    function _leadActionBtn(label, url) {
+        const btn = document.createElement('button');
+        btn.className = 'km-btn km-btn--secondary';
+        btn.style.marginLeft = '4px';
+        btn.textContent = label;
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const r = await fetch(url, { method: 'POST' });
+                if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+                loadLeads(true, _leadsData.length);
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
+                btn.disabled = false;
+            }
+        });
+        return btn;
     }
 
     function startLeadEdit(tr, lead) {
@@ -1111,22 +1152,13 @@
         tr.querySelector('.leads-col-distance').replaceChildren(mkInput(lead.event_distance, '70px'));
         tr.querySelector('.leads-col-status').replaceChildren(mkInput(lead.status, '70px'));
 
-        const dupCell = tr.querySelector('.leads-col-dup');
-        const lbl = document.createElement('label');
-        lbl.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer';
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.checked = !!lead.is_duplicate;
-        lbl.appendChild(chk);
-        lbl.appendChild(document.createTextNode('Дубль'));
-        dupCell.replaceChildren(lbl);
 
         const saveBtn = document.createElement('button');
         saveBtn.className = 'km-btn km-btn--primary leads-btn-save';
         saveBtn.textContent = 'Сохранить';
         saveBtn.style.marginLeft = '4px';
         saveBtn.addEventListener('click', () => saveLeadEdit(tr, lead));
-        tr.querySelector('td:last-child').appendChild(saveBtn);
+        tr.querySelector('.leads-btn-edit').after(saveBtn);
     }
 
     function cancelLeadEdit(tr, lead) {
@@ -1137,13 +1169,7 @@
         tr.querySelector('.leads-col-name').textContent = lead.name || '';
         tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
         tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
-
-        const dupCell = tr.querySelector('.leads-col-dup');
-        dupCell.innerHTML = '';
-        const badge = document.createElement('span');
-        badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
-        badge.textContent = lead.is_duplicate ? 'Дубль' : 'Ок';
-        dupCell.appendChild(badge);
+        _renderDupBadge(tr, lead);
 
         const saveBtn = tr.querySelector('.leads-btn-save');
         if (saveBtn) saveBtn.remove();
@@ -1158,7 +1184,6 @@
             surname: tr.querySelector('.leads-col-surname input').value.trim() || null,
             name:    tr.querySelector('.leads-col-name input').value.trim() || null,
             event_distance: tr.querySelector('.leads-col-distance input').value.trim() || null,
-            is_duplicate:   tr.querySelector('.leads-col-dup input[type=checkbox]').checked ? 1 : 0,
             status:  tr.querySelector('.leads-col-status input').value.trim() || null,
         };
 

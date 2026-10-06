@@ -445,6 +445,27 @@ async def patch_lead(
     return LeadAdminItem.model_validate(updated).model_dump()
 
 
+@router.post("/api/admin/leads/{lead_id}/main")
+async def make_lead_main(lead_id: int, user: str = Depends(api_require_auth)) -> dict:
+    """«Сделать основной»: остальные заявки человека на эту дистанцию становятся дублями."""
+    from src.analytics.db_results import set_lead_main
+
+    client_id = await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_main(lead_id))
+    if client_id is None:
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    return {"status": "ok"}
+
+
+@router.post("/api/admin/leads/{lead_id}/name-ok")
+async def mark_lead_name_ok(lead_id: int, user: str = Depends(api_require_auth)) -> dict:
+    """«Имя в порядке»: снять флаг подозрительного ФИО (до следующей правки ФИО)."""
+    from src.analytics.db_results import set_lead_name_ok
+
+    if not await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_name_ok(lead_id)):
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    return {"status": "ok"}
+
+
 # --- Возрастные группы (age_group_configs) --------------------------------
 # Границы для конкретных (event_name, event_distance) — переопределяют
 # дефолтную формулу calculate_age_group() при отображении регистраций

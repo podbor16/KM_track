@@ -12,64 +12,24 @@ def _mock_conn():
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
-def test_editing_name_recomputes_is_name_suspicious_to_clean(mock_get_conn):
-    """Реальная находка: правка ФИО вручную в админке (напр. "Kazakov"->
-    "Казаков") раньше не пересчитывала is_name_suspicious — флаг оставался
-    застрявшим (1547 записей с чистым ФИО, но is_name_suspicious=1)."""
+def test_editing_name_leaves_suspicious_flag_to_db_trigger(mock_get_conn):
+    """С 2026-10-06 флаг считает триггер trg_leads_name_flag_bu на любой записи заявки
+    (раньше — только этот путь в коде, и флаг застревал после правок мимо него)."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchone.side_effect = [
-        {"surname": "Kazakov", "name": "Oleg"},  # текущие значения до правки
-        {"id": 1, "surname": "Казаков", "name": "Олег"},  # финальный SELECT *
-    ]
+    cur.fetchone.return_value = {"id": 1, "surname": "Казаков", "name": "Олег"}
 
     update_lead(1, {"surname": "Казаков", "name": "Олег"})
 
     update_call = next(c for c in cur.execute.call_args_list if c.args[0].startswith("UPDATE leads"))
-    sql, params = update_call.args
-    assert "is_name_suspicious" in sql
-    assert 0 in params
+    assert update_call.args == ("UPDATE leads SET surname = %s, name = %s WHERE id = %s", ["Казаков", "Олег", 1])
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
-def test_editing_name_recomputes_is_name_suspicious_to_suspicious(mock_get_conn):
-    conn, cur = _mock_conn()
-    mock_get_conn.return_value = conn
-    cur.fetchone.side_effect = [
-        {"surname": "Иванов", "name": "Иван"},
-        {"id": 1, "surname": "Ivanov", "name": "Иван"},
-    ]
-
-    update_lead(1, {"surname": "Ivanov"})
-
-    update_call = next(c for c in cur.execute.call_args_list if c.args[0].startswith("UPDATE leads"))
-    sql, params = update_call.args
-    assert "is_name_suspicious" in sql
-    assert 1 in params
-
-
-@patch("src.analytics.db_results.get_pooled_connection")
-def test_editing_only_name_uses_existing_surname_for_check(mock_get_conn):
-    """Правится только name — surname берётся из текущего значения в БД, не
-    теряется при пересчёте."""
-    conn, cur = _mock_conn()
-    mock_get_conn.return_value = conn
-    cur.fetchone.side_effect = [
-        {"surname": "Иванов", "name": "Old"},
-        {"id": 1, "surname": "Иванов", "name": "Иван"},
-    ]
-
-    update_lead(1, {"name": "Иван"})
-
-    select_current = next(
-        c for c in cur.execute.call_args_list
-        if c.args[0].startswith("SELECT surname, name")
-    )
-    assert select_current.args[1] == (1,)
-    update_call = next(c for c in cur.execute.call_args_list if c.args[0].startswith("UPDATE leads"))
-    sql, params = update_call.args
-    assert "is_name_suspicious" in sql
-    assert 0 in params  # "Иванов"/"Иван" — оба чистые
+def test_duplicate_flag_not_editable_by_hand(mock_get_conn):
+    """is_duplicate считает recompute_duplicates(); основная заявка — кнопкой «Сделать основной»."""
+    assert update_lead(1, {"is_duplicate": 1}) is None
+    mock_get_conn.assert_not_called()
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
