@@ -52,7 +52,11 @@ SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
 SERVICE_NUMBER_OFFSET = 1000                         # как SWEEPER_NUMBER_OFFSET в load_race_results.py
 _GROUP = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)\W*(\d{4})(?:\s*[-−–]\s*(\d{4}))?", re.I)
-STATUS = {"Disqualified": "DSQ"}                     # как в остальных результатах БД
+# статусы протоколов (англ./рус./исп. выгрузки Copernico) → как в остальных результатах БД
+STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не стартовал": "Not started",
+          "Не финишировал": "DNF", "Дисквалификация": "DSQ", "Сошел": "Withdrawn", "Сошёл": "Withdrawn",
+          "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ"}
+_GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
 
 
 def _secs(v):
@@ -83,7 +87,7 @@ def _hms(s):
 def finish_columns(h, rows):
     """-> (чистое, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
     low = [x.lower().replace('"', "").replace("«", "").replace("»", "") for x in h]
-    cand = [k for k, x in enumerate(low) if x.startswith("finish") or "чист" in x or x.startswith("результат")]
+    cand = [k for k, x in enumerate(low) if x.startswith(("finish", "финиш", "результат")) or "чист" in x]
     timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")])
              and sum(_secs(v) is not None for v in vals) >= 0.9 * len(vals)]
     if not timed or len(timed) > 2:
@@ -104,8 +108,12 @@ def finish_columns(h, rows):
     return clean, gun
 
 
-HEADER_ALIASES = {"номер": "Bib", "фамилия": "Surname", "имя": "Name",      # протоколы с русскими
-                  "дата рождения": "Date of Birth", "статус": "Status"}       # заголовками (Жара 2025, 10 км)
+HEADER_ALIASES = {"номер": "Bib", "фамилия": "Surname", "имя": "Name",      # протоколы с русскими/англ.
+                  "дата рождения": "Date of Birth", "статус": "Status",      # заголовками в любом регистре
+                  "bib": "Bib", "dorsal": "Bib", "surname": "Surname", "name": "Name",
+                  "date of birth": "Date of Birth", "birthdate": "Date of Birth", "status": "Status",
+                  "gender": "Gender", "category": "Category", "start": "Start", "старт": "Start",
+                  "год рождения": "Birth Year"}
 _LETTER_BIB = re.compile(r"^(\d+)[а-яa-z]$", re.I)
 
 
@@ -163,8 +171,15 @@ def checkpoint_columns(h, overrides):
 def parse(path, year, overrides=None):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
-    h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[0]]
-    i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Status")}
+    # строка заголовков — первая с «Фамилия»/«Surname» (у протоколов Жары 2024 сверху шапка)
+    head = next(k for k, r in enumerate(rows[:20])
+                if r and any(str(v or "").strip().lower() in ("фамилия", "surname") for v in r))
+    h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[head]]
+    rows = rows[head:]
+    i = {k: h.index(k) for k in ("Surname", "Name", "Status")}
+    bib_i = h.index("Bib") if "Bib" in h else None                  # Женская 2024 — без номеров
+    bd_i = h.index("Date of Birth") if "Date of Birth" in h else None
+    by_i = h.index("Birth Year") if "Birth Year" in h else None      # Жара 2024 — только год
     start_i = h.index("Start") if "Start" in h else None
     sex_i = h.index("Gender") if "Gender" in h else None
     i["clean"], i["Finish"] = finish_columns(h, rows[1:])
@@ -174,10 +189,10 @@ def parse(path, year, overrides=None):
     group = ""                                       # текущий заголовок группы протокола «по группам»
     for r in rows[1:]:
         if not r or not r[i["Surname"]]:                               # пусто / заголовок группы
-            if r and r[0] and _GROUP.match(str(r[0])):
+            if r and r[0] and _GROUP_HEADER.match(str(r[0])):
                 group = str(r[0]).strip()
             continue
-        bib = str(r[i["Bib"]] or "").strip()
+        bib = str(r[bib_i] or "").strip() if bib_i is not None else ""
         raw_category = (str(r[cat_i] or "").strip() if cat_i is not None else "") or group
         category = canonical_category(short_category(raw_category, year))
         sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
@@ -190,7 +205,9 @@ def parse(path, year, overrides=None):
         finished = status == "Finished" and clean and gun
         out.append({
             "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
-            "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
+            "birthday": _birthday(r[bd_i]) if bd_i is not None else SENTINEL,
+            "birth_year": int(r[by_i]) if by_i is not None and str(r[by_i] or "").strip().isdigit() else None,
+            "sex": sex,
             "bib": bib, "start_number": _number(bib),
             "category": category,
             "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
@@ -209,6 +226,48 @@ def rank(rows):
             by_sex[r["sex"]] += 1
             by_cat[r["category"]] += 1
             r["rank_absolute" + suffix], r["rank_sex" + suffix], r["rank_category" + suffix] = n, by_sex[r["sex"]], by_cat[r["category"]]
+
+
+def _name_key(text):
+    return str(text or "").strip().lower().replace("ё", "е")
+
+
+def fill_from_leads(cur, event_id, rows):
+    """--from-leads (решение 2026-10-06): номера нет в протоколе (Женская 2024) — номер из заявки
+    того же забега с тем же ФИО и ДР; только год рождения (Жара 2024) — полная дата из заявки с
+    тем же ФИО и годом. Берётся только однозначное совпадение; не нашлось — «01.01.год».
+    -> {что сделано: число}, [не найдено]."""
+    cur.execute("SELECT surname, name, birthday, start_number FROM leads WHERE event_id = %s", (event_id,))
+    by_name = collections.defaultdict(list)
+    for surname, name, bd, bib in cur.fetchall():
+        by_name[(_name_key(surname), _name_key(name))].append((bd, bib))
+    done, missing = collections.Counter(), []
+    for r in rows:
+        need_bd = r["birthday"] == SENTINEL and r.get("birth_year")
+        need_bib = r["start_number"] is None and not r["bib"]
+        if not (need_bd or need_bib):
+            continue
+        cands = by_name.get((_name_key(r["surname"]), _name_key(r["name"])), [])
+        if r["birthday"] != SENTINEL:
+            cands = [c for c in cands if str(c[0]) == r["birthday"]]
+        elif r.get("birth_year"):
+            cands = [c for c in cands if c[0] and c[0].year == r["birth_year"]]
+        if need_bib:
+            cands = [c for c in cands if c[1]]
+        if len(cands) == 1:
+            bd, bib = cands[0]
+            if need_bd:
+                r["birthday"] = str(bd)
+                done["ДР из заявки"] += 1
+            if need_bib:
+                r["start_number"] = int(bib)
+                done["номер из заявки"] += 1
+            continue
+        if need_bd:
+            r["birthday"] = f"{r['birth_year']}-01-01"
+        missing.append(f"{r['surname']} {r['name']} {r.get('birth_year') or r['birthday']} {r['race_status']}"
+                       f" — {'несколько заявок' if cands else 'нет заявки'}")
+    return done, missing
 
 
 def write_checkpoints(cur, event_id, distance_km, rows):
@@ -244,6 +303,8 @@ def main():
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--checkpoints", default="", help="км отметок для колонок без километража: «razv1=1.75,razv2=5.25»")
     ap.add_argument("--checkpoints-only", action="store_true", help="только дописать отметки в уже загруженные результаты")
+    ap.add_argument("--from-leads", action="store_true",
+                    help="нет номера / только год рождения — взять из заявок этого забега (по ФИО)")
     ap.add_argument("--add-missing", action="store_true",
                     help="догрузить строки, которых нет в БД (по номеру), и пересчитать места всех по файлу")
     args = ap.parse_args()
@@ -258,6 +319,11 @@ def main():
             print(f"Нет события {args.event_id}")
             return 1
         rows = [row for path in args.xlsx for row in parse(path, int(ev[1]), overrides)]
+        if args.from_leads:
+            done, missing = fill_from_leads(cur, args.event_id, rows)
+            print(f"Из заявок: {dict(done)}; не найдено однозначно: {len(missing)}")
+            for line in missing:
+                print("   ", line)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:

@@ -73,3 +73,25 @@ def test_write_checkpoints_sets_distances_and_pace():
     vals = cur.execute.call_args_list[1].args[1]
     assert vals[:4] == ["00:09:17", "00:03:42", "00:17:03", "00:03:47"] and vals[4:14] == [None] * 10
     assert vals[-2:] == [89, 7]
+
+
+def test_fill_from_leads():
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import SENTINEL, fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("Попов", "Артем", datetime.date(2001, 7, 5), None),
+        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77),
+        ("Иванов", "Иван", datetime.date(1980, 1, 1), None), ("Иванов", "Иван", datetime.date(1980, 5, 5), None),
+    ]
+    rows = [
+        {"surname": "Попов", "name": "Артём", "birthday": SENTINEL, "birth_year": 2001, "start_number": 1087, "bib": "1087", "race_status": "Finished"},
+        {"surname": "Петрова", "name": "Анна", "birthday": "1990-01-02", "birth_year": None, "start_number": None, "bib": "", "race_status": "Finished"},
+        {"surname": "Иванов", "name": "Иван", "birthday": SENTINEL, "birth_year": 1980, "start_number": 5, "bib": "5", "race_status": "Finished"},
+    ]
+    done, missing = fill_from_leads(cur, 1, rows)
+    assert rows[0]["birthday"] == "2001-07-05"                    # «ё» в имени — не помеха
+    assert rows[1]["start_number"] == 77
+    assert rows[2]["birthday"] == "1980-01-01" and len(missing) == 1  # две заявки — неоднозначно
+    assert done == {"ДР из заявки": 1, "номер из заявки": 1}
