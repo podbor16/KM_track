@@ -237,8 +237,8 @@ def _name_key(text):
 def fill_from_leads(cur, event_id, rows):
     """--from-leads (решение 2026-10-06): номера нет в протоколе (Женская 2024) — номер из заявки
     того же забега; только год рождения (Жара 2024) — полная дата из заявки с тем же ФИО и годом.
-    Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → фамилия+имя → фамилия (уменьшительные имена
-    «Юлька», опечатки в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
+    Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → имя+ДР → фамилия+имя → фамилия (уменьшительные
+    имена «Юлька», опечатки в фамилии «Жиленковв» и в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
     сторон. Не нашлось — ДР «01.01.год», номер служебный.
     -> {что сделано: число}, [не найдено], [найдено не по ФИО+ДР — на проверку]."""
     cur.execute("SELECT surname, name, birthday, start_number FROM leads WHERE event_id = %s", (event_id,))
@@ -263,7 +263,7 @@ def fill_from_leads(cur, event_id, rows):
     used = {r["start_number"] for r in rows if r["start_number"]}
     pending = [r for r in rows if r["start_number"] is None and not r["bib"]]
     stages = (("ФИО+ДР", lambda s, n, bd: (s, n, bd)), ("фамилия+ДР", lambda s, n, bd: (s, bd)),
-              ("фамилия+имя", lambda s, n, bd: (s, n)), ("фамилия", lambda s, n, bd: (s,)))
+              ("имя+ДР", lambda s, n, bd: (n, bd)), ("фамилия+имя", lambda s, n, bd: (s, n)), ("фамилия", lambda s, n, bd: (s,)))
     for label, key in stages:
         free = collections.defaultdict(list)
         for surname, name, bd, bib in leads:
