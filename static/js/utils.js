@@ -6,9 +6,11 @@ window.KMUtils = {
     STATIC_V: (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
         ? (new URL(document.currentScript.src).searchParams.get('v') || '') : '',
 
-    // Номер участника для показа: у элиты (элитный кластер Жары 21,1 км) — «Элита»
-    bibLabel(bib, isElite) {
+    // Номер участника для показа: у элиты (элитный кластер Жары 21,1 км) — «Элита»,
+    // у пейсмейкеров — «Пейсер» (номер у них служебный)
+    bibLabel(bib, isElite, isPacer) {
         if (isElite) return 'Элита';
+        if (isPacer) return 'Пейсер';
         return bib == null || bib === 0 ? '' : String(bib);
     },
 

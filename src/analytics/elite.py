@@ -20,6 +20,12 @@ def is_elite_text(dorsal) -> bool:
     return "элит" in str(dorsal or "").lower()
 
 
+def is_pacer(dorsal) -> bool:
+    """«Пейсер» в bib Copernico/протокола (пейсмейкеры, Жара 21,1 км) — на сайте «Пейсер»."""
+    low = str(dorsal or "").lower()
+    return "пейс" in low or "pacer" in low
+
+
 def main_ranges(cur, event_name, distance) -> list:
     """[(start, end)] — основные диапазоны номеров дистанции; [] — не элитный кластер или не заданы."""
     if (event_name, distance) not in ELITE_DISTANCES:

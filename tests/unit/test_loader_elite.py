@@ -18,10 +18,14 @@ def test_init_marks_elite():
         {"dorsal": "7", "surname": "Быстров", "name": "Олег", "gender": "Male", "category": "М18-24"},
         {"dorsal": "Элита", "surname": "Попов", "name": "Артем", "gender": "Male", "category": "М18-24"},
         {"dorsal": "Зам", "surname": "Замыкающий", "name": "Петр", "gender": "Male", "category": ""},
+        {"dorsal": "Пейсер", "surname": "Пцарев", "name": "Александр", "gender": "Male", "category": ""},
     ]
     assert loader.init_mode(runners)
-    got = {row[2]: (row[1], row[-1]) for row in batches}
+    got = {row[2]: (row[1], row[-2]) for row in batches}          # (номер, is_elite)
+    pacer = {row[2]: row[-1] for row in batches}
     assert got["Обычный"] == ("150", 0)
     assert got["Быстров"] == ("7", 1)                                   # вне основного диапазона
     assert got["Попов"][1] == 1 and int(got["Попов"][0]) >= SWEEPER_NUMBER_OFFSET   # служебный номер — для диплома
     assert got["Замыкающий"][1] == 0
+    assert pacer == {"Обычный": 0, "Быстров": 0, "Попов": 0, "Замыкающий": 0, "Пцарев": 1}
+    assert got["Пцарев"][1] == 0 and int(got["Пцарев"][0]) >= SWEEPER_NUMBER_OFFSET

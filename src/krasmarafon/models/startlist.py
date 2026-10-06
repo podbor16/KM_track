@@ -62,6 +62,7 @@ class LeadAdminItem(BaseModel):
     name_ok: Optional[int] = None      # «Имя в порядке»
     refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»)
     is_elite: Optional[int] = None     # «Элита» — на сайте вместо номера
+    is_pacer: Optional[int] = None     # «Пейсер» — на сайте вместо номера
 
     @model_validator(mode='before')
     @classmethod

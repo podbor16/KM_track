@@ -251,3 +251,19 @@ def normalize_event_name(value):
     if not value or not isinstance(value, str):
         return value
     return " ".join(w.translate(_HOMOGLYPH) if _CYR.search(w) and _LAT.search(w) else w for w in value.split())
+
+
+_SEX_FEMALE = ("ж", "female", "f")
+_SEX_MALE = ("м", "male", "m")
+
+
+def normalize_sex(value) -> str:
+    """«жен», «Ж», «женский», «Female» → «Женщина»; «муж», «М», «мужской» → «Мужчина» —
+    канон заявок и результатов (бейдж пола на сайте; 2026-10-06). Пусто/непонятно — как есть."""
+    raw = str(value or "").strip()
+    low = raw.lower()
+    if low.startswith(_SEX_FEMALE) or low in ("female", "f"):
+        return "Женщина"
+    if low.startswith(_SEX_MALE) or low in ("male", "m"):
+        return "Мужчина"
+    return raw

@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 from scripts.import_boom_historical import get_connection
-from src.analytics.elite import distance_label, is_elite, main_ranges
+from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
 from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
@@ -174,6 +174,7 @@ def main():
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
             r["is_elite"] = int(is_elite(r["bib"], ranges, r["surname"]))
+            r["is_pacer"] = int(is_pacer(r["bib"]))
             if r["start_number"] is None:               # именной номер / «Элита» — служебный номер
                 r["start_number"], next_service = next_service, next_service + 1
         rank(rows)
@@ -202,14 +203,14 @@ def main():
             """INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status, time_gun_start, time_gun_finish, time_clear_finish, rank_absolute, rank_sex,
                    rank_category, rank_absolute_clean, rank_sex_clean, rank_category_clean, finish_pace_avg_gun,
-                   finish_pace_avg_clean, time_gun_finish_ms, time_clear_finish_ms, is_elite)
-               VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   finish_pace_avg_clean, time_gun_finish_ms, time_clear_finish_ms, is_elite, is_pacer)
+               VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             [(r["surname"], r["name"], r["birthday"], args.event_id, r["sex"], r["start_number"], r["category"],
               r["race_status"], _hms(r["start"]), _hms(r["gun"]), _hms(r["clean"]), r.get("rank_absolute"),
               r.get("rank_sex"), r.get("rank_category"), r.get("rank_absolute_clean"), r.get("rank_sex_clean"),
               r.get("rank_category_clean"), pace(r["gun"]), pace(r["clean"]),
               r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None,
-              r["is_elite"]) for r in rows])
+              r["is_elite"], r["is_pacer"]) for r in rows])
         conn.commit()
         cur.execute("SELECT COUNT(*), SUM(client_id = 0), SUM(race_status = 'Finished') FROM results WHERE event_id = %s",
                     (args.event_id,))

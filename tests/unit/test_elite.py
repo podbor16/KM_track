@@ -28,3 +28,10 @@ def test_main_ranges_only_for_elite_cluster():
     assert main_ranges(cur, "Жара", "5 км") == []
     assert cur.execute.call_count == 1
     assert distance_label(21.1) == "21.1 км" and distance_label("5.0") == "5 км"
+
+
+def test_pacer_text():
+    from src.analytics.elite import is_pacer
+    assert is_pacer("Пейсер") and is_pacer("пейсмейкер 1:30") and is_pacer("Pacer")
+    assert not is_pacer("Элита") and not is_pacer("Зам") and not is_pacer("150")
+    assert not is_elite("Пейсер", [], surname="Пцарев")

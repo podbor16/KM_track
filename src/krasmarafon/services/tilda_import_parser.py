@@ -32,6 +32,7 @@ import re
 
 import openpyxl
 
+from src.common.names import normalize_sex
 from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.services.tilda_webhook import (
     _canonical_event_name, convert_birthday, normalize_name, parse_products, is_name_suspicious, year_candidates,
@@ -462,7 +463,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
             result.rows.append(ImportRow(
                 row_number=idx, surname=surname, name=name, birthday=birthday,
                 event_name=event_name, event_year=event_year, event_distance=event_distance,
-                sex=str(get("sex") or "").strip(), city=str(get("city") or "").strip(),
+                sex=normalize_sex(get("sex")), city=str(get("city") or "").strip(),
                 club=str(get("club") or "").strip(),
                 email=str(get("email") or "").strip(), phone=str(get("phone") or "").strip(),
                 amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),

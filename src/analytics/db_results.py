@@ -84,6 +84,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
             r.sex,
             r.start_number,
             r.is_elite,
+            r.is_pacer,
             r.category,
             r.race_status,
             r.time_gun_start,
@@ -176,6 +177,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             r.sex,
             r.start_number,
             r.is_elite,
+            r.is_pacer,
             r.category,
             r.race_status,
             r.time_gun_start,
@@ -1934,6 +1936,10 @@ def _import_is_elite(raw: str) -> bool:
     return (raw or "").strip().lower() == "элита"
 
 
+def _import_is_pacer(raw: str) -> bool:
+    return (raw or "").strip().lower() in ("пейсер", "пейсмейкер")
+
+
 def set_lead_refund(lead_id: int, refund: bool) -> bool:
     """Ручная пометка «Возврат» (refund=1 — импорт её не снимает) / «Снять возврат»."""
     conn = get_pooled_connection()
@@ -2213,6 +2219,8 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                                 [2 if row.refund else 0, m['id']])
                     if _import_is_elite(row.start_number):
                         cur.execute("UPDATE leads SET is_elite = 1 WHERE id = %s", [m['id']])
+                    if _import_is_pacer(row.start_number):
+                        cur.execute("UPDATE leads SET is_pacer = 1 WHERE id = %s", [m['id']])
                     updated += 1
             else:
                 def _float_or_zero(v):
@@ -2229,14 +2237,14 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event, source, created_at, refund, is_elite
+                        status, is_new, is_new_event, source, created_at, refund, is_elite, is_pacer
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
                         %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s,
-                        %(refund)s, %(is_elite)s
+                        %(refund)s, %(is_elite)s, %(is_pacer)s
                     )
                     """,
                     {
@@ -2264,6 +2272,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         'start_number': _import_bib(row.start_number),
                         'refund': 2 if getattr(row, 'refund', False) else 0,
                         'is_elite': int(_import_is_elite(row.start_number)),
+                        'is_pacer': int(_import_is_pacer(row.start_number)),
                     },
                 )
                 new_id = cur.lastrowid

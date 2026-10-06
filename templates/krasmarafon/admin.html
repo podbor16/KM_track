@@ -1078,8 +1078,8 @@
 
         tr.querySelector('.leads-col-id').textContent = lead.id;
         const bibCell = tr.querySelector('.leads-col-bib');
-        bibCell.textContent = KMUtils.bibLabel(lead.start_number, lead.is_elite) || '—';
-        if (lead.is_elite && lead.start_number) bibCell.title = `Номер ${lead.start_number}`;
+        bibCell.textContent = KMUtils.bibLabel(lead.start_number, lead.is_elite, lead.is_pacer) || '—';
+        if ((lead.is_elite || lead.is_pacer) && lead.start_number) bibCell.title = `Номер ${lead.start_number}`;
         tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
         tr.querySelector('.leads-col-name').textContent = lead.name || '';
         tr.querySelector('.leads-col-sex').textContent = lead.sex || '—';

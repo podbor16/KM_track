@@ -3,7 +3,7 @@ import logging
 import math
 import re
 
-from src.common.names import normalize_event_name, normalize_person_name
+from src.common.names import normalize_event_name, normalize_person_name, normalize_sex
 
 _log = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ def transform_tilda_payload(body: dict, first_race_date=None, purchased_on=None)
     return {
         "surname": surname,
         "name": name,
-        "sex": body.get("sex", ""),
+        "sex": normalize_sex(body.get("sex", "")),
         "city": body.get("city", ""),
         "club": body.get("club", ""),
         "birthday": birthday,

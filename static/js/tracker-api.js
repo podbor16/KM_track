@@ -663,7 +663,7 @@ function renderTopTableHTML(results, gender) {
             const pace = parseDuration(runner.finish_pace_avg_gun) || parseDuration(runner.finish_pace_avg) || '-';
             return `<tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; text-align: center;">${runner[rankField] || '—'}</td>
-                <td style="padding: 8px; text-align: center;">${KMUtils.bibLabel(runner.start_number, runner.is_elite) || '-'}</td>
+                <td style="padding: 8px; text-align: center;">${KMUtils.bibLabel(runner.start_number, runner.is_elite, runner.is_pacer) || '-'}</td>
                 <td style="padding: 8px;"><strong>${runner.surname} ${runner.name}</strong></td>
                 <td style="padding: 8px;">${KMUtils.normalizeCategory(runner.category) || '-'}</td>
                 <td style="padding: 8px; text-align: center; font-family: monospace;">${parseDuration(runner.time_gun_finish) || '-'}</td>

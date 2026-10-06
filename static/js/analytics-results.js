@@ -444,6 +444,7 @@ function normalizeRunnerData(runners) {
             rank_category_clean: runner.rank_category_clean,
             start_number: runner.start_number,
             is_elite: runner.is_elite,
+            is_pacer: runner.is_pacer,
             event_id: runner.event_id,
 
             // Дистанция и событие - используем distance_from_event из БД если есть
@@ -1061,7 +1062,7 @@ function renderResultsTable(runners) {
 
         row.innerHTML = `
             <td class="km-td ${rowBg}">${rankDisplay}</td>
-            <td class="km-td ${rowBg}"><span class="km-bib">${KMUtils.bibLabel(runner.start_number, runner.is_elite)}</span></td>
+            <td class="km-td ${rowBg}"><span class="km-bib">${KMUtils.bibLabel(runner.start_number, runner.is_elite, runner.is_pacer)}</span></td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
             ${categoryCell}
             <td class="km-td ${rowBg}">${timeCol1}</td>

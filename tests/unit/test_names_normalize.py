@@ -45,3 +45,12 @@ def test_tilda_product_with_latin_c_maps_to_cyrillic_event():
     from src.krasmarafon.services.tilda_webhook import parse_products
     info = parse_products(["2 км Cнежная семерка 2026 (snow2-2026, Выберите категорию: Основная) x 1 ≡ 700"])
     assert info["event_name"] == "Снежная семерка"
+
+
+def test_normalize_sex():
+    from src.common.names import normalize_sex
+    for v in ("женщина", "Ж", "ж", "жен", "женский", "Женский", "Женщина", "Female"):
+        assert normalize_sex(v) == "Женщина", v
+    for v in ("мужчина", "М", "муж", "мужской", "Мужской", "Мужчина", "Male", "M"):
+        assert normalize_sex(v) == "Мужчина", v
+    assert normalize_sex("") == "" and normalize_sex(None) == ""
