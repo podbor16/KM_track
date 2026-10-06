@@ -49,8 +49,7 @@ def main_lead_per_person(leads):
 
 
 def _has_bib(lead):
-    """Номер есть — и «Элита» (0, именной номер): ей номер не присваивается."""
-    return lead.get("start_number") is not None
+    return bool(lead.get("start_number"))
 
 
 def group_key(event_name, lead):
@@ -67,8 +66,10 @@ def build_groups(event_name, leads):
     for lead in sorted(leads, key=main_lead_key, reverse=True):
         if (event_name, lead["event_distance"]) in NO_BIB_DISTANCES:
             continue
-        if _has_bib(lead) and int(lead["start_number"]):
+        if _has_bib(lead):
             taken.add(int(lead["start_number"]))
+        if lead.get("is_elite"):                       # элите номер дают отдельно (вне диапазонов)
+            continue
         by_person.setdefault((lead["client_id"], lead["event_id"]), []).append(lead)
     for person_leads in by_person.values():
         first = person_leads[0]
@@ -128,7 +129,7 @@ def plan(groups, ranges, taken):
 
 def load_leads(conn, event_name, event_year):
     cur = conn.cursor(dictionary=True)
-    cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main
+    cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main, is_elite
                    FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""", (event_name, int(event_year)))
     rows = cur.fetchall()
     cur.close()

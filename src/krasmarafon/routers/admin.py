@@ -469,12 +469,11 @@ async def mark_lead_refund(lead_id: int, refund: bool = True, user: str = Depend
 
 @router.post("/api/admin/leads/{lead_id}/elite")
 async def mark_lead_elite(lead_id: int, elite: bool = True, user: str = Depends(api_require_auth)) -> dict:
-    """«Элита» / «Снять элиту»: именной номер (start_number 0) — на сайте «Элита»."""
+    """«Элита» / «Снять элиту» (leads.is_elite): на сайте вместо номера — «Элита»."""
     from src.analytics.db_results import set_lead_elite
 
-    error = await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_elite(lead_id, elite))
-    if error:
-        raise HTTPException(status_code=404 if "не найдена" in error else 409, detail=error)
+    if not await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_elite(lead_id, elite)):
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
     return {"status": "ok"}
 
 

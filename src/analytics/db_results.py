@@ -83,6 +83,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
             r.event_id,
             r.sex,
             r.start_number,
+            r.is_elite,
             r.category,
             r.race_status,
             r.time_gun_start,
@@ -174,6 +175,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             r.event_id,
             r.sex,
             r.start_number,
+            r.is_elite,
             r.category,
             r.race_status,
             r.time_gun_start,
@@ -1819,7 +1821,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
 # дубли (решение пользователя 2026-10-06): ручной выбор «Сделать основной» (dup_main),
 # затем заявка с уже присвоенным номером, затем самая поздняя. То же правило —
 # src/analytics/bibs.main_lead_key (номера, «Экспорт CSV»).
-_MAIN_LEAD_ORDER = "dup_main DESC, (start_number IS NOT NULL) DESC, created_at DESC, id DESC"
+_MAIN_LEAD_ORDER = "dup_main DESC, (COALESCE(start_number, 0) > 0) DESC, created_at DESC, id DESC"
 
 
 def recompute_duplicates(cur, client_ids=None) -> int:
@@ -1902,39 +1904,34 @@ def set_lead_main(lead_id: int) -> Optional[int]:
         conn.close()
 
 
-ELITE_BIB = 0     # «Элита» — именной номер (Жара 21,1 км): на сайте «Элита», номер не присваивается
-
-
-def set_lead_elite(lead_id: int, elite: bool) -> Optional[str]:
-    """Кнопка «Элита»/«Снять элиту»: start_number 0 / NULL. Настоящий номер не трогается.
-    -> None — готово, иначе текст ошибки."""
+def set_lead_elite(lead_id: int, elite: bool) -> bool:
+    """Кнопка «Элита»/«Снять элиту» (leads.is_elite): на сайте вместо номера «Элита»,
+    «Присвоить номера» её пропускает (номер элите дают отдельно). Номер не трогается."""
     conn = get_pooled_connection()
     if not conn:
-        return "нет соединения с БД"
+        return False
     try:
         cur = conn.cursor()
-        cur.execute("SELECT client_id, start_number FROM leads WHERE id = %s", (lead_id,))
-        row = cur.fetchone()
-        if not row:
-            return "заявка не найдена"
-        if row[1] not in (None, ELITE_BIB):
-            return f"у заявки уже номер {row[1]}"
-        cur.execute("UPDATE leads SET start_number = %s WHERE id = %s", (ELITE_BIB if elite else None, lead_id))
-        recompute_duplicates(cur, [row[0]])
+        cur.execute("SELECT 1 FROM leads WHERE id = %s", (lead_id,))
+        if cur.fetchone() is None:
+            return False
+        cur.execute("UPDATE leads SET is_elite = %s WHERE id = %s", (int(elite), lead_id))
         conn.commit()
         cur.close()
         invalidate_start_list_cache()
-        return None
+        return True
     finally:
         conn.close()
 
 
 def _import_bib(raw: str):
-    """Колонка «Номер» файла импорта: число, «Элита» → 0, иначе — нет номера."""
+    """Колонка «Номер» файла импорта: число — номер; «Элита» — отметка элиты (номера нет)."""
     raw = (raw or "").strip()
-    if raw.isdigit():
-        return int(raw)
-    return ELITE_BIB if raw.lower() == "элита" else None
+    return int(raw) if raw.isdigit() else None
+
+
+def _import_is_elite(raw: str) -> bool:
+    return (raw or "").strip().lower() == "элита"
 
 
 def set_lead_refund(lead_id: int, refund: bool) -> bool:
@@ -2214,6 +2211,8 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         )
                     cur.execute("UPDATE leads SET refund = %s WHERE id = %s AND refund <> 1",
                                 [2 if row.refund else 0, m['id']])
+                    if _import_is_elite(row.start_number):
+                        cur.execute("UPDATE leads SET is_elite = 1 WHERE id = %s", [m['id']])
                     updated += 1
             else:
                 def _float_or_zero(v):
@@ -2230,14 +2229,14 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event, source, created_at, refund
+                        status, is_new, is_new_event, source, created_at, refund, is_elite
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
                         %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s,
-                        %(refund)s
+                        %(refund)s, %(is_elite)s
                     )
                     """,
                     {
@@ -2264,6 +2263,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         'is_name_suspicious': int(row.is_name_suspicious),
                         'start_number': _import_bib(row.start_number),
                         'refund': 2 if getattr(row, 'refund', False) else 0,
+                        'is_elite': int(_import_is_elite(row.start_number)),
                     },
                 )
                 new_id = cur.lastrowid

@@ -14,8 +14,10 @@
 Промежуточные отметки не загружаются — дистанции КТ неизвестны.
 Протоколы «по группам» (Жара 2025): строки-заголовки групп пропускаются, Start
 необязателен, категории «Мужчины 1986−1990 г. р.» / «Мальчики 2014 г.р.» → краткий
-вид как в 2026 («М35-39» — возраст в год старта). Элита — в Bib фамилия (именной
-номер): номер 0, на сайте «Элита» (решение пользователя 2026-10-06).
+вид как в 2026 («М35-39» — возраст в год старта). Элита (src/analytics/elite.py) —
+в Bib «Элита» или фамилия (именной номер, Жара 2025): служебный номер как у замыкающих
+в загрузчике (максимальный номер + 1000…), на сайте «Элита», диплом — по этому номеру.
+Числовой номер вне основных диапазонов Жары 21,1 км («Присвоить номера») — тоже элита.
 Места считаются заново: абсолютное/пол/категория по времени выстрела и по
 чистому времени. client_id подставляет trg_results_before_insert.
 
@@ -38,11 +40,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 from scripts.import_boom_historical import get_connection
+from src.analytics.elite import distance_label, is_elite, main_ranges
 from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
-ELITE_BIB = 0                                        # именной номер (фамилия вместо числа)
+SERVICE_NUMBER_OFFSET = 1000                         # как SWEEPER_NUMBER_OFFSET в load_race_results.py
 _GROUP = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)\W*(\d{4})(?:\s*[-−–]\s*(\d{4}))?", re.I)
 STATUS = {"Disqualified": "DSQ"}                     # как в остальных результатах БД
 
@@ -132,7 +135,7 @@ def parse(path, year):
         out.append({
             "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
             "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
-            "start_number": int(bib) if bib.isdigit() else ELITE_BIB,
+            "bib": bib, "start_number": int(bib) if bib.isdigit() else None,
             "category": category,
             "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
             "gun": gun if finished else None, "clean": clean if finished else None,
@@ -167,12 +170,20 @@ def main():
             print(f"Нет события {args.event_id}")
             return 1
         rows = parse(args.xlsx, int(ev[1]))
+        ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
+        next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
+        for r in rows:
+            r["is_elite"] = int(is_elite(r["bib"], ranges, r["surname"]))
+            if r["start_number"] is None:               # именной номер / «Элита» — служебный номер
+                r["start_number"], next_service = next_service, next_service + 1
         rank(rows)
-        bibs = collections.Counter(r["start_number"] for r in rows if r["start_number"] != ELITE_BIB)
+        bibs = collections.Counter(r["start_number"] for r in rows)
         dup = [b for b, k in bibs.items() if k > 1]
         print(f"Строк: {len(rows)}, по статусам: {dict(collections.Counter(r['race_status'] for r in rows))}, "
               f"без даты рождения: {sum(r['birthday'] == SENTINEL for r in rows)}, без пола: {sum(not r['sex'] for r in rows)}, "
-              f"элита (номер 0): {sum(r['start_number'] == ELITE_BIB for r in rows)}, повторы номеров: {dup}")
+              f"элита: {sum(r['is_elite'] for r in rows)} (основные диапазоны: {ranges or 'не заданы'}), "
+              f"текст вместо номера не-элиты: {[r['bib'] for r in rows if not r['bib'].isdigit() and not r['is_elite']]}, "
+              f"повторы номеров: {dup}")
         print("Категории:", dict(sorted(collections.Counter(r["category"] for r in rows).items())))
         if dup:
             return 1
@@ -191,13 +202,14 @@ def main():
             """INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status, time_gun_start, time_gun_finish, time_clear_finish, rank_absolute, rank_sex,
                    rank_category, rank_absolute_clean, rank_sex_clean, rank_category_clean, finish_pace_avg_gun,
-                   finish_pace_avg_clean, time_gun_finish_ms, time_clear_finish_ms)
-               VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   finish_pace_avg_clean, time_gun_finish_ms, time_clear_finish_ms, is_elite)
+               VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             [(r["surname"], r["name"], r["birthday"], args.event_id, r["sex"], r["start_number"], r["category"],
               r["race_status"], _hms(r["start"]), _hms(r["gun"]), _hms(r["clean"]), r.get("rank_absolute"),
               r.get("rank_sex"), r.get("rank_category"), r.get("rank_absolute_clean"), r.get("rank_sex_clean"),
               r.get("rank_category_clean"), pace(r["gun"]), pace(r["clean"]),
-              r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None) for r in rows])
+              r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None,
+              r["is_elite"]) for r in rows])
         conn.commit()
         cur.execute("SELECT COUNT(*), SUM(client_id = 0), SUM(race_status = 'Finished') FROM results WHERE event_id = %s",
                     (args.event_id,))

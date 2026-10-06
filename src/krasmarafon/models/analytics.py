@@ -92,6 +92,7 @@ class RegisteredRunnerInfo(BaseModel):
     start_number: Optional[int] = Field(None, description="Стартовый номер (bib), если присвоен заранее организатором")
     lead_id: Optional[int] = Field(None, description="id заявки (leads.id) — для диплома участника /diploma/lead/{lead_id}")
     event_id: Optional[int] = Field(None, description="id события-дистанции (events.id)")
+    is_elite: Optional[int] = Field(None, description="«Элита» — на сайте вместо номера")
 
 
 class RegisteredRunnersListResponse(BaseModel):

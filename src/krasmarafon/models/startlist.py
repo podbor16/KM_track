@@ -61,6 +61,7 @@ class LeadAdminItem(BaseModel):
     dup_main: Optional[int] = None     # «Сделать основной» — ручной выбор
     name_ok: Optional[int] = None      # «Имя в порядке»
     refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»)
+    is_elite: Optional[int] = None     # «Элита» — на сайте вместо номера
 
     @model_validator(mode='before')
     @classmethod

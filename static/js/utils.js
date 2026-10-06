@@ -6,10 +6,10 @@ window.KMUtils = {
     STATIC_V: (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
         ? (new URL(document.currentScript.src).searchParams.get('v') || '') : '',
 
-    // Номер участника для показа: 0 — «Элита» (именной номер, Жара 21,1 км), нет — пусто
-    bibLabel(bib) {
-        if (bib === 0 || bib === '0') return 'Элита';
-        return bib == null ? '' : String(bib);
+    // Номер участника для показа: у элиты (элитный кластер Жары 21,1 км) — «Элита»
+    bibLabel(bib, isElite) {
+        if (isElite) return 'Элита';
+        return bib == null || bib === 0 ? '' : String(bib);
     },
 
     versioned(url) {

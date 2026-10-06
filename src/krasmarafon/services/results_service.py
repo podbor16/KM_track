@@ -337,6 +337,7 @@ def _do_build(
         results.append({
             'id': runner.get('id') or runner.get('client_id'),
             'start_number': runner.get('start_number'),
+            'is_elite': runner.get('is_elite'),
             'surname': runner.get('surname', ''),
             'name': runner.get('name', ''),
             'full_name': f"{runner.get('surname', '')} {runner.get('name', '')}".strip(),

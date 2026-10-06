@@ -46,6 +46,7 @@ except ImportError:
 
 from src.analytics.db_connection_optimized import create_connection, calculate_age_group
 from src.common.names import normalize_person_name
+from src.analytics.elite import distance_label, is_elite, main_ranges
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
@@ -358,6 +359,7 @@ class RaceLoader:
 
         # Данные о событии (дистанция, массив дистанций КТ)
         self.event_distance_km: Optional[float] = None
+        self.elite_ranges: list = []          # «Элита»: основные диапазоны номеров (src/analytics/elite.py)
         self.checkpoint_distances: Optional[List[float]] = None
 
         # Параметры Copernico API
@@ -420,6 +422,9 @@ class RaceLoader:
             else:
                 self.checkpoint_distances = [0.0, self.event_distance_km]
 
+            # «Элита» — основные диапазоны номеров дистанции (src/analytics/elite.py)
+            self.elite_ranges = main_ranges(self.cursor, event["event_name"],
+                                            distance_label(self.event_distance_km))
             self.logger.info(f"✅ Подключено. Событие: {event['event_name']} ({self.event_distance_km} км)")
             self.logger.info(f"📌 Контрольные точки: {self.checkpoint_distances}")
             return True
@@ -691,7 +696,8 @@ class RaceLoader:
                     birthdate,
                     convert_gender(runner.get('gender')),
                     runner.get('category', 'Unknown'),
-                    'Not started'
+                    'Not started',
+                    int(is_elite(dorsal, self.elite_ranges, surname)),
                 ))
 
                 if len(batch) >= BATCH_SIZE:
@@ -1563,8 +1569,8 @@ class RaceLoader:
             insert_query = """
                 INSERT IGNORE INTO results (
                     event_id, start_number, surname, name, birthday,
-                    sex, category, race_status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    sex, category, race_status, is_elite
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             self.cursor.executemany(insert_query, batch)
             return self.cursor.rowcount

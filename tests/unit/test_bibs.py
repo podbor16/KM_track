@@ -102,13 +102,15 @@ def test_main_lead_order_manual_then_bib_then_latest():
     assert pick([L(1, 10, created="2026-10-05"), L(2, 10, created="2026-10-05")]) == 2             # равное время — больший id
 
 
-def test_elite_gets_no_bib_and_is_main():
-    # «Элита» — именной номер 0 (Жара 21,1 км): номер не присваивается, 0 не занимает диапазон
-    leads = [L(1, 10, bib=0, created="2026-10-01"), L(2, 10, created="2026-10-05"), L(3, 11, created="2026-10-02")]
-    rows, assign, ok = run(leads, {("7 км", ""): (1, 100)})
-    assert ok and assign == [(3, 1)] and rows[0]["with_bib"] == 1
+def test_elite_skipped_by_bib_assignment():
+    # «Элита» (leads.is_elite): номер ей дают отдельно (вне диапазонов) — «Присвоить номера» пропускает
+    elite = L(1, 10, created="2026-10-01")
+    elite["is_elite"] = 1
+    rows, assign, ok = run([elite, L(3, 11, created="2026-10-02")], {("7 км", ""): (1, 100)})
+    assert ok and assign == [(3, 1)]
 
 
-def test_import_bib_elite():
-    from src.analytics.db_results import _import_bib
-    assert [_import_bib(v) for v in ("17", " Элита ", "элита", "", "abc")] == [17, 0, 0, None, None]
+def test_import_bib_and_elite():
+    from src.analytics.db_results import _import_bib, _import_is_elite
+    assert [_import_bib(v) for v in ("17", " Элита ", "", "abc")] == [17, None, None, None]
+    assert [_import_is_elite(v) for v in ("17", " Элита ", "элита", "")] == [False, True, True, False]
