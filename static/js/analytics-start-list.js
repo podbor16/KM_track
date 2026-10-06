@@ -38,6 +38,7 @@ function readStateFromUrl() {
     if (gender === 'Мужчина' || gender === 'Женщина') _setGenderFilterActivePill(gender);
     const search = params.get('search');
     if (search) document.getElementById('surnameSearch').value = search;
+    if (params.get('elite') === '1') document.getElementById('eliteFilter')?.classList.add('active');
 }
 
 // Пишет текущие фильтры в query-параметры при каждом применении фильтров
@@ -56,6 +57,7 @@ function syncUrlFromState() {
     if (ageGroup) params.set('ageGroup', ageGroup);
     const search = document.getElementById('surnameSearch').value;
     if (search) params.set('search', search);
+    if (document.getElementById('eliteFilter')?.classList.contains('active')) params.set('elite', '1');
     const qs = params.toString();
     const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
     if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
@@ -509,10 +511,12 @@ function applyFilters() {
 
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
     const surnameSearch = KMUtils.searchNorm(document.getElementById('surnameSearch').value);
-    
+    const eliteOnly = KMUtils.eliteFilterSync(distanceFilter ? runnersOnDistance : allRunners);
+
     console.log('Применение фильтров:', { genderFilter, ageGroupFilter, distanceFilter, surnameSearch, totalRunners: allRunners.length });
     
     filteredRunners = allRunners.filter(runner => {
+        if (eliteOnly && !runner.is_elite) return false;
         // Фильтр по фамилии - поиск с начала фамилии
         if (surnameSearch !== '') {
             const runnerSurname = KMUtils.searchNorm(runner.surname);
@@ -580,6 +584,8 @@ function _sortArray(arr) {
                 valB = b.start_number || Infinity;
                 break;
             case 'surname':
+                // элита — первой, по алфавиту; затем остальные по алфавиту (решение 2026-10-06)
+                if (!!a.is_elite !== !!b.is_elite) return KMUtils.eliteFirst(a, b);
                 valA = (a.surname || '').toLowerCase();
                 valB = (b.surname || '').toLowerCase();
                 break;

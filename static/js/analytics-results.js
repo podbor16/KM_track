@@ -59,6 +59,7 @@ function readStateFromUrl() {
     }
     const search = params.get('search');
     if (search) document.getElementById('surnameSearch').value = search;
+    if (params.get('elite') === '1') document.getElementById('eliteFilter')?.classList.add('active');
 }
 
 // Пишет текущие фильтры в query-параметры при каждом применении фильтров
@@ -76,6 +77,7 @@ function syncUrlFromState() {
     if (ageGroup) params.set('ageGroup', ageGroup);
     const search = document.getElementById('surnameSearch').value;
     if (search) params.set('search', search);
+    if (document.getElementById('eliteFilter')?.classList.contains('active')) params.set('elite', '1');
     const qs = params.toString();
     const newUrl = qs ? `${location.pathname}?${qs}` : location.pathname;
     if (newUrl !== location.pathname + location.search) history.replaceState(null, '', newUrl);
@@ -814,8 +816,11 @@ function applyFilters() {
     
     // Числовой запрос — поиск по стартовому номеру, иначе — по фамилии с начала строки
     const isNumericSearch = /^\d+$/.test(surnameSearch);
+    const eliteOnly = KMUtils.eliteFilterSync(
+        distanceFilter ? allRunners.filter(r => (r.event || '') === distanceFilter) : allRunners);
 
     filteredRunners = allRunners.filter(runner => {
+        if (eliteOnly && !runner.is_elite) return false;
         if (surnameSearch !== '') {
             if (isNumericSearch) {
                 if (!String(runner.start_number).includes(surnameSearch)) {
@@ -916,6 +921,8 @@ function _sortArray(arr) {
                     valA = a[liveField] || 9999;
                     valB = b[liveField] || 9999;
                 } else {
+                    // до финишей (нет времени) — элита первой, по алфавиту; затем остальные
+                    if (!!a.is_elite !== !!b.is_elite) return KMUtils.eliteFirst(a, b);
                     valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
                     valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 }
@@ -951,6 +958,8 @@ function _sortArray(arr) {
                     valA = a[liveField] || 9999;
                     valB = b[liveField] || 9999;
                 } else {
+                    // до финишей (нет времени) — элита первой, по алфавиту; затем остальные
+                    if (!!a.is_elite !== !!b.is_elite) return KMUtils.eliteFirst(a, b);
                     valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
                     valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 }
@@ -973,6 +982,8 @@ function _sortArray(arr) {
                     valA = a[liveField] || 9999;
                     valB = b[liveField] || 9999;
                 } else {
+                    // до финишей (нет времени) — элита первой, по алфавиту; затем остальные
+                    if (!!a.is_elite !== !!b.is_elite) return KMUtils.eliteFirst(a, b);
                     valA = (`${a.surname || ''} ${a.name || ''}`).toLowerCase();
                     valB = (`${b.surname || ''} ${b.name || ''}`).toLowerCase();
                 }

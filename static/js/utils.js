@@ -12,6 +12,22 @@ window.KMUtils = {
         return bib == null || bib === 0 ? '' : String(bib);
     },
 
+    // «Элита» в списках (стартовый список, результаты до финишей): сначала элита, затем остальные
+    eliteFirst(a, b) {
+        return (b.is_elite ? 1 : 0) - (a.is_elite ? 1 : 0);
+    },
+
+    // Фильтр «Только элита»: виден, только если на дистанции есть элита; true — фильтр включён
+    eliteFilterSync(runnersOnDistance) {
+        const group = document.getElementById('eliteFilterGroup');
+        const btn = document.getElementById('eliteFilter');
+        if (!group || !btn) return false;
+        const has = runnersOnDistance.some(r => r.is_elite);
+        group.style.display = has ? '' : 'none';
+        if (!has) btn.classList.remove('active');
+        return has && btn.classList.contains('active');
+    },
+
     versioned(url) {
         return this.STATIC_V ? `${url}?v=${this.STATIC_V}` : url;
     },

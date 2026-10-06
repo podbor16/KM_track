@@ -33,6 +33,11 @@ function makeElement(tag) {
         appendChild(child) { children.push(child); return child; },
         addEventListener() {},
         querySelectorAll() { return []; },
+        // фильтр «Только элита» (KMUtils.eliteFilterSync) переключает класс active
+        classList: (() => {
+            const set = new Set();
+            return { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c), toggle: c => (set.has(c) ? set.delete(c) : set.add(c)) };
+        })(),
     };
 }
 

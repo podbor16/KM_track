@@ -61,6 +61,13 @@
                     </div>
                 </div>
 
+                <!-- «Только элита» — виден, только если на дистанции есть элита (KMUtils.eliteFilterSync) -->
+                <div class="km-filter-group" id="eliteFilterGroup" style="display:none">
+                    <label class="km-label" id="eliteFilterLabel">Элита:</label>
+                    <div class="km-pills" role="group" aria-labelledby="eliteFilterLabel">
+                        <button type="button" class="km-pill" id="eliteFilter" onclick="this.classList.toggle('active'); applyFilters()">Только элита</button>
+                    </div>
+                </div>
                 <div class="km-filter-pair">
                     <div class="km-filter-group" id="ageGroupFilterGroup">
                         <label class="km-label" for="ageGroupFilter">Возрастная группа:</label>
