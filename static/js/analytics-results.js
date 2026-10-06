@@ -1049,7 +1049,7 @@ function renderResultsTable(runners) {
 
         row.innerHTML = `
             <td class="km-td ${rowBg}">${rankDisplay}</td>
-            <td class="km-td ${rowBg}"><span class="km-bib">${runner.start_number || ''}</span></td>
+            <td class="km-td ${rowBg}"><span class="km-bib">${KMUtils.bibLabel(runner.start_number)}</span></td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
             ${categoryCell}
             <td class="km-td ${rowBg}">${timeCol1}</td>

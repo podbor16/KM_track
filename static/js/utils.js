@@ -6,6 +6,12 @@ window.KMUtils = {
     STATIC_V: (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
         ? (new URL(document.currentScript.src).searchParams.get('v') || '') : '',
 
+    // Номер участника для показа: 0 — «Элита» (именной номер, Жара 21,1 км), нет — пусто
+    bibLabel(bib) {
+        if (bib === 0 || bib === '0') return 'Элита';
+        return bib == null ? '' : String(bib);
+    },
+
     versioned(url) {
         return this.STATIC_V ? `${url}?v=${this.STATIC_V}` : url;
     },

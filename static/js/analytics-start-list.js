@@ -504,7 +504,7 @@ function applyFilters() {
     // только если хоть у кого-то из загруженных участников есть значение
     // (проверяем по ВСЕМ участникам события, не только по отфильтрованным —
     // чтобы колонка не мигала при смене фильтров пола/дистанции/группы).
-    const hasStartNumbers = allRunners.some(r => r.start_number);
+    const hasStartNumbers = allRunners.some(r => r.start_number != null);
     document.getElementById('startListTable').classList.toggle('km-table--show-start-number', hasStartNumbers);
 
     const ageGroupFilter = document.getElementById('ageGroupFilter').value;
@@ -703,7 +703,7 @@ function renderStartList(runners) {
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
         let rowHTML = `
             <td class="km-td km-td--c ${rowBg}">${index + 1}</td>
-            <td class="km-td km-td--c ${rowBg}">${runner.start_number || ''}</td>
+            <td class="km-td km-td--c ${rowBg}">${KMUtils.bibLabel(runner.start_number)}</td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div>${hasParticipantDiploma(runner)
                 ? `<a href="/diploma/lead/${runner.lead_id}" class="km-btn-profile km-btn-profile--under-name" target="_blank" onclick="event.stopPropagation()">🏅 Диплом</a>`
                 : ''}</td>
@@ -748,8 +748,8 @@ function exportStartListPdf() {
 
     // "Номер" — только если хоть у кого-то в выгрузке есть значение (см. тот
     // же принцип, что и колонка на самой странице, applyFilters())
-    const showStartNumber = sorted.some(r => r.start_number);
-    const numberCell = r => showStartNumber ? `<td>${r.start_number || ''}</td>` : '';
+    const showStartNumber = sorted.some(r => r.start_number != null);
+    const numberCell = r => showStartNumber ? `<td>${KMUtils.bibLabel(r.start_number)}</td>` : '';
     const numberHeader = showStartNumber ? '<th>Номер</th>' : '';
 
     const rows = sorted.map((r, i) => {

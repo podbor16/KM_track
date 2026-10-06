@@ -417,6 +417,7 @@
          страницы падала с ReferenceError, обрывая весь инлайн-скрипт
          (включая несвязанный loadHistoryToggle() в его хвосте). -->
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
+    <script src="/static/js/utils.js?v={{ v }}"></script>
     <script src="/static/js/admin-state.js?v={{ v }}"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
     <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
@@ -1076,6 +1077,7 @@
             <td class="leads-col-actions"><button class="km-btn km-btn--secondary leads-btn-edit">Изменить</button></td>`;
 
         tr.querySelector('.leads-col-id').textContent = lead.id;
+        tr.querySelector('.leads-col-bib').textContent = KMUtils.bibLabel(lead.start_number) || '—';
         tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
         tr.querySelector('.leads-col-name').textContent = lead.name || '';
         tr.querySelector('.leads-col-sex').textContent = lead.sex || '—';
@@ -1104,6 +1106,9 @@
             ? _leadActionBtn('Снять возврат', `/api/admin/leads/${lead.id}/refund?refund=false`)
             : _leadActionBtn('Возврат', `/api/admin/leads/${lead.id}/refund?refund=true`,
                              `Пометить возвратом заявку ${lead.surname} ${lead.name} от ${_fmtCreated(lead.created_at)}?\nОна пропадёт с сайта, из номеров и экспорта, но останется в админке.`));
+        // «Элита» — именной номер (0): только у заявок без настоящего номера
+        if (lead.start_number === 0) actions.appendChild(_leadActionBtn('Снять элиту', `/api/admin/leads/${lead.id}/elite?elite=false`));
+        else if (lead.start_number == null) actions.appendChild(_leadActionBtn('Элита', `/api/admin/leads/${lead.id}/elite?elite=true`));
         actions.appendChild(_leadActionBtn('Удалить', `/api/admin/leads/${lead.id}`,
             `Удалить заявку ${lead.surname} ${lead.name}, ${lead.event_distance || ''}, от ${_fmtCreated(lead.created_at)}?\nКопия сохранится в журнале действий.`, 'DELETE'));
         return tr;

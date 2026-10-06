@@ -12,6 +12,10 @@
 одного — ошибка. Гандикап (Снежная семёрка): Start — задержка волны, официальное —
 от первого выстрела (порядок прихода = места).
 Промежуточные отметки не загружаются — дистанции КТ неизвестны.
+Протоколы «по группам» (Жара 2025): строки-заголовки групп пропускаются, Start
+необязателен, категории «Мужчины 1986−1990 г. р.» / «Мальчики 2014 г.р.» → краткий
+вид как в 2026 («М35-39» — возраст в год старта). Элита — в Bib фамилия (именной
+номер): номер 0, на сайте «Элита» (решение пользователя 2026-10-06).
 Места считаются заново: абсолютное/пол/категория по времени выстрела и по
 чистому времени. client_id подставляет trg_results_before_insert.
 
@@ -22,6 +26,7 @@
 import argparse
 import collections
 import datetime
+import re
 import sys
 from pathlib import Path
 
@@ -37,6 +42,8 @@ from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
+ELITE_BIB = 0                                        # именной номер (фамилия вместо числа)
+_GROUP = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)\W*(\d{4})(?:\s*[-−–]\s*(\d{4}))?", re.I)
 STATUS = {"Disqualified": "DSQ"}                     # как в остальных результатах БД
 
 
@@ -89,19 +96,33 @@ def finish_columns(h, rows):
     return clean, gun
 
 
-def parse(path):
+def short_category(category, year):
+    """«Мужчины 1986−1990 г. р.» → «М35-39» (возраст в год старта); одиночный год —
+    «Мальчики 2014 г.р.» → «М11». Остальное — как есть."""
+    m = _GROUP.match(category or "")
+    if not m:
+        return category
+    sex = "М" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Ж"
+    y1, y2 = int(m.group(2)), int(m.group(3) or m.group(2))
+    young, old = year - max(y1, y2), year - min(y1, y2)
+    return f"{sex}{young}" if young == old else f"{sex}{young}-{old}"
+
+
+def parse(path, year):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
     h = [str(x or "").strip() for x in rows[0]]
-    i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Status", "Start")}
+    i = {k: h.index(k) for k in ("Bib", "Surname", "Name", "Date of Birth", "Status")}
+    start_i = h.index("Start") if "Start" in h else None
     sex_i = h.index("Gender") if "Gender" in h else None
     i["clean"], i["Finish"] = finish_columns(h, rows[1:])
     cat_i = h.index("Category") if "Category" in h else None
     out = []
     for r in rows[1:]:
-        if not r or not r[i["Surname"]] or not str(r[i["Bib"]] or "").strip().isdigit():
+        if not r or not r[i["Surname"]]:                               # пусто / заголовок группы
             continue
-        category = str(r[cat_i] or "").strip() if cat_i is not None else ""
+        bib = str(r[i["Bib"]] or "").strip()
+        category = short_category(str(r[cat_i] or "").strip(), year) if cat_i is not None else ""
         sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
         if not sex and category[:1].upper() in "МЖ":                   # нет Gender — пол из категории
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
@@ -111,9 +132,9 @@ def parse(path):
         out.append({
             "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
             "birthday": _birthday(r[i["Date of Birth"]]), "sex": sex,
-            "start_number": int(r[i["Bib"]]),
+            "start_number": int(bib) if bib.isdigit() else ELITE_BIB,
             "category": category,
-            "race_status": status, "start": _secs(r[i["Start"]]),
+            "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
             "gun": gun if finished else None, "clean": clean if finished else None,
         })
     return out
@@ -137,20 +158,24 @@ def main():
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
 
-    rows = parse(args.xlsx)
-    rank(rows)
-    bibs = collections.Counter(r["start_number"] for r in rows)
-    dup = [b for b, k in bibs.items() if k > 1]
-    print(f"Строк: {len(rows)}, по статусам: {dict(collections.Counter(r['race_status'] for r in rows))}, "
-          f"без даты рождения: {sum(r['birthday'] == SENTINEL for r in rows)}, без пола: {sum(not r['sex'] for r in rows)}, "
-          f"повторы номеров: {dup}")
-    if dup:
-        return 1
     conn = get_connection()
     try:
         cur = conn.cursor()
         cur.execute("SELECT event_name, event_year, event_distance FROM events WHERE id = %s", (args.event_id,))
         ev = cur.fetchone()
+        if not ev:
+            print(f"Нет события {args.event_id}")
+            return 1
+        rows = parse(args.xlsx, int(ev[1]))
+        rank(rows)
+        bibs = collections.Counter(r["start_number"] for r in rows if r["start_number"] != ELITE_BIB)
+        dup = [b for b, k in bibs.items() if k > 1]
+        print(f"Строк: {len(rows)}, по статусам: {dict(collections.Counter(r['race_status'] for r in rows))}, "
+              f"без даты рождения: {sum(r['birthday'] == SENTINEL for r in rows)}, без пола: {sum(not r['sex'] for r in rows)}, "
+              f"элита (номер 0): {sum(r['start_number'] == ELITE_BIB for r in rows)}, повторы номеров: {dup}")
+        print("Категории:", dict(sorted(collections.Counter(r["category"] for r in rows).items())))
+        if dup:
+            return 1
         cur.execute("SELECT COUNT(*) FROM results WHERE event_id = %s", (args.event_id,))
         existing = cur.fetchone()[0]
         print(f"Событие {args.event_id}: {ev}, результатов в БД: {existing}")

@@ -1819,7 +1819,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
 # дубли (решение пользователя 2026-10-06): ручной выбор «Сделать основной» (dup_main),
 # затем заявка с уже присвоенным номером, затем самая поздняя. То же правило —
 # src/analytics/bibs.main_lead_key (номера, «Экспорт CSV»).
-_MAIN_LEAD_ORDER = "dup_main DESC, (COALESCE(start_number, 0) > 0) DESC, created_at DESC, id DESC"
+_MAIN_LEAD_ORDER = "dup_main DESC, (start_number IS NOT NULL) DESC, created_at DESC, id DESC"
 
 
 def recompute_duplicates(cur, client_ids=None) -> int:
@@ -1900,6 +1900,41 @@ def set_lead_main(lead_id: int) -> Optional[int]:
         raise
     finally:
         conn.close()
+
+
+ELITE_BIB = 0     # «Элита» — именной номер (Жара 21,1 км): на сайте «Элита», номер не присваивается
+
+
+def set_lead_elite(lead_id: int, elite: bool) -> Optional[str]:
+    """Кнопка «Элита»/«Снять элиту»: start_number 0 / NULL. Настоящий номер не трогается.
+    -> None — готово, иначе текст ошибки."""
+    conn = get_pooled_connection()
+    if not conn:
+        return "нет соединения с БД"
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT client_id, start_number FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        if not row:
+            return "заявка не найдена"
+        if row[1] not in (None, ELITE_BIB):
+            return f"у заявки уже номер {row[1]}"
+        cur.execute("UPDATE leads SET start_number = %s WHERE id = %s", (ELITE_BIB if elite else None, lead_id))
+        recompute_duplicates(cur, [row[0]])
+        conn.commit()
+        cur.close()
+        invalidate_start_list_cache()
+        return None
+    finally:
+        conn.close()
+
+
+def _import_bib(raw: str):
+    """Колонка «Номер» файла импорта: число, «Элита» → 0, иначе — нет номера."""
+    raw = (raw or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    return ELITE_BIB if raw.lower() == "элита" else None
 
 
 def set_lead_refund(lead_id: int, refund: bool) -> bool:
@@ -2164,7 +2199,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                 # который может быть проставлен только в одном из нескольких
                 # файлов, гуляющих между организатором/оператором). Обновляем
                 # только когда в ЭТОЙ строке номер реально есть.
-                start_number = int(row.start_number) if row.start_number.strip().isdigit() else None
+                start_number = _import_bib(row.start_number)
                 for m in matches:
                     cur.execute(
                         f"UPDATE leads SET {set_clause}{created_at_frag} WHERE id = %s",
@@ -2227,7 +2262,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         'transaction_id': row.transaction_id or '',
                         'payment_system': row.payment_system or '',
                         'is_name_suspicious': int(row.is_name_suspicious),
-                        'start_number': int(row.start_number) if row.start_number.strip().isdigit() else None,
+                        'start_number': _import_bib(row.start_number),
                         'refund': 2 if getattr(row, 'refund', False) else 0,
                     },
                 )

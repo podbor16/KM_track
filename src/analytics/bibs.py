@@ -49,7 +49,8 @@ def main_lead_per_person(leads):
 
 
 def _has_bib(lead):
-    return bool(lead.get("start_number"))
+    """Номер есть — и «Элита» (0, именной номер): ей номер не присваивается."""
+    return lead.get("start_number") is not None
 
 
 def group_key(event_name, lead):
@@ -66,7 +67,7 @@ def build_groups(event_name, leads):
     for lead in sorted(leads, key=main_lead_key, reverse=True):
         if (event_name, lead["event_distance"]) in NO_BIB_DISTANCES:
             continue
-        if _has_bib(lead):
+        if _has_bib(lead) and int(lead["start_number"]):
             taken.add(int(lead["start_number"]))
         by_person.setdefault((lead["client_id"], lead["event_id"]), []).append(lead)
     for person_leads in by_person.values():

@@ -158,3 +158,19 @@ def test_delete_lead_logged_and_main_recomputed(db):
     finally:
         cur.execute("DELETE FROM dq_actions WHERE action = 'delete_lead' AND done_by = 'pytest'")
         conn.commit()
+
+
+def test_elite_button_keeps_real_bib(db):
+    from src.analytics.db_results import set_lead_elite
+    conn, cur = db
+    lead = add(cur, "Элита", "2026-01-01 10:00:00")
+    numbered = add(cur, "Номерной", "2026-01-01 10:00:00")
+    cur.execute("UPDATE leads SET start_number = 55 WHERE id = %s", (numbered,))
+    conn.commit()
+    assert set_lead_elite(lead, True) is None
+    cur.execute("SELECT start_number FROM leads WHERE id = %s", (lead,))
+    assert cur.fetchone()["start_number"] == 0
+    assert "уже номер 55" in set_lead_elite(numbered, True)
+    assert set_lead_elite(lead, False) is None
+    cur.execute("SELECT start_number FROM leads WHERE id = %s", (lead,))
+    assert cur.fetchone()["start_number"] is None
