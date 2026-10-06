@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, parse
+from scripts.import_results_xlsx import finish_columns, parse, rank
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -15,6 +15,10 @@ def test_named_clean_column_and_handicap():
     h = ["Bib", "Start", "Finish", "чистое "]                      # Снежная: официальное — от первого выстрела
     rows = [(1, "00:09:46", "00:38:50", "00:29:03")]
     assert finish_columns([x.strip() for x in h], rows) == (3, 2)
+
+
+def test_single_finish_column_is_official_only():
+    assert finish_columns(["Bib", "Результат"], [(1, "00:15:11")]) == (None, 1)
 
 
 def test_clean_greater_than_official_is_error():
@@ -39,3 +43,7 @@ def test_group_headers_by_age(tmp_path):
     wb.save(path)
     rows = parse(path, 2024)
     assert [(r["category"], r["sex"]) for r in rows] == [("М49", "Мужчина"), ("Ж60+", "Женщина")]
+    # одна колонка времени — только официальное, чистого нет
+    assert [(r["gun"], r["clean"]) for r in rows] == [(911, None), (1800, None)]
+    rank(rows)
+    assert (rows[0]["rank_absolute"], rows[0].get("rank_absolute_clean")) == (1, None)

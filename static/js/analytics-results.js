@@ -91,6 +91,18 @@ function isZharaEvent() {
     return currentEvent === 'zhara';
 }
 
+// Протоколы с одной колонкой времени (большинство 2024) — только официальное
+// время, чистого нет (решение пользователя 2026-10-06): колонка «Чистое время»
+// скрыта, основное время и места — официальные, в т.ч. у Жары. До первых
+// финишей (живая гонка) чистое время считается имеющимся.
+function hasCleanTimes() {
+    return !allRunners.some(r => r.time_gun_finish) || allRunners.some(r => r.time_clear_finish);
+}
+
+function cleanIsPrimary() {
+    return isZharaEvent() && hasCleanTimes();
+}
+
 // Расставляет заголовки+сортировку двух колонок времени в зависимости от
 // события: для Жары чистое время идёт первым, для остальных — официальное.
 function updateTimeColumnHeaders() {
@@ -99,11 +111,12 @@ function updateTimeColumnHeaders() {
     if (!th1 || !th2) return;
     const gun  = { label: 'Офиц. время',  key: 'time_gun' };
     const net  = { label: 'Чистое время', key: 'time_net' };
-    const [first, second] = isZharaEvent() ? [net, gun] : [gun, net];
+    const [first, second] = cleanIsPrimary() ? [net, gun] : [gun, net];
     th1.textContent = first.label;
     th1.setAttribute('onclick', `sortTable('${first.key}')`);
     th2.textContent = second.label;
     th2.setAttribute('onclick', `sortTable('${second.key}')`);
+    th2.style.display = hasCleanTimes() ? '' : 'none';
 }
 
 // Дефолтная сортировка при смене события — чистое время для Жары,
@@ -367,6 +380,8 @@ async function loadRunnersData(silent = false) {
         // Нормализуем данные в единый формат
         allRunners = normalizeRunnerData(rawData);
         _computeLiveRanks(allRunners);
+        if (!hasCleanTimes() && sortState.column === 'time_net') sortState.column = 'time_gun';
+        updateTimeColumnHeaders();
 
         console.log('allRunners после нормализации:', allRunners.length);
         if (allRunners.length > 0) {
@@ -497,9 +512,9 @@ function _liveRankTier(runner) {
 function _computeLiveRanks(runners) {
     // Официальные места Жары — по _clean-полям (награждение по чистому
     // времени), у остальных событий — обычные. Тот же суффикс, что и в
-    // getActiveRankField(), но вычислен один раз здесь (isZharaEvent() не
+    // getActiveRankField(), но вычислен один раз здесь (cleanIsPrimary() не
     // зависит от текущего UI-фильтра, в отличие от выбора поля по scope).
-    const officialSuffix = isZharaEvent() ? '_clean' : '';
+    const officialSuffix = cleanIsPrimary() ? '_clean' : '';
     const finished = runners.filter(r => _liveRankTier(r) === 0);
     const running = runners.filter(r => _liveRankTier(r) === 1);
 
@@ -897,7 +912,7 @@ function _rankFieldForScope(suffix, prefix = '') {
 }
 
 function getActiveRankField() {
-    return _rankFieldForScope(isZharaEvent() ? '_clean' : '');
+    return _rankFieldForScope(cleanIsPrimary() ? '_clean' : '');
 }
 
 function getActiveLiveRankField() {
@@ -1014,6 +1029,8 @@ function renderResultsTable(runners) {
     tbody.innerHTML = '';
 
     const rankField = getActiveRankField();
+    const withClean = hasCleanTimes();
+    const cleanFirst = cleanIsPrimary();
 
     // Колонка "Категория" — только когда фильтр по возр. группе = "Все",
     // иначе она видна на каждой строке одним и тем же значением и не несёт
@@ -1054,7 +1071,7 @@ function renderResultsTable(runners) {
         const timeNetCell = statusLabel
             ? `<span class="km-time-status">${statusLabel}</span>`
             : `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
-        const [timeCol1, timeCol2] = isZharaEvent() ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
+        const [timeCol1, timeCol2] = cleanFirst ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
         const categoryCell = showCategory
             ? `<td class="km-td km-td--l ${rowBg}">${KMUtils.normalizeCategory(runner.category) || '—'}</td>`
@@ -1066,7 +1083,7 @@ function renderResultsTable(runners) {
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${fullName}</div></td>
             ${categoryCell}
             <td class="km-td ${rowBg}">${timeCol1}</td>
-            <td class="km-td ${rowBg}">${timeCol2}</td>
+            ${withClean ? `<td class="km-td ${rowBg}">${timeCol2}</td>` : ''}
         `;
 
         const resultId = String(runner.id || '');
@@ -1323,7 +1340,9 @@ function buildDetailPanelHTML(runner) {
     </div>
     <div class="detail-tab-pane active" data-pane="times">
         <div class="detail-times-grid">
-            ${isZharaEvent() ? `
+            ${!hasCleanTimes() ? `
+            ${timeCol('ОФИЦИАЛЬНОЕ ВРЕМЯ', timeGun, 'gun', paceGun, rankAbs, rankSex, rankCat)}
+            ` : cleanIsPrimary() ? `
             ${timeCol('ЧИСТОЕ ВРЕМЯ', timeNet, 'net', paceNet, rankAbsClean, rankSexClean, rankCatClean)}
             ${timeCol('ОФИЦИАЛЬНОЕ ВРЕМЯ', timeGun, 'gun', paceGun, rankAbs, rankSex, rankCat)}
             ` : `
@@ -1809,7 +1828,8 @@ function getRaceStats() {
 function exportResultsPdf() {
     if (!filteredRunners.length) { alert('Нет данных для экспорта'); return; }
     const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
-    const zhara = isZharaEvent();
+    const zhara = cleanIsPrimary();
+    const withClean = hasCleanTimes();
     const primaryTimeField = zhara ? 'time_clear_finish' : 'time_gun_finish';
 
     // Сортировка: финишёры по возрастанию основного (для Жары — чистого,
@@ -1828,7 +1848,7 @@ function exportResultsPdf() {
     const rows = sorted.map((r, i) => {
         const tGunCell   = `<td>${formatTime(r.time_gun_finish)   || '—'}</td>`;
         const tCleanCell = `<td>${formatTime(r.time_clear_finish) || '—'}</td>`;
-        const timeCells = zhara ? tCleanCell + tGunCell : tGunCell + tCleanCell;
+        const timeCells = !withClean ? tGunCell : zhara ? tCleanCell + tGunCell : tGunCell + tCleanCell;
         const rankAbs = (zhara ? r.rank_absolute_clean : r.rank_absolute) ?? '—';
         const rankSex = (zhara ? r.rank_sex_clean      : r.rank_sex)      ?? '—';
         const rankCat = (zhara ? r.rank_category_clean : r.rank_category) ?? '—';
@@ -1845,7 +1865,7 @@ function exportResultsPdf() {
             <td>${rankCat}</td>
         </tr>`;
     }).join('');
-    const timeHeaders = zhara
+    const timeHeaders = !withClean ? '<th>Офиц. время</th>' : zhara
         ? '<th>Чистое время</th><th>Офиц. время</th>'
         : '<th>Офиц. время</th><th>Чистое время</th>';
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>

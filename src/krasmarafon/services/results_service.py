@@ -329,7 +329,7 @@ def _do_build(
             logger.warning(f"calculate_live_position error for runner {runner.get('id')}: {_e}")
             speed_kmh, current_dist, pace_str = 10.0, 0.0, "6:00"
 
-        if runner.get('time_clear_finish') or runner.get('time_clear_kt1'):
+        if runner.get('time_clear_finish') or runner.get('time_gun_finish') or runner.get('time_clear_kt1'):
             pace_source = ''
         else:
             pace_source = r_hist_source or ''

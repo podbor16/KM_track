@@ -264,8 +264,9 @@
         // «Жара» награждает по чистому времени, а не по официальному
         // (решение оргкомитета, с 2026 года) — единственное исключение
         // среди событий Красмарафона. field: 'absolute' | 'sex' | 'category'.
+        // Протокол с одной колонкой времени (2024) — чистого нет, место официальное.
         function raceRank(race, field) {
-            const key = race.event_name === 'Жара' ? `rank_${field}_clean` : `rank_${field}`;
+            const key = race.event_name === 'Жара' && race.time_clear_finish ? `rank_${field}_clean` : `rank_${field}`;
             return race[key];
         }
 
@@ -479,12 +480,11 @@
                         const ps = parsePaceToSeconds(r.finish_pace_avg_gun);
                         if (ps < bestGunPaceSec) { bestGunPaceSec = ps; bestGunPaceCtx = raceContext(r); }
                     }
+                    const mainTime = parseTimeToSeconds(r.time_clear_finish || r.time_gun_finish);
+                    if (mainTime > 0) { totalTime += mainTime; timeCount++; }
                     if (r.time_clear_finish) {
                         const s = parseTimeToSeconds(r.time_clear_finish);
-                        if (s > 0) {
-                            totalTime += s; timeCount++;
-                            if (s < bestClearSec) { bestClearSec = s; bestClearText = formatTime(s); bestClearCtx = raceContext(r); }
-                        }
+                        if (s > 0 && s < bestClearSec) { bestClearSec = s; bestClearText = formatTime(s); bestClearCtx = raceContext(r); }
                     }
                     if (r.time_gun_finish) {
                         const s = parseTimeToSeconds(r.time_gun_finish);
@@ -846,7 +846,7 @@
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
                 const pace = formatPaceDisplay(race);
-                const time = formatTime(parseTimeToSeconds(race.time_clear_finish));
+                const time = formatTime(parseTimeToSeconds(race.time_clear_finish || race.time_gun_finish));
                 const category = stripCategoryBirthYear(race.category);
 
                 // Дата из event_date
@@ -894,7 +894,7 @@
                 const statusInfo = getStatusText(race.race_status || 'unknown');
                 
                 const pace = formatPaceDisplay(race);
-                const time = formatTime(parseTimeToSeconds(race.time_clear_finish));
+                const time = formatTime(parseTimeToSeconds(race.time_clear_finish || race.time_gun_finish));
 
                 const dateStr = race.event_date ? new Date(race.event_date).toLocaleDateString('ru-RU') : '-';
 

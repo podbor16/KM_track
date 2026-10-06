@@ -161,6 +161,18 @@ def test_get_diploma_data_uses_clean_rank_for_zhara():
     assert data['rank_category'] == 1
 
 
+def test_get_diploma_data_official_only_protocol_zhara():
+    """Протокол с одной колонкой времени (Жара 2024): чистого нет — время и
+    место на дипломе официальные, даже у Жары."""
+    row = _row('101', 'female', time_s=None, rank_abs=None, rank_sex=None, rank_cat=None,
+               rank_abs_gun=7, rank_sex_gun=3, rank_cat_gun=2, event_name='Жара')
+    row['time_gun_finish'] = timedelta(seconds=1576)
+    with patch('src.krasmarafon.services.diploma_service.get_race_results_by_event_id', return_value=[row]):
+        data = get_diploma_data(event_id=1, bib='101')
+    assert data['time_display'] == '26:16'
+    assert (data['rank_absolute'], data['rank_sex'], data['rank_category']) == (7, 3, 2)
+
+
 def test_get_diploma_data_shows_category_row_when_real_age_category():
     """У события с настоящими возрастными категориями (напр. 'мужчины до
     49 лет') строка категории несёт данные, которых нет в строке "Пол" —

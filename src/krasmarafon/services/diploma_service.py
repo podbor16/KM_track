@@ -110,7 +110,9 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
     # чистому времени (решение оргкомитета), т.е. судья/сайт объявляют место
     # по _clean-варианту — значит и диплом для Жары должен показывать его,
     # чтобы место на дипломе по-прежнему совпадало с официально объявленным.
-    is_zhara = str(target.get('event_name') or '').strip() == 'Жара'
+    # Протокол с одной колонкой времени (2024) — чистого нет: время и место официальные.
+    has_clean = target.get('time_clear_finish') is not None
+    is_zhara = str(target.get('event_name') or '').strip() == 'Жара' and has_clean
     rank_absolute = target.get('rank_absolute_clean') if is_zhara else target.get('rank_absolute')
     rank_sex = target.get('rank_sex_clean') if is_zhara else target.get('rank_sex')
     rank_category = target.get('rank_category_clean') if is_zhara else target.get('rank_category')
@@ -119,7 +121,7 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
         'surname': target.get('surname'),
         'name': target.get('name'),
         'category': target.get('category'),
-        'time_display': format_finish_time(target.get('time_clear_finish')),
+        'time_display': format_finish_time(target.get('time_clear_finish') if has_clean else target.get('time_gun_finish')),
         'rank_absolute': rank_absolute,
         'rank_sex': rank_sex,
         'rank_category': rank_category,

@@ -9,7 +9,8 @@
 несколько с одинаковым названием («Finish» — чистое / официальное / темп): время
 определяется по содержимому (чч:мм:сс, темп «3'14"/km» отбрасывается), чистое —
 колонка со словом «чист», иначе меньшая из двух; чистое > официального хоть у
-одного — ошибка. Гандикап (Снежная семёрка): Start — задержка волны, официальное —
+одного — ошибка. Колонка финиша одна — это официальное время, чистого нет (NULL, места
+по чистому не считаются; решение пользователя 2026-10-06). Гандикап (Снежная семёрка): Start — задержка волны, официальное —
 от первого выстрела (порядок прихода = места).
 Промежуточные отметки (2026-10-06): колонки с километражем в названии («2,5», «4,5»,
 «2,5km») или заданные --checkpoints «razv1=1.75,razv2=5.25» → time_clear_kt1…7 и темп
@@ -85,7 +86,7 @@ def _hms(s):
 
 
 def finish_columns(h, rows):
-    """-> (чистое, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
+    """-> (чистое | None, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
     low = [x.lower().replace('"', "").replace("«", "").replace("»", "") for x in h]
     cand = [k for k, x in enumerate(low) if x.startswith(("finish", "финиш", "результат")) or "чист" in x]
     timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")])
@@ -93,7 +94,7 @@ def finish_columns(h, rows):
     if not timed or len(timed) > 2:
         raise ValueError(f"не удалось определить колонки финиша: {[h[k] for k in cand]}")
     if len(timed) == 1:
-        return timed[0], timed[0]
+        return None, timed[0]
     a, b = timed
     named = [k for k in timed if "чист" in low[k]]
     if named:
@@ -201,8 +202,9 @@ def parse(path, year, overrides=None):
         if not sex and category[:1].upper() in ("М", "Ж"):
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
         status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
-        clean, gun = _secs(r[i["clean"]]), _secs(r[i["Finish"]])
-        finished = status == "Finished" and clean and gun
+        clean = _secs(r[i["clean"]]) if i["clean"] is not None else None
+        gun = _secs(r[i["Finish"]])
+        finished = status == "Finished" and gun
         out.append({
             "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
             "birthday": _birthday(r[bd_i]) if bd_i is not None else SENTINEL,
@@ -220,7 +222,7 @@ def parse(path, year, overrides=None):
 def rank(rows):
     fin = [r for r in rows if r["gun"]]
     for field, suffix in (("gun", ""), ("clean", "_clean")):
-        order = sorted(fin, key=lambda r: (r[field], r["start_number"]))
+        order = sorted((r for r in fin if r[field]), key=lambda r: (r[field], r["start_number"]))
         by_sex, by_cat = collections.Counter(), collections.Counter()
         for n, r in enumerate(order, 1):
             by_sex[r["sex"]] += 1

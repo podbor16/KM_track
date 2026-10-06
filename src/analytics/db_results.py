@@ -120,7 +120,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
         FROM `{results_table}` r
         LEFT JOIN events e ON r.event_id = e.id
         WHERE r.event_id = %s
-        ORDER BY r.time_clear_finish ASC
+        ORDER BY COALESCE(r.time_clear_finish, r.time_gun_finish) ASC
         """
 
         cursor.execute(query, (event_id,))
@@ -292,7 +292,8 @@ def get_checkpoint_distances(event_id: int) -> List[float]:
 def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[str, float]:
     """
     Средняя скорость (км/ч) финишировавших по категориям для заданного события.
-    Считает из time_clear_finish / event_distance (finish_pace_avg часто NULL).
+    Считает из time_clear_finish / event_distance (finish_pace_avg часто NULL); нет чистого
+    (протокол с одной колонкой времени) — из официального.
     Fallback по приоритету: год+дистанция → все годы+дистанция → все годы.
     Один DB round-trip через UNION ALL с полем priority.
 
@@ -308,34 +309,34 @@ def get_category_avg_paces(event_name: str, event_distance, year: int) -> Dict[s
     UNION_SQL = """
         SELECT category, finish_secs, dist_km, priority FROM (
             SELECT r.category,
-                   TIME_TO_SEC(r.time_clear_finish) AS finish_secs,
+                   TIME_TO_SEC(COALESCE(r.time_clear_finish, r.time_gun_finish)) AS finish_secs,
                    CAST(e.event_distance AS DECIMAL(6,2)) AS dist_km,
                    1 AS priority
             FROM results r INNER JOIN events e ON r.event_id = e.id
             WHERE e.event_name = %s AND e.event_year = %s AND e.event_distance = %s
-              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.race_status = 'Finished' AND COALESCE(r.time_clear_finish, r.time_gun_finish) IS NOT NULL
               AND r.category IS NOT NULL AND r.category != ''
 
             UNION ALL
 
             SELECT r.category,
-                   TIME_TO_SEC(r.time_clear_finish),
+                   TIME_TO_SEC(COALESCE(r.time_clear_finish, r.time_gun_finish)),
                    CAST(e.event_distance AS DECIMAL(6,2)),
                    2
             FROM results r INNER JOIN events e ON r.event_id = e.id
             WHERE e.event_name = %s AND e.event_distance = %s
-              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.race_status = 'Finished' AND COALESCE(r.time_clear_finish, r.time_gun_finish) IS NOT NULL
               AND r.category IS NOT NULL AND r.category != ''
 
             UNION ALL
 
             SELECT r.category,
-                   TIME_TO_SEC(r.time_clear_finish),
+                   TIME_TO_SEC(COALESCE(r.time_clear_finish, r.time_gun_finish)),
                    CAST(e.event_distance AS DECIMAL(6,2)),
                    3
             FROM results r INNER JOIN events e ON r.event_id = e.id
             WHERE e.event_name = %s
-              AND r.race_status = 'Finished' AND r.time_clear_finish IS NOT NULL
+              AND r.race_status = 'Finished' AND COALESCE(r.time_clear_finish, r.time_gun_finish) IS NOT NULL
               AND r.category IS NOT NULL AND r.category != ''
         ) AS combined
         ORDER BY priority ASC
@@ -473,15 +474,15 @@ def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Di
         cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
             """
-            SELECT r.surname, r.name, r.birthday, r.category, r.finish_pace_avg_clean
+            SELECT r.surname, r.name, r.birthday, r.category,
+                   COALESCE(r.finish_pace_avg_clean, r.finish_pace_avg_gun) AS finish_pace_avg_clean
             FROM results r
             INNER JOIN events e ON r.event_id = e.id
             WHERE e.event_name = %s
               AND e.event_distance = %s
               AND e.event_year = %s
               AND r.race_status = 'Finished'
-              AND r.time_clear_finish IS NOT NULL
-              AND r.finish_pace_avg_clean IS NOT NULL
+              AND COALESCE(r.finish_pace_avg_clean, r.finish_pace_avg_gun) IS NOT NULL
             """,
             (event_name, str(event_distance), year),
         )
@@ -489,15 +490,14 @@ def get_prev_year_results(event_name: str, event_distance, year: int) -> List[Di
         if not rows:
             cursor.execute(
                 """
-                SELECT r.surname, r.name, r.birthday, r.category, r.finish_pace_avg_clean
+                SELECT r.surname, r.name, r.birthday, r.category,
+                   COALESCE(r.finish_pace_avg_clean, r.finish_pace_avg_gun) AS finish_pace_avg_clean
                 FROM results r
                 INNER JOIN events e ON r.event_id = e.id
                 WHERE e.event_name = %s
                   AND e.event_year = %s
                   AND r.race_status = 'Finished'
-                  AND r.time_clear_finish IS NOT NULL
-                  AND r.finish_pace_avg_clean IS NOT NULL
-                  AND r.finish_pace_avg_clean != ''
+                  AND COALESCE(r.finish_pace_avg_clean, r.finish_pace_avg_gun) IS NOT NULL
                 """,
                 (event_name, year),
             )
@@ -634,7 +634,7 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
                             female_paces.append(pace_sec)
                             all_female_paces.append(pace_sec)
 
-                    tc = r.get('time_clear_finish')
+                    tc = r.get('time_clear_finish') or r.get('time_gun_finish')
                     tc_sec = _td_sec(tc)
                     if tc_sec:
                         if dist_best_raw is None or tc_sec < dist_best_raw:
