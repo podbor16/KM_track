@@ -29,6 +29,18 @@ def _sample_parsed(unknown_headers=None, failed_rows=None):
     )
 
 
+def _sample_preview(to_delete=None):
+    """preview_leads_import_matches() с 2026-08 возвращает и удаления (заявки, которых нет
+    в файле), а не только список строк."""
+    return {
+        "rows": [{
+            "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
+            "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
+        }],
+        "to_delete": to_delete or [],
+    }
+
+
 class TestLeadsImportUpload:
     def test_upload_returns_token_and_preview_counts(self, client):
         with patch(
@@ -36,10 +48,7 @@ class TestLeadsImportUpload:
             return_value=_sample_parsed(),
         ), patch(
             "src.analytics.db_results.preview_leads_import_matches",
-            return_value=[{
-                "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
-                "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
-            }],
+            return_value=_sample_preview(),
         ):
             r = client.post(
                 "/api/admin/leads/import/upload",
@@ -51,6 +60,7 @@ class TestLeadsImportUpload:
         assert data["total_rows"] == 1
         assert data["to_update"] == 0
         assert data["to_create"] == 1
+        assert data["to_delete"] == 0
         assert data["parse_errors"] == []
         assert len(data["sample"]) == 1
         assert data["unknown_headers"] == []
@@ -61,10 +71,7 @@ class TestLeadsImportUpload:
             return_value=_sample_parsed(unknown_headers=["НоваяКолонкаТильды"]),
         ), patch(
             "src.analytics.db_results.preview_leads_import_matches",
-            return_value=[{
-                "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
-                "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
-            }],
+            return_value=_sample_preview(),
         ):
             r = client.post(
                 "/api/admin/leads/import/upload",
@@ -83,10 +90,7 @@ class TestLeadsImportUpload:
             return_value=_sample_parsed(failed_rows=failed),
         ), patch(
             "src.analytics.db_results.preview_leads_import_matches",
-            return_value=[{
-                "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
-                "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
-            }],
+            return_value=_sample_preview(),
         ):
             r = client.post(
                 "/api/admin/leads/import/upload",
@@ -129,10 +133,7 @@ class TestLeadsImportApply:
             return_value=_sample_parsed(),
         ), patch(
             "src.analytics.db_results.preview_leads_import_matches",
-            return_value=[{
-                "row_number": 2, "surname": "Иванов", "name": "Иван", "birthday": "1990-01-01",
-                "event_name": "Весна", "event_distance": "5 км", "matched_count": 0, "will": "create",
-            }],
+            return_value=_sample_preview(),
         ):
             upload = client.post(
                 "/api/admin/leads/import/upload",

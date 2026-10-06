@@ -720,17 +720,25 @@ check('chartToggleSelect — без лимита, 5+ участников мож
     const selected = vm.runInContext('_chartSelectedBibs', sandbox);
     assert.strictEqual(JSON.stringify(selected), JSON.stringify([1, 2, 3, 4, 5, 6]));
 });
-check('chartCompareColor — переиспользует палитру по кругу для 5-го и далее (без лимита)', () => {
-    const c0 = sandbox.chartCompareColor(0);
-    const c4 = sandbox.chartCompareColor(4); // 5-й участник (индекс 4) — тот же цвет, что 1-й (индекс 0)
-    assert.strictEqual(c0, c4);
+// С 2026-08-08 (0d5b5c2) цвет закреплён за bib (хэш → 8 цветов × сплошная/штрих = 16
+// слотов), а не за порядком выбора: участник не меняет цвет при добавлении/снятии других.
+check('chartCompareColor — цвет и штрих закреплены за bib, не зависят от порядка выбора', () => {
+    resetChartSelection();
+    const before = sandbox.chartCompareColor(144);
+    sandbox.chartToggleSelect(5);
+    sandbox.chartToggleSelect(144);
+    assert.deepStrictEqual(sandbox.chartCompareColor(144), before);
+    assert.deepStrictEqual(sandbox.chartCompareColor('144'), before, 'bib строкой и числом — один участник');
 });
-check('chartCompareColor — детерминирован по слоту, не зависит от вызова дважды подряд', () => {
-    const c0a = sandbox.chartCompareColor(0);
-    const c0b = sandbox.chartCompareColor(0);
-    const c1 = sandbox.chartCompareColor(1);
-    assert.strictEqual(c0a, c0b);
-    assert.notStrictEqual(c0a, c1);
+check('chartCompareColor — 16 слотов: 8 цветов палитры, сплошная и штриховая линии', () => {
+    const seen = new Set();
+    for (let bib = 1; bib <= 300; bib++) {
+        const c = sandbox.chartCompareColor(bib);
+        assert.ok(typeof c.color === 'string' && c.color.startsWith('#'), `цвет у bib ${bib}: ${JSON.stringify(c)}`);
+        assert.ok(Array.isArray(c.dash));
+        seen.add(c.color + '|' + c.dash.join(','));
+    }
+    assert.strictEqual(seen.size, 16, `ожидалось 16 сочетаний цвет+штрих, получено ${seen.size}`);
 });
 
 // ── computeRanksByValue() — общий примитив (баг-фикс дублирующихся мест
@@ -3007,7 +3015,8 @@ function setRecordsIndex(records) {
 check('renderOverall() — лидер, который держит рекорд "overall", показывает "Рекорд" ВМЕСТО "Лидер"', () => {
     const r = { ...mkInd('1', 100000), surname: 'Иванов', name: 'Пётр' };
     setRaceData([r], [], Date.now());
-    setRecordsIndex([{ column_key: 'overall', category: 'absolute', best_s: 71429, holder_name: 'Иванов Пётр' }]);
+    // best_s = время этой строки: с 2026-08-08 (0a19162) трофей только у заезда, равного рекорду
+    setRecordsIndex([{ column_key: 'overall', category: 'absolute', best_s: 100000, holder_name: 'Иванов Пётр' }]);
     setState('all', 'all');
     sandbox.renderOverall();
     const html = domGetAppHtml();
@@ -3021,12 +3030,24 @@ check('renderStage(\'swim\') — рекордсмен без лидерства 
     const leader = mkTimerInd('1', { surname: 'Быстров', name: 'Олег', gender: 'M', swim_s: 8000, cp: { swim: { [maxSeqSwim]: 8000 } } });
     const recordHolder = mkTimerInd('2', { surname: 'Петрова', name: 'Анна', gender: 'F', swim_s: 8500, cp: { swim: { [maxSeqSwim]: 8500 } } });
     setRaceData([leader, recordHolder], [], Date.now());
-    setRecordsIndex([{ column_key: 'swim', category: 'female', best_s: 9330, holder_name: 'Петрова Анна' }]);
+    setRecordsIndex([{ column_key: 'swim', category: 'female', best_s: 8500, holder_name: 'Петрова Анна' }]);
     setState('all', 'all');
     sandbox.renderStage('swim');
     const html = domGetAppHtml();
     const row2 = html.match(/<tr[^>]*>(?:(?!<tr)[\s\S])*?bib-cell">2<(?:(?!<tr)[\s\S])*?<\/tr>/)[0];
     assert.ok(row2.includes('time-gap-sub">+') && row2.includes('record">🏆 Ж<'), `ожидалась отдельная строка отставания И строка "Рекорд: Ж": ${row2}`);
+});
+check('renderOverall() — рекордсмен в заезде медленнее своего рекорда — без трофея, обычный "Лидер" (0a19162)', () => {
+    // реальный случай: Бурдин держит рекорд заплыва 2023 года, но 2025 проплыл медленнее —
+    // трофей подсвечивал его строку 2025 года по одному совпадению ФИО
+    const r = { ...mkInd('1', 100000), surname: 'Иванов', name: 'Пётр' };
+    setRaceData([r], [], Date.now());
+    setRecordsIndex([{ column_key: 'overall', category: 'absolute', best_s: 71429, holder_name: 'Иванов Пётр' }]);
+    setState('all', 'all');
+    sandbox.renderOverall();
+    const html = domGetAppHtml();
+    assert.ok(!html.includes('record">🏆'), `трофея быть не должно — время строки не равно рекорду: ${html}`);
+    assert.ok(html.includes('lead">Лидер'), `ожидался обычный "Лидер": ${html}`);
 });
 check('renderOverall() — без записи в индексе рекордов поведение не меняется (обычный "Лидер")', () => {
     const r = { ...mkInd('1', 100000), surname: 'Иванов', name: 'Пётр' };

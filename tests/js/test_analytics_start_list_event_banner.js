@@ -43,6 +43,8 @@ const sandbox = {
         createElement: (tag) => makeElement(tag),
         addEventListener: () => {},
         querySelectorAll: () => [],
+        // подзаголовок над баннером (.page-title-event) — прячется, когда баннер показан
+        querySelector: (sel) => sel === '.page-title-event' ? domStub('page-title-event') : null,
         documentElement: { style: { setProperty: () => {} } },
     },
     localStorage: { getItem: () => null, setItem: () => {} },
@@ -72,6 +74,7 @@ check('updateEventBanner() — показывает баннер, если фо�
     const banner = domStub('eventBanner');
     assert.strictEqual(banner.style.display, '');
     assert.ok(banner.style.backgroundImage.includes(encodeURIComponent('Весна')));
+    assert.strictEqual(domStub('page-title-event').style.display, 'none', 'подзаголовок дублирует надпись на баннере');
 });
 
 check('updateEventBanner() — прячет баннер, если фото не загрузилось (onerror)', () => {
@@ -81,6 +84,7 @@ check('updateEventBanner() — прячет баннер, если фото не
     sandbox.updateEventBanner();
     const banner = domStub('eventBanner');
     assert.strictEqual(banner.style.display, 'none');
+    assert.strictEqual(domStub('page-title-event').style.display, '', 'без баннера название события — в подзаголовке');
 });
 
 check('updateEventBanner() — не падает, если #eventBanner отсутствует в DOM', () => {
