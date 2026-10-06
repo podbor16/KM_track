@@ -923,3 +923,16 @@ def test_admin_resolve_import_years_prefers_selected_year(monkeypatch):
                           registered_at="2026-08-23 20:06:10", year_candidates=[2026, 2027])
     _resolve_import_years([row], ("Детский забег", 2026))
     assert (row.event_year, row.event_distance) == (2026, "500 м")
+
+
+def test_stage_archived_marks_refund():
+    """Возврат в Тильде — заявку переносят в CRM-лист «Архивные»; в выгрузке всех листов
+    колонка Stage (решение пользователя 2026-10-06). Stage больше не «неизвестная» колонка."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,Stage\r\n"
+        "Иванов,Иван,01.05.1990,Весна,5 км,2027,Входящие\r\n"
+        "Петров,Пётр,01.05.1991,Весна,5 км,2027,Архивные\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert [r.refund for r in result.rows] == [False, True]
+    assert result.unknown_headers == []

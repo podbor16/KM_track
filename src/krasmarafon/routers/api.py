@@ -383,7 +383,8 @@ async def get_registered_runners(
 
         filtered = [
             r for r in all_data
-            if r.get('event_name', event_name) == event_name
+            if not r.get('refund')                 # возвраты скрыты с сайта (видны только в /admin)
+            and r.get('event_name', event_name) == event_name
             and (lambda y: y == event_year if y else True)(
                 int(r['event_year']) if r.get('event_year') else None
             )
@@ -984,9 +985,10 @@ async def get_startlist(event_id: int = PathParam(..., description="ID собы�
 
 
 def _export_rows(rows):
-    """Одна заявка на человека (основная — та же, что получает номер), по номеру, затем ФИО."""
+    """Одна заявка на человека (основная — та же, что получает номер), по номеру, затем ФИО.
+    Возвраты в Copernico не идут."""
     from src.analytics.bibs import main_lead_per_person
-    return sorted(main_lead_per_person(rows),
+    return sorted(main_lead_per_person([r for r in rows if not r.get('refund')]),
                   key=lambda r: (r.get('start_number') or 10**9, r.get('surname') or '', r.get('name') or ''))
 
 

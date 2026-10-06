@@ -128,7 +128,7 @@ def plan(groups, ranges, taken):
 def load_leads(conn, event_name, event_year):
     cur = conn.cursor(dictionary=True)
     cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main
-                   FROM leads WHERE event_name = %s AND event_year = %s""", (event_name, int(event_year)))
+                   FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""", (event_name, int(event_year)))
     rows = cur.fetchall()
     cur.close()
     return rows

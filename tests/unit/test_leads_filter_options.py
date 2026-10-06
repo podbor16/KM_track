@@ -22,7 +22,7 @@ def test_event_names_union_leads_and_events(mock_get_conn):
     этот пробел."""
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchall.return_value = [("Детский забег",), ("Жара",)]
+    cur.fetchall.side_effect = [[("Детский забег",), ("Жара",)], []]   # имена; даты стартов — нет
 
     result = get_leads_filter_options()
 
@@ -91,3 +91,21 @@ def test_years_from_leads_only_for_start_list(mock_get_conn):
     years_call = cur.execute.call_args_list[1]
     assert "FROM events" not in years_call.args[0]
     assert years_call.args[1] == ("Х Трейл",)
+
+
+@patch("src.analytics.db_results._krsk_today")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_event_names_ordered_by_nearest_start(mock_get_conn, mock_today):
+    """Как селектор /start_list: предстоящие по дате, затем прошедшие (свежие выше),
+    без дат — в конце по алфавиту (решение пользователя 2026-10-06)."""
+    from datetime import date
+    mock_today.return_value = date(2026, 10, 6)
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [
+        [("Весна",), ("Жара",), ("Новый",), ("Снежная семерка",)],
+        [("Весна", 2026, date(2026, 5, 17), date(2026, 5, 17)), ("Весна", 2027, date(2027, 5, 16), date(2027, 5, 16)),
+         ("Жара", 2026, date(2026, 8, 22), date(2026, 8, 23)),
+         ("Снежная семерка", 2026, date(2026, 12, 6), date(2026, 12, 6))],
+    ]
+    assert get_leads_filter_options()["event_names"] == ["Снежная семерка", "Весна", "Жара", "Новый"]

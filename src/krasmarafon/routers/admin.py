@@ -402,6 +402,7 @@ async def list_leads(
     is_duplicate: Optional[bool] = None,
     is_name_suspicious: Optional[bool] = None,
     search: Optional[str] = None,
+    refund: Optional[bool] = None,
     offset: int = 0,
     limit: int = Query(default=100, le=500),
     user: str = Depends(api_require_auth),
@@ -412,7 +413,7 @@ async def list_leads(
     kw = dict(
         event_id=event_id, event_name=event_name, event_year=event_year,
         event_distance=event_distance, is_duplicate=is_duplicate,
-        is_name_suspicious=is_name_suspicious, search=search,
+        is_name_suspicious=is_name_suspicious, search=search, refund=refund,
     )
     # Последовательно — избегаем одновременного захвата двух соединений из пула
     rows = await asyncio.get_event_loop().run_in_executor(
@@ -452,6 +453,26 @@ async def make_lead_main(lead_id: int, user: str = Depends(api_require_auth)) ->
 
     client_id = await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_main(lead_id))
     if client_id is None:
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    return {"status": "ok"}
+
+
+@router.post("/api/admin/leads/{lead_id}/refund")
+async def mark_lead_refund(lead_id: int, refund: bool = True, user: str = Depends(api_require_auth)) -> dict:
+    """«Возврат» / «Снять возврат» вручную (импорт ручную пометку не снимает)."""
+    from src.analytics.db_results import set_lead_refund
+
+    if not await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_refund(lead_id, refund)):
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    return {"status": "ok"}
+
+
+@router.delete("/api/admin/leads/{lead_id}")
+async def remove_lead(lead_id: int, user: str = Depends(api_require_auth)) -> dict:
+    """«Удалить заявку»: копия строки — в журнале dq_actions."""
+    from src.analytics.db_results import delete_lead
+
+    if not await asyncio.get_event_loop().run_in_executor(None, lambda: delete_lead(lead_id, user)):
         raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
     return {"status": "ok"}
 
@@ -689,6 +710,7 @@ async def upload_leads_import(
         to_update=sum(1 for r in preview_rows if r["will"] == "update"),
         to_create=sum(1 for r in preview_rows if r["will"] == "create"),
         to_delete=len(to_delete),
+        to_refund=sum(1 for r in parsed.rows if getattr(r, "refund", False)),
         parse_errors=parsed.errors,
         sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
         unknown_headers=parsed.unknown_headers,

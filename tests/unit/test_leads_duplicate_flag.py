@@ -22,7 +22,8 @@ def test_recompute_marks_group_as_duplicate(mock_get_conn):
 
     assert updated == 3
     sql, params = cur.execute.call_args[0]
-    assert "UPDATE leads" in sql and "ROW_NUMBER() OVER (PARTITION BY client_id, event_id" in sql
+    assert "UPDATE leads" in sql and "PARTITION BY client_id, event_id, refund > 0" in sql
+    assert "refund = 0 AND ROW_NUMBER()" in sql                      # возврат — не основная и не «Дубль»
     assert "dup_main DESC" in sql and "created_at DESC" in sql      # ручной выбор, номер, самая поздняя
     assert "WHERE l.is_duplicate <> t.dup" in sql                   # пишутся только расхождения
     assert params == [42]

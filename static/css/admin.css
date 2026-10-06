@@ -120,6 +120,11 @@
     background: #f0f0f0;
     color: var(--km-text-secondary);
 }
+/* Возврат заявки (leads.refund) — скрыта с сайта, видна только в админке */
+.admin-badge--refund {
+    background: #fff3cd;
+    color: #8a6100;
+}
 
 /* ------- Buttons (km-btn) ------- */
 
@@ -560,3 +565,6 @@
 
 /* Несохранённый ввод, восстановленный из черновика или ещё не сохранённый (static/js/admin-state.js) */
 .admin-draft { outline: 2px solid #f0b429; outline-offset: -1px; }
+
+/* Действия в строке заявки — в одну строку, таблица прокручивается по горизонтали */
+.leads-col-actions { white-space: nowrap; }

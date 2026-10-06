@@ -114,3 +114,47 @@ def test_lead_with_bib_is_main_and_card_contacts_kept(db):
     conn.commit()
     cur.execute("SELECT phone FROM clients WHERE id = %s", (client,))
     assert cur.fetchone()["phone"] == "+73333333333"
+
+
+def test_refund_out_of_duplicates_site_and_bibs(db, client):
+    from src.analytics import bibs
+    from src.analytics.db_results import set_lead_refund
+    conn, cur = db
+    cur.execute("SHOW COLUMNS FROM leads LIKE 'refund'")
+    if not cur.fetchone():
+        pytest.skip("Миграция lead_refund не применена")
+    old = add(cur, "Возврат", "2026-01-01 10:00:00")
+    new = add(cur, "Возврат", "2026-01-02 10:00:00")
+    conn.commit()
+    assert set_lead_refund(new, True)                         # вернули деньги за свежую заявку
+    cur.execute("SELECT id, refund, is_duplicate FROM leads WHERE id IN (%s, %s) ORDER BY id", (old, new))
+    assert [tuple(r.values()) for r in cur.fetchall()] == [(old, 0, 0), (new, 1, 0)]   # основная — оставшаяся
+    runners = client.get("/api/registered-runners", params={"event_name": EV, "event_year": 2099}).json()["runners"]
+    assert [r["lead_id"] for r in runners] == [old]           # возврат скрыт с сайта
+    assert [l["id"] for l in bibs.load_leads(conn, EV, 2099)] == [old]   # и без номера
+    assert set_lead_refund(new, False)
+    cur.execute("SELECT is_duplicate FROM leads WHERE id IN (%s, %s) ORDER BY id", (old, new))
+    assert [r["is_duplicate"] for r in cur.fetchall()] == [1, 0]
+
+
+def test_delete_lead_logged_and_main_recomputed(db):
+    import json
+    from src.analytics.db_results import delete_lead
+    conn, cur = db
+    old = add(cur, "Удаление", "2026-01-01 10:00:00")
+    new = add(cur, "Удаление", "2026-01-02 10:00:00")
+    conn.commit()
+    cur.execute("SELECT client_id FROM leads WHERE id = %s", (old,))
+    recompute_duplicates(cur, [cur.fetchone()["client_id"]])
+    conn.commit()
+    assert flags(cur, old)["is_duplicate"] == 1
+    try:
+        assert delete_lead(new, "pytest")
+        assert flags(cur, new) is None
+        assert flags(cur, old)["is_duplicate"] == 0          # единственная — основная
+        cur.execute("SELECT details FROM dq_actions WHERE action = 'delete_lead' AND finding_key = %s", (f"lead:{new}",))
+        assert json.loads(cur.fetchone()["details"])["name"] == "Удаление"
+        assert not delete_lead(10 ** 12, "pytest")
+    finally:
+        cur.execute("DELETE FROM dq_actions WHERE action = 'delete_lead' AND done_by = 'pytest'")
+        conn.commit()

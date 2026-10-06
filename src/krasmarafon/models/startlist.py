@@ -60,6 +60,7 @@ class LeadAdminItem(BaseModel):
     created_at: Optional[str] = None   # дата заявки — видно, какая основная (самая поздняя)
     dup_main: Optional[int] = None     # «Сделать основной» — ручной выбор
     name_ok: Optional[int] = None      # «Имя в порядке»
+    refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»)
 
     @model_validator(mode='before')
     @classmethod
@@ -144,6 +145,7 @@ class LeadImportPreviewResponse(BaseModel):
     to_update: int
     to_create: int
     to_delete: int
+    to_refund: int = 0     # строки из листа «Архивные» (Stage) — будут помечены «Возврат»
     parse_errors: List[str]
     sample: List[LeadImportPreviewRow]
     unknown_headers: List[str] = []

@@ -113,13 +113,14 @@
                         <option value="">Все заявки</option>
                         <option value="false">Без дубликатов</option>
                         <option value="true">Только дубликаты</option>
+                        <option value="refund">Возвраты</option>
                     </select>
                     <label class="admin-checkbox-label">
                         <input type="checkbox" id="leads-suspicious-filter" onchange="loadLeads(true)">
                         Подозрит. имена
                     </label>
                     <input type="search" id="leads-search" class="admin-select" placeholder="Поиск по фамилии / email"
-                           style="min-width:180px" onkeydown="if(event.key==='Enter')loadLeads(true)">
+                           style="width:240px" onkeydown="if(event.key==='Enter')loadLeads(true)">
                 </div>
                 <div class="admin-leads-actions">
                     <button class="km-btn km-btn--secondary" onclick="loadLeads(true, _leadsData.length)">Обновить</button>
@@ -948,7 +949,9 @@
         let url = `/api/admin/leads?event_name=${encodeURIComponent(eventName)}&limit=${limit}&offset=${reset ? 0 : _leadsOffset}`;
         if (year) url += `&event_year=${year}`;
         if (dist) url += `&event_distance=${encodeURIComponent(dist)}`;
-        if (dupFilter !== '') url += `&is_duplicate=${dupFilter}`;
+        // «Возвраты» — отдельный фильтр; «Без дубликатов» — живые участники, без возвратов
+        if (dupFilter === 'refund') url += '&refund=true';
+        else if (dupFilter !== '') url += `&is_duplicate=${dupFilter}` + (dupFilter === 'false' ? '&refund=false' : '');
         if (suspFilter) url += `&is_name_suspicious=true`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
 
@@ -1096,6 +1099,13 @@
         const actions = tr.querySelector('.leads-col-actions');
         if (lead.is_duplicate) actions.appendChild(_leadActionBtn('Сделать основной', `/api/admin/leads/${lead.id}/main`));
         if (lead.is_name_suspicious) actions.appendChild(_leadActionBtn('Имя в порядке', `/api/admin/leads/${lead.id}/name-ok`));
+        // Возврат: скрыт с сайта, без номера и без экспорта Copernico, в админке — с бейджем
+        actions.appendChild(lead.refund
+            ? _leadActionBtn('Снять возврат', `/api/admin/leads/${lead.id}/refund?refund=false`)
+            : _leadActionBtn('Возврат', `/api/admin/leads/${lead.id}/refund?refund=true`,
+                             `Пометить возвратом заявку ${lead.surname} ${lead.name} от ${_fmtCreated(lead.created_at)}?\nОна пропадёт с сайта, из номеров и экспорта, но останется в админке.`));
+        actions.appendChild(_leadActionBtn('Удалить', `/api/admin/leads/${lead.id}`,
+            `Удалить заявку ${lead.surname} ${lead.name}, ${lead.event_distance || ''}, от ${_fmtCreated(lead.created_at)}?\nКопия сохранится в журнале действий.`, 'DELETE'));
         return tr;
     }
 
@@ -1103,9 +1113,15 @@
         const cell = tr.querySelector('.leads-col-dup');
         cell.innerHTML = '';
         const badge = document.createElement('span');
-        badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
-        badge.textContent = lead.is_duplicate ? 'Дубль' : (lead.dup_main ? 'Основная' : 'Ок');
-        if (lead.dup_main) badge.title = 'Выбрана основной вручную';
+        if (lead.refund) {
+            badge.className = 'admin-badge admin-badge--refund';
+            badge.textContent = 'Возврат';
+            badge.title = lead.refund === 2 ? 'Из Тильды: лист «Архивные»' : 'Помечено вручную';
+        } else {
+            badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
+            badge.textContent = lead.is_duplicate ? 'Дубль' : (lead.dup_main ? 'Основная' : 'Ок');
+            if (lead.dup_main) badge.title = 'Выбрана основной вручную';
+        }
         cell.appendChild(badge);
     }
 
@@ -1116,15 +1132,16 @@
         return `${dd}.${m}.${y}${t ? ' ' + t.slice(0, 5) : ''}`;
     }
 
-    function _leadActionBtn(label, url) {
+    function _leadActionBtn(label, url, confirmText, method) {
         const btn = document.createElement('button');
         btn.className = 'km-btn km-btn--secondary';
         btn.style.marginLeft = '4px';
         btn.textContent = label;
         btn.addEventListener('click', async () => {
+            if (confirmText && !confirm(confirmText)) return;
             btn.disabled = true;
             try {
-                const r = await fetch(url, { method: 'POST' });
+                const r = await fetch(url, { method: method || 'POST' });
                 if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
                 loadLeads(true, _leadsData.length);
             } catch (e) {
@@ -1371,7 +1388,8 @@
 
         el.style.display = '';
         el.innerHTML = `
-            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${preview.to_delete ? `, удалится: ${preview.to_delete}` : ''}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
+            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${preview.to_delete ? `, удалится: ${preview.to_delete}` : ''}${preview.to_refund ? `, возвратов (лист «Архивные»): ${preview.to_refund}` : ''}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
+            <div class="dq-muted">Возвраты: выгружайте из Тильды все листы CRM — заявки из «Архивных» станут «Возврат». Заявки, которых нет в файле, удаляются.</div>
             ${errorsHtml}
             ${unknownHeadersHtml}
             ${deleteHtml}

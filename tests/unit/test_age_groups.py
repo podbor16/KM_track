@@ -341,3 +341,23 @@ def test_save_age_groups_missing_row_rolls_back(mock_get_conn):
     conn.rollback.assert_called_once()
     conn.commit.assert_not_called()
     conn.close.assert_called()
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_no_connection_does_not_retry_per_lead(mock_get_conn):
+    """Пул исчерпан — раньше каждая из 60 тыс. заявок стартового списка снова просила
+    соединение (пустой кеш считался «нет кеша»), запрос висел десятки минут (2026-10-06)."""
+    mock_get_conn.return_value = None
+    for _ in range(100):
+        get_age_group_label("Жара", "5 км", 30, "Мужчина")
+    assert mock_get_conn.call_count == 1
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_empty_config_table_cached_too(mock_get_conn):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    for _ in range(50):
+        get_age_group_label("Жара", "5 км", 30, "Мужчина")
+    assert mock_get_conn.call_count == 1

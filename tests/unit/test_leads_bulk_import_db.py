@@ -55,7 +55,7 @@ def test_matches_by_order_id_even_when_surname_name_changed(mock_get_conn):
 
     assert summary["updated"] == 1
     assert summary["created"] == 0
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
     assert len(select_calls) == 1  # совпало по order_id — фоллбэк на surname+name не понадобился
     assert "order_id" in select_calls[0].args[0]
     assert 1644133682 in select_calls[0].args[1]
@@ -71,7 +71,7 @@ def test_falls_back_to_name_match_when_order_id_not_found(mock_get_conn):
     summary = bulk_import_leads([_row(order_id="999999")])
 
     assert summary["updated"] == 1
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
     assert len(select_calls) == 2
     assert "surname" in select_calls[1].args[0]
 
@@ -90,7 +90,7 @@ def test_order_id_zero_treated_as_no_order_id(mock_get_conn, mock_recompute):
 
     bulk_import_leads([_row(order_id="0")])
 
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
     assert len(select_calls) == 1  # order_id=0 пропущен — сразу фоллбэк на surname+name
     assert "surname" in select_calls[0].args[0]
 

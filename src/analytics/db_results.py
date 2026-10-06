@@ -2,6 +2,7 @@
 Запросы к БД: результаты забегов, статистика, сегменты, вспомогательные функции.
 """
 
+import json
 import logging
 import time
 import datetime
@@ -1019,6 +1020,7 @@ def _parse_age_and_sex(birthdate_or_age, sex: str = None):
 _age_group_cache: dict = {}
 _age_group_cache_ts: float = 0.0
 AGE_GROUP_CACHE_TTL = 60  # админ-конфиг — короткий TTL, правки видны быстро
+AGE_GROUP_RETRY_S = 5     # БД/пул недоступны — повтор не раньше, чем через 5 с
 
 
 def _get_age_group_configs() -> dict:
@@ -1028,12 +1030,16 @@ def _get_age_group_configs() -> dict:
     но не на каждый запрос."""
     global _age_group_cache, _age_group_cache_ts
     now = time.time()
-    if _age_group_cache and (now - _age_group_cache_ts) < AGE_GROUP_CACHE_TTL:
+    # свежесть — по времени, не по «непустоте»: пустой словарь (границ нет / БД не ответила)
+    # иначе перезапрашивался на КАЖДУЮ заявку — 60 тыс. попыток взять соединение из
+    # исчерпанного пула с паузой 0,1 с подвешивали стартовый список (найдено 2026-10-06)
+    if (now - _age_group_cache_ts) < AGE_GROUP_CACHE_TTL:
         return _age_group_cache
 
     conn = get_pooled_connection()
     if not conn:
-        return _age_group_cache or {}
+        _age_group_cache_ts = now - AGE_GROUP_CACHE_TTL + AGE_GROUP_RETRY_S
+        return _age_group_cache
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute(
@@ -1051,7 +1057,8 @@ def _get_age_group_configs() -> dict:
         return cache
     except Exception as e:
         logger.error(f"_get_age_group_configs error: {e}")
-        return _age_group_cache or {}
+        _age_group_cache_ts = now - AGE_GROUP_CACHE_TTL + AGE_GROUP_RETRY_S
+        return _age_group_cache
     finally:
         try:
             conn.close()
@@ -1380,30 +1387,10 @@ def get_test_table_data() -> List[Dict[str, Any]]:
                 cursor.execute(f"SELECT * FROM `{_validate_table_name(target_table)}`")
                 records = cursor.fetchall()
 
-                if records:
-                    logger.info(f"✅ Получено {len(records)} записей из таблицы '{target_table}'")
-
-                    for record in records:
-                        age_info = (
-                            record.get('birthday') or record.get('birthdate') or
-                            record.get('Дата рождения') or record.get('age') or
-                            record.get('Возраст')
-                        )
-                        sex_info = (
-                            record.get('sex') or record.get('Пол') or
-                            record.get('gender') or record.get('gender_en')
-                        )
-                        record['category'] = get_age_group_label(
-                            record.get('event_name'), record.get('event_distance'), age_info, sex_info,
-                            source=record.get('source'),
-                        ) if age_info else 'Неизвестно'
-
-                    _start_list_cache = records
-                    _start_list_cache_ts = time.time()
-                    return records
-                else:
+                if not records:
                     logger.warning(f"⚠️ Таблица '{target_table}' пуста, возвращаем тестовые данные")
                     return get_test_data_fallback()
+                logger.info(f"✅ Получено {len(records)} записей из таблицы '{target_table}'")
 
             except Error as e:
                 logger.error(f"❌ Ошибка выполнения SQL запроса: {e}")
@@ -1419,6 +1406,25 @@ def get_test_table_data() -> List[Dict[str, Any]]:
     else:
         logger.error("❌ Не удалось установить соединение с БД, используем тестовые данные")
         return get_test_data_fallback()
+
+    # категории — уже без своего соединения: get_age_group_label() может взять своё из пула
+    for record in records:
+        age_info = (
+            record.get('birthday') or record.get('birthdate') or
+            record.get('Дата рождения') or record.get('age') or
+            record.get('Возраст')
+        )
+        sex_info = (
+            record.get('sex') or record.get('Пол') or
+            record.get('gender') or record.get('gender_en')
+        )
+        record['category'] = get_age_group_label(
+            record.get('event_name'), record.get('event_distance'), age_info, sex_info,
+            source=record.get('source'),
+        ) if age_info else 'Неизвестно'
+    _start_list_cache = records
+    _start_list_cache_ts = time.time()
+    return records
 
 
 def get_test_data_fallback() -> List[Dict[str, Any]]:
@@ -1468,7 +1474,7 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
         return []
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
-        sql = "SELECT * FROM leads WHERE event_id = %s"
+        sql = "SELECT * FROM leads WHERE event_id = %s AND refund = 0"
         if not include_duplicates:
             sql += " AND is_duplicate = 0"
         sql += " ORDER BY surname ASC, name ASC"
@@ -1495,7 +1501,7 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
 
 def _leads_where(
     event_id=None, event_name=None, event_year=None, event_distance=None,
-    is_duplicate=None, is_name_suspicious=None, search=None
+    is_duplicate=None, is_name_suspicious=None, search=None, refund=None
 ):
     """Строит WHERE + params для leads-запросов."""
     conds: list = []
@@ -1517,6 +1523,8 @@ def _leads_where(
             conds.append("is_duplicate = %s"); params.append(0)
     if is_name_suspicious is not None:
         conds.append("is_name_suspicious = %s"); params.append(1 if is_name_suspicious else 0)
+    if refund is not None:
+        conds.append("refund > 0" if refund else "refund = 0")
     if search:
         like = "%" + search.replace("%", "\\%").replace("_", "\\_") + "%"
         conds.append("(surname LIKE %s OR name LIKE %s OR email LIKE %s)")
@@ -1527,7 +1535,7 @@ def _leads_where(
 
 def count_leads_admin(
     event_id=None, event_name=None, event_year=None, event_distance=None,
-    is_duplicate=None, is_name_suspicious=None, search=None
+    is_duplicate=None, is_name_suspicious=None, search=None, refund=None
 ) -> int:
     """SELECT COUNT(*) с теми же фильтрами что get_leads_admin."""
     conn = get_pooled_connection()
@@ -1537,7 +1545,7 @@ def count_leads_admin(
         where, params = _leads_where(
             event_id=event_id, event_name=event_name, event_year=event_year,
             event_distance=event_distance, is_duplicate=is_duplicate,
-            is_name_suspicious=is_name_suspicious, search=search,
+            is_name_suspicious=is_name_suspicious, search=search, refund=refund,
         )
         cur = conn.cursor(buffered=True)
         cur.execute(f"SELECT COUNT(*) FROM leads {where}", params)
@@ -1557,7 +1565,7 @@ def count_leads_admin(
 def get_leads_admin(
     event_id=None, event_name=None, event_year=None, event_distance=None,
     is_duplicate=None, is_name_suspicious=None,
-    search=None, offset=0, limit=100
+    search=None, offset=0, limit=100, refund=None
 ) -> List[Dict[str, Any]]:
     """Лиды с фильтрами для admin. Без кеша."""
     conn = get_pooled_connection()
@@ -1567,7 +1575,7 @@ def get_leads_admin(
         where, params = _leads_where(
             event_id=event_id, event_name=event_name, event_year=event_year,
             event_distance=event_distance, is_duplicate=is_duplicate,
-            is_name_suspicious=is_name_suspicious, search=search,
+            is_name_suspicious=is_name_suspicious, search=search, refund=refund,
         )
         cur = conn.cursor(dictionary=True, buffered=True)
         # дубликаты — группами по человеку и дистанции, внутри группы новые выше
@@ -1654,12 +1662,22 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None, yea
             "ORDER BY event_name"
         )
         event_names = [r[0] for r in cur.fetchall()]
+        if event_name is None:
+            # список мероприятий — от ближайшего старта, как селектор /start_list (решение
+            # пользователя 2026-10-06); события без дат в events — в конце по алфавиту
+            cur.execute("SELECT event_name, event_year, MIN(event_date), MAX(event_date) FROM events "
+                        "WHERE event_name IS NOT NULL GROUP BY event_name, event_year")
+            dated = order_start_list_events(
+                [{"event_name": n, "event_year": y, "first_date": f, "last_date": l} for n, y, f, l in cur.fetchall()],
+                _krsk_today())
+            rank = {e["event_name"]: i for i, e in enumerate(e for e in dated if e["date"])}
+            event_names.sort(key=lambda n: (rank.get(n, len(rank)), n))
 
         years: list = []
         if event_name:
             if years_from_leads_only:
                 cur.execute(
-                    "SELECT DISTINCT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL "
+                    "SELECT DISTINCT event_year FROM leads WHERE event_name = %s AND event_year IS NOT NULL AND refund = 0 "
                     "ORDER BY event_year DESC",
                     (event_name,),
                 )
@@ -1693,6 +1711,11 @@ def get_leads_filter_options(event_name: str = None, event_year: int = None, yea
             conn.close()
         except Exception:
             pass
+
+
+def _krsk_today() -> datetime.date:
+    from zoneinfo import ZoneInfo
+    return datetime.datetime.now(ZoneInfo("Asia/Krasnoyarsk")).date()
 
 
 def order_start_list_events(rows: List[Dict[str, Any]], today: datetime.date) -> List[Dict[str, Any]]:
@@ -1736,7 +1759,7 @@ def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
         cur.execute(
             "SELECT l.event_name, l.event_year, MIN(e.event_date) AS first_date, MAX(e.event_date) AS last_date "
             "FROM (SELECT DISTINCT event_name, event_year FROM leads "
-            "      WHERE event_year >= %s AND event_name IS NOT NULL) l "
+            "      WHERE event_year >= %s AND event_name IS NOT NULL AND refund = 0) l "
             "LEFT JOIN events e ON e.event_name = l.event_name AND e.event_year = l.event_year "
             "GROUP BY l.event_name, l.event_year",
             (today.year,),
@@ -1811,9 +1834,11 @@ def recompute_duplicates(cur, client_ids=None) -> int:
             return 0
         cond = f" AND client_id IN ({','.join(['%s'] * len(ids))})"
         params = ids
+    # возвраты вне групп: не основная заявка и не «Дубль» (бейдж «Возврат» в /admin)
     cur.execute(
         f"""UPDATE leads l JOIN (
-                SELECT id, ROW_NUMBER() OVER (PARTITION BY client_id, event_id ORDER BY {_MAIN_LEAD_ORDER}) > 1 AS dup
+                SELECT id, refund = 0 AND ROW_NUMBER() OVER (
+                    PARTITION BY client_id, event_id, refund > 0 ORDER BY {_MAIN_LEAD_ORDER}) > 1 AS dup
                 FROM leads WHERE client_id != 0 AND event_id != 0{cond}
             ) t ON t.id = l.id
             SET l.is_duplicate = t.dup
@@ -1877,6 +1902,57 @@ def set_lead_main(lead_id: int) -> Optional[int]:
         conn.close()
 
 
+def set_lead_refund(lead_id: int, refund: bool) -> bool:
+    """Ручная пометка «Возврат» (refund=1 — импорт её не снимает) / «Снять возврат»."""
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT client_id FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        if not row:
+            return False
+        cur.execute("UPDATE leads SET refund = %s WHERE id = %s", (1 if refund else 0, lead_id))
+        recompute_duplicates(cur, [row[0]])
+        conn.commit()
+        cur.close()
+        invalidate_start_list_cache()
+        return True
+    finally:
+        conn.close()
+
+
+def delete_lead(lead_id: int, user: str) -> bool:
+    """«Удалить заявку»: строка целиком — в журнал dq_actions (восстановить можно оттуда),
+    затем удаление и пересчёт основной заявки человека. Карточка клиента остаётся."""
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        if not row:
+            return False
+        if conn.in_transaction:
+            conn.commit()
+        conn.start_transaction()
+        cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
+                    ("delete_lead", f"lead:{lead_id}", json.dumps(row, default=str, ensure_ascii=False), user or ""))
+        cur.execute("DELETE FROM leads WHERE id = %s", (lead_id,))
+        recompute_duplicates(cur, [row["client_id"]])
+        conn.commit()
+        cur.close()
+        invalidate_start_list_cache()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def set_lead_name_ok(lead_id: int) -> bool:
     """«Имя в порядке»: снимает флаг подозрительного ФИО (триггер trg_leads_name_flag_bu);
     смена ФИО заявки сбрасывает отметку."""
@@ -1925,7 +2001,7 @@ def _find_lead_matches(cur, row) -> list:
 
     if row_order_id:
         cur.execute(
-            "SELECT id FROM leads WHERE order_id=%s "
+            "SELECT id, client_id FROM leads WHERE order_id=%s "
             "AND event_name=%s AND event_year=%s AND event_distance=%s",
             (row_order_id, row.event_name, row.event_year, row.event_distance),
         )
@@ -1939,7 +2015,7 @@ def _find_lead_matches(cur, row) -> list:
     # (дата рождения необязательна при импорте с 2026-08-18).
     row_birthday = row.birthday or '1900-01-01'
     cur.execute(
-        "SELECT id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
+        "SELECT id, client_id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
         "AND event_name=%s AND event_year=%s AND event_distance=%s",
         (row.surname, row.name, row_birthday, row.event_name, row.event_year, row.event_distance),
     )
@@ -2032,12 +2108,14 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
     updated = created = deleted = 0
     errors: list = []
     present_ids: set = set()
+    touched_clients: set = set()        # их основная заявка могла смениться (возврат, новая заявка)
     from src.krasmarafon.services.tilda_import_parser import parse_tilda_datetime
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         for row in rows:
             matches = _find_lead_matches(cur, row)
             present_ids.update(m['id'] for m in matches)
+            touched_clients.update(m.get('client_id') for m in matches)
 
             # Момент подачи заявки из колонки "Date" выгрузки Tilda. Пишется
             # в leads.created_at: без него у импортных строк created_at =
@@ -2099,6 +2177,8 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                             "UPDATE leads SET start_number = %s WHERE id = %s",
                             [start_number, m['id']],
                         )
+                    cur.execute("UPDATE leads SET refund = %s WHERE id = %s AND refund <> 1",
+                                [2 if row.refund else 0, m['id']])
                     updated += 1
             else:
                 def _float_or_zero(v):
@@ -2115,13 +2195,14 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event, source, created_at
+                        status, is_new, is_new_event, source, created_at, refund
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, '',
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
-                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s,
+                        %(refund)s
                     )
                     """,
                     {
@@ -2147,6 +2228,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                         'payment_system': row.payment_system or '',
                         'is_name_suspicious': int(row.is_name_suspicious),
                         'start_number': int(row.start_number) if row.start_number.strip().isdigit() else None,
+                        'refund': 2 if getattr(row, 'refund', False) else 0,
                     },
                 )
                 new_id = cur.lastrowid
@@ -2165,6 +2247,8 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                 [lead['id'] for lead in to_delete],
             )
             deleted = len(to_delete)
+        # возврат/снятие возврата меняет основную заявку человека — пересчёт по затронутым
+        recompute_duplicates(cur, touched_clients)
 
         conn.commit()
         cur.close()
