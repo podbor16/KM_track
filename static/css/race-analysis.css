@@ -86,49 +86,49 @@
 
 
 .race-card:nth-child(1) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Ночной забег.png');
+    background-image: url('/static/images/events/logo1x1/Ночной забег.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(2) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Весна.png');
+    background-image: url('/static/images/events/logo1x1/Весна.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(3) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Красочный забег.png');
+    background-image: url('/static/images/events/logo1x1/Красочный забег.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(4) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Женская семерка.png');
+    background-image: url('/static/images/events/logo1x1/Женская семерка.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(5) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Жара.png');
+    background-image: url('/static/images/events/logo1x1/Жара.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(6) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Детский забег.png');
+    background-image: url('/static/images/events/logo1x1/Детский забег.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(7) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Х Трейл.png');
+    background-image: url('/static/images/events/logo1x1/Х Трейл.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
 
 .race-card:nth-child(8) .race-card-image {
-    background-image: url('/static/images/events/logo1x1/Снежная семерка.png');
+    background-image: url('/static/images/events/logo1x1/Снежная семерка.png?v=20261006');
     background-size: cover;
     background-position: center;
 }
