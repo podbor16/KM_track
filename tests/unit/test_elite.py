@@ -52,3 +52,24 @@ def test_kids_and_group_sex():
     assert short_category("Девочки  2016 г. р.", 2025) == "Девочки 2016 г.р."
     assert group_sex("Девочки 2016 г.р.") == "Женщина" and group_sex(" Юноши 2012-2013 г.р.") == "Мужчина"
     assert group_sex("Unknown") == ""
+
+
+def test_checkpoint_columns():
+    from scripts.import_results_xlsx import checkpoint_columns
+    h = ["#", "Bib", "2,5", "Status", "4,5", "2,5km", "razv1", "Razv2", "Finish", "Start"]
+    assert checkpoint_columns(h, {"razv1": 1.75, "razv2": 5.25}) == {2: 2.5, 4: 4.5, 5: 2.5, 6: 1.75, 7: 5.25}
+
+
+def test_write_checkpoints_sets_distances_and_pace():
+    import json
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import write_checkpoints
+    cur = MagicMock()
+    cur.rowcount = 1
+    rows = [{"start_number": 7, "kt": {2.5: 557, 4.5: 1023}}, {"start_number": 8, "kt": {}}]
+    kms, updated = write_checkpoints(cur, 89, 5.0, rows)
+    assert kms == [2.5, 4.5] and updated == 1
+    assert json.loads(cur.execute.call_args_list[0].args[1][0]) == [0, 2.5, 4.5, 5.0]
+    vals = cur.execute.call_args_list[1].args[1]
+    assert vals[:4] == ["00:09:17", "00:03:42", "00:17:03", "00:03:47"] and vals[4:14] == [None] * 10
+    assert vals[-2:] == [89, 7]

@@ -11,7 +11,10 @@
 колонка со словом «чист», иначе меньшая из двух; чистое > официального хоть у
 одного — ошибка. Гандикап (Снежная семёрка): Start — задержка волны, официальное —
 от первого выстрела (порядок прихода = места).
-Промежуточные отметки не загружаются — дистанции КТ неизвестны.
+Промежуточные отметки (2026-10-06): колонки с километражем в названии («2,5», «4,5»,
+«2,5km») или заданные --checkpoints «razv1=1.75,razv2=5.25» → time_clear_kt1…7 и темп
+(как загрузчик Copernico: время / км отметки), дистанции — в events.checkpoint_distances.
+--checkpoints-only — дописать отметки в уже загруженные результаты (по номеру), финиш не трогать.
 Протоколы «по группам» (Жара 2025): строки-заголовки групп пропускаются, Start
 необязателен, категории «Мужчины 1986−1990 г. р.» / «Мальчики 2014 г.р.» → краткий
 вид как в 2026 («М35-39» — возраст в год старта). Элита (src/analytics/elite.py) —
@@ -28,6 +31,7 @@
 import argparse
 import collections
 import datetime
+import json
 import re
 import sys
 from pathlib import Path
@@ -139,7 +143,23 @@ def short_category(category, year):
     return f"{sex}{young}" if young == old else f"{sex}{young}-{old}"
 
 
-def parse(path, year):
+_KM_HEADER = re.compile(r"^(\d+(?:[.,]\d+)?)\s*(?:km|км)?$", re.I)
+MAX_CHECKPOINTS = 7
+
+
+def checkpoint_columns(h, overrides):
+    """{индекс колонки: км} — отметки по названию («2,5», «4,5km») и из --checkpoints."""
+    cols = {}
+    for k, name in enumerate(h):
+        low = name.strip().lower()
+        if low in overrides:
+            cols[k] = overrides[low]
+        elif (m := _KM_HEADER.match(low)):
+            cols[k] = float(m.group(1).replace(",", "."))
+    return cols
+
+
+def parse(path, year, overrides=None):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
     h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[0]]
@@ -148,6 +168,7 @@ def parse(path, year):
     sex_i = h.index("Gender") if "Gender" in h else None
     i["clean"], i["Finish"] = finish_columns(h, rows[1:])
     cat_i = h.index("Category") if "Category" in h else None
+    cp_cols = checkpoint_columns(h, overrides or {})
     out = []
     group = ""                                       # текущий заголовок группы протокола «по группам»
     for r in rows[1:]:
@@ -173,6 +194,7 @@ def parse(path, year):
             "category": category,
             "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
             "gun": gun if finished else None, "clean": clean if finished else None,
+            "kt": {km: t for k, km in cp_cols.items() if (t := _secs(r[k]))},
         })
     return out
 
@@ -188,12 +210,41 @@ def rank(rows):
             r["rank_absolute" + suffix], r["rank_sex" + suffix], r["rank_category" + suffix] = n, by_sex[r["sex"]], by_cat[r["category"]]
 
 
+def write_checkpoints(cur, event_id, distance_km, rows):
+    """Отметки: дистанции → events.checkpoint_distances, время и темп → results по номеру.
+    -> (км отметок, обновлено строк)."""
+    kms = sorted({km for r in rows for km in r["kt"]})
+    if not kms:
+        return [], 0
+    if len(kms) > MAX_CHECKPOINTS or kms[-1] >= distance_km:
+        raise ValueError(f"отметки {kms} не помещаются в {MAX_CHECKPOINTS} КТ до финиша {distance_km} км")
+    cur.execute("UPDATE events SET checkpoint_distances = %s WHERE id = %s",
+                (json.dumps([0] + kms + [distance_km]), event_id))
+    cols = ", ".join(f"time_clear_kt{n} = %s, pace_avg_kt{n} = %s" for n in range(1, MAX_CHECKPOINTS + 1))
+    updated = 0
+    for r in rows:
+        if not r["kt"]:
+            continue
+        vals = []
+        for n in range(MAX_CHECKPOINTS):
+            km = kms[n] if n < len(kms) else None
+            t = r["kt"].get(km) if km else None
+            vals += [_hms(t), _hms(int(t / km)) if t else None]          # темп — как загрузчик (_seconds_to_pace)
+        cur.execute(f"UPDATE results SET {cols} WHERE event_id = %s AND start_number = %s",
+                    vals + [event_id, r["start_number"]])
+        updated += cur.rowcount
+    return kms, updated
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--xlsx", required=True, nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
     ap.add_argument("--event-id", type=int, required=True, help="событие в БД (дистанция берётся из events)")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--checkpoints", default="", help="км отметок для колонок без километража: «razv1=1.75,razv2=5.25»")
+    ap.add_argument("--checkpoints-only", action="store_true", help="только дописать отметки в уже загруженные результаты")
     args = ap.parse_args()
+    overrides = {k.strip().lower(): float(v) for k, v in (p.split("=") for p in args.checkpoints.split(",") if p)}
 
     conn = get_connection()
     try:
@@ -203,7 +254,7 @@ def main():
         if not ev:
             print(f"Нет события {args.event_id}")
             return 1
-        rows = [row for path in args.xlsx for row in parse(path, int(ev[1]))]
+        rows = [row for path in args.xlsx for row in parse(path, int(ev[1]), overrides)]
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
@@ -220,8 +271,18 @@ def main():
               f"текст вместо номера не-элиты: {[r['bib'] for r in rows if not r['bib'].isdigit() and not r['is_elite']]}, "
               f"повторы номеров: {dup}")
         print("Категории:", dict(sorted(collections.Counter(r["category"] for r in rows).items())))
+        kt_count = collections.Counter(km for r in rows for km in r["kt"])
+        print("Отметки (км: участников):", dict(sorted(kt_count.items())) or "нет")
         if dup:
             return 1
+        if args.checkpoints_only:
+            if not args.apply:
+                print("\ndry-run (только отметки). Повтори с --apply.")
+                return 0
+            kms, updated = write_checkpoints(cur, args.event_id, float(ev[2]), rows)
+            conn.commit()
+            print(f"Отметки {kms}: обновлено результатов {updated} из {sum(1 for r in rows if r['kt'])}")
+            return 0
         cur.execute("SELECT COUNT(*) FROM results WHERE event_id = %s", (args.event_id,))
         existing = cur.fetchone()[0]
         print(f"Событие {args.event_id}: {ev}, результатов в БД: {existing}")
@@ -245,7 +306,10 @@ def main():
               r.get("rank_category_clean"), pace(r["gun"]), pace(r["clean"]),
               r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None,
               r["is_elite"], r["is_pacer"]) for r in rows])
+        kms, updated = write_checkpoints(cur, args.event_id, distance_km, rows)
         conn.commit()
+        if kms:
+            print(f"Отметки {kms}: записано у {updated}")
         cur.execute("SELECT COUNT(*), SUM(client_id = 0), SUM(race_status = 'Finished') FROM results WHERE event_id = %s",
                     (args.event_id,))
         print("Загружено (всего, без клиента, финишировали):", cur.fetchone())
