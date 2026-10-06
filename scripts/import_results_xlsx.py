@@ -243,6 +243,8 @@ def main():
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--checkpoints", default="", help="км отметок для колонок без километража: «razv1=1.75,razv2=5.25»")
     ap.add_argument("--checkpoints-only", action="store_true", help="только дописать отметки в уже загруженные результаты")
+    ap.add_argument("--add-missing", action="store_true",
+                    help="догрузить строки, которых нет в БД (по номеру), и пересчитать места всех по файлу")
     args = ap.parse_args()
     overrides = {k.strip().lower(): float(v) for k, v in (p.split("=") for p in args.checkpoints.split(",") if p)}
 
@@ -286,7 +288,12 @@ def main():
         cur.execute("SELECT COUNT(*) FROM results WHERE event_id = %s", (args.event_id,))
         existing = cur.fetchone()[0]
         print(f"Событие {args.event_id}: {ev}, результатов в БД: {existing}")
-        if not ev or not ev[2] or existing:
+        cur.execute("SELECT start_number FROM results WHERE event_id = %s", (args.event_id,))
+        in_db = {r[0] for r in cur.fetchall()}
+        if args.add_missing:
+            missing = [r for r in rows if r["start_number"] not in in_db]
+            print("Догрузить:", [f"№{r['start_number']} {r['surname']} {r['name']} {r['race_status']}" for r in missing])
+        if not ev or not ev[2] or (existing and not args.add_missing):
             print("Нет события, нет дистанции или результаты уже есть — не загружаю.")
             return 1
         distance_km = float(ev[2])
@@ -294,6 +301,9 @@ def main():
             print("\ndry-run. Повтори с --apply.")
             return 0
         pace = lambda s: _hms(round(s / distance_km)) if s else None
+        all_rows = rows
+        if args.add_missing:                         # вставляем только недостающие, места — всем ниже
+            rows = missing
         cur.executemany(
             """INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status, time_gun_start, time_gun_finish, time_clear_finish, rank_absolute, rank_sex,
@@ -306,6 +316,12 @@ def main():
               r.get("rank_category_clean"), pace(r["gun"]), pace(r["clean"]),
               r["gun"] * 1000 if r["gun"] else None, r["clean"] * 1000 if r["clean"] else None,
               r["is_elite"], r["is_pacer"]) for r in rows])
+        if args.add_missing:
+            ranks = ("rank_absolute", "rank_sex", "rank_category", "rank_absolute_clean", "rank_sex_clean", "rank_category_clean")
+            for r in all_rows:
+                cur.execute(f"UPDATE results SET {', '.join(f'{c} = %s' for c in ranks)} WHERE event_id = %s AND start_number = %s",
+                            [r.get(c) for c in ranks] + [args.event_id, r["start_number"]])
+            rows = all_rows
         kms, updated = write_checkpoints(cur, args.event_id, distance_km, rows)
         conn.commit()
         if kms:
