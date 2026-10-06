@@ -3,47 +3,37 @@
 """
 
 import logging
-import re
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 
-# Маппинг краткого формата категорий (Весна/Первомай 2026) → исторический
+from src.common.categories import canonical_category
+
+# Темп категории прошлого года для маркеров трекера. Категории сравниваются в едином
+# кратком виде (src/common/categories.py: «мужчины до 49 лет (…)» = «М 49» = «М49»);
+# здесь — только разные границы групп по годам: группа этого года → группа прошлых лет.
 _CAT_MAP = {
-    'М 49':   'мужчины до 49 лет',
-    'Ж 49':   'женщины до 49 лет',
-    'М12-49':  'мужчины до 49 лет',   # Забег Икс 2026 (Copernico) -> категории 2025
-    'М 12-49': 'мужчины до 49 лет',
-    'Ж12-49':  'женщины до 49 лет',
-    'Ж 12-49': 'женщины до 49 лет',
-    'М 50-59': 'мужчины 50-59 лет',
-    'Ж 50-59': 'женщины 50-59 лет',
-    'М 60-64': 'мужчины 60-64 года',
-    'Ж 60-64': 'женщины 60-64 года',
-    'М 65-69': 'мужчины 65-69 лет',
-    'Ж 65-69': 'женщины 65 лет и старше',
-    'М 70-74': 'мужчины 70-74 года',
-    'Ж 70-74': 'женщины 60-64 года',
-    'М 75-79': 'мужчины 75 лет и старше',
-    'М 80+':   'мужчины 75 лет и старше',
-    'Ж 75-79': 'женщины 65 лет и старше',
-    'Ж 80+':   'женщины 65 лет и старше',
+    'М12-49': 'М49',   # Забег Икс 2026 (Copernico) -> категории 2025
+    'Ж12-49': 'Ж49',
+    'Ж65-69': 'Ж65+',
+    'Ж70-74': 'Ж65+',
+    'Ж75-79': 'Ж65+',
+    'Ж80+':   'Ж65+',
+    'М75-79': 'М75+',
+    'М80+':   'М75+',
 }
 
-def _normalize_cat(cat: str) -> str:
-    """Убирает суффикс с годом рождения: 'мужчины до 49 лет (1977 г.р.)' → 'мужчины до 49 лет'"""
-    return re.sub(r'\s*\([^)]+\)', '', cat).strip().lower()
 
 def _resolve_speed(category: str, category_speeds: Dict[str, float], default: float) -> float:
-    """Находит скорость по категории с учётом маппинга и нормализации."""
+    """Скорость по категории: прямое совпадение в кратком виде, иначе через _CAT_MAP."""
     if not category:
         return default
     if category in category_speeds:
         return category_speeds[category]
-    cat_lookup = _CAT_MAP.get(category, category)
-    cat_norm = _normalize_cat(cat_lookup)
-    for key, speed in category_speeds.items():
-        if _normalize_cat(key) == cat_norm:
-            return speed
+    speeds = {canonical_category(k): v for k, v in category_speeds.items()}
+    cat = canonical_category(category)
+    for key in (cat, _CAT_MAP.get(cat)):
+        if key in speeds:
+            return speeds[key]
     return default
 
 logger = logging.getLogger(__name__)

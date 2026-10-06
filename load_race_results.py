@@ -47,6 +47,7 @@ except ImportError:
 from src.analytics.db_connection_optimized import create_connection, calculate_age_group
 from src.common.names import normalize_person_name
 from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
+from src.common.categories import canonical_category
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
@@ -695,7 +696,7 @@ class RaceLoader:
                     name,
                     birthdate,
                     convert_gender(runner.get('gender')),
-                    runner.get('category', 'Unknown'),
+                    canonical_category(runner.get('category') or '') or 'Unknown',
                     'Not started',
                     int(is_elite(dorsal, self.elite_ranges, surname)),
                     int(is_pacer(dorsal)),
@@ -997,8 +998,8 @@ class RaceLoader:
 
             birthdate = normalize_birthdate(runner.get('birthdate'))
             sex = convert_gender(runner.get('gender'))
-            # Категория берётся из Copernico как есть
-            category = (runner.get('category') or '').strip() or 'Unknown'
+            # Категория из Copernico — в едином кратком виде («М 49» → «М49», src/common/categories.py)
+            category = canonical_category(runner.get('category') or '') or 'Unknown'
             race_status = convert_status(runner.get('status'))
 
             # Времена — поля из preset-конфига

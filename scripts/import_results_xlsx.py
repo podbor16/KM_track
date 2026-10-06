@@ -45,6 +45,7 @@ import openpyxl
 
 from scripts.import_boom_historical import get_connection
 from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
+from src.common.categories import canonical_category
 from src.common.names import normalize_person_name
 
 SENTINEL = "1900-01-01"
@@ -178,7 +179,7 @@ def parse(path, year, overrides=None):
             continue
         bib = str(r[i["Bib"]] or "").strip()
         raw_category = (str(r[cat_i] or "").strip() if cat_i is not None else "") or group
-        category = short_category(raw_category, year)
+        category = canonical_category(short_category(raw_category, year))
         sex = SEX.get(str(r[sex_i] or "").strip(), "") if sex_i is not None else ""
         if not sex:                                                     # нет Gender — пол из группы/категории
             sex = group_sex(raw_category)
