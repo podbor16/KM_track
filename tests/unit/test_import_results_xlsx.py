@@ -86,3 +86,20 @@ def test_russian_sex_and_category_headers(tmp_path):
     wb.save(path)
     r = parse(path, 2023)[0]
     assert (r["sex"], r["category"], r["gun"], r["clean"]) == ("Мужчина", "Мужчины", 1888, None)
+
+
+
+def test_full_name_column_without_status(tmp_path):
+    # Жара 2023: «Имя» = «Имя Фамилия», статуса нет (только финишировавшие), год рождения в «Date of Birth»
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["ИТОГОВЫЙ ПРОТОКОЛ РЕЗУЛЬТАТОВ"])
+    ws.append(["#", "Номер", "Имя", "Результат", "Клуб", "Город", "Date of Birth"])
+    ws.append(["женщины 2010−2011 г. р."])
+    ws.append(["1", "1179", "Кира Огер", "00:48:05", "Сибиряк", "Красноярск", 2011])
+    path = tmp_path / "p.xlsx"
+    wb.save(path)
+    r = parse(path, 2023)[0]
+    assert (r["surname"], r["name"], r["race_status"], r["gun"], r["birth_year"], r["birthday"], r["sex"], r["start_number"]) == \
+        ("Огер", "Кира", "Finished", 2885, 2011, "1900-01-01", "Женщина", 1179)
+    assert r["category"] == "Ж12-13"

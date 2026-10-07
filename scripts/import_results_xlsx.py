@@ -174,12 +174,17 @@ def checkpoint_columns(h, overrides):
 def parse(path, year, overrides=None):
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
     rows = list(ws.iter_rows(values_only=True))
-    # строка заголовков — первая с «Фамилия»/«Surname» (у протоколов Жары 2024 сверху шапка)
+    # строка заголовков — первая с «Фамилия»/«Surname» (у протоколов Жары 2024 сверху шапка);
+    # Жара 2023: фамилии нет — «Номер» и «Имя» («Яков Петериков» — имя и фамилия в одной колонке)
+    cells = lambda r: {str(v or "").strip().lower() for v in r}
     head = next(k for k, r in enumerate(rows[:20])
-                if r and any(str(v or "").strip().lower() in ("фамилия", "surname") for v in r))
+                if r and (cells(r) & {"фамилия", "surname"} or {"номер", "имя"} <= cells(r)))
     h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[head]]
     rows = rows[head:]
-    i = {k: h.index(k) for k in ("Surname", "Name", "Status")}
+    full_name = "Surname" not in h
+    i = {k: h.index(k) for k in ("Name",) + (() if full_name else ("Surname",)) + (("Status",) if "Status" in h else ())}
+    if full_name:
+        i["Surname"] = i["Name"]
     bib_i = h.index("Bib") if "Bib" in h else None                  # Женская 2024 — без номеров
     bd_i = h.index("Date of Birth") if "Date of Birth" in h else None
     by_i = h.index("Birth Year") if "Birth Year" in h else None      # Жара 2024 — только год
@@ -206,14 +211,24 @@ def parse(path, year, overrides=None):
             sex = group_sex(raw_category)
         if not sex and category[:1].upper() in ("М", "Ж"):
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
-        status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
         clean = _secs(r[i["clean"]]) if i["clean"] is not None else None
         gun = _secs(r[i["Finish"]])
+        if "Status" in i:
+            status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
+        else:                                                           # Жара 2023: только финишировавшие
+            status = "Finished" if gun else "Not started"
+        if full_name:                                                   # «Яков Петериков» — имя, фамилия
+            name, _, surname = str(r[i["Name"]]).strip().partition(" ")
+        else:
+            name, surname = str(r[i["Name"]] or ""), str(r[i["Surname"]])
+        bd_raw = str(r[bd_i] or "").strip() if bd_i is not None else ""
+        year_in_bd = bd_raw.isdigit() and len(bd_raw) == 4                # Жара 2023 10 км: «Date of Birth» = год
         finished = status == "Finished" and gun
         out.append({
-            "surname": normalize_person_name(str(r[i["Surname"]])), "name": normalize_person_name(str(r[i["Name"]] or "")),
-            "birthday": _birthday(r[bd_i]) if bd_i is not None else SENTINEL,
-            "birth_year": int(r[by_i]) if by_i is not None and str(r[by_i] or "").strip().isdigit() else None,
+            "surname": normalize_person_name(surname), "name": normalize_person_name(name),
+            "birthday": _birthday(r[bd_i]) if bd_i is not None and not year_in_bd else SENTINEL,
+            "birth_year": (int(bd_raw) if year_in_bd else
+                           int(r[by_i]) if by_i is not None and str(r[by_i] or "").strip().isdigit() else None),
             "sex": sex,
             "bib": bib, "start_number": _number(bib),
             "category": category,
