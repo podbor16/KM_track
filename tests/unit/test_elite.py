@@ -126,6 +126,7 @@ def test_fill_from_leads_bib_stages():
     assert done == {"номер из заявки (фамилия+ДР)": 1, "номер из заявки (имя+ДР)": 1,
                     "номер из заявки (фамилия+имя)": 3}
     assert len(loose) == 5 and len(missing) == 2                  # две Петровы — неоднозначно; Сидоровой нет
+    assert (rows[0]["name"], rows[6]["surname"]) == ("Юлия", "Жиленков")   # ФИ из заявки — триггер свяжет с её карточкой
 
 
 def test_drop_protocol_duplicates_keeps_finished():

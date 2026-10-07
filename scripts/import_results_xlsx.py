@@ -239,12 +239,13 @@ def fill_from_leads(cur, event_id, rows):
     того же забега; только год рождения (Жара 2024) — полная дата из заявки с тем же ФИО и годом.
     Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → имя+ДР → фамилия+имя → фамилия (уменьшительные
     имена «Юлька», опечатки в фамилии «Жиленковв» и в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
-    сторон. Не нашлось — ДР «01.01.год», номер служебный.
+    сторон; ФИ строки берутся из заявки — иначе trg_results_before_insert не свяжет результат с
+    карточкой заявки и заведёт новую. Не нашлось — ДР «01.01.год», номер служебный.
     -> {что сделано: число}, [не найдено], [найдено не по ФИО+ДР — на проверку]."""
     cur.execute("SELECT surname, name, birthday, start_number FROM leads WHERE event_id = %s", (event_id,))
-    leads = [(_name_key(s), _name_key(n), bd, bib) for s, n, bd, bib in cur.fetchall()]
+    leads = [(_name_key(s), _name_key(n), bd, bib, s, n) for s, n, bd, bib in cur.fetchall()]
     by_name = collections.defaultdict(list)
-    for surname, name, bd, bib in leads:
+    for surname, name, bd, bib, *_ in leads:
         by_name[(surname, name)].append((bd, bib))
     done, missing, loose = collections.Counter(), [], []
     for r in rows:
@@ -266,9 +267,9 @@ def fill_from_leads(cur, event_id, rows):
               ("имя+ДР", lambda s, n, bd: (n, bd)), ("фамилия+имя", lambda s, n, bd: (s, n)), ("фамилия", lambda s, n, bd: (s,)))
     for label, key in stages:
         free = collections.defaultdict(list)
-        for surname, name, bd, bib in leads:
+        for surname, name, bd, bib, orig_surname, orig_name in leads:
             if bib and int(bib) not in used:
-                free[key(surname, name, str(bd))].append((surname, name, bd, int(bib)))
+                free[key(surname, name, str(bd))].append((orig_surname, orig_name, bd, int(bib)))
         row_key = lambda r: key(_name_key(r["surname"]), _name_key(r["name"]), r["birthday"])
         rows_per_key = collections.Counter(row_key(r) for r in pending)
         for r in list(pending):
@@ -281,8 +282,8 @@ def fill_from_leads(cur, event_id, rows):
             pending.remove(r)
             done["номер из заявки" + ("" if label == "ФИО+ДР" else f" ({label})")] += 1
             if label != "ФИО+ДР":
-                loose.append(f"{r['surname']} {r['name']} {r['birthday']} → №{bib}: заявка "
-                             f"{surname.capitalize()} {name.capitalize()} {bd}")
+                loose.append(f"{r['surname']} {r['name']} {r['birthday']} → №{bib}: заявка {surname} {name} {bd}")
+                r["surname"], r["name"] = surname, name
     missing += [f"{r['surname']} {r['name']} {r['birthday']} {r['race_status']} — нет заявки" for r in pending]
     return done, missing, loose
 
