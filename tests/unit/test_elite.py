@@ -123,8 +123,8 @@ def test_fill_from_leads_bib_stages():
             _row("Жиленковв", "Татьяна", "1988-03-08")]
     done, missing, loose = fill_from_leads(cur, 1, rows)
     assert [r["start_number"] for r in rows] == [203, 130, 262, 129, None, None, 358]
-    assert done == {"номер из заявки (фамилия+ДР)": 1, "номер из заявки (имя+ДР)": 1,
-                    "номер из заявки (фамилия+имя)": 3}
+    assert {k: v for k, v in done.items() if k.startswith("номер")} == {
+        "номер из заявки (фамилия+ДР)": 1, "номер из заявки (имя+ДР)": 1, "номер из заявки (фамилия+имя)": 3}
     assert len(loose) == 5 and len(missing) == 2                  # две Петровы — неоднозначно; Сидоровой нет
     assert (rows[0]["name"], rows[6]["surname"]) == ("Юлия", "Жиленков")   # ФИ из заявки — триггер свяжет с её карточкой
 
@@ -189,3 +189,21 @@ def test_fill_from_leads_birthday_stages():
     rows[1]["race_status"] = "Not started"
     fill_from_leads(cur, 1, rows)
     assert [r["birthday"] for r in rows] == ["1999-05-05", "1999-05-05"]
+
+
+
+def test_fill_from_leads_sex():
+    # Х Трейл 2024: пола в протоколе нет — из заявки по ФИО+ДР, иначе по однозначному ФИО
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("Путинцев", "Андрей", datetime.date(1986, 3, 27), None, "Мужчина"),
+        ("Саша", "Ким", datetime.date(1990, 1, 1), None, "Мужчина"), ("Саша", "Ким", datetime.date(1991, 1, 1), None, "женщина"),
+    ]
+    row = lambda surname, name, bd: {"surname": surname, "name": name, "birthday": bd, "birth_year": None,
+                                     "start_number": 1, "bib": "1", "sex": "", "race_status": "Finished"}
+    rows = [row("Путинцев", "Андрей", "1986-03-27"), row("Саша", "Ким", "1991-01-01"), row("Саша", "Ким", "1980-01-01")]
+    done, _, _ = fill_from_leads(cur, 1, rows)
+    assert [r["sex"] for r in rows] == ["Мужчина", "Женщина", ""] and done["пол из заявки"] == 2

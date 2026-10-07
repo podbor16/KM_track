@@ -351,6 +351,21 @@ def fill_from_leads(cur, event_id, rows):
                 loose.append(f"{r['surname']} {r['name']} {r['birthday']} → №{bib}: заявка {surname} {name} {bd}")
                 r["surname"], r["name"] = surname, name
     missing += [f"{r['surname']} {r['name']} {r['birthday']} {r['race_status']} — нет заявки" for r in pending]
+
+    # пол, которого нет в протоколе (Х Трейл 2024) — из заявки с теми же ФИО и ДР, иначе с теми же ФИО
+    sex_by = collections.defaultdict(set)
+    for (surname, name, bd, *_), (*_, sex) in zip(leads, fetched):
+        if sex:
+            sex_by[(surname, name, str(bd))].add(normalize_sex(sex))
+            sex_by[(surname, name)].add(normalize_sex(sex))
+    for r in rows:
+        if r.get("sex"):
+            continue
+        key = (_name_key(r["surname"]), _name_key(r["name"]))
+        found = sex_by.get(key + (r["birthday"],)) or sex_by.get(key)
+        if found and len(found) == 1:
+            r["sex"] = next(iter(found))
+            done["пол из заявки"] += 1
     return done, missing, loose
 
 
@@ -416,6 +431,8 @@ def main():
     ap.add_argument("--sex", help="пол тем, у кого его нет в протоколе (Женская семёрка — «Женщина»)")
     ap.add_argument("--age-categories", action="store_true",
                     help="нет категорий в протоколе — по возрасту в год старта (как Женская 2025)")
+    ap.add_argument("--age-bounds", default="49,59,64,69,74,79",
+                    help="верхние границы групп для --age-categories (Х Трейл 2025: 49,59,64,69,74 → «75+»)")
     ap.add_argument("--add-missing", action="store_true",
                     help="догрузить строки, которых нет в БД (по номеру), и пересчитать места всех по файлу")
     args = ap.parse_args()
@@ -443,11 +460,12 @@ def main():
             for line in loose:
                 print("   ", line)
         year = int(ev[1])
+        bounds = tuple(int(x) for x in args.age_bounds.split(","))
         for r in rows:
             if args.sex and not r["sex"]:
                 r["sex"] = args.sex
             if args.age_categories and not r["category"] and r["sex"] and r["birthday"] != SENTINEL:
-                r["category"] = age_category(r["sex"][:1], year - int(r["birthday"][:4]))
+                r["category"] = age_category(r["sex"][:1], year - int(r["birthday"][:4]), bounds)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
