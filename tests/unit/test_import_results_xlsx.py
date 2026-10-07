@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, parse, rank
+from scripts.import_results_xlsx import finish_columns, parse, rank, set_bibs
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -63,3 +63,13 @@ def test_pacer_group_has_no_category(tmp_path):
     wb.save(path)
     rows = parse(path, 2024)
     assert [(r["category"], r["sex"], r["pacer_group"]) for r in rows] == [("Ж75+", "Женщина", False), ("", "", True)]
+
+
+
+def test_set_bib():
+    rows = [{"surname": "Давыденко", "name": "Петр", "bib": "515", "start_number": 515},
+            {"surname": "Трегубов", "name": "Сергей", "bib": "515", "start_number": 515}]
+    set_bibs(rows, ["Давыденко Пётр=593"])
+    assert [r["start_number"] for r in rows] == [593, 515] and rows[0]["bib"] == "593"
+    with pytest.raises(ValueError):
+        set_bibs(rows, ["Иванов Иван=1"])

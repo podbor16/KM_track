@@ -354,6 +354,17 @@ def fill_from_leads(cur, event_id, rows):
     return done, missing, loose
 
 
+def set_bibs(rows, specs):
+    """--set-bib «Фамилия Имя=номер»: номер перепутан в протоколе (Детский 2024: 515 у двоих —
+    у Давыденко на самом деле 593, решение пользователя 2026-10-07). Строка — ровно одна."""
+    for spec in specs:
+        who, bib = spec.rsplit("=", 1)
+        hits = [r for r in rows if _name_key(f"{r['surname']} {r['name']}") == _name_key(who)]
+        if len(hits) != 1:
+            raise ValueError(f"--set-bib «{spec}»: строк {len(hits)}, нужна одна")
+        hits[0]["bib"], hits[0]["start_number"] = bib.strip(), int(bib)
+
+
 def drop_protocol_duplicates(rows):
     """Один человек дважды в протоколе (Женская 2024: «финишировала» и «не стартовала») — ФИО, ДР
     и номер (или его отсутствие) совпадают; остаётся строка с результатом. -> (строки, [убранные])."""
@@ -400,6 +411,8 @@ def main():
     ap.add_argument("--checkpoints-only", action="store_true", help="только дописать отметки в уже загруженные результаты")
     ap.add_argument("--from-leads", action="store_true",
                     help="нет номера / только год рождения — взять из заявок этого забега (по ФИО)")
+    ap.add_argument("--set-bib", action="append", default=[], metavar="«Фамилия Имя=номер»",
+                    help="исправить номер, перепутанный в протоколе")
     ap.add_argument("--sex", help="пол тем, у кого его нет в протоколе (Женская семёрка — «Женщина»)")
     ap.add_argument("--age-categories", action="store_true",
                     help="нет категорий в протоколе — по возрасту в год старта (как Женская 2025)")
@@ -417,6 +430,7 @@ def main():
             print(f"Нет события {args.event_id}")
             return 1
         rows = [row for path in args.xlsx for row in parse(path, int(ev[1]), overrides)]
+        set_bibs(rows, args.set_bib)
         rows, dropped = drop_protocol_duplicates(rows)
         for r in dropped:
             print(f"Повтор в протоколе убран: {r['surname']} {r['name']} {r['birthday']} {r['race_status']}")
