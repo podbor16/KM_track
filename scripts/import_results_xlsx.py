@@ -352,6 +352,24 @@ def fill_from_leads(cur, event_id, rows):
                 r["surname"], r["name"] = surname, name
     missing += [f"{r['surname']} {r['name']} {r['birthday']} {r['race_status']} — нет заявки" for r in pending]
 
+    # ФИ с опечаткой при известной ДР (Х Трейл 2024: «Ира», «Болсуновкая») — ФИ из однозначной заявки
+    # с той же фамилией или тем же именем и ДР, иначе результат уйдёт в новую карточку
+    by_sbd, by_nbd = collections.defaultdict(list), collections.defaultdict(list)
+    for k, (surname, name, bd, *_) in enumerate(leads):
+        by_sbd[(surname, str(bd))].append(k)
+        by_nbd[(name, str(bd))].append(k)
+    for r in rows:
+        key = (_name_key(r["surname"]), _name_key(r["name"]))
+        if r["birthday"] == SENTINEL or key in by_name:
+            continue
+        ks = set(by_sbd.get((key[0], r["birthday"]), [])) | set(by_nbd.get((key[1], r["birthday"]), []))
+        if len(ks) != 1:
+            continue
+        surname, name = leads[next(iter(ks))][4:6]
+        loose.append(f"{r['surname']} {r['name']} {r['birthday']} → заявка {surname} {name}")
+        r["surname"], r["name"] = surname, name
+        done["ФИ из заявки"] += 1
+
     # пол, которого нет в протоколе (Х Трейл 2024) — из заявки с теми же ФИО и ДР, иначе с теми же ФИО
     sex_by = collections.defaultdict(set)
     for (surname, name, bd, *_), (*_, sex) in zip(leads, fetched):
