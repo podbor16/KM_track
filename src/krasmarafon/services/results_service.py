@@ -9,6 +9,7 @@ import time
 from typing import Optional
 from datetime import datetime, date, timedelta
 
+from src.common.cache import prune
 from src.config.event_loader import EventConfig, get_event_by_name
 from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.models.analytics import RaceResultsResponse
@@ -283,6 +284,7 @@ def _do_build(
             cat = (row.get('category') or '').strip().split(' (')[0].strip()
             if cat and spd > 0:
                 cat_raw.setdefault(cat, []).append(spd)
+        prune(_hist_cache_ts, HIST_CACHE_TTL, _hist_cache)
         _hist_cache[cache_key] = {
             'personal': personal,
             'category_avg': {c: sum(v) / len(v) for c, v in cat_raw.items()},
@@ -408,6 +410,7 @@ def _background_rebuild(resp_key: str, event_id, event_name, year, events):
     """Фоновое перестроение кеша без блокировки вызывающего потока."""
     try:
         result = _do_build(event_id, event_name, year, events)
+        prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
         _response_cache[resp_key] = result
         _response_cache_ts[resp_key] = time.time()
         _json_cache[resp_key] = result.model_dump_json()
@@ -468,6 +471,7 @@ def build_event_results(
             return _cached2
 
         result = _do_build(event_id, event_name, year, events)
+        prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
         _response_cache[_resp_key] = result
         _response_cache_ts[_resp_key] = time.time()
         _json_cache[_resp_key] = result.model_dump_json()

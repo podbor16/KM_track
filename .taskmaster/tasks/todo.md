@@ -746,3 +746,11 @@ timestamp'ы»): если не прокинуть `Payment date` в `created_at`
    остаётся неопределённым/общим, не гадаем по возрасту
 
 **Переходим к реализации.**
+
+## 2026-10-07 — RAM 88%: кеши воркеров не вытесняют устаревшее
+Диагноз: воркер gunicorn 80 МБ после старта → 430–580 МБ за 6,5 ч; кеши (dict + ts) хранят каждый когда-либо запрошенный забег (~7 МБ на забег: строки БД + ответ + JSON), устаревшие записи не удаляются.
+- [ ] `src/common/cache.py: prune(ts, max_age, *stores)` — удалить записи старше max_age из всех словарей
+- [ ] вызвать перед записью: _results_cache, _segments_cache, _event_info_cache, _startlist_cache (db_results); _response_cache+_json_cache, _hist_cache (results_service); _sse_initial_cache (api)
+- [ ] юнит-тесты helper + вытеснение в results_service
+- [ ] деплой, замер RSS воркеров через пару часов
+- [ ] journald: SystemMaxUse=50M

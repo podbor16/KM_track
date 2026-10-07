@@ -18,6 +18,7 @@ from .db_pool import (
     get_cached_tables,
     _validate_table_name,
 )
+from src.common.cache import prune
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
 
         results_list = [dict(r) for r in results] if results else []
         logger.info(f"✅ Найдено {len(results_list)} результатов для event_id={event_id}")
+        prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
         _results_cache[event_id] = results_list
         _results_cache_ts[event_id] = time.time()
         return results_list
@@ -222,6 +224,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
         if results:
             results_list = [dict(r) for r in results]
             logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
+            prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
             _results_cache[_cache_key] = results_list
             _results_cache_ts[_cache_key] = time.time()
             return results_list
@@ -448,6 +451,7 @@ def get_event_info_by_id(event_id: int) -> Dict[str, Any]:
         row = cursor.fetchone()
         cursor.close()
         result = dict(row) if row else {}
+        prune(_event_info_cache_ts, EVENT_INFO_CACHE_TTL, _event_info_cache)
         _event_info_cache[event_id] = result
         _event_info_cache_ts[event_id] = _now
         return result
@@ -768,6 +772,7 @@ def get_result_segments(result_id: int) -> List[Dict[str, Any]]:
 
         logger.info(f"{'✅' if segments else 'ℹ️'} {'Найдено ' + str(len(segments)) + ' сегментов' if segments else 'Сегменты не найдены'} для result_id={result_id}")
         result = list(segments) if segments else []
+        prune(_segments_cache_ts, SEGMENTS_CACHE_TTL, _segments_cache)
         _segments_cache[result_id] = result
         _segments_cache_ts[result_id] = time.time()
         return result
@@ -1490,6 +1495,7 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
             d = dict(row)
             d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
             result.append(d)
+        prune(_startlist_cache_ts, STARTLIST_CACHE_TTL, _startlist_cache)
         _startlist_cache[key] = result
         _startlist_cache_ts[key] = time.time()
         return result
