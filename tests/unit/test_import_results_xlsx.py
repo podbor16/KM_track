@@ -73,3 +73,16 @@ def test_set_bib():
     assert [r["start_number"] for r in rows] == [593, 515] and rows[0]["bib"] == "593"
     with pytest.raises(ValueError):
         set_bibs(rows, ["Иванов Иван=1"])
+
+
+
+def test_russian_sex_and_category_headers(tmp_path):
+    # Ночной 2023: «Пол» (Male/Female); Снежная 2023: «Категория» и единственное «Чистое время» — официальное
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["#", "Номер", "Имя", "Фамилия", "Статус", "Пол", "Категория", "Чистое время", "Дата рождения"])
+    ws.append([1, 11, "Валентин", "Тяпкин", "Финишировал", "Male", "Мужчины", "00:31:28", "30/03/1957"])
+    path = tmp_path / "p.xlsx"
+    wb.save(path)
+    r = parse(path, 2023)[0]
+    assert (r["sex"], r["category"], r["gun"], r["clean"]) == ("Мужчина", "Мужчины", 1888, None)

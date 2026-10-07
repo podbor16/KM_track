@@ -116,7 +116,7 @@ HEADER_ALIASES = {"номер": "Bib", "фамилия": "Surname", "имя": "N
                   "bib": "Bib", "dorsal": "Bib", "surname": "Surname", "name": "Name",
                   "date of birth": "Date of Birth", "birthdate": "Date of Birth", "status": "Status",
                   "gender": "Gender", "category": "Category", "start": "Start", "старт": "Start",
-                  "год рождения": "Birth Year"}
+                  "год рождения": "Birth Year", "пол": "Gender", "категория": "Category"}
 _LETTER_BIB = re.compile(r"^(\d+)[а-яa-z]$", re.I)
 
 
