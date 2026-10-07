@@ -183,3 +183,9 @@ def test_fill_from_leads_birthday_stages():
     assert (rows[0]["name"], rows[0]["birthday"]) == ("Максим", "1985-12-26")
     assert (rows[1]["birthday"], rows[1]["sex"]) == ("1981-04-10", "Мужчина")
     assert [r["birthday"] for r in rows[2:]] == ["1985-01-01", "1985-01-01"] and len(missing) == 2  # одна заявка на двоих
+    # тот же человек дважды (перерегистрация: результат + «не стартовал») — обе строки по одной заявке
+    cur.fetchall.return_value = [("Речкин", "Виталий", datetime.date(1999, 5, 5), None, "Мужчина")]
+    rows = [row("Речкин", "Виталий", 1999), row("Речкин", "Виталий", 1999)]
+    rows[1]["race_status"] = "Not started"
+    fill_from_leads(cur, 1, rows)
+    assert [r["birthday"] for r in rows] == ["1999-05-05", "1999-05-05"]

@@ -294,15 +294,23 @@ def fill_from_leads(cur, event_id, rows):
     for label, ok in bd_stages:
         hits = {id(r): [k for k in by_surname.get(_name_key(r["surname"]), []) if k not in taken and ok(r, leads[k])]
                 for r in pending}
-        per_lead = collections.Counter(k for ks in hits.values() for k in ks)
+        # строки одного человека (те же ФИО и год, результат не больше чем у одной — перерегистрация
+        # под другим номером, Жара 2024) делят заявку
+        per_lead = collections.defaultdict(list)
+        for r in pending:
+            for k in hits[id(r)]:
+                per_lead[k].append(r)
+        person = lambda r: (_name_key(r["surname"]), _name_key(r["name"]), r.get("birth_year"))
+        same_person = lambda rs: len({person(x) for x in rs}) == 1 and sum(x["race_status"] == "Finished" for x in rs) <= 1
         for r in list(pending):
             ks = hits[id(r)]
-            if len(ks) != 1 or per_lead[ks[0]] != 1:
+            if len(ks) != 1 or not same_person(per_lead[ks[0]]):
                 continue
             k = ks[0]
             _s, _n, bd, _bib, surname, name = leads[k]
             sex = fetched[k][4]
-            taken.add(k)
+            if r is per_lead[k][-1]:
+                taken.add(k)
             pending.remove(r)
             if bd and bd.year > 1900:
                 r["birthday"] = str(bd)
