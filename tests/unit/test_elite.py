@@ -81,9 +81,9 @@ def test_fill_from_leads():
     from scripts.import_results_xlsx import SENTINEL, fill_from_leads
     cur = MagicMock()
     cur.fetchall.return_value = [
-        ("Попов", "Артем", datetime.date(2001, 7, 5), None),
-        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77),
-        ("Иванов", "Иван", datetime.date(1980, 1, 1), None), ("Иванов", "Иван", datetime.date(1980, 5, 5), None),
+        ("Попов", "Артем", datetime.date(2001, 7, 5), None, "Женщина"),
+        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77, "Женщина"),
+        ("Иванов", "Иван", datetime.date(1980, 1, 1), None, "Женщина"), ("Иванов", "Иван", datetime.date(1980, 5, 5), None, "Женщина"),
     ]
     rows = [
         {"surname": "Попов", "name": "Артём", "birthday": SENTINEL, "birth_year": 2001, "start_number": 1087, "bib": "1087", "race_status": "Finished"},
@@ -109,13 +109,13 @@ def test_fill_from_leads_bib_stages():
     from scripts.import_results_xlsx import fill_from_leads
     cur = MagicMock()
     cur.fetchall.return_value = [
-        ("Лопатеева", "Юлия", datetime.date(1979, 3, 3), 203),
-        ("Носкова", "Надежда", datetime.date(2012, 3, 14), 130),
-        ("Калькина", "Гульнара", datetime.date(1900, 1, 1), 262),
-        ("Лата", "Олеся", datetime.date(1987, 9, 16), 129),
-        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77), ("Петрова", "Анна", datetime.date(1991, 1, 2), 78),
-        ("Кощеева", "Дарья", datetime.date(1999, 2, 28), None),
-        ("Жиленков", "Татьяна", datetime.date(1988, 3, 8), 358),
+        ("Лопатеева", "Юлия", datetime.date(1979, 3, 3), 203, "Женщина"),
+        ("Носкова", "Надежда", datetime.date(2012, 3, 14), 130, "Женщина"),
+        ("Калькина", "Гульнара", datetime.date(1900, 1, 1), 262, "Женщина"),
+        ("Лата", "Олеся", datetime.date(1987, 9, 16), 129, "Женщина"),
+        ("Петрова", "Анна", datetime.date(1990, 1, 2), 77, "Женщина"), ("Петрова", "Анна", datetime.date(1991, 1, 2), 78, "Женщина"),
+        ("Кощеева", "Дарья", datetime.date(1999, 2, 28), None, "Женщина"),
+        ("Жиленков", "Татьяна", datetime.date(1988, 3, 8), 358, "Женщина"),
     ]
     rows = [_row("Лопатеева", "Юлька", "1979-03-03"), _row("Носкова", "Надежда", "2012-03-23"),
             _row("Калькина", "Гульнара", "1998-05-19"), _row("Лата", "Олеся", "1987-09-15"),
@@ -138,3 +138,25 @@ def test_drop_protocol_duplicates_keeps_finished():
     assert [r["race_status"] for r in dropped] == ["Not started"]
     rows[0]["start_number"], rows[1]["start_number"] = 5, 6       # разные номера — разные люди
     assert len(drop_protocol_duplicates(rows[:2])[0]) == 2
+
+
+
+def test_fill_from_leads_by_bib():
+    # Жара 2024: только год рождения, опечатка в имени, пейсер без пола — заявка с тем же номером
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import SENTINEL, fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("Яковлев", "Максим", datetime.date(1985, 4, 1), 501, "мужчина"),
+        ("Глазунов", "Владимир", datetime.date(1970, 2, 2), 900, "Мужчина"),
+        ("Петров", "Иван", datetime.date(1990, 3, 3), 77, "Мужчина"),
+    ]
+    row = lambda surname, name, year, bib: {"surname": surname, "name": name, "birthday": SENTINEL, "birth_year": year,
+                                            "start_number": bib, "bib": str(bib), "sex": "", "race_status": "Finished"}
+    rows = [row("Яковлев", "Макским", 1985, 501), row("Глазунов", "Владимир", None, 900), row("Сидоров", "Иван", 1980, 77)]
+    done, missing, loose = fill_from_leads(cur, 1, rows)
+    assert (rows[0]["birthday"], rows[0]["name"], rows[0]["sex"]) == ("1985-04-01", "Максим", "Мужчина")
+    assert (rows[1]["birthday"], rows[1]["sex"]) == ("1970-02-02", "Мужчина")
+    assert rows[2]["birthday"] == "1980-01-01" and rows[2]["surname"] == "Сидоров"   # чужая заявка: ни фамилии, ни года
+    assert len(loose) == 1 and len(missing) == 1

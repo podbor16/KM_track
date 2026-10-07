@@ -47,7 +47,7 @@ import openpyxl
 from scripts.import_boom_historical import get_connection
 from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
 from src.common.categories import age_category, canonical_category
-from src.common.names import normalize_person_name
+from src.common.names import normalize_person_name, normalize_sex
 
 SENTINEL = "1900-01-01"
 SEX = {"Male": "Мужчина", "Female": "Женщина"}
@@ -58,6 +58,7 @@ STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не с�
           "Не финишировал": "DNF", "Дисквалификация": "DSQ", "Сошел": "Withdrawn", "Сошёл": "Withdrawn",
           "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ"}
 _GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
+_PACER_GROUP = re.compile(r"пейс|pacer", re.I)                  # «Пейсмейкеры» (Жара 2024)
 
 
 def _secs(v):
@@ -188,10 +189,13 @@ def parse(path, year, overrides=None):
     cp_cols = checkpoint_columns(h, overrides or {})
     out = []
     group = ""                                       # текущий заголовок группы протокола «по группам»
+    pacers = False                                   # группа «Пейсмейкеры»: без категории, пол — из заявки
     for r in rows[1:]:
         if not r or not r[i["Surname"]]:                               # пусто / заголовок группы
             if r and r[0] and _GROUP_HEADER.match(str(r[0])):
-                group = str(r[0]).strip()
+                group, pacers = str(r[0]).strip(), False
+            elif r and r[0] and _PACER_GROUP.search(str(r[0])):
+                group, pacers = "", True
             continue
         bib = str(r[bib_i] or "").strip() if bib_i is not None else ""
         raw_category = (str(r[cat_i] or "").strip() if cat_i is not None else "") or group
@@ -215,6 +219,7 @@ def parse(path, year, overrides=None):
             "race_status": status, "start": _secs(r[start_i]) if start_i is not None else None,
             "gun": gun if finished else None, "clean": clean if finished else None,
             "kt": {km: t for k, km in cp_cols.items() if (t := _secs(r[k]))},
+            "pacer_group": pacers,
         })
     return out
 
@@ -237,17 +242,41 @@ def _name_key(text):
 def fill_from_leads(cur, event_id, rows):
     """--from-leads (решение 2026-10-06): номера нет в протоколе (Женская 2024) — номер из заявки
     того же забега; только год рождения (Жара 2024) — полная дата из заявки с тем же ФИО и годом.
+    ДР по номеру (Жара 2024): заявка с тем же номером и той же фамилией или годом рождения —
+    её ДР (если год сходится), ФИ и пол (у пейсеров пола в протоколе нет); иначе по ФИО и году.
     Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → имя+ДР → фамилия+имя → фамилия (уменьшительные
     имена «Юлька», опечатки в фамилии «Жиленковв» и в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
     сторон; ФИ строки берутся из заявки — иначе trg_results_before_insert не свяжет результат с
     карточкой заявки и заведёт новую. Не нашлось — ДР «01.01.год», номер служебный.
     -> {что сделано: число}, [не найдено], [найдено не по ФИО+ДР — на проверку]."""
-    cur.execute("SELECT surname, name, birthday, start_number FROM leads WHERE event_id = %s", (event_id,))
-    leads = [(_name_key(s), _name_key(n), bd, bib, s, n) for s, n, bd, bib in cur.fetchall()]
+    cur.execute("SELECT surname, name, birthday, start_number, sex FROM leads WHERE event_id = %s", (event_id,))
+    fetched = cur.fetchall()
+    leads = [(_name_key(s), _name_key(n), bd, bib, s, n) for s, n, bd, bib, _ in fetched]
     by_name = collections.defaultdict(list)
     for surname, name, bd, bib, *_ in leads:
         by_name[(surname, name)].append((bd, bib))
+    by_bib = collections.defaultdict(list)
+    for s_orig, n_orig, bd, bib, sex in fetched:
+        if bib:
+            by_bib[int(bib)].append((s_orig, n_orig, bd, sex))
     done, missing, loose = collections.Counter(), [], []
+    for r in rows:
+        if r["birthday"] != SENTINEL or not r["start_number"]:
+            continue
+        cands = [c for c in by_bib.get(r["start_number"], [])
+                 if _name_key(c[0]) == _name_key(r["surname"]) or (c[2] and c[2].year == r.get("birth_year"))]
+        if len(cands) != 1:
+            continue
+        surname, name, bd, sex = cands[0]
+        if bd and bd.year > 1900 and (not r.get("birth_year") or bd.year == r["birth_year"]):
+            r["birthday"] = str(bd)
+            done["ДР из заявки (по номеру)"] += 1
+        if (_name_key(surname), _name_key(name)) != (_name_key(r["surname"]), _name_key(r["name"])):
+            loose.append(f"№{r['start_number']} {r['surname']} {r['name']} → заявка {surname} {name}")
+            r["surname"], r["name"] = surname, name
+        if not r["sex"] and sex:
+            r["sex"] = normalize_sex(sex)
+            done["пол из заявки"] += 1
     for r in rows:
         if not (r["birthday"] == SENTINEL and r.get("birth_year")):
             continue
@@ -372,7 +401,7 @@ def main():
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
             r["is_elite"] = int(is_elite(r["bib"], ranges, r["surname"]))
-            r["is_pacer"] = int(is_pacer(r["bib"]))
+            r["is_pacer"] = int(is_pacer(r["bib"]) or r["pacer_group"])
             if r["start_number"] is None:               # именной номер / «Элита» — служебный номер
                 r["start_number"], next_service = next_service, next_service + 1
         rank(rows)

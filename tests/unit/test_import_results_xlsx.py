@@ -47,3 +47,19 @@ def test_group_headers_by_age(tmp_path):
     assert [(r["gun"], r["clean"]) for r in rows] == [(911, None), (1800, None)]
     rank(rows)
     assert (rows[0]["rank_absolute"], rows[0].get("rank_absolute_clean")) == (1, None)
+
+
+
+def test_pacer_group_has_no_category(tmp_path):
+    # Жара 2024: группа «Пейсмейкеры» в конце — не наследует предыдущую группу
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["#", "Номер", "Фамилия", "Имя", "Год рождения", "Статус", "Результат"])
+    ws.append(["Женщины 1949 г. р. и старше"])
+    ws.append([1, 55, "Антипина", "Лидия", 1949, "Финишировал", "02:30:00"])
+    ws.append(["Пейсмейкеры"])
+    ws.append([1, 900, "Глазунов", "Владимир", None, "Финишировал", "01:45:00"])
+    path = tmp_path / "p.xlsx"
+    wb.save(path)
+    rows = parse(path, 2024)
+    assert [(r["category"], r["sex"], r["pacer_group"]) for r in rows] == [("Ж75+", "Женщина", False), ("", "", True)]
