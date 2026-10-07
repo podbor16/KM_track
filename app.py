@@ -81,33 +81,9 @@ async def lifespan(app: FastAPI):
     settings.logger.info(f"📍 ReDoc: http://localhost:8000/redoc")
     settings.logger.info(f"📍 Трекер: http://localhost:8000/tracker")
 
-    # Прогрев кеша: загрузка результатов активных мероприятий в фоне
-    import asyncio
-    async def _prewarm_cache():
-        try:
-            from src.analytics.db_connection_optimized import get_pooled_connection
-            from src.krasmarafon.services.results_service import build_event_results
-            # Загружаем все event_id которые реально есть в БД
-            conn = get_pooled_connection()
-            if not conn:
-                return
-            try:
-                cur = conn.cursor(dictionary=True)
-                cur.execute("SELECT DISTINCT event_id FROM results ORDER BY event_id")
-                event_ids = [row['event_id'] for row in cur.fetchall()]
-                cur.close()
-            finally:
-                conn.close()
-            for eid in event_ids:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, build_event_results, eid, None, None, settings.EVENTS
-                )
-                settings.logger.info(f"Cache pre-warmed: event_id={eid}")
-        except Exception as _e:
-            settings.logger.warning(f"Cache pre-warm failed: {_e}")
-    asyncio.create_task(_prewarm_cache())
 
     # === REDIS ===
+    import asyncio
     import redis.asyncio as aioredis
     from src.krasmarafon.services.notification_hub import tracker_hub, notification_hub
     from src.krasmarafon.services.results_service import build_event_results
