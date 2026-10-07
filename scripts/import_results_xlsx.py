@@ -32,6 +32,7 @@
 import argparse
 import collections
 import datetime
+import difflib
 import json
 import re
 import sys
@@ -242,7 +243,9 @@ def _name_key(text):
 def fill_from_leads(cur, event_id, rows):
     """--from-leads (решение 2026-10-06): номера нет в протоколе (Женская 2024) — номер из заявки
     того же забега; только год рождения (Жара 2024) — полная дата из заявки с тем же ФИО и годом.
-    ДР по номеру (Жара 2024): заявка с тем же номером и той же фамилией или годом рождения —
+    ДР по ФИО (Жара 2024 — в заявках нет номеров): ФИО+год → фамилия+год+похожее имя («Макским»,
+    «Ира») → ФИО без года (пейсеры); ФИ и пол — из заявки.
+    ДР по номеру: заявка с тем же номером и той же фамилией или годом рождения —
     её ДР (если год сходится), ФИ и пол (у пейсеров пола в протоколе нет); иначе по ФИО и году.
     Номер ищется по ступеням: ФИО+ДР → фамилия+ДР → имя+ДР → фамилия+имя → фамилия (уменьшительные
     имена «Юлька», опечатки в фамилии «Жиленковв» и в ДР) — среди заявок, чей номер ещё не занят, и только однозначно с обеих
@@ -274,21 +277,47 @@ def fill_from_leads(cur, event_id, rows):
         if (_name_key(surname), _name_key(name)) != (_name_key(r["surname"]), _name_key(r["name"])):
             loose.append(f"№{r['start_number']} {r['surname']} {r['name']} → заявка {surname} {name}")
             r["surname"], r["name"] = surname, name
-        if not r["sex"] and sex:
+        if not r.get("sex") and sex:
             r["sex"] = normalize_sex(sex)
             done["пол из заявки"] += 1
-    for r in rows:
-        if not (r["birthday"] == SENTINEL and r.get("birth_year")):
-            continue
-        cands = [c for c in by_name.get((_name_key(r["surname"]), _name_key(r["name"])), [])
-                 if c[0] and c[0].year == r["birth_year"]]
-        if len(cands) == 1:
-            r["birthday"] = str(cands[0][0])
-            done["ДР из заявки"] += 1
-        else:
+    # ДР по ФИО — ступени, каждая заявка один раз и однозначно с обеих сторон
+    by_surname = collections.defaultdict(list)
+    for k, (surname, *_rest) in enumerate(leads):
+        by_surname[surname].append(k)
+    year_ok = lambda r, bd: r.get("birth_year") and bd and bd.year == r["birth_year"]
+    similar = lambda a, b: a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.6
+    bd_stages = (("ФИО+год", lambda r, l: l[1] == _name_key(r["name"]) and year_ok(r, l[2])),
+                 ("фамилия+год+похожее имя", lambda r, l: year_ok(r, l[2]) and similar(l[1], _name_key(r["name"]))),
+                 ("ФИО без года", lambda r, l: not r.get("birth_year") and l[1] == _name_key(r["name"])))
+    pending = [r for r in rows if r["birthday"] == SENTINEL]
+    taken = set()
+    for label, ok in bd_stages:
+        hits = {id(r): [k for k in by_surname.get(_name_key(r["surname"]), []) if k not in taken and ok(r, leads[k])]
+                for r in pending}
+        per_lead = collections.Counter(k for ks in hits.values() for k in ks)
+        for r in list(pending):
+            ks = hits[id(r)]
+            if len(ks) != 1 or per_lead[ks[0]] != 1:
+                continue
+            k = ks[0]
+            _s, _n, bd, _bib, surname, name = leads[k]
+            sex = fetched[k][4]
+            taken.add(k)
+            pending.remove(r)
+            if bd and bd.year > 1900:
+                r["birthday"] = str(bd)
+            done["ДР из заявки" + ("" if label == "ФИО+год" else f" ({label})")] += 1
+            if (_s, _n) != (_name_key(r["surname"]), _name_key(r["name"])):
+                loose.append(f"{r['surname']} {r['name']} {r.get('birth_year') or ''} → заявка {surname} {name} {bd}")
+                r["surname"], r["name"] = surname, name
+            if not r.get("sex") and sex:
+                r["sex"] = normalize_sex(sex)
+                done["пол из заявки"] += 1
+    for r in pending:
+        if r.get("birth_year"):
             r["birthday"] = f"{r['birth_year']}-01-01"
-            missing.append(f"{r['surname']} {r['name']} {r['birth_year']} {r['race_status']}"
-                           f" — {'несколько заявок' if cands else 'нет заявки'}")
+        missing.append(f"{r['surname']} {r['name']} {r.get('birth_year') or 'без года'} {r['race_status']}"
+                       f" — {'несколько заявок' if by_name.get((_name_key(r['surname']), _name_key(r['name']))) else 'нет заявки'}")
 
     used = {r["start_number"] for r in rows if r["start_number"]}
     pending = [r for r in rows if r["start_number"] is None and not r["bib"]]

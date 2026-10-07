@@ -94,7 +94,7 @@ def test_fill_from_leads():
     assert rows[0]["birthday"] == "2001-07-05"                    # «ё» в имени — не помеха
     assert rows[1]["start_number"] == 77
     assert rows[2]["birthday"] == "1980-01-01" and len(missing) == 1  # две заявки — неоднозначно
-    assert done == {"ДР из заявки": 1, "номер из заявки": 1} and loose == []
+    assert (done["ДР из заявки"], done["номер из заявки"]) == (1, 1) and loose == []
 
 
 def _row(surname, name, birthday, status="Finished"):
@@ -160,3 +160,26 @@ def test_fill_from_leads_by_bib():
     assert (rows[1]["birthday"], rows[1]["sex"]) == ("1970-02-02", "Мужчина")
     assert rows[2]["birthday"] == "1980-01-01" and rows[2]["surname"] == "Сидоров"   # чужая заявка: ни фамилии, ни года
     assert len(loose) == 1 and len(missing) == 1
+
+
+
+def test_fill_from_leads_birthday_stages():
+    # Жара 2024: в заявках нет номеров — опечатка в имени, пейсер без года, тёзки
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import SENTINEL, fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        ("Яковлев", "Максим", datetime.date(1985, 12, 26), None, "Мужчина"),
+        ("Яковлев", "Аркадий", datetime.date(1985, 3, 5), None, "Мужчина"),
+        ("Глазунов", "Владимир", datetime.date(1981, 4, 10), None, "Мужчина"),
+        ("Анисимова", "Елена", datetime.date(1985, 1, 1), None, "Женщина"),
+    ]
+    row = lambda surname, name, year: {"surname": surname, "name": name, "birthday": SENTINEL, "birth_year": year,
+                                       "start_number": 1, "bib": "1", "sex": "", "race_status": "Finished"}
+    rows = [row("Яковлев", "Макским", 1985), row("Глазунов", "Владимир", None),
+            row("Анисимова", "Елена", 1985), row("Анисимова", "Елена", 1985)]
+    done, missing, loose = fill_from_leads(cur, 1, rows)
+    assert (rows[0]["name"], rows[0]["birthday"]) == ("Максим", "1985-12-26")
+    assert (rows[1]["birthday"], rows[1]["sex"]) == ("1981-04-10", "Мужчина")
+    assert [r["birthday"] for r in rows[2:]] == ["1985-01-01", "1985-01-01"] and len(missing) == 2  # одна заявка на двоих
