@@ -59,7 +59,7 @@ STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не с�
           "Не финишировал": "DNF", "Дисквалификация": "DSQ", "Сошел": "Withdrawn", "Сошёл": "Withdrawn",
           "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ"}
 _GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
-_PACER_GROUP = re.compile(r"пейс|pacer", re.I)                  # «Пейсмейкеры» (Жара 2024)
+_PACER_GROUP = re.compile(r"пейс|pacer|вне\s*зач[её]т", re.I)   # «Пейсмейкеры» (Жара 2024), «Вне зачета» (2023)
 
 
 def _secs(v):
@@ -215,8 +215,10 @@ def parse(path, year, overrides=None):
         gun = _secs(r[i["Finish"]])
         if "Status" in i:
             status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
-        else:                                                           # Жара 2023: только финишировавшие
-            status = "Finished" if gun else "Not started"
+        elif gun:                                                       # Жара 2023: только финишировавшие
+            status = "Finished"
+        else:                                                           # подпись «Главный судья» под протоколом
+            continue
         if full_name:                                                   # «Яков Петериков» — имя, фамилия
             name, _, surname = str(r[i["Name"]]).strip().partition(" ")
         else:

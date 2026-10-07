@@ -97,9 +97,15 @@ def test_full_name_column_without_status(tmp_path):
     ws.append(["#", "Номер", "Имя", "Результат", "Клуб", "Город", "Date of Birth"])
     ws.append(["женщины 2010−2011 г. р."])
     ws.append(["1", "1179", "Кира Огер", "00:48:05", "Сибиряк", "Красноярск", 2011])
+    ws.append(["Вне зачета"])
+    ws.append(["1", "777", "Александр Ермолов", "02:19:01", None, "Красноярск", "-"])
+    ws.append([])
+    ws.append(["Главный судья", "Кондоба А.С."])
     path = tmp_path / "p.xlsx"
     wb.save(path)
     r = parse(path, 2023)[0]
     assert (r["surname"], r["name"], r["race_status"], r["gun"], r["birth_year"], r["birthday"], r["sex"], r["start_number"]) == \
         ("Огер", "Кира", "Finished", 2885, 2011, "1900-01-01", "Женщина", 1179)
     assert r["category"] == "Ж12-13"
+    rows = parse(path, 2023)
+    assert len(rows) == 2 and (rows[1]["surname"], rows[1]["category"], rows[1]["pacer_group"]) == ("Ермолов", "", True)
