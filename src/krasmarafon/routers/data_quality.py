@@ -33,6 +33,13 @@ class DeleteResultBody(BaseModel):
     key: str = ""
 
 
+class FixFioBody(BaseModel):
+    result_id: int
+    surname: str
+    name: str
+    key: str = ""
+
+
 class DismissBody(BaseModel):
     key: str
     decision: Literal["different_people", "keep"]
@@ -73,6 +80,12 @@ async def merge(body: MergeBody, user: str = Depends(api_require_auth)) -> dict:
 async def delete_result(body: DeleteResultBody, user: str = Depends(api_require_auth)) -> dict:
     await run_in_threadpool(_with_conn, dq.delete_result, body.result_id, user, body.key)
     return {"ok": True}
+
+
+@router.post("/api/admin/data-quality/fix-fio")
+async def fix_fio(body: FixFioBody, user: str = Depends(api_require_auth)) -> dict:
+    cid = await run_in_threadpool(_with_conn, dq.fix_fio, body.result_id, body.surname, body.name, user, body.key)
+    return {"ok": True, "client_id": cid}
 
 
 @router.post("/api/admin/data-quality/dismiss")

@@ -44,6 +44,7 @@ class Finding:
     event_id: int = None
     auto: bool = False                  # можно исправить без ревью
     lead_id: int = None
+    fix: tuple = ()                     # HYG: каноническое (фамилия, имя) для кнопки «Исправить ФИО»
 
     @property
     def key(self):
@@ -225,8 +226,13 @@ def propose_birthday(ids, data):
             return None
         return top[0][0]
 
-    timing = [(r["birthday"], data.year(r["event_id"])) for i in ids for r in data.res_by_card[i]]
-    return pick(timing) or pick([(data.clients[i]["birthday"], 0) for i in ids])
+    timing = pick([(r["birthday"], data.year(r["event_id"])) for i in ids for r in data.res_by_card[i]])
+    cards = pick([(data.clients[i]["birthday"], 0) for i in ids])
+    # в протоколе только год («2017-01-01», Детский 2023) — полная дата того же года из карточки
+    # (Климентий Роман 2017-09-10, склеен с заглушкой 2026-10-08)
+    if timing and jan1(timing) and cards and not jan1(cards) and cards[:4] == timing[:4]:
+        return cards
+    return timing or cards
 
 
 # ---------------------------------------------------------------- проверки
@@ -385,7 +391,8 @@ def check_hygiene(data, results):
         s, n, _ = canonical_fio(r["surname"], r["name"], data.names, r.get("sex", ""))
         if s and n and (s, n) != (r["surname"], r["name"]):
             out.append(Finding("HYG", "low", f'{data.event_label(r["event_id"])} №{r["start_number"]}: '
-                               f'«{r["surname"]} {r["name"]}» -> «{s} {n}»', (r["client_id"],), r["id"], r["event_id"]))
+                               f'«{r["surname"]} {r["name"]}» -> «{s} {n}»', (r["client_id"],), r["id"], r["event_id"],
+                               fix=(s, n)))
     return out
 
 
@@ -551,6 +558,49 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     conn.commit()
     cur.close()
     return surv
+
+
+def fix_fio(conn, result_id, surname, name, user, key=""):
+    """HYG «Исправить ФИО»: ФИО результата -> каноническое. Карточка с тем же ФИО, что у результата
+    (заведена по нему, «Tsimis Егор»), переименовывается со всеми заявками и результатами, а если
+    такие ФИ и ДР уже у другой карточки — склеивается с ней. Карточка уже в каноническом виде
+    («Маркус Роман» при «Роман Маркус» в протоколе) — правится только строка результата."""
+    surname, name = normalize_person_name(surname or ""), normalize_person_name(name or "")
+    if not surname or not name:
+        raise ValueError("нужны фамилия и имя")
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""SELECT r.id, r.client_id, r.surname, r.name, c.surname c_surname, c.name c_name, c.birthday
+                   FROM results r JOIN clients c ON c.id = r.client_id WHERE r.id = %s""", (int(result_id),))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        raise ValueError(f"нет результата #{result_id}")
+    cid, bd = row["client_id"], row["birthday"]
+    details = {"result_id": row["id"], "client_id": cid, "before": [row["surname"], row["name"]],
+               "after": [surname, name]}
+    if (norm(row["c_surname"]), norm(row["c_name"])) == (norm(row["surname"]), norm(row["name"])):
+        cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",
+                    (surname, name, bd, cid))
+        others = [r["id"] for r in cur.fetchall()]
+        cur.close()
+        fd, path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        try:
+            apply_merge(conn, None, {cid: (surname, name, bd)}, {o: cid for o in others}, path)
+            with open(path, encoding="utf-8") as fh:
+                details["card_before"] = json.load(fh)
+        finally:
+            os.remove(path)
+        details["merged"] = others
+        cur = conn.cursor()
+    else:
+        cur.close()
+        cur = conn.cursor()
+        cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (surname, name, row["id"]))
+    _log_action(cur, "fix_fio", key, details, user)
+    conn.commit()
+    cur.close()
+    return cid
 
 
 def delete_result(conn, result_id, user, key=""):

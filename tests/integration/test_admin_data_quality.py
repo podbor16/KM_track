@@ -65,3 +65,12 @@ def test_no_db_connection_is_503():
     with patch(f"{R}.get_pooled_connection", return_value=None):
         r = client.get("/api/admin/data-quality")
     assert r.status_code == 503
+
+
+
+def test_fix_fio_passes_user_and_returns_card(conn):
+    with patch(f"{R}.dq.fix_fio", return_value=53428) as m:
+        r = client.post("/api/admin/data-quality/fix-fio",
+                        json={"result_id": 7, "surname": "Цимис", "name": "Егор", "key": "k"})
+    assert r.json() == {"ok": True, "client_id": 53428}
+    assert m.call_args.args == (conn, 7, "Цимис", "Егор", "testuser", "k")

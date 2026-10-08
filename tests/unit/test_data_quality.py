@@ -75,6 +75,13 @@ def test_propose_birthday_skips_placeholders_and_registration_year():
     assert propose_birthday([1], d) == "1990-02-14"
 
 
+def test_propose_birthday_prefers_card_date_over_year_only_protocol():
+    # Климентий Роман: в протоколе Детского 2023 только год (2017-01-01), в карточке с заявками — 2017-09-10
+    d = data([C(1, "Климентий", "Роман", "2017-01-01"), C(2, "Климентий", "Роман", "2017-09-10")],
+             results=[R(1, 1, "Климентий", "Роман", "2017-01-01", 3, 5290)])
+    assert propose_birthday([1, 2], d) == "2017-09-10"
+
+
 def test_propose_birthday_ambiguous_timing_returns_none():
     # Мордвинова: хронометраж противоречит сам себе
     d = data([C(1, "Мордвинова", "Елена", "1986-03-30"), C(2, "Мордвинова", "Елена", "1986-03-03")],
@@ -193,6 +200,40 @@ def test_hygiene_case():
     d = data([C(1, "Галинин", "Вадим", "1983-06-30")], results=[R(1, 1, "галинин", "вадим", "1983-06-30", 4, 630)])
     [f] = check_hygiene(d, d.results)
     assert "Галинин Вадим" in f.message
+    assert f.fix == ("Галинин", "Вадим")
+
+
+def _fix_conn(row):
+    from unittest.mock import MagicMock
+    conn, dcur, cur = MagicMock(), MagicMock(), MagicMock()
+    dcur.fetchone.return_value = row
+    dcur.fetchall.return_value = []
+    conn.cursor.side_effect = lambda dictionary=False: dcur if dictionary else cur
+    return conn, cur
+
+
+def test_fix_fio_result_only_when_card_is_canonical():
+    # Маркус Роман: карточка верная, в протоколе «Роман Маркус» — правится только результат
+    from unittest.mock import patch
+    from src.analytics.data_quality import fix_fio
+    conn, cur = _fix_conn({"id": 9, "client_id": 30537, "surname": "Роман", "name": "Маркус",
+                           "c_surname": "Маркус", "c_name": "Роман", "birthday": "2019-10-26"})
+    with patch("src.analytics.data_quality.apply_merge") as am:
+        assert fix_fio(conn, 9, "Маркус", "Роман", "u", "k") == 30537
+    am.assert_not_called()
+    assert cur.execute.call_args_list[0].args[1] == ("Маркус", "Роман", 9)
+
+
+def test_fix_fio_renames_card_made_from_result():
+    # Tsimis Егор: карточка заведена по результату — переименовывается целиком
+    from unittest.mock import patch
+    from src.analytics.data_quality import fix_fio
+    conn, cur = _fix_conn({"id": 7, "client_id": 53428, "surname": "Tsimis", "name": "Егор",
+                           "c_surname": "Tsimis", "c_name": "Егор", "birthday": "1992-01-01"})
+    snapshot = lambda conn, cards, final, merged, path: open(path, "w").write("{}")
+    with patch("src.analytics.data_quality.apply_merge", side_effect=snapshot) as am:
+        fix_fio(conn, 7, "Цимис", "Егор", "u", "k")
+    assert am.call_args.args[2:4] == ({53428: ("Цимис", "Егор", "1992-01-01")}, {})
 
 
 def test_event_scope_checks_twins_of_lead_cards():

@@ -1,7 +1,8 @@
 // static/js/admin-data-quality.js
 // Вкладка "Качество данных" в /admin — находки проверок привязки заявок и
 // результатов к карточкам клиентов (src/analytics/data_quality.py) и действия
-// по ним: склеить карточки, удалить «Not started» со старым номером, запомнить
+// по ним: склеить карточки, удалить «Not started» со старым номером, исправить ФИО
+// не в каноническом виде, запомнить
 // решение «разные люди»/«оставить как есть» (больше не показывается).
 // API: src/krasmarafon/routers/data_quality.py
 
@@ -103,6 +104,13 @@ function dqItemHtml(f) {
             <button class="km-btn km-btn--primary" onclick="dqMerge(${idx}, this)">Склеить</button>
             <button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'different_people', this)">Разные люди</button>
         </div>`;
+    } else if (f.code === 'HYG' && (f.fix || []).length === 2) {
+        actions += `<div class="dq-merge">
+            <input class="admin-select dq-in-surname" value="${dqEsc(f.fix[0])}" placeholder="Фамилия">
+            <input class="admin-select dq-in-name" value="${dqEsc(f.fix[1])}" placeholder="Имя">
+            <button class="km-btn km-btn--primary" onclick="dqFixFio(${idx}, this)">Исправить ФИО</button>
+            <button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить как есть</button>
+        </div>`;
     } else if (f.code === 'R-DUP' && f.auto) {
         actions += `<button class="km-btn km-btn--primary" onclick="dqDeleteResult(${idx}, this)">Удалить «Not started»</button>
             <button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить</button>`;
@@ -147,6 +155,21 @@ async function dqMerge(idx, btn) {
     try {
         const r = await dqRequest('/api/admin/data-quality/merge', body);
         dqDone(idx, `Склеено в карточку #${r.client_id}: ${body.surname} ${body.name} ${body.birthday}`);
+    } catch (e) { dqFail(btn, e); }
+}
+
+async function dqFixFio(idx, btn) {
+    const f = dqFindings[idx];
+    const item = document.getElementById(`dq-item-${idx}`);
+    const body = {
+        result_id: f.result_id, key: f.key,
+        surname: item.querySelector('.dq-in-surname').value.trim(),
+        name: item.querySelector('.dq-in-name').value.trim(),
+    };
+    btn.disabled = true;
+    try {
+        const r = await dqRequest('/api/admin/data-quality/fix-fio', body);
+        dqDone(idx, `ФИО исправлено: ${body.surname} ${body.name} (карточка #${r.client_id})`);
     } catch (e) { dqFail(btn, e); }
 }
 
