@@ -415,6 +415,17 @@ def set_bibs(rows, specs):
         hits[0]["bib"], hits[0]["start_number"] = bib.strip(), int(bib)
 
 
+def same_card_collisions(rows):
+    """Разные люди с результатом, у которых совпали ФИО и ДР (часто заглушка «01.01.год»), —
+    trg_results_before_insert сведёт их в одну карточку (Анисимова Елена, Жара 2023/2024).
+    -> [[строки одной группы], …] для разбора до --apply."""
+    groups = collections.defaultdict(list)
+    for r in rows:
+        if r["race_status"] != "Not started":
+            groups[(_name_key(r["surname"]), _name_key(r["name"]), r["birthday"])].append(r)
+    return [g for g in groups.values() if len(g) > 1]
+
+
 def drop_protocol_duplicates(rows):
     """Один человек дважды в протоколе (Женская 2024: «финишировала» и «не стартовала») — ФИО, ДР
     и номер (или его отсутствие) совпадают; остаётся строка с результатом. -> (строки, [убранные])."""
@@ -517,6 +528,9 @@ def main():
               f"текст вместо номера не-элиты: {[r['bib'] for r in rows if r['bib'] and not r['bib'].isdigit() and not r['is_elite']]}, "
               f"повторы номеров: {dup}")
         print("Категории:", dict(sorted(collections.Counter(r["category"] for r in rows).items())))
+        for g in same_card_collisions(rows):
+            print(f"ВНИМАНИЕ: одна карточка для {len(g)} человек — {g[0]['surname']} {g[0]['name']} {g[0]['birthday']}: "
+                  + ", ".join(f"№{r['start_number']} {r['race_status']}" for r in g))
         kt_count = collections.Counter(km for r in rows for km in r["kt"])
         print("Отметки (км: участников):", dict(sorted(kt_count.items())) or "нет")
         if dup:

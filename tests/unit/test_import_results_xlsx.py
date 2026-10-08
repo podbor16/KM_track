@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, parse, rank, set_bibs
+from scripts.import_results_xlsx import finish_columns, parse, rank, same_card_collisions, set_bibs
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -109,3 +109,12 @@ def test_full_name_column_without_status(tmp_path):
     assert r["category"] == "Ж12-13"
     rows = parse(path, 2023)
     assert len(rows) == 2 and (rows[1]["surname"], rows[1]["category"], rows[1]["pacer_group"]) == ("Ермолов", "", True)
+
+
+
+def test_same_card_collisions():
+    # Жара 2023: две Анисимовы Елены 1985 с результатом, ДР — заглушка → одна карточка
+    row = lambda bib, status, bd="1985-01-01": {"surname": "Анисимова", "name": "Елена", "birthday": bd,
+                                                "start_number": bib, "race_status": status}
+    rows = [row(867, "Finished"), row(945, "Finished"), row(1, "Not started"), row(2, "Finished", "1985-12-06")]
+    assert [[r["start_number"] for r in g] for g in same_card_collisions(rows)] == [[867, 945]]
