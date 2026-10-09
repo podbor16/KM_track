@@ -1118,7 +1118,7 @@ function renderOverall() {
     const relayStats = {
         total: relay.length,
         finished: relay.filter(t => teamGapRow(t).status === 'active' && racePos(teamGapRow(t), null)?.seq === STAGE_MAX_SEQ.run).length,
-        dnfDsq: relay.filter(t => teamGapRow(t).status === 'dnf').length,
+        dnfDsq: relay.filter(t => ['dnf', 'dsq'].includes(teamGapRow(t).status)).length,
     };
     let html = buildStats(individual, relayStats, null);
 
@@ -1588,7 +1588,7 @@ function renderRankedProgress(options = {}) {
     const relayStatsDay = {
         total: relay.length,
         finished: entries.filter(e => e.type === 'relay' && isFinishedThisDay(e)).length,
-        dnfDsq: relay.filter(t => dayStatus(teamGapRow(t), maxStage) === 'dnf').length,
+        dnfDsq: relay.filter(t => ['dnf', 'dsq'].includes(dayStatus(teamGapRow(t), maxStage))).length,
     };
     let html = buildStats(individual, relayStatsDay, null, maxStage);
     if (entries.length === 0) {
@@ -2113,7 +2113,7 @@ function buildBikeCombinedPaceDatasets() {
         const pts = [];
         for (let seq = 1; seq <= STAGE_MAX_SEQ.bike_day1; seq++) {
             let splitRaw = r.splits?.bike_day1?.[seq];
-            if (seq === 1 && splitRaw != null && r.swimRef != null) splitRaw -= r.swimRef; // см. buildPaceDatasets
+            if (seq === stageSeqs('bike_day1')[0] && splitRaw != null && r.swimRef != null) splitRaw -= r.swimRef; // см. buildPaceDatasets
             const v = splitPaceValue('bike_day1', seq, splitRaw);
             if (v != null) pts.push({ x: CHECKPOINT_DIST_KM.bike_day1[seq], y: v });
         }
@@ -2140,7 +2140,7 @@ function buildPaceDatasets(tabStage) {
             // без вычитания скорость на первом отрезке считалась бы по
             // раздутому времени (см. тот же нюанс на странице участника,
             // stageBody()). Баг найден пользователем 2026-07-19.
-            if (dbStage === 'bike_day1' && seq === 1 && splitRaw != null && r.swimRef != null) {
+            if (dbStage === 'bike_day1' && seq === stageSeqs('bike_day1')[0] && splitRaw != null && r.swimRef != null) {
                 splitRaw = splitRaw - r.swimRef;
             }
             const v = splitPaceValue(dbStage, seq, splitRaw);
@@ -3194,6 +3194,7 @@ async function loadResults() {
         _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
         _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
         _recordsIndex = buildRecordsIndex(_data.records);
+        applyYearCheckpoints(_data.checkpoints);
         render();
         renderStageTimers();
     } catch(e) {
@@ -3224,6 +3225,7 @@ async function refreshData() {
         _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
         _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
         _recordsIndex = buildRecordsIndex(_data.records);
+        applyYearCheckpoints(_data.checkpoints);
         render();
         renderStageTimers();
     } catch(e) { /* сеть моргнула — подождём следующего цикла поллинга */ }

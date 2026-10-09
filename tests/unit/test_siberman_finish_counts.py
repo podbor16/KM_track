@@ -1,47 +1,38 @@
-from src.siberman.finish_counts import get_finish_count
+from src.siberman.finish_counts import get_finish_count, person_key
 
 
-def test_known_participant_baseline_only_when_no_db_years():
-    assert get_finish_count("Жуков", "Александр", 2026, {}) == 4
+def test_counts_only_years_before_race_year():
+    finished = {"русскин дмитрий": {2020, 2021, 2022, 2023, 2024, 2025}}
+    assert get_finish_count("Русскин", "Дмитрий", 2026, finished) == 6
 
 
-def test_case_and_whitespace_insensitive():
-    assert get_finish_count("ЖУКОВ", " Александр ", 2026, {}) == 4
+def test_race_year_itself_not_counted():
+    """При просмотре АРХИВА 2025 года сам 2025 ещё не должен считаться
+    прошлым финишем (жалоба пользователя 2026-08-08)."""
+    finished = {"русскин дмитрий": {2024, 2025}}
+    assert get_finish_count("Русскин", "Дмитрий", 2025, finished) == 1
 
 
-def test_first_timer_stored_as_zero():
-    assert get_finish_count("Дупляков", "Иван", 2026, {}) == 0
+def test_later_years_not_counted():
+    finished = {"русскин дмитрий": {2025, 2027}}
+    assert get_finish_count("Русскин", "Дмитрий", 2026, finished) == 1
 
 
-def test_unknown_participant_defaults_to_zero():
+def test_unknown_participant_is_zero():
     assert get_finish_count("Неизвестный", "Участник", 2026, {}) == 0
 
 
-def test_latin_name_lookup():
-    assert get_finish_count("Wijnand", "Herinckx", 2026, {}) == 2
+def test_person_key_case_whitespace_yo_insensitive():
+    assert person_key("ПАНЧЕНКО ", " Алексей") == "панченко алексей"
+    assert person_key("Печёнкина", "Екатерина") == person_key("Печенкина", "Екатерина")
 
 
-def test_db_year_before_race_year_adds_to_baseline():
-    """Регрессия 2026-08-08: тот же участник финишировал и в 2025 (уже
-    в БД) — при просмотре 2026 года это должно добавиться к базовому
-    (до-БД) числу."""
-    finished = {"русскин дмитрий": {2025}}
-    assert get_finish_count("Русскин", "Дмитрий", 2026, finished) == 5 + 1
+def test_person_key_alias_maiden_name():
+    # Один человек: 2024 — «Заволокина Олеся», рейтинг — «Князева (Заволокина) Олеся»
+    assert person_key("Заволокина", "Олеся") == person_key("Князева", "Олеся")
+    assert person_key("Князева (Заволокина)", "Олеся") == person_key("Князева", "Олеся")
 
 
-def test_db_year_equal_to_race_year_not_counted():
-    """При просмотре АРХИВА 2025 года сам 2025 ещё не должен считаться
-    прошлым финишем — та же гонка, а не финиш ДО неё (та самая жалоба
-    пользователя: 2025-архив показывал то же число, что и 2026)."""
-    finished = {"русскин дмитрий": {2025}}
-    assert get_finish_count("Русскин", "Дмитрий", 2025, finished) == 5
-
-
-def test_db_year_after_race_year_not_counted():
-    finished = {"русскин дмитрий": {2025, 2027}}
-    assert get_finish_count("Русскин", "Дмитрий", 2026, finished) == 5 + 1
-
-
-def test_no_baseline_entry_still_counts_db_years():
-    finished = {"новый спортсмен": {2025}}
-    assert get_finish_count("Новый", "Спортсмен", 2026, finished) == 0 + 1
+def test_alias_counts_years_under_both_surnames():
+    finished = {person_key("Заволокина", "Олеся"): {2024}}
+    assert get_finish_count("Князева", "Олеся", 2026, finished) == 1

@@ -3,7 +3,7 @@ import logging
 import mysql.connector
 from typing import Optional
 
-from src.siberman.finish_counts import get_finish_count
+from src.siberman.finish_counts import get_finish_count, person_key
 
 log = logging.getLogger(__name__)
 
@@ -367,7 +367,7 @@ def get_checkpoint_times_for_year(
 
 
 def get_finished_years_by_name(conn) -> dict[str, set[int]]:
-    """"фамилия имя" (нормализовано) -> множество ГОДОВ ИЗ БД, где личник с
+    """person_key ("фамилия имя") -> множество ГОДОВ ИЗ БД, где личник с
     таким именем реально дошёл до финиша бега (последняя круговая КТ,
     seq=12, не считая live-субметок Copernico seq>100 — см. миграцию 009).
     Только личный зачёт (get_finish_count тоже только для личников) — по
@@ -389,8 +389,7 @@ def get_finished_years_by_name(conn) -> dict[str, set[int]]:
     """)
     result: dict[str, set[int]] = {}
     for row in cur.fetchall():
-        key = " ".join(f"{row['surname']} {row['name']}".split()).lower()
-        result.setdefault(key, set()).add(row["race_year"])
+        result.setdefault(person_key(row["surname"], row["name"]), set()).add(row["race_year"])
     return result
 
 
@@ -494,7 +493,17 @@ def get_results_for_year(conn, race_year: int) -> dict:
     race_start = get_race_start(conn, race_year)
     stage_starts = get_stage_starts(conn, race_year)
 
+    # КТ года — подписи/дистанции для фронта: в архивных годах набор КТ
+    # другой (часть seq отсутствует), live-субметки бега (sub_mark) — нет.
+    cur.execute(
+        "SELECT stage, seq, label, distance_km FROM checkpoints "
+        "WHERE race_year=%s AND NOT sub_mark ORDER BY stage, seq",
+        (race_year,)
+    )
+    checkpoints = cur.fetchall()
+
     return {
         "individual": individual, "relay": relay_list, "race_start": race_start, "race_year": race_year,
         "bike2_start": stage_starts["bike2_start"], "run_start": stage_starts["run_start"],
+        "checkpoints": checkpoints,
     }

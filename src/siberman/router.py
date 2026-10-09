@@ -133,6 +133,7 @@ async def api_results(year: Optional[int] = None):
     data["individual"] = [_clean_row(r) for r in data["individual"]]
     for team in data["relay"]:
         team["members"] = [_clean_row(m) for m in team["members"]]
+    data["checkpoints"] = [_clean_row(c) for c in data["checkpoints"]]
     for key in ("race_start", "bike2_start", "run_start"):
         if data.get(key) is not None:
             data[key] = data[key].isoformat()

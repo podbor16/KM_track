@@ -285,6 +285,7 @@ function relayMemberStatusBadge(m, pos, maxSeq, started) {
 function teamStatusBadge(team) {
     const tr = teamGapRow(team);
     if (tr.status === 'dnf') return '<span class="badge badge-dnf">DNF</span>';
+    if (tr.status === 'dsq') return '<span class="badge badge-dsq">DSQ</span>';
     if (tr.status !== 'active') return '<span class="badge badge-live">На трассе</span>';
     return activeProgressBadge(racePos(tr, null), p => p.stageIdx === STAGE_ORDER.indexOf('run') && p.seq === STAGE_MAX_SEQ.run);
 }
@@ -344,6 +345,26 @@ for (const seq of RUN_SUBMARK_SEQS) {
     CHECKPOINT_DIST_KM.run[seq] = (seq - 100) * 7 - 0.5;
 }
 
+// КТ выбранного года из /api/siberman/results (data.checkpoints) заменяют
+// подписи/дистанции выше: в архивных годах (2016–2024) набор КТ вело другой
+// и часть seq отсутствует — финиш этапа всё равно STAGE_MAX_SEQ.
+function applyYearCheckpoints(checkpoints) {
+    if (!checkpoints || !checkpoints.length) return;
+    for (const stage of STAGE_ORDER) {
+        CHECKPOINT_LABELS[stage] = {};
+        for (let seq = 1; seq <= STAGE_MAX_SEQ[stage]; seq++) delete CHECKPOINT_DIST_KM[stage][seq];
+    }
+    for (const cp of checkpoints) {
+        CHECKPOINT_LABELS[cp.stage][cp.seq] = cp.label;
+        CHECKPOINT_DIST_KM[cp.stage][cp.seq] = cp.distance_km;
+    }
+}
+
+// Существующие КТ этапа по порядку (с учётом пропусков архивных лет).
+function stageSeqs(stage) {
+    return Object.keys(CHECKPOINT_LABELS[stage]).map(Number).sort((a, b) => a - b);
+}
+
 // Общая развилка единиц измерения по этапу — плавание темп/100м, вело
 // скорость км/ч, бег темп/км. Общий примитив для splitPaceLabel (сплит
 // между соседними КТ) и avgPaceLabel (средний темп от старта этапа до КТ,
@@ -359,9 +380,14 @@ function _paceOrSpeedLabel(dbStage, distKm, timeS) {
 }
 // Темп/скорость на СПЛИТЕ (между соседними КТ).
 function splitPaceLabel(dbStage, seq, splitS) {
+    return _paceOrSpeedLabel(dbStage, splitDistKm(dbStage, seq), splitS);
+}
+// Длина сплита — от предыдущей СУЩЕСТВУЮЩЕЙ КТ этапа (в архивных годах
+// часть seq отсутствует), для live-субметок бега — от seq-1, как раньше.
+function splitDistKm(dbStage, seq) {
     const distTable = CHECKPOINT_DIST_KM[dbStage];
-    const distKm = distTable[seq] - (distTable[seq - 1] ?? 0);
-    return _paceOrSpeedLabel(dbStage, distKm, splitS);
+    const prev = seq <= STAGE_MAX_SEQ[dbStage] ? stageSeqs(dbStage).filter(s => s < seq).pop() : seq - 1;
+    return distTable[seq] - (distTable[prev] ?? 0);
 }
 // Средний темп/скорость ОТ СТАРТА ЭТАПА до конкретной КТ (не сплит между
 // соседними КТ) — нужен генератору постов трансляции ("темп на отметке X км").
@@ -512,8 +538,7 @@ function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
 // таблица — внешние данные).
 function splitPaceValue(dbStage, seq, splitS) {
     if (splitS == null) return null;
-    const distTable = CHECKPOINT_DIST_KM[dbStage];
-    const distKm = distTable[seq] - (distTable[seq - 1] ?? 0);
+    const distKm = splitDistKm(dbStage, seq);
     if (!(distKm > 0)) return null;
     if (dbStage === 'swim') return splitS / distKm / 10;
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return distKm / (splitS / 3600);
@@ -1078,8 +1103,10 @@ function teamGapRow(team) {
         // причина, что и у личников, см. bike2StartEpoch).
         bike2_start_s: byBike?.bike2_start_s,
         // Команда считается активной, пока хотя бы её текущий "рабочий" член
-        // не сошёл — упрощение: DNF любого члена трактуем как DNF команды.
-        status: team.members.some(m => m.status === 'dnf') ? 'dnf' : 'active',
+        // не сошёл — упрощение: DNF любого члена трактуем как DNF команды,
+        // DSQ любого (архив 2024: снята вся команда) — как DSQ команды.
+        status: team.members.some(m => m.status === 'dsq') ? 'dsq'
+            : team.members.some(m => m.status === 'dnf') ? 'dnf' : 'active',
     };
 }
 

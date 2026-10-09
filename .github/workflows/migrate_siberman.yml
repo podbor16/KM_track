@@ -56,6 +56,9 @@ jobs:
             # Live-синхронизация из Google Таблицы (альтернатива Excel, переключается в админке)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/011_google_sheet_sync.sql
 
+            # Подписи/дистанции КТ 2025–2026 в БД (фронт берёт их из API за год)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/012_checkpoint_labels_2025_2026.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

@@ -71,6 +71,24 @@ def compute_split_times(cumulative: list[Optional[int]]) -> list[Optional[int]]:
     return splits
 
 
+def checkpoint_splits(cp_times: dict) -> dict[tuple[str, int], Optional[int]]:
+    """Сплит каждой КТ — от предыдущей СУЩЕСТВУЮЩЕЙ КТ того же этапа (в
+    архивных годах часть seq отсутствует, финиш этапа всё равно
+    STAGE_MAX_SEQ); первая КТ этапа — сам cumulative. None, если нет
+    времени на этой или на предыдущей КТ."""
+    splits: dict[tuple[str, int], Optional[int]] = {}
+    prev: dict[str, Optional[int]] = {}
+    for stage, seq in sorted(cp_times):
+        cum = cp_times[(stage, seq)]
+        if stage not in prev:
+            splits[(stage, seq)] = cum
+        else:
+            p = prev[stage]
+            splits[(stage, seq)] = cum - p if cum is not None and p is not None else None
+        prev[stage] = cum
+    return splits
+
+
 def _last_cp(cp_times: dict, stage: str) -> Optional[int]:
     """Последний не-None cumulative для этапа."""
     for seq in range(STAGE_MAX_SEQ[stage], 0, -1):
@@ -378,7 +396,7 @@ def _recompute_records(conn, race_year: int, pid_to_participant: dict, pid_total
 
 
 def recompute_totals_ranks_records(conn, race_year: int, participants: list[dict],
-                                    pid_cp_times: dict[int, dict]) -> None:
+                                    pid_cp_times: dict[int, dict], update_records: bool = True) -> None:
     """Пересчитать stage_totals/overall_results/рекорды из уже записанных
     checkpoint_times — общая точка для ОБОИХ источников данных: Excel-путь
     (apply_to_db, полный пересчёт после clear_race_year) и live-обновления
@@ -482,7 +500,8 @@ def recompute_totals_ranks_records(conn, race_year: int, participants: list[dict
             rank_relay=None,
         )
 
-    _recompute_records(conn, race_year, pid_to_participant, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
+    if update_records:
+        _recompute_records(conn, race_year, pid_to_participant, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
 
 
 def apply_parse_result_upsert(conn, result: ParseResult) -> dict:
@@ -525,18 +544,13 @@ def apply_parse_result_upsert(conn, result: ParseResult) -> dict:
             )
 
         cp_times = result.checkpoint_times.get(cp_key, {})
+        splits = checkpoint_splits(cp_times)
         for (stage, seq), cumulative_s in cp_times.items():
             cp_id = cp_id_map.get((stage, seq))
             if cp_id is None:
                 log.warning(f"No checkpoint for stage={stage} seq={seq}")
                 continue
-            prev_cum = cp_times.get((stage, seq - 1))
-            split_s: Optional[int] = None
-            if cumulative_s is not None and prev_cum is not None:
-                split_s = cumulative_s - prev_cum
-            elif cumulative_s is not None and seq == 1:
-                split_s = cumulative_s
-            upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, split_s)
+            upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, splits[(stage, seq)])
             upserted_times += 1
 
         for zone, dur in result.transitions.get(cp_key, {}).items():
@@ -555,13 +569,16 @@ def apply_parse_result_upsert(conn, result: ParseResult) -> dict:
     return {"ok": True, "participants": upserted_parts, "checkpoint_times": upserted_times}
 
 
-def apply_to_db(result: ParseResult) -> dict:
+def apply_to_db(result: ParseResult, update_records: bool = True) -> dict:
     """
     Записать ParseResult в БД:
     1. Удалить все данные за год
     2. Upsert участников + checkpoint_times + transitions
     3. Вычислить stage_totals (итоги, темп/скорость)
     4. Ранжировать и сохранить в stage_totals + overall_results
+    5. Пересчитать рекорды — кроме импорта архива (update_records=False):
+       пересчёт берёт только кандидатов загружаемого года и откатил бы
+       рекорды более поздних лет к baseline.
     """
     conn = get_siberman_connection()
     if conn is None:
@@ -595,18 +612,13 @@ def apply_to_db(result: ParseResult) -> dict:
                 )
 
             cp_times = result.checkpoint_times.get(cp_key, {})
+            splits = checkpoint_splits(cp_times)
             for (stage, seq), cumulative_s in cp_times.items():
                 cp_id = cp_id_map.get((stage, seq))
                 if cp_id is None:
                     log.warning(f"No checkpoint for stage={stage} seq={seq}")
                     continue
-                prev_cum = cp_times.get((stage, seq - 1))
-                split_s: Optional[int] = None
-                if cumulative_s is not None and prev_cum is not None:
-                    split_s = cumulative_s - prev_cum
-                elif cumulative_s is not None and seq == 1:
-                    split_s = cumulative_s
-                upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, split_s)
+                upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, splits[(stage, seq)])
                 inserted_times += 1
 
             for zone, dur in result.transitions.get(cp_key, {}).items():
@@ -621,7 +633,7 @@ def apply_to_db(result: ParseResult) -> dict:
             participants_meta.append({**p, "id": pid})
             pid_cp_times[pid] = result.checkpoint_times.get(cp_key, {})
 
-        recompute_totals_ranks_records(conn, result.race_year, participants_meta, pid_cp_times)
+        recompute_totals_ranks_records(conn, result.race_year, participants_meta, pid_cp_times, update_records)
 
         return {
             "ok":               True,

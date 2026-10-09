@@ -5,7 +5,7 @@ from src.siberman.service import (
     format_seconds, format_pace, compute_split_times,
     convert_bike_times_to_elapsed, BIKE_DAY2_BASE_START_S,
     _finished_stage, SWIM_LAP_SEQS, STAGE_MAX_SEQ, _recompute_records,
-    compute_metrics,
+    compute_metrics, checkpoint_splits, recompute_totals_ranks_records,
 )
 
 RACE_START_S = 8 * 3600  # 08:00:00
@@ -382,3 +382,40 @@ def test_recompute_records_relay_team_partial_completion_is_evaluated_per_role()
     assert ("swim", "absolute") in calls
     assert ("bike_total", "absolute") in calls
     assert not any(k[0] == "run" for k in calls)
+
+
+def test_checkpoint_splits_contiguous_seqs_unchanged():
+    cp = {("run", 1): 100, ("run", 2): 250, ("run", 3): 400}
+    assert checkpoint_splits(cp) == {("run", 1): 100, ("run", 2): 150, ("run", 3): 150}
+
+
+def test_checkpoint_splits_gap_in_seqs_uses_previous_existing_checkpoint():
+    # Архив 2016–2017: на вело-1 нет КТ «3 км» и «142 км» — seq 1 и 5
+    # отсутствуют, финиш всё равно seq 6 (STAGE_MAX_SEQ). Сплит считается
+    # от предыдущей СУЩЕСТВУЮЩЕЙ КТ, а не от seq-1.
+    cp = {("bike_day1", 2): 1000, ("bike_day1", 3): 5000, ("bike_day1", 4): 9000, ("bike_day1", 6): 9500}
+    assert checkpoint_splits(cp) == {
+        ("bike_day1", 2): 1000, ("bike_day1", 3): 4000,
+        ("bike_day1", 4): 4000, ("bike_day1", 6): 500,
+    }
+
+
+def test_checkpoint_splits_none_previous_gives_none_and_stages_are_independent():
+    cp = {("swim", 1): 900, ("swim", 2): None, ("swim", 3): 2800, ("run", 1): 3000}
+    assert checkpoint_splits(cp) == {
+        ("swim", 1): 900, ("swim", 2): None, ("swim", 3): None, ("run", 1): 3000,
+    }
+
+
+def test_recompute_totals_ranks_records_skips_records_when_update_records_false():
+    # Импорт архивного года не должен пересчитывать рекорды: write_best_record
+    # берёт min(baseline, кандидаты ЭТОГО года) и откатил бы рекорды 2026.
+    participants = [{"id": 1, "bib": "1", "format": "individual", "surname": "Иванов",
+                     "name": "Пётр", "gender": "M", "status": "active"}]
+    with patch("src.siberman.service.upsert_stage_total"), \
+         patch("src.siberman.service.upsert_overall_result"), \
+         patch("src.siberman.service._recompute_records") as rec:
+        recompute_totals_ranks_records(None, 2016, participants, {1: _full_finish_cp()}, update_records=False)
+        assert not rec.called
+        recompute_totals_ranks_records(None, 2026, participants, {1: _full_finish_cp()})
+        assert rec.called
