@@ -61,6 +61,9 @@ OFFICIAL_FINISH_FIXES = {
     (2022, "27"): {("bike_day2", 8): 9 * 3600 + 56 * 60 + 38},
     # «Общее время 84 км» 8:46:53, а 12-й круг — 8:46:38
     (2023, "3"): {("run", 12): 8 * 3600 + 46 * 60 + 53},
+    # Эстафета IRONSTAR: вело в протоколе пусто, итог 31:53:51 (7 место) →
+    # вело 20:26:00 целиком на 2-й день, финиш 1-го дня = финиш плавания
+    (2017, "13"): {("bike_day1", 6): 3 * 3600 + 18 * 60 + 40, ("bike_day2", 8): 20 * 3600 + 26 * 60},
 }
 
 MALE_NAMES_ENDING_A = {"никита", "илья", "кузьма", "лука", "фома", "савва", "данила", "гаврила"}
@@ -285,17 +288,17 @@ def build_year(wb, year: int, gender_by: dict, relay_by_year: dict) -> tuple[Par
     return result, checkpoints, notes
 
 
-def verify_against_sheet(wb, year: int, result: ParseResult) -> list[str]:
-    """(расхождения итога, расхождения места). Итог личника, посчитанный
-    нашей моделью, должен совпасть с «Сумма трех дней» — иначе запись
-    отменяется. Место — только предупреждение: оно у нас по итогу, а в
+def verify_against_sheet(wb, year: int, result: ParseResult) -> tuple[list[str], list[str]]:
+    """(расхождения итога, расхождения места). Итог личника и эстафеты
+    (сумма КТ трёх этапов команды), посчитанный нашей моделью, должен
+    совпасть с «Сумма трех дней» — иначе запись отменяется. Место — только предупреждение: оно у нас по итогу, а в
     протоколе 2022 места Шапенко/Ошуркова не соответствуют их итогам
     (рейтинг организатора — по итогу, как у нас)."""
     rows = list(wb[str(year)].iter_rows(values_only=True))
     lay = sheet_layout(rows)
     sheet = {}
     for r in rows[2:]:
-        if norm(r[0]) == "Лично":
+        if norm(r[0]) in ("Лично", "Эстафета"):
             bib = str(int(r[1])) if isinstance(r[1], float) else norm(r[1])
             sheet[bib] = (parse_time_to_seconds(r[lay["total"]]), r[lay["place"]])
     problems, places, finishers = [], [], []
@@ -308,6 +311,14 @@ def verify_against_sheet(wb, year: int, result: ParseResult) -> list[str]:
             finishers.append((ours, p["bib"]))
             if ours != theirs:
                 problems.append(f"№{p['bib']} {p['surname']}: итог {format_seconds(ours)} ≠ лист {format_seconds(theirs)}")
+    for bib in {p["bib"] for p in result.participants if p["format"] == "relay"}:
+        members = [p for p in result.participants if p["format"] == "relay" and p["bib"] == bib]
+        if any(m["status"] != "active" for m in members):
+            continue
+        cp = {k: v for m in members for k, v in result.checkpoint_times[m["_cp_key"]].items()}
+        ours, theirs = compute_overall(compute_stage_totals(cp)), sheet[bib][0]
+        if ours != theirs:
+            problems.append(f"эстафета №{bib} «{members[0]['relay_team_name']}»: итог {format_seconds(ours)} ≠ лист {format_seconds(theirs)}")
     for place, (_, bib) in enumerate(sorted(f for f in finishers if f[0] is not None), start=1):
         if sheet[bib][1] != place:
             places.append(f"№{bib}: место {place} ≠ лист {sheet[bib][1]:g}")

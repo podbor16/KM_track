@@ -373,7 +373,7 @@ function stageSeqs(stage) {
 // повторить тот же класс расхождений, что уже чинили в этом проекте
 // (см. шапку файла).
 function _paceOrSpeedLabel(dbStage, distKm, timeS) {
-    if (timeS == null || !(distKm > 0)) return '—';
+    if (!(timeS > 0) || !(distKm > 0)) return '—';
     if (dbStage === 'swim') return fmtPace100m(timeS / distKm);
     if (dbStage === 'bike_day1' || dbStage === 'bike_day2') return fmtSpeed(distKm / (timeS / 3600));
     return fmtPace(Math.round(timeS / distKm));
@@ -537,7 +537,7 @@ function forecastCellFromPassedPoints(passedPoints, targetDist, baseEpoch) {
 // отсутствует или дистанция сплита нулевая (не должно случаться, но КТ
 // таблица — внешние данные).
 function splitPaceValue(dbStage, seq, splitS) {
-    if (splitS == null) return null;
+    if (!(splitS > 0)) return null;
     const distKm = splitDistKm(dbStage, seq);
     if (!(distKm > 0)) return null;
     if (dbStage === 'swim') return splitS / distKm / 10;
