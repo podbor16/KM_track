@@ -1,0 +1,60 @@
+name: Uptime check
+
+# Внешняя проверка доступности сайтов на VPS (scripts/uptime_check.py): мониторинг на самом VPS
+# молчит, когда VPS лежит целиком. Алерт в ntfy — при смене состояния и раз в час, пока сайт лежит.
+# GitHub может задерживать запуски по расписанию на 5–15 минут.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Отправить тестовое уведомление в ntfy"
+        type: boolean
+        default: false
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/uptime_check.py
+            src/common
+          sparse-checkout-cone-mode: false
+
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: uptime_state.json
+          key: uptime-state-${{ github.run_id }}
+          restore-keys: uptime-state-
+
+      - id: before
+        run: echo "hash=$(sha1sum uptime_state.json 2>/dev/null | cut -c1-40)" >> "$GITHUB_OUTPUT"
+
+      - name: Check sites
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+        run: python3 scripts/uptime_check.py --state uptime_state.json ${{ inputs.test_alert && '--test-alert' || '' }}
+
+      - id: after
+        if: always()
+        run: echo "hash=$(sha1sum uptime_state.json 2>/dev/null | cut -c1-40)" >> "$GITHUB_OUTPUT"
+
+      - name: Save state (only when changed)
+        if: always() && steps.after.outputs.hash != steps.before.outputs.hash
+        uses: actions/cache/save@v4
+        with:
+          path: uptime_state.json
+          key: uptime-state-${{ github.run_id }}
