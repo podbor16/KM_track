@@ -228,3 +228,15 @@ def test_fill_from_cards_unique_card_in_group_years():
     # карточки; Петров 1970 — вне годов группы
     assert fill_from_cards(cur, rows) == 1
     assert [r["birthday"] for r in rows] == ["1957-03-30", "1900-01-01", "1900-01-01", "1900-01-01"]
+
+
+
+def test_fill_from_cards_checks_kids_category_years():
+    # Детский 2017: «Трегубов Сергей» — ребёнок 2012 г.р. и младше, карточка тёзки-взрослого не подходит
+    import datetime
+    from unittest.mock import MagicMock
+    cur = MagicMock()
+    cur.fetchall.return_value = [("Трегубов", "Сергей", datetime.date(1985, 3, 3)), ("Иванов", "Петр", datetime.date(2010, 4, 4))]
+    rows = [{"surname": "Трегубов", "name": "Сергей", "birthday": "1900-01-01", "birth_year": None, "category": "Мальчики 2012 г.р. и младше"},
+            {"surname": "Иванов", "name": "Петр", "birthday": "1900-01-01", "birth_year": None, "category": "Мальчики 2010-2011 г.р."}]
+    assert fill_from_cards(cur, rows) == 1 and [r["birthday"] for r in rows] == ["1900-01-01", "2010-04-04"]

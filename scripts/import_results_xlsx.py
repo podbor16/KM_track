@@ -311,6 +311,21 @@ def _category_sex(raw):
     return ""
 
 
+def _category_years(cat):
+    """Годы рождения группы: «мужчины 1989-1985 г.р.» → (1985, 1989), «Мальчики 2012 г.р. и младше» →
+    (2012, 2030), «… 2005 г.р. и старше» → (1900, 2005); без годов — None (проверки нет)."""
+    years = sorted(int(y) for y in re.findall(r"(?<!\d)(\d{4})(?!\d)", cat or ""))
+    if len(years) >= 2:
+        return years[0], years[-1]
+    if len(years) == 1 and "младше" in cat.lower():
+        return years[0], 2100
+    if len(years) == 1 and ("старше" in cat.lower() or "+" in cat):
+        return 1900, years[0]
+    if len(years) == 1 and "г.р" in cat.lower():
+        return years[0], years[0]
+    return None
+
+
 def fill_from_cards(cur, rows):
     """--fio-cards (Sportmaniacs 2018–2020: заявок нет у трети): ДР не нашлась в заявках — из
     единственной карточки клиента с теми же ФИО и настоящей ДР; годы группы протокола
@@ -327,9 +342,9 @@ def fill_from_cards(cur, rows):
     found = 0
     for r in need:
         cands = cards.get((_name_key(r["surname"]), _name_key(r["name"])), [])
-        years = sorted(int(y) for y in re.findall(r"(?<!\d)(\d{4})(?!\d)", r.get("raw_category") or ""))
-        if len(years) >= 2:
-            cands = [bd for bd in cands if years[0] <= bd.year <= years[-1]]
+        years = _category_years(r.get("raw_category") or r.get("category") or "")
+        if years:
+            cands = [bd for bd in cands if years[0] <= bd.year <= years[1]]
         if len(cands) == 1:
             r["birthday"] = str(cands[0])
             found += 1
