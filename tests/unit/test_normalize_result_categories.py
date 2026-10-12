@@ -20,3 +20,14 @@ def test_zhara_groups_from_birthday_skip_placeholder_and_same():
     out = categories_from_birthday(cur, 220, ZHARA_5_10, 12)
     assert out == [(2, "М18-49"), (3, "Ж75-79"), (4, "М80+")]
     assert "is_pacer = 0" in cur.execute.call_args_list[1].args[0]
+
+
+
+def test_category_already_in_scheme_is_kept():
+    # Жара 2026: «Ж30-34» из протокола, ДР из заявки говорит 35 — награждали по протоколу, не трогаем
+    cur = MagicMock()
+    cur.fetchone.return_value = (2026,)
+    cur.fetchall.return_value = [(1, datetime.date(1991, 1, 1), "Женщина", "Ж30-34"),
+                                 (2, datetime.date(1955, 1, 1), "Женщина", "Ж65+")]
+    out = categories_from_birthday(cur, 116, (24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74, 79), 18)
+    assert out == [(2, "Ж70-74")]

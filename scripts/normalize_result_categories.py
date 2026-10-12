@@ -12,7 +12,9 @@
 --age-bounds / --age-min — свои группы (Жара, решение 2026-10-12 — группы Жары 2027 на все годы):
   5/10 км:  --age-bounds 13,15,17,49,59,64,69,74,79 --age-min 12   → «М12-13» … «М75-79», «М80+»
   21,1 км:  --age-bounds 24,29,34,39,44,49,54,59,64,69,74,79 --age-min 18
-Пейсеры (is_pacer) без категории — не трогаются.
+Пейсеры (is_pacer) без категории — не трогаются. Категория, которая уже есть в новой схеме, остаётся
+как в протоколе (по ней награждали; ДР в заявке бывает ошибочной) — меняются только чужие
+(«Ж18+» 2023, «М70+» 2024, «Ж65+» 2025).
 """
 
 import argparse
@@ -36,8 +38,9 @@ def categories_from_birthday(cur, event_id, bounds=None, low=None):
     year = int(cur.fetchone()[0])
     cur.execute("SELECT id, birthday, sex, category FROM results WHERE event_id = %s AND is_pacer = 0", (event_id,))
     out = []
+    scheme = {age_category(s, a, *((bounds,) if bounds else ()), low) for s in "МЖ" for a in range(0, 120)}
     for rid, bd, sex, cat in cur.fetchall():
-        if not bd or bd.year <= SENTINEL_YEAR or not sex:
+        if not bd or bd.year <= SENTINEL_YEAR or not sex or (bounds and cat in scheme):
             continue
         new = age_category(sex[:1].upper(), year - bd.year, *((bounds,) if bounds else ()), low)
         if new != cat:
