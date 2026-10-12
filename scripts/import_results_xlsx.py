@@ -263,6 +263,45 @@ def parse(path, year, overrides=None):
     return out
 
 
+SPORTMANIACS_URL = "https://sportmaniacs.com/ru/races/rankings/{event}"
+SM_SEX = {"gender_0": "Мужчина", "gender_1": "Женщина"}
+
+
+def sportmaniacs_rows(data, year):
+    """Протокол Sportmaniacs (публичные результаты Copernico 2018–2020, решение 2026-10-12) → строки как
+    у parse(): «ИМЯ ФАМИЛИЯ» одной строкой (имя первым), ДР нет (берётся из заявок), не финишировал —
+    «Not started» (DNS и DNF Sportmaniacs не различает), официальное и чистое время."""
+    out = []
+    for x in data["Rankings"]:
+        name, _, surname = " ".join(str(x.get("name") or "").split()).partition(" ")
+        if not surname:
+            continue
+        finished = bool(x.get("finishedRace"))
+        gun = _secs(x.get("officialTime")) if finished else None
+        clean = _secs(x.get("realTime")) if finished else None
+        raw_category = str(x.get("category") or "").strip()
+        category = canonical_category(short_category(raw_category, year))
+        bib = str(x.get("dorsal") or "").strip()
+        out.append({
+            "surname": normalize_person_name(surname), "name": normalize_person_name(name),
+            "birthday": SENTINEL, "birth_year": None,
+            "sex": SM_SEX.get(x.get("gender"), "") or group_sex(raw_category),
+            "bib": bib, "start_number": _number(bib),
+            "category": "" if category in ("All Ages",) else category,
+            "race_status": "Finished" if finished and gun else "Not started", "start": None,
+            "gun": gun, "clean": clean if clean and clean <= (gun or 0) else None,
+            "kt": {}, "pacer_group": False,
+        })
+    return out
+
+
+def fetch_sportmaniacs(event_id):
+    import urllib.request
+    req = urllib.request.Request(SPORTMANIACS_URL.format(event=event_id), headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read().decode("utf-8"))["data"]
+
+
 def rank(rows):
     fin = [r for r in rows if r["gun"]]
     for field, suffix in (("gun", ""), ("clean", "_clean")):
@@ -493,7 +532,12 @@ def write_checkpoints(cur, event_id, distance_km, rows):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--xlsx", required=True, nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--xlsx", nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
+    src.add_argument("--sportmaniacs", nargs="+", metavar="EVENT_ID",
+                     help="id дистанции на sportmaniacs.com (результаты 2018–2020, протоколов-файлов нет)")
+    ap.add_argument("--recompute-categories", action="store_true",
+                    help="категории протокола заменить возрастными (--age-categories): Жара — группы 2027")
     ap.add_argument("--event-id", type=int, required=True, help="событие в БД (дистанция берётся из events)")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--checkpoints", default="", help="км отметок для колонок без километража: «razv1=1.75,razv2=5.25»")
@@ -524,11 +568,13 @@ def main():
         if not ev:
             print(f"Нет события {args.event_id}")
             return 1
-        if args.file_sex and len(args.file_sex) != len(args.xlsx):
+        sources = args.xlsx or args.sportmaniacs
+        if args.file_sex and len(args.file_sex) != len(sources):
             ap.error("--file-sex: по одному полу на каждый файл --xlsx")
         rows = []
-        for k, path in enumerate(args.xlsx):
-            part = parse(path, int(ev[1]), overrides)
+        for k, path in enumerate(sources):
+            part = (parse(path, int(ev[1]), overrides) if args.xlsx
+                    else sportmaniacs_rows(fetch_sportmaniacs(path), int(ev[1])))
             for r in part:
                 if args.swap_names:                     # Красочный 2021: в «Фамилии» имена
                     r["surname"], r["name"] = r["name"], r["surname"]
@@ -553,10 +599,12 @@ def main():
         for r in rows:
             if args.sex and not r["sex"]:
                 r["sex"] = args.sex
+            if args.recompute_categories:               # Sportmaniacs: «Мужчины 12 лет и старше», «All Ages»
+                r["category"] = ""
             if args.category_by_sex and not r["category"] and r["sex"]:          # Снежная: зачёт только по полу
                 r["category"] = "Женщины" if r["sex"] == "Женщина" else "Мужчины"
-            if args.age_categories and r["category"] in ("Мужчины", "Женщины"):   # Ночной 2021: зачёт по полу
-                r["category"] = ""
+            if args.age_categories and (r["category"] in ("Мужчины", "Женщины") or args.recompute_categories):
+                r["category"] = ""                      # Ночной 2021: зачёт по полу; --recompute-categories — все
             if args.age_categories and not r["category"] and r["sex"] and birth(r) and not r["pacer_group"]:
                 r["category"] = age_category(r["sex"][:1], year - birth(r), bounds, args.age_min)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))

@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, parse, rank, same_card_collisions, set_bibs
+from scripts.import_results_xlsx import finish_columns, parse, rank, same_card_collisions, set_bibs, sportmaniacs_rows
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -162,3 +162,17 @@ def test_kids_two_year_groups_and_not_started(tmp_path):
     rows = parse(path, 2021)
     assert [(r["category"], r["race_status"]) for r in rows] == [("Девочки 2010-2011 г.р.", "Finished"),
                                                                   ("Девочки 2010-2011 г.р.", "Not started")]
+
+
+
+def test_sportmaniacs_rows():
+    data = {"Rankings": [
+        {"dorsal": "86", "name": "ВАЛЕНТИН ТЯПКИН", "gender": "gender_0", "category": "Мужчины 12 лет и старше",
+         "officialTime": "00:38:03", "realTime": "00:28:12", "finishedRace": True},
+        {"dorsal": "401", "name": "Елена Иванова ", "gender": "gender_1", "category": "All Ages",
+         "officialTime": "00:00:00", "realTime": "00:00:00", "finishedRace": False},
+    ]}
+    a, b = sportmaniacs_rows(data, 2020)
+    assert (a["surname"], a["name"], a["sex"], a["gun"], a["clean"], a["race_status"], a["start_number"]) == \
+        ("Тяпкин", "Валентин", "Мужчина", 2283, 1692, "Finished", 86)
+    assert (b["surname"], b["race_status"], b["gun"], b["category"]) == ("Иванова", "Not started", None, "")
