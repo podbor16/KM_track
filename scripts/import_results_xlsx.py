@@ -294,7 +294,7 @@ def sportmaniacs_rows(data, year):
             # пол из категории надёжнее: на Жаре 2019 у всех gender_0, на 10 км — gender_-1
             "sex": _category_sex(raw_category) or SM_SEX.get(x.get("gender"), ""),
             "bib": bib, "start_number": _number(bib),
-            "category": "" if category in ("All Ages",) else category,
+            "category": "" if category in ("All Ages", "-") else category,
             "race_status": "Finished" if finished and gun else "Not started", "start": None,
             "gun": gun, "clean": clean if clean and clean <= (gun or 0) else None,
             "kt": {}, "pacer_group": False, "raw_category": raw_category,
