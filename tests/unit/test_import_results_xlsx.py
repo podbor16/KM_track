@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, parse, rank, same_card_collisions, set_bibs, sportmaniacs_rows
+from scripts.import_results_xlsx import finish_columns, kids_category, parse, rank, same_card_collisions, set_bibs, sportmaniacs_rows
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -176,3 +176,26 @@ def test_sportmaniacs_rows():
     assert (a["surname"], a["name"], a["sex"], a["gun"], a["clean"], a["race_status"], a["start_number"]) == \
         ("Тяпкин", "Валентин", "Мужчина", 2283, 1692, "Finished", 86)
     assert (b["surname"], b["race_status"], b["gun"], b["category"]) == ("Иванова", "Not started", None, "")
+
+
+
+@pytest.mark.parametrize("raw, sex, out", [
+    ("m2008-2007", "Мужчина", "Мальчики 2007-2008 г.р."),
+    ("w2018-2013", "Женщина", "Девочки 2013-2018 г.р."),
+    ("2006+", "Мужчина", "Мальчики 2006 г.р. и старше"),
+    ("мужчины 2009-2008 г.р.", "Мужчина", "Мальчики 2008-2009 г.р."),
+    ("Девочки 2010-2009 г.р.", "Женщина", "Девочки 2009-2010 г.р."),
+    ("All Ages", "Женщина", ""),
+])
+def test_kids_category(raw, sex, out):
+    assert kids_category(raw, sex) == out
+
+
+
+def test_sportmaniacs_zhara_2018_codes():
+    data = {"Rankings": [{"dorsal": "1", "name": "Иван Петров", "gender": "gender_0", "category": "m2000",
+                          "officialTime": "00:40:00", "realTime": "00:39:50", "finishedRace": True},
+                         {"dorsal": "2", "name": "Анна Петрова", "gender": "gender_1", "category": "w2004-2003",
+                          "officialTime": "00:45:00", "realTime": "00:44:50", "finishedRace": True}]}
+    a, b = sportmaniacs_rows(data, 2018)
+    assert (a["category"], b["category"]) == ("М18+", "Ж14-15")

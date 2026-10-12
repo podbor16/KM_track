@@ -265,6 +265,7 @@ def parse(path, year, overrides=None):
 
 SPORTMANIACS_URL = "https://sportmaniacs.com/ru/races/rankings/{event}"
 SM_SEX = {"gender_0": "Мужчина", "gender_1": "Женщина"}
+_SM_CODE = re.compile(r"^([mw])(\d{4})(?:-(\d{4}))?$", re.I)
 
 
 def sportmaniacs_rows(data, year):
@@ -280,6 +281,11 @@ def sportmaniacs_rows(data, year):
         gun = _secs(x.get("officialTime")) if finished else None
         clean = _secs(x.get("realTime")) if finished else None
         raw_category = str(x.get("category") or "").strip()
+        m = _SM_CODE.match(raw_category)                # Жара 2018: «m2002-2001», «w2000» (2000 г.р. и старше)
+        if m:
+            sex_word = "мужчины" if m.group(1).lower() == "m" else "женщины"
+            raw_category = (f"{sex_word} {m.group(2)}-{m.group(3)} г.р." if m.group(3)
+                            else f"{sex_word} {m.group(2)} г.р. и старше")
         category = canonical_category(short_category(raw_category, year))
         bib = str(x.get("dorsal") or "").strip()
         out.append({
@@ -290,16 +296,39 @@ def sportmaniacs_rows(data, year):
             "category": "" if category in ("All Ages",) else category,
             "race_status": "Finished" if finished and gun else "Not started", "start": None,
             "gun": gun, "clean": clean if clean and clean <= (gun or 0) else None,
-            "kt": {}, "pacer_group": False,
+            "kt": {}, "pacer_group": False, "raw_category": raw_category,
         })
     return out
 
 
-def fetch_sportmaniacs(event_id):
+def kids_category(raw, sex):
+    """Детский забег на Sportmaniacs: группа по годам рождения в любом написании («m2008-2007»,
+    «мужчины 2009-2008 г.р.», «2006+») → «Мальчики 2007-2008 г.р.», «Девочки 2006 г.р. и старше»."""
+    years = sorted(int(y) for y in re.findall(r"(?<!\d)(\d{4})(?!\d)", raw or ""))
+    if not years or not sex:
+        return ""
+    kid = "Мальчики" if sex == "Мужчина" else "Девочки"
+    if len(years) >= 2 and years[0] != years[-1]:
+        return f"{kid} {years[0]}-{years[-1]} г.р."
+    older = "+" in raw or "старше" in raw.lower()
+    return f"{kid} {years[0]} г.р." + (" и старше" if older else "")
+
+
+def load_sportmaniacs(src):
+    """id дистанции — запрос на sportmaniacs.com; путь к .json — сохранённый ответ (с сервера запрос
+    к Sportmaniacs бывает дольше 2 минут, протоколы скачиваются локально)."""
+    import gzip
+    import os
     import urllib.request
-    req = urllib.request.Request(SPORTMANIACS_URL.format(event=event_id), headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return json.loads(resp.read().decode("utf-8"))["data"]
+    if os.path.exists(src):
+        raw = open(src, "rb").read()
+    else:
+        req = urllib.request.Request(SPORTMANIACS_URL.format(event=src), headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            raw = resp.read()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    return json.loads(raw.decode("utf-8"))["data"]
 
 
 def rank(rows):
@@ -536,6 +565,8 @@ def main():
     src.add_argument("--xlsx", nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
     src.add_argument("--sportmaniacs", nargs="+", metavar="EVENT_ID",
                      help="id дистанции на sportmaniacs.com (результаты 2018–2020, протоколов-файлов нет)")
+    ap.add_argument("--kids-categories", action="store_true",
+                    help="детские группы по годам рождения из категории протокола (Sportmaniacs)")
     ap.add_argument("--recompute-categories", action="store_true",
                     help="категории протокола заменить возрастными (--age-categories): Жара — группы 2027")
     ap.add_argument("--event-id", type=int, required=True, help="событие в БД (дистанция берётся из events)")
@@ -574,7 +605,7 @@ def main():
         rows = []
         for k, path in enumerate(sources):
             part = (parse(path, int(ev[1]), overrides) if args.xlsx
-                    else sportmaniacs_rows(fetch_sportmaniacs(path), int(ev[1])))
+                    else sportmaniacs_rows(load_sportmaniacs(path), int(ev[1])))
             for r in part:
                 if args.swap_names:                     # Красочный 2021: в «Фамилии» имена
                     r["surname"], r["name"] = r["name"], r["surname"]
@@ -599,7 +630,11 @@ def main():
         for r in rows:
             if args.sex and not r["sex"]:
                 r["sex"] = args.sex
-            if args.recompute_categories:               # Sportmaniacs: «Мужчины 12 лет и старше», «All Ages»
+            if args.kids_categories:                    # Детский на Sportmaniacs: группы по годам рождения
+                r["category"] = kids_category(r.get("raw_category", ""), r["sex"]) or r["category"]
+            # Sportmaniacs: категория протокола заменяется, если есть чем — полом (Снежная) или возрастом по ДР;
+            # ДР нет — остаётся группа протокола (у Жары она по годам рождения)
+            if args.recompute_categories and (args.category_by_sex or (args.age_categories and birth(r))):
                 r["category"] = ""
             if args.category_by_sex and not r["category"] and r["sex"]:          # Снежная: зачёт только по полу
                 r["category"] = "Женщины" if r["sex"] == "Женщина" else "Мужчины"
