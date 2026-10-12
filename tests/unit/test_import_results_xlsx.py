@@ -240,3 +240,11 @@ def test_fill_from_cards_checks_kids_category_years():
     rows = [{"surname": "Трегубов", "name": "Сергей", "birthday": "1900-01-01", "birth_year": None, "category": "Мальчики 2012 г.р. и младше"},
             {"surname": "Иванов", "name": "Петр", "birthday": "1900-01-01", "birth_year": None, "category": "Мальчики 2010-2011 г.р."}]
     assert fill_from_cards(cur, rows) == 1 and [r["birthday"] for r in rows] == ["1900-01-01", "2010-04-04"]
+
+
+
+def test_short_category_kids_keeps_older_younger():
+    from scripts.import_results_xlsx import short_category
+    assert short_category("Девочки 2012 г.р. и младше", 2017) == "Девочки 2012 г.р. и младше"
+    assert short_category("Мальчики 2005 г.р. и старше", 2017) == "Мальчики 2005 г.р. и старше"
+    assert short_category("Мальчики 2014 г.р.", 2025) == "Мальчики 2014 г.р."

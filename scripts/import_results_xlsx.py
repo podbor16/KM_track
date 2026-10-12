@@ -157,7 +157,8 @@ def short_category(category, year):
         if m.group(3) and m.group(3) != m.group(2):     # Детский 2021: «девочки 2011-2010» — двухлетняя группа
             y1, y2 = sorted((int(m.group(2)), int(m.group(3))))
             return f"{_KIDS[m.group(1).lower()]} {y1}-{y2} г.р."
-        return f"{_KIDS[m.group(1).lower()]} {m.group(2)} г.р."
+        tail = " и старше" if "старше" in category.lower() else " и младше" if "младше" in category.lower() else ""
+        return f"{_KIDS[m.group(1).lower()]} {m.group(2)} г.р.{tail}"         # Детский 2017: «… и младше»
     sex = "М" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Ж"
     y1, y2 = int(m.group(2)), int(m.group(3) or m.group(2))
     young, old = year - max(y1, y2), year - min(y1, y2)
