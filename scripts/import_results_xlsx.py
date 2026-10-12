@@ -684,8 +684,8 @@ def main():
                 r["category"] = ""
             if args.category_by_sex and not r["category"] and r["sex"]:          # Снежная: зачёт только по полу
                 r["category"] = "Женщины" if r["sex"] == "Женщина" else "Мужчины"
-            if args.age_categories and (r["category"] in ("Мужчины", "Женщины") or args.recompute_categories):
-                r["category"] = ""                      # Ночной 2021: зачёт по полу; --recompute-categories — все
+            if args.age_categories and r["category"] in ("Мужчины", "Женщины"):     # Ночной 2021: зачёт по полу
+                r["category"] = ""
             if args.age_categories and not r["category"] and r["sex"] and birth(r) and not r["pacer_group"]:
                 r["category"] = age_category(r["sex"][:1], year - birth(r), bounds, args.age_min)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
