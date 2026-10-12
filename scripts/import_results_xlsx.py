@@ -543,7 +543,10 @@ def set_bibs(rows, specs):
         hits = [r for r in rows if _name_key(f"{r['surname']} {r['name']}") == _name_key(who)]
         if len(hits) != 1:
             raise ValueError(f"--set-bib «{spec}»: строк {len(hits)}, нужна одна")
-        hits[0]["bib"], hits[0]["start_number"] = bib.strip(), int(bib)
+        if bib.strip() == "-":                         # «-» — служебный номер (Х Трейл 2020: №888 у двоих)
+            hits[0]["bib"], hits[0]["start_number"] = "", None
+        else:
+            hits[0]["bib"], hits[0]["start_number"] = bib.strip(), int(bib)
 
 
 def same_card_collisions(rows):

@@ -73,6 +73,8 @@ def test_set_bib():
     assert [r["start_number"] for r in rows] == [593, 515] and rows[0]["bib"] == "593"
     with pytest.raises(ValueError):
         set_bibs(rows, ["Иванов Иван=1"])
+    set_bibs(rows, ["Трегубов Сергей=-"])
+    assert rows[1]["start_number"] is None
 
 
 
