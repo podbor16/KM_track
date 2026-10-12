@@ -379,7 +379,8 @@
 
 /* на телефоне таблицы прокручиваются внутри своего блока, а не всей страницей */
 #loader-table-wrap,
-#leads-table-wrap { overflow-x: auto; }
+#leads-table-wrap,
+.admin-table-scroll { overflow-x: auto; }
 
 .admin-leads-table {
     width: 100%;
