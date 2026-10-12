@@ -346,11 +346,14 @@ async def lifespan(app: FastAPI):
                 settings.logger.warning(f"[webhook] spool replayer error: {_e}")
 
     async def _metrics_flusher():
-        """Каждые 60с снимает bucket метрик и пишет в SQLite."""
+        """Каждые 60с снимает bucket метрик и пишет в SQLite; заодно возвращает системе
+        свободную память арен glibc (src/common/memory.py)."""
+        from src.common.memory import trim
         while True:
             await asyncio.sleep(60)
             sse_count = tracker_hub.total_sse_count() + notification_hub.total_sse_count()
             await metrics_collector.flush(sse_connections=sse_count)
+            trim()
 
     _sse_tasks = [asyncio.create_task(_metrics_flusher())]
     if redis_client is not None:

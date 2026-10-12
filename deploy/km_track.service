@@ -8,6 +8,9 @@ User=km
 Group=km
 WorkingDirectory=/opt/km_track
 EnvironmentFile=/opt/km_track/.env
+# не больше 2 арен glibc на процесс: иначе пул потоков фрагментирует память (2026-10-12, src/common/memory.py).
+# Правка unit-файла применяется только systemctl restart km_track (деплой делает reload).
+Environment=MALLOC_ARENA_MAX=2
 ExecStart=/opt/km_track/venv/bin/gunicorn app:app \
     -k uvicorn.workers.UvicornWorker \
     --workers 3 \
