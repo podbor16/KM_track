@@ -214,3 +214,17 @@ def test_fill_from_leads_sex():
     done, _, loose = fill_from_leads(cur, 1, rows)
     assert [(r["surname"], r["name"], r["sex"]) for r in rows] == [
         ("Заводовская", "Ирина", "Женщина"), ("Болсуновская", "Наталья", "Женщина"), ("Иванов", "Иван", "")]
+
+
+
+def test_placeholder_birthday_is_not_a_match():
+    # Жара 2022: Архипов Иван «1983-01-01» (только год) и заявка Шабуров Иван 1983-01-01 (заглушка Бума) — разные люди
+    import datetime
+    from unittest.mock import MagicMock
+    from scripts.import_results_xlsx import fill_from_leads
+    cur = MagicMock()
+    cur.fetchall.return_value = [("Шабуров", "Иван", datetime.date(1983, 1, 1), None, "Мужчина")]
+    rows = [{"surname": "Архипов", "name": "Иван", "birthday": "1983-01-01", "birth_year": None,
+             "start_number": 5, "bib": "5", "sex": "Мужчина", "race_status": "Finished"}]
+    fill_from_leads(cur, 1, rows)
+    assert rows[0]["surname"] == "Архипов"

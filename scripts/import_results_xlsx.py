@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import openpyxl
 
 from scripts.import_boom_historical import get_connection
-from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
+from src.analytics.elite import ELITE_DISTANCES, distance_label, is_elite, is_pacer, main_ranges
 from src.common.categories import age_category, canonical_category
 from src.common.names import normalize_person_name, normalize_sex
 
@@ -271,6 +271,11 @@ def rank(rows):
             r["rank_absolute" + suffix], r["rank_sex" + suffix], r["rank_category" + suffix] = n, by_sex[r["sex"]], by_cat[r["category"]]
 
 
+def _placeholder_bd(bd):
+    """Заглушка ДР: 1900-01-01 или «ГГГГ-01-01» (в протоколе только год) — не довод, что люди совпадают."""
+    return not bd or bd == SENTINEL or bd.endswith("-01-01")
+
+
 def _name_key(text):
     return str(text or "").strip().lower().replace("ё", "е")
 
@@ -374,6 +379,8 @@ def fill_from_leads(cur, event_id, rows):
         row_key = lambda r: key(_name_key(r["surname"]), _name_key(r["name"]), r["birthday"])
         rows_per_key = collections.Counter(row_key(r) for r in pending)
         for r in list(pending):
+            if label in ("фамилия+ДР", "имя+ДР") and _placeholder_bd(r["birthday"]):
+                continue                                # «ГГГГ-01-01» — не совпадение ДР
             cands = free.get(row_key(r), [])
             if len(cands) != 1 or rows_per_key[row_key(r)] != 1:
                 continue
@@ -395,7 +402,7 @@ def fill_from_leads(cur, event_id, rows):
         by_nbd[(name, str(bd))].append(k)
     for r in rows:
         key = (_name_key(r["surname"]), _name_key(r["name"]))
-        if r["birthday"] == SENTINEL or key in by_name:
+        if _placeholder_bd(r["birthday"]) or key in by_name:    # Архипов Иван 1983-01-01 ≠ Шабуров Иван 1983-01-01
             continue
         ks = set(by_sbd.get((key[0], r["birthday"]), [])) | set(by_nbd.get((key[1], r["birthday"]), []))
         if len(ks) != 1:
@@ -536,9 +543,10 @@ def main():
             if args.age_categories and not r["category"] and r["sex"] and birth(r) and not r["pacer_group"]:
                 r["category"] = age_category(r["sex"][:1], year - birth(r), bounds, args.age_min)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
+        elite_distance = (ev[0], distance_label(ev[2])) in ELITE_DISTANCES     # Купаева на 10 км 2022 — не элита
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:
-            r["is_elite"] = int(is_elite(r["bib"], ranges, r["surname"]))
+            r["is_elite"] = int(elite_distance and is_elite(r["bib"], ranges, r["surname"]))
             r["is_pacer"] = int(is_pacer(r["bib"]) or r["pacer_group"])
             if r["start_number"] is None:               # именной номер / «Элита» — служебный номер
                 r["start_number"], next_service = next_service, next_service + 1
