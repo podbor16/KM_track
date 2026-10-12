@@ -18,6 +18,7 @@ import re
 import tempfile
 
 from src.analytics.client_merge import apply as apply_merge, recompute_aggregates
+from src.analytics.db_results import recompute_duplicates
 from src.common.names import SENTINELS, Names, _near_bd, canonical_fio, lev, norm, normalize_person_name
 
 NOT_STARTED = "Not started"
@@ -500,12 +501,14 @@ def finding_view(f, data):
 
 
 def _log_action(cur, action, key, details, user):
+    """-> id записи журнала (по нему действие отменяется)."""
     cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
                 (action, key or "", json.dumps(details, ensure_ascii=False, default=str), user or ""))
+    return cur.lastrowid
 
 
 def dismiss(conn, key, decision, note, user):
-    """Запомнить решение по находке — больше не показывается."""
+    """Запомнить решение по находке — больше не показывается. -> id записи журнала."""
     if decision not in DECISIONS:
         raise ValueError(f"решение: {', '.join(DECISIONS)}")
     cur = conn.cursor()
@@ -513,14 +516,15 @@ def dismiss(conn, key, decision, note, user):
                    ON DUPLICATE KEY UPDATE decision = VALUES(decision), note = VALUES(note),
                                            decided_by = VALUES(decided_by), decided_at = NOW()""",
                 (key, decision, note or "", user or ""))
-    _log_action(cur, "dismiss", key, {"decision": decision, "note": note}, user)
+    action_id = _log_action(cur, "dismiss", key, {"decision": decision, "note": note}, user)
     conn.commit()
     cur.close()
+    return action_id
 
 
 def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     """Склеить карточки в одну с итоговыми ФИ/ДР. Основная — с наибольшим числом заявок и результатов.
-    Снимок «до» — в dq_actions."""
+    Снимок «до» — в dq_actions. -> (основная карточка, id записи журнала)."""
     ids = sorted({int(i) for i in ids})
     surname, name = normalize_person_name(surname or ""), normalize_person_name(name or "")
     if len(ids) < 2:
@@ -553,18 +557,19 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     finally:
         os.remove(path)
     cur = conn.cursor()
-    _log_action(cur, "merge", key, {"survivor": surv, "merged": sorted(merged_into),
-                                    "final": [surname, name, birthday], "before": snapshot}, user)
+    action_id = _log_action(cur, "merge", key, {"survivor": surv, "merged": sorted(merged_into),
+                                                "final": [surname, name, birthday], "before": snapshot}, user)
     conn.commit()
     cur.close()
-    return surv
+    return surv, action_id
 
 
 def fix_fio(conn, result_id, surname, name, user, key=""):
     """HYG «Исправить ФИО»: ФИО результата -> каноническое. Карточка с тем же ФИО, что у результата
     (заведена по нему, «Tsimis Егор»), переименовывается со всеми заявками и результатами, а если
     такие ФИ и ДР уже у другой карточки — склеивается с ней. Карточка уже в каноническом виде
-    («Маркус Роман» при «Роман Маркус» в протоколе) — правится только строка результата."""
+    («Маркус Роман» при «Роман Маркус» в протоколе) — правится только строка результата.
+    -> (карточка, id записи журнала)."""
     surname, name = normalize_person_name(surname or ""), normalize_person_name(name or "")
     if not surname or not name:
         raise ValueError("нужны фамилия и имя")
@@ -597,14 +602,15 @@ def fix_fio(conn, result_id, surname, name, user, key=""):
         cur.close()
         cur = conn.cursor()
         cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (surname, name, row["id"]))
-    _log_action(cur, "fix_fio", key, details, user)
+    action_id = _log_action(cur, "fix_fio", key, details, user)
     conn.commit()
     cur.close()
-    return cid
+    return cid, action_id
 
 
 def delete_result(conn, result_id, user, key=""):
-    """Удалить «Not started», если у карточки есть другой результат в этом забеге (старый номер)."""
+    """Удалить «Not started», если у карточки есть другой результат в этом забеге (старый номер).
+    -> id записи журнала."""
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM results WHERE id = %s", (int(result_id),))
     row = cur.fetchone()
@@ -619,9 +625,10 @@ def delete_result(conn, result_id, user, key=""):
         raise ValueError("удаляется только «Not started», когда у карточки есть другой результат в этом забеге")
     cur.execute("DELETE FROM results WHERE id = %s", (row["id"],))
     recompute_aggregates(cur, [row["client_id"]])
-    _log_action(cur, "delete_result", key, {"before": row}, user)
+    action_id = _log_action(cur, "delete_result", key, {"before": row}, user)
     conn.commit()
     cur.close()
+    return action_id
 
 
 def apply_auto(conn, user):
@@ -666,3 +673,171 @@ def apply_auto(conn, user):
         except ValueError as e:
             done["skipped"].append(f"{label}: {e}")
     return done
+
+
+# ---------------------------------------------------------------- отмена действий (запись «undo» в dq_actions)
+
+UNDOABLE = ("merge", "fix_fio", "delete_result", "dismiss")
+
+
+def _cards_of(action, d):
+    """Карточки, которых касалось действие (для порядка отмен)."""
+    if action == "merge":
+        return {d["survivor"], *d["merged"]}
+    if action == "fix_fio":
+        return {d["client_id"], *d.get("merged", [])}
+    if action == "delete_result":
+        return {d["before"]["client_id"]}
+    return set()
+
+
+def _describe(action, d):
+    if action == "merge":
+        cards = " + ".join(f'#{c["id"]} {c["surname"]} {c["name"]} {c["birthday"]}'
+                           for c in d.get("before", {}).get("clients", []))
+        return f'Склейка: {cards} → #{d["survivor"]} {" ".join(map(str, d["final"]))}'
+    if action == "fix_fio":
+        return f'Исправление ФИО: {" ".join(d["before"])} → {" ".join(d["after"])} (карточка #{d["client_id"]})'
+    if action == "delete_result":
+        b = d["before"]
+        return f'Удалён «Not started»: {b["surname"]} {b["name"]} №{b["start_number"]} (забег #{b["event_id"]})'
+    if action == "dismiss":
+        return "Решение: " + ("разные люди" if d["decision"] == "different_people" else "оставить как есть")
+    return action
+
+
+def _load_actions(cur, since_id=0):
+    """Действия журнала с id >= since_id по порядку + множество отменённых id."""
+    cur.execute("SELECT id, action, finding_key, details, done_by, done_at FROM dq_actions WHERE id >= %s ORDER BY id",
+                (int(since_id),))
+    rows = cur.fetchall()
+    for r in rows:
+        if isinstance(r["details"], (str, bytes, bytearray)):
+            r["details"] = json.loads(r["details"])
+    undone = {r["details"].get("undo_of") for r in rows if r["action"] == "undo"}
+    return rows, undone
+
+
+def _undo_blocker(row, later, undone):
+    """Почему действие нельзя отменить (None — можно)."""
+    if row["action"] not in UNDOABLE:
+        return "это действие не отменяется"
+    if row["id"] in undone:
+        return "уже отменено"
+    cards = _cards_of(row["action"], row["details"])
+    for x in later:
+        if x["action"] in UNDOABLE and x["id"] not in undone and cards & _cards_of(x["action"], x["details"]):
+            return f'сначала отмените более позднее действие #{x["id"]} с теми же карточками'
+    return None
+
+
+def recent_actions(conn, limit=50):
+    """Последние действия для /admin (новые сверху): описание, отменено ли, можно ли отменить."""
+    cur = conn.cursor(dictionary=True)
+    ph = ",".join(["%s"] * len(UNDOABLE))
+    cur.execute(f"SELECT COALESCE(MIN(id), 0) m FROM (SELECT id FROM dq_actions WHERE action IN ({ph}) "
+                "ORDER BY id DESC LIMIT %s) t", (*UNDOABLE, int(limit)))
+    rows, undone = _load_actions(cur, cur.fetchone()["m"])
+    cur.close()
+    acts = [r for r in rows if r["action"] in UNDOABLE]
+    out = []
+    for k, r in enumerate(acts):
+        blocker = _undo_blocker(r, acts[k + 1:], undone)
+        out.append({"id": r["id"], "action": r["action"], "key": r["finding_key"],
+                    "text": _describe(r["action"], r["details"]), "done_by": r["done_by"],
+                    "done_at": str(r["done_at"]), "undone": r["id"] in undone,
+                    "can_undo": blocker is None, "why_not": blocker or ""})
+    return out[::-1]
+
+
+def _restore_cards(cur, snap):
+    """Карточки, заявки и результаты — как в снимке client_merge.apply (удалённые карточки — с прежними id)."""
+    clients = snap.get("clients", [])
+    ids = [c["id"] for c in clients]
+    ph = ",".join(["%s"] * len(ids))
+    cur.execute(f"SELECT id FROM clients WHERE id IN ({ph})", ids)
+    existing = {r["id"] for r in cur.fetchall()}
+    for c in clients:
+        cur.execute(f"SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id NOT IN ({ph})",
+                    [c["surname"], c["name"], c["birthday"]] + ids)
+        other = cur.fetchone()
+        if other:
+            raise ValueError(f'{c["surname"]} {c["name"]} {c["birthday"]} уже у карточки #{other["id"]} — отмена невозможна')
+    # два шага, как в client_merge.apply: не упереться в uk_client при обмене ФИ/ДР
+    for i in existing:
+        cur.execute("UPDATE clients SET surname = CONCAT('~', id) WHERE id = %s", (i,))
+    for c in clients:
+        cols = [k for k in c if k != "id"]
+        if c["id"] in existing:
+            cur.execute(f"UPDATE clients SET {', '.join(f'`{k}` = %s' for k in cols)} WHERE id = %s",
+                        [c[k] for k in cols] + [c["id"]])
+        else:
+            cur.execute(f"INSERT INTO clients (`id`, {', '.join(f'`{k}`' for k in cols)}) "
+                        f"VALUES ({', '.join(['%s'] * (len(cols) + 1))})", [c["id"]] + [c[k] for k in cols])
+    for table in ("leads", "results"):
+        for r in snap.get(table, []):
+            cur.execute(f"UPDATE {table} SET client_id = %s, surname = %s, name = %s, birthday = %s WHERE id = %s",
+                        (r["client_id"], r["surname"], r["name"], r["birthday"], r["id"]))
+    # trg_leads_after_update переписывает телефон/почту карточки данными заявки — вернуть как было
+    for c in clients:
+        cur.execute("UPDATE clients SET phone = %s, email = %s WHERE id = %s", (c.get("phone"), c.get("email"), c["id"]))
+    recompute_aggregates(cur, ids)
+    recompute_duplicates(cur, ids)
+
+
+def _restore_result(cur, row):
+    """Удалённый результат — обратно с прежним id и карточкой (триггер вставки сам выбирает карточку)."""
+    cur.execute("SELECT id FROM clients WHERE id = %s", (row["client_id"],))
+    if not cur.fetchone():
+        raise ValueError(f'карточки #{row["client_id"]} уже нет — отмена невозможна')
+    cur.execute("SELECT COALESCE(MAX(id), 0) m FROM clients")
+    max_client = cur.fetchone()["m"]
+    cols = list(row)
+    cur.execute(f"INSERT INTO results ({', '.join(f'`{k}`' for k in cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
+                [row[k] for k in cols])
+    cur.execute("SELECT client_id FROM results WHERE id = %s", (row["id"],))
+    picked = cur.fetchone()["client_id"]
+    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (row["client_id"], row["id"]))
+    cur.execute("""DELETE c FROM clients c WHERE c.id > %s
+                   AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
+                   AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)""", (max_client,))
+    cur.execute("SELECT id FROM clients WHERE id IN (%s, %s)", (row["client_id"], picked))
+    recompute_aggregates(cur, [r["id"] for r in cur.fetchall()])
+
+
+def undo_action(conn, action_id, user):
+    """Отменить действие из журнала по снимку «до». Нельзя, если уже отменено или после него было
+    неотменённое действие с теми же карточками (сначала отменить его). -> id записи «undo»."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        rows, undone = _load_actions(cur, action_id)
+        if not rows or rows[0]["id"] != int(action_id):
+            raise ValueError(f"нет действия #{action_id}")
+        row, d = rows[0], rows[0]["details"]
+        blocker = _undo_blocker(row, rows[1:], undone)
+        if blocker:
+            raise ValueError(blocker)
+        if conn.in_transaction:
+            conn.commit()
+        conn.start_transaction()
+        if row["action"] == "merge":
+            _restore_cards(cur, d["before"])
+        elif row["action"] == "fix_fio":
+            if "card_before" in d:
+                _restore_cards(cur, d["card_before"])
+            else:
+                cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (*d["before"], d["result_id"]))
+        elif row["action"] == "delete_result":
+            _restore_result(cur, d["before"])
+        else:
+            cur.execute("DELETE FROM dq_decisions WHERE finding_key = %s AND decision = %s",
+                        (row["finding_key"], d["decision"]))
+        undo_id = _log_action(cur, "undo", row["finding_key"], {"undo_of": row["id"], "action": row["action"]}, user)
+        conn.commit()
+        return undo_id
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        cur.close()

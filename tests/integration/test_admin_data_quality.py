@@ -41,10 +41,10 @@ def test_list_sorted_by_severity_and_connection_closed(conn):
 
 
 def test_merge_passes_user_and_returns_survivor(conn):
-    with patch(f"{R}.dq.merge_cards", return_value=7) as m:
+    with patch(f"{R}.dq.merge_cards", return_value=(7, 501)) as m:
         r = client.post("/api/admin/data-quality/merge",
                         json={"client_ids": [7, 9], "surname": "Иванов", "name": "Иван", "birthday": "1990-01-02", "key": "k"})
-    assert r.json() == {"ok": True, "client_id": 7}
+    assert r.json() == {"ok": True, "client_id": 7, "action_id": 501}
     assert m.call_args.args == (conn, [7, 9], "Иванов", "Иван", "1990-01-02", "testuser", "k")
 
 
@@ -69,8 +69,25 @@ def test_no_db_connection_is_503():
 
 
 def test_fix_fio_passes_user_and_returns_card(conn):
-    with patch(f"{R}.dq.fix_fio", return_value=53428) as m:
+    with patch(f"{R}.dq.fix_fio", return_value=(53428, 502)) as m:
         r = client.post("/api/admin/data-quality/fix-fio",
                         json={"result_id": 7, "surname": "Цимис", "name": "Егор", "key": "k"})
-    assert r.json() == {"ok": True, "client_id": 53428}
+    assert r.json() == {"ok": True, "client_id": 53428, "action_id": 502}
     assert m.call_args.args == (conn, 7, "Цимис", "Егор", "testuser", "k")
+
+
+def test_undo_passes_user_and_maps_refusal_to_400(conn):
+    with patch(f"{R}.dq.undo_action", return_value=900) as m:
+        r = client.post("/api/admin/data-quality/undo", json={"action_id": 501})
+    assert r.json() == {"ok": True, "undo_id": 900}
+    assert m.call_args.args == (conn, 501, "testuser")
+    with patch(f"{R}.dq.undo_action", side_effect=ValueError("уже отменено")):
+        r = client.post("/api/admin/data-quality/undo", json={"action_id": 501})
+    assert r.status_code == 400 and r.json()["detail"] == "уже отменено"
+
+
+def test_actions_journal_limit_clamped(conn):
+    with patch(f"{R}.dq.recent_actions", return_value=[{"id": 1}]) as m:
+        r = client.get("/api/admin/data-quality/actions?limit=100000")
+    assert r.json() == {"actions": [{"id": 1}]}
+    assert m.call_args.args == (conn, 500)

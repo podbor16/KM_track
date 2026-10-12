@@ -219,7 +219,7 @@ def test_fix_fio_result_only_when_card_is_canonical():
     conn, cur = _fix_conn({"id": 9, "client_id": 30537, "surname": "Роман", "name": "Маркус",
                            "c_surname": "Маркус", "c_name": "Роман", "birthday": "2019-10-26"})
     with patch("src.analytics.data_quality.apply_merge") as am:
-        assert fix_fio(conn, 9, "Маркус", "Роман", "u", "k") == 30537
+        assert fix_fio(conn, 9, "Маркус", "Роман", "u", "k")[0] == 30537
     am.assert_not_called()
     assert cur.execute.call_args_list[0].args[1] == ("Маркус", "Роман", 9)
 

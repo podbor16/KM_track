@@ -544,6 +544,12 @@
 .dq-sev--medium { background: #fff3cd; color: #856404; }
 .dq-sev--low { background: #f0f0f0; color: var(--km-text-secondary); }
 .dq-message { margin-bottom: 8px; overflow-wrap: anywhere; }
+.dq-journal { margin: 8px 0 16px; }
+.dq-journal summary { cursor: pointer; color: var(--km-text-secondary); font-size: 0.9rem; }
+.dq-journal-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 0;
+                  border-bottom: 1px solid var(--km-border-light); font-size: 0.85rem; }
+.dq-journal-row--undone .dq-journal-text { text-decoration: line-through; opacity: 0.6; }
+.dq-journal-text { flex: 1 1 320px; overflow-wrap: anywhere; }
 .dq-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
 .dq-card { background: var(--km-bg, #fafafa); border: 1px solid var(--km-border-light); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .dq-card-title { font-weight: 600; margin-bottom: 4px; }

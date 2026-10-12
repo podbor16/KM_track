@@ -3,7 +3,8 @@
 // результатов к карточкам клиентов (src/analytics/data_quality.py) и действия
 // по ним: склеить карточки, удалить «Not started» со старым номером, исправить ФИО
 // не в каноническом виде, запомнить
-// решение «разные люди»/«оставить как есть» (больше не показывается).
+// решение «разные люди»/«оставить как есть» (больше не показывается); отменить
+// любое из этих действий («Отменить» сразу после него или в «Последних действиях»).
 // API: src/krasmarafon/routers/data_quality.py
 
 const DQ_CODES = {
@@ -130,10 +131,13 @@ function dqItemHtml(f) {
     </div>`;
 }
 
-function dqDone(idx, text) {
+function dqDone(idx, text, actionId) {
     const el = document.getElementById(`dq-item-${idx}`);
     el.classList.add('dq-item--done');
-    el.querySelector('.dq-actions').innerHTML = `<span class="dq-status dq-status--ok">${dqEsc(text)}</span>`;
+    const undo = actionId
+        ? ` <button class="km-btn km-btn--secondary" onclick="dqUndo(${Number(actionId)}, this)">Отменить</button>` : '';
+    el.querySelector('.dq-actions').innerHTML = `<span class="dq-status dq-status--ok">${dqEsc(text)}</span>${undo}`;
+    dqRefreshJournal();
 }
 
 function dqFail(btn, e) {
@@ -154,7 +158,7 @@ async function dqMerge(idx, btn) {
     btn.disabled = true;
     try {
         const r = await dqRequest('/api/admin/data-quality/merge', body);
-        dqDone(idx, `Склеено в карточку #${r.client_id}: ${body.surname} ${body.name} ${body.birthday}`);
+        dqDone(idx, `Склеено в карточку #${r.client_id}: ${body.surname} ${body.name} ${body.birthday}`, r.action_id);
     } catch (e) { dqFail(btn, e); }
 }
 
@@ -169,7 +173,7 @@ async function dqFixFio(idx, btn) {
     btn.disabled = true;
     try {
         const r = await dqRequest('/api/admin/data-quality/fix-fio', body);
-        dqDone(idx, `ФИО исправлено: ${body.surname} ${body.name} (карточка #${r.client_id})`);
+        dqDone(idx, `ФИО исправлено: ${body.surname} ${body.name} (карточка #${r.client_id})`, r.action_id);
     } catch (e) { dqFail(btn, e); }
 }
 
@@ -177,8 +181,8 @@ async function dqDeleteResult(idx, btn) {
     const f = dqFindings[idx];
     btn.disabled = true;
     try {
-        await dqRequest('/api/admin/data-quality/delete-result', { result_id: f.result_id, key: f.key });
-        dqDone(idx, 'Результат удалён');
+        const r = await dqRequest('/api/admin/data-quality/delete-result', { result_id: f.result_id, key: f.key });
+        dqDone(idx, 'Результат удалён', r.action_id);
     } catch (e) { dqFail(btn, e); }
 }
 
@@ -186,8 +190,9 @@ async function dqDismiss(idx, decision, btn) {
     const f = dqFindings[idx];
     btn.disabled = true;
     try {
-        await dqRequest('/api/admin/data-quality/dismiss', { key: f.key, decision });
-        dqDone(idx, decision === 'different_people' ? 'Запомнено: разные люди' : 'Запомнено: оставить как есть');
+        const r = await dqRequest('/api/admin/data-quality/dismiss', { key: f.key, decision });
+        dqDone(idx, decision === 'different_people' ? 'Запомнено: разные люди' : 'Запомнено: оставить как есть',
+               r.action_id);
     } catch (e) { dqFail(btn, e); }
 }
 
@@ -205,5 +210,44 @@ async function dqApplyAuto(btn) {
         box.textContent = `Ошибка: ${e.message}`;
     } finally {
         btn.disabled = false;
+    }
+}
+
+// ---- Отмена действий (журнал dq_actions) ----
+
+async function dqUndo(actionId, btn) {
+    if (!confirm('Отменить это действие и вернуть данные как было до него?')) return;
+    btn.disabled = true;
+    try {
+        await dqRequest('/api/admin/data-quality/undo', { action_id: actionId });
+        const box = btn.parentElement;
+        btn.remove();
+        box.insertAdjacentHTML('beforeend',
+            ' <span class="dq-status dq-status--ok">Отменено — находка вернётся после «Проверить заново»</span>');
+        dqRefreshJournal();
+    } catch (e) {
+        btn.disabled = false;
+        alert(`Не удалось отменить: ${e.message}`);
+    }
+}
+
+function dqRefreshJournal() {
+    if (document.getElementById('dq-journal')?.open) dqLoadJournal();
+}
+
+async function dqLoadJournal() {
+    const box = document.getElementById('dq-journal-list');
+    try {
+        const { actions } = await dqRequest('/api/admin/data-quality/actions?limit=50');
+        box.innerHTML = actions.length ? actions.map(a => {
+            const state = a.undone ? '<span class="dq-muted">отменено</span>'
+                : a.can_undo ? `<button class="km-btn km-btn--secondary" onclick="dqUndo(${Number(a.id)}, this)">Отменить</button>`
+                : `<span class="dq-muted" title="${dqEsc(a.why_not)}">нельзя отменить: ${dqEsc(a.why_not)}</span>`;
+            return `<div class="dq-journal-row${a.undone ? ' dq-journal-row--undone' : ''}">
+                <span class="dq-muted">#${Number(a.id)} · ${dqEsc(a.done_at)} · ${dqEsc(a.done_by)}</span>
+                <span class="dq-journal-text">${dqEsc(a.text)}</span>${state}</div>`;
+        }).join('') : '<div class="admin-loading">Действий пока нет</div>';
+    } catch (e) {
+        box.innerHTML = `<div class="admin-error">Ошибка: ${dqEsc(e.message)}</div>`;
     }
 }

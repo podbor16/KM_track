@@ -3,6 +3,7 @@
 
 Находки считаются на лету (src/analytics/data_quality.py) в пуле потоков — проверка всей
 базы ~3 с. Решённые («разные люди», «оставить») хранятся в dq_decisions и не показываются.
+Каждое действие возвращает action_id — по нему его можно отменить (журнал dq_actions).
 """
 
 from typing import Literal, Optional
@@ -40,6 +41,10 @@ class FixFioBody(BaseModel):
     key: str = ""
 
 
+class UndoBody(BaseModel):
+    action_id: int
+
+
 class DismissBody(BaseModel):
     key: str
     decision: Literal["different_people", "keep"]
@@ -71,29 +76,41 @@ async def list_findings(event_id: Optional[int] = None, user: str = Depends(api_
 
 @router.post("/api/admin/data-quality/merge")
 async def merge(body: MergeBody, user: str = Depends(api_require_auth)) -> dict:
-    surv = await run_in_threadpool(_with_conn, dq.merge_cards, body.client_ids, body.surname, body.name,
-                                   body.birthday, user, body.key)
-    return {"ok": True, "client_id": surv}
+    surv, action_id = await run_in_threadpool(_with_conn, dq.merge_cards, body.client_ids, body.surname, body.name,
+                                              body.birthday, user, body.key)
+    return {"ok": True, "client_id": surv, "action_id": action_id}
 
 
 @router.post("/api/admin/data-quality/delete-result")
 async def delete_result(body: DeleteResultBody, user: str = Depends(api_require_auth)) -> dict:
-    await run_in_threadpool(_with_conn, dq.delete_result, body.result_id, user, body.key)
-    return {"ok": True}
+    action_id = await run_in_threadpool(_with_conn, dq.delete_result, body.result_id, user, body.key)
+    return {"ok": True, "action_id": action_id}
 
 
 @router.post("/api/admin/data-quality/fix-fio")
 async def fix_fio(body: FixFioBody, user: str = Depends(api_require_auth)) -> dict:
-    cid = await run_in_threadpool(_with_conn, dq.fix_fio, body.result_id, body.surname, body.name, user, body.key)
-    return {"ok": True, "client_id": cid}
+    cid, action_id = await run_in_threadpool(_with_conn, dq.fix_fio, body.result_id, body.surname, body.name,
+                                             user, body.key)
+    return {"ok": True, "client_id": cid, "action_id": action_id}
 
 
 @router.post("/api/admin/data-quality/dismiss")
 async def dismiss(body: DismissBody, user: str = Depends(api_require_auth)) -> dict:
-    await run_in_threadpool(_with_conn, dq.dismiss, body.key, body.decision, body.note, user)
-    return {"ok": True}
+    action_id = await run_in_threadpool(_with_conn, dq.dismiss, body.key, body.decision, body.note, user)
+    return {"ok": True, "action_id": action_id}
 
 
 @router.post("/api/admin/data-quality/apply-auto")
 async def apply_auto(user: str = Depends(api_require_auth)) -> dict:
     return await run_in_threadpool(_with_conn, dq.apply_auto, user)
+
+
+@router.get("/api/admin/data-quality/actions")
+async def actions(limit: int = 50, user: str = Depends(api_require_auth)) -> dict:
+    return {"actions": await run_in_threadpool(_with_conn, dq.recent_actions, min(max(limit, 1), 500))}
+
+
+@router.post("/api/admin/data-quality/undo")
+async def undo(body: UndoBody, user: str = Depends(api_require_auth)) -> dict:
+    undo_id = await run_in_threadpool(_with_conn, dq.undo_action, body.action_id, user)
+    return {"ok": True, "undo_id": undo_id}
