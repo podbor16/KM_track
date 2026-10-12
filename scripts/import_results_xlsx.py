@@ -61,7 +61,7 @@ STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не с�
           "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ",
           "Retired": "Withdrawn"}
 # вместо времени в колонке результата (Х Трейл 2022: «DNS», статуса нет)
-TIME_STATUS = {"DNS": "Not started", "DNF": "DNF", "DSQ": "DSQ"}
+TIME_STATUS = {"DNS": "Not started", "DNF": "DNF", "DSQ": "DSQ", "NOT STARTED": "Not started"}   # Детский 2021
 # группа «год рождения» Детского 2022: «2016 ГОД», «2014»
 _YEAR_GROUP = re.compile(r"^\s*(\d{4})\s*(?:г(?:од)?\.?)?\s*$", re.I)
 _GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
@@ -154,6 +154,9 @@ def short_category(category, year):
     if not m:
         return category
     if m.group(1).lower() in _KIDS:
+        if m.group(3) and m.group(3) != m.group(2):     # Детский 2021: «девочки 2011-2010» — двухлетняя группа
+            y1, y2 = sorted((int(m.group(2)), int(m.group(3))))
+            return f"{_KIDS[m.group(1).lower()]} {y1}-{y2} г.р."
         return f"{_KIDS[m.group(1).lower()]} {m.group(2)} г.р."
     sex = "М" if m.group(1).lower() in ("мужчины", "юноши", "мальчики") else "Ж"
     y1, y2 = int(m.group(2)), int(m.group(3) or m.group(2))
@@ -500,6 +503,8 @@ def main():
     ap.add_argument("--set-bib", action="append", default=[], metavar="«Фамилия Имя=номер»",
                     help="исправить номер, перепутанный в протоколе")
     ap.add_argument("--sex", help="пол тем, у кого его нет в протоколе (Женская семёрка — «Женщина»)")
+    ap.add_argument("--file-sex", nargs="+", help="пол для каждого файла --xlsx по порядку (Жара 2021: «Женщина Мужчина»)")
+    ap.add_argument("--swap-names", action="store_true", help="в протоколе перепутаны колонки фамилии и имени")
     ap.add_argument("--age-categories", action="store_true",
                     help="нет категорий в протоколе — по возрасту в год старта (как Женская 2025)")
     ap.add_argument("--age-bounds", default="49,59,64,69,74,79",
@@ -519,7 +524,17 @@ def main():
         if not ev:
             print(f"Нет события {args.event_id}")
             return 1
-        rows = [row for path in args.xlsx for row in parse(path, int(ev[1]), overrides)]
+        if args.file_sex and len(args.file_sex) != len(args.xlsx):
+            ap.error("--file-sex: по одному полу на каждый файл --xlsx")
+        rows = []
+        for k, path in enumerate(args.xlsx):
+            part = parse(path, int(ev[1]), overrides)
+            for r in part:
+                if args.swap_names:                     # Красочный 2021: в «Фамилии» имена
+                    r["surname"], r["name"] = r["name"], r["surname"]
+                if args.file_sex and not r["sex"]:      # Жара 2021: мужчины и женщины в разных файлах
+                    r["sex"] = args.file_sex[k]
+            rows += part
         set_bibs(rows, args.set_bib)
         rows, dropped = drop_protocol_duplicates(rows)
         for r in dropped:
@@ -540,6 +555,8 @@ def main():
                 r["sex"] = args.sex
             if args.category_by_sex and not r["category"] and r["sex"]:          # Снежная: зачёт только по полу
                 r["category"] = "Женщины" if r["sex"] == "Женщина" else "Мужчины"
+            if args.age_categories and r["category"] in ("Мужчины", "Женщины"):   # Ночной 2021: зачёт по полу
+                r["category"] = ""
             if args.age_categories and not r["category"] and r["sex"] and birth(r) and not r["pacer_group"]:
                 r["category"] = age_category(r["sex"][:1], year - birth(r), bounds, args.age_min)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))

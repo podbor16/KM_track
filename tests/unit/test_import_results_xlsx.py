@@ -152,3 +152,13 @@ def test_dns_in_result_column_and_retired(tmp_path):
                             ["1", "13", "Никита", "Калинин", "Finished", "Male", "00:16:32"],
                             ["2", "14", "Иван", "Петров", "Retired", "Male", None]])
     assert [r["race_status"] for r in parse(path, 2022)] == ["Finished", "Withdrawn"]
+
+
+
+def test_kids_two_year_groups_and_not_started(tmp_path):
+    # Детский 2021: «девочки 2011-2010», «Not started» вместо времени
+    path = _xlsx(tmp_path, [["Место", "Номер", "Фамилия", "Имя", "Результат"], ["девочки 2011-2010"],
+                            ["1", "180", "Шмыгина", "Анна", "00:03:44"], ["", "503", "Воронина", "Нелли", "Not started"]])
+    rows = parse(path, 2021)
+    assert [(r["category"], r["race_status"]) for r in rows] == [("Девочки 2010-2011 г.р.", "Finished"),
+                                                                  ("Девочки 2010-2011 г.р.", "Not started")]
