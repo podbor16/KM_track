@@ -275,7 +275,7 @@ def sportmaniacs_rows(data, year):
     out = []
     for x in data["Rankings"]:
         name, _, surname = " ".join(str(x.get("name") or "").split()).partition(" ")
-        if not surname:
+        if not surname or name.lower() == "dorsal":     # «Dorsal 110» — номер без участника
             continue
         finished = bool(x.get("finishedRace"))
         gun = _secs(x.get("officialTime")) if finished else None
@@ -291,7 +291,8 @@ def sportmaniacs_rows(data, year):
         out.append({
             "surname": normalize_person_name(surname), "name": normalize_person_name(name),
             "birthday": SENTINEL, "birth_year": None,
-            "sex": SM_SEX.get(x.get("gender"), "") or group_sex(raw_category),
+            # пол из категории надёжнее: на Жаре 2019 у всех gender_0, на 10 км — gender_-1
+            "sex": _category_sex(raw_category) or SM_SEX.get(x.get("gender"), ""),
             "bib": bib, "start_number": _number(bib),
             "category": "" if category in ("All Ages",) else category,
             "race_status": "Finished" if finished and gun else "Not started", "start": None,
@@ -299,6 +300,40 @@ def sportmaniacs_rows(data, year):
             "kt": {}, "pacer_group": False, "raw_category": raw_category,
         })
     return out
+
+
+def _category_sex(raw):
+    low = (raw or "").strip().lower()
+    if low.startswith(("женщ", "девоч", "девуш")):
+        return "Женщина"
+    if low.startswith(("мужч", "мальч", "юнош")):
+        return "Мужчина"
+    return ""
+
+
+def fill_from_cards(cur, rows):
+    """--fio-cards (Sportmaniacs 2018–2020: заявок нет у трети): ДР не нашлась в заявках — из
+    единственной карточки клиента с теми же ФИО и настоящей ДР; годы группы протокола
+    («мужчины 1989-1985 г.р.») — проверка, что год рождения карточки в них попадает.
+    -> число найденных."""
+    need = [r for r in rows if _placeholder_bd(r["birthday"]) and not r.get("birth_year")]
+    if not need:
+        return 0
+    cur.execute("SELECT surname, name, birthday FROM clients WHERE birthday > '1900-01-01'")
+    cards = collections.defaultdict(list)
+    for s_, n_, bd in cur.fetchall():
+        if bd and not str(bd).endswith("-01-01"):
+            cards[(_name_key(s_), _name_key(n_))].append(bd)
+    found = 0
+    for r in need:
+        cands = cards.get((_name_key(r["surname"]), _name_key(r["name"])), [])
+        years = sorted(int(y) for y in re.findall(r"(?<!\d)(\d{4})(?!\d)", r.get("raw_category") or ""))
+        if len(years) >= 2:
+            cands = [bd for bd in cands if years[0] <= bd.year <= years[-1]]
+        if len(cands) == 1:
+            r["birthday"] = str(cands[0])
+            found += 1
+    return found
 
 
 def kids_category(raw, sex):
@@ -565,6 +600,9 @@ def main():
     src.add_argument("--xlsx", nargs="+", help="один или несколько протоколов одного события (Детский — по годам рождения)")
     src.add_argument("--sportmaniacs", nargs="+", metavar="EVENT_ID",
                      help="id дистанции на sportmaniacs.com (результаты 2018–2020, протоколов-файлов нет)")
+    ap.add_argument("--force-sex", help="пол всем строкам (Женская на Sportmaniacs — пол в протоколе неверный)")
+    ap.add_argument("--fio-cards", action="store_true",
+                    help="ДР без заявки — из единственной карточки с теми же ФИО (Sportmaniacs 2018–2020)")
     ap.add_argument("--kids-categories", action="store_true",
                     help="детские группы по годам рождения из категории протокола (Sportmaniacs)")
     ap.add_argument("--recompute-categories", action="store_true",
@@ -614,6 +652,9 @@ def main():
             rows += part
         set_bibs(rows, args.set_bib)
         rows, dropped = drop_protocol_duplicates(rows)
+        if args.force_sex:                              # Женская 2019 на Sportmaniacs: у всех gender_0
+            for r in rows:
+                r["sex"] = args.force_sex
         for r in dropped:
             print(f"Повтор в протоколе убран: {r['surname']} {r['name']} {r['birthday']} {r['race_status']}")
         if args.from_leads:
@@ -624,6 +665,8 @@ def main():
             print(f"Номер не по ФИО+ДР (проверить): {len(loose)}")
             for line in loose:
                 print("   ", line)
+        if args.fio_cards:
+            print(f"ДР из карточки клиента по ФИО: {fill_from_cards(cur, rows)}")
         year = int(ev[1])
         bounds = tuple(int(x) for x in args.age_bounds.split(","))
         birth = lambda r: int(r["birthday"][:4]) if r["birthday"] != SENTINEL else r.get("birth_year")

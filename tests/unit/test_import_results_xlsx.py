@@ -2,7 +2,7 @@ import pytest
 
 import openpyxl
 
-from scripts.import_results_xlsx import finish_columns, kids_category, parse, rank, same_card_collisions, set_bibs, sportmaniacs_rows
+from scripts.import_results_xlsx import fill_from_cards, finish_columns, kids_category, parse, rank, same_card_collisions, set_bibs, sportmaniacs_rows
 
 
 def test_three_finish_columns_clean_official_pace():
@@ -199,3 +199,30 @@ def test_sportmaniacs_zhara_2018_codes():
                           "officialTime": "00:45:00", "realTime": "00:44:50", "finishedRace": True}]}
     a, b = sportmaniacs_rows(data, 2018)
     assert (a["category"], b["category"]) == ("М18+", "Ж14-15")
+
+
+
+def test_sportmaniacs_sex_from_category_and_dorsal_placeholder():
+    data = {"Rankings": [
+        {"dorsal": "1", "name": "Анна Петрова", "gender": "gender_0", "category": "женщины 2003-2002 г.р. ",
+         "officialTime": "00:40:00", "realTime": "00:39:50", "finishedRace": True},
+        {"dorsal": "110", "name": "Dorsal 110 ", "gender": "gender_2", "category": "-",
+         "officialTime": "00:00:00", "realTime": "00:00:00", "finishedRace": False}]}
+    rows = sportmaniacs_rows(data, 2019)
+    assert [(r["surname"], r["sex"]) for r in rows] == [("Петрова", "Женщина")]
+
+
+def test_fill_from_cards_unique_card_in_group_years():
+    import datetime
+    from unittest.mock import MagicMock
+    cur = MagicMock()
+    cur.fetchall.return_value = [("Тяпкин", "Валентин", datetime.date(1957, 3, 30)),
+                                 ("Иванов", "Иван", datetime.date(1980, 5, 5)), ("Иванов", "Иван", datetime.date(1990, 6, 6)),
+                                 ("Петров", "Петр", datetime.date(1970, 1, 2))]
+    row = lambda s, n, cat: {"surname": s, "name": n, "birthday": "1900-01-01", "birth_year": None, "raw_category": cat}
+    rows = [row("Тяпкин", "Валентин", "All Ages"), row("Иванов", "Иван", "мужчины 1989-1985 г.р."),
+            row("Иванов", "Иван", "All Ages"), row("Петров", "Петр", "мужчины 1989-1985 г.р.")]
+    # Тяпкин — одна карточка; Иванов в группе 1985–1989 — карточек в этих годах нет; Иванов без группы — две
+    # карточки; Петров 1970 — вне годов группы
+    assert fill_from_cards(cur, rows) == 1
+    assert [r["birthday"] for r in rows] == ["1957-03-30", "1900-01-01", "1900-01-01", "1900-01-01"]
