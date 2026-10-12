@@ -9,6 +9,10 @@
 --from-birthday EVENT_ID — протокол без категорий (Женская семёрка 2025): категория по
 возрасту в год старта (группы как у Copernico 2026), места в категориях пересчитываются
 (официальное и чистое время, как scripts/import_results_xlsx.py). Повторный запуск ничего не меняет.
+--age-bounds / --age-min — свои группы (Жара, решение 2026-10-12 — группы Жары 2027 на все годы):
+  5/10 км:  --age-bounds 13,15,17,49,59,64,69,74,79 --age-min 12   → «М12-13» … «М75-79», «М80+»
+  21,1 км:  --age-bounds 24,29,34,39,44,49,54,59,64,69,74,79 --age-min 18
+Пейсеры (is_pacer) без категории — не трогаются.
 """
 
 import argparse
@@ -26,16 +30,16 @@ from src.common.categories import age_category, canonical_category  # noqa: E402
 SENTINEL_YEAR = 1900
 
 
-def categories_from_birthday(cur, event_id):
-    """[(id, новая категория)] по возрасту в год старта; ДР-заглушка — без категории."""
+def categories_from_birthday(cur, event_id, bounds=None, low=None):
+    """[(id, новая категория)] по возрасту в год старта; ДР-заглушка и пейсеры — без изменений."""
     cur.execute("SELECT event_year FROM events WHERE id = %s", (event_id,))
     year = int(cur.fetchone()[0])
-    cur.execute("SELECT id, birthday, sex, category FROM results WHERE event_id = %s", (event_id,))
+    cur.execute("SELECT id, birthday, sex, category FROM results WHERE event_id = %s AND is_pacer = 0", (event_id,))
     out = []
     for rid, bd, sex, cat in cur.fetchall():
         if not bd or bd.year <= SENTINEL_YEAR or not sex:
             continue
-        new = age_category(sex[:1].upper(), year - bd.year)
+        new = age_category(sex[:1].upper(), year - bd.year, *((bounds,) if bounds else ()), low)
         if new != cat:
             out.append((rid, new))
     return out
@@ -58,6 +62,8 @@ def main():
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--backup", help="TSV: id, категория и места в категории до правки")
     ap.add_argument("--from-birthday", type=int, action="append", default=[], help="событие без категорий")
+    ap.add_argument("--age-bounds", help="верхние границы групп через запятую (по умолчанию как Женская 2025)")
+    ap.add_argument("--age-min", type=int, help="нижняя граница первой группы (12 → «М12-13»)")
     args = ap.parse_args()
     if args.apply and not args.backup:
         ap.error("--apply требует --backup")
@@ -74,7 +80,8 @@ def main():
               f"{sum(counts[o] for o in changes)} результатов")
         for old, new in sorted(changes.items(), key=lambda kv: kv[1]):
             print(f"   {counts[old]:5}  «{old}» → «{new}»")
-        birthday = {e: categories_from_birthday(cur, e) for e in args.from_birthday}
+        bounds = tuple(int(x) for x in args.age_bounds.split(",")) if args.age_bounds else None
+        birthday = {e: categories_from_birthday(cur, e, bounds, args.age_min) for e in args.from_birthday}
         for e, rows in birthday.items():
             print(f"Событие {e}: категории по ДР — {len(rows)} результатов: "
                   f"{dict(collections.Counter(new for _, new in rows))}")

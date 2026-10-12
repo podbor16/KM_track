@@ -38,9 +38,10 @@ def canonical_category(category) -> str:
 
 # Группы по возрасту в год старта для протоколов без категорий (Женская семёрка 2025) —
 # как в Copernico 2026 у той же дистанции
-def age_category(sex_letter: str, age: int, bounds=(49, 59, 64, 69, 74, 79)) -> str:
+def age_category(sex_letter: str, age: int, bounds=(49, 59, 64, 69, 74, 79), low: int | None = None) -> str:
+    """low — нижняя граница первой группы: «М18-24» вместо «М24» (Жара 21,1 2022 — пятилетки)."""
     if age <= bounds[0]:
-        return f"{sex_letter}{bounds[0]}"
+        return f"{sex_letter}{low}-{bounds[0]}" if low is not None else f"{sex_letter}{bounds[0]}"
     lo = bounds[0] + 1
     for hi in bounds[1:]:
         if age <= hi:

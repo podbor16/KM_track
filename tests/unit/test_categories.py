@@ -40,3 +40,9 @@ def test_canonical_is_idempotent():
 def test_age_category_women7_groups():
     assert [age_category("Ж", a) for a in (18, 49, 50, 59, 60, 64, 65, 69, 74, 79, 80)] == \
         ["Ж49", "Ж49", "Ж50-59", "Ж50-59", "Ж60-64", "Ж60-64", "Ж65-69", "Ж65-69", "Ж70-74", "Ж75-79", "Ж80+"]
+
+
+
+def test_age_category_with_lower_bound_zhara_2022():
+    bounds = (24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74)
+    assert [age_category("М", a, bounds, 18) for a in (19, 24, 25, 74, 75)] == ["М18-24", "М18-24", "М25-29", "М70-74", "М75+"]

@@ -51,13 +51,19 @@ from src.common.categories import age_category, canonical_category
 from src.common.names import normalize_person_name, normalize_sex
 
 SENTINEL = "1900-01-01"
-SEX = {"Male": "Мужчина", "Female": "Женщина"}
+SEX = {"Male": "Мужчина", "Female": "Женщина", "Мужчина": "Мужчина", "Женщина": "Женщина",
+       "Мужчины": "Мужчина", "Женщины": "Женщина", "М": "Мужчина", "Ж": "Женщина"}   # Ночной 2022: «Мужчины»
 SERVICE_NUMBER_OFFSET = 1000                         # как SWEEPER_NUMBER_OFFSET в load_race_results.py
 _GROUP = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)\W*(\d{4})(?:\s*[-−–]\s*(\d{4}))?", re.I)
 # статусы протоколов (англ./рус./исп. выгрузки Copernico) → как в остальных результатах БД
 STATUS = {"Disqualified": "DSQ", "Финишировал": "Finished", "Не стартовал": "Not started",
           "Не финишировал": "DNF", "Дисквалификация": "DSQ", "Сошел": "Withdrawn", "Сошёл": "Withdrawn",
-          "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ"}
+          "Finalizado": "Finished", "Sin salida": "Not started", "Retirado": "Withdrawn", "Descalificado": "DSQ",
+          "Retired": "Withdrawn"}
+# вместо времени в колонке результата (Х Трейл 2022: «DNS», статуса нет)
+TIME_STATUS = {"DNS": "Not started", "DNF": "DNF", "DSQ": "DSQ"}
+# группа «год рождения» Детского 2022: «2016 ГОД», «2014»
+_YEAR_GROUP = re.compile(r"^\s*(\d{4})\s*(?:г(?:од)?\.?)?\s*$", re.I)
 _GROUP_HEADER = re.compile(r"^\s*(мужчины|юноши|мальчики|женщины|девушки|девочки)", re.I)
 _PACER_GROUP = re.compile(r"пейс|pacer|вне\s*зач[её]т", re.I)   # «Пейсмейкеры» (Жара 2024), «Вне зачета» (2023)
 
@@ -91,7 +97,8 @@ def finish_columns(h, rows):
     """-> (чистое | None, официальное) — индексы колонок времени финиша (см. docstring модуля)."""
     low = [x.lower().replace('"', "").replace("«", "").replace("»", "") for x in h]
     cand = [k for k, x in enumerate(low) if x.startswith(("finish", "финиш", "результат")) or "чист" in x]
-    timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")])
+    timed = [k for k in cand if (vals := [r[k] for r in rows if len(r) > k and r[k] not in (None, "")
+                                          and str(r[k]).strip().upper() not in TIME_STATUS])
              and sum(_secs(v) is not None for v in vals) >= 0.9 * len(vals)]
     if not timed or len(timed) > 2:
         raise ValueError(f"не удалось определить колонки финиша: {[h[k] for k in cand]}")
@@ -116,7 +123,8 @@ HEADER_ALIASES = {"номер": "Bib", "фамилия": "Surname", "имя": "N
                   "bib": "Bib", "dorsal": "Bib", "surname": "Surname", "name": "Name",
                   "date of birth": "Date of Birth", "birthdate": "Date of Birth", "status": "Status",
                   "gender": "Gender", "category": "Category", "start": "Start", "старт": "Start",
-                  "год рождения": "Birth Year", "пол": "Gender", "категория": "Category"}
+                  "год рождения": "Birth Year", "пол": "Gender", "категория": "Category",
+                  "статаус": "Status"}                                          # опечатка в Красочном 2022
 _LETTER_BIB = re.compile(r"^(\d+)[а-яa-z]$", re.I)
 
 
@@ -180,6 +188,8 @@ def parse(path, year, overrides=None):
     head = next(k for k, r in enumerate(rows[:20])
                 if r and (cells(r) & {"фамилия", "surname"} or {"номер", "имя"} <= cells(r)))
     h = [HEADER_ALIASES.get(str(x or "").strip().lower(), str(x or "").strip()) for x in rows[head]]
+    # Детский 2022: первая группа («2016 ГОД») стоит над строкой заголовков
+    above = [str(r[0]).strip() for r in rows[:head] if r and r[0] is not None and _YEAR_GROUP.match(str(r[0]))]
     rows = rows[head:]
     full_name = "Surname" not in h
     i = {k: h.index(k) for k in ("Name",) + (() if full_name else ("Surname",)) + (("Status",) if "Status" in h else ())}
@@ -195,11 +205,14 @@ def parse(path, year, overrides=None):
     cp_cols = checkpoint_columns(h, overrides or {})
     out = []
     group = ""                                       # текущий заголовок группы протокола «по группам»
+    group_year = int(_YEAR_GROUP.match(above[-1]).group(1)) if above else None   # Детский 2022: группа = год
     pacers = False                                   # группа «Пейсмейкеры»: без категории, пол — из заявки
     for r in rows[1:]:
         if not r or not r[i["Surname"]]:                               # пусто / заголовок группы
             if r and r[0] and _GROUP_HEADER.match(str(r[0])):
                 group, pacers = str(r[0]).strip(), False
+            elif r and r[0] is not None and _YEAR_GROUP.match(str(r[0])):
+                group_year = int(_YEAR_GROUP.match(str(r[0])).group(1))
             elif r and r[0] and _PACER_GROUP.search(str(r[0])):
                 group, pacers = "", True
             continue
@@ -211,12 +224,17 @@ def parse(path, year, overrides=None):
             sex = group_sex(raw_category)
         if not sex and category[:1].upper() in ("М", "Ж"):
             sex = "Мужчина" if category[:1].upper() == "М" else "Женщина"
+        if group_year and not category and sex:                         # Детский 2022: «Мальчики 2016 г.р.»
+            category = f'{"Мальчики" if sex == "Мужчина" else "Девочки"} {group_year} г.р.'
+
         clean = _secs(r[i["clean"]]) if i["clean"] is not None else None
         gun = _secs(r[i["Finish"]])
         if "Status" in i:
             status = STATUS.get(str(r[i["Status"]] or "").strip(), str(r[i["Status"]] or "").strip())
         elif gun:                                                       # Жара 2023: только финишировавшие
             status = "Finished"
+        elif str(r[i["Finish"]] or "").strip().upper() in TIME_STATUS:   # Х Трейл 2022: «DNS» вместо времени
+            status = TIME_STATUS[str(r[i["Finish"]]).strip().upper()]
         else:                                                           # подпись «Главный судья» под протоколом
             continue
         if full_name:                                                   # «Яков Петериков» — имя, фамилия
@@ -230,7 +248,7 @@ def parse(path, year, overrides=None):
             "surname": normalize_person_name(surname), "name": normalize_person_name(name),
             "birthday": _birthday(r[bd_i]) if bd_i is not None and not year_in_bd else SENTINEL,
             "birth_year": (int(bd_raw) if year_in_bd else
-                           int(r[by_i]) if by_i is not None and str(r[by_i] or "").strip().isdigit() else None),
+                           int(r[by_i]) if by_i is not None and str(r[by_i] or "").strip().isdigit() else group_year),
             "sex": sex,
             "bib": bib, "start_number": _number(bib),
             "category": category,
@@ -479,6 +497,8 @@ def main():
                     help="нет категорий в протоколе — по возрасту в год старта (как Женская 2025)")
     ap.add_argument("--age-bounds", default="49,59,64,69,74,79",
                     help="верхние границы групп для --age-categories (Х Трейл 2025: 49,59,64,69,74 → «75+»)")
+    ap.add_argument("--age-min", type=int, help="нижняя граница первой группы: 18 → «М18-24» (Жара 21,1)")
+    ap.add_argument("--category-by-sex", action="store_true", help="категория = «Женщины»/«Мужчины» (Снежная)")
     ap.add_argument("--add-missing", action="store_true",
                     help="догрузить строки, которых нет в БД (по номеру), и пересчитать места всех по файлу")
     args = ap.parse_args()
@@ -507,11 +527,14 @@ def main():
                 print("   ", line)
         year = int(ev[1])
         bounds = tuple(int(x) for x in args.age_bounds.split(","))
+        birth = lambda r: int(r["birthday"][:4]) if r["birthday"] != SENTINEL else r.get("birth_year")
         for r in rows:
             if args.sex and not r["sex"]:
                 r["sex"] = args.sex
-            if args.age_categories and not r["category"] and r["sex"] and r["birthday"] != SENTINEL:
-                r["category"] = age_category(r["sex"][:1], year - int(r["birthday"][:4]), bounds)
+            if args.category_by_sex and not r["category"] and r["sex"]:          # Снежная: зачёт только по полу
+                r["category"] = "Женщины" if r["sex"] == "Женщина" else "Мужчины"
+            if args.age_categories and not r["category"] and r["sex"] and birth(r) and not r["pacer_group"]:
+                r["category"] = age_category(r["sex"][:1], year - birth(r), bounds, args.age_min)
         ranges = main_ranges(cur, ev[0], distance_label(ev[2]))
         next_service = max([r["start_number"] for r in rows if r["start_number"]] or [0]) + SERVICE_NUMBER_OFFSET
         for r in rows:

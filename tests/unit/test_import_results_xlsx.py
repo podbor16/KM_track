@@ -118,3 +118,37 @@ def test_same_card_collisions():
                                                 "start_number": bib, "race_status": status}
     rows = [row(867, "Finished"), row(945, "Finished"), row(1, "Not started"), row(2, "Finished", "1985-12-06")]
     assert [[r["start_number"] for r in g] for g in same_card_collisions(rows)] == [[867, 945]]
+
+
+
+def _xlsx(tmp_path, rows):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    path = tmp_path / "p.xlsx"
+    wb.save(path)
+    return path
+
+
+def test_kids_year_groups_above_header(tmp_path):
+    # Детский 2022: «2016 ГОД» над заголовками, дальше группы — просто год
+    path = _xlsx(tmp_path, [["1 КМ"], ["2016 ГОД"], ["#", "Номер", "Имя", "Фамилия", "Пол", "Результат", "Город"],
+                            ["1", "601", "Тимофей", "Мохов", "Male", "00:04:24", "Канск"],
+                            [2014], ["1", "401", "Анна", "Иванова", "Female", "00:04:50", "Канск"],
+                            [], ["Главный судья ", "Ситников В.Н."]])
+    rows = parse(path, 2022)
+    assert [(r["category"], r["birth_year"]) for r in rows] == [("Мальчики 2016 г.р.", 2016), ("Девочки 2014 г.р.", 2014)]
+
+
+def test_dns_in_result_column_and_retired(tmp_path):
+    # Х Трейл 2022: статуса нет, «DNS» вместо времени; Весна 2022: «Retired»; Ночной 2022: пол «Мужчины»
+    path = _xlsx(tmp_path, [["#", "Номер", "Фамилия", "Имя", "пол", "Результат"],
+                            ["1", "518", "Матвеенко", "Егор", "Мужчины", "00:38:25"],
+                            ["2", "7", "Иванов", "Иван", "Male", "DNS"]])
+    rows = parse(path, 2022)
+    assert [(r["race_status"], r["sex"]) for r in rows] == [("Finished", "Мужчина"), ("Not started", "Мужчина")]
+    path = _xlsx(tmp_path, [["#", "Номер", "Имя", "Фамилия", "Статаус", "Пол", "Результат"],
+                            ["1", "13", "Никита", "Калинин", "Finished", "Male", "00:16:32"],
+                            ["2", "14", "Иван", "Петров", "Retired", "Male", None]])
+    assert [r["race_status"] for r in parse(path, 2022)] == ["Finished", "Withdrawn"]
