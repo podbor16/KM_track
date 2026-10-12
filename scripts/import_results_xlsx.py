@@ -330,9 +330,10 @@ def _category_years(cat):
 def fill_from_cards(cur, rows):
     """--fio-cards (Sportmaniacs 2018–2020: заявок нет у трети): ДР не нашлась в заявках — из
     единственной карточки клиента с теми же ФИО и настоящей ДР; годы группы протокола
-    («мужчины 1989-1985 г.р.») — проверка, что год рождения карточки в них попадает.
+    («мужчины 1989-1985 г.р.») — проверка, что год рождения карточки в них попадает; год рождения
+    из протокола (Жара 2013–2015, заявок нет) — карточка только этого года.
     -> число найденных."""
-    need = [r for r in rows if _placeholder_bd(r["birthday"]) and not r.get("birth_year")]
+    need = [r for r in rows if _placeholder_bd(r["birthday"])]
     if not need:
         return 0
     cur.execute("SELECT surname, name, birthday FROM clients WHERE birthday > '1900-01-01'")
@@ -343,7 +344,8 @@ def fill_from_cards(cur, rows):
     found = 0
     for r in need:
         cands = cards.get((_name_key(r["surname"]), _name_key(r["name"])), [])
-        years = _category_years(r.get("raw_category") or r.get("category") or "")
+        years = ((r["birth_year"], r["birth_year"]) if r.get("birth_year")
+                 else _category_years(r.get("raw_category") or r.get("category") or ""))
         if years:
             cands = [bd for bd in cands if years[0] <= bd.year <= years[1]]
         if len(cands) == 1:

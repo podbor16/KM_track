@@ -248,3 +248,15 @@ def test_short_category_kids_keeps_older_younger():
     assert short_category("Девочки 2012 г.р. и младше", 2017) == "Девочки 2012 г.р. и младше"
     assert short_category("Мальчики 2005 г.р. и старше", 2017) == "Мальчики 2005 г.р. и старше"
     assert short_category("Мальчики 2014 г.р.", 2025) == "Мальчики 2014 г.р."
+
+
+def test_fill_from_cards_by_protocol_birth_year():
+    # Жара 2014: в протоколе год рождения, заявок нет — полная ДР из единственной карточки этого года
+    import datetime
+    from unittest.mock import MagicMock
+    cur = MagicMock()
+    cur.fetchall.return_value = [("Путинцев", "Андрей", datetime.date(1987, 5, 6)), ("Путинцев", "Андрей", datetime.date(1960, 1, 2)),
+                                 ("Мога", "Виталий", datetime.date(1986, 2, 2))]
+    row = lambda s, n, y: {"surname": s, "name": n, "birthday": f"{y}-01-01", "birth_year": y, "category": ""}
+    rows = [row("Путинцев", "Андрей", 1987), row("Мога", "Виталий", 1985)]
+    assert fill_from_cards(cur, rows) == 1 and [r["birthday"] for r in rows] == ["1987-05-06", "1985-01-01"]
