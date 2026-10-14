@@ -9,8 +9,11 @@
 import csv
 import datetime
 import io
+import logging
 import threading
 import time
+
+import mysql.connector
 
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
@@ -23,8 +26,15 @@ from src.siberman.draw.payments import PAYMENT_ICONS, auto_invite_allowed, next_
 from src.siberman.draw.simulation import win_probabilities
 
 
+log = logging.getLogger(__name__)
+
+
 class DrawError(Exception):
     """Ошибка, которую оператор видит как есть."""
+
+
+class DrawUnavailable(DrawError):
+    """БД недоступна: роутер отвечает 503 (а не 409), vMix/страница повторят запрос."""
 
 
 CACHE_TTL_S = 1.0
@@ -47,6 +57,7 @@ _cache: dict[int, tuple[int, float, dict]] = {}
 _probs: dict[int, tuple[int, dict | None]] = {}
 _probs_running: set[int] = set()
 _lock = threading.Lock()
+_year_locks: dict[int, threading.Lock] = {}
 
 
 def clear_cache() -> None:
@@ -58,12 +69,29 @@ def clear_cache() -> None:
 def _connect():
     conn = get_siberman_connection()
     if conn is None:
-        raise DrawError("БД недоступна")
+        raise DrawUnavailable("БД недоступна")
     return conn
 
 
-def _snapshot(conn, year: int) -> dict:
-    config = ddb.load_config(conn, year)
+def _year_lock(year: int) -> threading.Lock:
+    with _lock:
+        return _year_locks.setdefault(year, threading.Lock())
+
+
+def _empty_config() -> dict:
+    cfg = {f: None for f in ddb.CONFIG_INT_FIELDS}
+    return {**cfg, "current_round": 0, "version": 0, "auto_invite_until": None, "imported_at": None}
+
+
+def _snapshot(conn, year: int, create: bool = True) -> dict:
+    """create=False — путь публичного чтения: без INSERT, для года без строки — пустое состояние."""
+    if create:
+        config = ddb.load_config(conn, year)
+    else:
+        config = ddb.get_config(conn, year)
+        if config is None:
+            return {"year": year, "config": _empty_config(), "applicants": [], "picks": [],
+                    "lists": build_lists({}, [], _empty_config())}
     apps = ddb.load_applicants(conn, year)
     picks = ddb.load_picks(conn, year)
     lists = build_lists({a["id"]: a for a in apps}, picks, config)
@@ -121,11 +149,20 @@ def pick(year: int, applicant_id: int, user: str = "") -> dict:
     return _write(year, op)
 
 
+def _reset_payment(conn, year: int, snap: dict, applicant_id: int, user: str) -> None:
+    """Вытесненный/отменённый участник больше не в списке — его статус оплаты не должен висеть."""
+    a = next((x for x in snap["applicants"] if x["id"] == applicant_id), None)
+    if a and a["payment_status"] != "none":
+        ddb.update_payment_status(conn, applicant_id, "none")
+        ddb.audit(conn, year, applicant_id, "payment", a["payment_status"], "none", None, user)
+
+
 def cancel(year: int, pick_id: int, user: str = "") -> dict:
     def op(conn, snap):
         p = _active_pick(snap, pick_id)
         ddb.cancel_pick(conn, pick_id)
         ddb.audit(conn, year, p["applicant_id"], "cancel_pick", str(pick_id), "", None, user)
+        _reset_payment(conn, year, snap, p["applicant_id"], user)
         return {"ok": True}
     return _write(year, op)
 
@@ -143,6 +180,7 @@ def replace(year: int, pick_id: int, applicant_id: int, user: str = "") -> dict:
         new_id = ddb.insert_pick(conn, year, a["id"], p["round"], p["category"], position_key=p["position_key"])
         ddb.cancel_pick(conn, pick_id, replaced_by=new_id)
         ddb.audit(conn, year, a["id"], "replace_pick", str(p["applicant_id"]), str(a["id"]), p["applicant_id"], user)
+        _reset_payment(conn, year, snap, p["applicant_id"], user)
         return {"pick_id": new_id}
     return _write(year, op)
 
@@ -160,11 +198,14 @@ def set_round(year: int, rnd: int, user: str = "") -> dict:
 def save_config(year: int, values: dict, user: str = "") -> dict:
     clean = {}
     for k in ddb.CONFIG_INT_FIELDS:
-        v = values.get(k)
-        if v is not None and (not isinstance(v, int) or v < 0):
-            raise DrawError(f"{k}: нужно целое число ≥ 0")
+        if k not in values:
+            continue
+        v = values[k]
+        if v is not None and (not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 1000):
+            raise DrawError(f"{k}: нужно целое число от 0 до 1000")
         clean[k] = v
-    clean["auto_invite_until"] = values.get("auto_invite_until")
+    if "auto_invite_until" in values:
+        clean["auto_invite_until"] = values["auto_invite_until"]
 
     def op(conn, snap):
         ddb.save_config(conn, year, clean)
@@ -207,21 +248,29 @@ def set_payment(year: int, applicant_id: int, status: str, comment: str = "", us
         placed = placement(snap["lists"], a["id"])
         if placed is None:
             raise DrawError(f"{_fio(a)}: ещё не вытянут")
-        old = a["payment_status"]
+        old, old_comment = a["payment_status"], a["payment_comment"] or ""
         ddb.update_payment(conn, a["id"], status, comment)
         if old != status:
             ddb.audit(conn, year, a["id"], "payment", old, status, None, user)
-        result = {"auto_invited": None, "waitlist_empty": False, "suggest_revert": None}
+        elif old_comment != comment[:500]:
+            ddb.audit(conn, year, a["id"], "payment_comment", old_comment[:200], comment[:200], None, user)
+        result = {"auto_invited": None, "waitlist_empty": False, "suggest_revert": None, "already_invited": None}
         if status == "unpaid" and old != "unpaid" and auto_invite_allowed(snap["config"]["auto_invite_until"], today):
             rows = snap["lists"][placed[0]]
             for r in rows:
                 if r["applicant_id"] == a["id"]:
                     r["payment_status"] = status
+            prev_id = ddb.last_auto_invite(conn, year, a["id"])
+            prev = next((x for x in snap["applicants"] if x["id"] == prev_id), None)
             nxt = next_invitee(rows)
-            if nxt is None:
+            if prev and prev["payment_status"] == "pending":
+                # цепочка ❌→✅→❌: приглашённый в прошлый раз ещё ждёт — второго не зовём
+                result["already_invited"] = {"applicant_id": prev["id"], "surname": prev["surname"],
+                                             "name": prev["name"]}
+            elif nxt is None:
                 result["waitlist_empty"] = True
             else:
-                ddb.update_payment(conn, nxt["applicant_id"], "pending", "")
+                ddb.update_payment_status(conn, nxt["applicant_id"], "pending")
                 ddb.audit(conn, year, nxt["applicant_id"], "auto_invite", "none", "pending", a["id"], user)
                 result["auto_invited"] = {"applicant_id": nxt["applicant_id"], "surname": nxt["surname"],
                                           "name": nxt["name"], "category": placed[0], "position": nxt["position"]}
@@ -282,22 +331,45 @@ def applicant_summary(year: int, applicant_id: int) -> dict:
 
 # ── Чтение: публика (кэш) ───────────────────────────────────────────────────
 
+def _fresh(hit, now: float) -> bool:
+    return bool(hit) and now - hit[1] < CACHE_TTL_S
+
+
+def _store(year: int, version: int, snap: dict) -> None:
+    """Не затираем более новую версию более старой (запись из соседнего потока/воркера)."""
+    with _lock:
+        cur = _cache.get(year)
+        if cur is None or cur[0] <= version:
+            _cache[year] = (version, time.monotonic(), snap)
+
+
 def _cached_snapshot(year: int) -> dict:
-    now = time.monotonic()
     hit = _cache.get(year)
-    if hit and now - hit[1] < CACHE_TTL_S:
+    if _fresh(hit, time.monotonic()):
         return hit[2]
-    conn = _connect()
-    try:
-        version = ddb.get_version(conn, year)
-        if hit and hit[0] == version:
-            snap = hit[2]
-        else:
-            snap = _snapshot(conn, year)
-            snap["version"] = version
-    finally:
-        conn.close()
-    _cache[year] = (version, now, snap)
+    with _year_lock(year):  # single-flight: на промах кэша — один запрос в БД на воркер
+        hit = _cache.get(year)
+        if _fresh(hit, time.monotonic()):
+            return hit[2]
+        try:
+            conn = _connect()
+            try:
+                if hit and hit[0] == ddb.get_version(conn, year):
+                    snap = hit[2]
+                else:
+                    snap = _snapshot(conn, year, create=False)
+                    snap["version"] = snap["config"]["version"]
+            finally:
+                conn.close()
+        except (DrawError, mysql.connector.Error) as e:
+            if hit:
+                log.warning("draw %s: БД недоступна, отдаём прошлый снимок: %s", year, e)
+                _store(year, hit[0], hit[2])  # отметка времени — не долбим БД чаще CACHE_TTL_S
+                return hit[2]
+            if isinstance(e, DrawError):
+                raise
+            raise DrawUnavailable("БД недоступна") from e
+        _store(year, snap["version"], snap)
     _ensure_probabilities(snap)
     return snap
 
@@ -315,11 +387,14 @@ def _ensure_probabilities(snap: dict) -> None:
         try:
             probs = win_probabilities(snap["applicants"], snap["lists"], snap["config"],
                                       snap["config"]["current_round"], sims=SIMS)
-            with _lock:
+        except Exception:
+            log.exception("draw %s: расчёт вероятностей упал (версия %s)", year, version)
+            probs = None  # (version, None): не перезапускаем каждую секунду
+        with _lock:
+            done = _probs.get(year)
+            if done is None or done[0] <= version:
                 _probs[year] = (version, probs)
-        finally:
-            with _lock:
-                _probs_running.discard(year)
+            _probs_running.discard(year)
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -392,12 +467,14 @@ def feed_rows(year: int, name: str) -> list[dict]:
     if name == "wildcard":
         wc = sorted(({**r, "category": c} for c, rows in snap["lists"].items() for r in rows if r["is_wildcard"]),
                     key=lambda r: r["position_key"])
+        if not wc:
+            return [{"num": "", "name": "", "city": "", "category": ""}]
         return [{"num": i, "name": _fio(r), "city": r["city"], "category": CATEGORY_LABELS[r["category"]]}
                 for i, r in enumerate(wc, start=1)]
     if name == "last":
         last = _last_row(snap)
-        if last is None:
-            return []
+        if last is None:  # одна пустая строка: режиссёр настроит колонки Data Source в vMix до эфира
+            return [{"name": "", "city": "", "category": "", "num": "", "round": ""}]
         return [{"name": _fio(last), "city": last["city"], "category": CATEGORY_LABELS[last["category"]],
                  "num": last["position"], "round": ROUND_LABELS[last["round"]]}]
     raise DrawError("нет такого фида")

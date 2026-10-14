@@ -27,6 +27,13 @@ def load_config(conn, year: int) -> dict:
     return cur.fetchone()
 
 
+def get_config(conn, year: int) -> Optional[dict]:
+    """Настройки года без создания строки (публичное чтение не пишет в БД)."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM draw_config WHERE draw_year=%s", (year,))
+    return cur.fetchone()
+
+
 def lock_config(conn, year: int) -> dict:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM draw_config WHERE draw_year=%s FOR UPDATE", (year,))
@@ -83,6 +90,14 @@ def update_payment(conn, applicant_id: int, status: str, comment: str) -> None:
     conn.cursor().execute(
         "UPDATE draw_applicants SET payment_status=%s, payment_comment=%s, payment_updated_at=NOW() WHERE id=%s",
         (status, comment[:500], applicant_id),
+    )
+
+
+def update_payment_status(conn, applicant_id: int, status: str) -> None:
+    """Только статус (автопередача/сброс): комментарий директора не трогаем."""
+    conn.cursor().execute(
+        "UPDATE draw_applicants SET payment_status=%s, payment_updated_at=NOW() WHERE id=%s",
+        (status, applicant_id),
     )
 
 

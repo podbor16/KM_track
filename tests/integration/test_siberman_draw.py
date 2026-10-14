@@ -1,9 +1,12 @@
 """
 Жеребьёвка на локальной БД siberman (.env.local): вытягивание, исправление/отмена,
 оплаты с автопередачей, публичные данные без утечки wild card, фиды, маршруты.
-Год 2099 — тестовый, чистится до и после.
+Год теста 2090–2099 (от PID), чистится до и после.
 """
 import datetime
+import os
+import threading
+import time
 
 import pytest
 
@@ -12,9 +15,10 @@ from src.core.auth import api_require_auth
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
 from src.siberman.draw import service
-from src.siberman.draw.service import DrawError
+from src.siberman.draw.service import DrawError, DrawUnavailable
 
-YEAR = 2099
+YEAR = 2090 + os.getpid() % 10  # изоляция параллельных прогонов
+OTHER_YEAR = 2090 + (YEAR - 2090 + 1) % 10
 
 
 def _app(surname, fmt="individual", gender="M", pool="novice", wc=False, chances=1, starts=0):
@@ -144,7 +148,8 @@ def test_public_state_hides_unrevealed_wildcard(draw):
     pub = service.public_state(YEAR)
     assert "Вайлдкардов" not in str(pub)
     assert "Повторов" in [p["surname"] for p in pub["aquarium"]["people"]]
-    assert service.feed_rows(YEAR, "wildcard") == []
+    # до первого вытягивания фид — одна пустая строка с ключами (колонки Data Source в vMix)
+    assert service.feed_rows(YEAR, "wildcard") == [{"num": "", "name": "", "city": "", "category": ""}]
     service.pick(YEAR, draw["Вайлдкардов"])
     service.clear_cache()
     pub = service.public_state(YEAR)
@@ -199,3 +204,195 @@ def test_routes(draw, client):
     assert client.get(f"/draw/{YEAR}/results", headers={"host": "siberman.localhost"}).status_code == 200
     assert client.get(f"/draw/{YEAR}/results").status_code == 404
     assert client.get(f"/api/siberman/admin/draw/{YEAR}/state").status_code == 401
+
+
+# ── Ревью: настройки, кэш, сбой БД, оплаты, права ───────────────────────────
+
+def _status(ids, surname):
+    return next(a for a in service.admin_state(YEAR)["applicants"] if a["id"] == ids[surname])
+
+
+def test_last_feed_empty_row_before_first_pick(draw):
+    assert service.feed_rows(YEAR, "last") == [{"name": "", "city": "", "category": "", "num": "", "round": ""}]
+
+
+def test_partial_config_post_keeps_other_fields(draw, client):
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        r = client.post(f"/api/siberman/admin/draw/{YEAR}/config", json={"capacity_men": 5})
+        assert r.status_code == 200
+        cfg = service.admin_state(YEAR)["config"]
+        assert cfg["capacity_men"] == 5 and cfg["capacity_women"] == 1 and cfg["quota_repeat_men"] == 2
+        assert cfg["auto_invite_until"] == datetime.date(2098, 1, 1)
+        assert client.post(f"/api/siberman/admin/draw/{YEAR}/config", json={"capacity_men": 1001}).status_code == 409
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)
+
+
+def test_pick_concurrent_same_applicant(draw):
+    results = []
+
+    def go():
+        try:
+            results.append(service.pick(YEAR, draw["Вайлдкардов"]))
+        except DrawError as e:
+            results.append(e)
+    threads = [threading.Thread(target=go) for _ in range(4)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    errors = [r for r in results if isinstance(r, DrawError)]
+    assert len(results) == 4 and len(errors) == 3 and all("уже вытянут" in str(e) for e in errors)
+
+
+def test_pick_concurrent_different_applicants_no_duplicate_numbers(draw):
+    service.set_round(YEAR, 4)
+    names = ("Новиков", "Запасной", "Последний", "Повторов")
+    errors = []
+
+    def go(n):
+        try:
+            service.pick(YEAR, draw[n])
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+    threads = [threading.Thread(target=go, args=(n,)) for n in names]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors
+    assert sorted(r["position"] for r in service.admin_state(YEAR)["lists"]["men"]) == [1, 2, 3, 4]
+
+
+def test_public_cache_invalidated_by_version_without_clear(draw, monkeypatch):
+    monkeypatch.setattr(service, "CACHE_TTL_S", 0)
+    assert service.public_state(YEAR)["lists"]["men"] == []
+    service.pick(YEAR, draw["Вайлдкардов"])
+    assert service.public_state(YEAR)["lists"]["men"][0]["surname"] == "Вайлдкардов"
+
+
+def test_db_failure_serves_stale_snapshot_or_unavailable(draw, monkeypatch):
+    monkeypatch.setattr(service, "CACHE_TTL_S", 0)
+    real = service.get_siberman_connection
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: None)
+    with pytest.raises(DrawUnavailable):
+        service.public_state(YEAR)               # кэш пуст (clear_cache в фикстуре)
+    monkeypatch.setattr(service, "get_siberman_connection", real)
+    warm = service.public_state(YEAR)
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: None)
+    stale = service.public_state(YEAR)           # БД лежит — отдаём старый снимок
+    # (вероятности аквариума досчитываются в фоне, поэтому сравниваем списки и раунд)
+    assert (stale["lists"], stale["round"]) == (warm["lists"], warm["round"])
+
+
+def test_db_down_route_returns_503(draw, client, monkeypatch):
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: None)
+    assert client.get(f"/api/siberman/draw/{YEAR}/state").status_code == 503
+    assert client.get(f"/api/siberman/draw/{YEAR}/feed/men.json").status_code == 503
+
+
+def test_public_read_does_not_create_config_row(draw):
+    conn = get_siberman_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM draw_config WHERE draw_year=%s", (OTHER_YEAR,))
+        pub = service.public_state(OTHER_YEAR)
+        assert pub["round"] == 0 and all(v is None for v in pub["capacities"].values())
+        assert all(rows == [] for rows in pub["lists"].values()) and pub["aquarium"]["people"] == []
+        assert service.feed_rows(OTHER_YEAR, "last")[0]["name"] == ""
+        cur.execute("SELECT COUNT(*) FROM draw_config WHERE draw_year=%s", (OTHER_YEAR,))
+        assert cur.fetchone()[0] == 0
+    finally:
+        conn.close()
+        service.clear_cache()
+
+
+def test_failed_probabilities_not_restarted(draw, monkeypatch):
+    calls = []
+
+    def boom(*a, **k):
+        calls.append(1)
+        raise RuntimeError("sim")
+    monkeypatch.setattr(service, "win_probabilities", boom)
+    monkeypatch.setattr(service, "CACHE_TTL_S", 0)
+    service.public_state(YEAR)
+    for _ in range(100):
+        if service._probs.get(YEAR):
+            break
+        time.sleep(0.05)
+    assert service._probs[YEAR][1] is None
+    service.public_state(YEAR)
+    time.sleep(0.2)
+    assert len(calls) == 1
+
+
+def test_auto_invite_keeps_comment_and_audits_comment_change(draw):
+    _men_after_wildcard_and_three(draw)
+    today = datetime.date(2097, 11, 1)
+    service.set_payment(YEAR, draw["Последний"], "none", "звонила мама", today=today)
+    service.set_payment(YEAR, draw["Новиков"], "unpaid", today=today)
+    # «Последний» в листе ожидания со своим комментарием, статус none → его и зовут, комментарий цел
+    assert _status(draw, "Последний")["payment_status"] == "pending"
+    assert _status(draw, "Последний")["payment_comment"] == "звонила мама"
+    service.set_payment(YEAR, draw["Новиков"], "unpaid", "договорились", today=today)
+    actions = [x["action"] for x in service.applicant_summary(YEAR, draw["Новиков"])["audit"]]
+    assert actions == ["payment", "payment_comment"]
+
+
+def test_unpaid_paid_unpaid_does_not_invite_second(draw):
+    _men_after_wildcard_and_three(draw)
+    today = datetime.date(2097, 11, 1)
+    first = service.set_payment(YEAR, draw["Новиков"], "unpaid", today=today)
+    assert first["auto_invited"]["surname"] == "Последний"
+    service.set_payment(YEAR, draw["Новиков"], "paid", today=today)
+    again = service.set_payment(YEAR, draw["Новиков"], "unpaid", today=today)
+    assert again["auto_invited"] is None and again["already_invited"]["surname"] == "Последний"
+
+
+def test_cancel_and_replace_reset_payment_status(draw):
+    service.set_round(YEAR, 4)
+    a = service.pick(YEAR, draw["Новиков"])
+    b = service.pick(YEAR, draw["Запасной"])
+    service.set_payment(YEAR, draw["Новиков"], "paid")
+    service.set_payment(YEAR, draw["Запасной"], "paid")
+    service.cancel(YEAR, a["pick_id"])
+    assert _status(draw, "Новиков")["payment_status"] == "none"
+    service.replace(YEAR, b["pick_id"], draw["Повторов"])
+    assert _status(draw, "Запасной")["payment_status"] == "none"
+    assert "payment" in [x["action"] for x in service.applicant_summary(YEAR, draw["Запасной"])["audit"]]
+
+
+ADMIN_CALLS = [
+    ("get", "state", None), ("get", "applicant/1", None), ("post", "round", {"round": 1}),
+    ("post", "pick", {"applicant_id": 1}), ("post", "picks/1/cancel", None),
+    ("post", "picks/1/replace", {"applicant_id": 1}),
+    ("post", "payment", {"applicant_id": 1, "status": "paid"}), ("post", "config", {}),
+    ("post", "reset", {"confirm": "x"}),
+]
+
+
+def _call(client, method, year, path, body):
+    kw = {"json": body} if body is not None else {}
+    return getattr(client, method)(f"/api/siberman/admin/draw/{year}/{path}", **kw)
+
+
+@pytest.mark.parametrize("method,path,body", ADMIN_CALLS)
+def test_admin_endpoints_require_auth(client, method, path, body):
+    assert _call(client, method, YEAR, path, body).status_code == 401
+
+
+@pytest.mark.parametrize("bad_year", [0, 99999])
+@pytest.mark.parametrize("method,path,body", ADMIN_CALLS)
+def test_admin_endpoints_reject_bad_year(client, method, path, body, bad_year):
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        assert _call(client, method, bad_year, path, body).status_code == 404
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)
+
+
+def test_import_too_large_rejected(client):
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        big = b"x" * (5 * 1024 * 1024 + 1)
+        r = client.post(f"/api/siberman/admin/draw/{YEAR}/import", files={"file": ("a.xlsx", big)})
+        assert r.status_code == 409 and "слишком большой" in r.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)

@@ -17,7 +17,8 @@ def test_auto_invite_deadline():
     until = datetime.date(2027, 1, 1)
     assert auto_invite_allowed(until, datetime.date(2026, 12, 31)) is True
     assert auto_invite_allowed(until, datetime.date(2027, 1, 1)) is False
-    assert auto_invite_allowed(None, datetime.date(2030, 1, 1)) is True
+    # NULL-дата = автопередача выключена (раньше значила бессрочную — опасно при частичном сохранении)
+    assert auto_invite_allowed(None, datetime.date(2030, 1, 1)) is False
 
 
 def test_icons():

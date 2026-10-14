@@ -14,4 +14,5 @@ def next_invitee(rows: list[dict]) -> dict | None:
 
 
 def auto_invite_allowed(until: datetime.date | None, today: datetime.date) -> bool:
-    return until is None or today < until
+    """Пустая дата = автопередача выключена (по умолчанию дату ставит ensure_config при создании года)."""
+    return until is not None and today < until
