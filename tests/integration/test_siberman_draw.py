@@ -144,17 +144,35 @@ def test_payment_requires_drawn(draw):
         service.set_payment(YEAR, draw["Новиков"], "paid")
 
 
-def test_public_state_hides_unrevealed_wildcard(draw):
+def _wait_probs():
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        done = service._probs.get(YEAR)
+        if done and done[1] is not None:
+            return
+        time.sleep(0.05)
+
+
+def test_public_aquarium_shows_unrevealed_wildcard_as_ordinary(draw):
+    service.public_state(YEAR)
+    _wait_probs()
     pub = service.public_state(YEAR)
-    assert "Вайлдкардов" not in str(pub)
-    assert "Повторов" in [p["surname"] for p in pub["aquarium"]["people"]]
+    people = {p["surname"]: p for p in pub["aquarium"]["people"]}
+    assert people["Вайлдкардов"]["group"] == "repeat"
+    assert not {"is_wildcard", "pool"} & set(people["Вайлдкардов"])
+    assert next(g for g in pub["aquarium"]["groups"] if g["key"] == "repeat")["people"] == 2
+    assert all(p["probability"] is None for p in pub["aquarium"]["people"])
     # до первого вытягивания фид — одна пустая строка с ключами (колонки Data Source в vMix)
     assert service.feed_rows(YEAR, "wildcard") == [{"num": "", "name": "", "city": "", "category": ""}]
     service.pick(YEAR, draw["Вайлдкардов"])
     service.clear_cache()
+    service.public_state(YEAR)
+    _wait_probs()
     pub = service.public_state(YEAR)
+    assert "Вайлдкардов" not in [p["surname"] for p in pub["aquarium"]["people"]]
     assert pub["lists"]["men"][0]["surname"] == "Вайлдкардов"
     assert "is_wildcard" not in pub["lists"]["men"][0]
+    assert any(p["probability"] is not None for p in pub["aquarium"]["people"])
     assert [r["name"] for r in service.feed_rows(YEAR, "wildcard")] == ["Вайлдкардов Тест"]
 
 

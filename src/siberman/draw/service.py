@@ -414,17 +414,24 @@ def _last_row(snap: dict) -> dict | None:
 def _aquarium_group(a: dict, rnd: int) -> str:
     if a["format"] == "relay":
         return "relay"
-    return "individual" if rnd >= 4 else a["pool"]
+    if rnd >= 4:
+        return "individual"
+    if a["is_wildcard"]:  # необъявленный WC выглядит как обычный участник своей группы
+        return "repeat" if a["starts_individual"] > 0 else "novice"
+    return a["pool"]
 
 
 def public_state(year: int) -> dict:
-    """Публично: без признака wild card и без необъявленных wild card (их нет нигде)."""
+    """Публично: без признака wild card. Необъявленные WC в аквариуме как обычные участники своей
+    группы; вероятности скрыты у всех, пока объявлены не все WC (иначе WC вычислялись бы по цифре)."""
     snap = _cached_snapshot(year)
     cfg, rnd = snap["config"], snap["config"]["current_round"]
     done = _probs.get(year)
     probs = done[1] if done else None
     placed = {r["applicant_id"] for rows in snap["lists"].values() for r in rows}
-    people = [a for a in snap["applicants"] if not a["is_wildcard"] and a["id"] not in placed]
+    people = [a for a in snap["applicants"] if a["id"] not in placed]
+    if any(a["is_wildcard"] for a in people):
+        probs = None
     group_keys = ["relay"] + (["individual"] if rnd >= 4 else ["repeat", "novice"])
     groups = []
     for key in group_keys:
