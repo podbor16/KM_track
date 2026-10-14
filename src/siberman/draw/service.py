@@ -112,7 +112,7 @@ def pick(year: int, applicant_id: int, user: str = "") -> dict:
     def op(conn, snap):
         a = _applicant(snap, applicant_id)
         rnd = snap["config"]["current_round"]
-        reason = check_pick(a, rnd, snap["lists"])
+        reason = check_pick(a, rnd, snap["lists"], snap["config"], {x["id"]: x for x in snap["applicants"]})
         if reason:
             raise DrawError(f"{_fio(a)}: {reason}")
         category = category_of(a)
@@ -251,6 +251,7 @@ def admin_state(year: int) -> dict:
         a["placed"] = {"category": placed[0], "position": placed[1]} if placed else None
         a["in_round"] = in_round_pool(a, rnd)
         a["category"] = category_of(a)
+        a["block"] = check_pick(a, rnd, snap["lists"], cfg, by_id)
     journal = [{
         "pick_id": p["id"], "applicant_id": p["applicant_id"],
         "surname": by_id[p["applicant_id"]]["surname"], "name": by_id[p["applicant_id"]]["name"],

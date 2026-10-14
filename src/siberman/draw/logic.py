@@ -68,13 +68,40 @@ def placement(lists: dict, applicant_id: int) -> tuple[str, int] | None:
     return None
 
 
-def check_pick(app: dict, rnd: int, lists: dict) -> str | None:
+KIND_LABELS = {"repeat": "повторных", "novice": "новичков"}
+GENDER_LABELS = {"M": "мужчин", "F": "женщин"}
+
+
+def quota_block(app: dict, rnd: int, lists: dict, config: dict, apps_by_id: dict) -> str | None:
+    """Раунды 2–3: квота вида (повторные/новички) у пола набрана или места пола заняты →
+    шарик откладывается до раунда 4. Временное правило — ждём подтверждения организаторов."""
+    if rnd not in (2, 3) or app["format"] == "relay":
+        return None
+    kind = "repeat" if rnd == 2 else "novice"
+    category = category_of(app)
+    gender = app["gender"]
+    rows = lists[category]
+    taken = sum(1 for r in rows if kind_of(apps_by_id[r["applicant_id"]]) == kind)
+    quota = config.get(f"quota_{kind}_{category}")
+    capacity = config.get(f"capacity_{category}")
+    who = GENDER_LABELS[gender]
+    if quota is not None and taken >= quota:
+        return f"квота {KIND_LABELS[kind]} {who} набрана ({taken}/{quota}) — шарик откладывается до раунда 4"
+    if capacity is not None and len(rows) >= capacity:
+        return f"места {who} заняты ({len(rows)}/{capacity}) — шарик откладывается до раунда 4"
+    return None
+
+
+def check_pick(app: dict, rnd: int, lists: dict, config: dict | None = None,
+               apps_by_id: dict | None = None) -> str | None:
     """Причина отказа или None, если участника можно вытянуть в раунде rnd."""
     placed = placement(lists, app["id"])
     if placed:
         return f"уже вытянут — {CATEGORY_LABELS[placed[0]]} №{placed[1]}"
     if not in_round_pool(app, rnd):
         return f"не в этом раунде: {POOL_LABELS[app['pool']]}"
+    if config is not None:
+        return quota_block(app, rnd, lists, config, apps_by_id)
     return None
 
 

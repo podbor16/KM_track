@@ -77,6 +77,20 @@ def test_wildcard_round_and_refusals(draw):
         service.pick(YEAR, draw["Новиков"])
 
 
+def test_round2_repeat_quota_defers_to_round4(draw):
+    service.save_config(YEAR, {"capacity_men": 3, "capacity_women": 1, "capacity_relay": 1,
+                               "quota_repeat_men": 1, "quota_repeat_women": 0, "quota_novice_men": 1,
+                               "quota_novice_women": 1, "auto_invite_until": datetime.date(2098, 1, 1)})
+    service.pick(YEAR, draw["Вайлдкардов"])
+    service.set_round(YEAR, 2)
+    with pytest.raises(DrawError, match=r"квота повторных мужчин набрана \(1/1\)"):
+        service.pick(YEAR, draw["Повторов"])
+    blocks = {a["surname"]: a["block"] for a in service.admin_state(YEAR)["applicants"]}
+    assert "квота повторных мужчин" in blocks["Повторов"] and blocks["Новиков"].startswith("не в этом раунде")
+    service.set_round(YEAR, 4)
+    assert service.pick(YEAR, draw["Повторов"])["position"] == 2
+
+
 def test_replace_keeps_position_cancel_shifts(draw):
     service.set_round(YEAR, 4)
     a = service.pick(YEAR, draw["Новиков"])
