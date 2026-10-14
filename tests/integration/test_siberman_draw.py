@@ -322,6 +322,29 @@ def test_public_read_does_not_create_config_row(draw):
         service.clear_cache()
 
 
+def test_empty_category_feed_without_capacity_is_one_stub_row(draw):
+    conn = get_siberman_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM draw_config WHERE draw_year=%s", (OTHER_YEAR,))
+        for name in ("men", "women", "relay"):
+            assert service.feed_rows(OTHER_YEAR, name) == [
+                {"num": "", "name": "", "city": "", "section": "", "status": ""}]
+    finally:
+        conn.close()
+        service.clear_cache()
+
+
+def test_public_state_cached_while_versions_unchanged(draw):
+    service.public_state(YEAR)
+    _wait_probs()
+    first = service.public_state(YEAR)
+    assert service.public_state(YEAR) is first
+    service.pick(YEAR, draw["Вайлдкардов"])
+    service.clear_cache()
+    assert service.public_state(YEAR) is not first
+
+
 def test_failed_probabilities_not_restarted(draw, monkeypatch):
     calls = []
 

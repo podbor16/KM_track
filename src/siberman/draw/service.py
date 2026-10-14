@@ -54,6 +54,7 @@ AQUARIUM_GROUPS = {"relay": ("Эстафеты", "blue"), "repeat": ("Повто
                    "novice": ("Новички", "black"), "individual": ("Личники", "black")}
 
 _cache: dict[int, tuple[int, float, dict]] = {}
+_state_cache: dict[int, tuple[tuple, dict]] = {}  # готовый public_state: (ключ версий, ответ)
 _probs: dict[int, tuple[int, dict | None]] = {}
 _probs_running: set[int] = set()
 _lock = threading.Lock()
@@ -63,6 +64,7 @@ _year_locks: dict[int, threading.Lock] = {}
 def clear_cache() -> None:
     with _lock:
         _cache.clear()
+        _state_cache.clear()
         _probs.clear()
 
 
@@ -347,7 +349,12 @@ def _cached_snapshot(year: int) -> dict:
     hit = _cache.get(year)
     if _fresh(hit, time.monotonic()):
         return hit[2]
-    with _year_lock(year):  # single-flight: на промах кэша — один запрос в БД на воркер
+    lock = _year_lock(year)  # single-flight: на промах кэша — один запрос в БД на воркер
+    if not lock.acquire(blocking=False):
+        if hit:  # кто-то уже обновляет — не ждём, отдаём прошлый снимок
+            return hit[2]
+        lock.acquire()
+    try:
         hit = _cache.get(year)
         if _fresh(hit, time.monotonic()):
             return hit[2]
@@ -370,6 +377,8 @@ def _cached_snapshot(year: int) -> dict:
                 raise
             raise DrawUnavailable("БД недоступна") from e
         _store(year, snap["version"], snap)
+    finally:
+        lock.release()
     _ensure_probabilities(snap)
     return snap
 
@@ -423,10 +432,23 @@ def _aquarium_group(a: dict, rnd: int) -> str:
 
 def public_state(year: int) -> dict:
     """Публично: без признака wild card. Необъявленные WC в аквариуме как обычные участники своей
-    группы; вероятности скрыты у всех, пока объявлены не все WC (иначе WC вычислялись бы по цифре)."""
+    группы; вероятности скрыты у всех, пока объявлены не все WC (иначе WC вычислялись бы по цифре).
+    Готовый ответ кэшируется по (версия снимка, версия вероятностей) — вызывающий его не меняет."""
     snap = _cached_snapshot(year)
-    cfg, rnd = snap["config"], snap["config"]["current_round"]
     done = _probs.get(year)
+    key = (snap["version"], done[0] if done else None)
+    with _lock:
+        hit = _state_cache.get(year)
+    if hit and hit[0] == key:
+        return hit[1]
+    state = _build_public_state(year, snap, done)
+    with _lock:
+        _state_cache[year] = (key, state)
+    return state
+
+
+def _build_public_state(year: int, snap: dict, done) -> dict:
+    cfg, rnd = snap["config"], snap["config"]["current_round"]
     probs = done[1] if done else None
     placed = {r["applicant_id"] for rows in snap["lists"].values() for r in rows}
     people = [a for a in snap["applicants"] if a["id"] not in placed]
@@ -470,6 +492,8 @@ def feed_rows(year: int, name: str) -> list[dict]:
                for r in rows]
         for i in range(len(rows) + 1, (cap or 0) + 1):
             out.append({"num": i, "name": "", "city": "", "section": SECTION_LABELS["winner"], "status": ""})
+        if not out:  # места не заданы и список пуст: одна пустая строка для настройки колонок в vMix
+            out.append({"num": "", "name": "", "city": "", "section": "", "status": ""})
         return out
     if name == "wildcard":
         wc = sorted(({**r, "category": c} for c, rows in snap["lists"].items() for r in rows if r["is_wildcard"]),
