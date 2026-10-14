@@ -83,11 +83,14 @@ const isArmed = key => armed !== null && armed.key === key && armed.until > Date
 
 function confirmClick(btn, key, action) {
   clearTimeout(armedTimer);
-  if (isArmed(key)) { armed = null; renderRounds(); renderJournal(); action(); return; }
+  if (isArmed(key)) { armed = null; renderArmed(); action(); return; }
   armed = { key, until: Date.now() + 4000 };
-  renderRounds(); renderJournal();
-  armedTimer = setTimeout(() => { armed = null; renderRounds(); renderJournal(); }, 4000);
+  renderArmed();
+  armedTimer = setTimeout(() => { armed = null; renderArmed(); }, 4000);
 }
+
+// Всё, где показывается «Точно?»: раунды, журнал, список участников
+function renderArmed() { renderRounds(); renderJournal(); renderSearch(); }
 
 // Без force перерисовываем только при изменении ответа — иначе опрос пересоздаёт кнопки и сбивает ввод.
 async function load(force = false) {
@@ -148,15 +151,24 @@ function reasonFor(a) {
   return a.block || ''; // сервер: не в этом раунде / квота или места набраны (logic.check_pick)
 }
 
+const query = () => norm($('search').value.trim());
+
+// Пустой поиск — весь список участников раунда (при исправлении — раунда и зачёта исправляемой
+// записи), сначала доступные; набран текст — найденные среди всех заявок.
 function candidates() {
-  const q = norm($('search').value.trim());
-  if (!q) return [];
-  return S.applicants
-    .filter(a => norm(fio(a)).startsWith(q))
+  const q = query();
+  const rnd = replacing ? replacing.round : S.config.current_round;
+  const list = q
+    ? S.applicants.filter(a => norm(fio(a)).startsWith(q))
+    : S.applicants.filter(a => inRound(a, rnd) && (!replacing || a.category === replacing.category));
+  const sorted = list
     .map(a => ({ a, reason: reasonFor(a) }))
-    .sort((x, y) => (x.reason ? 1 : 0) - (y.reason ? 1 : 0) || fio(x.a).localeCompare(fio(y.a), 'ru'))
-    .slice(0, 12);
+    .sort((x, y) => (x.reason ? 1 : 0) - (y.reason ? 1 : 0) || fio(x.a).localeCompare(fio(y.a), 'ru'));
+  return q ? sorted.slice(0, 12) : sorted;
 }
+
+// Выбор мышью — вторым кликом (длинный список, промах в эфире недопустим)
+function pickFromList(id, btn) { confirmClick(btn, `pick:${id}`, () => choose(id)); }
 
 function renderSearch() {
   const list = candidates();
@@ -167,12 +179,16 @@ function renderSearch() {
   if (replacing) {
     banner.innerHTML = `Исправление: вместо <b>${esc(replacing.name)}</b> (${catLabel(replacing.category)} №${replacing.position}) выберите правильного участника. <button class="btn-link" onclick="cancelReplace()">Отмена</button>`;
   }
-  $('results').innerHTML = list.map(x => {
+  const typed = query() !== '';
+  const head = typed ? '' : `<div class="res-head">Участники раунда: доступно ${selectable.length} из ${list.length} — дважды нажмите на строку, чтобы вытянуть</div>`;
+  $('results').innerHTML = head + list.map(x => {
     const a = x.a, idx = selectable.indexOf(x);
-    const cls = x.reason ? 'res disabled' : (idx === highlight ? 'res hl' : 'res');
+    const isArmedRow = isArmed(`pick:${a.id}`);
+    const cls = x.reason ? 'res disabled' : isArmedRow ? 'res armed' : (typed && idx === highlight ? 'res hl' : 'res');
     const wc = a.is_wildcard ? ' <span class="wc">WC</span>' : '';
-    const click = x.reason ? '' : `onclick="choose(${a.id})"`;
-    return `<div class="${cls}" ${click}><b>${esc(fio(a))}</b>${wc} · ${esc(a.city)} · ${a.chances} шанс. · ${catLabel(a.category)}${x.reason ? ` — <i>${esc(x.reason)}</i>` : ''}</div>`;
+    const click = x.reason ? '' : `onclick="pickFromList(${a.id}, this)"`;
+    const hint = isArmedRow ? ' — <b>нажмите ещё раз, чтобы вытянуть</b>' : '';
+    return `<div class="${cls}" ${click}><b>${esc(fio(a))}</b>${wc} · ${esc(a.city)} · ${a.chances} шанс. · ${catLabel(a.category)}${x.reason ? ` — <i>${esc(x.reason)}</i>` : ''}${hint}</div>`;
   }).join('');
 }
 
@@ -378,6 +394,7 @@ function switchTab(name, btn) {
 const search = $('search');
 search.addEventListener('input', () => { highlight = 0; renderSearch(); });
 search.addEventListener('keydown', e => {
+  if (!query()) return; // стрелки и Enter — только по найденным: Enter на пустом поле не вытягивает первого в списке
   const selectable = candidates().filter(x => !x.reason);
   if (e.key === 'ArrowDown') { highlight = Math.min(highlight + 1, Math.max(selectable.length - 1, 0)); renderSearch(); e.preventDefault(); }
   else if (e.key === 'ArrowUp') { highlight = Math.max(highlight - 1, 0); renderSearch(); e.preventDefault(); }
