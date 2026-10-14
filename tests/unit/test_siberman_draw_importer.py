@@ -74,7 +74,7 @@ def test_missing_sex_duplicate_and_bad_number():
     ]))
     assert [a["surname"] for a in apps] == ["Дубль"]
     joined = " | ".join(errors)
-    assert "пол" in joined and "повтор заявки" in joined and "не число" in joined
+    assert "пол" in joined and "повтор заявки" in joined and "не целое число" in joined
 
 
 def test_missing_column():
@@ -93,3 +93,76 @@ def test_report_counts_people_and_balls():
     assert rep["groups"] == {"repeat_M": {"people": 1, "balls": 4},
                              "novice_F": {"people": 1, "balls": 1},
                              "relay": {"people": 1, "balls": 1}}
+
+
+IND = "Индивидуальное участие"
+
+
+@pytest.mark.parametrize("wc", ["Wildcard", "wildcard", "Wild card", "WILDCARD", " wild  card "])
+def test_wildcard_case_and_spaces(wc):
+    apps, errors = parse_applicants(_xlsx([_row(IND, "Иванов Иван", "Мужской", wc=wc)]))
+    assert errors == [] and apps[0]["is_wildcard"] is True and apps[0]["pool"] == "wildcard"
+
+
+def test_wildcard_unknown_value_is_error():
+    apps, errors = parse_applicants(_xlsx([_row(IND, "Иванов Иван", "Мужской", wc="возможно")]))
+    assert apps == [] and "«Wildcard» — непонятное значение «возможно»" in errors[0]
+
+
+def test_number_error_names_column():
+    _, errors = parse_applicants(_xlsx([_row(IND, "Кривой Номер", "Мужской", starts="два")]))
+    assert errors == ["строка 2 «Кривой Номер»: «Старты на гонке (индивидуально)» — не целое число: «два»"]
+
+
+def test_number_error_in_total_column():
+    row = _row(IND, "Кривой Номер", "Мужской", total="много")
+    _, errors = parse_applicants(_xlsx([row]))
+    assert "«Общая сумма шансов» — не целое число: «много»" in errors[0]
+
+
+def test_blank_float_whole_values_ok():
+    row = _row(IND, "Иванов Иван", "Мужской", starts=2.0, accum="   ", extra_sum=2, total=3)
+    apps, errors = parse_applicants(_xlsx([row]))
+    assert errors == [] and apps[0]["starts_individual"] == 2 and apps[0]["draw_accumulated"] == 0
+
+
+@pytest.mark.parametrize("bad", [2.5, -1, "-1", "2.5"])
+def test_fractional_and_negative_are_errors(bad):
+    row = _row(IND, "Иванов Иван", "Мужской", starts=bad, extra_sum=0, total=1)
+    apps, errors = parse_applicants(_xlsx([row]))
+    assert apps == [] and "не целое число ≥ 0" in errors[0]
+
+
+def test_total_below_one_is_error():
+    row = _row(IND, "Иванов Иван", "Мужской", extra_sum=-1, total=0)
+    apps, errors = parse_applicants(_xlsx([row]))
+    assert apps == [] and errors
+
+
+def test_total_zero_is_error():
+    row = _row(IND, "Иванов Иван", "Мужской", extra_sum=0, total=0)
+    apps, errors = parse_applicants(_xlsx([row]))
+    assert apps == [] and errors
+
+
+def test_duplicate_ignores_yo_and_case():
+    apps, errors = parse_applicants(_xlsx([
+        _row(IND, "Королёв Пётр", "Мужской"),
+        _row(IND, "королев петр", "Мужской"),
+    ]))
+    assert len(apps) == 1 and "повтор заявки" in errors[0]
+
+
+def test_single_word_name_is_error():
+    apps, errors = parse_applicants(_xlsx([_row(IND, "Иванов", "Мужской")]))
+    assert apps == [] and "нет имени" in errors[0]
+
+
+def test_inner_spaces_collapsed():
+    apps, _ = parse_applicants(_xlsx([_row(IND, "Иванов   Иван", "Мужской")]))
+    assert apps[0]["surname"] == "Иванов" and apps[0]["name"] == "Иван"
+
+
+def test_not_xlsx():
+    assert parse_applicants(b"not a zip") == (
+        [], ["файл не похож на .xlsx — сохраните таблицу в формате Excel"])

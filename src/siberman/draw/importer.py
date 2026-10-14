@@ -33,18 +33,29 @@ def _norm(v) -> str:
 
 
 def _int(v) -> int:
-    if v in (None, ""):
+    if v is None or (isinstance(v, str) and not v.strip()):
         return 0
-    if isinstance(v, (int, float)) and float(v).is_integer():
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer() and v >= 0:
         return int(v)
-    if isinstance(v, str) and v.strip().isdigit():
-        return int(v.strip())
-    raise ValueError(f"не число: «{v}»")
+    if isinstance(v, str):
+        t = v.strip()
+        if t.isdigit():
+            return int(t)
+        if t.endswith(".0") and t[:-2].isdigit():
+            return int(t[:-2])
+    try:
+        float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"не целое число: «{v}»") from None
+    raise ValueError(f"не целое число ≥ 0: «{v}»")
 
 
 def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     """(заявки, ошибки). Строка с ошибкой в заявки не попадает."""
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    except Exception:
+        return [], ["файл не похож на .xlsx — сохраните таблицу в формате Excel"]
     ws = wb[SHEET] if SHEET in wb.sheetnames else wb.worksheets[0]
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
@@ -81,23 +92,40 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if fmt == "individual" and gender is None:
             errors.append(f"{where}: пол «{_norm(get(COL_SEX))}»")
             continue
+        wc_raw = _norm(get(COL_WILDCARD)).lower().replace(" ", "")
+        if wc_raw not in ("", "!", "wildcard"):
+            errors.append(f"{where}: «{COL_WILDCARD}» — непонятное значение «{_norm(get(COL_WILDCARD))}»")
+            continue
         try:
-            extra = {k: _int(get(col)) for k, col in EXTRA_COLS.items()}
-            total, extra_sum = _int(get(COL_TOTAL)), _int(get(COL_EXTRA))
+            extra, col = {}, ""
+            for k, col in EXTRA_COLS.items():
+                extra[k] = _int(get(col))
+            col = COL_TOTAL
+            total = _int(get(col))
+            col = COL_EXTRA
+            extra_sum = _int(get(col))
         except ValueError as e:
-            errors.append(f"{where}: {e}")
+            errors.append(f"{where}: «{col}» — {e}")
+            continue
+        if total < 1:
+            errors.append(f"{where}: шансов меньше 1")
             continue
         if sum(extra.values()) != extra_sum or total != extra_sum + 1:
             errors.append(f"{where}: шансы не сходятся (доп. {sum(extra.values())}, "
                           f"«сумма доп.» {extra_sum}, итого {total})")
             continue
         surname, _, name = full.partition(" ")
-        key = (fmt, surname.lower(), name.lower())
+        if not name:
+            errors.append(f"{where}: нет имени")
+            continue
+        def fold(t):
+            return t.lower().replace("ё", "е")
+        key = (fmt, fold(surname), fold(name))
         if key in seen:
             errors.append(f"{where}: повтор заявки")
             continue
         seen.add(key)
-        is_wildcard = _norm(get(COL_WILDCARD)) == "Wildcard"
+        is_wildcard = wc_raw == "wildcard"
         if is_wildcard:
             pool = "wildcard"
         elif fmt == "relay":

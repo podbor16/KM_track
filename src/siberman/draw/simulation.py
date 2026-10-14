@@ -6,7 +6,7 @@
 по убыванию). Ещё не объявленные wild card — гарантированные места (сами в результат
 не попадают: публично их нет до объявления).
 
-Без numpy (решение 2026-10-14): ~0,5–0,8 с на 240 участников × 5000 прогонов, считается
+Без numpy (решение 2026-10-14): на VPS 2000 прогонов × 240 участников ≈ 0,9 с (5000 ≈ 2,2 с), считается
 в фоне раз на изменение. Выборка — только в _weighted_order (заменяема на numpy).
 """
 import random
@@ -23,7 +23,7 @@ def _weighted_order(people: list[tuple[int, int]], rnd) -> list[int]:
 
 
 def win_probabilities(apps: list[dict], lists: dict, config: dict, current_round: int,
-                      sims: int = 5000, seed=None) -> dict[int, float] | None:
+                      sims: int = 2000, seed=None) -> dict[int, float] | None:
     """{applicant_id: P(победитель)} для ещё не вытянутых не-wild card; None — места/квоты не заданы."""
     if any(config.get(k) is None for k in REQUIRED_CONFIG):
         return None

@@ -54,3 +54,25 @@ def test_relay_only_until_round1():
 def test_reproducible_with_seed():
     apps = [app(i, chances=i % 4 + 1) for i in range(1, 30)]
     assert probs(apps, cfg(men=5)) == probs(apps, cfg(men=5))
+
+
+def test_unrevealed_repeat_wildcard_eats_repeat_quota():
+    apps = [app(1, "wildcard", wc=True, starts=1), app(2, "repeat", starts=1), app(3)]
+    # квота повторных занята wild card: повторник идёт в общий 4-й раунд наравне с новичком (без wild card было бы 1.0)
+    p = probs(apps, cfg(men=2, rep_m=1))
+    assert abs(p[2] - 0.5) < 0.04 and abs(p[3] - 0.5) < 0.04
+
+
+def test_round3_repeaters_already_gone():
+    apps = [app(1, "repeat", starts=1), app(2), app(3)]
+    p = probs(apps, cfg(men=1, nov_m=0), rnd=3, sims=4000)
+    assert all(abs(v - 1 / 3) < 0.04 for v in p.values())
+
+
+def test_women_weights():
+    p = probs([app(1, gender="F", chances=3), app(2, gender="F")], cfg(women=1))
+    assert abs(p[1] - 0.75) < 0.04 and abs(p[2] - 0.25) < 0.04
+
+
+def test_zero_capacity_nobody_wins():
+    assert probs([app(1), app(2)], cfg(men=0)) == {1: 0.0, 2: 0.0}
