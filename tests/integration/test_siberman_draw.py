@@ -437,3 +437,21 @@ def test_import_too_large_rejected(client):
         assert r.status_code == 409 and "слишком большой" in r.json()["detail"]
     finally:
         app.dependency_overrides.pop(api_require_auth, None)
+
+
+def test_login_returns_to_requested_page(client):
+    """Вход с /admin/draw возвращает на /admin/draw, а не на /admin."""
+    from urllib.parse import parse_qs, urlparse
+    from src.config import settings
+    host = {"host": "siberman.localhost"}
+    r = client.get("/admin/draw", headers=host, follow_redirects=False)
+    assert r.status_code == 302
+    loc = urlparse(r.headers["location"])
+    assert loc.path == "/login" and parse_qs(loc.query)["next"] == ["/admin/draw"]
+    r = client.post("/login", headers=host, follow_redirects=False,
+                    data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD, "next": "/admin/draw"})
+    assert r.status_code == 302 and r.headers["location"] == "/admin/draw"
+    r = client.post("/login", headers=host, follow_redirects=False,
+                    data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD, "next": "//evil.example"})
+    assert r.headers["location"] == "/admin"
+    client.cookies.clear()

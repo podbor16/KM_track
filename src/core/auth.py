@@ -6,7 +6,9 @@ Cookie-based session auth для страницы бизнес-аналитик�
 import hmac
 import hashlib
 import time
-from fastapi import Cookie, HTTPException, status
+from urllib.parse import quote
+
+from fastapi import Cookie, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
 COOKIE_NAME = "km_session"
@@ -50,14 +52,25 @@ def require_auth_for(login_path: str):
     на отдельных доменах (siberman/triatleta), где общий /login с домена
     krasmarafon недоступен из-за nginx domain isolation (см.
     deploy/nginx.conf, каждый домен видит только свои префиксы)."""
-    def _dep(km_session: str | None = Cookie(default=None)):
+    def _dep(request: Request, km_session: str | None = Cookie(default=None)):
+        # После входа — обратно на запрошенную страницу (?next=), а не всегда на /admin
+        here = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        to_login = RedirectResponse(url=f"{login_path}?next={quote(here, safe='')}", status_code=302)
         if not km_session:
-            return RedirectResponse(url=login_path, status_code=302)
+            return to_login
         try:
             return verify_session_cookie(km_session)
         except HTTPException:
-            return RedirectResponse(url=login_path, status_code=302)
+            return to_login
     return _dep
+
+
+def safe_next(target: str | None) -> str | None:
+    """Адрес возврата после входа — только путь этого же сайта (иначе ссылка на /login
+    могла бы увести на чужой домен: «//evil», «https://evil», «/\\evil»)."""
+    if target and target.startswith("/") and not target.startswith("//") and "\\" not in target:
+        return target
+    return None
 
 
 require_auth = require_auth_for("/login")

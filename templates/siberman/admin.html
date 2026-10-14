@@ -64,7 +64,6 @@
         <div>
             <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:1px">Siberman 515</div>
             <h1>Админка</h1>
-        <a href="/admin/draw" class="logout-link">Жеребьёвка</a>
         </div>
         <div style="margin-left:auto">
             <a href="/logout" class="logout-link">Выйти</a>
@@ -75,6 +74,7 @@
         <div class="admin-tabs">
             <button class="admin-tab admin-tab--active" onclick="switchTab('upload', this)">Загрузка результатов</button>
             <button class="admin-tab" onclick="switchTab('broadcast', this)">Трансляция</button>
+            <a class="admin-tab" href="/admin/draw" style="text-decoration:none">Жеребьёвка</a>
         </div>
 
         <div id="tab-upload" class="admin-tab-content">
