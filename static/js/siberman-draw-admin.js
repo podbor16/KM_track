@@ -21,6 +21,11 @@ let S = null;          // последнее состояние с сервер�
 let highlight = 0;     // подсвеченный результат поиска
 let replacing = null;  // запись журнала, которую исправляем
 let busy = false;      // запрос «вытянуть» в полёте — повторный Enter игнорируем
+let armed = null;      // взведённое подтверждение {key, until}; переживает перерисовку кнопок
+let armedTimer = null;
+let loadSeq = 0;       // номер последнего запроса /state — устаревшие ответы не применяем
+let lastStateText = null;
+let expiredShown = false;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -28,32 +33,74 @@ const norm = s => String(s ?? '').toLowerCase().replace(/ё/g, 'е');
 const fio = a => `${a.surname} ${a.name}`.trim();
 const catLabel = c => S.category_labels[c];
 
+function detailText(data, status) {
+  const d = data && data.detail;
+  if (Array.isArray(d)) {
+    const label = loc => (CFG_FIELDS.find(([k]) => k === loc[loc.length - 1]) || [])[1];
+    return `проверьте значения: ${d.map(x => (label(x.loc || []) ? `${label(x.loc)} — ` : '') + (x.msg || 'неверное значение')).join('; ')}`;
+  }
+  return d || `HTTP ${status}`;
+}
+
+function sessionExpired() {
+  const el = $('msg');
+  el.className = 'msg msg-error';
+  el.textContent = 'Сессия закончилась — войдите заново ';
+  const a = document.createElement('a');
+  a.href = '/login';
+  a.textContent = 'войти';
+  el.appendChild(a);
+  el.style.display = 'block';
+  expiredShown = true;
+}
+
+async function request(url, opt) {
+  const r = await fetch(url, opt);
+  if (r.status === 401) { sessionExpired(); const e = new Error('нужно войти'); e.expired = true; throw e; }
+  const text = await r.text();
+  let data = {};
+  try { data = JSON.parse(text); } catch (e) { /* не JSON */ }
+  if (!r.ok) throw new Error(detailText(data, r.status));
+  return { text, data };
+}
+
 async function api(path, body) {
   const opt = body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
-  const r = await fetch(API + path, opt);
-  const data = await r.json().catch(() => ({}));
-  if (r.status === 401) { location.href = '/login'; throw new Error('нужно войти'); }
-  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
-  return data;
+  return (await request(API + path, opt)).data;
 }
 
 function msg(text, kind = 'ok') {
   const el = $('msg');
+  expiredShown = false;
   el.className = `msg msg-${kind}`;
   el.textContent = text;
   el.style.display = text ? 'block' : 'none';
 }
 
-function confirmClick(btn, action) {
-  if (btn.dataset.armed) { delete btn.dataset.armed; action(); return; }
-  btn.dataset.armed = '1';
-  const text = btn.textContent;
-  btn.textContent = 'Точно?';
-  setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = text; } }, 4000);
+function fail(e) { if (!e.expired) msg(e.message, 'error'); }
+
+const isArmed = key => armed !== null && armed.key === key && armed.until > Date.now();
+
+function confirmClick(btn, key, action) {
+  clearTimeout(armedTimer);
+  if (isArmed(key)) { armed = null; renderRounds(); renderJournal(); action(); return; }
+  armed = { key, until: Date.now() + 4000 };
+  renderRounds(); renderJournal();
+  armedTimer = setTimeout(() => { armed = null; renderRounds(); renderJournal(); }, 4000);
 }
 
-async function load() {
-  try { S = await api('/state'); render(); } catch (e) { msg(`Ошибка загрузки: ${e.message}`, 'error'); }
+// Без force перерисовываем только при изменении ответа — иначе опрос пересоздаёт кнопки и сбивает ввод.
+async function load(force = false) {
+  const seq = ++loadSeq;
+  try {
+    const { text } = await request(API + '/state');
+    if (seq !== loadSeq) return; // пришёл более свежий запрос
+    if (expiredShown) msg('');
+    if (!force && text === lastStateText) return;
+    lastStateText = text;
+    S = JSON.parse(text);
+    render();
+  } catch (e) { if (!e.expired && seq === loadSeq) msg(`Ошибка загрузки: ${e.message}`, 'error'); }
 }
 
 function render() { renderRounds(); renderCounters(); renderSearch(); renderJournal(); renderLists(); }
@@ -63,15 +110,15 @@ function renderRounds() {
   $('rounds').innerHTML = Object.entries(S.round_labels).map(([n, label]) => {
     const active = Number(n) === S.config.current_round;
     const prefix = n === '0' ? '' : `Р${n} `;
-    return `<button class="round-btn ${ROUND_COLORS[n]} ${active ? 'active' : ''}" onclick="setRound(${n}, this)">● ${prefix}${esc(label)}</button>`;
+    return `<button class="round-btn ${ROUND_COLORS[n]} ${active ? 'active' : ''}" onclick="setRound(${n}, this)">${isArmed('round:' + n) ? 'Точно?' : `● ${prefix}${esc(label)}`}</button>`;
   }).join('');
 }
 
 function setRound(n, btn) {
   if (n === S.config.current_round) return;
-  confirmClick(btn, async () => {
-    try { await api('/round', { round: n }); replacing = null; await load(); $('search').focus(); }
-    catch (e) { msg(e.message, 'error'); }
+  confirmClick(btn, `round:${n}`, async () => {
+    try { await api('/round', { round: n }); replacing = null; await load(true); $('search').focus(); }
+    catch (e) { fail(e); }
   });
 }
 
@@ -133,6 +180,7 @@ async function choose(id) {
   if (busy) return;
   busy = true;
   const a = S.applicants.find(x => x.id === id);
+  const typed = $('search').value;
   try {
     if (replacing) {
       await api(`/picks/${replacing.pick_id}/replace`, { applicant_id: id });
@@ -142,13 +190,12 @@ async function choose(id) {
       const r = await api('/pick', { applicant_id: id });
       msg(`${fio(a)} → ${catLabel(r.category)} №${r.position}`);
     }
-    $('search').value = '';
-    highlight = 0;
+    if ($('search').value === typed) { $('search').value = ''; highlight = 0; } // уже набранное для следующего не стираем
   } catch (e) {
-    msg(e.message, 'error');
+    fail(e);
   } finally {
     busy = false;
-    await load();
+    await load(true);
     $('search').focus();
   }
 }
@@ -170,14 +217,14 @@ function renderJournal() {
     const where = j.cancelled_at ? (j.replaced_by ? '<i>исправлено</i>' : '<i>отменено</i>') : `${catLabel(j.category)} №${j.position}`;
     const btns = j.cancelled_at ? '' :
       `<button class="btn-small" onclick="startReplace(${j.pick_id})">Исправить</button> ` +
-      `<button class="btn-small danger" onclick="confirmClick(this, () => cancelPick(${j.pick_id}))">Отменить</button>`;
+      `<button class="btn-small danger" onclick="confirmClick(this, 'cancel:${j.pick_id}', () => cancelPick(${j.pick_id}))">${isArmed('cancel:' + j.pick_id) ? 'Точно?' : 'Отменить'}</button>`;
     return `<div class="jrow ${j.cancelled_at ? 'cancelled' : ''}">${t} · ${esc(S.round_labels[j.round])} · <b>${esc(j.surname + ' ' + j.name)}</b> → ${where} ${btns}</div>`;
   }).join('') || '<div class="jrow muted">Пока пусто</div>';
 }
 
 async function cancelPick(pickId) {
-  try { await api(`/picks/${pickId}/cancel`, {}); msg('Запись отменена'); await load(); }
-  catch (e) { msg(e.message, 'error'); }
+  try { await api(`/picks/${pickId}/cancel`, {}); msg('Запись отменена'); await load(true); }
+  catch (e) { fail(e); }
 }
 
 function renderLists() {
@@ -217,7 +264,7 @@ async function openSummary(id) {
       ${a.wildcard_reason ? `<h4>Почему wild card</h4><div class="text">${esc(a.wildcard_reason)}</div>` : ''}
       ${a.results_text ? `<h4>О результатах</h4><div class="text">${esc(a.results_text)}</div>` : ''}`;
     $('summary').classList.add('open');
-  } catch (e) { msg(e.message, 'error'); }
+  } catch (e) { fail(e); }
 }
 
 function closeSummary() { $('summary').classList.remove('open'); }
@@ -232,12 +279,13 @@ async function savePayment(id, prefix) {
       const x = r.auto_invited;
       text += ` ⏳ поставлен: ${x.surname} ${x.name} (${catLabel(x.category)} №${x.position}) — отправьте счёт.`;
     }
+    if (r.already_invited) text += ` ⏳ уже стоит у ${r.already_invited.surname} ${r.already_invited.name} — второго не зовём.`;
     if (r.waitlist_empty) text += ' Лист ожидания пуст.';
     msg(text, r.waitlist_empty ? 'warn' : 'ok');
     if (r.suggest_revert) showRevert(r.suggest_revert);
-    await load();
+    await load(true);
     if ($('tab-payments').classList.contains('active')) renderPayments();
-  } catch (e) { msg(e.message, 'error'); }
+  } catch (e) { fail(e); }
 }
 
 function showRevert(s) {
@@ -250,12 +298,13 @@ function showRevert(s) {
 
 async function revertInvite(id) {
   try {
-    await api('/payment', { applicant_id: id, status: 'none', comment: '' });
+    const cur = S.applicants.find(x => x.id === id);
+    await api('/payment', { applicant_id: id, status: 'none', comment: cur ? cur.payment_comment || '' : '' });
     $('revert').style.display = 'none';
     msg('⏳ снят');
-    await load();
+    await load(true);
     if ($('tab-payments').classList.contains('active')) renderPayments();
-  } catch (e) { msg(e.message, 'error'); }
+  } catch (e) { fail(e); }
 }
 
 function renderPayments() {
@@ -284,8 +333,8 @@ async function saveConfig() {
   const body = {};
   CFG_FIELDS.forEach(([k]) => { const v = $(`cfg-${k}`).value; body[k] = v === '' ? null : Number(v); });
   body.auto_invite_until = $('cfg-auto_invite_until').value || null;
-  try { await api('/config', body); msg('Настройки сохранены'); await load(); renderConfig(); }
-  catch (e) { msg(e.message, 'error'); }
+  try { await api('/config', body); msg('Настройки сохранены'); await load(true); renderConfig(); }
+  catch (e) { fail(e); }
 }
 
 function reportHtml(d) {
@@ -301,11 +350,11 @@ async function importTable(dryRun) {
   const fd = new FormData();
   fd.append('file', f);
   fd.append('dry_run', dryRun ? 'true' : 'false');
-  const r = await fetch(`${API}/import`, { method: 'POST', body: fd });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) { msg(d.detail || `HTTP ${r.status}`, 'error'); return; }
-  $('import-report').innerHTML = reportHtml(d);
-  if (d.written) { msg('Таблица загружена'); await load(); renderConfig(); }
+  try {
+    const d = (await request(`${API}/import`, { method: 'POST', body: fd })).data;
+    $('import-report').innerHTML = reportHtml(d);
+    if (d.written) { msg('Таблица загружена'); await load(true); renderConfig(); }
+  } catch (e) { fail(e); }
 }
 
 async function resetDraw() {
@@ -313,8 +362,8 @@ async function resetDraw() {
     await api('/reset', { confirm: $('reset-confirm').value });
     $('reset-confirm').value = '';
     msg('Журнал очищен');
-    await load();
-  } catch (e) { msg(e.message, 'error'); }
+    await load(true);
+  } catch (e) { fail(e); }
 }
 
 // ── Вкладки и запуск ──
