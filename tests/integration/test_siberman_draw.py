@@ -142,7 +142,7 @@ def test_public_state_hides_unrevealed_wildcard(draw):
 def test_feed_padded_to_capacity_and_csv(draw):
     rows = service.feed_rows(YEAR, "men")
     assert [r["num"] for r in rows] == [1, 2, 3] and all(r["name"] == "" for r in rows)
-    assert service.to_csv(rows, service.FEED_COLUMNS["men"]).startswith("﻿num,name,city,section,status")
+    assert service.to_csv(rows, service.FEED_COLUMNS["men"]).startswith("\ufeffnum,name,city,section,status")
 
 
 def test_import_blocked_after_start(draw, monkeypatch):

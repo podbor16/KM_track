@@ -407,4 +407,4 @@ def to_csv(rows: list[dict], columns: tuple) -> str:
     writer = csv.DictWriter(buf, fieldnames=list(columns), lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
-    return "﻿" + buf.getvalue()
+    return "\ufeff" + buf.getvalue()
