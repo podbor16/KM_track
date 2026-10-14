@@ -26,4 +26,6 @@ function drawPoll(year, render) {
   const send = () => window.parent.postMessage({ sibermanDrawHeight: document.documentElement.scrollHeight }, '*');
   new ResizeObserver(send).observe(document.body);
   window.addEventListener('load', send);
+  // скрипт-слушатель на странице Тильды может подключиться позже iframe — первое сообщение теряется
+  setInterval(send, 2000);
 })();
