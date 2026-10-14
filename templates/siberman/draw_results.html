@@ -28,7 +28,7 @@ document.querySelectorAll('#tabs .tab').forEach(b => b.addEventListener('click',
 function sectionRow(cls, text) { return `<tr class="section-row ${cls}"><td colspan="3">${text}</td></tr>`; }
 function personRow(r) {
   const just = r.is_last ? '<span class="just">только что</span>' : '';
-  return `<tr class="${r.is_last ? 'is-last' : ''}"><td class="num">${r.position}</td><td>${drawEscape(r.surname + ' ' + r.name)}${just}</td><td>${r.status}</td></tr>`;
+  return `<tr class="${r.is_last ? 'is-last' : ''}"><td class="num">${r.position}</td><td>${drawEscape(r.surname + ' ' + r.name)}${just}</td><td class="pay">${r.status}</td></tr>`;
 }
 function render() {
   if (!state) return;
@@ -40,7 +40,7 @@ function render() {
     html += sectionRow('', `Победители · ${cap} мест`);
     for (let i = 1; i <= cap; i++) {
       const r = rows[i - 1];
-      html += r ? personRow(r) : `<tr class="empty"><td class="num">${i}</td><td>—</td><td></td></tr>`;
+      html += r ? personRow(r) : `<tr class="empty"><td class="num">${i}</td><td>—</td><td class="pay"></td></tr>`;
     }
     const wait = rows.slice(cap);
     if (wait.length) html += sectionRow('waitlist', 'Лист ожидания') + wait.map(personRow).join('');
