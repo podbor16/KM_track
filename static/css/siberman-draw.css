@@ -10,7 +10,7 @@ html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: '
 .legend, .round { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
 .round b { color: var(--ink); }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
-td, th { padding: 8px; border-top: 1px solid var(--line); text-align: left; color: var(--ink); }
+td, th { padding: 8px; border-top: 1px solid var(--line); text-align: center; color: var(--ink); }
 th { color: var(--muted); font-weight: 300; font-size: 13px; }
 .num { width: 40px; color: var(--muted); }
 .section-row td { background: var(--navy); color: #fff; font-weight: 800; font-size: 13px; border: 0; }
