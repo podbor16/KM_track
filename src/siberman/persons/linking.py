@@ -17,13 +17,13 @@ NatKey = tuple  # (race_year: int, bib: str, relay_stage: str) — строка 
 def plain_key(surname: str, name: str) -> str:
     """'фамилия имя': нижний регистр, ё→е, скобки → пробел, без лишних пробелов. Без псевдонимов —
     смену фамилии личника ловит номер, остальное решает админ."""
-    raw = f"{surname} {name}".lower().replace("ё", "е").replace("(", " ").replace(")", " ")
+    raw = f"{surname or ''} {name or ''}".lower().replace("ё", "е").replace("(", " ").replace(")", " ")
     return " ".join(raw.split())
 
 
 def norm_city(city: str) -> str:
     t = (city or "").lower().replace("ё", "е").strip()
-    for prefix in ("г.", "г ", "город "):
+    for prefix in ("город ", "г.", "г "):
         if t.startswith(prefix):
             t = t[len(prefix):]
     return " ".join(t.replace("-", " ").split())
@@ -31,6 +31,14 @@ def norm_city(city: str) -> str:
 
 def natkey(row: dict) -> NatKey:
     return (int(row["race_year"]), str(row["bib"]), str(row["relay_stage"]))
+
+
+def _bib_order(bib: str) -> tuple:
+    return (0, int(bib), "") if bib.isdigit() else (1, 0, bib)
+
+
+def _row_order(row: dict) -> tuple:
+    return (int(row["race_year"]), row["format"] != "individual", _bib_order(str(row["bib"])), str(row["relay_stage"]))
 
 
 @dataclass(eq=False)
@@ -72,6 +80,7 @@ class Applicant:
     birthdate: datetime.date
     city: str = ""
     submitted_at: Optional[datetime.datetime] = None
+    claimed_starts: Optional[int] = None   # сколько стартов на Siberman указал сам; None — этапник эстафеты
 
 
 def _gender_ok(a: Optional[str], b: Optional[str]) -> bool:
@@ -130,10 +139,13 @@ def _resolve(reg: Registry, r: dict) -> tuple:
     if r["format"] == "individual":
         p = reg.by_bib.get(bib)
         if p is not None:
+            if g and p.gender and g != p.gender:
+                return p, [Review("bib_gender_mismatch", natkey=nk, person=p)]
             return p, ([] if key in p.keys else [Review("bib_name_change", natkey=nk, person=p)])
-    cands = []
+    cands, other_gender = [], []
     for p in reg.by_key.get(key, []):
         if not _gender_ok(g, p.gender):
+            other_gender.append(p)
             continue
         used = p.usage.get(year)
         if used and bib not in used:          # в этом году уже выступал под другим номером
@@ -146,22 +158,37 @@ def _resolve(reg: Registry, r: dict) -> tuple:
         switch = bool(p.formats) and r["format"] not in p.formats
         return p, ([Review("format_switch", natkey=nk, person=p)] if switch else [])
     p = reg.add(r["surname"], r["name"], g)
-    return p, ([Review("namesake_candidate", natkey=nk, person=p, others=tuple(cands))] if cands else [])
+    if cands:
+        return p, [Review("namesake_candidate", natkey=nk, person=p, others=tuple(cands))]
+    if other_gender:                          # тот же ФИ, другой пол (в Excel пусто → парсер ставит M)
+        return p, [Review("gender_mismatch", natkey=nk, person=p, others=tuple(other_gender))]
+    return p, []
 
 
 def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
-    """rows — все строки participants; links — сохранённые привязки {natkey: person_id}.
-    → ({natkey: Person} новых привязок, [Review]). Уже привязанные строки только наполняют индексы."""
-    rows = sorted(rows, key=lambda r: (int(r["race_year"]), r["format"] != "individual",
-                                       str(r["bib"]), str(r["relay_stage"])))
+    """rows — все строки participants; links — сохранённые привязки {natkey: (person_id, manual, name_key)}.
+    Привязка действует, если она ручная или ФИ строки не изменилось с момента привязки; иначе
+    (замена этапника, исправленный протокол) строка разрешается заново. Строки без фамилии
+    не привязываются. → ({natkey: Person} новых и изменённых привязок, [Review])."""
+    rows = sorted((r for r in rows if str(r["surname"] or "").strip()), key=_row_order)
+
+    def kept_person(r):
+        link = links.get(natkey(r))
+        if not link or link[0] not in reg.by_id:
+            return None
+        person_id, manual, name_key = link
+        return reg.by_id[person_id] if manual or name_key == plain_key(r["surname"], r["name"]) else None
+
+    kept = set()
     for r in rows:
-        pid = links.get(natkey(r))
-        if pid in reg.by_id:
-            reg.attach(reg.by_id[pid], r)
+        p = kept_person(r)
+        if p is not None:
+            reg.attach(p, r)
+            kept.add(natkey(r))
     new_links, reviews = {}, []
     for r in rows:
         k = natkey(r)
-        if links.get(k) in reg.by_id:
+        if k in kept:
             continue
         p, rv = _resolve(reg, r)
         reg.attach(p, r)
@@ -179,10 +206,12 @@ def _applicant_candidates(reg: Registry, a: Applicant) -> list:
 
 
 def attach_birthdates(reg: Registry, applicants: list) -> tuple:
-    """ДР из заявок → ([(Person, дата)] новые ДР, [Review]). Заявка не ставит ДР, если ФИ подходит
-    нескольким людям, у человека уже другая ДР или город заявки другой — тогда «проверить»."""
+    """ДР из заявок → ([(Person, дата)] новые ДР, [Review]). Заявки — по дате подачи. ДР ставится
+    автоматически, только если ФИ подходит одному человеку, у него нет другой ДР, город не
+    противоречит и заявитель сам указал старты на Siberman; иначе — «проверить»."""
     updates, reviews = [], []
-    for a in sorted(applicants, key=lambda x: x.tranid):
+    order = sorted(applicants, key=lambda x: (x.submitted_at or datetime.datetime.min, x.tranid))
+    for a in order:
         cands = _applicant_candidates(reg, a)
         if not cands:
             continue
@@ -198,6 +227,9 @@ def attach_birthdates(reg: Registry, applicants: list) -> tuple:
             continue
         if a.city and c.city and norm_city(a.city) != norm_city(c.city):
             reviews.append(Review("applicant_city_mismatch", person=c, detail=a.tranid))
+            continue
+        if not a.claimed_starts:              # не указал стартов на Siberman — может быть тёзкой
+            reviews.append(Review("applicant_unconfirmed", person=c, detail=a.tranid))
             continue
         c.birthdate = a.birthdate
         updates.append((c, a.birthdate))

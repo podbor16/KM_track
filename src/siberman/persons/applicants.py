@@ -1,10 +1,12 @@
 """
-Выгрузка заявок Тильды (CSV: «;», UTF-8 с BOM) → даты рождения для реестра людей.
+Выгрузка заявок Тильды (CSV: «;», UTF-8 с BOM, либо cp1251 после пересохранения в Excel) →
+даты рождения для реестра людей.
 
-Берём только ФИ, пол, ДР, город, номер заявки (tranid) и дату подачи — телефоны, e-mail и
-тексты заявок не читаем. ДР в форме есть с 15.10.2024 (форма 807405240 и следующие); у
-эстафеты — у каждого этапника (surname_swim/name_swim/birthday_swim и т.д.). Старые формы
-без колонки surname (ФИ одной строкой в Name, ДР нет) пропускаются.
+Берём только ФИ, пол, ДР, город, номер заявки (tranid), дату подачи и сколько стартов на
+Siberman заявитель указал сам — телефоны, e-mail и тексты заявок не читаем. ДР в форме есть
+с 15.10.2024 (форма 807405240 и следующие). В эстафетной заявке берём только этапников
+(surname_swim/name_swim/birthday_swim и т.д.): основной заявитель либо сам этапник (дубль),
+либо не участник. Старые формы без колонки surname (ФИ одной строкой, ДР нет) пропускаются.
 """
 import csv
 import datetime
@@ -14,12 +16,18 @@ from typing import Optional
 from src.siberman.persons.linking import Applicant
 
 STAGES = ("swim", "bike", "run")
+STARTS_COLS = ("siberman_individual_starts", "siberman_individual_starts_2", "siberman_relay_starts")
 MIN_YEAR = 1930
 MIN_AGE = 14
 
 
 def _clean(v) -> str:
     return " ".join(str(v or "").split())
+
+
+def _int0(v) -> int:
+    t = _clean(v)
+    return int(t) if t.isdigit() else 0
 
 
 def parse_birthdate(raw: str, today: datetime.date) -> Optional[datetime.date]:
@@ -43,11 +51,22 @@ def _parse_dt(raw) -> Optional[datetime.datetime]:
         return None
 
 
+def _decode(data: bytes) -> str:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp1251", errors="strict")
+    return text.lstrip(chr(0xFEFF))
+
+
 def parse_applicants_csv(data: bytes, today: Optional[datetime.date] = None) -> tuple:
     """→ ([Applicant], {'rows', 'people', 'no_birthday', 'bad_birthday'}). ValueError — не выгрузка Тильды."""
     today = today or datetime.date.today()
-    text = data.decode("utf-8", errors="replace").lstrip(chr(0xFEFF))
-    reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    try:
+        text = _decode(data)
+    except UnicodeDecodeError:
+        raise ValueError("Не удалось прочитать файл — сохраните выгрузку в UTF-8") from None
+    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=";")
     if not reader.fieldnames or "tranid" not in reader.fieldnames:
         raise ValueError("Это не выгрузка заявок Тильды: нет колонки tranid")
     found: dict = {}
@@ -58,13 +77,16 @@ def parse_applicants_csv(data: bytes, today: Optional[datetime.date] = None) -> 
         if not tranid:
             continue
         submitted = _parse_dt(row.get("Date"))
-        gender = {"Мужской": "M", "Женский": "F"}.get(_clean(row.get("sex")))
-        city = _clean(row.get("city") or row.get("city_2"))
-        people = [(tranid, row.get("surname"), row.get("Name"), row.get("birthday"), gender, city)]
+        people = []
+        if not _clean(row.get("format")).startswith("Эстафет"):
+            gender = {"Мужской": "M", "Женский": "F"}.get(_clean(row.get("sex")))
+            city = _clean(row.get("city") or row.get("city_2"))
+            starts = sum(_int0(row.get(c)) for c in STARTS_COLS)
+            people.append((tranid, row.get("surname"), row.get("Name"), row.get("birthday"), gender, city, starts))
         for st in STAGES:
             people.append((f"{tranid}:{st}", row.get(f"surname_{st}"), row.get(f"name_{st}"),
-                           row.get(f"birthday_{st}"), None, ""))
-        for tid, surname, name, bd_raw, g, c in people:
+                           row.get(f"birthday_{st}"), None, "", None))
+        for tid, surname, name, bd_raw, g, c, starts in people:
             surname, name = _clean(surname), _clean(name)
             if not surname:
                 continue
@@ -73,6 +95,6 @@ def parse_applicants_csv(data: bytes, today: Optional[datetime.date] = None) -> 
                 stats["bad_birthday" if _clean(bd_raw) else "no_birthday"] += 1
                 continue
             found[tid] = Applicant(tranid=tid, surname=surname, name=name, gender=g, birthdate=bd,
-                                   city=c, submitted_at=submitted)
+                                   city=c, submitted_at=submitted, claimed_starts=starts)
     stats["people"] = len(found)
     return list(found.values()), stats
