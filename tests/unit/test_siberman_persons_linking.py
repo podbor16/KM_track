@@ -162,6 +162,7 @@ def test_manual_link_name_change_is_kept_but_flagged():
     reg, links, reviews = run([r], persons=[p], links={key(r): (5, 1, "иванов иван")})
     assert links == {}
     assert [(x.kind, x.person) for x in reviews] == [("manual_name_changed", reg.by_id[5])]
+    assert reviews[0].detail == "петров петр"
     assert "петров петр" not in reg.by_id[5].keys
 
 
@@ -238,6 +239,9 @@ def test_review_dedupe_keys():
     p.id = 42
     assert Review("bib_name_change", natkey=key(a), person=p).dedupe_key() == "bib_name_change:2024:7:none"
     assert Review("bd_conflict", person=p, detail="t9").dedupe_key() == "bd_conflict:42:t9"
+    first = Review("relinked", natkey=key(a), person=p, detail="петров петр").dedupe_key()
+    second = Review("relinked", natkey=key(a), person=p, detail="петрова петра").dedupe_key()
+    assert first == "relinked:2024:7:none:петров петр" and first != second
 
 
 def test_cleared_surname_drops_auto_link_only():
@@ -246,7 +250,8 @@ def test_cleared_surname_drops_auto_link_only():
     reg, links, reviews = run([auto, manual], persons=[p],
                               links={key(auto): (1, 0, "иванов иван"), key(manual): (1, 1, "иванов иван")})
     assert reg.dropped == [key(auto)]
-    assert links == {} and reviews == []
+    assert links == {}
+    assert [(x.kind, x.natkey) for x in reviews] == [("manual_name_changed", key(manual))]
 
 
 def test_relinked_after_typo_fix_keeps_trace():
@@ -257,6 +262,7 @@ def test_relinked_after_typo_fix_keeps_trace():
     new = links[key(b)]
     assert new is not reg.by_id[1]
     assert [(x.kind, x.person, x.others) for x in reviews] == [("relinked", new, (reg.by_id[1],))]
+    assert reviews[0].detail == "иванов иван"
 
 
 def test_individual_namesake_with_own_bib_is_not_gender_mismatch():

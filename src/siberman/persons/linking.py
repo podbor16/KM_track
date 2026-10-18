@@ -67,7 +67,8 @@ class Review:
     def dedupe_key(self) -> str:
         if self.natkey:
             y, b, s = self.natkey
-            return f"{self.kind}:{y}:{b}:{s}"
+            # detail (новое ФИ строки) различает повторные правки одного и того же выступления
+            return (f"{self.kind}:{y}:{b}:{s}" + (f":{self.detail}" if self.detail else ""))[:190]
         return f"{self.kind}:{self.person.id if self.person else ''}:{self.detail}"[:190]
 
 
@@ -177,15 +178,19 @@ def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
     → ({natkey: Person} новых и изменённых привязок, [Review])."""
     ordered = sorted(rows, key=_row_order)
     named = []
+    kept, reviews = set(), []
     for r in ordered:
         if str(r["surname"] or "").strip():
             named.append(r)
             continue
         link = links.get(natkey(r))
-        if link and not link[1]:
+        if not link:
+            continue
+        if not link[1]:
             reg.dropped.append(natkey(r))
+        elif link[0] in reg.by_id:
+            reviews.append(Review("manual_name_changed", natkey=natkey(r), person=reg.by_id[link[0]]))
 
-    kept, reviews = set(), []
     for r in named:
         link = links.get(natkey(r))
         if not link or link[0] not in reg.by_id:
@@ -197,7 +202,8 @@ def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
             reg.attach(p, r, index_name=same)
             kept.add(natkey(r))
             if not same:
-                reviews.append(Review("manual_name_changed", natkey=natkey(r), person=p))
+                reviews.append(Review("manual_name_changed", natkey=natkey(r), person=p,
+                                      detail=plain_key(r["surname"], r["name"])))
 
     new_links = {}
     for r in named:
@@ -211,7 +217,8 @@ def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
         link = links.get(k)
         prev = reg.by_id.get(link[0]) if link else None
         if prev is not None and prev is not p:
-            reviews.append(Review("relinked", natkey=k, person=p, others=(prev,)))
+            reviews.append(Review("relinked", natkey=k, person=p, others=(prev,),
+                                  detail=plain_key(r["surname"], r["name"])))
     return new_links, reviews
 
 
