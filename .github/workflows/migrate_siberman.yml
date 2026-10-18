@@ -62,6 +62,9 @@ jobs:
             # Жеребьёвка регистраций (заявки, настройки, журнал, аудит)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/013_draw.sql
 
+            # Реестр людей (кто есть кто за все годы, ДР из заявок, «проверить», журнал)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/014_persons.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"
