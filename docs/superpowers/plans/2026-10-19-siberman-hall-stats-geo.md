@@ -597,7 +597,7 @@ def test_geo_on_archive(archive):
         assert client.get(page).status_code == 404
 ```
 
-- [ ] **Step 2: Красный прогон** — `tests/integration/test_siberman_hall.py`: ошибка импорта `stats`.
+- [ ] **Step 2: Красный прогон** — `tests/integration/test_siberman_hall.py`: 1 failed (`test_api_and_pages` — `/api/siberman/hall/stats` 404, маршрута ещё нет), 6 passed (сверки уже проходят: модули из Task 1–3).
 
 - [ ] **Step 3: `service.py`.** Импорты `from src.siberman.hall import geo as hgeo`, `from src.siberman.hall.stats import build_stats`. Докстринг модуля, первая строка: «Рейтинг, рекорды, статистика и география Siberman: снимок архива в памяти воркера на CACHE_TTL_S (спецификация hall §2).» `_build`:
 ```python
