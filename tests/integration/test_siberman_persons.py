@@ -128,7 +128,7 @@ def test_auto_sync_notices_renamed_relay_member(conn):
                           "WHERE race_year=%s AND bib='9101'", (YEAR,))
     assert service.auto_sync() is not None
     assert _pid(conn, YEAR, 9101, "swim") != old
-    kinds = [r["kind"] for r in service.reviews("open") if r["participant"] and r["participant"]["year"] == YEAR]
+    kinds = [r["kind"] for r in pdb.list_reviews(conn, "open") if r["race_year"] == YEAR]
     assert "relinked" in kinds
 
 
