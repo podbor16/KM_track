@@ -14,7 +14,7 @@ html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: '
 .seg button { padding: 7px 12px; border: 0; background: #fff; color: var(--ink); font: inherit; cursor: pointer; }
 .seg button.on { background: var(--ink); color: #fff; }
 .bar select, .search { padding: 7px 10px; border: 1px solid #bdbdbd; border-radius: 6px; background: #fff; color: var(--ink); font: inherit; font-size: 14px; }
-.search { min-width: 220px; }
+.search { min-width: 260px; }
 .tbl { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
 td, th { padding: 8px 6px; border-top: 1px solid var(--line); text-align: center; color: var(--ink); }
@@ -59,7 +59,12 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
 .pop td { border: 0; border-top: 1px solid var(--line); text-align: left; font-size: 14px; }
 .gain { color: var(--red); white-space: nowrap; }
 @media (max-width: 640px) {
-  td, th { padding: 6px 4px; font-size: 13px; }
+  .hall { padding: 12px 8px; }
+  td, th { padding: 6px 2px; font-size: 13px; }
+  th { font-size: 12px; }
+  .dot { margin-right: 3px; }
+  .stage, td.l b { font-size: 12px; }
+  .stage .lbl { width: 58px; font-size: 11px; }
   .city { display: none; }
   .search { min-width: 0; flex: 1 1 100%; }
   .desk { display: none; }
