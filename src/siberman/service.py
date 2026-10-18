@@ -585,6 +585,7 @@ def apply_to_db(result: ParseResult, update_records: bool = True) -> dict:
        пересчёт берёт только кандидатов загружаемого года и откатил бы
        рекорды более поздних лет к baseline.
     """
+    from src.siberman.persons.service import protocol_rewrite  # внутри: без циклического импорта
     conn = get_siberman_connection()
     if conn is None:
         return {"ok": False, "error": "DB connection failed"}
@@ -595,39 +596,40 @@ def apply_to_db(result: ParseResult, update_records: bool = True) -> dict:
             (row["stage"], row["seq"]): row["id"] for row in checkpoints
         }
 
-        clear_race_year(conn, result.race_year)
+        with protocol_rewrite(conn):
+            clear_race_year(conn, result.race_year)
 
-        # cp_key → participant_id (уникальный ключ для relay: "{bib}:{stage}", для personal: bib)
-        cp_key_to_pid: dict[str, int] = {}
-        inserted_parts = 0
-        inserted_times = 0
+            # cp_key → participant_id (уникальный ключ для relay: "{bib}:{stage}", для personal: bib)
+            cp_key_to_pid: dict[str, int] = {}
+            inserted_parts = 0
+            inserted_times = 0
 
-        for p in result.participants:
-            pid = upsert_participant(conn, p)
-            cp_key = p.get("_cp_key", p["bib"])
-            cp_key_to_pid[cp_key] = pid
-            inserted_parts += 1
+            for p in result.participants:
+                pid = upsert_participant(conn, p)
+                cp_key = p.get("_cp_key", p["bib"])
+                cp_key_to_pid[cp_key] = pid
+                inserted_parts += 1
 
-            handicap = result.handicaps.get(cp_key)
-            if handicap is not None:
-                cur = conn.cursor()
-                cur.execute(
-                    "UPDATE participants SET bike_day2_handicap_s=%s WHERE id=%s",
-                    (handicap, pid),
-                )
+                handicap = result.handicaps.get(cp_key)
+                if handicap is not None:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE participants SET bike_day2_handicap_s=%s WHERE id=%s",
+                        (handicap, pid),
+                    )
 
-            cp_times = result.checkpoint_times.get(cp_key, {})
-            splits = checkpoint_splits(cp_times)
-            for (stage, seq), cumulative_s in cp_times.items():
-                cp_id = cp_id_map.get((stage, seq))
-                if cp_id is None:
-                    log.warning(f"No checkpoint for stage={stage} seq={seq}")
-                    continue
-                upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, splits[(stage, seq)])
-                inserted_times += 1
+                cp_times = result.checkpoint_times.get(cp_key, {})
+                splits = checkpoint_splits(cp_times)
+                for (stage, seq), cumulative_s in cp_times.items():
+                    cp_id = cp_id_map.get((stage, seq))
+                    if cp_id is None:
+                        log.warning(f"No checkpoint for stage={stage} seq={seq}")
+                        continue
+                    upsert_checkpoint_time(conn, pid, cp_id, cumulative_s, splits[(stage, seq)])
+                    inserted_times += 1
 
-            for zone, dur in result.transitions.get(cp_key, {}).items():
-                upsert_transition(conn, pid, zone, dur)
+                for zone, dur in result.transitions.get(cp_key, {}).items():
+                    upsert_transition(conn, pid, zone, dur)
 
         # --- Пересчитать тоталы/ранги/рекорды (общая функция с live-путём Copernico) ---
         participants_meta: list[dict] = []

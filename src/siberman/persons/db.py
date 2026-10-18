@@ -126,11 +126,13 @@ def load_links(conn) -> dict:
             for r in cur.fetchall()}
 
 
-def count_unlinked(conn) -> int:
+def protocol_fingerprint(conn) -> tuple:
+    """Отпечаток протокола: меняется при вставке, удалении или правке ФИ, пола, формата строки."""
     cur = _cur(conn)
-    cur.execute(f"SELECT COUNT(*) AS n FROM participants p LEFT JOIN siberman_person_links l ON {LINK_ON} "
-                "WHERE l.person_id IS NULL AND TRIM(p.surname) <> ''")
-    return int(cur.fetchone()["n"])
+    cur.execute("SELECT COUNT(*) AS n, BIT_XOR(CRC32(CONCAT_WS('|', race_year, bib, relay_stage, surname, name, "
+                "gender, format))) AS x FROM participants")
+    r = cur.fetchone()
+    return (int(r["n"]), int(r["x"] or 0))
 
 
 def set_links(conn, items: Iterable, manual: bool) -> None:

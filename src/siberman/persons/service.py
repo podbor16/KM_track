@@ -43,6 +43,10 @@ class PersonsUnavailable(PersonsError):
     """БД недоступна — роутер отвечает 503."""
 
 
+class PersonsBusy(PersonsError):
+    """Реестр занят (перезапись протокола или другая синхронизация)."""
+
+
 @contextlib.contextmanager
 def _connection():
     conn = get_siberman_connection()
@@ -55,11 +59,11 @@ def _connection():
 
 
 @contextlib.contextmanager
-def _locked_tx(conn):
+def _locked_tx(conn, wait_s: int = 10):
     cur = conn.cursor(buffered=True)
-    cur.execute("SELECT GET_LOCK(%s, 10)", (LOCK_NAME,))
+    cur.execute("SELECT GET_LOCK(%s, %s)", (LOCK_NAME, wait_s))
     if cur.fetchone()[0] != 1:
-        raise PersonsError("Реестр занят другой операцией — повторите через несколько секунд")
+        raise PersonsBusy("Реестр занят другой операцией — повторите через несколько секунд")
     try:
         conn.start_transaction()
         try:
@@ -79,10 +83,10 @@ def _fio(row: Optional[dict]) -> str:
 
 # ── синхронизация ────────────────────────────────────────────────────────────
 
-def sync(conn) -> dict:
+def sync(conn, wait_s: int = 10) -> dict:
     """Привязать новые выступления, записать ДР из заявок, убрать устаревшие автопривязки и людей
     без выступлений. Идемпотентна: повторный запуск ничего не меняет."""
-    with _locked_tx(conn):
+    with _locked_tx(conn, wait_s):
         reg = Registry(pdb.load_persons(conn))
         rows = pdb.load_participant_rows(conn)
         names = {natkey(r): plain_key(r["surname"], r["name"]) for r in rows}
@@ -109,19 +113,55 @@ def sync_now() -> dict:
         return sync(conn)
 
 
-def sync_safe() -> None:
-    """Хвост каждой загрузки результатов (recompute_totals_ranks_records). Своё соединение;
-    ошибки реестра (в т.ч. не применённая миграция 014) приём данных гонки не ломают."""
+_last_fingerprint = None   # отпечаток протокола после последней успешной синхронизации (на воркер)
+_warned = False
+
+
+def auto_sync():
+    """Синхронизация после загрузки результатов — только если протокол изменился с прошлого раза
+    (вставки, удаления, правки ФИ) и реестр не занят. Ошибки — в лог (предупреждение один раз на воркер,
+    например пока миграция 014 не применена). → результат sync или None."""
+    global _last_fingerprint, _warned
     conn = get_siberman_connection()
     if conn is None:
-        return
+        return None
     try:
-        if pdb.count_unlinked(conn):
-            log.info("[persons] sync: %s", sync(conn))
+        fp = pdb.protocol_fingerprint(conn)
+        if fp == _last_fingerprint:
+            return None
+        result = sync(conn, wait_s=0)
+        _last_fingerprint = fp
+        log.info("[persons] sync: %s", result)
+        return result
+    except PersonsBusy:
+        return None   # идёт перезапись протокола или другая синхронизация — следующий цикл доделает
     except Exception as e:
-        log.warning(f"[persons] sync пропущен: {e}")
+        (log.debug if _warned else log.warning)(f"[persons] sync пропущен: {e}")
+        _warned = True
+        return None
     finally:
         conn.close()
+
+
+def sync_safe() -> None:
+    """Хвост каждой загрузки результатов (recompute_totals_ranks_records); в тестах подменяется no-op."""
+    auto_sync()
+
+
+@contextlib.contextmanager
+def protocol_rewrite(conn):
+    """Держать реестр, пока строки года удаляются и вставляются заново (загрузка Excel): синхронизация
+    из другого воркера не увидит полупустой протокол и не удалит привязки и людей. Лок не взят за
+    30 с — загрузка всё равно идёт (результаты гонки важнее), просто без защиты."""
+    cur = conn.cursor(buffered=True)
+    cur.execute("SELECT GET_LOCK(%s, 30)", (LOCK_NAME,))
+    got = cur.fetchone()[0] == 1
+    try:
+        yield
+    finally:
+        if got:
+            cur.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
+            cur.fetchall()
 
 
 def import_applicants(data: bytes) -> dict:

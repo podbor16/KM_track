@@ -34,7 +34,7 @@ def _clean(conn):
     cur.execute("DELETE FROM siberman_applicants WHERE tranid LIKE 'test-%%'")
     cur.execute("DELETE FROM siberman_person_audit WHERE summary LIKE '%%Тестреестров%%'")
     cur.execute("DELETE s FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
-                "WHERE l.person_id IS NULL")
+                "WHERE l.person_id IS NULL AND s.surname LIKE 'Тестреестров%%'")
 
 
 def _pid(conn, year, bib, stage="none"):
@@ -116,3 +116,29 @@ def test_import_applicants_csv(conn):
     report = service.import_applicants((chr(0xFEFF) + body).encode("utf-8"))
     assert report["people"] == 1 and report["sync"]["birthdates"] >= 1
     assert pdb.get_person(conn, _pid(conn, YEAR, 9001))["birthdate"] == datetime.date(1979, 3, 2)
+
+
+def test_auto_sync_notices_renamed_relay_member(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    old = _pid(conn, YEAR, 9101, "swim")
+    service.auto_sync()                                   # запомнить отпечаток протокола
+    assert service.auto_sync() is None                    # протокол не менялся — синхронизации нет
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестров', name='Пётр', gender='M' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    assert service.auto_sync() is not None
+    assert _pid(conn, YEAR, 9101, "swim") != old
+    kinds = [r["kind"] for r in service.reviews("open") if r["participant"] and r["participant"]["year"] == YEAR]
+    assert "relinked" in kinds
+
+
+def test_auto_sync_skips_while_protocol_is_rewritten(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    other = get_siberman_connection()
+    try:
+        with service.protocol_rewrite(other):
+            assert service.auto_sync() is None
+            assert _pid(conn, YEAR, 9001) is None
+    finally:
+        other.close()
+    assert service.auto_sync() is not None and _pid(conn, YEAR, 9001) is not None
