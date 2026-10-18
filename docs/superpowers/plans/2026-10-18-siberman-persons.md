@@ -3111,6 +3111,170 @@ git commit -m "feat(siberman/persons): слить/перенести/ДР/ста
 
 ---
 
+### Task 7a: Ревью задачи 7 — отмена возвращает и записи «проверить», «Оставить привязку» в журнале
+
+1. **Отмена слияния теряла запись «проверить».** FK `ON DELETE SET NULL` обнулял `person_id` записей исходного человека, а статус `resolved`, поставленный кнопкой, не возвращался — вопрос «тот же или тёзка» молча закрывался. Теперь снимок действия хранит и состояние затронутых записей «проверить» (`person_id`, кандидаты, статус), отмена их возвращает; `merge` переносит открытые записи исходного человека на целевого; решение по записи (`review_id`) ставится в той же транзакции, что и действие (`merge`, `reassign`, `set_birthdate`) — одна запись в журнале, одна отмена.
+2. **`keep_link` не писался в журнал** — его нельзя было отменить, и он не блокировал отмену более раннего действия по той же привязке. Теперь пишется.
+3. Мелочь: `reassign` не удаляет опустевших людей, на которых ссылаются нерешённые записи (как `delete_stale`).
+
+**Files:**
+- Modify: `src/siberman/persons/db.py`, `src/siberman/persons/service.py`, `tests/integration/test_siberman_persons.py`
+(роутер и JS — в Task 9, их текст в плане уже обновлён под `review_id`)
+
+- [ ] **Step 1: Тесты (в конец `tests/integration/test_siberman_persons.py`)**
+
+```python
+def test_undo_merge_reopens_review(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    _ins(conn, Y2, 9002, "Тестреестров", "Олег")
+    _ins(conn, Y3, 9103, "Тестреестров", "Олег", fmt="relay", stage="bike", team="Тест")
+    service.sync(conn)
+    r = [x for x in service.reviews("open") if x["participant"] and x["participant"]["year"] == Y3][0]
+    source, target = r["person"]["id"], r["others"][0]["id"]
+    res = service.merge(source, target, "test", review_id=r["id"])
+    assert all(x["id"] != r["id"] for x in service.reviews("open"))
+    service.undo(res["audit_id"], "test")
+    back = [x for x in service.reviews("open") if x["id"] == r["id"]]
+    assert back and back[0]["person"]["id"] == source
+    assert _pid(conn, Y3, 9103, "bike") == source
+
+
+def test_keep_link_is_undoable_and_blocks_earlier_undo(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    first = service.reassign([[YEAR, "9101", "swim"]], pid, "test")
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестрова-Кузина' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    service.sync(conn)
+    rv = [r for r in service.reviews("open") if r["kind"] == "manual_name_changed"
+          and r["participant"] and r["participant"]["year"] == YEAR][0]
+    kept = service.keep_link(rv["id"], "test")
+    with pytest.raises(service.PersonsError):
+        service.undo(first["audit_id"], "test")
+    service.undo(kept["audit_id"], "test")
+    link = pdb.links_for_keys(conn, [(YEAR, "9101", "swim")])[(YEAR, "9101", "swim")]
+    assert link["name_key"] == "тестреестрова анна"
+    assert any(r["id"] == rv["id"] for r in service.reviews("open"))
+```
+
+- [ ] **Step 2: Тесты падают**
+
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/integration/test_siberman_persons.py -q -p no:cacheprovider`
+Expected: 13 passed, 2 failed (`TypeError: merge() got an unexpected keyword argument 'review_id'`, `KeyError: 'audit_id'` или `TypeError`).
+
+- [ ] **Step 3: `db.py`**
+
+1. `delete_orphans` — не удалять людей, на которых ссылаются нерешённые записи. Запрос в ней заменить на:
+```python
+    cur.execute(f"SELECT s.id FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
+                f"WHERE s.id IN ({marks}) AND l.person_id IS NULL AND NOT EXISTS (SELECT 1 FROM "
+                "siberman_person_reviews r WHERE r.status <> 'resolved' AND "
+                "(r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids)))", args)
+```
+2. В раздел «проверить» (после `reviews_for_person`) добавить:
+```python
+REVIEW_STATE = ("person_id", "other_person_ids", "status", "resolved_at", "resolved_by")
+
+
+def reviews_state(conn, person_ids, review_ids=()) -> list:
+    """Состояние записей «проверить», затронутых действием: где человек — основной или кандидат,
+    плюс явно названные записи. Для снимка отмены."""
+    ids = sorted({int(i) for i in person_ids if i is not None})
+    rids = sorted({int(i) for i in review_ids if i is not None})
+    conds, args = [], []
+    for i in ids:
+        conds.append("(person_id=%s OR FIND_IN_SET(%s, other_person_ids))")
+        args += [i, str(i)]
+    if rids:
+        conds.append(f"id IN ({','.join(['%s'] * len(rids))})")
+        args += rids
+    if not conds:
+        return []
+    cur = _cur(conn)
+    cur.execute(f"SELECT id, {', '.join(REVIEW_STATE)} FROM siberman_person_reviews WHERE {' OR '.join(conds)}", args)
+    return cur.fetchall()
+
+
+def restore_reviews(conn, rows: list) -> None:
+    cur = conn.cursor()
+    for r in rows:
+        cur.execute(f"UPDATE siberman_person_reviews SET {', '.join(f'{k}=%s' for k in REVIEW_STATE)} WHERE id=%s",
+                    [r[k] for k in REVIEW_STATE] + [int(r["id"])])
+
+
+def move_reviews(conn, source_id: int, target_id: int) -> None:
+    """Слияние: открытые и отложенные записи исходного человека — на целевого (FK обнулил бы их)."""
+    conn.cursor().execute("UPDATE siberman_person_reviews SET person_id=%s WHERE person_id=%s AND status <> 'resolved'",
+                          (int(target_id), int(source_id)))
+```
+
+- [ ] **Step 4: `service.py`**
+
+1. `_snapshot` — с записями «проверить»:
+```python
+def _snapshot(conn, person_ids, keys: list, review_ids=()) -> dict:
+    person_ids = sorted({int(i) for i in person_ids if i is not None})
+    persons = pdb.get_persons(conn, person_ids)
+    links = pdb.links_for_keys(conn, keys)
+    return {"persons": {str(i): _plain(persons.get(i)) for i in person_ids},
+            "links": [[k[0], k[1], k[2], links.get(tuple(k))] for k in keys],
+            "reviews": [_plain(r) for r in pdb.reviews_state(conn, person_ids, review_ids)]}
+```
+2. `_record` — scope с записями:
+```python
+def _record(conn, action: str, summary: str, snap: dict, user: str) -> int:
+    scope = ({f"p:{i}" for i in snap["persons"]} | {f"k:{y}/{b}/{s}" for y, b, s, _ in snap["links"]}
+             | {f"r:{r['id']}" for r in snap.get("reviews", [])})
+    return pdb.add_audit(conn, action, summary, snap, scope, user)
+```
+3. В `_restore` после цикла, восстанавливающего привязки (`for y, b, s, link in snap["links"]: … set_links …`), и ДО цикла, удаляющего созданных действием людей, добавить:
+```python
+    pdb.restore_reviews(conn, snap.get("reviews", []))
+```
+4. `merge` — сигнатура `def merge(source_id: int, target_id: int, user: str, review_id: Optional[int] = None) -> dict:`; снимок `_snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id), [review_id])`; сразу после `pdb.move_links(conn, source_id, target_id)` добавить `pdb.move_reviews(conn, source_id, target_id)`; перед `audit_id = _record(...)` добавить:
+```python
+        if review_id is not None:
+            pdb.set_review_status(conn, review_id, "resolved", user)
+```
+5. `reassign` — сигнатура `def reassign(keys: list, target_id: Optional[int], user: str, review_id: Optional[int] = None) -> dict:`; снимок `_snapshot(conn, old_ids + [target_id] + ([holder["id"]] if holder else []), keys, [review_id])`; перед `audit_id = _record(...)` — тот же блок `if review_id is not None: pdb.set_review_status(...)`.
+6. `set_birthdate` — сигнатура `def set_birthdate(person_id: int, value: Optional[datetime.date], user: str, review_id: Optional[int] = None) -> dict:`; снимок `_snapshot(conn, [person_id], [], [review_id])`; перед `audit_id = _record(...)` — тот же блок.
+7. `keep_link` заменить:
+```python
+def keep_link(review_id: int, user: str) -> dict:
+    """«Оставить привязку» по записи о выступлении: привязка становится ручной с текущим ФИ строки
+    (подтверждённое написание попадает в ключи человека, следующая смена ФИ снова будет замечена).
+    Пишется в журнал — отменяется, как остальные решения."""
+    with _connection() as conn, _locked_tx(conn):
+        r = pdb.get_review(conn, review_id)
+        if not r or not r["race_year"]:
+            raise PersonsError("Запись не найдена")
+        k = (int(r["race_year"]), str(r["bib"]), r["relay_stage"])
+        rows = pdb.participants_by_keys(conn, [k])
+        link = pdb.links_for_keys(conn, [k]).get(k)
+        if not rows or not link:
+            raise PersonsError("Выступление не найдено — обновите страницу")
+        snap = _snapshot(conn, [link["person_id"]], [k], [review_id])
+        pdb.set_links(conn, [(k, link["person_id"], plain_key(rows[0]["surname"], rows[0]["name"]))], manual=True)
+        pdb.set_review_status(conn, review_id, "resolved", user)
+        audit_id = _record(conn, "keep_link", f"Привязка оставлена с новым ФИ: {_fio(rows[0])} ({k[0]}, №{k[1]})",
+                           snap, user)
+    return {"ok": True, "audit_id": audit_id}
+```
+
+- [ ] **Step 5: Тесты проходят**
+
+Run: интеграционные — 15 passed; `tests/unit/` — 941 passed.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/siberman/persons/db.py src/siberman/persons/service.py tests/integration/test_siberman_persons.py
+git commit -m "fix(siberman/persons): отмена возвращает записи «проверить», «Оставить привязку» в журнале"
+```
+
+---
+
 ### Task 8: Счётчик финишей — по человеку
 
 **Files:**
@@ -3325,15 +3489,18 @@ API = "/api/siberman/admin/people"
 class MergeIn(BaseModel):
     source_id: int
     target_id: int
+    review_id: Optional[int] = None      # решение по записи «проверить» — в той же транзакции
 
 
 class ReassignIn(BaseModel):
     keys: list[tuple[int, str, str]]
     target_id: Optional[int] = None
+    review_id: Optional[int] = None
 
 
 class BirthdateIn(BaseModel):
     birthdate: Optional[datetime.date] = None
+    review_id: Optional[int] = None
 
 
 class ReviewStatusIn(BaseModel):
@@ -3387,12 +3554,12 @@ def api_journal(user: str = Depends(api_require_auth)):
 
 @router.post(f"{API}/merge")
 def api_merge(body: MergeIn, user: str = Depends(api_require_auth)):
-    return _run(service.merge, body.source_id, body.target_id, user)
+    return _run(service.merge, body.source_id, body.target_id, user, body.review_id)
 
 
 @router.post(f"{API}/reassign")
 def api_reassign(body: ReassignIn, user: str = Depends(api_require_auth)):
-    return _run(service.reassign, [list(k) for k in body.keys], body.target_id, user)
+    return _run(service.reassign, [list(k) for k in body.keys], body.target_id, user, body.review_id)
 
 
 @router.post(f"{API}/undo/{{audit_id}}")
@@ -3420,7 +3587,7 @@ def api_person(person_id: int, user: str = Depends(api_require_auth)):
 
 @router.post(f"{API}/{{person_id}}/birthdate")
 def api_birthdate(person_id: int, body: BirthdateIn, user: str = Depends(api_require_auth)):
-    return _run(service.set_birthdate, person_id, body.birthdate, user)
+    return _run(service.set_birthdate, person_id, body.birthdate, user, body.review_id)
 ```
 
 В `src/krasmarafon/router.py` после строк подключения `siberman_draw_router` добавить:
@@ -3653,16 +3820,17 @@ async function onReviewAction(r, action) {
   if (action === 'defer') return act(() => post(`/reviews/${r.id}`, { status: 'deferred' }), 'Отложено');
   if (action === 'keep') return act(() => post(`/reviews/${r.id}/keep`), 'Привязка подтверждена с новым ФИ');
   if (action === 'reopen') return act(() => post(`/reviews/${r.id}`, { status: 'open' }), 'Возвращено в «проверить»');
+  // Действие и решение по записи — одним запросом (одна запись в журнале, одна отмена)
   if (action === 'split') {
-    return act(async () => { await post('/reassign', { keys: [r.participant.key], target_id: null }); await done(); },
+    return act(() => post('/reassign', { keys: [r.participant.key], target_id: null, review_id: r.id }),
       'Выступление отделено в нового человека');
   }
   const [kind, a, b] = action.split(':');
   if (kind === 'merge') {
-    return act(async () => { await post('/merge', { source_id: +a, target_id: +b }); await done(); }, 'Слито');
+    return act(() => post('/merge', { source_id: +a, target_id: +b, review_id: r.id }), 'Слито');
   }
   if (kind === 'bd') {
-    return act(async () => { await post(`/${a}/birthdate`, { birthdate: b }); await done(); }, 'Дата рождения записана');
+    return act(() => post(`/${a}/birthdate`, { birthdate: b, review_id: r.id }), 'Дата рождения записана');
   }
 }
 
