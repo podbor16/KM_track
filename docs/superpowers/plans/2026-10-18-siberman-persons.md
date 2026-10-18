@@ -1602,6 +1602,157 @@ git commit -m "fix(siberman/persons): замена этапника при пе�
 
 ---
 
+### Task 3b: Повторное ревью — ручные привязки, стёртая фамилия, переразбор без следа
+
+Повторное ревью 3a: прошлые замечания закрыты; найдены три обхода той же защиты от «не того человека».
+
+1. **Ручная привязка не проверялась.** Слияние (`move_links`) делало ручными все выступления исходного человека, и после любого слияния замена этапника снова оставалась незамеченной. Теперь: ручная привязка с другим ФИ остаётся, но даёт запись `manual_name_changed`, а новое ФИ не попадает в ключи человека. `move_links` больше не трогает `manual` (Task 4).
+2. **Стёртая фамилия.** Строка без фамилии отбрасывалась до проверки привязок — автопривязка к прежнему этапнику оставалась. Теперь такие автопривязки собираются в `Registry.dropped`, `sync` их удаляет (Task 5).
+3. **Переразбор без следа.** Исправление опечатки в протоколе давало нового человека молча, прежний (с ручной ДР, с адресом `/athlete/{id}`) удалялся как сирота. Теперь — запись `relinked` (новый человек + прежний кандидатом), а `delete_stale` не удаляет людей, на которых ссылаются нерешённые записи «проверить» (Task 4).
+4. Мелочь: у личника тёзка со своим личным номером отсеивается до проверки пола (лишний `gender_mismatch`). `count_unlinked` не считает строки без фамилии (Task 4).
+
+**Files:**
+- Modify: `src/siberman/persons/linking.py`
+- Modify: `tests/unit/test_siberman_persons_linking.py`
+
+- [ ] **Step 1: Тесты**
+
+В `tests/unit/test_siberman_persons_linking.py` заменить `test_manual_link_survives_name_change` на:
+```python
+def test_manual_link_name_change_is_kept_but_flagged():
+    p = Person(id=5, surname="Иванов", name="Иван", gender="M")
+    r = relay(2020, 101, "swim", "Петров", "Пётр")
+    reg, links, reviews = run([r], persons=[p], links={key(r): (5, 1, "иванов иван")})
+    assert links == {}
+    assert [(x.kind, x.person) for x in reviews] == [("manual_name_changed", reg.by_id[5])]
+    assert "петров петр" not in reg.by_id[5].keys
+```
+и добавить в конец файла:
+```python
+def test_cleared_surname_drops_auto_link_only():
+    p = Person(id=1, surname="Иванов", name="Иван", gender="M")
+    auto, manual = relay(2020, 101, "swim", "", ""), relay(2020, 102, "swim", " ", "")
+    reg, links, reviews = run([auto, manual], persons=[p],
+                              links={key(auto): (1, 0, "иванов иван"), key(manual): (1, 1, "иванов иван")})
+    assert reg.dropped == [key(auto)]
+    assert links == {} and reviews == []
+
+
+def test_relinked_after_typo_fix_keeps_trace():
+    prev = Person(id=1, surname="Ивнов", name="Иван", gender="M")
+    a, b = relay(2019, 100, "run", "Ивнов", "Иван"), relay(2020, 101, "swim", "Иванов", "Иван")
+    reg, links, reviews = run([a, b], persons=[prev],
+                              links={key(a): (1, 0, "ивнов иван"), key(b): (1, 0, "ивнов иван")})
+    new = links[key(b)]
+    assert new is not reg.by_id[1]
+    assert [(x.kind, x.person, x.others) for x in reviews] == [("relinked", new, (reg.by_id[1],))]
+
+
+def test_individual_namesake_with_own_bib_is_not_gender_mismatch():
+    a, b = row(2020, 7, "Иванов", "Саша", gender="M"), row(2021, 8, "Иванов", "Саша", gender="F")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+    assert reviews == []
+```
+
+- [ ] **Step 2: Тесты падают**
+
+Run: `conda run -n base python -m pytest tests/unit/test_siberman_persons_linking.py -q`
+Expected: 4 failed (`manual_name_changed`, `dropped`, `relinked`, лишний `gender_mismatch`), остальные passed.
+
+- [ ] **Step 3: Правки `linking.py`**
+
+1. В `Registry.__init__` после `self.bib_assigned: list = []` добавить:
+```python
+        self.dropped: list = []        # автопривязки строк, у которых в протоколе стёрли фамилию
+```
+2. Сигнатуру `Registry.attach` и её первую строку тела заменить:
+```python
+    def attach(self, p: Person, row: dict, index_name: bool = True) -> None:
+        """Учесть выступление row за человеком p. index_name=False — ФИ строки не добавлять
+        в ключи человека (ручная привязка, у которой ФИ в протоколе изменилось)."""
+        year, bib = int(row["race_year"]), str(row["bib"])
+        if index_name:
+            self._index_key(p, plain_key(row["surname"], row["name"]))
+```
+(остальное тело `attach` без изменений).
+3. В `_resolve` цикл по кандидатам заменить (проверка личного номера — до проверки пола):
+```python
+    for p in reg.by_key.get(key, []):
+        if r["format"] == "individual" and p.bib_individual and p.bib_individual != bib:
+            continue                          # у человека свой личный номер — это тёзка
+        if not _gender_ok(g, p.gender):
+            other_gender.append(p)
+            continue
+        used = p.usage.get(year)
+        if used and bib not in used:          # в этом году уже выступал под другим номером
+            continue
+        cands.append(p)
+```
+4. `link_participants` заменить целиком:
+```python
+def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
+    """rows — все строки participants; links — сохранённые привязки {natkey: (person_id, manual, name_key)}.
+    Автопривязка действует, пока ФИ строки то же, что при привязке; иначе строка разрешается заново
+    (замена этапника, исправленный протокол) и, если ушла к другому человеку, — запись «relinked».
+    Ручная привязка действует всегда; другое ФИ — запись «manual_name_changed». Строки без фамилии
+    не привязываются, их автопривязки — в reg.dropped (удалить).
+    → ({natkey: Person} новых и изменённых привязок, [Review])."""
+    ordered = sorted(rows, key=_row_order)
+    named = []
+    for r in ordered:
+        if str(r["surname"] or "").strip():
+            named.append(r)
+            continue
+        link = links.get(natkey(r))
+        if link and not link[1]:
+            reg.dropped.append(natkey(r))
+
+    kept, reviews = set(), []
+    for r in named:
+        link = links.get(natkey(r))
+        if not link or link[0] not in reg.by_id:
+            continue
+        person_id, manual, name_key = link
+        p = reg.by_id[person_id]
+        same = name_key == plain_key(r["surname"], r["name"])
+        if same or manual:
+            reg.attach(p, r, index_name=same)
+            kept.add(natkey(r))
+            if not same:
+                reviews.append(Review("manual_name_changed", natkey=natkey(r), person=p))
+
+    new_links = {}
+    for r in named:
+        k = natkey(r)
+        if k in kept:
+            continue
+        p, rv = _resolve(reg, r)
+        reg.attach(p, r)
+        new_links[k] = p
+        reviews.extend(rv)
+        link = links.get(k)
+        prev = reg.by_id.get(link[0]) if link else None
+        if prev is not None and prev is not p:
+            reviews.append(Review("relinked", natkey=k, person=p, others=(prev,)))
+    return new_links, reviews
+```
+
+- [ ] **Step 4: Тесты проходят**
+
+Run: `conda run -n base python -m pytest tests/unit/test_siberman_persons_linking.py tests/unit/test_siberman_persons_applicants.py -q`
+Expected: 28 + 10 = 38 passed.
+Run: `conda run -n base python -m pytest tests/unit/ -q` — 903 + 38 = 941 passed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/siberman/persons/linking.py tests/unit/test_siberman_persons_linking.py
+git commit -m "fix(siberman/persons): ручная привязка с другим ФИ, стёртая фамилия, след переразбора, номер до пола"
+```
+
+---
+
 ### Task 4: SQL реестра (`db.py`)
 
 **Files:**
@@ -1743,7 +1894,7 @@ def load_links(conn) -> dict:
 def count_unlinked(conn) -> int:
     cur = _cur(conn)
     cur.execute(f"SELECT COUNT(*) AS n FROM participants p LEFT JOIN siberman_person_links l ON {LINK_ON} "
-                "WHERE l.person_id IS NULL")
+                "WHERE l.person_id IS NULL AND TRIM(p.surname) <> ''")
     return int(cur.fetchone()["n"])
 
 
@@ -1782,18 +1933,22 @@ def links_of_person(conn, person_id: int) -> list:
 
 
 def move_links(conn, source_id: int, target_id: int) -> None:
-    conn.cursor().execute("UPDATE siberman_person_links SET person_id=%s, manual=1 WHERE person_id=%s",
+    """Слияние: привязки переходят как есть — ручными становятся только явно выбранные выступления
+    (reassign), иначе после слияния замена этапника перестала бы проверяться."""
+    conn.cursor().execute("UPDATE siberman_person_links SET person_id=%s WHERE person_id=%s",
                           (int(target_id), int(source_id)))
 
 
 def delete_stale(conn) -> tuple:
-    """Автопривязки к исчезнувшим строкам и люди без выступлений. → (привязок, людей)."""
+    """Автопривязки к исчезнувшим строкам и люди без выступлений, на которых не ссылаются
+    нерешённые записи «проверить» (их держим, чтобы админ мог слить обратно). → (привязок, людей)."""
     cur = conn.cursor()
     cur.execute(f"DELETE l FROM siberman_person_links l LEFT JOIN participants p ON {LINK_ON} "
                 "WHERE p.id IS NULL AND l.manual=0")
     links = cur.rowcount
     cur.execute("DELETE s FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
-                "WHERE l.person_id IS NULL")
+                "WHERE l.person_id IS NULL AND NOT EXISTS (SELECT 1 FROM siberman_person_reviews r "
+                "WHERE r.status <> 'resolved' AND (r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids)))")
     return links, cur.rowcount
 
 
@@ -2125,6 +2280,8 @@ REVIEW_TITLES = {
     "applicant_unconfirmed": "Заявка с тем же ФИ без стартов на Siberman — это он?",
     "gender_mismatch": "Те же ФИ, другой пол — тот же человек?",
     "bib_gender_mismatch": "Личный номер у человека другого пола",
+    "relinked": "ФИ в протоколе изменилось — выступление ушло к другому человеку",
+    "manual_name_changed": "Ручная привязка, а ФИ в протоколе теперь другое",
 }
 APPLICANT_KINDS = ("bd_conflict", "applicant_ambiguous", "applicant_city_mismatch", "applicant_unconfirmed")
 
@@ -2187,6 +2344,7 @@ def sync(conn) -> dict:
         for p in reg.bib_assigned:
             pdb.update_person(conn, p.id, {"bib_individual": p.bib_individual})
         pdb.set_links(conn, [(k, p.id, names[k]) for k, p in new_links.items()], manual=False)
+        pdb.delete_links(conn, reg.dropped)
         bd_updates, bd_reviews = attach_birthdates(reg, pdb.load_applicants(conn))
         for p, bd in bd_updates:
             pdb.update_person(conn, p.id, {"birthdate": bd})
@@ -2194,7 +2352,7 @@ def sync(conn) -> dict:
         stale_links, orphans = pdb.delete_stale(conn)
         pdb.refresh_display(conn, {p.id for p in new_links.values()} | {p.id for p in reg.bib_assigned})
     return {"linked": len(new_links), "new_persons": len(reg.new), "birthdates": len(bd_updates),
-            "reviews": added, "stale_links": stale_links, "orphans": orphans}
+            "reviews": added, "dropped": len(reg.dropped), "stale_links": stale_links, "orphans": orphans}
 
 
 def sync_now() -> dict:
@@ -2316,7 +2474,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Unit-тесты не сломаны**
 
 Run: `conda run -n base python -m pytest tests/unit/ -q`
-Expected: всё PASS, число тестов = 903 + 35 = 938.
+Expected: всё PASS, число тестов = 903 + 38 = 941.
 
 - [ ] **Step 5: Commit**
 
@@ -3146,6 +3304,12 @@ function reviewButtons(r) {
   if (r.kind === 'namesake_candidate') {
     r.others.forEach(o => { if (o && r.person) out.push(B(`Это ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
     out.push(B('Это другой человек', 'resolve'));
+  } else if (r.kind === 'relinked') {
+    r.others.forEach(o => { if (o && r.person) out.push(B(`Тот же человек: слить с ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
+    out.push(B('Разные люди', 'resolve'));
+  } else if (r.kind === 'manual_name_changed') {
+    out.push(B('Оставить привязку', 'resolve'));
+    if (r.participant) out.push(B('Отделить в нового человека', 'split'));
   } else if (r.kind === 'gender_mismatch') {
     r.others.forEach(o => { if (o && r.person) out.push(B(`Это ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
     out.push(B('Это другой человек', 'resolve'));
@@ -3176,7 +3340,7 @@ async function loadReviews() {
     <div class="rtitle">${esc(r.title)}</div>
     ${r.participant ? `<div>${startText(r.participant)} — ${esc(r.participant.fio)}, ${esc(r.participant.city)}</div>` : ''}
     ${r.applicant ? `<div>Заявка: ${esc(r.applicant.fio)}, ДР ${esc(r.applicant.birthdate)}, ${esc(r.applicant.city)}</div>` : ''}
-    <div class="pboxes">${r.person ? personBox(r.person, ['namesake_candidate', 'gender_mismatch'].includes(r.kind) ? 'Сейчас — отдельный человек' : 'Человек') : ''}${r.others.map(o => personBox(o, 'Кандидат')).join('')}</div>
+    <div class="pboxes">${r.person ? personBox(r.person, ['namesake_candidate', 'gender_mismatch', 'relinked'].includes(r.kind) ? 'Сейчас — отдельный человек' : 'Человек') : ''}${r.others.map(o => personBox(o, 'Кандидат')).join('')}</div>
     <div data-i="${i}">${reviewButtons(r)}</div></div>`).join('');
 }
 
@@ -3291,7 +3455,8 @@ function report(r) {
     lines.push(`Строк в файле: ${r.rows}. Людей с датой рождения: ${r.people}. Без даты: ${r.no_birthday}. Неверных дат: ${r.bad_birthday}.`);
   }
   lines.push(`Привязано выступлений: ${s.linked}. Новых людей: ${s.new_persons}. Записано дат рождения: ${s.birthdates}. ` +
-             `Новых «проверить»: ${s.reviews}. Убрано устаревших привязок: ${s.stale_links}, людей без выступлений: ${s.orphans}.`);
+             `Новых «проверить»: ${s.reviews}. Снято привязок со стёртой фамилией: ${s.dropped}. ` +
+             `Убрано устаревших привязок: ${s.stale_links}, людей без выступлений: ${s.orphans}.`);
   el.textContent = lines.join('\n');
   el.style.display = 'block';
 }
@@ -3411,7 +3576,7 @@ for q in ("SELECT COUNT(*) FROM siberman_persons",
 - [ ] **Step 4: Полный прогон тестов**
 
 Run: `conda run -n base python -m pytest tests/unit/ tests/integration/test_siberman_persons.py -q`
-Expected: все PASS; unit — 903 + 38 = 941.
+Expected: все PASS; unit — 903 + 41 = 944.
 
 - [ ] **Step 5: Уточнить спецификацию**
 
