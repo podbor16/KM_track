@@ -17,7 +17,7 @@
   `/hall/rating`, `/hall/records`, `/hall/stats`, `/hall/geo`. Вставляются на siberman515.com/results вместо ручных таблиц, якоря меню (`#rec29811964`, `#rec28752702`, `#rec480029115`, `#rec783300995`) сохраняются — пользователь ставит блоки в те же места.
 - Отдельная страница `/athlete/{person_id}` (не iframe).
 - Страницы отдаются только при `request.state.domain == "siberman"`; в `deploy/nginx.conf` (server live.siberman515.com) регэксп путей дополняется `hall/` и `athlete/`.
-- API (sync `def`, блокирующая БД — в пуле потоков), кэш 60 с с ключом по версии данных:
+- API (sync `def`, блокирующая БД — в пуле потоков), снимок в памяти воркера на 60 с (архив меняется только загрузкой, в живой год — раз в минуту); БД недоступна — прошлый снимок, повтор не чаще раза в 10 с:
   `GET /api/siberman/hall/rating`, `/hall/records`, `/hall/records/history?cell=…`, `/hall/stats`, `/hall/geo`, `/api/siberman/athlete/{person_id}`.
 - Сниппет для Тильды — `docs/siberman/hall-tilda-snippet.md` (по образцу `draw-tilda-snippet.md`).
 

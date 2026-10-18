@@ -1557,6 +1557,166 @@ git commit -m "feat(siberman/hall): блок «Рекорды» — таблиц
 
 ---
 
+### Task 7a: Ревью задач 5–7 — сбой БД, окно истории, клавиатура
+
+1. **Сбой БД.** Снимок не собрался → прошлый снимок отдаётся, но `at` не обновлялся: каждый запрос снова шёл в БД (≈2 с) под `_lock`, запросы вставали в очередь и занимали пул потоков. Теперь после ошибки следующая попытка — не раньше чем через `RETRY_S`; без снимка в это время сразу 503; ошибка — в лог.
+2. **Окно истории.** Ответ для клетки A, пришедший после клика по B, писался в окно B; после закрытия окна во время загрузки вызывался `place()`. Теперь номер запроса `popSeq`.
+3. **Клавиатура.** Клетки и карточки — `tabindex="0" role="button"`, Enter/пробел открывают историю; крестик — кнопка; окно — `role="dialog"`, фокус в окно и обратно на клетку.
+4. Мелочи: заголовок `Cache-Control: public, max-age=60` убран (nginx в том же location ставит `no-store`, снимок и так в памяти); у поиска `type="search"` и `aria-label`, у вкладок и переключателя — `type="button"`; тест 404 для `/hall/records` на чужом домене.
+
+**Files:** Modify `src/siberman/hall/service.py`, `src/siberman/hall/router.py`, `static/js/siberman-hall-records.js`, `static/css/siberman-hall.css`, `templates/siberman/hall_records.html`, `templates/siberman/hall_rating.html`, `tests/integration/test_siberman_hall.py`. Create `tests/unit/test_siberman_hall_service.py`.
+
+- [ ] **Step 1: Тест сервиса** — `tests/unit/test_siberman_hall_service.py`:
+```python
+import mysql.connector
+import pytest
+
+from src.siberman.hall import service
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(service.time, "monotonic", lambda: now[0])
+    service.clear_cache()
+    yield now
+    service.clear_cache()
+
+
+def test_db_failure_serves_old_snapshot_and_retries_not_before_retry_s(clock, monkeypatch):
+    calls = []
+
+    def build():
+        calls.append(clock[0])
+        if len(calls) > 1:
+            raise mysql.connector.Error("down")
+        return {"rating": "old", "records": {}}
+
+    monkeypatch.setattr(service, "_build", build)
+    assert service.rating() == "old"
+    clock[0] += service.CACHE_TTL_S
+    assert service.rating() == "old" and len(calls) == 2          # попытка была, отдали прошлый снимок
+    clock[0] += service.RETRY_S - 1
+    assert service.rating() == "old" and len(calls) == 2          # в БД не ходим до RETRY_S
+    clock[0] += 1
+    assert service.rating() == "old" and len(calls) == 3
+
+
+def test_no_snapshot_fails_fast_until_retry_s(clock, monkeypatch):
+    calls = []
+
+    def build():
+        calls.append(clock[0])
+        raise service.HallUnavailable("x")
+
+    monkeypatch.setattr(service, "_build", build)
+    for _ in range(3):
+        with pytest.raises(service.HallUnavailable):
+            service.rating()
+    assert len(calls) == 1
+    clock[0] += service.RETRY_S
+    with pytest.raises(service.HallUnavailable):
+        service.rating()
+    assert len(calls) == 2
+```
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/unit/test_siberman_hall_service.py -q -p no:cacheprovider`. Expected: 2 failed (первый — `AttributeError: ... RETRY_S`, второй — `assert 3 == 1`).
+
+- [ ] **Step 2: `service.py`.** Импорт `logging`, `log = logging.getLogger(__name__)`, `RETRY_S = 10` под `CACHE_TTL_S`, в докстринге модуля последнее предложение: «БД недоступна — отдаём прошлый снимок, если он есть, и пробуем снова не раньше чем через RETRY_S (без снимка до этого сразу 503), чтобы запросы не ждали БД друг за другом под блокировкой.»
+```python
+_cache = {"at": 0.0, "snap": None, "fail_at": None}
+
+
+def _snapshot() -> dict:
+    with _lock:
+        snap, now = _cache["snap"], time.monotonic()
+        if snap is not None and now - _cache["at"] < CACHE_TTL_S:
+            return snap
+        if snap is None and _cache["fail_at"] is not None and now - _cache["fail_at"] < RETRY_S:
+            raise HallUnavailable("Данные временно недоступны")
+        try:
+            snap = _build()
+        except (HallUnavailable, mysql.connector.Error) as e:
+            log.warning("[siberman/hall] снимок не обновлён: %s", e)
+            _cache["fail_at"] = now
+            if _cache["snap"] is not None:
+                _cache["at"] = now - CACHE_TTL_S + RETRY_S       # следующая попытка через RETRY_S
+                return _cache["snap"]
+            raise HallUnavailable("Данные временно недоступны") from None
+        _cache.update(at=now, snap=snap, fail_at=None)
+        return snap
+
+
+def clear_cache() -> None:
+    with _lock:
+        _cache.update(at=0.0, snap=None, fail_at=None)
+```
+Run: тот же файл — 2 passed.
+
+- [ ] **Step 3: `router.py`.** Удалить `PUBLIC_CACHE`; в `_json` последняя строка — `return JSONResponse(jsonable_encoder(data))`.
+
+- [ ] **Step 4: интеграционный тест.** В `test_api_and_pages` после `assert client.get("/hall/rating").status_code == 404` добавить `assert client.get("/hall/records").status_code == 404`.
+
+- [ ] **Step 5: `siberman-hall-records.js`.**
+  - В `renderTable` у обеих веток `td` с `data-cell` и в `card` добавить ` tabindex="0" role="button"` сразу после `data-cell="…"`.
+  - Окно и фокус:
+```js
+const pop = document.getElementById('pop'), hall = document.querySelector('.hall');
+let popSeq = 0, popFrom = null;                      // номер последнего открытия; клетка, куда вернуть фокус
+```
+```js
+function closePop() {
+  if (pop.hidden) return;
+  popSeq++;
+  pop.hidden = true;
+  hall.style.minHeight = '';
+  if (popFrom) popFrom.focus();
+  popFrom = null;
+}
+
+async function openHistory(key, anchor) {
+  const seq = ++popSeq;
+  popFrom = anchor;
+  pop.innerHTML = `<button type="button" class="close" data-close aria-label="Закрыть">×</button>
+    <h4 id="pop-title">История рекорда</h4><div class="team">${hallEsc(cellTitle(key))}</div>
+    <div class="state-msg" id="pop-body">Загрузка…</div>`;
+  pop.hidden = false;
+  place(anchor);
+  pop.querySelector('.close').focus();
+  try {
+    const list = await hallLoad(`/api/siberman/hall/records/history?cell=${encodeURIComponent(key)}`);
+    if (seq !== popSeq) return;                      // открыли другую клетку или закрыли окно
+    const rows = …                                   // без изменений
+    document.getElementById('pop-body').outerHTML = `<table>${rows}</table>`;
+  } catch (err) {
+    if (seq !== popSeq) return;
+    document.getElementById('pop-body').textContent = err.message;
+  }
+  place(anchor);
+}
+```
+  - Обработчик клавиш вместо однострочного:
+```js
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') return closePop();
+  const cell = (e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('[data-cell]');
+  if (cell && e.target === cell) { e.preventDefault(); openHistory(cell.dataset.cell, cell); }
+});
+```
+  (`e.target === cell` — Enter на ссылке ФИ внутри клетки остаётся переходом.)
+
+- [ ] **Step 6: шаблоны и CSS.**
+  - `hall_records.html`: `<div class="pop" id="pop" role="dialog" aria-labelledby="pop-title" hidden></div>`.
+  - `hall_rating.html`: всем `<button` вкладок и переключателя режима — `type="button"`; поиск — `<input id="q" class="search" type="search" aria-label="Поиск по фамилии или номеру" placeholder="Поиск по фамилии или номеру…" autocomplete="off">`.
+  - `siberman-hall.css`: строку `.pop .x { … }` заменить на
+```css
+.pop .close { position: absolute; right: 8px; top: 4px; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; background: none; border: 0; padding: 4px 6px; }
+[data-cell]:focus-visible, .pop .close:focus-visible { outline: 2px solid var(--navy); outline-offset: -2px; }
+```
+
+- [ ] **Step 7: Прогоны.** `node --check static/js/siberman-hall-records.js`; `tests/unit/` — 966 passed; интеграционные `test_siberman_hall.py` + `test_siberman_persons.py` — 25 passed.
+
+- [ ] **Step 8: Commit** — `fix(siberman/hall): сбой БД без очереди под блокировкой; окно истории — последний клик, клавиатура и фокус`.
+
 ### Task 8: Вставка в Тильду, проверка в браузере, документы
 
 **Files:**
@@ -1608,6 +1768,7 @@ window.addEventListener('message', function (e) {
 ```
 
 Ссылки внутри блоков (страница спортсмена, карточка года) открываются в новой вкладке.
+Выкладывать только вместе с планом 4 (страница спортсмена `/athlete/{id}` и `athlete/` в nginx) — иначе ссылки ФИ ведут на 404.
 Данные обновляются сами: блоки читают БД (снимок на минуту), ручная правка таблиц больше не нужна.
 ````
 
@@ -1626,7 +1787,8 @@ window.addEventListener('message', function (e) {
 `/hall/records` (десктоп и телефон):
 7. Нет ошибок. Десктоп: таблица 6 строк, клетка `race:relay:X` с `colspan=2`; на телефоне таблица скрыта, карточек 6 блоков × 7 и 6 (первый блок — 5 карточек, остальные — 6).
 8. Клик по времени в клетке `run:absolute:M` → окно истории видно, в нём ≥ 1 строка и «текущий»; Esc — окно скрыто; клик по ФИ в клетке не открывает окно.
-9. Окно открыто у нижней строки («Бег 84») — нижний край окна в пределах `.hall` (min-height выросла).
+9. Окно открыто у нижней строки («Бег 84») и у последней карточки на телефоне — нижний край окна в пределах `.hall` (min-height выросла); на скриншоте iframe-страницы окно не уходит за экран — иначе записать в замечания (`scrollIntoView` или открытие над клеткой).
+10. Клавиатура: Tab до клетки → Enter открывает окно, фокус на крестике; Esc закрывает, фокус снова на клетке. Быстрый клик по клетке A, затем B — в окне заголовок и история B.
 
 iframe (обе страницы): локальная HTML-страница в scratchpad с двумя iframe (`http://siberman.localhost:8011/hall/rating`, `/hall/records`) и скриптом из сниппета, в котором `e.origin` заменён на `http://siberman.localhost:8011` → высота iframe через 3 с > 600 и примерно равна высоте блока.
 
@@ -1634,7 +1796,7 @@ iframe (обе страницы): локальная HTML-страница в sc
 
 - [ ] **Step 3: Полный прогон**
 
-Run: `tests/unit/` — 964 passed; `tests/integration/test_siberman_hall.py tests/integration/test_siberman_persons.py` — 25 passed.
+Run: `tests/unit/` — 966 passed; `tests/integration/test_siberman_hall.py tests/integration/test_siberman_persons.py` — 25 passed.
 
 - [ ] **Step 4: Commit**
 
@@ -1651,4 +1813,4 @@ git commit -m "docs(siberman/hall): вставка рейтинга и реко�
 
 - Спецификация §4 (рейтинг: вкладки, переключатель, год, поиск, DNF/DSQ в конце, номер, «N-й финиш» с медалью, ссылки, эстафеты без пола с составом и ссылкой на команду) — Task 4, 6; §5.1 (таблица, вариант А, эстафета «гонки» без пола, «эстафета» + команда в абсолютных клетках отрезков, «НОВЫЙ», только финишировавшие) — Task 3, 7; §5.2 (история, окно рядом с клеткой, переходы по ФИ/команде) — Task 3, 7; §5.3 (сверка с организаторами) — Task 5; §5.4 (цвета, телефон) — Task 6–7 (CSS), 7; §9 (медали одной функцией) — Task 1; §2 (блоки, API, снимок 60 с, nginx, сниппет, домен) — Task 5, 8; §11 (БД недоступна → прошлый снимок / 503, живой год) — Task 5, 4; §12 — Task 1–5, 8. Статистика, география, страница спортсмена — планы 3–4 (ссылки `/athlete/{id}` заработают после плана 4).
 - Имена: `Entry`, `Team`, `build_teams`, `race_time`, `segment_time`, `bib_order` (data) используются в records/rating; `build_records(entries, teams)` → `current/history/last_year`; `build_rating(entries, teams, records)` → `individual/relay/years`; `service.rating/records/record_history/clear_cache`; JS: `hallEsc/hallTime/hallNorm/hallLink/hallAthlete/hallCard/hallLoad/HALL_STAGE`.
-- Числа тестов: unit 944 → 945 (T1) → 948 (T2) → 954 (T3) → 958 (T4) → 959 (f7ca7b0) → 964 (T4a); интеграционные hall — 5.
+- Числа тестов: unit 944 → 945 (T1) → 948 (T2) → 954 (T3) → 958 (T4) → 959 (f7ca7b0) → 964 (T4a) → 966 (T7a); интеграционные hall — 5.
