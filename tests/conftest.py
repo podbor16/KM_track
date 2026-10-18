@@ -31,6 +31,13 @@ def _no_real_notifications(monkeypatch):
     monkeypatch.delenv("NTFY_URL", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_persons_sync_on_recompute(monkeypatch):
+    """recompute_totals_ranks_records() хвостом синхронизирует реестр людей Siberman своим
+    соединением с БД — в unit-тестах с моками это лишнее. Тесты реестра вызывают service.sync()."""
+    monkeypatch.setattr("src.siberman.persons.service.sync_safe", lambda: None)
+
+
 @pytest.fixture(scope="session")
 def client():
     """TestClient с полным lifecycle приложения (lifespan)."""

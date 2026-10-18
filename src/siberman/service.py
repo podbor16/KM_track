@@ -503,6 +503,11 @@ def recompute_totals_ranks_records(conn, race_year: int, participants: list[dict
     if update_records:
         _recompute_records(conn, race_year, pid_to_participant, pid_totals, pid_meta, pid_cp_times, relay_by_bib)
 
+    # Реестр людей: новые выступления года → к людям (спецификация hall §3.3). Своё соединение,
+    # ошибки реестра приём результатов не ломают. Импорт внутри — без циклического импорта.
+    from src.siberman.persons import service as persons_service
+    persons_service.sync_safe()
+
 
 def apply_parse_result_upsert(conn, result: ParseResult) -> dict:
     """То же самое, что делает apply_to_db() ПОСЛЕ clear_race_year() —
