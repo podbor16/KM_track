@@ -156,11 +156,13 @@ def test_relay_member_replaced_on_reload_is_resolved_again():
     assert "петров петр" not in reg2.by_id[1].keys
 
 
-def test_manual_link_survives_name_change():
+def test_manual_link_name_change_is_kept_but_flagged():
     p = Person(id=5, surname="Иванов", name="Иван", gender="M")
     r = relay(2020, 101, "swim", "Петров", "Пётр")
     reg, links, reviews = run([r], persons=[p], links={key(r): (5, 1, "иванов иван")})
-    assert links == {} and reviews == []
+    assert links == {}
+    assert [(x.kind, x.person) for x in reviews] == [("manual_name_changed", reg.by_id[5])]
+    assert "петров петр" not in reg.by_id[5].keys
 
 
 def app(tranid, surname, name, bd, gender=None, city="", starts=1, submitted=None):
@@ -236,3 +238,29 @@ def test_review_dedupe_keys():
     p.id = 42
     assert Review("bib_name_change", natkey=key(a), person=p).dedupe_key() == "bib_name_change:2024:7:none"
     assert Review("bd_conflict", person=p, detail="t9").dedupe_key() == "bd_conflict:42:t9"
+
+
+def test_cleared_surname_drops_auto_link_only():
+    p = Person(id=1, surname="Иванов", name="Иван", gender="M")
+    auto, manual = relay(2020, 101, "swim", "", ""), relay(2020, 102, "swim", " ", "")
+    reg, links, reviews = run([auto, manual], persons=[p],
+                              links={key(auto): (1, 0, "иванов иван"), key(manual): (1, 1, "иванов иван")})
+    assert reg.dropped == [key(auto)]
+    assert links == {} and reviews == []
+
+
+def test_relinked_after_typo_fix_keeps_trace():
+    prev = Person(id=1, surname="Ивнов", name="Иван", gender="M")
+    a, b = relay(2019, 100, "run", "Ивнов", "Иван"), relay(2020, 101, "swim", "Иванов", "Иван")
+    reg, links, reviews = run([a, b], persons=[prev],
+                              links={key(a): (1, 0, "ивнов иван"), key(b): (1, 0, "ивнов иван")})
+    new = links[key(b)]
+    assert new is not reg.by_id[1]
+    assert [(x.kind, x.person, x.others) for x in reviews] == [("relinked", new, (reg.by_id[1],))]
+
+
+def test_individual_namesake_with_own_bib_is_not_gender_mismatch():
+    a, b = row(2020, 7, "Иванов", "Саша", gender="M"), row(2021, 8, "Иванов", "Саша", gender="F")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+    assert reviews == []

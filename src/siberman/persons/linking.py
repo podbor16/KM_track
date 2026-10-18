@@ -98,6 +98,7 @@ class Registry:
             self._index_key(p, plain_key(p.surname, p.name))
         self.new: list = []
         self.bib_assigned: list = []   # люди из БД, которым этот прогон записал личный номер
+        self.dropped: list = []        # автопривязки строк, у которых в протоколе стёрли фамилию
         self._next_tmp = -1
 
     def _index_key(self, p: Person, key: str) -> None:
@@ -113,10 +114,12 @@ class Registry:
         self._index_key(p, plain_key(surname, name))
         return p
 
-    def attach(self, p: Person, row: dict) -> None:
-        """Учесть выступление row за человеком p."""
+    def attach(self, p: Person, row: dict, index_name: bool = True) -> None:
+        """Учесть выступление row за человеком p. index_name=False — ФИ строки не добавлять
+        в ключи человека (ручная привязка, у которой ФИ в протоколе изменилось)."""
         year, bib = int(row["race_year"]), str(row["bib"])
-        self._index_key(p, plain_key(row["surname"], row["name"]))
+        if index_name:
+            self._index_key(p, plain_key(row["surname"], row["name"]))
         p.usage.setdefault(year, set()).add(bib)
         p.formats.add(row["format"])
         if p.gender is None and row.get("gender") in ("M", "F"):
@@ -144,14 +147,14 @@ def _resolve(reg: Registry, r: dict) -> tuple:
             return p, ([] if key in p.keys else [Review("bib_name_change", natkey=nk, person=p)])
     cands, other_gender = [], []
     for p in reg.by_key.get(key, []):
+        if r["format"] == "individual" and p.bib_individual and p.bib_individual != bib:
+            continue                          # у человека свой личный номер — это тёзка
         if not _gender_ok(g, p.gender):
             other_gender.append(p)
             continue
         used = p.usage.get(year)
         if used and bib not in used:          # в этом году уже выступал под другим номером
             continue
-        if r["format"] == "individual" and p.bib_individual and p.bib_individual != bib:
-            continue                          # у человека свой личный номер — это тёзка
         cands.append(p)
     if len(cands) == 1:
         p = cands[0]
@@ -167,26 +170,37 @@ def _resolve(reg: Registry, r: dict) -> tuple:
 
 def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
     """rows — все строки participants; links — сохранённые привязки {natkey: (person_id, manual, name_key)}.
-    Привязка действует, если она ручная или ФИ строки не изменилось с момента привязки; иначе
-    (замена этапника, исправленный протокол) строка разрешается заново. Строки без фамилии
-    не привязываются. → ({natkey: Person} новых и изменённых привязок, [Review])."""
-    rows = sorted((r for r in rows if str(r["surname"] or "").strip()), key=_row_order)
+    Автопривязка действует, пока ФИ строки то же, что при привязке; иначе строка разрешается заново
+    (замена этапника, исправленный протокол) и, если ушла к другому человеку, — запись «relinked».
+    Ручная привязка действует всегда; другое ФИ — запись «manual_name_changed». Строки без фамилии
+    не привязываются, их автопривязки — в reg.dropped (удалить).
+    → ({natkey: Person} новых и изменённых привязок, [Review])."""
+    ordered = sorted(rows, key=_row_order)
+    named = []
+    for r in ordered:
+        if str(r["surname"] or "").strip():
+            named.append(r)
+            continue
+        link = links.get(natkey(r))
+        if link and not link[1]:
+            reg.dropped.append(natkey(r))
 
-    def kept_person(r):
+    kept, reviews = set(), []
+    for r in named:
         link = links.get(natkey(r))
         if not link or link[0] not in reg.by_id:
-            return None
+            continue
         person_id, manual, name_key = link
-        return reg.by_id[person_id] if manual or name_key == plain_key(r["surname"], r["name"]) else None
-
-    kept = set()
-    for r in rows:
-        p = kept_person(r)
-        if p is not None:
-            reg.attach(p, r)
+        p = reg.by_id[person_id]
+        same = name_key == plain_key(r["surname"], r["name"])
+        if same or manual:
+            reg.attach(p, r, index_name=same)
             kept.add(natkey(r))
-    new_links, reviews = {}, []
-    for r in rows:
+            if not same:
+                reviews.append(Review("manual_name_changed", natkey=natkey(r), person=p))
+
+    new_links = {}
+    for r in named:
         k = natkey(r)
         if k in kept:
             continue
@@ -194,6 +208,10 @@ def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
         reg.attach(p, r)
         new_links[k] = p
         reviews.extend(rv)
+        link = links.get(k)
+        prev = reg.by_id.get(link[0]) if link else None
+        if prev is not None and prev is not p:
+            reviews.append(Review("relinked", natkey=k, person=p, others=(prev,)))
     return new_links, reviews
 
 
