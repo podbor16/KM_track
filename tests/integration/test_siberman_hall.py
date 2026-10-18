@@ -9,9 +9,11 @@ from fastapi.testclient import TestClient
 from app import app
 from src.siberman.db import get_siberman_connection
 from src.siberman.hall import data as hdata
+from src.siberman.hall import geo as hgeo
 from src.siberman.hall import service
 from src.siberman.hall.rating import build_rating
 from src.siberman.hall.records import build_records
+from src.siberman.hall.stats import build_stats
 
 SIBERMAN = {"host": "siberman.localhost"}
 
@@ -39,14 +41,16 @@ def archive():
         pytest.skip("Нет локальной БД siberman")
     try:
         entries = [e for e in hdata.load_entries(conn) if e.year <= 2025]
+        persons, applicants = hdata.load_people(conn)
     finally:
         conn.close()
     if not any(e.year == 2016 for e in entries):
         pytest.skip("В локальной БД нет архива 2016–2025")
     teams = hdata.build_teams(entries)
     records = build_records(entries, teams)
+    geo = hgeo.build_geo(entries, hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities()))
     return {"entries": entries, "teams": teams, "records": records,
-            "rating": build_rating(entries, teams, records)}
+            "rating": build_rating(entries, teams, records), "geo": geo}
 
 
 def test_records_match_organizers_table(archive):
@@ -79,6 +83,22 @@ def test_rating_marks_current_records(archive):
     assert sum(1 for r in rating["relay"] if r["record"]) == 1
 
 
+def test_stats_match_site(archive):
+    s = build_stats(archive["entries"], archive["teams"], archive["geo"])
+    i = s["individual"]
+    got = (i["starts"], i["finishes"], i["people"], i["people_finished"], i["people_men"], i["people_women"],
+           i["starts_men"], i["finishes_men"], i["starts_women"], i["finishes_women"],
+           s["relay"]["teams"], s["relay"]["finished"], s["people_total"])
+    assert got == (204, 196, 170, 165, 156, 14, 189, 184, 15, 12, 73, 71, 337), f"наше: {got}"
+    assert (s["first_year"], s["last_year"], len(s["years"])) == (2016, 2025, 10)
+
+
+def test_geo_on_archive(archive):
+    g = archive["geo"]
+    assert g["total"] == 337 and 168 <= g["known"] < g["total"]
+    assert sum(c["count"] for c in g["cities"]) == g["known"] == sum(c["count"] for c in g["countries"])
+
+
 def test_api_and_pages():
     service.clear_cache()
     client = TestClient(app)
@@ -91,7 +111,15 @@ def test_api_and_pages():
     assert "race:relay:X" in records["current"] and "history" not in records
     assert client.get("/api/siberman/hall/records/history", params={"cell": "run:absolute:M"}).status_code == 200
     assert client.get("/api/siberman/hall/records/history", params={"cell": "nope"}).status_code == 404
+    stats = client.get("/api/siberman/hall/stats").json()
+    assert {"individual", "relay", "years", "people_total", "countries", "cities"} <= set(stats)
+    geo = client.get("/api/siberman/hall/geo")
+    assert geo.status_code == 200 and {"total", "known", "countries", "cities"} <= set(geo.json())
+    assert "birthdate" not in geo.text
     assert client.get("/hall/rating", headers=SIBERMAN).status_code == 200
     assert client.get("/hall/records", headers=SIBERMAN).status_code == 200
     assert client.get("/hall/rating").status_code == 404
     assert client.get("/hall/records").status_code == 404
+    for page in ("/hall/stats", "/hall/geo"):
+        assert client.get(page, headers=SIBERMAN).status_code == 200
+        assert client.get(page).status_code == 404

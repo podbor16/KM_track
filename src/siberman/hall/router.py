@@ -1,5 +1,6 @@
 """
-Рейтинг и рекорды Siberman: блоки для iframe в Тильде (/hall/rating, /hall/records) и их API.
+Рейтинг, рекорды, статистика и география Siberman: блоки для iframe в Тильде (/hall/rating, /hall/records,
+/hall/stats, /hall/geo) и их API.
 API — обычные def: блокирующий mysql-connector уходит в пул потоков. Страницы — только на домене
 Siberman.
 """
@@ -40,6 +41,16 @@ async def hall_records_page(request: Request):
     return _page(request, "siberman/hall_records.html")
 
 
+@router.get("/hall/stats", response_class=HTMLResponse)
+async def hall_stats_page(request: Request):
+    return _page(request, "siberman/hall_stats.html")
+
+
+@router.get("/hall/geo", response_class=HTMLResponse)
+async def hall_geo_page(request: Request):
+    return _page(request, "siberman/hall_geo.html")
+
+
 @router.get("/api/siberman/hall/rating")
 def api_hall_rating():
     return _json(service.rating)
@@ -53,3 +64,13 @@ def api_hall_records():
 @router.get("/api/siberman/hall/records/history")
 def api_hall_record_history(cell: str = ""):
     return _json(service.record_history, cell)
+
+
+@router.get("/api/siberman/hall/stats")
+def api_hall_stats():
+    return _json(service.stats)
+
+
+@router.get("/api/siberman/hall/geo")
+def api_hall_geo():
+    return _json(service.geography)
