@@ -191,13 +191,13 @@ def _plain(row: Optional[dict]) -> Optional[dict]:
     return {k: (v.isoformat() if isinstance(v, (datetime.date, datetime.datetime)) else v) for k, v in row.items()}
 
 
-def _snapshot(conn, person_ids, keys: list, review_ids=()) -> dict:
+def _snapshot(conn, person_ids, keys: list, review_ids=(), moved_from=None) -> dict:
     person_ids = sorted({int(i) for i in person_ids if i is not None})
     persons = pdb.get_persons(conn, person_ids)
     links = pdb.links_for_keys(conn, keys)
     return {"persons": {str(i): _plain(persons.get(i)) for i in person_ids},
             "links": [[k[0], k[1], k[2], links.get(tuple(k))] for k in keys],
-            "reviews": [_plain(r) for r in pdb.reviews_state(conn, person_ids, review_ids)]}
+            "reviews": [_plain(r) for r in pdb.reviews_state(conn, review_ids, moved_from)]}
 
 
 def _record(conn, action: str, summary: str, snap: dict, user: str) -> int:
@@ -265,9 +265,10 @@ def merge(source_id: int, target_id: int, user: str, review_id: Optional[int] = 
         if src["bib_individual"] and dst["bib_individual"]:
             raise PersonsError(f"У обоих свой личный номер (№{src['bib_individual']} и №{dst['bib_individual']}) — "
                                "по правилам Siberman это разные люди")
-        snap = _snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id), [review_id])
+        snap = _snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id), [review_id],
+                         moved_from=source_id)
         pdb.move_links(conn, source_id, target_id)
-        pdb.move_reviews(conn, source_id, target_id)
+        pdb.move_reviews(conn, source_id, target_id, user)
         pdb.delete_person(conn, source_id)
         pdb.update_person(conn, target_id, {"bib_individual": dst["bib_individual"] or src["bib_individual"],
                                             "birthdate": dst["birthdate"] or src["birthdate"]})

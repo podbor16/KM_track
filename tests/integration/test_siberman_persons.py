@@ -298,3 +298,39 @@ def test_admin_api_requires_auth_and_works(conn):
         assert client.get("/api/siberman/admin/people/journal").status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def _gender_review(conn):
+    """Две эстафетчицы-тёзки, вторая — с полом M в протоколе → gender_mismatch: person=M, кандидат=F."""
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Саша", fmt="relay", stage="swim", gender="F", team="Тест")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Саша", fmt="relay", stage="run", gender="M", team="Тест")
+    service.sync(conn)
+    rv = [r for r in pdb.list_reviews(conn, "open") if r["race_year"] == Y2 and r["kind"] == "gender_mismatch"][0]
+    return rv, _pid(conn, Y2, 9102, "run"), _pid(conn, YEAR, 9101, "swim")
+
+
+def test_undo_after_review_person_was_deleted(conn):
+    rv, male, female = _gender_review(conn)
+    res = service.set_birthdate(female, datetime.date(1990, 1, 1), "test", review_id=rv["id"])
+    conn.cursor().execute("DELETE FROM participants WHERE race_year=%s AND bib='9102'", (Y2,))
+    service.sync(conn)                                       # M без выступлений, запись решена → M удалён
+    assert pdb.get_person(conn, male) is None
+    service.undo(res["audit_id"], "test")                    # без IntegrityError
+    back = pdb.get_review(conn, rv["id"])
+    assert back["status"] == "open" and back["person_id"] is None
+    assert pdb.get_person(conn, female)["birthdate"] is None
+
+
+def test_merge_from_card_cleans_candidates_and_closes_review(conn):
+    rv, male, female = _gender_review(conn)
+    service.merge(male, female, "test")                      # из карточки — без review_id
+    back = pdb.get_review(conn, rv["id"])
+    assert back["person_id"] == female and back["other_person_ids"] == "" and back["status"] == "resolved"
+
+
+def test_undo_does_not_touch_reviews_changed_later(conn):
+    rv, male, female = _gender_review(conn)
+    res = service.set_birthdate(female, datetime.date(1990, 1, 1), "test")   # без review_id
+    service.set_review_status(rv["id"], "deferred", "test")
+    service.undo(res["audit_id"], "test")
+    assert pdb.get_review(conn, rv["id"])["status"] == "deferred"

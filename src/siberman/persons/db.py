@@ -312,18 +312,17 @@ def reviews_for_person(conn, person_id: int) -> list:
 REVIEW_STATE = ("person_id", "other_person_ids", "status", "resolved_at", "resolved_by")
 
 
-def reviews_state(conn, person_ids, review_ids=()) -> list:
-    """Состояние записей «проверить», затронутых действием: где человек — основной или кандидат,
-    плюс явно названные записи. Для снимка отмены."""
-    ids = sorted({int(i) for i in person_ids if i is not None})
+def reviews_state(conn, review_ids=(), moved_from=None) -> list:
+    """Записи «проверить», которые меняет действие: явно названные + (при слиянии) нерешённые записи,
+    где исходный человек — основной или кандидат. Только они попадают в снимок отмены."""
     rids = sorted({int(i) for i in review_ids if i is not None})
     conds, args = [], []
-    for i in ids:
-        conds.append("(person_id=%s OR FIND_IN_SET(%s, other_person_ids))")
-        args += [i, str(i)]
     if rids:
         conds.append(f"id IN ({','.join(['%s'] * len(rids))})")
         args += rids
+    if moved_from is not None:
+        conds.append("(status <> 'resolved' AND (person_id=%s OR FIND_IN_SET(%s, other_person_ids)))")
+        args += [int(moved_from), str(moved_from)]
     if not conds:
         return []
     cur = _cur(conn)
@@ -334,14 +333,34 @@ def reviews_state(conn, person_ids, review_ids=()) -> list:
 def restore_reviews(conn, rows: list) -> None:
     cur = conn.cursor()
     for r in rows:
-        cur.execute(f"UPDATE siberman_person_reviews SET {', '.join(f'{k}=%s' for k in REVIEW_STATE)} WHERE id=%s",
-                    [r[k] for k in REVIEW_STATE] + [int(r["id"])])
+        cur.execute("UPDATE siberman_person_reviews SET person_id=(SELECT id FROM siberman_persons WHERE id=%s), "
+                    "other_person_ids=%s, status=%s, resolved_at=%s, resolved_by=%s WHERE id=%s",
+                    (r["person_id"], r["other_person_ids"], r["status"], r["resolved_at"], r["resolved_by"],
+                     int(r["id"])))
 
 
-def move_reviews(conn, source_id: int, target_id: int) -> None:
-    """Слияние: открытые и отложенные записи исходного человека — на целевого (FK обнулил бы их)."""
-    conn.cursor().execute("UPDATE siberman_person_reviews SET person_id=%s WHERE person_id=%s AND status <> 'resolved'",
-                          (int(target_id), int(source_id)))
+CANDIDATE_KINDS = ("namesake_candidate", "gender_mismatch", "relinked")
+
+
+def move_reviews(conn, source_id: int, target_id: int, user: str) -> None:
+    """Слияние: в нерешённых записях исходный человек заменяется целевым — и как основной, и среди
+    кандидатов (FK обнулил бы основного). Запись «тот же или другой?», у которой не осталось
+    кандидатов, закрывается."""
+    source, target = int(source_id), int(target_id)
+    cur = _cur(conn)
+    cur.execute("SELECT id, kind, person_id, other_person_ids FROM siberman_person_reviews WHERE status <> 'resolved' "
+                "AND (person_id=%s OR FIND_IN_SET(%s, other_person_ids))", (source, str(source)))
+    for r in cur.fetchall():
+        person = target if r["person_id"] == source else r["person_id"]
+        others = []
+        for x in filter(None, r["other_person_ids"].split(",")):
+            x = target if int(x) == source else int(x)
+            if x != person and x not in others:
+                others.append(x)
+        conn.cursor().execute("UPDATE siberman_person_reviews SET person_id=%s, other_person_ids=%s WHERE id=%s",
+                              (person, ",".join(map(str, others)), r["id"]))
+        if r["kind"] in CANDIDATE_KINDS and not others:
+            set_review_status(conn, r["id"], "resolved", user)
 
 
 # ── журнал ───────────────────────────────────────────────────────────────────
