@@ -20,7 +20,7 @@
 - **Старт** — выступление со статусом не `dns`; **финиш личника** — `race_time(e)` (статус active, итог и последняя КТ каждого этапа); **команда стартовала** — `Team.status != "dns"`, **финишировала** — `Team.time_s` не None.
 - Пол человека — пол последнего личного старта. «Людей в составах эстафет» — участники стартовавших команд со своим статусом не `dns`. «Всего людей» — все, у кого есть старт (лично или в эстафете). **Новичок года** — первый старт человека в Siberman (любой формат) в этом году. Лучшее время года — лучший итог личника. Год без стартов в статистику не попадает.
 - Сверка на архиве 2016–2025 (локальная БД, проверено 2026-10-19): стартов 204 / финишей 196; людей 170 / 165; мужчин 156, женщин 14; мужских стартов 189 / 184; женских 15 / 12; команд 73 / 71; людей всего 337 — совпадает с сайтом. Расхождения — сообщить, тест не подгонять.
-- **Город человека:** последнего старта с городом → `siberman_persons.city` (введён в админке или из прошлых стартов) → заявка Тильды, у которой ФИ (в любом порядке) и ДР совпадают ровно с одним человеком реестра (из нескольких — последняя поданная). Иначе город неизвестен.
+- **Город человека** (с Task 5a): введён в админке (`siberman_persons.city_manual`, главнее протокола — решение пользователя 2026-10-19) → последнего старта с городом → заявка Тильды, у которой ФИ (в любом порядке) и ДР совпадают ровно с одним человеком реестра (из нескольких — последняя поданная). Иначе город неизвестен.
 - В протоколах эстафет города нет (0 из 219 строк архива), страна у всех «Россия» по умолчанию. **Решение пользователя 2026-10-19:** на карте и в списках — только люди с известным городом, без переключателя «Все / Личный / Эстафеты», подпись «город известен у N из M». Неизвестные города пользователь уточнит — ввод во вкладке «Люди» → «Без города» (открытый вопрос, спецификация §10).
 - **Справочник** `data/siberman/cities.json`: каноническое название, страна, ISO 3166-1 numeric страны (3 цифры), широта, долгота, написания (`aliases`). Поиск по `norm_city` (нижний регистр, ё→е, без «г.», дефис = пробел). **Страна — из справочника**, не из протокола (в протоколе «Киргизия» / «Кыргызстан» / «Germany», «Апрелевка — Украина»). Города нет в справочнике — в списках как написан, страна из протокола, без точки на карте; админка показывает «города без координат». Справочник заполняет скрипт через Nominatim и проверяет глазами пользователь.
 - `refresh_display` реестра больше не стирает город и страну, если в последнем выступлении города нет (иначе город, введённый в админке, пропадал при следующей эстафете).
@@ -672,6 +672,225 @@ def api_hall_geo():
 
 ---
 
+### Task 5a: Ревью задач 1–5 — старт без отметок, страна и дубли городов, ручной город, битый справочник
+
+1. **Старт.** Статус `dns` в живом году не ставится (Copernico переводит неявившихся в active), стартовый протокол загружен до гонки → «N стартов, новички, 2016–2026». Старт = `dnf`/`dsq` или `active` с хоть одной отметкой КТ (`data.is_start`). На архиве — те же 204 / 337 (у всех не-dns строк архива есть отметка, проверено ревью).
+2. **Страна города из заявки / админки** — та, с которой этот город чаще пишут в протоколах (было: пустая → строка «» в странах, дубли «Москва / Москва»). Строки городов ключуются по `norm_city` (разные написания одного города — одна строка, название — первое встреченное).
+3. **Ручной город** — отдельная колонка `siberman_persons.city_manual` (решение пользователя 2026-10-19: ручной главнее протокола). Город: введён в админке → последнего старта с городом → заявка. `persons.city` — снова только из протоколов: последнего выступления **с городом**. Слияние сохраняет ручной город; без изменений `set_city` в журнал не пишет.
+4. **Битый `cities.json`** (правится руками) — не роняет рейтинг и рекорды: справочник пропускается с ошибкой в логе.
+
+**Files:** Modify `src/siberman/migrations/014_persons.sql`, `src/siberman/persons/linking.py`, `src/siberman/persons/db.py`, `src/siberman/persons/service.py`, `src/siberman/hall/data.py`, `src/siberman/hall/geo.py`, `src/siberman/hall/stats.py`, `tests/unit/test_siberman_hall_geo.py`, `tests/unit/test_siberman_hall_stats.py`, `tests/integration/test_siberman_persons.py`, `tests/integration/test_siberman_hall.py`.
+
+- [ ] **Step 1: Колонка.** В `014_persons.sql` после строки `country …`:
+```sql
+  city_manual     VARCHAR(100) NOT NULL DEFAULT '',  -- введён в админке; для карты главнее протокола
+```
+Локальная БД (таблица уже есть) — один раз скриптом из scratchpad (`.env.local` через dotenv): если в `SHOW COLUMNS FROM siberman_persons` нет `city_manual` → `ALTER TABLE siberman_persons ADD COLUMN city_manual VARCHAR(100) NOT NULL DEFAULT '' AFTER country`. На проде миграции 014 ещё нет — хватит правки файла.
+
+- [ ] **Step 2: Тесты.**
+  - `tests/unit/test_siberman_hall_geo.py`:
+    - импорт: `from src.siberman.hall.geo import City, applicant_cities, build_geo, city_of, load_cities, missing_report, resolve_places`;
+    - `start(...)` — параметр `has_time=True` в конце сигнатуры и `has_time=has_time` в `Entry(...)`;
+    - `person` заменить на
+```python
+def person(pid, surname, manual="", bd=None):
+    return NS(id=pid, surname=surname, name="Тест", birthdate=bd, city="", city_manual=manual)
+```
+    - в `test_place_priority_last_start_then_registry_then_applicant`: переименовать в `test_place_priority_manual_then_last_start_then_applicant`, комментарий у второго старта — `# эстафета без города`, у `Второй` — `# город введён в админке`, а ожидание для 1 — `1: "Москва"` (ручной главнее старта; Москвы в DIR нет — как написан);
+    - в конец:
+```python
+def test_no_marks_is_not_a_start_and_country_from_protocol():
+    entries = [start(2026, "Неявка", "Омск", pid=7, has_time=False),    # стартовый протокол живого года
+               start(2025, "Сосед", "Абакан", pid=8),
+               start(2025, "Эстафетчик", fmt="relay", stage="run", pid=9),
+               start(2025, "Сошедший", "Омск", pid=10, status="dnf", has_time=False)]
+    places = resolve_places(entries, [person(9, "Эстафетчик", "абакан")], [], DIR)
+    assert 7 not in places and places[10].name == "Омск"
+    assert (places[9].name, places[9].country) == ("абакан", "Россия")      # страна — как у Абакана в протоколах
+    g = build_geo(entries, places)
+    assert [(c["name"], c["country"], c["count"]) for c in g["cities"]] == [("Абакан", "Россия", 2), ("Омск", "Россия", 1)]
+
+
+def test_broken_or_missing_cities_json_is_ignored(tmp_path):
+    bad = tmp_path / "cities.json"
+    bad.write_text("[{", encoding="utf-8")
+    assert load_cities(bad) == {} and load_cities(tmp_path / "нет.json") == {}
+```
+  - `tests/unit/test_siberman_hall_stats.py`:
+    - `ind(year, pid, g="M", status="active", total=100, has_time=True)`; в `Entry(...)`: `overall_s=total if status == "active" and has_time else None`, `finished=ALL if status == "active" and has_time else frozenset()`, `has_time=has_time`;
+    - `rel(year, bib, role, pid, status="active", has_time=True)` → `has_time=has_time`, `finished=frozenset(ROLE[role]) if has_time else frozenset()`;
+    - `team(year, bib, pids, swim_status="active", has_time=True)` → передаёт `has_time` в `rel`;
+    - в конец:
+```python
+def test_live_year_start_list_without_marks_is_not_counted():
+    entries = [ind(2025, 1), ind(2026, 2, has_time=False), *team(2026, 101, (3, 4, 5), has_time=False)]
+    s = stats(entries)
+    assert (s["last_year"], s["people_total"], s["relay"]["teams"], s["relay"]["people"]) == (2025, 1, 0, 0)
+```
+  - `tests/integration/test_siberman_persons.py`: `test_city_survives_relay_start_and_is_undoable` заменить на
+```python
+def test_manual_city_is_separate_and_undoable(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Анна", gender="F", city="Норильск")
+    _ins(conn, Y3, 9103, "Тестреестрова", "Анна", fmt="relay", stage="run", gender="F", team="Тест", city="")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    assert _pid(conn, Y2, 9102) == pid == _pid(conn, Y3, 9103, "run")
+    assert pdb.get_person(conn, pid)["city"] == "Норильск"          # последнего выступления с городом
+    res = service.set_city(pid, "  Абакан ", "test")
+    p = pdb.get_person(conn, pid)
+    assert (p["city_manual"], p["city"]) == ("Абакан", "Норильск")
+    assert service.set_city(pid, "Абакан", "test")["audit_id"] is None   # без изменений — не в журнал
+    service.undo(res["audit_id"], "test")
+    assert pdb.get_person(conn, pid)["city_manual"] == ""
+
+
+def test_merge_keeps_manual_city(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Аня", fmt="relay", stage="run", gender="F", team="Тест", city="")
+    service.sync(conn)
+    src, dst = _pid(conn, YEAR, 9101, "swim"), _pid(conn, Y2, 9102, "run")
+    assert src != dst
+    service.set_city(src, "Абакан", "test")
+    service.merge(src, dst, "test")
+    assert pdb.get_person(conn, dst)["city_manual"] == "Абакан"
+```
+    (если `_pid(conn, Y2, 9102) == pid` не выполняется из-за правил привязки личник ↔ эстафета — остановись и опиши, тест не подгоняй.)
+  - `tests/integration/test_siberman_hall.py`, в `test_geo_on_archive`: импорт `from src.siberman.persons.linking import norm_city` и строка `assert len({norm_city(c["name"]) for c in g["cities"]}) == len(g["cities"])`.
+
+- [ ] **Step 3: Красный прогон** — unit `test_siberman_hall_geo.py` + `test_siberman_hall_stats.py`: падают на `has_time` (`TypeError: ... unexpected keyword argument 'has_time'`); интеграционные — `KeyError: 'city_manual'` / несовпадения.
+
+- [ ] **Step 4: `data.py`.**
+  - После `FINISHED_SQL`: `STARTED_SQL = "SELECT DISTINCT participant_id FROM checkpoint_times WHERE cumulative_s IS NOT NULL"`.
+  - `Entry`: после `finished` — `has_time: bool = False                       # есть хоть одна отметка КТ`.
+  - После `race_time`:
+```python
+def is_start(e: Entry) -> bool:
+    """Вышел на старт: сошёл / снят или есть хоть одна отметка КТ. Статус dns ставят не всегда: в живом
+    году Copernico переводит неявившихся в active, а стартовый протокол загружен до гонки."""
+    return e.status in ("dnf", "dsq") or (e.status == "active" and e.has_time)
+```
+  - `load_entries`: после цикла `finished` — `cur.execute(STARTED_SQL)` и `started = {r["participant_id"] for r in cur.fetchall()}`; в `Entry(...)` — `has_time=r["id"] in started`.
+
+- [ ] **Step 5: `geo.py`.**
+  - Импорты: `import logging`, `from collections import Counter, defaultdict`, `from src.siberman.hall.data import is_start, person_of`; после импортов `log = logging.getLogger(__name__)`.
+  - Докстринг модуля, второе предложение: «Город человека — введённый в админке; нет — последнего старта с городом; нет — из заявки Тильды с той же ФИ и ДР.»
+  - `load_cities`:
+```python
+def load_cities(path: Path = CITIES_PATH) -> dict:
+    """Нормализованное написание → City (название и все написания из aliases). Нет файла — пусто; файл
+    испорчен (правится руками) — пусто и ошибка в логе: рейтинг и рекорды не должны падать из-за карты."""
+    try:
+        out = {}
+        for r in json.loads(path.read_text(encoding="utf-8")):
+            c = City(r["name"], r["country"], r.get("iso") or "", r.get("lat"), r.get("lon"))
+            for s in (r["name"], *r.get("aliases", ())):
+                out[norm_city(s)] = c
+        return out
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        log.error("[siberman/hall] %s не прочитан, география без справочника: %s", path.name, e)
+        return {}
+```
+  - `resolve_places`:
+```python
+def resolve_places(entries: list, persons: list, applicants: list, directory: dict) -> dict:
+    """Человек (data.person_of) → City или None; люди — все, у кого есть старт (data.is_start). Город
+    из админки или заявки получает страну, с которой этот город чаще пишут в протоколах."""
+    found, proto = {}, defaultdict(Counter)
+    for e in sorted(entries, key=lambda e: e.year):
+        if norm_city(e.city) and e.country:
+            proto[norm_city(e.city)][e.country] += 1
+        if not is_start(e):
+            continue
+        k = person_of(e)
+        found.setdefault(k, None)
+        if norm_city(e.city):
+            found[k] = (e.city, e.country)
+
+    def with_country(city: str) -> tuple:
+        c = proto.get(norm_city(city))
+        return city, c.most_common(1)[0][0] if c else ""
+
+    registry = {p.id: p for p in persons}
+    from_apps = applicant_cities(persons, applicants)
+    out = {}
+    for k, place in found.items():
+        p = registry.get(k) if isinstance(k, int) else None
+        if p is not None and norm_city(p.city_manual):
+            place = with_country(p.city_manual)
+        elif place is None and k in from_apps:
+            place = with_country(from_apps[k])
+        out[k] = city_of(*place, directory) if place else None
+    return out
+```
+  - `_last_starts`: условие `if is_start(e):` вместо `if e.status != "dns":`; докстринг «Человек → его старты (data.is_start) по годам.»
+  - `build_geo`: ключ строки — `(norm_city(c.name), c.country)` вместо `(c.name, c.country)`; докстринг дополнить «; разные написания одного города — одна строка».
+  - `missing_report`, часть про координаты:
+```python
+    no_coords = {}
+    for c in places.values():
+        if c is not None and c.lat is None:
+            row = no_coords.setdefault((norm_city(c.name), c.country), {"name": c.name, "country": c.country, "count": 0})
+            row["count"] += 1
+    return {"people": people, "no_coords": sorted(no_coords.values(), key=lambda r: (r["country"], r["name"]))}
+```
+
+- [ ] **Step 6: `stats.py`.** Импорт `from src.siberman.hall.data import is_start, person_of, race_time`; `started = sorted((e for e in entries if is_start(e)), key=lambda e: e.year)`; `tstart = [t for t in teams if any(is_start(m) for m in t.members)]`; люди в составах — `… for m in t.members if is_start(m)`. В докстринге: «Старт — data.is_start (dnf/dsq или отметка КТ: dns в живом году не ставится)».
+
+- [ ] **Step 7: Реестр.**
+  - `linking.py`, `Person`: после `city: str = ""` — `city_manual: str = ""`.
+  - `db.py`: `PERSON_FIELDS = ("surname", "name", "gender", "birthdate", "bib_individual", "city", "country", "city_manual")`; `load_persons` — в SELECT `city, city_manual` и `city_manual=r["city_manual"]` в `Person(...)`; `refresh_display`:
+```python
+def _recent(r: dict) -> tuple:
+    return r["race_year"], r["format"] == "individual"
+
+
+def refresh_display(conn, person_ids) -> None:
+    """ФИ и пол — по последнему выступлению; город и страна — по последнему выступлению с городом (в
+    протоколах эстафет города нет). Город, введённый в админке, хранится отдельно — city_manual."""
+    for pid, rows in participations(conn, person_ids).items():
+        last = max(rows, key=_recent)
+        fields = {"surname": last["surname"], "name": last["name"]}
+        with_city = [r for r in rows if r["city"]]
+        if with_city:
+            w = max(with_city, key=_recent)
+            fields.update(city=w["city"], country=w["country"] or "")
+        if last["gender"] in ("M", "F"):
+            fields["gender"] = last["gender"]
+        update_person(conn, pid, fields)
+```
+  - `service.py`:
+    - `_restore`: кортеж полей `("surname", "name", "gender", "birthdate", "city", "country", "city_manual")`;
+    - `merge`: в `update_person(conn, target_id, {...})` добавить `"city_manual": dst["city_manual"] or src["city_manual"]`;
+    - `set_city`:
+```python
+def set_city(person_id: int, city: str, user: str) -> dict:
+    """Город человека, введённый в админке (для карты главнее протокола; пусто — снова из протоколов).
+    Пишется в журнал; без изменений — ничего не делает."""
+    city = " ".join((city or "").split())
+    if len(city) > 100:
+        raise PersonsError("Слишком длинное название города")
+    with _connection() as conn, _locked_tx(conn):
+        p = pdb.get_person(conn, person_id)
+        if not p:
+            raise PersonsError("Человек не найден")
+        if p["city_manual"] == city:
+            return {"ok": True, "audit_id": None}
+        snap = _snapshot(conn, [person_id], [])
+        pdb.update_person(conn, person_id, {"city_manual": city})
+        audit_id = _record(conn, "city", f"Город {_fio(p)} (id {person_id}): {p['city_manual'] or '—'} → {city or '—'}",
+                           snap, user)
+    return {"ok": True, "audit_id": audit_id}
+```
+
+- [ ] **Step 8: Прогоны.** unit `test_siberman_hall_geo.py` — 7, `test_siberman_hall_stats.py` — 4; `tests/unit/` — 977; интеграционные persons — 23, hall — 7 (сверка 204/196…/337 — без изменений; число не сошлось → стоп).
+
+- [ ] **Step 9: Commit** — `fix(siberman/hall): старт — с отметкой КТ; страна города из протоколов, один город — одна строка; ручной город отдельно; битый справочник не роняет блоки`.
+
+---
+
 ### Task 6: Справочник городов (Nominatim) — после «да» пользователя
 
 **Files:** Create `scripts/siberman_geocode_cities.py`, `data/siberman/cities.json`.
@@ -787,9 +1006,28 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Запуск** (после «да» пользователя): `C:\Users\podbo\miniconda3\python.exe scripts/siberman_geocode_cities.py`. В отчёт — полный вывод скрипта (названия городов — не ПДн).
 
+- [ ] **Step 2b: Тест на настоящий справочник** — в конец `tests/unit/test_siberman_hall_geo.py`:
+```python
+def test_cities_json_is_consistent():
+    import json
+    import re
+    from src.siberman.hall.geo import CITIES_PATH
+    from src.siberman.persons.linking import norm_city
+    seen = {}
+    for r in json.loads(CITIES_PATH.read_text(encoding="utf-8")):
+        assert set(r) == {"name", "country", "iso", "lat", "lon", "aliases"} and r["name"] and r["country"], r
+        assert re.fullmatch(r"\d{3}", r["iso"]) or r["iso"] == "", r
+        assert (r["lat"] is None) == (r["lon"] is None), r
+        if r["lat"] is not None:
+            assert -90 <= r["lat"] <= 90 and -180 <= r["lon"] <= 180, r
+        for spelling in (r["name"], *r["aliases"]):    # одно написание — один город (Железногорск!)
+            assert seen.setdefault(norm_city(spelling), (r["name"], r["country"])) == (r["name"], r["country"]), spelling
+```
+  и в `tests/integration/test_siberman_hall.py` → `test_geo_on_archive`: `assert all(c["name"] for c in g["countries"])` (со справочником у каждого города есть страна). Падение — править `cities.json` (страна «НЕ НАЙДЕН», дубль написания), не тест.
+
 - [ ] **Step 3: Проверка глазами (координатор + пользователь).** Пройти вывод: тёзки-города (Железногорск — ожидаемо Красноярский край, 56.25, 93.53; Радужный (Владимирская область); Королёв; Дзержинск), страны (Апрелевка → Россия), «НЕ НАЙДЕН». Правки — прямо в `cities.json` (координаты, страна, iso, перенос написания в `aliases` нужного города). Повторный `--dry-run` — «новых написаний: 0».
 
-- [ ] **Step 4: Прогоны** — интеграционные hall (7): `known` и сумма по странам не меняются, меняются только точки.
+- [ ] **Step 4: Прогоны** — `tests/unit/` — 978; интеграционные hall (7): `known` не меняется, страны и города — по справочнику.
 
 - [ ] **Step 5: Commit** — `feat(siberman/hall): справочник городов для географии (Nominatim + проверка)`.
 
@@ -911,7 +1149,7 @@ hallLoad('/api/siberman/hall/stats').then(render)
 ```
 В `@media (max-width: 640px)` добавить строку `  .st-two, .geo-cols { grid-template-columns: 1fr; }`.
 
-- [ ] **Step 4: Проверка** — `node --check static/js/siberman-hall-stats.js`; `tests/unit/` — 974; интеграционные hall — 7.
+- [ ] **Step 4: Проверка** — `node --check static/js/siberman-hall-stats.js`; `tests/unit/` — 978; интеграционные hall — 7.
 
 - [ ] **Step 5: Commit** — `feat(siberman/hall): блок «Статистика»`.
 
@@ -1074,7 +1312,7 @@ hallLoad('/api/siberman/hall/geo').then(g => { drawCities(g.cities); drawCountri
 ```
 В `@media (max-width: 640px)` добавить `  #map { height: 320px; }`.
 
-- [ ] **Step 4: Проверка** — `node --check static/js/siberman-hall-geo.js`; `tests/unit/` — 974; интеграционные hall — 7.
+- [ ] **Step 4: Проверка** — `node --check static/js/siberman-hall-geo.js`; `tests/unit/` — 978; интеграционные hall — 7.
 
 - [ ] **Step 5: Commit** — `feat(siberman/hall): блок «География» — карта, страны, города`.
 
@@ -1099,9 +1337,9 @@ hallLoad('/api/siberman/hall/geo').then(g => { drawCities(g.cities); drawCountri
   - После `let searchTimer = null;`: `let noCity = null;`
   - В `renderCard` после строки с датой рождения (`…${card.reviews.length ? … : ''}</div>`):
 ```js
-    <div class="row">Город <input id="city" value="${esc(p.city || '')}" maxlength="100" style="width:220px">
+    <div class="row">Город вручную <input id="city" value="${esc(p.city_manual || '')}" placeholder="${esc(p.city || '')}" maxlength="100" style="width:220px">
       <button class="btn-small" id="city-save">Сохранить</button>
-      <span class="muted">для карты «География»; страна и координаты — из справочника городов</span></div>
+      <span class="muted">для карты «География» главнее протокола; пусто — город из протоколов</span></div>
 ```
     и после обработчика `bd-save`:
 ```js
@@ -1150,7 +1388,7 @@ async function loadNoCity() {
 ```
   - После обработчика `search`: `document.getElementById('nocity-q').addEventListener('input', renderNoCity);`
 
-- [ ] **Step 3: Проверка** — `node --check static/js/siberman-people-admin.js`; интеграционные persons — 22.
+- [ ] **Step 3: Проверка** — `node --check static/js/siberman-people-admin.js`; интеграционные persons — 23.
 
 - [ ] **Step 4: Commit** — `feat(siberman/admin): вкладка «Без города» и город в карточке человека`.
 
@@ -1188,7 +1426,7 @@ iframe: локальная страница в scratchpad с 4 iframe и скр�
 
 Скриншоты (десктоп и телефон обоих блоков, всплывающий список города, вкладка админки) — посмотреть глазами. Сервер остановить.
 
-- [ ] **Step 3: Полный прогон** — `tests/unit/` — 974; интеграционные hall + persons — 29.
+- [ ] **Step 3: Полный прогон** — `tests/unit/` — 978; интеграционные hall + persons — 30.
 
 - [ ] **Step 4: Commit** — `docs(siberman/hall): вставка статистики и географии в Тильду`.
 
@@ -1201,4 +1439,4 @@ iframe: локальная страница в scratchpad с 4 iframe и скр�
 - Спецификация §6 (две колонки «Люди» / «Старты», М/Ж, строка эстафет, всего людей, стран, городов, таблица по годам, «старт» без dns, сверка 204/196, 170/165, 156/14, 189/184, 15/12, 73/71) — Task 3, 5, 8. §7 (люди по реестру, город последнего старта → реестр → заявка; справочник с написаниями и ISO; Nominatim раз в секунду + проверка глазами; города без координат — в списках и в админке; Leaflet + Esri без «Leaflet»; закрашенные страны с подсказкой; Чукотка/Алеуты; кружок с числом, подсказка «город, страна», список людей по нажатию, markercluster; колесо над картой; телефон — два пальца, подсказка, Евразия; списки стран и городов; без переключателя, подпись «известен у N из M») — Task 1, 2, 6, 7, 9; ввод города в админке — Task 4, 10. §11 (503 → «Данные временно недоступны», год без стартов не попадает) — `hallLoad`, Task 3. §12 (unit: статистика, нормализация городов; integration: сверка статистики, нет `birthdate`; браузер: iframe, жесты карты) — Task 1–5, 11.
 - Отступления от спецификации: библиотеки — `static/lib/` через `download_static_libs.py` (не `static/vendor/`); «города без координат» — во вкладке «Без города» админки.
 - Имена: `person_of`, `load_people` (data) → geo, stats, persons.service; `City`, `load_cities`, `city_of`, `applicant_cities`, `resolve_places`, `build_geo`, `missing_report`, `CITIES_PATH` (geo); `build_stats(entries, teams, geo)`; `service.stats()`, `service.geography()`; `persons.service.set_city`, `no_city`; JS — `hallEsc`, `hallTime`, `hallAthlete`, `hallLoad` из `siberman-hall.js`.
-- Числа тестов: unit 966 → 969 (T1) → 971 (T2) → 974 (T3); интеграционные persons 20 → 22 (T4), hall 5 → 7 (T5); hall + persons 25 → 29.
+- Числа тестов: unit 966 → 969 (T1) → 971 (T2) → 974 (T3) → 977 (T5a) → 978 (T6); интеграционные persons 20 → 22 (T4) → 23 (T5a), hall 5 → 7 (T5); hall + persons 25 → 30.
