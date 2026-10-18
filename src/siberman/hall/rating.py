@@ -1,19 +1,14 @@
 """
 Рейтинг Siberman за все годы (спецификация hall §4): личники — финиш (официальный итог) с номером
-финиша человека и медалью, DNF/DSQ в конце; эстафеты — команда года с составом по этапам.
+финиша человека (из реестра; не привязано — по ФИ во всех годах, как трекер) и медалью, DNF/DSQ в конце; эстафеты — команда года с составом по этапам.
 Не стартовавшие и ещё идущие по дистанции (живой год) не показываются. Вкладки, «лучший на
 человека», год, поиск и места внутри выборки считает страница.
 """
 from collections import defaultdict
 
-from src.siberman.hall.data import Entry, bib_order, race_time
+from src.siberman.hall.data import bib_order, race_time
 from src.siberman.medals import medal_for
 from src.siberman.persons.linking import plain_key
-
-
-def person_key(e: Entry) -> tuple:
-    """Человек из реестра; выступление ещё не привязано (или нет миграции 014) — по ФИ."""
-    return ("p", e.person_id) if e.person_id else ("n", plain_key(e.surname, e.name))
 
 
 def _holder_at(current: dict, key: str):
@@ -29,10 +24,12 @@ def build_rating(entries: list, teams: list, records: dict) -> dict:
     current = records["current"]
     record_individual = {g: _holder_at(current, f"race:individual:{g}") for g in ("M", "F")}
     record_team = _holder_at(current, "race:relay:X")
-    finished_years = defaultdict(list)
+    by_person, by_name = defaultdict(list), defaultdict(list)
     for e in entries:
         if race_time(e) is not None:
-            finished_years[person_key(e)].append(e.year)
+            by_name[plain_key(e.surname, e.name)].append(e.year)
+            if e.person_id:
+                by_person[e.person_id].append(e.year)
 
     individual = []
     for e in entries:
@@ -41,7 +38,8 @@ def build_rating(entries: list, teams: list, records: dict) -> dict:
         t = race_time(e)
         if t is None and e.status not in ("dnf", "dsq"):
             continue
-        n = sum(1 for y in finished_years[person_key(e)] if y <= e.year) if t is not None else None
+        years = by_person[e.person_id] if e.person_id else by_name[plain_key(e.surname, e.name)]
+        n = sum(1 for y in years if y <= e.year) if t is not None else None
         individual.append({
             "year": e.year, "bib": e.bib, "person_id": e.person_id, "surname": e.surname, "name": e.name,
             "gender": e.gender, "city": e.city, "status": "finished" if t is not None else e.status,

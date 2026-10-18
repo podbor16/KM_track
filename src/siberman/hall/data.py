@@ -38,15 +38,24 @@ class Entry:
         return f"{self.surname} {self.name}".strip()
 
 
+BIKE_DAYS = ("bike_day1", "bike_day2")
+
+
 def race_time(e: Entry) -> Optional[int]:
-    """Итог личника, финишировавшего всю гонку (статус active и есть официальный итог)."""
-    return e.overall_s if e.format == "individual" and e.status == "active" and e.overall_s else None
+    """Итог личника, финишировавшего всю гонку: статус active, есть официальный итог и последняя КТ
+    каждого этапа (в живом году overall_results пишется и для идущих по дистанции)."""
+    if e.format != "individual" or e.status != "active" or not e.overall_s or not set(STAGES) <= e.finished:
+        return None
+    return e.overall_s
 
 
 def segment_time(e: Entry, stages: tuple) -> Optional[int]:
     """Время отрезка из этапов stages: участник не сошёл и дошёл до последней КТ каждого этапа.
-    Время этапа 0 — не время (архив кладёт весь велоэтап IRONSTAR 2017 на 2-й день)."""
-    if e.status != "active" or any(s not in e.finished or not e.times.get(s) or e.times[s] <= 0 for s in stages):
+    Время этапа 0 — не время (архив кладёт весь велоэтап IRONSTAR 2017 на 2-й день); у такого
+    участника и «2-й день» — весь велоэтап, поэтому отрезки отдельных дней не считаются."""
+    if e.status != "active" or any(s not in e.finished or (e.times.get(s) or 0) <= 0 for s in stages):
+        return None
+    if len(stages) == 1 and stages[0] in BIKE_DAYS and any((e.times.get(d) or 0) <= 0 for d in BIKE_DAYS):
         return None
     return sum(e.times[s] for s in stages)
 
@@ -74,7 +83,8 @@ class Team:
 
     @property
     def time_s(self) -> Optional[int]:
-        """Итог команды — сумма этапов (как в протоколе года): все три этапа на месте, никто не сошёл."""
+        """Итог команды — сумма этапов: все три этапа на месте, никто не сошёл, каждый дошёл до последней КТ
+        своих этапов (в живом году итоги этапов пишутся и у идущих)."""
         if self.status != "active":
             return None
         total = 0
@@ -83,7 +93,7 @@ class Team:
             if m is None:
                 return None
             for s in ROLE_STAGES[role]:
-                if m.times.get(s) is None:
+                if m.times.get(s) is None or s not in m.finished:
                     return None
                 total += m.times[s]
         return total
