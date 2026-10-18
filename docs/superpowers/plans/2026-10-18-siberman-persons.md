@@ -1753,6 +1753,97 @@ git commit -m "fix(siberman/persons): ручная привязка с друг�
 
 ---
 
+### Task 3c: Третье ревью — повторные правки одного выступления
+
+1. **Ключ записи «проверить» не менялся** (`kind:год:номер:этап`): вторая смена ФИ на том же месте давала тот же ключ, `INSERT IGNORE` её глотал — выступление молча уходило к третьему человеку. Теперь у `relinked` и `manual_name_changed` в `detail` — новый ключ ФИ строки, и он входит в ключ дедупликации.
+2. **«Оставить привязку» только закрывало запись**: `name_key` оставался старым, подтверждённое ФИ не попадало в ключи человека. Теперь отдельное действие `keep_link` (Task 7/9) переписывает привязку с текущим ФИ.
+3. Ручная привязка строки, у которой стёрли фамилию, — тоже `manual_name_changed`.
+
+**Files:**
+- Modify: `src/siberman/persons/linking.py`
+- Modify: `tests/unit/test_siberman_persons_linking.py`
+
+- [ ] **Step 1: Тесты**
+
+В `tests/unit/test_siberman_persons_linking.py`:
+
+1. В `test_cleared_surname_drops_auto_link_only` заменить последнюю строку `assert links == {} and reviews == []` на:
+```python
+    assert links == {}
+    assert [(x.kind, x.natkey) for x in reviews] == [("manual_name_changed", key(manual))]
+```
+2. В `test_manual_link_name_change_is_kept_but_flagged` после строки с `assert [(x.kind, x.person) ...]` добавить:
+```python
+    assert reviews[0].detail == "петров петр"
+```
+3. В `test_review_dedupe_keys` в конец добавить:
+```python
+    first = Review("relinked", natkey=key(a), person=p, detail="петров петр").dedupe_key()
+    second = Review("relinked", natkey=key(a), person=p, detail="петрова петра").dedupe_key()
+    assert first == "relinked:2024:7:none:петров петр" and first != second
+```
+4. В `test_relinked_after_typo_fix_keeps_trace` после последнего `assert` добавить:
+```python
+    assert reviews[0].detail == "иванов иван"
+```
+
+- [ ] **Step 2: Тесты падают**
+
+Run: `conda run -n base python -m pytest tests/unit/test_siberman_persons_linking.py -q`
+Expected: 4 failed.
+
+- [ ] **Step 3: Правки `linking.py`**
+
+1. `Review.dedupe_key` заменить:
+```python
+    def dedupe_key(self) -> str:
+        if self.natkey:
+            y, b, s = self.natkey
+            # detail (новое ФИ строки) различает повторные правки одного и того же выступления
+            return (f"{self.kind}:{y}:{b}:{s}" + (f":{self.detail}" if self.detail else ""))[:190]
+        return f"{self.kind}:{self.person.id if self.person else ''}:{self.detail}"[:190]
+```
+2. В `link_participants`, первый цикл (строки без фамилии) — ручная привязка тоже даёт запись:
+```python
+    for r in ordered:
+        if str(r["surname"] or "").strip():
+            named.append(r)
+            continue
+        link = links.get(natkey(r))
+        if not link:
+            continue
+        if not link[1]:
+            reg.dropped.append(natkey(r))
+        elif link[0] in reg.by_id:
+            reviews.append(Review("manual_name_changed", natkey=natkey(r), person=reg.by_id[link[0]]))
+```
+и перенести инициализацию `kept, reviews = set(), []` ПЕРЕД этим циклом (`reviews` нужен в нём). Во втором цикле:
+```python
+            if not same:
+                reviews.append(Review("manual_name_changed", natkey=natkey(r), person=p,
+                                      detail=plain_key(r["surname"], r["name"])))
+```
+3. В третьем цикле запись `relinked`:
+```python
+        if prev is not None and prev is not p:
+            reviews.append(Review("relinked", natkey=k, person=p, others=(prev,),
+                                  detail=plain_key(r["surname"], r["name"])))
+```
+
+- [ ] **Step 4: Тесты проходят**
+
+Run: `conda run -n base python -m pytest tests/unit/test_siberman_persons_linking.py tests/unit/test_siberman_persons_applicants.py -q`
+Expected: 38 passed. `tests/unit/` — 941 passed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/siberman/persons/linking.py tests/unit/test_siberman_persons_linking.py
+git commit -m "fix(siberman/persons): повторные правки одного выступления — новая запись «проверить»"
+```
+
+---
+
 ### Task 4: SQL реестра (`db.py`)
 
 **Files:**
@@ -2037,6 +2128,12 @@ def add_reviews(conn, reviews: list) -> int:
              ",".join(str(o.id) for o in r.others), r.detail[:255]))
         n += cur.rowcount
     return n
+
+
+def get_review(conn, review_id: int) -> Optional[dict]:
+    cur = _cur(conn)
+    cur.execute("SELECT * FROM siberman_person_reviews WHERE id=%s", (int(review_id),))
+    return cur.fetchone()
 
 
 def list_reviews(conn, status: str) -> list:
@@ -2557,12 +2654,30 @@ def test_reviews_search_and_journal(conn):
     pid = _pid(conn, YEAR, 9001)
     service.set_birthdate(pid, datetime.date(1980, 1, 1), "test")
     assert any("Тестреестров" in j["summary"] for j in service.journal())
+
+
+def test_keep_link_confirms_new_name(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    service.reassign([[YEAR, "9101", "swim"]], pid, "test")          # теперь привязка ручная
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестрова-Кузина' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    service.sync(conn)
+
+    def mine():
+        return [r for r in service.reviews("open")
+                if r["kind"] == "manual_name_changed" and r["participant"] and r["participant"]["year"] == YEAR]
+    assert len(mine()) == 1 and _pid(conn, YEAR, 9101, "swim") == pid
+    service.keep_link(mine()[0]["id"], "test")
+    service.sync(conn)
+    assert mine() == [] and _pid(conn, YEAR, 9101, "swim") == pid
 ```
 
 - [ ] **Step 2: Тесты падают**
 
 Run: `conda run -n base python -m pytest tests/integration/test_siberman_persons.py -q`
-Expected: 5 passed, 5 failed (`AttributeError: module ... has no attribute 'reassign'` и т.п.).
+Expected: 5 passed, 6 failed (`AttributeError: module ... has no attribute 'reassign'` и т.п.).
 
 - [ ] **Step 3: Реализация (дописать в `service.py`)**
 
@@ -2726,6 +2841,23 @@ def set_review_status(review_id: int, status: str, user: str) -> dict:
     return {"ok": True}
 
 
+def keep_link(review_id: int, user: str) -> dict:
+    """«Оставить привязку» по записи о выступлении: привязка становится ручной с текущим ФИ строки
+    (подтверждённое написание попадает в ключи человека, следующая смена ФИ снова будет замечена)."""
+    with _connection() as conn, _locked_tx(conn):
+        r = pdb.get_review(conn, review_id)
+        if not r or not r["race_year"]:
+            raise PersonsError("Запись не найдена")
+        k = (int(r["race_year"]), str(r["bib"]), r["relay_stage"])
+        rows = pdb.participants_by_keys(conn, [k])
+        link = pdb.links_for_keys(conn, [k]).get(k)
+        if not rows or not link:
+            raise PersonsError("Выступление не найдено — обновите страницу")
+        pdb.set_links(conn, [(k, link["person_id"], plain_key(rows[0]["surname"], rows[0]["name"]))], manual=True)
+        pdb.set_review_status(conn, review_id, "resolved", user)
+    return {"ok": True}
+
+
 # ── чтение для админки ───────────────────────────────────────────────────────
 
 def _start(r: dict) -> dict:
@@ -2802,7 +2934,7 @@ def journal() -> list:
 - [ ] **Step 4: Тесты проходят**
 
 Run: `conda run -n base python -m pytest tests/integration/test_siberman_persons.py -q`
-Expected: 10 passed.
+Expected: 11 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -3072,6 +3204,11 @@ def api_review_status(review_id: int, body: ReviewStatusIn, user: str = Depends(
     return _run(service.set_review_status, review_id, body.status, user)
 
 
+@router.post(f"{API}/reviews/{{review_id}}/keep")
+def api_keep_link(review_id: int, user: str = Depends(api_require_auth)):
+    return _run(service.keep_link, review_id, user)
+
+
 @router.get(f"{API}/search")
 def api_search(q: str = "", user: str = Depends(api_require_auth)):
     return _run(service.search, q)
@@ -3308,7 +3445,7 @@ function reviewButtons(r) {
     r.others.forEach(o => { if (o && r.person) out.push(B(`Тот же человек: слить с ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
     out.push(B('Разные люди', 'resolve'));
   } else if (r.kind === 'manual_name_changed') {
-    out.push(B('Оставить привязку', 'resolve'));
+    out.push(B('Оставить привязку', 'keep'));
     if (r.participant) out.push(B('Отделить в нового человека', 'split'));
   } else if (r.kind === 'gender_mismatch') {
     r.others.forEach(o => { if (o && r.person) out.push(B(`Это ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
@@ -3348,6 +3485,7 @@ async function onReviewAction(r, action) {
   const done = () => post(`/reviews/${r.id}`, { status: 'resolved' });
   if (action === 'resolve') return act(done, 'Отмечено как решённое');
   if (action === 'defer') return act(() => post(`/reviews/${r.id}`, { status: 'deferred' }), 'Отложено');
+  if (action === 'keep') return act(() => post(`/reviews/${r.id}/keep`), 'Привязка подтверждена с новым ФИ');
   if (action === 'reopen') return act(() => post(`/reviews/${r.id}`, { status: 'open' }), 'Возвращено в «проверить»');
   if (action === 'split') {
     return act(async () => { await post('/reassign', { keys: [r.participant.key], target_id: null }); await done(); },
