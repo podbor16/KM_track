@@ -85,7 +85,9 @@ def delete_orphans(conn, ids) -> list:
     marks, args = _in(ids)
     cur = _cur(conn)
     cur.execute(f"SELECT s.id FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
-                f"WHERE s.id IN ({marks}) AND l.person_id IS NULL", args)
+                f"WHERE s.id IN ({marks}) AND l.person_id IS NULL AND NOT EXISTS (SELECT 1 FROM "
+                "siberman_person_reviews r WHERE r.status <> 'resolved' AND "
+                "(r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids)))", args)
     gone = [r["id"] for r in cur.fetchall()]
     for pid in gone:
         delete_person(conn, pid)
@@ -305,6 +307,41 @@ def reviews_for_person(conn, person_id: int) -> list:
     cur.execute("SELECT id, kind, status FROM siberman_person_reviews WHERE status='open' "
                 "AND (person_id=%s OR FIND_IN_SET(%s, other_person_ids)) ORDER BY id", (int(person_id), str(person_id)))
     return cur.fetchall()
+
+
+REVIEW_STATE = ("person_id", "other_person_ids", "status", "resolved_at", "resolved_by")
+
+
+def reviews_state(conn, person_ids, review_ids=()) -> list:
+    """Состояние записей «проверить», затронутых действием: где человек — основной или кандидат,
+    плюс явно названные записи. Для снимка отмены."""
+    ids = sorted({int(i) for i in person_ids if i is not None})
+    rids = sorted({int(i) for i in review_ids if i is not None})
+    conds, args = [], []
+    for i in ids:
+        conds.append("(person_id=%s OR FIND_IN_SET(%s, other_person_ids))")
+        args += [i, str(i)]
+    if rids:
+        conds.append(f"id IN ({','.join(['%s'] * len(rids))})")
+        args += rids
+    if not conds:
+        return []
+    cur = _cur(conn)
+    cur.execute(f"SELECT id, {', '.join(REVIEW_STATE)} FROM siberman_person_reviews WHERE {' OR '.join(conds)}", args)
+    return cur.fetchall()
+
+
+def restore_reviews(conn, rows: list) -> None:
+    cur = conn.cursor()
+    for r in rows:
+        cur.execute(f"UPDATE siberman_person_reviews SET {', '.join(f'{k}=%s' for k in REVIEW_STATE)} WHERE id=%s",
+                    [r[k] for k in REVIEW_STATE] + [int(r["id"])])
+
+
+def move_reviews(conn, source_id: int, target_id: int) -> None:
+    """Слияние: открытые и отложенные записи исходного человека — на целевого (FK обнулил бы их)."""
+    conn.cursor().execute("UPDATE siberman_person_reviews SET person_id=%s WHERE person_id=%s AND status <> 'resolved'",
+                          (int(target_id), int(source_id)))
 
 
 # ── журнал ───────────────────────────────────────────────────────────────────

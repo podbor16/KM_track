@@ -225,3 +225,37 @@ def test_keep_link_confirms_new_name(conn):
     service.keep_link(mine()[0]["id"], "test")
     service.sync(conn)
     assert mine() == [] and _pid(conn, YEAR, 9101, "swim") == pid
+
+
+def test_undo_merge_reopens_review(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    _ins(conn, Y2, 9002, "Тестреестров", "Олег")
+    _ins(conn, Y3, 9103, "Тестреестров", "Олег", fmt="relay", stage="bike", team="Тест")
+    service.sync(conn)
+    r = [x for x in service.reviews("open") if x["participant"] and x["participant"]["year"] == Y3][0]
+    source, target = r["person"]["id"], r["others"][0]["id"]
+    res = service.merge(source, target, "test", review_id=r["id"])
+    assert all(x["id"] != r["id"] for x in service.reviews("open"))
+    service.undo(res["audit_id"], "test")
+    back = [x for x in service.reviews("open") if x["id"] == r["id"]]
+    assert back and back[0]["person"]["id"] == source
+    assert _pid(conn, Y3, 9103, "bike") == source
+
+
+def test_keep_link_is_undoable_and_blocks_earlier_undo(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    first = service.reassign([[YEAR, "9101", "swim"]], pid, "test")
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестрова-Кузина' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    service.sync(conn)
+    rv = [r for r in service.reviews("open") if r["kind"] == "manual_name_changed"
+          and r["participant"] and r["participant"]["year"] == YEAR][0]
+    kept = service.keep_link(rv["id"], "test")
+    with pytest.raises(service.PersonsError):
+        service.undo(first["audit_id"], "test")
+    service.undo(kept["audit_id"], "test")
+    link = pdb.links_for_keys(conn, [(YEAR, "9101", "swim")])[(YEAR, "9101", "swim")]
+    assert link["name_key"] == "тестреестрова анна"
+    assert any(r["id"] == rv["id"] for r in service.reviews("open"))

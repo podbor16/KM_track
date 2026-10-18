@@ -191,16 +191,18 @@ def _plain(row: Optional[dict]) -> Optional[dict]:
     return {k: (v.isoformat() if isinstance(v, (datetime.date, datetime.datetime)) else v) for k, v in row.items()}
 
 
-def _snapshot(conn, person_ids, keys: list) -> dict:
+def _snapshot(conn, person_ids, keys: list, review_ids=()) -> dict:
     person_ids = sorted({int(i) for i in person_ids if i is not None})
     persons = pdb.get_persons(conn, person_ids)
     links = pdb.links_for_keys(conn, keys)
     return {"persons": {str(i): _plain(persons.get(i)) for i in person_ids},
-            "links": [[k[0], k[1], k[2], links.get(tuple(k))] for k in keys]}
+            "links": [[k[0], k[1], k[2], links.get(tuple(k))] for k in keys],
+            "reviews": [_plain(r) for r in pdb.reviews_state(conn, person_ids, review_ids)]}
 
 
 def _record(conn, action: str, summary: str, snap: dict, user: str) -> int:
-    scope = {f"p:{i}" for i in snap["persons"]} | {f"k:{y}/{b}/{s}" for y, b, s, _ in snap["links"]}
+    scope = ({f"p:{i}" for i in snap["persons"]} | {f"k:{y}/{b}/{s}" for y, b, s, _ in snap["links"]}
+             | {f"r:{r['id']}" for r in snap.get("reviews", [])})
     return pdb.add_audit(conn, action, summary, snap, scope, user)
 
 
@@ -223,6 +225,7 @@ def _restore(conn, snap: dict) -> None:
     for y, b, s, link in snap["links"]:
         if link is not None:
             pdb.set_links(conn, [((y, b, s), link["person_id"], link["name_key"])], manual=bool(link["manual"]))
+    pdb.restore_reviews(conn, snap.get("reviews", []))
     for pid, row in persons.items():
         if row is None and pid in now:
             pdb.delete_person(conn, pid)
@@ -250,7 +253,7 @@ def undo(audit_id: int, user: str) -> dict:
 
 # ── ручные решения ───────────────────────────────────────────────────────────
 
-def merge(source_id: int, target_id: int, user: str) -> dict:
+def merge(source_id: int, target_id: int, user: str, review_id: Optional[int] = None) -> dict:
     """Все выступления source → target, source удаляется (тот же человек под разными ФИ)."""
     if int(source_id) == int(target_id):
         raise PersonsError("Это один и тот же человек")
@@ -262,18 +265,21 @@ def merge(source_id: int, target_id: int, user: str) -> dict:
         if src["bib_individual"] and dst["bib_individual"]:
             raise PersonsError(f"У обоих свой личный номер (№{src['bib_individual']} и №{dst['bib_individual']}) — "
                                "по правилам Siberman это разные люди")
-        snap = _snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id))
+        snap = _snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id), [review_id])
         pdb.move_links(conn, source_id, target_id)
+        pdb.move_reviews(conn, source_id, target_id)
         pdb.delete_person(conn, source_id)
         pdb.update_person(conn, target_id, {"bib_individual": dst["bib_individual"] or src["bib_individual"],
                                             "birthdate": dst["birthdate"] or src["birthdate"]})
         pdb.refresh_display(conn, [target_id])
+        if review_id is not None:
+            pdb.set_review_status(conn, review_id, "resolved", user)
         audit_id = _record(conn, "merge", f"Слиты: {_fio(src)} (id {source_id}) → {_fio(dst)} (id {target_id})",
                            snap, user)
     return {"ok": True, "person_id": int(target_id), "audit_id": audit_id}
 
 
-def reassign(keys: list, target_id: Optional[int], user: str) -> dict:
+def reassign(keys: list, target_id: Optional[int], user: str, review_id: Optional[int] = None) -> dict:
     """Выступления keys → человеку target_id или новому (target_id=None). Личный номер переходит
     вместе со стартами под ним."""
     keys = sorted({(int(k[0]), str(k[1]), str(k[2])) for k in keys})
@@ -302,7 +308,7 @@ def reassign(keys: list, target_id: Optional[int], user: str) -> dict:
             if rest:
                 raise PersonsError(f"Под №{bib} этот человек выступал и в {', '.join(str(k[0]) for k in rest)} — "
                                    "перенесите все годы с этим номером")
-        snap = _snapshot(conn, old_ids + [target_id] + ([holder["id"]] if holder else []), keys)
+        snap = _snapshot(conn, old_ids + [target_id] + ([holder["id"]] if holder else []), keys, [review_id])
         if holder and holder["id"] != target_id:
             pdb.update_person(conn, holder["id"], {"bib_individual": None})
         last = max(rows, key=lambda r: r["race_year"])
@@ -317,17 +323,21 @@ def reassign(keys: list, target_id: Optional[int], user: str) -> dict:
         pdb.set_links(conn, [(k, target_id, names[k]) for k in keys], manual=True)
         gone = pdb.delete_orphans(conn, old_ids)
         pdb.refresh_display(conn, [i for i in set(old_ids) | {target_id} if i not in gone])
+        if review_id is not None:
+            pdb.set_review_status(conn, review_id, "resolved", user)
         audit_id = _record(conn, "reassign", f"{len(keys)} выступл. ({_fio(last)}) → id {target_id}", snap, user)
     return {"ok": True, "person_id": int(target_id), "audit_id": audit_id}
 
 
-def set_birthdate(person_id: int, value: Optional[datetime.date], user: str) -> dict:
+def set_birthdate(person_id: int, value: Optional[datetime.date], user: str, review_id: Optional[int] = None) -> dict:
     with _connection() as conn, _locked_tx(conn):
         p = pdb.get_person(conn, person_id)
         if not p:
             raise PersonsError("Человек не найден")
-        snap = _snapshot(conn, [person_id], [])
+        snap = _snapshot(conn, [person_id], [], [review_id])
         pdb.update_person(conn, person_id, {"birthdate": value})
+        if review_id is not None:
+            pdb.set_review_status(conn, review_id, "resolved", user)
         audit_id = _record(conn, "birthdate",
                            f"ДР {_fio(p)} (id {person_id}): {p['birthdate'] or '—'} → {value or '—'}", snap, user)
     return {"ok": True, "audit_id": audit_id}
@@ -344,7 +354,8 @@ def set_review_status(review_id: int, status: str, user: str) -> dict:
 
 def keep_link(review_id: int, user: str) -> dict:
     """«Оставить привязку» по записи о выступлении: привязка становится ручной с текущим ФИ строки
-    (подтверждённое написание попадает в ключи человека, следующая смена ФИ снова будет замечена)."""
+    (подтверждённое написание попадает в ключи человека, следующая смена ФИ снова будет замечена).
+    Пишется в журнал — отменяется, как остальные решения."""
     with _connection() as conn, _locked_tx(conn):
         r = pdb.get_review(conn, review_id)
         if not r or not r["race_year"]:
@@ -354,9 +365,12 @@ def keep_link(review_id: int, user: str) -> dict:
         link = pdb.links_for_keys(conn, [k]).get(k)
         if not rows or not link:
             raise PersonsError("Выступление не найдено — обновите страницу")
+        snap = _snapshot(conn, [link["person_id"]], [k], [review_id])
         pdb.set_links(conn, [(k, link["person_id"], plain_key(rows[0]["surname"], rows[0]["name"]))], manual=True)
         pdb.set_review_status(conn, review_id, "resolved", user)
-    return {"ok": True}
+        audit_id = _record(conn, "keep_link", f"Привязка оставлена с новым ФИ: {_fio(rows[0])} ({k[0]}, №{k[1]})",
+                           snap, user)
+    return {"ok": True, "audit_id": audit_id}
 
 
 # ── чтение для админки ───────────────────────────────────────────────────────
