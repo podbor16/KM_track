@@ -13,7 +13,7 @@
 **Отличие от спецификации (уточнение при планировании):** вместо колонки `participants.person_id` + `person_locked` — таблица `siberman_person_links (race_year, bib, relay_stage) → person_id, manual`. Причина: загрузка Excel делает `DELETE FROM participants WHERE race_year=…` и вставляет строки заново — колонка в `participants` теряла бы привязки (в т.ч. ручные) и id людей в адресах `/athlete/{id}` менялись бы. Таск 10 правит спецификацию.
 
 **Правила для исполнителя:**
-- Работать только в worktree `.worktrees/siberman-hall` (ветка `siberman-hall`).
+- Работать только в worktree `.worktrees/siberman-hall` (ветка `feature/siberman-hall`).
 - Не печатать содержимое `.env`, `.env.local`, пароли, cookie. Не выводить ФИО/даты рождения из БД и CSV в отчёты — только числа.
 - BOM в коде — только как `chr(0xFEFF)`, никогда литералом.
 - Тесты: `conda run -n base python -m pytest …` из корня worktree.
@@ -51,7 +51,7 @@
 Из корня основного репозитория:
 ```bash
 cd "/c/Users/podbo/Работа/КРАСМАРАФОН/KM_track"
-git worktree add .worktrees/siberman-hall -b siberman-hall siberman-draw-2028
+git worktree add .worktrees/siberman-hall -b feature/siberman-hall feature/siberman-draw-2028
 cp .env .env.local .worktrees/siberman-hall/
 cd .worktrees/siberman-hall && git log --oneline -1
 ```
@@ -782,6 +782,826 @@ git commit -m "feat(siberman/persons): разбор выгрузки заяво�
 
 ---
 
+### Task 3a: Исправления по ревью задач 1–3 (до SQL и сервиса)
+
+Ревью нашло дефекты плана в логике определения людей. Закрываем до Task 4 — иначе пришлось бы менять уже готовую схему.
+
+1. **Замена этапника при перезагрузке года** (Critical). Привязка по (год, номер, этап) переживала смену ФИ в строке: новый этапник молча оставался за прежним человеком, а его ФИ попадало в ключи прежнего. Теперь привязка хранит `name_key` (ФИ на момент привязки); автопривязка с другим ФИ разрешается заново. Ручные (`manual=1`) — не трогаются.
+2. **ДР тёзке, который не подавал заявку** (Important). Заявка ставит ДР автоматически, только если заявитель сам указал старты на Siberman (`siberman_individual_starts`, `…_2`, `siberman_relay_starts` > 0); иначе — «проверить» (`applicant_unconfirmed`, одна кнопка «это он»). У этапников эстафеты стартов в заявке нет — всегда «проверить».
+3. **Тихое раздвоение по полу** — запись `gender_mismatch`, если тёзки по ФИ отсеяны только полом (парсер Excel ставит `M` при пустом поле пола).
+4. **Личный номер у другого пола** — запись `bib_gender_mismatch` вместо `bib_name_change` (почти наверняка другой человек).
+5. **Строки без фамилии** не привязываются.
+6. Мелочи: `;` в комментариях миграции (ломает построчные сплиттеры); FK `siberman_person_reviews.person_id → ON DELETE SET NULL`; номера сортируются как числа; заявки — по дате подачи; CSV в cp1251 (пересохранён Excel) читается, а не превращается в мусор; в эстафетной заявке основной заявитель не берётся (он либо этапник — дубль, либо не участник).
+
+**Files:**
+- Modify: `src/siberman/migrations/014_persons.sql` (полная замена)
+- Modify: `src/siberman/persons/linking.py` (полная замена)
+- Modify: `src/siberman/persons/applicants.py` (полная замена)
+- Modify: `tests/unit/test_siberman_persons_linking.py`, `tests/unit/test_siberman_persons_applicants.py` (полная замена)
+
+- [ ] **Step 1: Миграция (полная замена файла)**
+
+```sql
+-- Реестр людей Siberman: кто есть кто за все годы, с тёзками. Спецификация:
+-- docs/superpowers/specs/2026-10-18-siberman-hall-ratings-records-design.md §3.
+-- Привязка выступления к человеку — по естественному ключу (год, номер, этап), а не по
+-- participants.id: загрузка Excel удаляет и заново вставляет участников года.
+CREATE TABLE IF NOT EXISTS siberman_persons (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  surname         VARCHAR(100) NOT NULL,
+  name            VARCHAR(100) NOT NULL DEFAULT '',
+  gender          ENUM('M','F') DEFAULT NULL,
+  birthdate       DATE DEFAULT NULL,          -- только админка, публично не отдаётся
+  bib_individual  VARCHAR(10) DEFAULT NULL,   -- личный номер закреплён за человеком навсегда
+  city            VARCHAR(100) NOT NULL DEFAULT '',
+  country         VARCHAR(100) NOT NULL DEFAULT '',
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_bib_individual (bib_individual)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- manual=1 — поставлено вручную в админке: синхронизация такие привязки не трогает
+-- и не удаляет, даже если строки участника временно нет (перезагрузка года).
+-- name_key — ФИ строки на момент привязки: если в перезагруженном протоколе на этом
+-- номере и этапе другое ФИ (замена этапника), автопривязка разрешается заново.
+CREATE TABLE IF NOT EXISTS siberman_person_links (
+  race_year    SMALLINT NOT NULL,
+  bib          VARCHAR(10) NOT NULL,
+  relay_stage  ENUM('none','swim','bike','run') NOT NULL,
+  person_id    INT NOT NULL,
+  manual       TINYINT(1) NOT NULL DEFAULT 0,
+  name_key     VARCHAR(201) NOT NULL DEFAULT '',
+  PRIMARY KEY (race_year, bib, relay_stage),
+  KEY idx_person (person_id),
+  CONSTRAINT fk_link_person FOREIGN KEY (person_id) REFERENCES siberman_persons(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Из заявок Тильды берём только это: ФИ, пол, ДР, город, номер заявки, дату подачи и
+-- сколько стартов на Siberman заявитель указал сам (NULL у этапников эстафеты).
+-- Эстафетчики — tranid с суффиксом этапа: '59855:123:swim'.
+CREATE TABLE IF NOT EXISTS siberman_applicants (
+  tranid          VARCHAR(64) PRIMARY KEY,
+  surname         VARCHAR(100) NOT NULL,
+  name            VARCHAR(100) NOT NULL DEFAULT '',
+  gender          ENUM('M','F') DEFAULT NULL,
+  birthdate       DATE NOT NULL,
+  city            VARCHAR(100) NOT NULL DEFAULT '',
+  submitted_at    DATETIME DEFAULT NULL,
+  claimed_starts  SMALLINT DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- «Проверить»: выступление (race_year/bib/relay_stage) или человек + кандидаты.
+-- dedupe_key не даёт повторной синхронизации плодить одинаковые записи.
+CREATE TABLE IF NOT EXISTS siberman_person_reviews (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  kind              VARCHAR(32) NOT NULL,
+  dedupe_key        VARCHAR(190) NOT NULL,
+  race_year         SMALLINT DEFAULT NULL,
+  bib               VARCHAR(10) DEFAULT NULL,
+  relay_stage       VARCHAR(5) DEFAULT NULL,
+  person_id         INT DEFAULT NULL,
+  other_person_ids  VARCHAR(255) NOT NULL DEFAULT '',
+  detail            VARCHAR(255) NOT NULL DEFAULT '',
+  status            ENUM('open','resolved','deferred') NOT NULL DEFAULT 'open',
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at       DATETIME DEFAULT NULL,
+  resolved_by       VARCHAR(100) DEFAULT NULL,
+  UNIQUE KEY uq_review (dedupe_key),
+  CONSTRAINT fk_review_person FOREIGN KEY (person_id) REFERENCES siberman_persons(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Журнал ручных действий: payload — снимок «до» (люди и привязки), scope — что затронуто
+-- (вида 'p:12,k:2024/7/none'). Отмена восстанавливает снимок, если позже это не трогали.
+CREATE TABLE IF NOT EXISTS siberman_person_audit (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  action      VARCHAR(32) NOT NULL,
+  summary     VARCHAR(255) NOT NULL,
+  payload     JSON NOT NULL,
+  scope       TEXT NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_by  VARCHAR(100) NOT NULL DEFAULT '',
+  undone_at   DATETIME DEFAULT NULL,
+  undone_by   VARCHAR(100) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+Пересоздать таблицы локально (данных в них ещё нет): в scratchpad-скрипте `apply_014.py` перед применением выполнить
+`DROP TABLE IF EXISTS siberman_person_audit, siberman_person_reviews, siberman_person_links, siberman_applicants, siberman_persons`, затем применить файл. Проверка: `SHOW CREATE TABLE siberman_person_links` содержит `name_key`, `siberman_applicants` — `claimed_starts`, `siberman_person_reviews` — `fk_review_person`. В файле миграции не должно остаться `;` внутри комментариев: `grep -n "^--.*;" src/siberman/migrations/014_persons.sql` — пусто.
+
+- [ ] **Step 2: Тесты `linking` (полная замена файла)**
+
+```python
+import datetime
+
+from src.siberman.persons.linking import (
+    Applicant, Person, Registry, Review, attach_birthdates, link_participants, norm_city, plain_key,
+)
+
+
+def row(year, bib, surname, name, fmt="individual", stage="none", gender="M", city="Красноярск"):
+    return {"race_year": year, "bib": str(bib), "relay_stage": stage, "surname": surname, "name": name,
+            "gender": gender, "format": fmt, "city": city, "country": "Россия"}
+
+
+def relay(year, bib, stage, surname, name, gender="M"):
+    return row(year, bib, surname, name, fmt="relay", stage=stage, gender=gender)
+
+
+def key(r):
+    return (r["race_year"], r["bib"], r["relay_stage"])
+
+
+def saved(rows, new_links, manual=0):
+    """Как сохранит service: {natkey: (person_id, manual, name_key)}."""
+    names = {key(r): plain_key(r["surname"], r["name"]) for r in rows}
+    return {k: (p.id, manual, names[k]) for k, p in new_links.items()}
+
+
+def run(rows, persons=(), links=None):
+    reg = Registry(list(persons))
+    new_links, reviews = link_participants(reg, rows, links or {})
+    return reg, new_links, reviews
+
+
+def fresh(persons):
+    return [Person(id=p.id, surname=p.surname, name=p.name, gender=p.gender, bib_individual=p.bib_individual)
+            for p in persons]
+
+
+def test_plain_key_and_city():
+    assert plain_key("ПЕЧЁНКИНА ", " Екатерина") == "печенкина екатерина"
+    assert plain_key("Князева (Заволокина)", "Олеся") == "князева заволокина олеся"
+    assert norm_city("г. Красноярск") == norm_city("красноярск") == norm_city("Город Красноярск") == "красноярск"
+    assert norm_city("Ростов-на-Дону") == "ростов на дону"
+
+
+def test_individual_same_bib_is_one_person_even_if_name_changes():
+    a, b = row(2020, 7, "Иванова", "Анна", gender="F"), row(2024, 7, "Петрова (Иванова)", "Анна", gender="F")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is links[key(b)]
+    assert links[key(a)].bib_individual == "7"
+    assert [r.kind for r in reviews] == ["bib_name_change"]
+    assert reviews[0].natkey == key(b)
+
+
+def test_same_bib_other_gender_is_flagged_separately():
+    a, b = row(2020, 7, "Иванов", "Саша", gender="M"), row(2024, 7, "Иванова", "Саша", gender="F")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is links[key(b)]
+    assert [r.kind for r in reviews] == ["bib_gender_mismatch"]
+
+
+def test_namesakes_with_different_individual_bibs_are_two_people_without_review():
+    a, b = row(2020, 7, "Кузнецов", "Олег"), row(2021, 58, "Кузнецов", "Олег")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+    assert reviews == []
+
+
+def test_relay_member_two_stages_same_year_is_one_person():
+    a, b = relay(2022, 101, "swim", "Смирнов", "Илья"), relay(2022, 101, "bike", "Смирнов", "Илья")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is links[key(b)]
+    assert reviews == []
+
+
+def test_relay_namesakes_in_different_teams_same_year_are_two_people():
+    a, b = relay(2022, 101, "swim", "Смирнов", "Илья"), relay(2022, 102, "run", "Смирнов", "Илья")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+    assert reviews == []
+
+
+def test_individual_and_relay_namesakes_same_year_are_two_people():
+    a, b = row(2022, 7, "Смирнов", "Илья"), relay(2022, 101, "run", "Смирнов", "Илья")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+
+
+def test_relay_then_individual_links_and_asks_to_check():
+    a, b = relay(2020, 101, "run", "Петров", "Андрей"), row(2021, 7, "Петров", "Андрей")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is links[key(b)]
+    assert links[key(b)].bib_individual == "7"
+    assert [r.kind for r in reviews] == ["format_switch"]
+
+
+def test_individual_then_relay_links_and_asks_to_check():
+    a, b = row(2020, 7, "Петров", "Андрей"), relay(2021, 101, "run", "Петров", "Андрей")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is links[key(b)]
+    assert [r.kind for r in reviews] == ["format_switch"]
+
+
+def test_two_candidates_make_new_person_and_review():
+    rows = [row(2020, 7, "Кузнецов", "Олег"), row(2021, 58, "Кузнецов", "Олег"),
+            relay(2022, 103, "bike", "Кузнецов", "Олег")]
+    reg, links, reviews = run(rows)
+    third = links[key(rows[2])]
+    assert third not in (links[key(rows[0])], links[key(rows[1])])
+    assert [r.kind for r in reviews] == ["namesake_candidate"]
+    assert reviews[0].person is third and len(reviews[0].others) == 2
+
+
+def test_gender_mismatch_is_not_merged_but_flagged():
+    a, b = relay(2020, 101, "swim", "Белых", "Саша", gender="F"), relay(2021, 105, "run", "Белых", "Саша", gender="M")
+    reg, links, reviews = run([a, b])
+    assert links[key(a)] is not links[key(b)]
+    assert [r.kind for r in reviews] == ["gender_mismatch"]
+    assert reviews[0].others == (links[key(a)],)
+
+
+def test_rows_without_surname_are_not_linked():
+    a, b = relay(2020, 101, "swim", "", ""), relay(2021, 105, "swim", " ", "")
+    reg, links, reviews = run([a, b])
+    assert links == {} and reg.new == []
+
+
+def test_existing_links_are_kept_and_used():
+    p = Person(id=5, surname="Орлова", name="Мария", gender="F", bib_individual="23")
+    a, b = row(2023, 23, "Орлова", "Мария", gender="F"), row(2024, 23, "Орлова", "Мария", gender="F")
+    reg, links, reviews = run([a, b], persons=[p], links={key(a): (5, 0, "орлова мария")})
+    assert list(links) == [key(b)] and links[key(b)] is reg.by_id[5]
+    assert reg.new == [] and reviews == []
+
+
+def test_second_run_links_nothing():
+    rows = [row(2020, 7, "Кузнецов", "Олег"), row(2021, 58, "Кузнецов", "Олег"),
+            relay(2022, 101, "swim", "Смирнов", "Илья"), relay(2022, 101, "bike", "Смирнов", "Илья")]
+    reg, links, _ = run(rows)
+    for i, p in enumerate(reg.new, start=100):
+        p.id = i
+    reg2, links2, reviews2 = run(rows, persons=fresh(reg.new), links=saved(rows, links))
+    assert links2 == {} and reg2.new == [] and reviews2 == []
+
+
+def test_relay_member_replaced_on_reload_is_resolved_again():
+    """Перезагрузка года: на номере 101 этап плавания теперь у другого человека. Прежняя
+    автопривязка не должна молча отдать его выступление и его ФИ прежнему человеку."""
+    old = [relay(2020, 101, "swim", "Иванов", "Иван")]
+    reg, links, _ = run(old)
+    links[key(old[0])].id = 1
+    store = saved(old, links)
+    new = [relay(2020, 101, "swim", "Петров", "Пётр"), relay(2021, 107, "swim", "Петров", "Пётр")]
+    reg2, links2, _ = run(new, persons=fresh(reg.new), links=store)
+    assert links2[key(new[0])] is not reg2.by_id[1]
+    assert links2[key(new[0])] is links2[key(new[1])]
+    assert "петров петр" not in reg2.by_id[1].keys
+
+
+def test_manual_link_survives_name_change():
+    p = Person(id=5, surname="Иванов", name="Иван", gender="M")
+    r = relay(2020, 101, "swim", "Петров", "Пётр")
+    reg, links, reviews = run([r], persons=[p], links={key(r): (5, 1, "иванов иван")})
+    assert links == {} and reviews == []
+
+
+def app(tranid, surname, name, bd, gender=None, city="", starts=1, submitted=None):
+    return Applicant(tranid=tranid, surname=surname, name=name, gender=gender, birthdate=bd, city=city,
+                     submitted_at=submitted, claimed_starts=starts)
+
+
+def test_birthdate_attached_to_single_match_with_claimed_starts():
+    p = Person(id=1, surname="Иванов", name="Алексей", gender="M", city="Москва")
+    reg = Registry([p])
+    updates, reviews = attach_birthdates(reg, [app("t1", "Иванов", "Алексей", datetime.date(1985, 5, 30), "M", "Москва")])
+    assert updates == [(p, datetime.date(1985, 5, 30))] and p.birthdate == datetime.date(1985, 5, 30)
+    assert reviews == []
+
+
+def test_applicant_without_claimed_starts_is_only_suggested():
+    p = Person(id=1, surname="Иванов", name="Алексей", gender="M")
+    for starts in (0, None):
+        updates, reviews = attach_birthdates(Registry([p]), [app("t1", "Иванов", "Алексей", datetime.date(1985, 5, 30),
+                                                                 starts=starts)])
+        assert updates == [] and [r.kind for r in reviews] == ["applicant_unconfirmed"]
+        assert p.birthdate is None
+
+
+def test_swapped_surname_and_name_still_match():
+    p = Person(id=1, surname="Herinckx", name="Wijnand", gender="M")
+    updates, _ = attach_birthdates(Registry([p]), [app("t1", "Wijnand", "Herinckx", datetime.date(1984, 5, 12))])
+    assert updates and p.birthdate == datetime.date(1984, 5, 12)
+
+
+def test_other_birthdate_makes_conflict_review():
+    p = Person(id=1, surname="Иванов", name="Алексей", gender="M", birthdate=datetime.date(1985, 5, 30))
+    updates, reviews = attach_birthdates(Registry([p]), [app("t2", "Иванов", "Алексей", datetime.date(1986, 5, 30))])
+    assert updates == [] and [r.kind for r in reviews] == ["bd_conflict"]
+    assert reviews[0].person is p and reviews[0].detail == "t2"
+
+
+def test_ambiguous_applicant_between_namesakes():
+    a = Person(id=1, surname="Иванов", name="Никита", gender="M")
+    b = Person(id=2, surname="Иванов", name="Никита", gender="M")
+    updates, reviews = attach_birthdates(Registry([a, b]), [app("t3", "Иванов", "Никита", datetime.date(1994, 7, 12))])
+    assert updates == [] and [r.kind for r in reviews] == ["applicant_ambiguous"]
+    assert set(reviews[0].others) == {a, b}
+
+
+def test_namesake_with_matching_birthdate_needs_nothing():
+    a = Person(id=1, surname="Иванов", name="Никита", gender="M", birthdate=datetime.date(1994, 7, 12))
+    b = Person(id=2, surname="Иванов", name="Никита", gender="M")
+    updates, reviews = attach_birthdates(Registry([a, b]), [app("t3", "Иванов", "Никита", datetime.date(1994, 7, 12))])
+    assert updates == [] and reviews == []
+
+
+def test_city_mismatch_is_not_attached():
+    p = Person(id=1, surname="Иванов", name="Никита", gender="M", city="Томск")
+    updates, reviews = attach_birthdates(Registry([p]), [app("t4", "Иванов", "Никита", datetime.date(1989, 8, 21),
+                                                             city="Красноярск")])
+    assert updates == [] and [r.kind for r in reviews] == ["applicant_city_mismatch"]
+
+
+def test_earliest_application_wins():
+    p = Person(id=1, surname="Иванов", name="Алексей", gender="M")
+    early = app("9:1", "Иванов", "Алексей", datetime.date(1985, 5, 30), submitted=datetime.datetime(2024, 10, 20))
+    late = app("10:1", "Иванов", "Алексей", datetime.date(1985, 5, 31), submitted=datetime.datetime(2025, 8, 1))
+    updates, reviews = attach_birthdates(Registry([p]), [late, early])
+    assert p.birthdate == datetime.date(1985, 5, 30)
+    assert [(r.kind, r.detail) for r in reviews] == [("bd_conflict", "10:1")]
+
+
+def test_review_dedupe_keys():
+    a = row(2024, 7, "Петрова", "Анна", gender="F")
+    reg, links, _ = run([row(2020, 7, "Иванова", "Анна", gender="F"), a])
+    p = links[key(a)]
+    p.id = 42
+    assert Review("bib_name_change", natkey=key(a), person=p).dedupe_key() == "bib_name_change:2024:7:none"
+    assert Review("bd_conflict", person=p, detail="t9").dedupe_key() == "bd_conflict:42:t9"
+```
+
+- [ ] **Step 3: `linking.py` (полная замена файла)**
+
+```python
+"""
+Реестр людей Siberman — чистая логика привязки выступлений к людям (без БД).
+
+Спецификация hall §3: личник узнаётся по личному стартовому номеру (закреплён за человеком
+навсегда, тот же номер = тот же человек даже при смене фамилии); эстафетчик — по ФИ среди
+людей того же пола без противоречий. Неоднозначность → новый человек + запись «проверить».
+Даты рождения приходят из заявок Тильды (attach_birthdates).
+"""
+import datetime
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Optional
+
+NatKey = tuple  # (race_year: int, bib: str, relay_stage: str) — строка participants
+
+
+def plain_key(surname: str, name: str) -> str:
+    """'фамилия имя': нижний регистр, ё→е, скобки → пробел, без лишних пробелов. Без псевдонимов —
+    смену фамилии личника ловит номер, остальное решает админ."""
+    raw = f"{surname or ''} {name or ''}".lower().replace("ё", "е").replace("(", " ").replace(")", " ")
+    return " ".join(raw.split())
+
+
+def norm_city(city: str) -> str:
+    t = (city or "").lower().replace("ё", "е").strip()
+    for prefix in ("город ", "г.", "г "):
+        if t.startswith(prefix):
+            t = t[len(prefix):]
+    return " ".join(t.replace("-", " ").split())
+
+
+def natkey(row: dict) -> NatKey:
+    return (int(row["race_year"]), str(row["bib"]), str(row["relay_stage"]))
+
+
+def _bib_order(bib: str) -> tuple:
+    return (0, int(bib), "") if bib.isdigit() else (1, 0, bib)
+
+
+def _row_order(row: dict) -> tuple:
+    return (int(row["race_year"]), row["format"] != "individual", _bib_order(str(row["bib"])), str(row["relay_stage"]))
+
+
+@dataclass(eq=False)
+class Person:
+    id: int                      # > 0 — в БД, < 0 — создан этим прогоном
+    surname: str
+    name: str
+    gender: Optional[str] = None
+    birthdate: Optional[datetime.date] = None
+    bib_individual: Optional[str] = None
+    city: str = ""
+    usage: dict = field(default_factory=dict)    # год -> {номера}
+    formats: set = field(default_factory=set)    # {'individual', 'relay'}
+    keys: set = field(default_factory=set)       # все ФИ, под которыми выступал
+    last_year: int = 0
+
+
+@dataclass(eq=False)
+class Review:
+    kind: str
+    natkey: Optional[NatKey] = None
+    person: Optional[Person] = None
+    others: tuple = ()
+    detail: str = ""
+
+    def dedupe_key(self) -> str:
+        if self.natkey:
+            y, b, s = self.natkey
+            return f"{self.kind}:{y}:{b}:{s}"
+        return f"{self.kind}:{self.person.id if self.person else ''}:{self.detail}"[:190]
+
+
+@dataclass
+class Applicant:
+    tranid: str
+    surname: str
+    name: str
+    gender: Optional[str]
+    birthdate: datetime.date
+    city: str = ""
+    submitted_at: Optional[datetime.datetime] = None
+    claimed_starts: Optional[int] = None   # сколько стартов на Siberman указал сам; None — этапник эстафеты
+
+
+def _gender_ok(a: Optional[str], b: Optional[str]) -> bool:
+    return a is None or b is None or a == b
+
+
+class Registry:
+    """Люди в памяти + индексы по личному номеру и ФИ."""
+
+    def __init__(self, persons: list):
+        self.by_id = {p.id: p for p in persons}
+        self.by_bib = {p.bib_individual: p for p in persons if p.bib_individual}
+        self.by_key = defaultdict(list)
+        for p in persons:
+            self._index_key(p, plain_key(p.surname, p.name))
+        self.new: list = []
+        self.bib_assigned: list = []   # люди из БД, которым этот прогон записал личный номер
+        self._next_tmp = -1
+
+    def _index_key(self, p: Person, key: str) -> None:
+        p.keys.add(key)
+        if p not in self.by_key[key]:
+            self.by_key[key].append(p)
+
+    def add(self, surname: str, name: str, gender: Optional[str]) -> Person:
+        p = Person(id=self._next_tmp, surname=surname, name=name, gender=gender)
+        self._next_tmp -= 1
+        self.by_id[p.id] = p
+        self.new.append(p)
+        self._index_key(p, plain_key(surname, name))
+        return p
+
+    def attach(self, p: Person, row: dict) -> None:
+        """Учесть выступление row за человеком p."""
+        year, bib = int(row["race_year"]), str(row["bib"])
+        self._index_key(p, plain_key(row["surname"], row["name"]))
+        p.usage.setdefault(year, set()).add(bib)
+        p.formats.add(row["format"])
+        if p.gender is None and row.get("gender") in ("M", "F"):
+            p.gender = row["gender"]
+        if year >= p.last_year:
+            p.last_year = year
+            p.city = row.get("city") or p.city
+        if row["format"] == "individual" and not p.bib_individual and bib not in self.by_bib:
+            p.bib_individual = bib
+            self.by_bib[bib] = p
+            if p.id > 0:
+                self.bib_assigned.append(p)
+
+
+def _resolve(reg: Registry, r: dict) -> tuple:
+    """Человек для непривязанного выступления r и записи «проверить»."""
+    year, bib, nk = int(r["race_year"]), str(r["bib"]), natkey(r)
+    g = r.get("gender") if r.get("gender") in ("M", "F") else None
+    key = plain_key(r["surname"], r["name"])
+    if r["format"] == "individual":
+        p = reg.by_bib.get(bib)
+        if p is not None:
+            if g and p.gender and g != p.gender:
+                return p, [Review("bib_gender_mismatch", natkey=nk, person=p)]
+            return p, ([] if key in p.keys else [Review("bib_name_change", natkey=nk, person=p)])
+    cands, other_gender = [], []
+    for p in reg.by_key.get(key, []):
+        if not _gender_ok(g, p.gender):
+            other_gender.append(p)
+            continue
+        used = p.usage.get(year)
+        if used and bib not in used:          # в этом году уже выступал под другим номером
+            continue
+        if r["format"] == "individual" and p.bib_individual and p.bib_individual != bib:
+            continue                          # у человека свой личный номер — это тёзка
+        cands.append(p)
+    if len(cands) == 1:
+        p = cands[0]
+        switch = bool(p.formats) and r["format"] not in p.formats
+        return p, ([Review("format_switch", natkey=nk, person=p)] if switch else [])
+    p = reg.add(r["surname"], r["name"], g)
+    if cands:
+        return p, [Review("namesake_candidate", natkey=nk, person=p, others=tuple(cands))]
+    if other_gender:                          # тот же ФИ, другой пол (в Excel пусто → парсер ставит M)
+        return p, [Review("gender_mismatch", natkey=nk, person=p, others=tuple(other_gender))]
+    return p, []
+
+
+def link_participants(reg: Registry, rows: list, links: dict) -> tuple:
+    """rows — все строки participants; links — сохранённые привязки {natkey: (person_id, manual, name_key)}.
+    Привязка действует, если она ручная или ФИ строки не изменилось с момента привязки; иначе
+    (замена этапника, исправленный протокол) строка разрешается заново. Строки без фамилии
+    не привязываются. → ({natkey: Person} новых и изменённых привязок, [Review])."""
+    rows = sorted((r for r in rows if str(r["surname"] or "").strip()), key=_row_order)
+
+    def kept_person(r):
+        link = links.get(natkey(r))
+        if not link or link[0] not in reg.by_id:
+            return None
+        person_id, manual, name_key = link
+        return reg.by_id[person_id] if manual or name_key == plain_key(r["surname"], r["name"]) else None
+
+    kept = set()
+    for r in rows:
+        p = kept_person(r)
+        if p is not None:
+            reg.attach(p, r)
+            kept.add(natkey(r))
+    new_links, reviews = {}, []
+    for r in rows:
+        k = natkey(r)
+        if k in kept:
+            continue
+        p, rv = _resolve(reg, r)
+        reg.attach(p, r)
+        new_links[k] = p
+        reviews.extend(rv)
+    return new_links, reviews
+
+
+def _applicant_candidates(reg: Registry, a: Applicant) -> list:
+    for key in (plain_key(a.surname, a.name), plain_key(a.name, a.surname)):
+        c = [p for p in reg.by_key.get(key, []) if _gender_ok(a.gender, p.gender)]
+        if c:
+            return c
+    return []
+
+
+def attach_birthdates(reg: Registry, applicants: list) -> tuple:
+    """ДР из заявок → ([(Person, дата)] новые ДР, [Review]). Заявки — по дате подачи. ДР ставится
+    автоматически, только если ФИ подходит одному человеку, у него нет другой ДР, город не
+    противоречит и заявитель сам указал старты на Siberman; иначе — «проверить»."""
+    updates, reviews = [], []
+    order = sorted(applicants, key=lambda x: (x.submitted_at or datetime.datetime.min, x.tranid))
+    for a in order:
+        cands = _applicant_candidates(reg, a)
+        if not cands:
+            continue
+        if len(cands) > 1:
+            if sum(1 for c in cands if c.birthdate == a.birthdate) != 1:
+                reviews.append(Review("applicant_ambiguous", others=tuple(cands), detail=a.tranid))
+            continue
+        c = cands[0]
+        if c.birthdate == a.birthdate:
+            continue
+        if c.birthdate is not None:
+            reviews.append(Review("bd_conflict", person=c, detail=a.tranid))
+            continue
+        if a.city and c.city and norm_city(a.city) != norm_city(c.city):
+            reviews.append(Review("applicant_city_mismatch", person=c, detail=a.tranid))
+            continue
+        if not a.claimed_starts:              # не указал стартов на Siberman — может быть тёзкой
+            reviews.append(Review("applicant_unconfirmed", person=c, detail=a.tranid))
+            continue
+        c.birthdate = a.birthdate
+        updates.append((c, a.birthdate))
+    return updates, reviews
+```
+
+- [ ] **Step 4: Тесты `applicants` (полная замена файла)**
+
+```python
+import datetime
+
+import pytest
+
+from src.siberman.persons.applicants import parse_applicants_csv, parse_birthdate
+
+COLS = ("Email;Name;Phone;Date;city;format;tranid;formid;sex;surname;birthday;city_2;"
+        "siberman_individual_starts;siberman_individual_starts_2;siberman_relay_starts;"
+        "surname_swim;name_swim;birthday_swim;surname_bike;name_bike;birthday_bike;"
+        "surname_run;name_run;birthday_run").split(";")
+TODAY = datetime.date(2026, 10, 18)
+
+
+def line(**kw):
+    return ";".join(kw.get(c, "") for c in COLS)
+
+
+def csv_bytes(*lines, encoding="utf-8", bom=True, sep="\n"):
+    return ((chr(0xFEFF) if bom else "") + ";".join(COLS) + sep + sep.join(lines)).encode(encoding)
+
+
+def test_individual_with_birthdate_and_claimed_starts():
+    apps, stats = parse_applicants_csv(csv_bytes(line(
+        Email="a@x", Name="Анна", Date="2025-10-28 08:06:01", city="Красноярск", tranid="1:2",
+        format="Индивидуальное участие", sex="Женский", surname="Тестова", birthday="20.01.1978",
+        siberman_individual_starts="1", siberman_relay_starts="2")), today=TODAY)
+    assert len(apps) == 1
+    a = apps[0]
+    assert (a.tranid, a.surname, a.name, a.gender, a.birthdate, a.city, a.claimed_starts) == (
+        "1:2", "Тестова", "Анна", "F", datetime.date(1978, 1, 20), "Красноярск", 3)
+    assert a.submitted_at == datetime.datetime(2025, 10, 28, 8, 6, 1)
+    assert stats == {"rows": 1, "people": 1, "no_birthday": 0, "bad_birthday": 0}
+
+
+def test_men_gender_and_city_2_and_no_starts():
+    apps, _ = parse_applicants_csv(csv_bytes(line(
+        Name="Иван", tranid="1:8", sex="Мужской", surname="Тестов", birthday="01.01.1980", city_2="Томск",
+        siberman_individual_starts_2="")), today=TODAY)
+    assert (apps[0].gender, apps[0].city, apps[0].claimed_starts) == ("M", "Томск", 0)
+
+
+def test_old_form_without_surname_is_skipped():
+    apps, stats = parse_applicants_csv(csv_bytes(line(Name="Иван Тестов", Date="2023-11-24 00:01:40", tranid="1:1")),
+                                       today=TODAY)
+    assert apps == [] and stats["rows"] == 1 and stats["people"] == 0
+
+
+def test_relay_members_get_own_records_and_captain_is_skipped():
+    apps, _ = parse_applicants_csv(csv_bytes(line(
+        Name="Ирина", tranid="1:3", format="Эстафетная команда", surname="Тестова", birthday="20.01.1978",
+        surname_swim="Пловцова", name_swim="Элина", birthday_swim="01.02.2005",
+        surname_bike="Велосипедов", name_bike="Андрей", birthday_bike="20-04-1977",
+        surname_run="Бегунова", name_run="Ирина", birthday_run="")), today=TODAY)
+    by_id = {a.tranid: a for a in apps}
+    assert set(by_id) == {"1:3:swim", "1:3:bike"}
+    assert by_id["1:3:bike"].birthdate == datetime.date(1977, 4, 20)
+    assert by_id["1:3:swim"].gender is None and by_id["1:3:swim"].claimed_starts is None
+
+
+def test_bad_and_too_young_dates_are_counted():
+    apps, stats = parse_applicants_csv(csv_bytes(
+        line(tranid="1:4", surname="Тестов", Name="А", birthday="31.02.1990"),
+        line(tranid="1:5", surname="Тестов", Name="Б", birthday="09.01.2025"),
+        line(tranid="1:6", surname="Тестов", Name="В", birthday="")), today=TODAY)
+    assert apps == []
+    assert stats["bad_birthday"] == 2 and stats["no_birthday"] == 1
+
+
+def test_min_age_boundary():
+    assert parse_birthdate("31.12.2012", TODAY) == datetime.date(2012, 12, 31)
+    assert parse_birthdate("01.01.2013", TODAY) is None
+
+
+def test_same_tranid_twice_keeps_last():
+    apps, _ = parse_applicants_csv(csv_bytes(
+        line(tranid="1:7", surname="Тестов", Name="Иван", birthday="01.01.1980"),
+        line(tranid="1:7", surname="Тестов", Name="Иван", birthday="02.01.1980")), today=TODAY)
+    assert len(apps) == 1 and apps[0].birthdate == datetime.date(1980, 1, 2)
+
+
+def test_quoted_newline_crlf_and_cp1251():
+    text_line = line(tranid="1:9", surname="Тестов", Name="Иван", birthday="01.01.1980")
+    quoted = text_line.replace("1:9", '"1:9"', 1)
+    for data in (csv_bytes(quoted, sep="\r\n"), csv_bytes(text_line, encoding="cp1251", bom=False)):
+        apps, _ = parse_applicants_csv(data, today=TODAY)
+        assert [(a.tranid, a.surname) for a in apps] == [("1:9", "Тестов")]
+    multiline = line(tranid="1:10", surname="Тестов", Name="Иван", birthday="01.01.1980").replace(
+        "a@x", "", 1)
+    data = (";".join(COLS) + "\n" + multiline.replace(";;", ';"две\nстроки";', 1)).encode("utf-8")
+    apps, _ = parse_applicants_csv(data, today=TODAY)
+    assert [a.tranid for a in apps] == ["1:10"]
+
+
+def test_not_a_tilda_export():
+    with pytest.raises(ValueError):
+        parse_applicants_csv(b"a;b\n1;2", today=TODAY)
+
+
+def test_parse_birthdate_formats():
+    assert parse_birthdate("01.05.1981", TODAY) == datetime.date(1981, 5, 1)
+    assert parse_birthdate("01-05-1981", TODAY) == datetime.date(1981, 5, 1)
+    assert parse_birthdate("1981-05-01", TODAY) is None
+    assert parse_birthdate("01.05.1920", TODAY) is None
+```
+
+Примечание к `test_quoted_newline_crlf_and_cp1251`: третья часть вставляет в первое пустое поле строки значение в кавычках с переводом строки — разбор не должен развалиться. Если вставка попадает не в то поле и тест ломается из-за самой конструкции строки, упростить её (строка CSV с полем `"две\nстроки"` в колонке `Phone`), не меняя смысла проверки.
+
+- [ ] **Step 5: `applicants.py` (полная замена файла)**
+
+```python
+"""
+Выгрузка заявок Тильды (CSV: «;», UTF-8 с BOM, либо cp1251 после пересохранения в Excel) →
+даты рождения для реестра людей.
+
+Берём только ФИ, пол, ДР, город, номер заявки (tranid), дату подачи и сколько стартов на
+Siberman заявитель указал сам — телефоны, e-mail и тексты заявок не читаем. ДР в форме есть
+с 15.10.2024 (форма 807405240 и следующие). В эстафетной заявке берём только этапников
+(surname_swim/name_swim/birthday_swim и т.д.): основной заявитель либо сам этапник (дубль),
+либо не участник. Старые формы без колонки surname (ФИ одной строкой, ДР нет) пропускаются.
+"""
+import csv
+import datetime
+import io
+from typing import Optional
+
+from src.siberman.persons.linking import Applicant
+
+STAGES = ("swim", "bike", "run")
+STARTS_COLS = ("siberman_individual_starts", "siberman_individual_starts_2", "siberman_relay_starts")
+MIN_YEAR = 1930
+MIN_AGE = 14
+
+
+def _clean(v) -> str:
+    return " ".join(str(v or "").split())
+
+
+def _int0(v) -> int:
+    t = _clean(v)
+    return int(t) if t.isdigit() else 0
+
+
+def parse_birthdate(raw: str, today: datetime.date) -> Optional[datetime.date]:
+    """'дд.мм.гггг' или 'дд-мм-гггг'; невозможная дата, раньше 1930 или моложе 14 лет → None."""
+    parts = _clean(raw).replace("-", ".").replace("/", ".").split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts) or len(parts[2]) != 4:
+        return None
+    try:
+        d = datetime.date(int(parts[2]), int(parts[1]), int(parts[0]))
+    except ValueError:
+        return None
+    if d.year < MIN_YEAR or d.year > today.year - MIN_AGE:
+        return None
+    return d
+
+
+def _parse_dt(raw) -> Optional[datetime.datetime]:
+    try:
+        return datetime.datetime.strptime(_clean(raw), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _decode(data: bytes) -> str:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp1251", errors="strict")
+    return text.lstrip(chr(0xFEFF))
+
+
+def parse_applicants_csv(data: bytes, today: Optional[datetime.date] = None) -> tuple:
+    """→ ([Applicant], {'rows', 'people', 'no_birthday', 'bad_birthday'}). ValueError — не выгрузка Тильды."""
+    today = today or datetime.date.today()
+    try:
+        text = _decode(data)
+    except UnicodeDecodeError:
+        raise ValueError("Не удалось прочитать файл — сохраните выгрузку в UTF-8") from None
+    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=";")
+    if not reader.fieldnames or "tranid" not in reader.fieldnames:
+        raise ValueError("Это не выгрузка заявок Тильды: нет колонки tranid")
+    found: dict = {}
+    stats = {"rows": 0, "people": 0, "no_birthday": 0, "bad_birthday": 0}
+    for row in reader:
+        stats["rows"] += 1
+        tranid = _clean(row.get("tranid"))
+        if not tranid:
+            continue
+        submitted = _parse_dt(row.get("Date"))
+        people = []
+        if not _clean(row.get("format")).startswith("Эстафет"):
+            gender = {"Мужской": "M", "Женский": "F"}.get(_clean(row.get("sex")))
+            city = _clean(row.get("city") or row.get("city_2"))
+            starts = sum(_int0(row.get(c)) for c in STARTS_COLS)
+            people.append((tranid, row.get("surname"), row.get("Name"), row.get("birthday"), gender, city, starts))
+        for st in STAGES:
+            people.append((f"{tranid}:{st}", row.get(f"surname_{st}"), row.get(f"name_{st}"),
+                           row.get(f"birthday_{st}"), None, "", None))
+        for tid, surname, name, bd_raw, g, c, starts in people:
+            surname, name = _clean(surname), _clean(name)
+            if not surname:
+                continue
+            bd = parse_birthdate(bd_raw, today)
+            if bd is None:
+                stats["bad_birthday" if _clean(bd_raw) else "no_birthday"] += 1
+                continue
+            found[tid] = Applicant(tranid=tid, surname=surname, name=name, gender=g, birthdate=bd,
+                                   city=c, submitted_at=submitted, claimed_starts=starts)
+    stats["people"] = len(found)
+    return list(found.values()), stats
+```
+
+- [ ] **Step 6: Прогон**
+
+Run: `conda run -n base python -m pytest tests/unit/test_siberman_persons_linking.py tests/unit/test_siberman_persons_applicants.py -q`
+Expected: 25 + 10 = 35 passed.
+Run: `conda run -n base python -m pytest tests/unit/ -q` — 903 + 35 = 938 passed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/siberman/migrations/014_persons.sql src/siberman/persons/linking.py src/siberman/persons/applicants.py tests/unit/test_siberman_persons_linking.py tests/unit/test_siberman_persons_applicants.py
+git commit -m "fix(siberman/persons): замена этапника при перезагрузке, ДР только при указанных стартах, ревью по полу, cp1251"
+```
+
+---
+
 ### Task 4: SQL реестра (`db.py`)
 
 **Files:**
@@ -913,9 +1733,11 @@ def load_participant_rows(conn) -> list:
 
 
 def load_links(conn) -> dict:
+    """{(год, номер, этап): (person_id, manual, name_key)} — формат, который ждёт link_participants."""
     cur = _cur(conn)
-    cur.execute("SELECT race_year, bib, relay_stage, person_id FROM siberman_person_links")
-    return {(int(r["race_year"]), str(r["bib"]), str(r["relay_stage"])): r["person_id"] for r in cur.fetchall()}
+    cur.execute("SELECT race_year, bib, relay_stage, person_id, manual, name_key FROM siberman_person_links")
+    return {(int(r["race_year"]), str(r["bib"]), str(r["relay_stage"])): (r["person_id"], r["manual"], r["name_key"])
+            for r in cur.fetchall()}
 
 
 def count_unlinked(conn) -> int:
@@ -926,12 +1748,13 @@ def count_unlinked(conn) -> int:
 
 
 def set_links(conn, items: Iterable, manual: bool) -> None:
-    """items — [((год, номер, этап), person_id)]."""
-    rows = [(int(k[0]), str(k[1]), str(k[2]), int(pid), int(manual)) for k, pid in items]
+    """items — [((год, номер, этап), person_id, name_key)]; name_key — plain_key ФИ строки сейчас."""
+    rows = [(int(k[0]), str(k[1]), str(k[2]), int(pid), int(manual), name_key) for k, pid, name_key in items]
     if rows:
         conn.cursor().executemany(
-            "INSERT INTO siberman_person_links (race_year, bib, relay_stage, person_id, manual) "
-            "VALUES (%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE person_id=VALUES(person_id), manual=VALUES(manual)", rows)
+            "INSERT INTO siberman_person_links (race_year, bib, relay_stage, person_id, manual, name_key) "
+            "VALUES (%s,%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE person_id=VALUES(person_id), "
+            "manual=VALUES(manual), name_key=VALUES(name_key)", rows)
 
 
 def delete_links(conn, keys: list) -> None:
@@ -945,9 +1768,10 @@ def links_for_keys(conn, keys: list) -> dict:
         return {}
     where, args = _keys_where(keys)
     cur = _cur(conn)
-    cur.execute(f"SELECT race_year, bib, relay_stage, person_id, manual FROM siberman_person_links WHERE {where}", args)
-    return {(int(r["race_year"]), str(r["bib"]), str(r["relay_stage"])): {"person_id": r["person_id"], "manual": r["manual"]}
-            for r in cur.fetchall()}
+    cur.execute(f"SELECT race_year, bib, relay_stage, person_id, manual, name_key FROM siberman_person_links "
+                f"WHERE {where}", args)
+    return {(int(r["race_year"]), str(r["bib"]), str(r["relay_stage"])):
+            {"person_id": r["person_id"], "manual": r["manual"], "name_key": r["name_key"]} for r in cur.fetchall()}
 
 
 def links_of_person(conn, person_id: int) -> list:
@@ -1016,17 +1840,20 @@ def refresh_display(conn, person_ids) -> None:
 
 def load_applicants(conn) -> list:
     cur = _cur(conn)
-    cur.execute("SELECT tranid, surname, name, gender, birthdate, city, submitted_at FROM siberman_applicants")
+    cur.execute("SELECT tranid, surname, name, gender, birthdate, city, submitted_at, claimed_starts "
+                "FROM siberman_applicants")
     return [Applicant(**r) for r in cur.fetchall()]
 
 
 def upsert_applicants(conn, apps: list) -> int:
-    rows = [(a.tranid, a.surname, a.name, a.gender, a.birthdate, a.city, a.submitted_at) for a in apps]
+    rows = [(a.tranid, a.surname, a.name, a.gender, a.birthdate, a.city, a.submitted_at, a.claimed_starts)
+            for a in apps]
     if rows:
         conn.cursor().executemany(
-            "INSERT INTO siberman_applicants (tranid, surname, name, gender, birthdate, city, submitted_at) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE surname=VALUES(surname), name=VALUES(name), "
-            "gender=VALUES(gender), birthdate=VALUES(birthdate), city=VALUES(city), submitted_at=VALUES(submitted_at)",
+            "INSERT INTO siberman_applicants (tranid, surname, name, gender, birthdate, city, submitted_at, "
+            "claimed_starts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE surname=VALUES(surname), "
+            "name=VALUES(name), gender=VALUES(gender), birthdate=VALUES(birthdate), city=VALUES(city), "
+            "submitted_at=VALUES(submitted_at), claimed_starts=VALUES(claimed_starts)",
             rows)
     return len(rows)
 
@@ -1237,11 +2064,13 @@ def test_reload_of_year_keeps_person_ids(conn):
 
 def test_birthdate_from_applicant_and_conflict(conn):
     _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
-    pdb.upsert_applicants(conn, [Applicant("test-1", "Тестреестров", "Олег", "M", datetime.date(1980, 5, 1), "Красноярск")])
+    pdb.upsert_applicants(conn, [Applicant("test-1", "Тестреестров", "Олег", "M", datetime.date(1980, 5, 1), "Красноярск",
+                                           claimed_starts=1)])
     service.sync(conn)
     pid = _pid(conn, YEAR, 9001)
     assert pdb.get_person(conn, pid)["birthdate"] == datetime.date(1980, 5, 1)
-    pdb.upsert_applicants(conn, [Applicant("test-2", "Тестреестров", "Олег", "M", datetime.date(1981, 5, 1), "Красноярск")])
+    pdb.upsert_applicants(conn, [Applicant("test-2", "Тестреестров", "Олег", "M", datetime.date(1981, 5, 1), "Красноярск",
+                                           claimed_starts=1)])
     service.sync(conn)
     kinds = [r["kind"] for r in pdb.list_reviews(conn, "open") if r["person_id"] == pid]
     assert "bd_conflict" in kinds
@@ -1249,9 +2078,9 @@ def test_birthdate_from_applicant_and_conflict(conn):
 
 def test_import_applicants_csv(conn):
     _ins(conn, YEAR, 9001, "Тестреестров", "Олег", city="Томск")
-    cols = ["tranid", "Date", "surname", "Name", "sex", "birthday", "city"]
+    cols = ["tranid", "Date", "surname", "Name", "sex", "birthday", "city", "siberman_individual_starts"]
     body = ";".join(cols) + "\n" + ";".join(["test-9", "2026-10-01 10:00:00", "Тестреестров", "Олег",
-                                             "Мужской", "02.03.1979", "Томск"])
+                                             "Мужской", "02.03.1979", "Томск", "1"])
     report = service.import_applicants((chr(0xFEFF) + body).encode("utf-8"))
     assert report["people"] == 1 and report["sync"]["birthdates"] >= 1
     assert pdb.get_person(conn, _pid(conn, YEAR, 9001))["birthdate"] == datetime.date(1979, 3, 2)
@@ -1280,7 +2109,7 @@ from typing import Optional
 from src.siberman.db import get_siberman_connection
 from src.siberman.persons import db as pdb
 from src.siberman.persons.applicants import parse_applicants_csv
-from src.siberman.persons.linking import Registry, attach_birthdates, link_participants
+from src.siberman.persons.linking import Registry, attach_birthdates, link_participants, natkey, plain_key
 
 log = logging.getLogger(__name__)
 
@@ -1293,8 +2122,11 @@ REVIEW_TITLES = {
     "bd_conflict": "В заявке другая дата рождения",
     "applicant_ambiguous": "Заявка подходит нескольким тёзкам",
     "applicant_city_mismatch": "Заявка с тем же ФИ, но из другого города",
+    "applicant_unconfirmed": "Заявка с тем же ФИ без стартов на Siberman — это он?",
+    "gender_mismatch": "Те же ФИ, другой пол — тот же человек?",
+    "bib_gender_mismatch": "Личный номер у человека другого пола",
 }
-APPLICANT_KINDS = ("bd_conflict", "applicant_ambiguous", "applicant_city_mismatch")
+APPLICANT_KINDS = ("bd_conflict", "applicant_ambiguous", "applicant_city_mismatch", "applicant_unconfirmed")
 
 
 class PersonsError(Exception):
@@ -1346,13 +2178,15 @@ def sync(conn) -> dict:
     без выступлений. Идемпотентна: повторный запуск ничего не меняет."""
     with _locked_tx(conn):
         reg = Registry(pdb.load_persons(conn))
-        new_links, reviews = link_participants(reg, pdb.load_participant_rows(conn), pdb.load_links(conn))
+        rows = pdb.load_participant_rows(conn)
+        names = {natkey(r): plain_key(r["surname"], r["name"]) for r in rows}
+        new_links, reviews = link_participants(reg, rows, pdb.load_links(conn))
         for p in reg.new:
             p.id = pdb.insert_person(conn, {"surname": p.surname, "name": p.name, "gender": p.gender,
                                             "bib_individual": p.bib_individual, "city": p.city})
         for p in reg.bib_assigned:
             pdb.update_person(conn, p.id, {"bib_individual": p.bib_individual})
-        pdb.set_links(conn, [(k, p.id) for k, p in new_links.items()], manual=False)
+        pdb.set_links(conn, [(k, p.id, names[k]) for k, p in new_links.items()], manual=False)
         bd_updates, bd_reviews = attach_birthdates(reg, pdb.load_applicants(conn))
         for p, bd in bd_updates:
             pdb.update_person(conn, p.id, {"birthdate": bd})
@@ -1482,7 +2316,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Unit-тесты не сломаны**
 
 Run: `conda run -n base python -m pytest tests/unit/ -q`
-Expected: всё PASS, число тестов = базовое + 24.
+Expected: всё PASS, число тестов = 903 + 35 = 938.
 
 - [ ] **Step 5: Commit**
 
@@ -1614,7 +2448,7 @@ def _restore(conn, snap: dict) -> None:
     pdb.delete_links(conn, [(y, b, s) for y, b, s, link in snap["links"] if link is None])
     for y, b, s, link in snap["links"]:
         if link is not None:
-            pdb.set_links(conn, [((y, b, s), link["person_id"])], manual=bool(link["manual"]))
+            pdb.set_links(conn, [((y, b, s), link["person_id"], link["name_key"])], manual=bool(link["manual"]))
     for pid, row in persons.items():
         if row is None and pid in now:
             pdb.delete_person(conn, pid)
@@ -1705,7 +2539,8 @@ def reassign(keys: list, target_id: Optional[int], user: str) -> dict:
             snap["persons"][str(target_id)] = None
         if bib:
             pdb.update_person(conn, target_id, {"bib_individual": bib})
-        pdb.set_links(conn, [(k, target_id) for k in keys], manual=True)
+        names = {(int(r["race_year"]), str(r["bib"]), r["relay_stage"]): plain_key(r["surname"], r["name"]) for r in rows}
+        pdb.set_links(conn, [(k, target_id, names[k]) for k in keys], manual=True)
         gone = pdb.delete_orphans(conn, old_ids)
         pdb.refresh_display(conn, [i for i in set(old_ids) | {target_id} if i not in gone])
         audit_id = _record(conn, "reassign", f"{len(keys)} выступл. ({_fio(last)}) → id {target_id}", snap, user)
@@ -2311,7 +3146,10 @@ function reviewButtons(r) {
   if (r.kind === 'namesake_candidate') {
     r.others.forEach(o => { if (o && r.person) out.push(B(`Это ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
     out.push(B('Это другой человек', 'resolve'));
-  } else if (r.kind === 'bib_name_change' || r.kind === 'format_switch') {
+  } else if (r.kind === 'gender_mismatch') {
+    r.others.forEach(o => { if (o && r.person) out.push(B(`Это ${o.fio} (id ${o.id})`, `merge:${r.person.id}:${o.id}`)); });
+    out.push(B('Это другой человек', 'resolve'));
+  } else if (r.kind === 'bib_name_change' || r.kind === 'format_switch' || r.kind === 'bib_gender_mismatch') {
     out.push(B('Тот же человек', 'resolve'));
     if (r.participant) out.push(B('Другой человек — отделить', 'split'));
   } else if (r.kind === 'bd_conflict' && r.person) {
@@ -2321,7 +3159,7 @@ function reviewButtons(r) {
   } else if (r.kind === 'applicant_ambiguous') {
     r.others.forEach(o => { if (o && bd) out.push(B(`ДР у ${o.fio} (id ${o.id})`, `bd:${o.id}:${bd}`)); });
     out.push(B('Ни у кого из них', 'resolve'));
-  } else if (r.kind === 'applicant_city_mismatch' && r.person) {
+  } else if ((r.kind === 'applicant_city_mismatch' || r.kind === 'applicant_unconfirmed') && r.person) {
     if (bd) out.push(B('Это он — записать ДР', `bd:${r.person.id}:${bd}`));
     out.push(B('Не он', 'resolve'));
   }
@@ -2338,7 +3176,7 @@ async function loadReviews() {
     <div class="rtitle">${esc(r.title)}</div>
     ${r.participant ? `<div>${startText(r.participant)} — ${esc(r.participant.fio)}, ${esc(r.participant.city)}</div>` : ''}
     ${r.applicant ? `<div>Заявка: ${esc(r.applicant.fio)}, ДР ${esc(r.applicant.birthdate)}, ${esc(r.applicant.city)}</div>` : ''}
-    <div class="pboxes">${r.person ? personBox(r.person, r.kind === 'namesake_candidate' ? 'Сейчас — отдельный человек' : 'Человек') : ''}${r.others.map(o => personBox(o, 'Кандидат')).join('')}</div>
+    <div class="pboxes">${r.person ? personBox(r.person, ['namesake_candidate', 'gender_mismatch'].includes(r.kind) ? 'Сейчас — отдельный человек' : 'Человек') : ''}${r.others.map(o => personBox(o, 'Кандидат')).join('')}</div>
     <div data-i="${i}">${reviewButtons(r)}</div></div>`).join('');
 }
 
@@ -2573,7 +3411,7 @@ for q in ("SELECT COUNT(*) FROM siberman_persons",
 - [ ] **Step 4: Полный прогон тестов**
 
 Run: `conda run -n base python -m pytest tests/unit/ tests/integration/test_siberman_persons.py -q`
-Expected: все PASS; unit — базовое число из Task 0 + 27.
+Expected: все PASS; unit — 903 + 38 = 941.
 
 - [ ] **Step 5: Уточнить спецификацию**
 
