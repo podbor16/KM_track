@@ -414,6 +414,8 @@ _MAINTENANCE_ALLOWED_PREFIXES = (
     # эфир жеребьёвки Siberman и vMix не должны падать при техработах Красмарафона
     "/api/siberman/draw",
     "/draw/",
+    "/api/siberman/hall",
+    "/hall/",
     "/static",
     "/docs",
     "/redoc",
