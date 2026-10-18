@@ -50,6 +50,15 @@ def test_segment_time_needs_last_checkpoint_and_active():
     assert segment_time(ind(2020, 8, "Б", status="dnf"), ("swim",)) is None
 
 
+def test_zero_segment_time_is_not_a_time():
+    """IRONSTAR 2017: в протоколе нет времени велоэтапа, архив кладёт весь велоэтап на 2-й день,
+    1-й день = 0 — это не время отрезка и не рекорд."""
+    e = rel(2017, 13, "bike", "Велосипедов", times={"bike_day1": 0, "bike_day2": 73560})
+    assert segment_time(e, ("bike_day1",)) is None
+    assert segment_time(e, ("bike_day2",)) == 73560
+    assert segment_time(e, ("bike_day1", "bike_day2")) is None
+
+
 def test_team_time_and_status():
     [t] = build_teams(team(2021, 101))
     assert (t.year, t.bib, t.name, t.status, t.time_s) == (2021, "101", "Команда", "active", 75)

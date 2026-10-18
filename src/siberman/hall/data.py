@@ -44,8 +44,9 @@ def race_time(e: Entry) -> Optional[int]:
 
 
 def segment_time(e: Entry, stages: tuple) -> Optional[int]:
-    """Время отрезка из этапов stages: участник не сошёл и дошёл до последней КТ каждого этапа."""
-    if e.status != "active" or any(s not in e.finished or e.times.get(s) is None for s in stages):
+    """Время отрезка из этапов stages: участник не сошёл и дошёл до последней КТ каждого этапа.
+    Время этапа 0 — не время (архив кладёт весь велоэтап IRONSTAR 2017 на 2-й день)."""
+    if e.status != "active" or any(s not in e.finished or not e.times.get(s) or e.times[s] <= 0 for s in stages):
         return None
     return sum(e.times[s] for s in stages)
 
