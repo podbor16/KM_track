@@ -9,6 +9,9 @@ from typing import Optional
 
 import mysql.connector
 
+from src.siberman.persons import db as pdb
+from src.siberman.persons.linking import plain_key
+
 STAGES = ("swim", "bike_day1", "bike_day2", "run")
 ROLES = ("swim", "bike", "run")
 ROLE_STAGES = {"swim": ("swim",), "bike": ("bike_day1", "bike_day2"), "run": ("run",)}
@@ -168,3 +171,16 @@ def load_entries(conn) -> list:
             team=r["relay_team_name"] or "", person_id=persons.get((year, bib, stage)), overall_s=r["total_s"],
             times={s: r[s] for s in STAGES}, finished=frozenset(finished.get(r["id"], ()))))
     return out
+
+
+def person_of(e: Entry):
+    """Человек выступления: id реестра; без привязки — 'фамилия имя' (как рейтинг и трекер)."""
+    return e.person_id or plain_key(e.surname, e.name)
+
+
+def load_people(conn) -> tuple:
+    """Люди реестра и заявки Тильды — для города человека; без таблиц реестра (миграция 014) — пусто."""
+    try:
+        return pdb.load_persons(conn), pdb.load_applicants(conn)
+    except mysql.connector.Error:
+        return [], []
