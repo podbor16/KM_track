@@ -36,3 +36,21 @@ def test_person_key_alias_maiden_name():
 def test_alias_counts_years_under_both_surnames():
     finished = {person_key("Заволокина", "Олеся"): {2024}}
     assert get_finish_count("Князева", "Олеся", 2026, finished) == 1
+
+
+from src.siberman.finish_counts import finish_count_for
+
+
+def test_finish_count_by_person_when_linked():
+    by_person = {5: {2020, 2021, 2025}}
+    assert finish_count_for(5, "Кто-то", "Другой", 2025, by_person, {}) == 2
+
+
+def test_linked_person_without_finishes_is_zero_not_name_fallback():
+    by_name = {"иванов иван": {2020}}
+    assert finish_count_for(9, "Иванов", "Иван", 2025, {}, by_name) == 0
+
+
+def test_unlinked_falls_back_to_name():
+    by_name = {"иванов иван": {2020, 2021}}
+    assert finish_count_for(None, "Иванов", "Иван", 2025, {}, by_name) == 2

@@ -259,3 +259,20 @@ def test_keep_link_is_undoable_and_blocks_earlier_undo(conn):
     link = pdb.links_for_keys(conn, [(YEAR, "9101", "swim")])[(YEAR, "9101", "swim")]
     assert link["name_key"] == "тестреестрова анна"
     assert any(r["id"] == rv["id"] for r in service.reviews("open"))
+
+
+def test_finish_counts_on_archive_match_name_based(conn):
+    """После синхронизации реестра «N-й финиш» в архиве такой же, как при подсчёте по ФИ
+    (в архиве нет тёзок-личников). Различия печатаются без ФИО — год и номер."""
+    from src.siberman.db import get_finished_years_by_name, get_results_for_year
+    from src.siberman.finish_counts import get_finish_count
+    service.sync(conn)
+    by_name = get_finished_years_by_name(conn)
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT race_year FROM participants WHERE race_year < 2090 ORDER BY race_year")
+    diffs = []
+    for (year,) in cur.fetchall():
+        for p in get_results_for_year(conn, year)["individual"]:
+            if p["finish_count"] != get_finish_count(p["surname"], p["name"], year, by_name):
+                diffs.append((year, p["bib"]))
+    assert diffs == []

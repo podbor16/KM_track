@@ -3,7 +3,7 @@ import logging
 import mysql.connector
 from typing import Optional
 
-from src.siberman.finish_counts import get_finish_count, person_key
+from src.siberman.finish_counts import finish_count_for, get_finish_count, person_key
 
 log = logging.getLogger(__name__)
 
@@ -393,11 +393,47 @@ def get_finished_years_by_name(conn) -> dict[str, set[int]]:
     return result
 
 
+def get_finished_years_by_person(conn) -> dict[int, set[int]]:
+    """person_id → годы, где личник финишировал (то же условие, что get_finished_years_by_name).
+    Нет таблиц реестра (миграция 014 не применена) — пусто: счёт по ФИ."""
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT DISTINCT p.race_year, l.person_id
+            FROM participants p
+            JOIN siberman_person_links l
+              ON l.race_year=p.race_year AND l.bib=p.bib AND l.relay_stage=p.relay_stage
+            JOIN checkpoint_times ct ON ct.participant_id = p.id
+            JOIN checkpoints c ON c.id = ct.checkpoint_id
+            WHERE p.format='individual' AND p.status='active'
+              AND c.stage='run' AND c.seq=12 AND ct.cumulative_s IS NOT NULL
+        """)
+    except mysql.connector.Error:
+        return {}
+    result: dict[int, set[int]] = {}
+    for row in cur.fetchall():
+        result.setdefault(row["person_id"], set()).add(row["race_year"])
+    return result
+
+
+def get_person_ids_for_year(conn, race_year: int) -> dict[str, int]:
+    """Личный номер года → человек реестра. Нет таблиц реестра — пусто."""
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT bib, person_id FROM siberman_person_links WHERE race_year=%s AND relay_stage='none'",
+                    (race_year,))
+    except mysql.connector.Error:
+        return {}
+    return {str(r["bib"]): r["person_id"] for r in cur.fetchall()}
+
+
 def get_results_for_year(conn, race_year: int) -> dict:
     """Вернуть все результаты за год для публичной страницы."""
     cur = conn.cursor(dictionary=True)
     cp_by_pid, split_by_pid = get_checkpoint_times_for_year(conn, race_year)
     finished_years_by_name = get_finished_years_by_name(conn)
+    finished_years_by_person = get_finished_years_by_person(conn)
+    person_ids = get_person_ids_for_year(conn, race_year)
 
     # Личные участники — все данные в одной строке (pivot через LEFT JOIN)
     cur.execute("""
@@ -430,7 +466,8 @@ def get_results_for_year(conn, race_year: int) -> dict:
         p["splits"] = split_by_pid.get(pid, {})
         # Только личный зачёт (запрошено пользователем 2026-08-05) — у
         # эстафетных команд свой "стаж" не считается.
-        p["finish_count"] = get_finish_count(p["surname"], p["name"], race_year, finished_years_by_name)
+        p["finish_count"] = finish_count_for(person_ids.get(str(p["bib"])), p["surname"], p["name"],
+                                             race_year, finished_years_by_person, finished_years_by_name)
 
     # Эстафетные члены (все трое)
     cur.execute("""

@@ -37,3 +37,18 @@ def get_finish_count(
     finished_years_by_name (ключ — person_key), строго меньше race_year."""
     years = finished_years_by_name.get(person_key(surname, name), ())
     return sum(1 for y in years if y < race_year)
+
+
+def finish_count_for(
+    person_id,
+    surname: str,
+    name: str,
+    race_year: int,
+    finished_years_by_person: dict,
+    finished_years_by_name: dict,
+) -> int:
+    """Финиши ДО race_year: по человеку из реестра (тёзки не смешиваются), а если выступление
+    ещё не привязано (до первой синхронизации или без миграции 014) — по ФИ, как раньше."""
+    if person_id is not None:
+        return sum(1 for y in finished_years_by_person.get(person_id, ()) if y < race_year)
+    return get_finish_count(surname, name, race_year, finished_years_by_name)
