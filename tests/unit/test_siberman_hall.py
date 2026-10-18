@@ -117,3 +117,46 @@ def test_stage_without_last_checkpoint_is_not_a_record():
     entries = [ind(2020, 7, "А", swim=5, finished=frozenset({"bike_day1", "bike_day2", "run"})),
                ind(2020, 8, "Б", swim=9)]
     assert recs(entries)["current"]["swim:individual:M"]["holder"]["bib"] == "8"
+
+
+from src.siberman.hall.rating import build_rating
+
+
+def rating_of(entries):
+    teams = build_teams(entries)
+    return build_rating(entries, teams, build_records(entries, teams))
+
+
+def test_finish_numbers_medals_and_dnf_rows():
+    entries = [ind(2019, 7, "Петров", total=130, pid=5), ind(2020, 7, "Петров", status="dnf", dnf_stage="run", pid=5),
+               ind(2021, 7, "Петров", total=120, pid=5), ind(2022, 7, "Петров", total=110, pid=5),
+               ind(2022, 8, "Новиков", status="dns"), ind(2022, 9, "Идущий", total=None)]
+    rows = {(r["year"], r["bib"]): r for r in rating_of(entries)["individual"]}
+    assert set(rows) == {(2019, "7"), (2020, "7"), (2021, "7"), (2022, "7")}     # dns и «ещё на дистанции» — нет
+    assert [rows[(y, "7")]["finish_no"] for y in (2019, 2021, 2022)] == [1, 2, 3]
+    assert rows[(2022, "7")]["medal"]["key"] == "gold"
+    dnf = rows[(2020, "7")]
+    assert (dnf["status"], dnf["dnf_stage"], dnf["finish_no"], dnf["medal"], dnf["time_s"]) == ("dnf", "run", None, None, None)
+
+
+def test_finish_numbers_without_registry_use_name():
+    entries = [ind(2019, 7, "Петров", total=130), ind(2021, 7, "Петров", total=120)]
+    assert [r["finish_no"] for r in rating_of(entries)["individual"]] == [2, 1]   # по времени: 120 (2021), 130 (2019)
+
+
+def test_rows_sorted_by_time_dnf_last_and_record_marks():
+    entries = [ind(2019, 7, "А", total=130), ind(2020, 8, "Б", total=100), ind(2020, 9, "В", "F", total=140),
+               ind(2021, 10, "Г", status="dsq")]
+    rows = rating_of(entries)["individual"]
+    assert [r["bib"] for r in rows] == ["8", "7", "9", "10"]
+    assert [r["record"] for r in rows] == ["M", None, "F", None]
+
+
+def test_relay_rating_rows():
+    entries = [*team(2020, 101, name="Быстрые"), *team(2021, 102, status="dnf", name="Сошедшие")]
+    r = rating_of(entries)
+    first, second = r["relay"]
+    assert (first["team"], first["time_s"], first["status"], first["record"]) == ("Быстрые", 75, "finished", True)
+    assert [m["stage"] for m in first["members"]] == ["swim", "bike", "run"]
+    assert (second["status"], second["time_s"], second["record"]) == ("dnf", None, False)
+    assert r["years"] == [2021, 2020]
