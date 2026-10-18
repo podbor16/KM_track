@@ -3275,6 +3275,144 @@ git commit -m "fix(siberman/persons): отмена возвращает запи
 
 ---
 
+### Task 7b: Ревью 7a — снимок только затронутых записей, отмена без ошибки FK, слияние чистит кандидатов
+
+1. **Important.** Отмена падала с `IntegrityError` (FK), если человек из записи «проверить» удалён синхронизацией после действия: `restore_reviews` возвращал `person_id` как есть. Теперь несуществующий человек → NULL.
+2. Снимок брал все записи о человеке — отмена откатывала статусы, которые админ менял позже, и лишне блокировала отмену соседних действий. Теперь в снимке только явно названная запись (`review_id`) и, при слиянии, записи, которые меняет `move_reviews`.
+3. `move_reviews` менял только основного человека: исходный оставался в кандидатах, а запись «Это … (id target)» предлагала слить человека с самим собой. Теперь исходный заменяется целевым и в кандидатах; запись «тот же или другой?», у которой не осталось кандидатов, закрывается.
+
+**Files:**
+- Modify: `src/siberman/persons/db.py`, `src/siberman/persons/service.py`, `tests/integration/test_siberman_persons.py`
+
+- [ ] **Step 1: Тесты (в конец `tests/integration/test_siberman_persons.py`)**
+
+```python
+def _gender_review(conn):
+    """Две эстафетчицы-тёзки, вторая — с полом M в протоколе → gender_mismatch: person=M, кандидат=F."""
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Саша", fmt="relay", stage="swim", gender="F", team="Тест")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Саша", fmt="relay", stage="run", gender="M", team="Тест")
+    service.sync(conn)
+    rv = [r for r in pdb.list_reviews(conn, "open") if r["race_year"] == Y2 and r["kind"] == "gender_mismatch"][0]
+    return rv, _pid(conn, Y2, 9102, "run"), _pid(conn, YEAR, 9101, "swim")
+
+
+def test_undo_after_review_person_was_deleted(conn):
+    rv, male, female = _gender_review(conn)
+    res = service.set_birthdate(female, datetime.date(1990, 1, 1), "test", review_id=rv["id"])
+    conn.cursor().execute("DELETE FROM participants WHERE race_year=%s AND bib='9102'", (Y2,))
+    service.sync(conn)                                       # M без выступлений, запись решена → M удалён
+    assert pdb.get_person(conn, male) is None
+    service.undo(res["audit_id"], "test")                    # без IntegrityError
+    back = pdb.get_review(conn, rv["id"])
+    assert back["status"] == "open" and back["person_id"] is None
+    assert pdb.get_person(conn, female)["birthdate"] is None
+
+
+def test_merge_from_card_cleans_candidates_and_closes_review(conn):
+    rv, male, female = _gender_review(conn)
+    service.merge(male, female, "test")                      # из карточки — без review_id
+    back = pdb.get_review(conn, rv["id"])
+    assert back["person_id"] == female and back["other_person_ids"] == "" and back["status"] == "resolved"
+
+
+def test_undo_does_not_touch_reviews_changed_later(conn):
+    rv, male, female = _gender_review(conn)
+    res = service.set_birthdate(female, datetime.date(1990, 1, 1), "test")   # без review_id
+    service.set_review_status(rv["id"], "deferred", "test")
+    service.undo(res["audit_id"], "test")
+    assert pdb.get_review(conn, rv["id"])["status"] == "deferred"
+```
+
+- [ ] **Step 2: Тесты падают**
+
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/integration/test_siberman_persons.py -q -p no:cacheprovider`
+Expected: 17 passed, 3 failed (`IntegrityError`, кандидаты/статус, статус `open` вместо `deferred`).
+
+- [ ] **Step 3: `db.py`**
+
+1. `reviews_state` заменить:
+```python
+def reviews_state(conn, review_ids=(), moved_from=None) -> list:
+    """Записи «проверить», которые меняет действие: явно названные + (при слиянии) нерешённые записи,
+    где исходный человек — основной или кандидат. Только они попадают в снимок отмены."""
+    rids = sorted({int(i) for i in review_ids if i is not None})
+    conds, args = [], []
+    if rids:
+        conds.append(f"id IN ({','.join(['%s'] * len(rids))})")
+        args += rids
+    if moved_from is not None:
+        conds.append("(status <> 'resolved' AND (person_id=%s OR FIND_IN_SET(%s, other_person_ids)))")
+        args += [int(moved_from), str(moved_from)]
+    if not conds:
+        return []
+    cur = _cur(conn)
+    cur.execute(f"SELECT id, {', '.join(REVIEW_STATE)} FROM siberman_person_reviews WHERE {' OR '.join(conds)}", args)
+    return cur.fetchall()
+```
+2. `restore_reviews` заменить (человек мог быть удалён после действия → NULL вместо нарушения FK):
+```python
+def restore_reviews(conn, rows: list) -> None:
+    cur = conn.cursor()
+    for r in rows:
+        cur.execute("UPDATE siberman_person_reviews SET person_id=(SELECT id FROM siberman_persons WHERE id=%s), "
+                    "other_person_ids=%s, status=%s, resolved_at=%s, resolved_by=%s WHERE id=%s",
+                    (r["person_id"], r["other_person_ids"], r["status"], r["resolved_at"], r["resolved_by"],
+                     int(r["id"])))
+```
+3. `move_reviews` заменить:
+```python
+CANDIDATE_KINDS = ("namesake_candidate", "gender_mismatch", "relinked")
+
+
+def move_reviews(conn, source_id: int, target_id: int, user: str) -> None:
+    """Слияние: в нерешённых записях исходный человек заменяется целевым — и как основной, и среди
+    кандидатов (FK обнулил бы основного). Запись «тот же или другой?», у которой не осталось
+    кандидатов, закрывается."""
+    source, target = int(source_id), int(target_id)
+    cur = _cur(conn)
+    cur.execute("SELECT id, kind, person_id, other_person_ids FROM siberman_person_reviews WHERE status <> 'resolved' "
+                "AND (person_id=%s OR FIND_IN_SET(%s, other_person_ids))", (source, str(source)))
+    for r in cur.fetchall():
+        person = target if r["person_id"] == source else r["person_id"]
+        others = []
+        for x in filter(None, r["other_person_ids"].split(",")):
+            x = target if int(x) == source else int(x)
+            if x != person and x not in others:
+                others.append(x)
+        conn.cursor().execute("UPDATE siberman_person_reviews SET person_id=%s, other_person_ids=%s WHERE id=%s",
+                              (person, ",".join(map(str, others)), r["id"]))
+        if r["kind"] in CANDIDATE_KINDS and not others:
+            set_review_status(conn, r["id"], "resolved", user)
+```
+
+- [ ] **Step 4: `service.py`**
+
+1. `_snapshot`:
+```python
+def _snapshot(conn, person_ids, keys: list, review_ids=(), moved_from=None) -> dict:
+    person_ids = sorted({int(i) for i in person_ids if i is not None})
+    persons = pdb.get_persons(conn, person_ids)
+    links = pdb.links_for_keys(conn, keys)
+    return {"persons": {str(i): _plain(persons.get(i)) for i in person_ids},
+            "links": [[k[0], k[1], k[2], links.get(tuple(k))] for k in keys],
+            "reviews": [_plain(r) for r in pdb.reviews_state(conn, review_ids, moved_from)]}
+```
+2. В `merge`: снимок `_snapshot(conn, [source_id, target_id], pdb.links_of_person(conn, source_id), [review_id], moved_from=source_id)`; вызов `pdb.move_reviews(conn, source_id, target_id)` → `pdb.move_reviews(conn, source_id, target_id, user)`.
+(`reassign`, `set_birthdate`, `keep_link` уже передают `[review_id]` — без изменений.)
+
+- [ ] **Step 5: Тесты проходят**
+
+Интеграционные — 20 passed; `tests/unit/` — 944 passed.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/siberman/persons/db.py src/siberman/persons/service.py tests/integration/test_siberman_persons.py
+git commit -m "fix(siberman/persons): снимок отмены — только затронутые записи, без ошибки FK; слияние чистит кандидатов"
+```
+
+---
+
 ### Task 8: Счётчик финишей — по человеку
 
 **Files:**
