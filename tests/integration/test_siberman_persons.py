@@ -142,3 +142,86 @@ def test_auto_sync_skips_while_protocol_is_rewritten(conn):
     finally:
         other.close()
     assert service.auto_sync() is not None and _pid(conn, YEAR, 9001) is not None
+
+
+def test_reassign_to_new_person_and_undo(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Анна", fmt="relay", stage="run", gender="F", team="Тест")
+    service.sync(conn)
+    old = _pid(conn, YEAR, 9101, "swim")
+    assert _pid(conn, Y2, 9102, "run") == old
+    res = service.reassign([[Y2, "9102", "run"]], None, "test")
+    assert _pid(conn, Y2, 9102, "run") == res["person_id"] != old
+    card = service.person_card(res["person_id"])
+    assert [p["manual"] for p in card["participations"]] == [1]
+    service.undo(res["audit_id"], "test")
+    assert _pid(conn, Y2, 9102, "run") == old
+    assert pdb.get_person(conn, res["person_id"]) is None
+
+
+def test_merge_and_undo(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    _ins(conn, Y2, 9102, "Тестреестрова-Кузина", "Анна", fmt="relay", stage="run", gender="F", team="Тест")
+    service.sync(conn)
+    a, b = _pid(conn, YEAR, 9101, "swim"), _pid(conn, Y2, 9102, "run")
+    assert a != b
+    res = service.merge(b, a, "test")
+    assert _pid(conn, Y2, 9102, "run") == a and pdb.get_person(conn, b) is None
+    service.undo(res["audit_id"], "test")
+    assert _pid(conn, Y2, 9102, "run") == b and pdb.get_person(conn, b)["surname"] == "Тестреестрова-Кузина"
+
+
+def test_merge_refuses_two_individual_bibs(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Иван")
+    _ins(conn, Y2, 9002, "Тестреестров", "Иван")
+    service.sync(conn)
+    with pytest.raises(service.PersonsError):
+        service.merge(_pid(conn, Y2, 9002), _pid(conn, YEAR, 9001), "test")
+
+
+def test_undo_is_blocked_by_later_action_on_same_person(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9001)
+    first = service.set_birthdate(pid, datetime.date(1980, 1, 1), "test")
+    second = service.set_birthdate(pid, datetime.date(1980, 1, 2), "test")
+    with pytest.raises(service.PersonsError):
+        service.undo(first["audit_id"], "test")
+    service.undo(second["audit_id"], "test")
+    service.undo(first["audit_id"], "test")
+    assert pdb.get_person(conn, pid)["birthdate"] is None
+
+
+def test_reviews_search_and_journal(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    _ins(conn, Y2, 9002, "Тестреестров", "Олег")
+    _ins(conn, Y3, 9103, "Тестреестров", "Олег", fmt="relay", stage="bike", team="Тест")
+    service.sync(conn)
+    mine = [r for r in service.reviews("open") if r["participant"] and r["participant"]["year"] == Y3]
+    assert [r["kind"] for r in mine] == ["namesake_candidate"]
+    assert len(mine[0]["others"]) == 2 and mine[0]["title"]
+    service.set_review_status(mine[0]["id"], "deferred", "test")
+    assert all(r["id"] != mine[0]["id"] for r in service.reviews("open"))
+    found = service.search("Тестреестров Олег")
+    assert len(found) >= 3 and all("birthdate" in f for f in found)
+    pid = _pid(conn, YEAR, 9001)
+    service.set_birthdate(pid, datetime.date(1980, 1, 1), "test")
+    assert any("Тестреестров" in j["summary"] for j in service.journal())
+
+
+def test_keep_link_confirms_new_name(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    service.reassign([[YEAR, "9101", "swim"]], pid, "test")          # теперь привязка ручная
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестрова-Кузина' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    service.sync(conn)
+
+    def mine():
+        return [r for r in service.reviews("open")
+                if r["kind"] == "manual_name_changed" and r["participant"] and r["participant"]["year"] == YEAR]
+    assert len(mine()) == 1 and _pid(conn, YEAR, 9101, "swim") == pid
+    service.keep_link(mine()[0]["id"], "test")
+    service.sync(conn)
+    assert mine() == [] and _pid(conn, YEAR, 9101, "swim") == pid
