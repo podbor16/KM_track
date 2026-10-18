@@ -1,0 +1,66 @@
+/* Рейтинг и рекорды Siberman (iframe в Тильде). Фирменный Onest, явные цвета (не зависят от темы). */
+@font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-Light.ttf') format('truetype'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-ExtraBold.ttf') format('truetype'); font-weight: 800; font-display: swap; }
+:root { --navy: #003D62; --red: #BE0A21; --ink: #111111; --muted: #5f5f5f; --line: #e6e6e6; --bg: #ffffff;
+        --m: #eef4f9; --m2: #cfe0ee; --f: #fbeef0; --f2: #f4d3d8; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Onest', Arial, sans-serif; }
+.hall { position: relative; max-width: 960px; margin: 0 auto; padding: 12px 16px; box-sizing: border-box; }
+.hall a { color: var(--navy); text-decoration: none; border-bottom: 1px dashed var(--navy); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+.tab { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--navy); background: #fff; color: var(--navy); font: inherit; font-weight: 800; cursor: pointer; }
+.tab.active { background: var(--navy); color: #fff; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; margin-bottom: 10px; font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid #bdbdbd; border-radius: 6px; overflow: hidden; }
+.seg button { padding: 7px 12px; border: 0; background: #fff; color: var(--ink); font: inherit; cursor: pointer; }
+.seg button.on { background: var(--ink); color: #fff; }
+.bar select, .search { padding: 7px 10px; border: 1px solid #bdbdbd; border-radius: 6px; background: #fff; color: var(--ink); font: inherit; font-size: 14px; }
+.search { min-width: 220px; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+td, th { padding: 8px 6px; border-top: 1px solid var(--line); text-align: center; color: var(--ink); }
+th { color: var(--muted); font-weight: 300; font-size: 13px; }
+.l { text-align: left; }
+.num { color: var(--muted); font-size: 13px; }
+.rec { color: var(--red); font-size: 12px; margin-left: 6px; white-space: nowrap; }
+.sx { display: inline-block; min-width: 18px; padding: 1px 4px; border-radius: 4px; font-size: 12px; font-weight: 800; }
+.sx.m { background: var(--m); color: var(--navy); }
+.sx.f { background: var(--f); color: var(--red); }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.sec td { background: var(--navy); color: #fff; font-weight: 800; font-size: 13px; border: 0; }
+.dnf td { color: #9a9a9a; }
+.dnf a { color: #9a9a9a; border-color: #9a9a9a; }
+.stage { text-align: left; font-size: 14px; line-height: 1.45; }
+.stage .lbl { display: inline-block; width: 78px; color: var(--muted); font-size: 12px; }
+.state-msg { padding: 24px; text-align: center; color: var(--muted); }
+/* таблица рекордов */
+.records td, .records th { border: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+.records th { background: var(--navy); color: #fff; font-weight: 800; }
+.records th.m { background: var(--m2); color: var(--navy); }
+.records th.f { background: var(--f2); color: var(--red); }
+.records td.row { text-align: left; font-weight: 800; background: #f6f6f6; white-space: nowrap; }
+.records td.m { background: var(--m); }
+.records td.f { background: var(--f); }
+.records td.x { background: #fff; }
+[data-cell] { cursor: pointer; }
+.t { font-weight: 800; font-size: 15px; }
+.team, .yr { color: var(--muted); font-size: 12px; }
+.new { color: var(--red); font-size: 11px; font-weight: 800; }
+.mob { display: none; }
+.rowt { font-weight: 800; margin: 14px 0 6px; text-align: center; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.card2 { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 13px; text-align: center; background: #fff; }
+.card2.m { background: var(--m); border-color: var(--m2); }
+.card2.f { background: var(--f); border-color: var(--f2); }
+.card2 .lbl2 { color: var(--ink); font-weight: 800; }
+.pop { position: absolute; left: 50%; transform: translateX(-50%); width: min(560px, 94%); background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); padding: 14px 16px; z-index: 10; box-sizing: border-box; }
+.pop h4 { margin: 0 0 4px; color: var(--navy); }
+.pop .x { position: absolute; right: 12px; top: 6px; font-size: 22px; color: var(--muted); cursor: pointer; }
+.pop td { border: 0; border-top: 1px solid var(--line); text-align: left; font-size: 14px; }
+.gain { color: var(--red); white-space: nowrap; }
+@media (max-width: 640px) {
+  td, th { padding: 6px 4px; font-size: 13px; }
+  .city { display: none; }
+  .search { min-width: 0; flex: 1 1 100%; }
+  .desk { display: none; }
+  .mob { display: block; }
+}

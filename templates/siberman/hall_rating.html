@@ -1,2 +1,27 @@
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8"><title>Siberman</title></head><body><div class="hall"></div></body></html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman — рейтинг</title>
+<link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
+</head>
+<body>
+<div class="hall">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="abs">Абсолют</button>
+    <button class="tab" data-tab="men">Мужчины</button>
+    <button class="tab" data-tab="women">Женщины</button>
+    <button class="tab" data-tab="relay">Эстафеты</button>
+  </div>
+  <div class="bar">
+    <span class="seg" id="mode"><button class="on" data-mode="all">Все финиши</button><button data-mode="best">Лучший на человека</button></span>
+    <select id="year"><option value="">Все годы</option></select>
+    <input id="q" class="search" placeholder="Поиск по фамилии или номеру…" autocomplete="off">
+  </div>
+  <div class="tbl"><table id="table"><tr><td class="state-msg">Загрузка…</td></tr></table></div>
+</div>
+<script src="/static/js/siberman-hall.js?v={{ v }}"></script>
+<script src="/static/js/siberman-hall-rating.js?v={{ v }}"></script>
+</body>
+</html>
