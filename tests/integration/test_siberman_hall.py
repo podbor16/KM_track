@@ -94,3 +94,4 @@ def test_api_and_pages():
     assert client.get("/hall/rating", headers=SIBERMAN).status_code == 200
     assert client.get("/hall/records", headers=SIBERMAN).status_code == 200
     assert client.get("/hall/rating").status_code == 404
+    assert client.get("/hall/records").status_code == 404

@@ -1,8 +1,10 @@
 """
 Рейтинг и рекорды Siberman: снимок архива в памяти воркера на CACHE_TTL_S (спецификация hall §2).
 Архив меняется только загрузкой результатов; во время гонки снимок обновляется раз в минуту.
-БД недоступна — отдаём прошлый снимок, если он есть.
+БД недоступна — отдаём прошлый снимок, если он есть, и пробуем снова не раньше чем через RETRY_S
+(без снимка до этого сразу 503), чтобы запросы не ждали БД друг за другом под блокировкой.
 """
+import logging
 import threading
 import time
 from typing import Optional
@@ -14,7 +16,10 @@ from src.siberman.hall import data as hdata
 from src.siberman.hall.rating import build_rating
 from src.siberman.hall.records import build_records
 
+log = logging.getLogger(__name__)
+
 CACHE_TTL_S = 60
+RETRY_S = 10
 
 
 class HallUnavailable(Exception):
@@ -22,7 +27,7 @@ class HallUnavailable(Exception):
 
 
 _lock = threading.Lock()
-_cache = {"at": 0.0, "snap": None}
+_cache = {"at": 0.0, "snap": None, "fail_at": None}
 
 
 def _build() -> dict:
@@ -40,22 +45,27 @@ def _build() -> dict:
 
 def _snapshot() -> dict:
     with _lock:
-        snap = _cache["snap"]
-        if snap is not None and time.monotonic() - _cache["at"] < CACHE_TTL_S:
+        snap, now = _cache["snap"], time.monotonic()
+        if snap is not None and now - _cache["at"] < CACHE_TTL_S:
             return snap
+        if snap is None and _cache["fail_at"] is not None and now - _cache["fail_at"] < RETRY_S:
+            raise HallUnavailable("Данные временно недоступны")
         try:
             snap = _build()
-        except (HallUnavailable, mysql.connector.Error):
+        except (HallUnavailable, mysql.connector.Error) as e:
+            log.warning("[siberman/hall] снимок не обновлён: %s", e)
+            _cache["fail_at"] = now
             if _cache["snap"] is not None:
+                _cache["at"] = now - CACHE_TTL_S + RETRY_S       # следующая попытка через RETRY_S
                 return _cache["snap"]
             raise HallUnavailable("Данные временно недоступны") from None
-        _cache.update(at=time.monotonic(), snap=snap)
+        _cache.update(at=now, snap=snap, fail_at=None)
         return snap
 
 
 def clear_cache() -> None:
     with _lock:
-        _cache.update(at=0.0, snap=None)
+        _cache.update(at=0.0, snap=None, fail_at=None)
 
 
 def rating() -> dict:

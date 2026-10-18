@@ -12,7 +12,6 @@ from src.siberman.hall.service import HallUnavailable
 from src.siberman.router import templates
 
 router = APIRouter(tags=["Siberman hall"])
-PUBLIC_CACHE = {"Cache-Control": "public, max-age=60"}
 
 
 def _page(request: Request, template: str):
@@ -28,7 +27,7 @@ def _json(fn, *args) -> JSONResponse:
         return JSONResponse({"detail": str(e)}, status_code=503, headers={"Cache-Control": "no-store"})
     if data is None:
         raise HTTPException(status_code=404)
-    return JSONResponse(jsonable_encoder(data), headers=PUBLIC_CACHE)
+    return JSONResponse(jsonable_encoder(data))
 
 
 @router.get("/hall/rating", response_class=HTMLResponse)

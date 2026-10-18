@@ -9,15 +9,15 @@
 <body>
 <div class="hall">
   <div class="tabs" id="tabs">
-    <button class="tab active" data-tab="abs">Абсолют</button>
-    <button class="tab" data-tab="men">Мужчины</button>
-    <button class="tab" data-tab="women">Женщины</button>
-    <button class="tab" data-tab="relay">Эстафеты</button>
+    <button type="button" class="tab active" data-tab="abs">Абсолют</button>
+    <button type="button" class="tab" data-tab="men">Мужчины</button>
+    <button type="button" class="tab" data-tab="women">Женщины</button>
+    <button type="button" class="tab" data-tab="relay">Эстафеты</button>
   </div>
   <div class="bar">
-    <span class="seg" id="mode"><button class="on" data-mode="all">Все финиши</button><button data-mode="best">Лучший на человека</button></span>
+    <span class="seg" id="mode"><button type="button" class="on" data-mode="all">Все финиши</button><button type="button" data-mode="best">Лучший на человека</button></span>
     <select id="year"><option value="">Все годы</option></select>
-    <input id="q" class="search" placeholder="Поиск по фамилии или номеру…" autocomplete="off">
+    <input id="q" class="search" type="search" aria-label="Поиск по фамилии или номеру" placeholder="Поиск по фамилии или номеру…" autocomplete="off">
   </div>
   <div class="tbl"><table id="table"><tr><td class="state-msg">Загрузка…</td></tr></table></div>
 </div>

@@ -34,10 +34,10 @@ function renderTable() {
     h += `<tr><td class="row">${label}</td>`;
     for (const [col] of COLS) {
       if (seg === 'race' && col === 'relay') {
-        h += `<td class="x" colspan="2" data-cell="race:relay:X">${body('race:relay:X')}</td>`;
+        h += `<td class="x" colspan="2" data-cell="race:relay:X" tabindex="0" role="button">${body('race:relay:X')}</td>`;
       } else {
-        h += `<td class="m" data-cell="${seg}:${col}:M">${body(`${seg}:${col}:M`)}</td>`
-           + `<td class="f" data-cell="${seg}:${col}:F">${body(`${seg}:${col}:F`)}</td>`;
+        h += `<td class="m" data-cell="${seg}:${col}:M" tabindex="0" role="button">${body(`${seg}:${col}:M`)}</td>`
+           + `<td class="f" data-cell="${seg}:${col}:F" tabindex="0" role="button">${body(`${seg}:${col}:F`)}</td>`;
       }
     }
     h += '</tr>';
@@ -46,7 +46,7 @@ function renderTable() {
 }
 
 function card(key, title, cls, wide) {
-  return `<div class="card2 ${cls}" data-cell="${key}"${wide ? ' style="grid-column: span 2"' : ''}><b class="lbl2">${title}</b>${body(key)}</div>`;
+  return `<div class="card2 ${cls}" data-cell="${key}" tabindex="0" role="button"${wide ? ' style="grid-column: span 2"' : ''}><b class="lbl2">${title}</b>${body(key)}</div>`;
 }
 
 function renderCards() {
@@ -66,6 +66,7 @@ function cellTitle(key) {
 }
 
 const pop = document.getElementById('pop'), hall = document.querySelector('.hall');
+let popSeq = 0, popFrom = null;                      // номер последнего открытия; клетка, куда вернуть фокус
 
 function place(anchor) {
   const a = anchor.getBoundingClientRect(), b = hall.getBoundingClientRect();
@@ -76,22 +77,32 @@ function place(anchor) {
 }
 
 function closePop() {
+  if (pop.hidden) return;
+  popSeq++;
   pop.hidden = true;
   hall.style.minHeight = '';
+  if (popFrom) popFrom.focus();
+  popFrom = null;
 }
 
 async function openHistory(key, anchor) {
-  pop.innerHTML = `<span class="x" data-close>×</span><h4>История рекорда</h4><div class="team">${hallEsc(cellTitle(key))}</div>
+  const seq = ++popSeq;
+  popFrom = anchor;
+  pop.innerHTML = `<button type="button" class="close" data-close aria-label="Закрыть">×</button>
+    <h4 id="pop-title">История рекорда</h4><div class="team">${hallEsc(cellTitle(key))}</div>
     <div class="state-msg" id="pop-body">Загрузка…</div>`;
   pop.hidden = false;
   place(anchor);
+  pop.querySelector('.close').focus();
   try {
     const list = await hallLoad(`/api/siberman/hall/records/history?cell=${encodeURIComponent(key)}`);
+    if (seq !== popSeq) return;                      // открыли другую клетку или закрыли окно
     const rows = list.slice().reverse().map((e, i) => `<tr><td><b>${hallTime(e.time_s)}</b></td><td>${holderHtml(e, key)}</td>
       <td>${e.year}</td><td class="gain">${e.delta_s ? '−' + hallTime(e.delta_s) : ''}</td>
       <td class="team">${i === 0 ? 'текущий' : e.delta_s == null ? 'первый' : ''}</td></tr>`).join('');
     document.getElementById('pop-body').outerHTML = `<table>${rows}</table>`;
   } catch (err) {
+    if (seq !== popSeq) return;
     document.getElementById('pop-body').textContent = err.message;
   }
   place(anchor);
@@ -104,7 +115,11 @@ document.addEventListener('click', e => {
   if (cell && !pop.contains(cell)) return openHistory(cell.dataset.cell, cell);
   if (!pop.contains(e.target)) closePop();
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') return closePop();
+  const cell = (e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('[data-cell]');
+  if (cell && e.target === cell) { e.preventDefault(); openHistory(cell.dataset.cell, cell); }
+});
 
 hallLoad('/api/siberman/hall/records').then(d => { data = d; renderTable(); renderCards(); })
   .catch(err => { document.getElementById('table').innerHTML = `<tr><td class="state-msg">${hallEsc(err.message)}</td></tr>`; });
