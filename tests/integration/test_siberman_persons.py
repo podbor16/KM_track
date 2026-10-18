@@ -276,3 +276,25 @@ def test_finish_counts_on_archive_match_name_based(conn):
             if p["finish_count"] != get_finish_count(p["surname"], p["name"], year, by_name):
                 diffs.append((year, p["bib"]))
     assert diffs == []
+
+
+def test_admin_api_requires_auth_and_works(conn):
+    from fastapi.testclient import TestClient
+    from app import app
+    from src.core.auth import api_require_auth
+    client = TestClient(app)
+    assert client.get("/api/siberman/admin/people/reviews").status_code == 401
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    service.sync(conn)
+    app.dependency_overrides[api_require_auth] = lambda: "test"
+    try:
+        r = client.get("/api/siberman/admin/people/search", params={"q": "Тестреестров"})
+        assert r.status_code == 200 and r.json()
+        pid = _pid(conn, YEAR, 9001)
+        assert client.get(f"/api/siberman/admin/people/{pid}").json()["person"]["id"] == pid
+        r = client.post(f"/api/siberman/admin/people/{pid}/birthdate", json={"birthdate": "1980-01-01"})
+        assert r.status_code == 200
+        assert client.post("/api/siberman/admin/people/merge", json={"source_id": pid, "target_id": pid}).status_code == 409
+        assert client.get("/api/siberman/admin/people/journal").status_code == 200
+    finally:
+        app.dependency_overrides.clear()
