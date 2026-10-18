@@ -756,7 +756,7 @@ def test_merge_keeps_manual_city(conn):
     assert pdb.get_person(conn, dst)["city_manual"] == "Абакан"
 ```
     (если `_pid(conn, Y2, 9102) == pid` не выполняется из-за правил привязки личник ↔ эстафета — остановись и опиши, тест не подгоняй.)
-  - `tests/integration/test_siberman_hall.py`, в `test_geo_on_archive`: импорт `from src.siberman.persons.linking import norm_city` и строка `assert len({norm_city(c["name"]) for c in g["cities"]}) == len(g["cities"])`.
+  - `tests/integration/test_siberman_persons.py` → `test_no_city_list_and_api`: после `_ins(...)` — `conn.cursor().execute("UPDATE participants SET status='dnf' WHERE race_year=%s AND bib='9101'", (YEAR,))` (без отметок КТ стартом считается только dnf/dsq).
 
 - [ ] **Step 3: Красный прогон** — unit `test_siberman_hall_geo.py` + `test_siberman_hall_stats.py`: падают на `has_time` (`TypeError: ... unexpected keyword argument 'has_time'`); интеграционные — `KeyError: 'city_manual'` / несовпадения.
 
@@ -862,7 +862,7 @@ def refresh_display(conn, person_ids) -> None:
         update_person(conn, pid, fields)
 ```
   - `service.py`:
-    - `_restore`: кортеж полей `("surname", "name", "gender", "birthdate", "city", "country", "city_manual")`;
+    - `_restore`: после сборки `fields` — `fields["city_manual"] = row.get("city_manual", "")` (снимки журнала до появления колонки);
     - `merge`: в `update_person(conn, target_id, {...})` добавить `"city_manual": dst["city_manual"] or src["city_manual"]`;
     - `set_city`:
 ```python
@@ -1023,7 +1023,7 @@ def test_cities_json_is_consistent():
         for spelling in (r["name"], *r["aliases"]):    # одно написание — один город (Железногорск!)
             assert seen.setdefault(norm_city(spelling), (r["name"], r["country"])) == (r["name"], r["country"]), spelling
 ```
-  и в `tests/integration/test_siberman_hall.py` → `test_geo_on_archive`: `assert all(c["name"] for c in g["countries"])` (со справочником у каждого города есть страна). Падение — править `cities.json` (страна «НЕ НАЙДЕН», дубль написания), не тест.
+  и в `tests/integration/test_siberman_hall.py` → `test_geo_on_archive` (импорт `norm_city`): `assert all(c["name"] for c in g["countries"])` и `assert len({norm_city(c["name"]) for c in g["cities"]}) == len(g["cities"])` (со справочником у каждого города одна страна; без него Бишкек записан с «Киргизия» и «Кыргызстан» — две строки). Падение — править `cities.json` (страна «НЕ НАЙДЕН», дубль написания), не тест.
 
 - [ ] **Step 3: Проверка глазами (координатор + пользователь).** Пройти вывод: тёзки-города (Железногорск — ожидаемо Красноярский край, 56.25, 93.53; Радужный (Владимирская область); Королёв; Дзержинск), страны (Апрелевка → Россия), «НЕ НАЙДЕН». Правки — прямо в `cities.json` (координаты, страна, iso, перенос написания в `aliases` нужного города). Повторный `--dry-run` — «новых написаний: 0».
 
