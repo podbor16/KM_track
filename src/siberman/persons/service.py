@@ -114,14 +114,14 @@ def sync_now() -> dict:
 
 
 _last_fingerprint = None   # отпечаток протокола после последней успешной синхронизации (на воркер)
-_warned = False
+_last_error = None
 
 
 def auto_sync():
     """Синхронизация после загрузки результатов — только если протокол изменился с прошлого раза
     (вставки, удаления, правки ФИ) и реестр не занят. Ошибки — в лог (предупреждение один раз на воркер,
     например пока миграция 014 не применена). → результат sync или None."""
-    global _last_fingerprint, _warned
+    global _last_fingerprint, _last_error
     conn = get_siberman_connection()
     if conn is None:
         return None
@@ -131,13 +131,15 @@ def auto_sync():
             return None
         result = sync(conn, wait_s=0)
         _last_fingerprint = fp
+        _last_error = None
         log.info("[persons] sync: %s", result)
         return result
     except PersonsBusy:
         return None   # идёт перезапись протокола или другая синхронизация — следующий цикл доделает
     except Exception as e:
-        (log.debug if _warned else log.warning)(f"[persons] sync пропущен: {e}")
-        _warned = True
+        msg = str(e)
+        (log.debug if msg == _last_error else log.warning)(f"[persons] sync пропущен: {msg}")
+        _last_error = msg
         return None
     finally:
         conn.close()
@@ -156,12 +158,17 @@ def protocol_rewrite(conn):
     cur = conn.cursor(buffered=True)
     cur.execute("SELECT GET_LOCK(%s, 30)", (LOCK_NAME,))
     got = cur.fetchone()[0] == 1
+    if not got:
+        log.warning("[persons] лок реестра не получен за 30 с — перезапись года без защиты реестра")
     try:
         yield
     finally:
         if got:
-            cur.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
-            cur.fetchall()
+            try:
+                cur.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
+                cur.fetchall()
+            except Exception as e:
+                log.warning(f"[persons] RELEASE_LOCK: {e}")
 
 
 def import_applicants(data: bytes) -> dict:
