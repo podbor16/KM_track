@@ -1,14 +1,14 @@
 """
 Статистика Siberman (спецификация hall §6): люди и старты личного зачёта, эстафеты, всего людей,
-страны и города (по людям с известным городом — из build_geo), таблица по годам. Старт — статус не
-dns; финиш личника — race_time; пол человека — последнего личного старта; новичок года — первый
-старт человека в Siberman (лично или в эстафете).
+страны и города (по людям с известным городом — из build_geo), таблица по годам. Старт — data.is_start
+(dnf/dsq или отметка КТ: dns в живом году не ставится); финиш личника — race_time; пол человека —
+последнего личного старта; новичок года — первый старт человека в Siberman (лично или в эстафете).
 """
-from src.siberman.hall.data import person_of, race_time
+from src.siberman.hall.data import is_start, person_of, race_time
 
 
 def build_stats(entries: list, teams: list, geo: dict) -> dict:
-    started = sorted((e for e in entries if e.status != "dns"), key=lambda e: e.year)
+    started = sorted((e for e in entries if is_start(e)), key=lambda e: e.year)
     ind = [e for e in started if e.format == "individual"]
     fin = [e for e in ind if race_time(e) is not None]
     gender = {}
@@ -18,7 +18,7 @@ def build_stats(entries: list, teams: list, geo: dict) -> dict:
     first = {}
     for e in started:
         first.setdefault(person_of(e), e.year)
-    tstart = [t for t in teams if t.status != "dns"]
+    tstart = [t for t in teams if any(is_start(m) for m in t.members)]
     years = sorted({e.year for e in started}, reverse=True)
     rows = []
     for y in years:
@@ -38,7 +38,7 @@ def build_stats(entries: list, teams: list, geo: dict) -> dict:
             "starts_men": sum(e.gender == "M" for e in ind), "finishes_men": sum(e.gender == "M" for e in fin),
             "starts_women": sum(e.gender == "F" for e in ind), "finishes_women": sum(e.gender == "F" for e in fin)},
         "relay": {"teams": len(tstart), "finished": sum(t.time_s is not None for t in tstart),
-                  "people": len({person_of(m) for t in tstart for m in t.members if m.status != "dns"})},
+                  "people": len({person_of(m) for t in tstart for m in t.members if is_start(m)})},
         "people_total": len({person_of(e) for e in started}),
         "countries": sum(1 for c in geo["countries"] if c["name"]), "cities": len(geo["cities"]),
         "years": rows,

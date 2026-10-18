@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS siberman_persons (
   bib_individual  VARCHAR(10) DEFAULT NULL,   -- личный номер закреплён за человеком навсегда
   city            VARCHAR(100) NOT NULL DEFAULT '',
   country         VARCHAR(100) NOT NULL DEFAULT '',
+  city_manual     VARCHAR(100) NOT NULL DEFAULT '',  -- введён в админке; для карты главнее протокола
   created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_bib_individual (bib_individual)

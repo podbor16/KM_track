@@ -50,6 +50,7 @@ class Person:
     birthdate: Optional[datetime.date] = None
     bib_individual: Optional[str] = None
     city: str = ""
+    city_manual: str = ""
     usage: dict = field(default_factory=dict)    # год -> {номера}
     formats: set = field(default_factory=set)    # {'individual', 'relay'}
     keys: set = field(default_factory=set)       # все ФИ, под которыми выступал

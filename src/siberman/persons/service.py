@@ -219,6 +219,7 @@ def _restore(conn, snap: dict) -> None:
         if row is None:
             continue
         fields = {k: row[k] for k in ("surname", "name", "gender", "birthdate", "city", "country")}
+        fields["city_manual"] = row.get("city_manual", "")   # снимки до появления колонки
         if pid in now:
             pdb.update_person(conn, pid, fields)
         else:
@@ -273,7 +274,8 @@ def merge(source_id: int, target_id: int, user: str, review_id: Optional[int] = 
         pdb.move_reviews(conn, source_id, target_id, user)
         pdb.delete_person(conn, source_id)
         pdb.update_person(conn, target_id, {"bib_individual": dst["bib_individual"] or src["bib_individual"],
-                                            "birthdate": dst["birthdate"] or src["birthdate"]})
+                                            "birthdate": dst["birthdate"] or src["birthdate"],
+                                            "city_manual": dst["city_manual"] or src["city_manual"]})
         pdb.refresh_display(conn, [target_id])
         if review_id is not None:
             pdb.set_review_status(conn, review_id, "resolved", user)
@@ -347,7 +349,8 @@ def set_birthdate(person_id: int, value: Optional[datetime.date], user: str, rev
 
 
 def set_city(person_id: int, city: str, user: str) -> dict:
-    """Город человека для карты «География» (в протоколах эстафет города нет). Пишется в журнал."""
+    """Город человека, введённый в админке (для карты главнее протокола; пусто — снова из протоколов).
+    Пишется в журнал; без изменений — ничего не делает."""
     city = " ".join((city or "").split())
     if len(city) > 100:
         raise PersonsError("Слишком длинное название города")
@@ -355,9 +358,11 @@ def set_city(person_id: int, city: str, user: str) -> dict:
         p = pdb.get_person(conn, person_id)
         if not p:
             raise PersonsError("Человек не найден")
+        if p["city_manual"] == city:
+            return {"ok": True, "audit_id": None}
         snap = _snapshot(conn, [person_id], [])
-        pdb.update_person(conn, person_id, {"city": city})
-        audit_id = _record(conn, "city", f"Город {_fio(p)} (id {person_id}): {p['city'] or '—'} → {city or '—'}",
+        pdb.update_person(conn, person_id, {"city_manual": city})
+        audit_id = _record(conn, "city", f"Город {_fio(p)} (id {person_id}): {p['city_manual'] or '—'} → {city or '—'}",
                            snap, user)
     return {"ok": True, "audit_id": audit_id}
 

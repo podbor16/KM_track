@@ -35,6 +35,7 @@ class Entry:
     overall_s: Optional[int] = None  # официальный итог личника (overall_results)
     times: dict = field(default_factory=dict)    # swim / bike_day1 / bike_day2 / run → секунды (stage_totals)
     finished: frozenset = frozenset()            # этапы, где есть время последней КТ года
+    has_time: bool = False                       # есть хоть одна отметка КТ
 
     @property
     def fio(self) -> str:
@@ -50,6 +51,12 @@ def race_time(e: Entry) -> Optional[int]:
     if e.format != "individual" or e.status != "active" or not e.overall_s or not set(STAGES) <= e.finished:
         return None
     return e.overall_s
+
+
+def is_start(e: Entry) -> bool:
+    """Вышел на старт: сошёл / снят или есть хоть одна отметка КТ. Статус dns ставят не всегда: в живом
+    году Copernico переводит неявившихся в active, а стартовый протокол загружен до гонки."""
+    return e.status in ("dnf", "dsq") or (e.status == "active" and e.has_time)
 
 
 def segment_time(e: Entry, stages: tuple) -> Optional[int]:
@@ -129,6 +136,8 @@ FINISHED_SQL = """
     WHERE ct.cumulative_s IS NOT NULL
 """
 
+STARTED_SQL = "SELECT DISTINCT participant_id FROM checkpoint_times WHERE cumulative_s IS NOT NULL"
+
 ENTRIES_SQL = """
     SELECT p.id, p.race_year, p.bib, p.relay_stage, p.format, p.surname, p.name, p.gender,
            p.city, p.country, p.status, p.dnf_stage, p.relay_team_name, o.total_s,
@@ -159,6 +168,8 @@ def load_entries(conn) -> list:
     finished = defaultdict(set)
     for r in cur.fetchall():
         finished[r["participant_id"]].add(r["stage"])
+    cur.execute(STARTED_SQL)
+    started = {r["participant_id"] for r in cur.fetchall()}
     persons = _person_ids(conn)
     cur.execute(ENTRIES_SQL)
     out = []
@@ -169,7 +180,8 @@ def load_entries(conn) -> list:
             gender=r["gender"] if r["gender"] in ("M", "F") else None,
             city=r["city"] or "", country=r["country"] or "", status=r["status"], dnf_stage=r["dnf_stage"],
             team=r["relay_team_name"] or "", person_id=persons.get((year, bib, stage)), overall_s=r["total_s"],
-            times={s: r[s] for s in STAGES}, finished=frozenset(finished.get(r["id"], ()))))
+            times={s: r[s] for s in STAGES}, finished=frozenset(finished.get(r["id"], ())),
+            has_time=r["id"] in started))
     return out
 
 

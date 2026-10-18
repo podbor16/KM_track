@@ -7,21 +7,22 @@ GEO = {"countries": [{"name": "Россия", "iso": "643", "count": 3}, {"name"
        "cities": [{"name": "Красноярск"}, {"name": "Москва"}, {"name": "Алматы"}]}
 
 
-def ind(year, pid, g="M", status="active", total=100):
+def ind(year, pid, g="M", status="active", total=100, has_time=True):
     return Entry(year=year, bib=str(pid), stage="none", format="individual", surname=f"Личник{pid}", name="Тест",
-                 gender=g, status=status, person_id=pid, overall_s=total if status == "active" else None,
+                 gender=g, status=status, person_id=pid, overall_s=total if status == "active" and has_time else None,
                  times={"swim": 1, "bike_day1": 1, "bike_day2": 1, "run": 1},
-                 finished=ALL if status == "active" else frozenset())
+                 finished=ALL if status == "active" and has_time else frozenset(), has_time=has_time)
 
 
-def rel(year, bib, role, pid, status="active"):
+def rel(year, bib, role, pid, status="active", has_time=True):
     return Entry(year=year, bib=str(bib), stage=role, format="relay", surname=f"Этапник{pid}", name="Тест",
                  gender="M", status=status, team="Команда", person_id=pid, times={s: 10 for s in ROLE[role]},
-                 finished=frozenset(ROLE[role]))
+                 finished=frozenset(ROLE[role]) if has_time else frozenset(), has_time=has_time)
 
 
-def team(year, bib, pids, swim_status="active"):
-    return [rel(year, bib, r, p, swim_status if r == "swim" else "active") for r, p in zip(("swim", "bike", "run"), pids)]
+def team(year, bib, pids, swim_status="active", has_time=True):
+    return [rel(year, bib, r, p, swim_status if r == "swim" else "active", has_time)
+            for r, p in zip(("swim", "bike", "run"), pids)]
 
 
 def stats(entries):
@@ -53,3 +54,9 @@ def test_by_year_newcomers_best_time_and_years_without_starts():
     assert [r["year"] for r in s["years"]] == [2021, 2020]
     assert s["years"][0] == {"year": 2021, "ind_start": 2, "ind_fin": 2, "men": 1, "women": 1, "relay_start": 1,
                              "relay_fin": 1, "newcomers": 3, "best_s": 90}
+
+
+def test_live_year_start_list_without_marks_is_not_counted():
+    entries = [ind(2025, 1), ind(2026, 2, has_time=False), *team(2026, 101, (3, 4, 5), has_time=False)]
+    s = stats(entries)
+    assert (s["last_year"], s["people_total"], s["relay"]["teams"], s["relay"]["people"]) == (2025, 1, 0, 0)

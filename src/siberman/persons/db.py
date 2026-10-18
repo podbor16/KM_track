@@ -5,7 +5,7 @@ from typing import Iterable, Optional
 
 from src.siberman.persons.linking import Applicant, Person
 
-PERSON_FIELDS = ("surname", "name", "gender", "birthdate", "bib_individual", "city", "country")
+PERSON_FIELDS = ("surname", "name", "gender", "birthdate", "bib_individual", "city", "country", "city_manual")
 LINK_ON = "l.race_year=p.race_year AND l.bib=p.bib AND l.relay_stage=p.relay_stage"
 
 
@@ -27,9 +27,10 @@ def _in(ids) -> tuple:
 
 def load_persons(conn) -> list:
     cur = _cur(conn)
-    cur.execute("SELECT id, surname, name, gender, birthdate, bib_individual, city FROM siberman_persons")
+    cur.execute("SELECT id, surname, name, gender, birthdate, bib_individual, city, city_manual FROM siberman_persons")
     return [Person(id=r["id"], surname=r["surname"], name=r["name"], gender=r["gender"],
-                   birthdate=r["birthdate"], bib_individual=r["bib_individual"], city=r["city"])
+                   birthdate=r["birthdate"], bib_individual=r["bib_individual"], city=r["city"],
+                   city_manual=r["city_manual"])
             for r in cur.fetchall()]
 
 
@@ -219,14 +220,20 @@ def participations(conn, person_ids) -> dict:
     return out
 
 
+def _recent(r: dict) -> tuple:
+    return r["race_year"], r["format"] == "individual"
+
+
 def refresh_display(conn, person_ids) -> None:
-    """ФИ, пол, город, страна человека — по последнему выступлению. В протоколах эстафет города нет —
-    тогда город и страна остаются прежними (из прошлых стартов или введённые в админке)."""
+    """ФИ и пол — по последнему выступлению; город и страна — по последнему выступлению с городом (в
+    протоколах эстафет города нет). Город, введённый в админке, хранится отдельно — city_manual."""
     for pid, rows in participations(conn, person_ids).items():
-        last = max(rows, key=lambda r: (r["race_year"], r["format"] == "individual"))
+        last = max(rows, key=_recent)
         fields = {"surname": last["surname"], "name": last["name"]}
-        if last["city"]:
-            fields.update(city=last["city"], country=last["country"] or "")
+        with_city = [r for r in rows if r["city"]]
+        if with_city:
+            w = max(with_city, key=_recent)
+            fields.update(city=w["city"], country=w["country"] or "")
         if last["gender"] in ("M", "F"):
             fields["gender"] = last["gender"]
         update_person(conn, pid, fields)

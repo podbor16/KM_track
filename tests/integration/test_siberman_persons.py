@@ -336,18 +336,31 @@ def test_undo_does_not_touch_reviews_changed_later(conn):
     assert pdb.get_review(conn, rv["id"])["status"] == "deferred"
 
 
-def test_city_survives_relay_start_and_is_undoable(conn):
+def test_manual_city_is_separate_and_undoable(conn):
     _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Анна", gender="F", city="Норильск")
+    _ins(conn, Y3, 9103, "Тестреестрова", "Анна", fmt="relay", stage="run", gender="F", team="Тест", city="")
     service.sync(conn)
     pid = _pid(conn, YEAR, 9101, "swim")
+    assert _pid(conn, Y2, 9102) == pid == _pid(conn, Y3, 9103, "run")
+    assert pdb.get_person(conn, pid)["city"] == "Норильск"          # последнего выступления с городом
     res = service.set_city(pid, "  Абакан ", "test")
-    assert pdb.get_person(conn, pid)["city"] == "Абакан"
-    _ins(conn, Y2, 9102, "Тестреестрова", "Анна", fmt="relay", stage="run", gender="F", team="Тест", city="")
-    service.sync(conn)
-    assert _pid(conn, Y2, 9102, "run") == pid
-    assert pdb.get_person(conn, pid)["city"] == "Абакан"          # эстафета без города не стирает
+    p = pdb.get_person(conn, pid)
+    assert (p["city_manual"], p["city"]) == ("Абакан", "Норильск")
+    assert service.set_city(pid, "Абакан", "test")["audit_id"] is None   # без изменений — не в журнал
     service.undo(res["audit_id"], "test")
-    assert pdb.get_person(conn, pid)["city"] == ""
+    assert pdb.get_person(conn, pid)["city_manual"] == ""
+
+
+def test_merge_keeps_manual_city(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    _ins(conn, Y2, 9102, "Тестреестрова", "Аня", fmt="relay", stage="run", gender="F", team="Тест", city="")
+    service.sync(conn)
+    src, dst = _pid(conn, YEAR, 9101, "swim"), _pid(conn, Y2, 9102, "run")
+    assert src != dst
+    service.set_city(src, "Абакан", "test")
+    service.merge(src, dst, "test")
+    assert pdb.get_person(conn, dst)["city_manual"] == "Абакан"
 
 
 def test_no_city_list_and_api(conn):
@@ -355,6 +368,7 @@ def test_no_city_list_and_api(conn):
     from app import app
     from src.core.auth import api_require_auth
     _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    conn.cursor().execute("UPDATE participants SET status='dnf' WHERE race_year=%s AND bib='9101'", (YEAR,))  # старт без отметок КТ — только dnf/dsq (is_start)
     service.sync(conn)
     pid = _pid(conn, YEAR, 9101, "swim")
     assert pid in [p["person_id"] for p in service.no_city()["people"]]
