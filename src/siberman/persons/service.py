@@ -1,6 +1,6 @@
 """
 Реестр людей Siberman: синхронизация после каждой загрузки результатов, импорт заявок Тильды,
-ручные решения админки (слить, перенести выступления, ДР, статус «проверить»), журнал с отменой,
+ручные решения админки (слить, перенести выступления, ДР, город, статус «проверить»), журнал с отменой,
 карточки и поиск. Все записи — под MySQL GET_LOCK (живой цикл Copernico и админка не
 пересекаются) и в одной транзакции. Спецификация hall §3.
 """
@@ -11,6 +11,8 @@ import logging
 from typing import Optional
 
 from src.siberman.db import get_siberman_connection
+from src.siberman.hall import data as hdata
+from src.siberman.hall import geo as hgeo
 from src.siberman.persons import db as pdb
 from src.siberman.persons.applicants import parse_applicants_csv
 from src.siberman.persons.linking import Registry, attach_birthdates, link_participants, natkey, plain_key
@@ -342,6 +344,31 @@ def set_birthdate(person_id: int, value: Optional[datetime.date], user: str, rev
         audit_id = _record(conn, "birthdate",
                            f"ДР {_fio(p)} (id {person_id}): {p['birthdate'] or '—'} → {value or '—'}", snap, user)
     return {"ok": True, "audit_id": audit_id}
+
+
+def set_city(person_id: int, city: str, user: str) -> dict:
+    """Город человека для карты «География» (в протоколах эстафет города нет). Пишется в журнал."""
+    city = " ".join((city or "").split())
+    if len(city) > 100:
+        raise PersonsError("Слишком длинное название города")
+    with _connection() as conn, _locked_tx(conn):
+        p = pdb.get_person(conn, person_id)
+        if not p:
+            raise PersonsError("Человек не найден")
+        snap = _snapshot(conn, [person_id], [])
+        pdb.update_person(conn, person_id, {"city": city})
+        audit_id = _record(conn, "city", f"Город {_fio(p)} (id {person_id}): {p['city'] or '—'} → {city or '—'}",
+                           snap, user)
+    return {"ok": True, "audit_id": audit_id}
+
+
+def no_city() -> dict:
+    """Вкладка «Без города»: люди без известного города и города без координат — по свежим данным."""
+    with _connection() as conn:
+        entries = hdata.load_entries(conn)
+        persons, applicants = hdata.load_people(conn)
+    places = hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities())
+    return hgeo.missing_report(entries, places)
 
 
 def set_review_status(review_id: int, status: str, user: str) -> dict:

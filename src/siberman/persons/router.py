@@ -40,6 +40,10 @@ class BirthdateIn(BaseModel):
     review_id: Optional[int] = None
 
 
+class CityIn(BaseModel):
+    city: str = ""
+
+
 class ReviewStatusIn(BaseModel):
     status: str
 
@@ -117,6 +121,11 @@ def api_applicants(file: UploadFile = File(...), user: str = Depends(api_require
     return _run(service.import_applicants, data)
 
 
+@router.get(f"{API}/no-city")
+def api_no_city(user: str = Depends(api_require_auth)):
+    return _run(service.no_city)
+
+
 @router.get(f"{API}/{{person_id}}")
 def api_person(person_id: int, user: str = Depends(api_require_auth)):
     return _run(service.person_card, person_id)
@@ -125,3 +134,8 @@ def api_person(person_id: int, user: str = Depends(api_require_auth)):
 @router.post(f"{API}/{{person_id}}/birthdate")
 def api_birthdate(person_id: int, body: BirthdateIn, user: str = Depends(api_require_auth)):
     return _run(service.set_birthdate, person_id, body.birthdate, user, body.review_id)
+
+
+@router.post(f"{API}/{{person_id}}/city")
+def api_city(person_id: int, body: CityIn, user: str = Depends(api_require_auth)):
+    return _run(service.set_city, person_id, body.city, user)

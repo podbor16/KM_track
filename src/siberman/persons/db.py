@@ -220,11 +220,13 @@ def participations(conn, person_ids) -> dict:
 
 
 def refresh_display(conn, person_ids) -> None:
-    """ФИ, пол, город, страна человека — по последнему выступлению."""
+    """ФИ, пол, город, страна человека — по последнему выступлению. В протоколах эстафет города нет —
+    тогда город и страна остаются прежними (из прошлых стартов или введённые в админке)."""
     for pid, rows in participations(conn, person_ids).items():
         last = max(rows, key=lambda r: (r["race_year"], r["format"] == "individual"))
-        fields = {"surname": last["surname"], "name": last["name"],
-                  "city": last["city"] or "", "country": last["country"] or ""}
+        fields = {"surname": last["surname"], "name": last["name"]}
+        if last["city"]:
+            fields.update(city=last["city"], country=last["country"] or "")
         if last["gender"] in ("M", "F"):
             fields["gender"] = last["gender"]
         update_person(conn, pid, fields)

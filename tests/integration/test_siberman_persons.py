@@ -334,3 +334,37 @@ def test_undo_does_not_touch_reviews_changed_later(conn):
     service.set_review_status(rv["id"], "deferred", "test")
     service.undo(res["audit_id"], "test")
     assert pdb.get_review(conn, rv["id"])["status"] == "deferred"
+
+
+def test_city_survives_relay_start_and_is_undoable(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    res = service.set_city(pid, "  Абакан ", "test")
+    assert pdb.get_person(conn, pid)["city"] == "Абакан"
+    _ins(conn, Y2, 9102, "Тестреестрова", "Анна", fmt="relay", stage="run", gender="F", team="Тест", city="")
+    service.sync(conn)
+    assert _pid(conn, Y2, 9102, "run") == pid
+    assert pdb.get_person(conn, pid)["city"] == "Абакан"          # эстафета без города не стирает
+    service.undo(res["audit_id"], "test")
+    assert pdb.get_person(conn, pid)["city"] == ""
+
+
+def test_no_city_list_and_api(conn):
+    from fastapi.testclient import TestClient
+    from app import app
+    from src.core.auth import api_require_auth
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест", city="")
+    service.sync(conn)
+    pid = _pid(conn, YEAR, 9101, "swim")
+    assert pid in [p["person_id"] for p in service.no_city()["people"]]
+    client = TestClient(app)
+    assert client.get("/api/siberman/admin/people/no-city").status_code == 401
+    app.dependency_overrides[api_require_auth] = lambda: "test"
+    try:
+        assert client.post(f"/api/siberman/admin/people/{pid}/city", json={"city": "Абакан"}).status_code == 200
+        people = client.get("/api/siberman/admin/people/no-city").json()["people"]
+        assert pid not in [p["person_id"] for p in people]
+        assert client.post(f"/api/siberman/admin/people/{pid}/city", json={"city": "х" * 101}).status_code == 409
+    finally:
+        app.dependency_overrides.clear()
