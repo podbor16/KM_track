@@ -2,7 +2,7 @@ import datetime
 from types import SimpleNamespace as NS
 
 from src.siberman.hall.data import Entry
-from src.siberman.hall.geo import City, applicant_cities, city_of, resolve_places
+from src.siberman.hall.geo import City, applicant_cities, build_geo, city_of, missing_report, resolve_places
 
 SPB = City("Санкт-Петербург", "Россия", "643", 59.94, 30.31)
 KRS = City("Красноярск", "Россия", "643", 56.01, 92.85)
@@ -58,3 +58,26 @@ def test_place_priority_last_start_then_registry_then_applicant():
     places = resolve_places(entries, persons, [app("Третий", "Санкт-Петербург", BD)], DIR)
     assert {k: (c.name if c else None) for k, c in places.items()} == {
         1: "Красноярск", 2: "Красноярск", 3: "Санкт-Петербург", 4: None, "шестой тест": "Санкт-Петербург"}
+
+
+def test_geo_counts_people_once_by_last_city():
+    entries = [start(2019, "Первый", "Красноярск", pid=1), start(2023, "Первый", "Красноярск", pid=1),
+               start(2023, "Второй", "Алма-Аты", "Казахстан", pid=2), start(2024, "Третий", "Вантаа", "Финляндия", pid=3),
+               start(2024, "Четвёртый", fmt="relay", stage="run", pid=4)]
+    g = build_geo(entries, resolve_places(entries, [], [], DIR))
+    assert (g["total"], g["known"]) == (4, 3)
+    assert [(c["name"], c["iso"], c["count"]) for c in g["countries"]] == [
+        ("Казахстан", "398", 1), ("Россия", "643", 1), ("Финляндия", "", 1)]
+    krs = next(c for c in g["cities"] if c["name"] == "Красноярск")
+    assert (krs["count"], krs["lat"], krs["people"]) == (1, 56.01, [{"person_id": 1, "fio": "Первый Тест"}])
+    assert next(c for c in g["cities"] if c["name"] == "Вантаа")["lat"] is None
+
+
+def test_missing_report_people_without_city_and_cities_without_coords():
+    entries = [start(2023, "Второй", fmt="relay", stage="run", pid=2, team="Команда"),
+               start(2024, "Третий", "Вантаа", "Финляндия", pid=3),
+               start(2024, "Шестой", fmt="relay", stage="swim", team="Без реестра")]
+    rep = missing_report(entries, resolve_places(entries, [], [], DIR))
+    assert [(p["person_id"], p["fio"]) for p in rep["people"]] == [(2, "Второй Тест"), (None, "Шестой Тест")]
+    assert rep["people"][0]["starts"] == [{"year": 2023, "format": "relay", "stage": "run", "team": "Команда"}]
+    assert rep["no_coords"] == [{"name": "Вантаа", "country": "Финляндия", "count": 1}]

@@ -90,3 +90,47 @@ def resolve_places(entries: list, persons: list, applicants: list, directory: di
                 place = (from_apps[k], "")
         out[k] = city_of(*place, directory) if place else None
     return out
+
+
+def _last_starts(entries: list) -> dict:
+    """Человек → его старты (не dns) по годам."""
+    out = defaultdict(list)
+    for e in sorted(entries, key=lambda e: e.year):
+        if e.status != "dns":
+            out[person_of(e)].append(e)
+    return out
+
+
+def build_geo(entries: list, places: dict) -> dict:
+    """Люди по городам и странам: человек — один раз, по своему городу; ФИ и ссылка — последнего старта."""
+    starts = _last_starts(entries)
+    cities, countries = {}, {}
+    for k, c in places.items():
+        if c is None:
+            continue
+        last = starts[k][-1]
+        row = cities.setdefault((c.name, c.country), {"name": c.name, "country": c.country, "iso": c.iso,
+                                                      "lat": c.lat, "lon": c.lon, "people": []})
+        row["people"].append({"person_id": last.person_id, "fio": last.fio})
+        countries.setdefault(c.country, {"name": c.country, "iso": c.iso, "count": 0})["count"] += 1
+    for row in cities.values():
+        row["people"].sort(key=lambda p: p["fio"])
+        row["count"] = len(row["people"])
+    return {"total": len(places), "known": sum(c is not None for c in places.values()),
+            "countries": sorted(countries.values(), key=lambda r: (-r["count"], r["name"])),
+            "cities": sorted(cities.values(), key=lambda r: (-r["count"], r["name"]))}
+
+
+def missing_report(entries: list, places: dict) -> dict:
+    """Для админки «Люди»: люди без известного города (с выступлениями) и города без координат."""
+    starts = _last_starts(entries)
+    people = [{"person_id": k if isinstance(k, int) else None, "fio": s[-1].fio,
+               "starts": [{"year": e.year, "format": e.format, "stage": e.stage, "team": e.team} for e in s]}
+              for k, s in starts.items() if places.get(k) is None]
+    people.sort(key=lambda p: p["fio"])
+    no_coords = defaultdict(int)
+    for c in places.values():
+        if c is not None and c.lat is None:
+            no_coords[(c.name, c.country)] += 1
+    return {"people": people,
+            "no_coords": [{"name": n, "country": ct, "count": v} for (n, ct), v in sorted(no_coords.items())]}
