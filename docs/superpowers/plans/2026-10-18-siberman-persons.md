@@ -2582,6 +2582,172 @@ git commit -m "feat(siberman/persons): синхронизация реестра
 
 ---
 
+### Task 6a: Ревью задач 4–6 — синхронизация по отпечатку протокола, лок на перезапись года
+
+1. **Critical.** `sync_safe` запускал синхронизацию только при непривязанных строках. Все пути загрузки сохраняют ключ (год, номер, этап) — переименование, стёртая фамилия, удалённая строка не давали непривязанных, и защиты 3a–3c срабатывали только по кнопке. Теперь — по отпечатку протокола (`COUNT` + `BIT_XOR(CRC32(...))` по участникам): изменился → синхронизация.
+2. **Important.** Загрузка Excel удаляет строки года и вставляет заново (секунды, autocommit). Синхронизация из другого воркера в этот момент увидела бы полупустой протокол и через `delete_stale` удалила привязки и людей. Теперь `apply_to_db` держит лок реестра на время перезаписи (`protocol_rewrite`), а автосинхронизация лок не ждёт — пропускает цикл.
+3. Мелочи: ожидание лока параметром (`wait_s`), предупреждение «таблиц нет» — один раз на воркер, очистка в тестах — только тестовые люди; `count_unlinked` больше не нужен.
+
+**Files:**
+- Modify: `src/siberman/persons/db.py`, `src/siberman/persons/service.py`, `src/siberman/service.py` (`apply_to_db`), `tests/integration/test_siberman_persons.py`
+
+- [ ] **Step 1: Тесты**
+
+В `tests/integration/test_siberman_persons.py`:
+1. В `_clean` последнюю команду заменить на (не трогать людей вне тестов):
+```python
+    cur.execute("DELETE s FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
+                "WHERE l.person_id IS NULL AND s.surname LIKE 'Тестреестров%%'")
+```
+2. В конец файла:
+```python
+def test_auto_sync_notices_renamed_relay_member(conn):
+    _ins(conn, YEAR, 9101, "Тестреестрова", "Анна", fmt="relay", stage="swim", gender="F", team="Тест")
+    service.sync(conn)
+    old = _pid(conn, YEAR, 9101, "swim")
+    service.auto_sync()                                   # запомнить отпечаток протокола
+    assert service.auto_sync() is None                    # протокол не менялся — синхронизации нет
+    conn.cursor().execute("UPDATE participants SET surname='Тестреестров', name='Пётр', gender='M' "
+                          "WHERE race_year=%s AND bib='9101'", (YEAR,))
+    assert service.auto_sync() is not None
+    assert _pid(conn, YEAR, 9101, "swim") != old
+    kinds = [r["kind"] for r in service.reviews("open") if r["participant"] and r["participant"]["year"] == YEAR]
+    assert "relinked" in kinds
+
+
+def test_auto_sync_skips_while_protocol_is_rewritten(conn):
+    _ins(conn, YEAR, 9001, "Тестреестров", "Олег")
+    other = get_siberman_connection()
+    try:
+        with service.protocol_rewrite(other):
+            assert service.auto_sync() is None
+            assert _pid(conn, YEAR, 9001) is None
+    finally:
+        other.close()
+    assert service.auto_sync() is not None and _pid(conn, YEAR, 9001) is not None
+```
+
+- [ ] **Step 2: Тесты падают**
+
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/integration/test_siberman_persons.py -q -p no:cacheprovider`
+Expected: 5 passed, 2 failed (`AttributeError: ... 'auto_sync'`).
+
+- [ ] **Step 3: `db.py`**
+
+Функцию `count_unlinked` удалить и на её место поставить:
+```python
+def protocol_fingerprint(conn) -> tuple:
+    """Отпечаток протокола: меняется при вставке, удалении или правке ФИ, пола, формата строки."""
+    cur = _cur(conn)
+    cur.execute("SELECT COUNT(*) AS n, BIT_XOR(CRC32(CONCAT_WS('|', race_year, bib, relay_stage, surname, name, "
+                "gender, format))) AS x FROM participants")
+    r = cur.fetchone()
+    return (int(r["n"]), int(r["x"] or 0))
+```
+
+- [ ] **Step 4: `persons/service.py`**
+
+1. После класса `PersonsUnavailable` добавить:
+```python
+class PersonsBusy(PersonsError):
+    """Реестр занят (перезапись протокола или другая синхронизация)."""
+```
+2. `_locked_tx` — ожидание лока параметром, занятый лок → `PersonsBusy`:
+```python
+@contextlib.contextmanager
+def _locked_tx(conn, wait_s: int = 10):
+    cur = conn.cursor(buffered=True)
+    cur.execute("SELECT GET_LOCK(%s, %s)", (LOCK_NAME, wait_s))
+    if cur.fetchone()[0] != 1:
+        raise PersonsBusy("Реестр занят другой операцией — повторите через несколько секунд")
+    try:
+        conn.start_transaction()
+        try:
+            yield
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        cur.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
+        cur.fetchall()
+```
+3. `sync` — сигнатура `def sync(conn, wait_s: int = 10) -> dict:` и `with _locked_tx(conn, wait_s):` (тело без изменений).
+4. `sync_safe` заменить на:
+```python
+_last_fingerprint = None   # отпечаток протокола после последней успешной синхронизации (на воркер)
+_warned = False
+
+
+def auto_sync():
+    """Синхронизация после загрузки результатов — только если протокол изменился с прошлого раза
+    (вставки, удаления, правки ФИ) и реестр не занят. Ошибки — в лог (предупреждение один раз на воркер,
+    например пока миграция 014 не применена). → результат sync или None."""
+    global _last_fingerprint, _warned
+    conn = get_siberman_connection()
+    if conn is None:
+        return None
+    try:
+        fp = pdb.protocol_fingerprint(conn)
+        if fp == _last_fingerprint:
+            return None
+        result = sync(conn, wait_s=0)
+        _last_fingerprint = fp
+        log.info("[persons] sync: %s", result)
+        return result
+    except PersonsBusy:
+        return None   # идёт перезапись протокола или другая синхронизация — следующий цикл доделает
+    except Exception as e:
+        (log.debug if _warned else log.warning)(f"[persons] sync пропущен: {e}")
+        _warned = True
+        return None
+    finally:
+        conn.close()
+
+
+def sync_safe() -> None:
+    """Хвост каждой загрузки результатов (recompute_totals_ranks_records); в тестах подменяется no-op."""
+    auto_sync()
+
+
+@contextlib.contextmanager
+def protocol_rewrite(conn):
+    """Держать реестр, пока строки года удаляются и вставляются заново (загрузка Excel): синхронизация
+    из другого воркера не увидит полупустой протокол и не удалит привязки и людей. Лок не взят за
+    30 с — загрузка всё равно идёт (результаты гонки важнее), просто без защиты."""
+    cur = conn.cursor(buffered=True)
+    cur.execute("SELECT GET_LOCK(%s, 30)", (LOCK_NAME,))
+    got = cur.fetchone()[0] == 1
+    try:
+        yield
+    finally:
+        if got:
+            cur.execute("SELECT RELEASE_LOCK(%s)", (LOCK_NAME,))
+            cur.fetchall()
+```
+
+- [ ] **Step 5: `apply_to_db` (`src/siberman/service.py`)**
+
+В `apply_to_db` взять в `with protocol_rewrite(conn):` участок от `clear_race_year(conn, result.race_year)` до конца цикла `for p in result.participants:` со вставкой участников, времён и транзитов (блок «Пересчитать тоталы/ранги/рекорды» и вызов `recompute_totals_ranks_records` — ВНЕ `with`: хвост синхронизации берёт лок своим соединением). Импорт — в начале тела функции, рядом с подключением:
+```python
+    from src.siberman.persons.service import protocol_rewrite  # внутри: без циклического импорта
+```
+Отступы участка увеличить на один уровень, логику не менять. Перед правкой прочитать функцию целиком.
+
+- [ ] **Step 6: Тесты проходят**
+
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/integration/test_siberman_persons.py -q -p no:cacheprovider` — 7 passed.
+Run: `C:\Users\podbo\miniconda3\python.exe -m pytest tests/unit/ -q -p no:cacheprovider` — 941 passed (тесты `apply_to_db` с моками не должны упасть; если упали из-за `protocol_rewrite` на мок-соединении — сообщить, не подгонять).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/siberman/persons/db.py src/siberman/persons/service.py src/siberman/service.py tests/integration/test_siberman_persons.py
+git commit -m "fix(siberman/persons): автосинхронизация по отпечатку протокола, лок реестра на перезапись года"
+```
+
+---
+
 ### Task 7: Ручные решения, отмена, карточки, поиск, «проверить»
 
 **Files:**
@@ -2677,7 +2843,7 @@ def test_keep_link_confirms_new_name(conn):
 - [ ] **Step 2: Тесты падают**
 
 Run: `conda run -n base python -m pytest tests/integration/test_siberman_persons.py -q`
-Expected: 5 passed, 6 failed (`AttributeError: module ... has no attribute 'reassign'` и т.п.).
+Expected: 7 passed, 6 failed (`AttributeError: module ... has no attribute 'reassign'` и т.п.).
 
 - [ ] **Step 3: Реализация (дописать в `service.py`)**
 
@@ -2934,7 +3100,7 @@ def journal() -> list:
 - [ ] **Step 4: Тесты проходят**
 
 Run: `conda run -n base python -m pytest tests/integration/test_siberman_persons.py -q`
-Expected: 11 passed.
+Expected: 13 passed.
 
 - [ ] **Step 5: Commit**
 
