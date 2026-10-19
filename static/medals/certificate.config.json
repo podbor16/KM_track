@@ -1,0 +1,11 @@
+{
+  "width": 1080,
+  "height": 1920,
+  "overlay": "/static/medals/certificate-overlay-1080x1920.png?v=571360d9",
+  "quality": 0.94,
+  "filename": "zabeg-edinstva-2026-certificate",
+  "maxFileBytes": 31457280,
+  "maxImageSide": 4096,
+  "minZoom": 1,
+  "maxZoom": 4
+}

@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.config import settings
@@ -268,6 +268,14 @@ async def diploma_page(request: Request, event_id: int, bib: str):
 async def race_analysis_page(request: Request):
     """Анализ забегов с выбором события и года."""
     return templates.TemplateResponse("krasmarafon/race-analysis.html", {"request": request})
+
+
+@router.get("/medals", include_in_schema=False)
+@router.get("/medals/", include_in_schema=False)
+async def medals_page():
+    """Сертификат участника «Забега Единства» со своим фото (static/medals/, перенесено с
+    2210.sidmasters.ru): всё собирается в браузере, фото на сервер не уходит."""
+    return FileResponse(BASE_DIR / "static" / "medals" / "index.html", media_type="text/html")
 
 
 # ============================================================================
