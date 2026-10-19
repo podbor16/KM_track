@@ -17,7 +17,7 @@ import mysql.connector
 
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
-from src.siberman.draw.importer import import_report, parse_applicants
+from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants
 from src.siberman.draw.logic import (
     CATEGORIES, CATEGORY_LABELS, ROUND_LABELS, build_lists, category_of, check_pick,
     in_round_pool, placement, round_counters,
@@ -215,17 +215,31 @@ def save_config(year: int, values: dict, user: str = "") -> dict:
     return _write(year, op)
 
 
+def _against(snap: dict, apps: list[dict]) -> dict:
+    """Сравнение с загруженной таблицей (организаторы меняют шансы до самой жеребьёвки) и запрет записи."""
+    loaded = snap["config"]["imported_at"] is not None
+    return {"diff": diff_applicants(snap["applicants"], apps) if loaded else None, "blocked": bool(snap["picks"])}
+
+
 def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: str = "") -> dict:
+    """Таблица заменяет заявки года целиком — можно перезаливать сколько угодно до первого вытянутого.
+    Проверка (dry_run) ничего не пишет: отчёт, ошибки и что изменится относительно загруженной таблицы."""
     apps, errors = parse_applicants(file_bytes)
     report = import_report(apps)
     if dry_run or errors:
-        return {"report": report, "errors": errors, "written": False}
+        conn = _connect()
+        try:
+            snap = _snapshot(conn, year, create=False)
+        finally:
+            conn.close()
+        return {"report": report, "errors": errors, "written": False, **_against(snap, apps)}
 
     def op(conn, snap):
         if snap["picks"]:
             raise DrawError("жеребьёвка уже началась — загрузка таблицы запрещена (сначала «Очистить журнал»)")
+        result = {"report": report, "errors": [], "written": True, **_against(snap, apps)}
         ddb.replace_applicants(conn, year, apps)
-        return {"report": report, "errors": [], "written": True}
+        return result
     return _write(year, op)
 
 

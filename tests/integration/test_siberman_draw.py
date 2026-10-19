@@ -187,7 +187,22 @@ def test_import_blocked_after_start(draw, monkeypatch):
     service.pick(YEAR, draw["Вайлдкардов"])
     with pytest.raises(DrawError, match="уже началась"):
         service.import_applicants(YEAR, b"x", dry_run=False)
-    assert service.import_applicants(YEAR, b"x", dry_run=True)["written"] is False
+    checked = service.import_applicants(YEAR, b"x", dry_run=True)
+    assert checked["written"] is False and checked["blocked"] is True
+
+
+def test_import_dry_run_shows_diff_against_loaded(draw, monkeypatch):
+    new = [{**a, "chances": 4, "draw_accumulated": 1} if a["surname"] == "Повторов" else a
+           for a in APPS if a["surname"] != "Последний"] + [_app("Добавленный")]
+    monkeypatch.setattr(service, "parse_applicants", lambda b: (new, []))
+    d = service.import_applicants(YEAR, b"x", dry_run=True)
+    assert (d["written"], d["blocked"]) == (False, False)
+    assert [x["fio"] for x in d["diff"]["added"]] == ["Добавленный Тест"]
+    assert [x["fio"] for x in d["diff"]["removed"]] == ["Последний Тест"]
+    assert [x["changes"] for x in d["diff"]["changed"]] == [[{"field": "chances", "old": 3, "new": 4},
+                                                             {"field": "draw_accumulated", "old": 0, "new": 1}]]
+    stored = {a["surname"]: a["chances"] for a in service.admin_state(YEAR)["applicants"]}
+    assert stored["Повторов"] == 3 and "Добавленный" not in stored          # проверка ничего не записала
 
 
 def test_reset_needs_year(draw):

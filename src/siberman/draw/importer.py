@@ -8,6 +8,7 @@
 Эстафета — по капитану, названия команды в таблице нет.
 """
 import io
+from operator import itemgetter
 
 import openpyxl
 
@@ -26,6 +27,13 @@ EXTRA_COLS = {
 }
 REQUIRED = (COL_FORMAT, COL_NAME, COL_SEX, COL_CITY, COL_WILDCARD, COL_TOTAL, COL_EXTRA, *EXTRA_COLS.values())
 RELAY_ROLES = ("swim", "bike", "run")
+# Что сравнивать между версиями таблицы (тексты «причина wild card» и «о результатах» — нет)
+DIFF_FIELDS = ("gender", "city", "pool", "is_wildcard", "chances", *EXTRA_COLS,
+               "relay_swim", "relay_bike", "relay_run")
+
+
+def _fold(t) -> str:
+    return (t or "").lower().replace("ё", "е")
 
 
 def _norm(v) -> str:
@@ -118,9 +126,7 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if not name:
             errors.append(f"{where}: нет имени")
             continue
-        def fold(t):
-            return t.lower().replace("ё", "е")
-        key = (fmt, fold(surname), fold(name))
+        key = (fmt, _fold(surname), _fold(name))
         if key in seen:
             errors.append(f"{where}: повтор заявки")
             continue
@@ -155,3 +161,35 @@ def import_report(apps: list[dict]) -> dict:
         g["people"] += 1
         g["balls"] += a["chances"]
     return {"total": len(apps), "groups": groups}
+
+
+def applicant_key(a: dict) -> tuple:
+    """Одна и та же заявка в двух версиях таблицы: формат + фамилия + имя (без регистра и ё)."""
+    return a["format"], _fold(a["surname"]), _fold(a["name"])
+
+
+def _cmp(v):
+    """Значение из БД (0/1, NULL) и из таблицы (bool, '') — к одному виду для сравнения."""
+    return "" if v is None else int(v) if isinstance(v, bool) else v
+
+
+def diff_applicants(old: list[dict], new: list[dict]) -> dict:
+    """Что меняет новая таблица относительно загруженной: добавлены, убраны, изменены (поле: было → стало),
+    шариков было → стало."""
+    before = {applicant_key(a): a for a in old}
+    after = {applicant_key(a): a for a in new}
+
+    def brief(a: dict) -> dict:
+        return {"fio": f"{a['surname']} {a['name']}", "format": a["format"], "chances": a["chances"]}
+
+    changed = []
+    for k, a in after.items():
+        b = before.get(k)
+        fields = [{"field": f, "old": b[f], "new": a[f]} for f in DIFF_FIELDS if b and _cmp(b[f]) != _cmp(a[f])]
+        if fields:
+            changed.append({**brief(a), "changes": fields})
+    by_fio = itemgetter("fio")
+    return {"added": sorted((brief(a) for k, a in after.items() if k not in before), key=by_fio),
+            "removed": sorted((brief(b) for k, b in before.items() if k not in after), key=by_fio),
+            "changed": sorted(changed, key=by_fio),
+            "balls": {"old": sum(a["chances"] for a in old), "new": sum(a["chances"] for a in new)}}

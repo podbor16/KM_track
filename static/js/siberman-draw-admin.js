@@ -353,11 +353,37 @@ async function saveConfig() {
   catch (e) { fail(e); }
 }
 
+const DIFF_LABELS = {
+  gender: 'пол', city: 'город', pool: 'пул', is_wildcard: 'wild card', chances: 'шансов',
+  starts_individual: 'старты лично', starts_relay: 'старты в эстафете', draw_accumulated: 'накопленные',
+  is_local: 'местный', duathlon_222: '222 Дуатлон', race_24h: '24 часа', tattoo: 'тату',
+  relay_swim: 'плавание', relay_bike: 'вело', relay_run: 'бег',
+};
+
+// Сравнение с загруженной таблицей: организаторы меняют шансы до самой жеребьёвки.
+function diffHtml(df) {
+  if (!df) return '<p class="muted">Сравнивать не с чем — таблица ещё не загружалась.</p>';
+  if (!df.added.length && !df.removed.length && !df.changed.length) {
+    return `<p>По сравнению с загруженной таблицей изменений нет (шариков ${df.balls.new}).</p>`;
+  }
+  const who = x => `${esc(x.fio)}${x.format === 'relay' ? ' <span class="muted">(эстафета)</span>' : ''}`;
+  const val = (f, v) => (f === 'is_wildcard' ? (v ? 'да' : 'нет') : v === null || v === '' ? '—' : esc(String(v)));
+  const changes = x => x.changes.map(c => `${DIFF_LABELS[c.field] || esc(c.field)}: ${val(c.field, c.old)} → <b>${val(c.field, c.new)}</b>`).join('; ');
+  const part = (title, rows) => (rows.length ? `<p><b>${title} (${rows.length})</b></p><table class="pay-table">${rows.join('')}</table>` : '');
+  return `<p><b>Что изменится</b> · шариков ${df.balls.old} → <b>${df.balls.new}</b></p>`
+    + part('Изменены', df.changed.map(x => `<tr><td>${who(x)}</td><td>${changes(x)}</td></tr>`))
+    + part('Добавлены', df.added.map(x => `<tr><td>${who(x)}</td><td>шансов: ${x.chances}</td></tr>`))
+    + part('Убраны', df.removed.map(x => `<tr><td>${who(x)}</td><td>шансов было: ${x.chances}</td></tr>`));
+}
+
 function reportHtml(d) {
   const rows = Object.entries(d.report.groups).map(([k, g]) => `<tr><td>${GROUP_LABELS[k] || k}</td><td>${g.people}</td><td>${g.balls}</td></tr>`).join('');
   const errs = d.errors.length ? `<div class="msg msg-error" style="display:block">${d.errors.map(esc).join('<br>')}</div>` : '';
+  const blocked = d.blocked && !d.written
+    ? '<div class="msg msg-error" style="display:block">В журнале уже есть вытянутые — загрузка запрещена. Сначала «Очистить журнал».</div>' : '';
   const note = d.written ? 'Записано.' : (d.errors.length ? 'Есть ошибки — запись невозможна.' : 'Проверка без записи. Если всё верно — «Загрузить».');
-  return `${errs}<table class="pay-table"><tr><th>Группа</th><th>Людей</th><th>Шариков</th></tr>${rows}<tr><td><b>Всего</b></td><td><b>${d.report.total}</b></td><td></td></tr></table><p>${note}</p>`;
+  return `${errs}${blocked}<table class="pay-table"><tr><th>Группа</th><th>Людей</th><th>Шариков</th></tr>${rows}<tr><td><b>Всего</b></td><td><b>${d.report.total}</b></td><td></td></tr></table>`
+    + `${d.errors.length ? '' : diffHtml(d.diff)}<p>${note}</p>`;
 }
 
 async function importTable(dryRun) {

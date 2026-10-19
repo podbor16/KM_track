@@ -3,7 +3,7 @@ import io
 import openpyxl
 import pytest
 
-from src.siberman.draw.importer import import_report, parse_applicants
+from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants
 
 HEADER = [
     "format", "surname Name", "sex", "city (исправлено)", "Wildcard",
@@ -166,3 +166,26 @@ def test_inner_spaces_collapsed():
 def test_not_xlsx():
     assert parse_applicants(b"not a zip") == (
         [], ["файл не похож на .xlsx — сохраните таблицу в формате Excel"])
+
+def test_diff_against_loaded_table():
+    old, _ = parse_applicants(_xlsx([
+        _row(IND, "Акулич Степан", "Мужской", starts=3),
+        _row(IND, "Новикова Анна", "Женский"),
+        _row(IND, "Ёлкина Мария", "Женский"),
+        _row("Эстафетная команда", "Капитан Один", None),
+    ]))
+    old = [{**a, "is_wildcard": int(a["is_wildcard"])} for a in old]      # из БД — 0/1, а не bool
+    new, _ = parse_applicants(_xlsx([
+        _row(IND, "Акулич Степан", "Мужской", starts=3, accum=1),
+        _row(IND, "Елкина мария", "Женский"),                               # регистр и ё — та же заявка
+        _row("Эстафетная команда", "Капитан Один", None),
+        _row(IND, "Петров Пётр", "Мужской"),
+    ]))
+    d = diff_applicants(old, new)
+    assert [x["fio"] for x in d["added"]] == ["Петров Пётр"]
+    assert [x["fio"] for x in d["removed"]] == ["Новикова Анна"]
+    assert d["changed"] == [{"fio": "Акулич Степан", "format": "individual", "chances": 5,
+                             "changes": [{"field": "chances", "old": 4, "new": 5},
+                                         {"field": "draw_accumulated", "old": 0, "new": 1}]}]
+    assert d["balls"] == {"old": 7, "new": 8}
+
