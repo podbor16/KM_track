@@ -65,6 +65,9 @@ jobs:
             # Реестр людей (кто есть кто за все годы, ДР из заявок, «проверить», журнал)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/014_persons.sql
 
+            # Жеребьёвка: квоты раундов 2–3 общие на оба пола (правила 2028)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/015_draw_quota_total.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

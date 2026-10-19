@@ -56,8 +56,8 @@ def draw():
     _clean(conn)
     ddb.replace_applicants(conn, YEAR, APPS)
     ddb.save_config(conn, YEAR, {"capacity_men": 3, "capacity_women": 1, "capacity_relay": 1,
-                                 "quota_repeat_men": 2, "quota_repeat_women": 0, "quota_novice_men": 1,
-                                 "quota_novice_women": 1, "auto_invite_until": datetime.date(2098, 1, 1)})
+                                 "quota_repeat": 2, "quota_novice": 2,
+                                 "auto_invite_until": datetime.date(2098, 1, 1)})
     service.clear_cache()
     yield {a["surname"]: a["id"] for a in ddb.load_applicants(conn, YEAR)}
     _clean(conn)
@@ -82,17 +82,26 @@ def test_wildcard_round_and_refusals(draw):
 
 
 def test_round2_repeat_quota_defers_to_round4(draw):
-    service.save_config(YEAR, {"capacity_men": 3, "capacity_women": 1, "capacity_relay": 1,
-                               "quota_repeat_men": 1, "quota_repeat_women": 0, "quota_novice_men": 1,
-                               "quota_novice_women": 1, "auto_invite_until": datetime.date(2098, 1, 1)})
+    service.save_config(YEAR, {"quota_repeat": 1})
     service.pick(YEAR, draw["Вайлдкардов"])
     service.set_round(YEAR, 2)
-    with pytest.raises(DrawError, match=r"квота повторных мужчин набрана \(1/1\)"):
+    with pytest.raises(DrawError, match=r"квота повторных набрана \(1/1\)"):
         service.pick(YEAR, draw["Повторов"])
     blocks = {a["surname"]: a["block"] for a in service.admin_state(YEAR)["applicants"]}
-    assert "квота повторных мужчин" in blocks["Повторов"] and blocks["Новиков"].startswith("не в этом раунде")
+    assert "квота повторных набрана" in blocks["Повторов"] and blocks["Новиков"].startswith("не в этом раунде")
     service.set_round(YEAR, 4)
     assert service.pick(YEAR, draw["Повторов"])["position"] == 2
+
+
+def test_round3_full_gender_goes_to_waitlist_without_quota(draw):
+    service.save_config(YEAR, {"capacity_women": 0, "quota_novice": 1})
+    service.set_round(YEAR, 3)
+    service.pick(YEAR, draw["Новикова"])
+    women = service.admin_state(YEAR)["lists"]["women"]
+    assert [(r["surname"], r["section"]) for r in women] == [("Новикова", "waitlist")]
+    service.pick(YEAR, draw["Новиков"])                       # женщина из листа ожидания квоту не заняла
+    with pytest.raises(DrawError, match=r"квота новичков набрана \(1/1\)"):
+        service.pick(YEAR, draw["Последний"])
 
 
 def test_replace_keeps_position_cancel_shifts(draw):
@@ -255,7 +264,7 @@ def test_partial_config_post_keeps_other_fields(draw, client):
         r = client.post(f"/api/siberman/admin/draw/{YEAR}/config", json={"capacity_men": 5})
         assert r.status_code == 200
         cfg = service.admin_state(YEAR)["config"]
-        assert cfg["capacity_men"] == 5 and cfg["capacity_women"] == 1 and cfg["quota_repeat_men"] == 2
+        assert cfg["capacity_men"] == 5 and cfg["capacity_women"] == 1 and cfg["quota_repeat"] == 2
         assert cfg["auto_invite_until"] == datetime.date(2098, 1, 1)
         assert client.post(f"/api/siberman/admin/draw/{YEAR}/config", json={"capacity_men": 1001}).status_code == 409
     finally:

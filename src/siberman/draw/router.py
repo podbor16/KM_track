@@ -41,10 +41,8 @@ class ConfigIn(BaseModel):
     capacity_men: Optional[int] = None
     capacity_women: Optional[int] = None
     capacity_relay: Optional[int] = None
-    quota_repeat_men: Optional[int] = None
-    quota_repeat_women: Optional[int] = None
-    quota_novice_men: Optional[int] = None
-    quota_novice_women: Optional[int] = None
+    quota_repeat: Optional[int] = None
+    quota_novice: Optional[int] = None
     auto_invite_until: Optional[datetime.date] = None
 
 

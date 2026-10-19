@@ -8,8 +8,7 @@ const PAY = { none: '—', pending: '⏳ ожидает', paid: '✅ оплач�
 const PAY_ICON = { none: '', pending: '⏳', paid: '✅', unpaid: '❌' };
 const CFG_FIELDS = [
   ['capacity_men', 'Мест: мужчины'], ['capacity_women', 'Мест: женщины'], ['capacity_relay', 'Мест: эстафеты'],
-  ['quota_repeat_men', 'Повторные: мужчины'], ['quota_repeat_women', 'Повторные: женщины'],
-  ['quota_novice_men', 'Новички: мужчины'], ['quota_novice_women', 'Новички: женщины'],
+  ['quota_repeat', 'Повторных всего (М+Ж, вкл. wild card)'], ['quota_novice', 'Новичков всего (М+Ж, вкл. wild card)'],
 ];
 const GROUP_LABELS = {
   wildcard_M: 'Wild card — мужчины', wildcard_F: 'Wild card — женщины', wildcard: 'Wild card — эстафеты',
@@ -129,8 +128,7 @@ function renderCounters() {
   const c = S.counters, cfg = S.config, k = c.kinds, q = v => v ?? '?';
   $('counters').innerHTML =
     `Мужчины <b>${c.categories.men}/${q(cfg.capacity_men)}</b> · Женщины <b>${c.categories.women}/${q(cfg.capacity_women)}</b> · Эстафеты <b>${c.categories.relay}/${q(cfg.capacity_relay)}</b><br>` +
-    `Повторные: М <b>${k.repeat_M}/${q(cfg.quota_repeat_men)}</b>, Ж <b>${k.repeat_F}/${q(cfg.quota_repeat_women)}</b> · ` +
-    `Новички: М <b>${k.novice_M}/${q(cfg.quota_novice_men)}</b>, Ж <b>${k.novice_F}/${q(cfg.quota_novice_women)}</b> · ` +
+    `Повторные (победители, М+Ж) <b>${k.repeat}/${q(cfg.quota_repeat)}</b> · Новички <b>${k.novice}/${q(cfg.quota_novice)}</b> · ` +
     `В ёмкости раунда: <b>${c.pool_people}</b> чел., <b>${c.pool_balls}</b> шар.`;
 }
 

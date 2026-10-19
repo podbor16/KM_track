@@ -62,7 +62,7 @@ def test_round_counters():
     lists = build_lists({a["id"]: a for a in apps}, [pick(1, 1, rnd=0), pick(2, 3, "women", rnd=3)], CFG)
     c = round_counters(apps, lists, 4)
     assert c["categories"] == {"men": 1, "women": 1, "relay": 0}
-    assert c["kinds"] == {"repeat_M": 1, "repeat_F": 0, "novice_M": 0, "novice_F": 1}
+    assert c["kinds"] == {"repeat": 1, "novice": 1}
     assert (c["pool_people"], c["pool_balls"]) == (2, 5)
 
 
@@ -76,41 +76,36 @@ def _quota_case(extra_cfg, placed_apps, rnd=2, candidate=None):
     return cand, lists, cfg, apps
 
 
-def test_quota_block_repeat_men_full():
-    cand, lists, cfg, apps = _quota_case({"quota_repeat_men": 1}, [app(1, "repeat", starts=1)])
-    reason = check_pick(cand, 2, lists, cfg, apps)
-    assert reason.startswith("квота повторных мужчин набрана (1/1)") and "раунда 4" in reason
-
-
-def test_quota_block_women_not_full():
+def test_repeat_quota_is_shared_by_both_genders_and_counts_wildcard():
+    wc = app(1, "wildcard", wc=True, starts=2)
     cand = app(9, "repeat", gender="F", starts=1)
-    _, lists, cfg, apps = _quota_case({"quota_repeat_men": 1, "quota_repeat_women": 1},
-                                      [app(1, "repeat", starts=1)], candidate=cand)
+    _, lists, cfg, apps = _quota_case({"quota_repeat": 1}, [wc], rnd=0, candidate=cand)
+    reason = check_pick(cand, 2, lists, cfg, apps)
+    assert reason.startswith("квота повторных набрана (1/1)") and "раунда 4" in reason
+
+
+def test_quota_not_full_allows_pick():
+    cand, lists, cfg, apps = _quota_case({"quota_repeat": 2}, [app(1, "repeat", starts=1)])
     assert check_pick(cand, 2, lists, cfg, apps) is None
 
 
-def test_quota_block_capacity_full_when_quota_none():
-    cand, lists, cfg, apps = _quota_case({"capacity_men": 1}, [app(1)], rnd=3, candidate=app(9))
-    assert "места мужчин заняты (1/1)" in check_pick(cand, 3, lists, cfg, apps)
+def test_full_gender_is_not_a_block_and_waitlist_does_not_count():
+    # мест мужчин 1: второй повторник уже в листе ожидания и квоту не занимает
+    placed = [app(1, "repeat", starts=1), app(2, "repeat", starts=1)]
+    cand, lists, cfg, apps = _quota_case({"capacity_men": 1, "quota_repeat": 2}, placed)
+    assert [r["section"] for r in lists["men"]] == ["winner", "waitlist"]
+    assert check_pick(cand, 2, lists, cfg, apps) is None
 
 
-def test_quota_block_other_rounds_and_novice():
-    placed = [app(1, "repeat", starts=1)]
-    cand, lists, cfg, apps = _quota_case({"quota_repeat_men": 1, "capacity_men": 1}, placed)
+def test_quota_other_rounds_and_novice():
+    cand, lists, cfg, apps = _quota_case({"quota_repeat": 1}, [app(1, "repeat", starts=1)])
     assert check_pick(cand, 4, lists, cfg, apps) is None
     novice = app(8)
     apps[8] = novice
     assert check_pick(novice, 1, lists, cfg, apps) == "не в этом раунде: новичок"
-    cfg2 = {**cfg, "capacity_men": None, "quota_novice_men": 0}
-    assert "квота новичков мужчин набрана (0/0)" in check_pick(novice, 3, lists, cfg2, apps)
-
-
-def test_quota_block_wildcard_repeat_counts():
-    wc = app(1, "wildcard", wc=True, starts=2)
-    cand, lists, cfg, apps = _quota_case({"quota_repeat_men": 1}, [wc], rnd=0)
-    assert "квота повторных мужчин набрана (1/1)" in check_pick(cand, 2, lists, cfg, apps)
+    assert "квота новичков набрана (0/0)" in check_pick(novice, 3, lists, {**cfg, "quota_novice": 0}, apps)
 
 
 def test_check_pick_without_config_ignores_quota():
-    cand, lists, cfg, apps = _quota_case({"quota_repeat_men": 0}, [app(1, "repeat", starts=1)])
+    cand, lists, cfg, apps = _quota_case({"quota_repeat": 0}, [app(1, "repeat", starts=1)])
     assert check_pick(cand, 2, lists) is None

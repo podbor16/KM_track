@@ -11,10 +11,9 @@
 """
 import random
 
-from src.siberman.draw.logic import category_of, kind_of
+from src.siberman.draw.logic import category_of, kind_of, winners_of_kind
 
-REQUIRED_CONFIG = ("capacity_men", "capacity_women", "capacity_relay", "quota_repeat_men",
-                   "quota_repeat_women", "quota_novice_men", "quota_novice_women")
+REQUIRED_CONFIG = ("capacity_men", "capacity_women", "capacity_relay", "quota_repeat", "quota_novice")
 GENDER_CATEGORY = {"M": "men", "F": "women"}
 
 
@@ -30,21 +29,17 @@ def win_probabilities(apps: list[dict], lists: dict, config: dict, current_round
     rnd = random.Random(seed).random
     by_id = {a["id"]: a for a in apps}
     cap = {c: config[f"capacity_{c}"] for c in ("men", "women", "relay")}
-    quota = {f"{k}_{g}": config[f"quota_{k}_{GENDER_CATEGORY[g]}"] for k in ("repeat", "novice") for g in ("M", "F")}
+    quota = {k: config[f"quota_{k}"] for k in ("repeat", "novice")}
     placed = {r["applicant_id"] for rows in lists.values() for r in rows}
 
     count0 = {c: len(lists[c]) for c in cap}
-    kind0 = dict.fromkeys(quota, 0)
-    for c in ("men", "women"):
-        for r in lists[c]:
-            a = by_id[r["applicant_id"]]
-            kind0[f"{kind_of(a)}_{a['gender']}"] += 1
+    kind0 = {k: winners_of_kind(lists, by_id, k) for k in quota}
     for a in apps:
         if a["is_wildcard"] and a["id"] not in placed:
             c = category_of(a)
             count0[c] += 1
-            if c != "relay":
-                kind0[f"{kind_of(a)}_{a['gender']}"] += 1
+            if c != "relay" and count0[c] <= cap[c]:
+                kind0[kind_of(a)] += 1
 
     undrawn = [a for a in apps if a["id"] not in placed and not a["is_wildcard"]]
     relay = [(a["id"], a["chances"]) for a in undrawn if a["pool"] == "relay"]
@@ -64,14 +59,14 @@ def win_probabilities(apps: list[dict], lists: dict, config: dict, current_round
                 leftovers.extend(pid for pid, _ in people)
                 continue
             for pid in _weighted_order(people, rnd):
-                g = by_id[pid]["gender"]
-                c = GENDER_CATEGORY[g]
-                if kinds[f"{kind}_{g}"] < quota[f"{kind}_{g}"] and count[c] < cap[c]:
+                if kinds[kind] >= quota[kind]:
+                    leftovers.append(pid)                 # квота набрана — шарик ждёт раунда 4
+                    continue
+                c = GENDER_CATEGORY[by_id[pid]["gender"]]
+                if count[c] < cap[c]:
                     wins[pid] += 1
-                    kinds[f"{kind}_{g}"] += 1
-                    count[c] += 1
-                else:
-                    leftovers.append(pid)
+                    kinds[kind] += 1
+                count[c] += 1                             # места пола кончились — лист ожидания
         if count["men"] >= cap["men"] and count["women"] >= cap["women"]:
             continue
         for pid in _weighted_order([(pid, by_id[pid]["chances"]) for pid in leftovers], rnd):

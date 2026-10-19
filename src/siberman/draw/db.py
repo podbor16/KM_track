@@ -5,8 +5,7 @@ from typing import Optional
 from src.siberman.db import get_finished_years_by_name
 from src.siberman.finish_counts import person_key
 
-CONFIG_INT_FIELDS = ("capacity_men", "capacity_women", "capacity_relay", "quota_repeat_men",
-                     "quota_repeat_women", "quota_novice_men", "quota_novice_women")
+CONFIG_INT_FIELDS = ("capacity_men", "capacity_women", "capacity_relay", "quota_repeat", "quota_novice")
 APPLICANT_COLUMNS = ("format", "surname", "name", "gender", "city", "pool", "is_wildcard", "chances",
                      "starts_individual", "starts_relay", "draw_accumulated", "is_local",
                      "duathlon_222", "race_24h", "tattoo", "relay_swim", "relay_bike", "relay_run",

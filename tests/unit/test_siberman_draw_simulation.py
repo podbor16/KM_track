@@ -8,10 +8,9 @@ def app(i, pool="novice", gender="M", fmt="individual", wc=False, starts=0, chan
             "starts_individual": starts, "chances": chances, "payment_status": "none"}
 
 
-def cfg(men=1, women=1, relay=1, rep_m=0, rep_f=0, nov_m=0, nov_f=0):
+def cfg(men=1, women=1, relay=1, rep=0, nov=0):
     return {"capacity_men": men, "capacity_women": women, "capacity_relay": relay,
-            "quota_repeat_men": rep_m, "quota_repeat_women": rep_f,
-            "quota_novice_men": nov_m, "quota_novice_women": nov_f}
+            "quota_repeat": rep, "quota_novice": nov}
 
 
 def probs(apps, config, rnd=0, picks=(), sims=4000, seed=7):
@@ -41,8 +40,8 @@ def test_unrevealed_wildcard_takes_place():
 def test_repeat_quota_then_round4():
     # 1 место у мужчин уходит повторному по квоте; новичок выигрывает только при 2 местах
     apps = [app(1, "repeat", starts=1), app(2)]
-    assert probs(apps, cfg(men=1, rep_m=1)) == {1: 1.0, 2: 0.0}
-    assert probs(apps, cfg(men=2, rep_m=1)) == {1: 1.0, 2: 1.0}
+    assert probs(apps, cfg(men=1, rep=1)) == {1: 1.0, 2: 0.0}
+    assert probs(apps, cfg(men=2, rep=1)) == {1: 1.0, 2: 1.0}
 
 
 def test_relay_only_until_round1():
@@ -59,13 +58,13 @@ def test_reproducible_with_seed():
 def test_unrevealed_repeat_wildcard_eats_repeat_quota():
     apps = [app(1, "wildcard", wc=True, starts=1), app(2, "repeat", starts=1), app(3)]
     # квота повторных занята wild card: повторник идёт в общий 4-й раунд наравне с новичком (без wild card было бы 1.0)
-    p = probs(apps, cfg(men=2, rep_m=1))
+    p = probs(apps, cfg(men=2, rep=1))
     assert abs(p[2] - 0.5) < 0.04 and abs(p[3] - 0.5) < 0.04
 
 
 def test_round3_repeaters_already_gone():
     apps = [app(1, "repeat", starts=1), app(2), app(3)]
-    p = probs(apps, cfg(men=1, nov_m=0), rnd=3, sims=4000)
+    p = probs(apps, cfg(men=1, nov=0), rnd=3, sims=4000)
     assert all(abs(v - 1 / 3) < 0.04 for v in p.values())
 
 
@@ -76,3 +75,16 @@ def test_women_weights():
 
 def test_zero_capacity_nobody_wins():
     assert probs([app(1), app(2)], cfg(men=0)) == {1: 0.0, 2: 0.0}
+
+
+def test_repeat_quota_shared_by_genders():
+    # квота повторных 1 на оба пола: женщина-повторница выигрывает в раунде 2, только если её шарик раньше
+    apps = [app(1, "repeat", starts=1, chances=3), app(2, "repeat", gender="F", starts=1), app(3, gender="F")]
+    p = probs(apps, cfg(men=1, women=1, rep=1), rnd=2, sims=8000)
+    assert p[1] == 1.0 and abs(p[2] - 0.625) < 0.03 and abs(p[3] - 0.375) < 0.03
+
+
+def test_full_gender_goes_to_waitlist_and_keeps_quota():
+    # мест мужчин нет: повторник уходит в лист ожидания, квота остаётся женщине
+    apps = [app(1, "repeat", starts=1, chances=5), app(2, "repeat", gender="F", starts=1)]
+    assert probs(apps, cfg(men=0, women=1, rep=1), rnd=2) == {1: 0.0, 2: 1.0}
