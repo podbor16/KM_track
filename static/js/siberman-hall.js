@@ -1,5 +1,5 @@
 'use strict';
-// Общие помощники блоков «Рейтинг» и «Рекорды» Siberman (iframe в Тильде): экранирование, время,
+// Общие помощники блоков Siberman (рейтинг, рекорды, статистика, география, страница спортсмена): экранирование, время,
 // ссылки, загрузка API и высота содержимого для страницы Тильды (docs/siberman/hall-tilda-snippet.md).
 
 function hallEsc(s) {
@@ -13,6 +13,11 @@ function hallTime(s) {
 }
 
 function hallNorm(s) { return String(s ?? '').toLowerCase().replace(/ё/g, 'е'); }
+
+function hallPlural(n, one, few, many) {
+  const a = n % 10, b = n % 100;
+  return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
+}
 
 const HALL_STAGE = { swim: 'плавание', bike: 'велосипед', run: 'бег', bike_day1: 'вело, 1 день', bike_day2: 'вело, 2 день' };
 
