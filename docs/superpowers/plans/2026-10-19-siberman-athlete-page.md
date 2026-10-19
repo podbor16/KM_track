@@ -354,7 +354,7 @@ def test_athlete_pages_on_archive(archive):
     assert client.get(f"/athlete/{pid}").status_code == 404
 ```
 
-- [ ] **Step 2: Красный прогон** — hall: ошибки (`athletes` в фикстуре — `ImportError`).
+- [ ] **Step 2: Красный прогон** — hall: 1 failed (`test_api_and_pages` — маршрутов ещё нет), 7 passed (`athlete.py` есть с Task 2).
 
 - [ ] **Step 3: `service.py`.** Импорт `from src.siberman.hall.athlete import build_athletes`. В `_build` вместо строки `geo = …`:
 ```python
@@ -394,7 +394,7 @@ def api_athlete(person_id: int):
     return _json(service.athlete, person_id)
 ```
 
-- [ ] **Step 5: Маршрутизация.** `app.py` → `_MAINTENANCE_ALLOWED_PREFIXES`: после `"/hall/",` — `"/athlete/",`. `deploy/nginx.conf`, server live.siberman515.com: регэксп `…|draw/|hall/)` → `…|draw/|hall/|athlete/)`; в комментарии над ним — «/athlete/{id} — страница спортсмена (2026-10)».
+- [ ] **Step 5: Маршрутизация.** `app.py` → `_MAINTENANCE_ALLOWED_PREFIXES`: после `"/api/siberman/hall",` — `"/api/siberman/athlete",`, после `"/hall/",` — `"/athlete/",` (без API-префикса при техработах страница открывается, а данные — 503). `deploy/nginx.conf`, server live.siberman515.com: регэксп `…|draw/|hall/)` → `…|draw/|hall/|athlete/)`; в комментарии над ним — «/athlete/{id} — страница спортсмена (2026-10)».
 
 - [ ] **Step 6: Шаблон** `templates/siberman/athlete.html`:
 ```html
