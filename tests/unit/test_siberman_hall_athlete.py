@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace as NS
 
 from src.siberman.hall.athlete import build_athletes
@@ -59,7 +60,7 @@ def test_participations_places_and_stage_times():
     assert (dnf["status"], dnf["dnf_stage"], dnf["finish_no"], dnf["place"]) == ("dnf", "run", None, None)
     assert dnf["times"] == {"swim": 27, "bike": 98, "run": None}             # сошёл на беге: этапы до него есть
     assert (fin["time_s"], fin["finish_no"], fin["place"], fin["record"]) == (180, 2, {"abs": 2, "gender": 2}, False)
-    assert (relay["stage"], relay["team"], relay["time_s"], relay["place"]) == ("run", "Столбы", 165, {"relay": 1})
+    assert relay["stages"] == ["run"] and (relay["team"], relay["time_s"], relay["place"]) == ("Столбы", 165, {"relay": 1})
     assert relay["times"] == {"run": 50} and relay["record"] is True       # действующий рекорд эстафеты гонки
     assert (first["place"], first["finish_no"]) == ({"abs": 1, "gender": 1}, 1)
 
@@ -77,3 +78,25 @@ def test_best_results_rating_and_records():
     assert recs[0]["team"] == "Столбы"
     old = next(r for r in recs if r["cell"] == "race:individual:M")
     assert (old["year"], old["current"], old["beaten"]) == (2019, False, {"year": 2021, "time_s": 170})
+
+
+def test_two_stages_of_one_team_is_one_row_and_live_year_racing():
+    entries = [rel(2020, 101, "swim", 1, (25,)), rel(2020, 101, "bike", 6, (40, 50)), rel(2020, 101, "run", 1, (50,)),
+               ind(2021, 7, 1, None, (28, 45, 55, 0), finished=frozenset({"swim", "bike_day1", "bike_day2"}))]
+    teams = build_teams(entries)
+    p = build_athletes(entries, teams, build_records(entries, teams), {}, [])[1]
+    rows = p["participations"]
+    assert [(r["year"], r["format"]) for r in rows] == [(2021, "individual"), (2020, "relay")]
+    assert (rows[0]["status"], rows[0]["place"]) == ("racing", None)          # последний год, ещё на дистанции
+    assert (rows[1]["stages"], rows[1]["times"]) == (["swim", "run"], {"swim": 25, "run": 50})
+    assert p["summary"]["starts"] == 2 and len(p["relay_medals"]) == 1
+
+
+def test_relay_dnf_stage_is_where_team_dropped():
+    entries = [rel(2020, 101, "swim", 1, (25,)),
+               replace(rel(2020, 101, "bike", 6, (40, 50)), status="dnf", dnf_stage="bike_day2",
+                       finished=frozenset({"bike_day1"})),
+               rel(2020, 101, "run", 7, (0,))]
+    teams = build_teams(entries)
+    row = build_athletes(entries, teams, build_records(entries, teams), {}, [])[1]["participations"][0]
+    assert (row["status"], row["dnf_stage"], row["time_s"]) == ("dnf", "bike_day2", None)

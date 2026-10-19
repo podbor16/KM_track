@@ -115,6 +115,14 @@ def test_athlete_pages_on_archive(archive):
     assert sum(len(x["medals"]) for x in pages.values()) == 196
 
 
+def test_athlete_finish_numbers_match_rating(archive):
+    want = {(r["year"], r["bib"]): (r["person_id"], r["finish_no"], r["medal"]["key"])
+            for r in archive["rating"]["individual"] if r["status"] == "finished"}
+    got = {(row["year"], row["bib"]): (pid, row["finish_no"], p["medals"][row["finish_no"] - 1]["medal"]["key"])
+           for pid, p in archive["athletes"].items() for row in p["participations"] if row.get("finish_no")}
+    assert got == want
+
+
 def test_api_and_pages():
     service.clear_cache()
     client = TestClient(app)
@@ -144,7 +152,7 @@ def test_api_and_pages():
     assert a.status_code == 200 and a.json()["person"]["id"] == pid and "birthdate" not in a.text
     assert client.get("/api/siberman/athlete/999999").status_code == 404
     assert client.get(f"/athlete/{pid}", headers=SIBERMAN).status_code == 200
-    for bad in ("/athlete/999999", "/athlete/abc"):
+    for bad in ("/athlete/999999", "/athlete/abc", "/athlete/%C2%B2"):
         r = client.get(bad, headers=SIBERMAN)
         assert r.status_code == 404 and "Спортсмен не найден" in r.text
     assert client.get(f"/athlete/{pid}").status_code == 404

@@ -134,4 +134,5 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
   .st-foot span:first-child { flex-basis: 100%; }
   .ath-stats, .best { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ath h1 { font-size: 22px; }
+  .ath-bib { text-align: left; }
 }

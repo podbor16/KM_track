@@ -5,7 +5,7 @@
 """
 from collections import defaultdict
 
-from src.siberman.hall.data import bib_order, is_start, person_of, race_time, segment_time
+from src.siberman.hall.data import ROLE_STAGES, ROLES, bib_order, is_start, person_of, race_time, segment_time
 from src.siberman.hall.records import SEG_ROLE, SEG_STAGES, SEGMENTS, cell_keys
 from src.siberman.medals import medal_for
 
@@ -35,8 +35,9 @@ def _places(entries: list, teams: list) -> dict:
         rows.sort(key=lambda r: r[:2])
         in_gender = defaultdict(int)
         for i, (_, _, e) in enumerate(rows, 1):
-            in_gender[e.gender] += 1
-            out[("i", e.year, e.bib)] = {"abs": i, "gender": in_gender[e.gender]}
+            if e.gender:
+                in_gender[e.gender] += 1
+            out[("i", e.year, e.bib)] = {"abs": i, "gender": in_gender[e.gender] if e.gender else None}
     by_year = defaultdict(list)
     for t in teams:
         if t.time_s is not None:
@@ -54,9 +55,9 @@ def _rating_positions(entries: list) -> dict:
     for e in entries:
         t = race_time(e)
         if t is not None:
-            k = person_of(e)
-            if k not in best or (t, e.year) < best[k]:
-                best[k] = (t, e.year)
+            k, key = person_of(e), (t, e.year, bib_order(e.bib))
+            if k not in best or key < best[k]:
+                best[k] = key
     order = sorted(best, key=lambda k: best[k])
     return {k: {"position": i, "total": len(order)} for i, k in enumerate(order, 1)}
 
@@ -82,7 +83,8 @@ def _held_records(history: dict) -> dict:
     return out
 
 
-def _page(pid: int, starts: list, team_of: dict, places: dict, rating: dict, bib, city, recs: list) -> dict:
+def _page(pid: int, starts: list, team_of: dict, places: dict, rating: dict, bib, city, recs: list,
+          last_year) -> dict:
     finishes = [e for e in starts if race_time(e) is not None]
     finish_no = {(e.year, e.bib): i for i, e in enumerate(finishes, 1)}
     relays = {(e.year, e.bib): team_of[(e.year, e.bib)] for e in starts if e.format == "relay"}
@@ -91,21 +93,37 @@ def _page(pid: int, starts: list, team_of: dict, places: dict, rating: dict, bib
     def race_record(e) -> bool:
         return any(r["cell"].startswith("race:") and (r["year"], r["bib"]) == (e.year, e.bib) for r in current)
 
-    def outcome(time_s, status) -> str:
-        return "finished" if time_s is not None else status if status in ("dnf", "dsq") else "racing"
+    def outcome(time_s, status, year) -> str:
+        if time_s is not None:
+            return "finished"
+        if status in ("dnf", "dsq"):
+            return status
+        return "racing" if year == last_year else "dnf"
 
-    rows = []
-    for e in sorted(starts, key=lambda e: (-e.year, e.format != "individual", e.stage)):
-        row = {"year": e.year, "bib": e.bib, "format": e.format, "stage": e.stage, "dnf_stage": e.dnf_stage,
-               "times": _times(e), "record": race_record(e)}
+    rows, seen = [], set()
+    for e in sorted(starts, key=lambda e: (-e.year, e.format != "individual",
+                                           ROLES.index(e.stage) if e.stage in ROLES else 0)):
         if e.format == "individual":
             t = race_time(e)
-            row.update(gender=e.gender, time_s=t, status=outcome(t, e.status),
-                       finish_no=finish_no.get((e.year, e.bib)), place=places.get(("i", e.year, e.bib)))
+            row = {"year": e.year, "bib": e.bib, "format": e.format, "dnf_stage": e.dnf_stage,
+                   "times": _times(e), "record": race_record(e), "gender": e.gender, "time_s": t,
+                   "status": outcome(t, e.status, e.year), "finish_no": finish_no.get((e.year, e.bib)),
+                   "place": places.get(("i", e.year, e.bib))}
         else:
+            if (e.year, e.bib) in seen:
+                continue
+            seen.add((e.year, e.bib))
+            mine = [s for s in starts if s.format == "relay" and (s.year, s.bib) == (e.year, e.bib)]
+            mine.sort(key=lambda s: ROLES.index(s.stage) if s.stage in ROLES else len(ROLES))
             tm = relays[(e.year, e.bib)]
-            row.update(team=tm.name, time_s=tm.time_s, status=outcome(tm.time_s, tm.status),
-                       place=places.get(("r", e.year, e.bib)))
+            times = {}
+            for s in mine:
+                times.update(_times(s))
+            row = {"year": e.year, "bib": e.bib, "format": e.format, "stages": [s.stage for s in mine],
+                   "dnf_stage": next((m.dnf_stage or ROLE_STAGES[m.stage][0] for m in tm.members
+                                      if m.status in ("dnf", "dns")), None),
+                   "times": times, "record": race_record(e), "team": tm.name, "time_s": tm.time_s,
+                   "status": outcome(tm.time_s, tm.status, e.year), "place": places.get(("r", e.year, e.bib))}
         rows.append(row)
 
     best = []
@@ -124,8 +142,8 @@ def _page(pid: int, starts: list, team_of: dict, places: dict, rating: dict, bib
             v, y, e = min(cands, key=lambda c: c[:2])
             best.append({"seg": seg, "time_s": v, "year": y,
                          "place": (places.get(("i", y, e.bib)) or {}).get("abs") if seg == "race" else None,
-                         "record": any(r["cell"].startswith(seg + ":") and (r["time_s"], r["year"]) == (v, y)
-                                       for r in current)})
+                         "record": any(r["cell"].startswith(seg + ":")
+                                       and (r["time_s"], r["year"], r["bib"]) == (v, y, e.bib) for r in current)})
     placed = [(places[("i", e.year, e.bib)]["abs"], e.year) for e in finishes]
     return {
         "person": {"id": pid, "fio": starts[-1].fio, "city": city.name if city else "",
@@ -156,5 +174,6 @@ def build_athletes(entries: list, teams: list, records: dict, places: dict, pers
     for e in sorted(entries, key=lambda e: e.year):
         if e.person_id and is_start(e):
             starts[e.person_id].append(e)
-    return {pid: _page(pid, es, team_of, year_places, rating, bibs.get(pid), places.get(pid), held.get(pid, []))
+    return {pid: _page(pid, es, team_of, year_places, rating, bibs.get(pid), places.get(pid), held.get(pid, []),
+                       records["last_year"])
             for pid, es in starts.items()}

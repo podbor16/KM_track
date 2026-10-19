@@ -1,5 +1,6 @@
 """Медали Siberman за финиши (спецификация hall §9) — одно место для правила «N-й финиш → медаль».
-8-й и дальше — пока как 7-й. Картинка — static/img/siberman/medals/{key}.webp, если файл есть; иначе страница рисует кружок цвета медали."""
+8-й и дальше — пока как 7-й. Картинка — static/img/siberman/medals/{key}.webp, если файл есть (новый файл — после перезапуска); иначе страница рисует кружок цвета медали."""
+import functools
 from pathlib import Path
 from typing import Optional
 
@@ -17,6 +18,11 @@ SEVENTH_AND_LATER = ("hex_silver_red", "Серебряный шестигран�
 RELAY = ("relay_silver", "Античное серебро 70 мм (эстафета)", "#a9a9a9")
 
 
+@functools.lru_cache(maxsize=None)
+def _image(medals_dir: Path, key: str):
+    return f"/static/img/siberman/medals/{key}.webp" if (medals_dir / f"{key}.webp").exists() else None
+
+
 def medal_for(finish_no: Optional[int], relay: bool = False) -> Optional[dict]:
     """Медаль за finish_no-й финиш в личном зачёте; relay=True — эстафетная. Нет финиша → None."""
     if relay:
@@ -25,5 +31,4 @@ def medal_for(finish_no: Optional[int], relay: bool = False) -> Optional[dict]:
         return None
     else:
         key, name, color = INDIVIDUAL.get(finish_no, SEVENTH_AND_LATER)
-    image = f"/static/img/siberman/medals/{key}.webp" if (MEDALS_DIR / f"{key}.webp").exists() else None
-    return {"key": key, "name": name, "color": color, "image": image}
+    return {"key": key, "name": name, "color": color, "image": _image(MEDALS_DIR, key)}

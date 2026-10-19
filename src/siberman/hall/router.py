@@ -57,7 +57,7 @@ def athlete_page(request: Request, person_id: str):
     БД недоступна — страница, которая сама покажет «временно недоступны»."""
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    pid = int(person_id) if person_id.isdigit() else None
+    pid = int(person_id) if person_id.isascii() and person_id.isdigit() else None
     try:
         found = pid is not None and service.athlete(pid) is not None
     except HallUnavailable:
