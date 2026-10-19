@@ -9,6 +9,7 @@ let reviewsCache = [];
 let card = null;
 let searchTimer = null;
 let noCity = null;
+const cityDrafts = {};
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -211,7 +212,7 @@ function renderNoCity() {
   document.getElementById('nocity').innerHTML = '<tr><th>ФИ</th><th>Выступления</th><th>Город</th></tr>'
     + rows.map(r => `<tr><td>${r.person_id ? `<a href="#" data-card="${r.person_id}">${esc(r.fio)}</a>` : esc(r.fio)}</td>
       <td>${esc(startsText(r))}</td>
-      <td>${r.person_id ? `<input data-city-for="${r.person_id}" placeholder="Город" maxlength="100" style="width:160px">
+      <td>${r.person_id ? `<input data-city-for="${r.person_id}" value="${esc(cityDrafts[r.person_id] || '')}" aria-label="Город" placeholder="Город" maxlength="100" style="width:160px">
         <button class="btn-small" data-city-save="${r.person_id}">Сохранить</button>` : '<span class="muted">не в реестре</span>'}</td></tr>`).join('');
   const nc = noCity.no_coords;
   document.getElementById('nocoords').innerHTML = nc.length ? `<div class="card"><h2>Города без координат (${nc.length})</h2>
@@ -229,11 +230,11 @@ async function loadNoCity() {
 async function refreshAll() {
   await loadReviews();
   await loadJournal();
-  await loadNoCity();
   if (card) {
     try { card = await api(`/${card.person.id}`); } catch (e) { card = null; }
     renderCard();
   }
+  await loadNoCity().catch(e => { if (e.message !== 'auth') msg(e.message, 'error'); });
 }
 
 function showTab(name) {
@@ -275,7 +276,7 @@ document.addEventListener('click', e => {
   if (t.matches('[data-city-save]')) {
     const id = t.dataset.citySave, v = document.querySelector(`[data-city-for="${id}"]`).value.trim();
     if (!v) return msg('Введите город', 'error');
-    act(() => post(`/${id}/city`, { city: v }), 'Город сохранён');
+    act(async () => { await post(`/${id}/city`, { city: v }); delete cityDrafts[id]; }, 'Город сохранён');
     return;
   }
   if (t.matches('[data-undo]')) {
@@ -288,6 +289,7 @@ document.getElementById('search').addEventListener('input', () => {
   searchTimer = setTimeout(() => doSearch().catch(err => msg(err.message, 'error')), 250);
 });
 document.getElementById('nocity-q').addEventListener('input', renderNoCity);
+document.getElementById('nocity').addEventListener('input', e => { if (e.target.dataset.cityFor) cityDrafts[e.target.dataset.cityFor] = e.target.value; });
 
 document.getElementById('upload').onclick = async () => {
   const f = document.getElementById('csv').files[0];

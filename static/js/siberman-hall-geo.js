@@ -11,13 +11,15 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_L
   { maxZoom: 16, attribution: 'Esri' }).addTo(map);
 
 if (touch) {
-  const hint = document.getElementById('map-hint');
+  const hint = document.getElementById('map-hint'), el = map.getContainer();
   let timer;
-  map.getContainer().addEventListener('touchstart', e => {
+  el.addEventListener('touchmove', e => {
+    if (e.touches.length !== 1) return;
+    hint.style.opacity = 1;
     clearTimeout(timer);
-    hint.style.opacity = e.touches.length === 1 ? 1 : 0;
-    if (e.touches.length === 1) timer = setTimeout(() => { hint.style.opacity = 0; }, 1200);
+    timer = setTimeout(() => { hint.style.opacity = 0; }, 1200);
   }, { passive: true });
+  el.addEventListener('touchstart', e => { if (e.touches.length > 1) hint.style.opacity = 0; }, { passive: true });
 }
 
 const size = n => Math.round(22 + Math.sqrt(n) * 3.2);
@@ -33,8 +35,10 @@ function drawCities(cities) {
   const group = L.markerClusterGroup({
     maxClusterRadius: 45, showCoverageOnHover: false, spiderfyOnMaxZoom: false, zoomToBoundsOnClick: true,
     iconCreateFunction: cl => {
-      const kids = cl.getAllChildMarkers(), n = kids.reduce((s, m) => s + m.options.count, 0);
-      cl.bindTooltip(hallEsc(kids.map(m => m.options.city).join(', ')), { direction: 'top', offset: [0, -size(n) / 2] });
+      const kids = cl.getAllChildMarkers().sort((a, b) => b.options.count - a.options.count);
+      const n = kids.reduce((s, m) => s + m.options.count, 0);
+      const names = kids.slice(0, 5).map(m => m.options.city).join(', ') + (kids.length > 5 ? ` и ещё ${kids.length - 5}` : '');
+      cl.bindTooltip(hallEsc(names), { direction: 'top', offset: [0, -size(n) / 2] });
       return icon(n);
     },
   });
@@ -46,7 +50,7 @@ function drawCities(cities) {
   });
   group.addTo(map);
   if (map.getSize().x < 560 || !placed.length) map.setView([55, 62], 2);   // телефон — Евразия
-  else map.fitBounds(placed.map(c => [c.lat, c.lon]), { padding: [20, 20] });
+  else map.fitBounds(placed.map(c => [c.lat, c.lon]), { padding: [20, 20], maxZoom: 6 });
 }
 
 // Кольца через линию перемены дат (Чукотка, Алеуты): отрицательные долготы +360°, иначе полосы через карту.
@@ -56,7 +60,7 @@ function unwrap(ring) {
 }
 
 async function drawCountries(countries) {
-  const have = new Map(countries.filter(c => c.iso).map(c => [c.iso.padStart(3, '0'), c]));
+  const have = new Map(countries.filter(c => c.iso).map(c => [String(c.iso).padStart(3, '0'), c]));
   if (!have.size) return;
   try {
     const topo = await (await fetch('/static/lib/world-atlas-2.0.2/countries-110m.json')).json();
@@ -88,12 +92,12 @@ function renderCities(list, all) {
 }
 
 function drawLists(g) {
-  document.getElementById('geo-note').textContent = `Город известен у ${g.known} из ${g.total} человек `
+  document.getElementById('geo-note').textContent = `Город известен у ${g.known} из ${g.total} ${g.total % 10 === 1 && g.total % 100 !== 11 ? 'человека' : 'человек'} `
     + '(в протоколах эстафет города нет). Закрашены страны участников; число в кружке — сколько людей, нажмите — кто.';
   document.getElementById('countries').innerHTML = '<div class="geo-h">Страны</div>'
     + g.countries.map(c => `<div><span>${hallEsc(c.name || 'Страна не указана')}</span><b>${c.count}</b></div>`).join('');
   renderCities(g.cities, false);
 }
 
-hallLoad('/api/siberman/hall/geo').then(g => { drawCities(g.cities); drawCountries(g.countries); drawLists(g); })
+hallLoad('/api/siberman/hall/geo').then(g => { drawLists(g); drawCities(g.cities); drawCountries(g.countries); })
   .catch(err => { document.querySelector('.geo-map').outerHTML = `<div class="state-msg">${hallEsc(err.message)}</div>`; });

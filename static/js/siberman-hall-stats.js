@@ -9,12 +9,12 @@ function plural(n, one, few, many) {
 
 function render(s) {
   const i = s.individual, r = s.relay;
-  const span = s.first_year === s.last_year ? s.first_year : `${s.first_year}–${s.last_year}`;
+  const span = s.first_year == null ? '' : ` · ${s.first_year === s.last_year ? s.first_year : `${s.first_year}–${s.last_year}`}`;
   const rows = s.years.map(y => `<tr><td><b>${y.year}</b></td><td>${y.ind_start} / ${y.ind_fin}</td>
     <td>${y.men} / ${y.women}</td><td>${y.relay_start} / ${y.relay_fin}</td><td>${y.newcomers}</td>
     <td>${hallTime(y.best_s)}</td></tr>`).join('');
   document.getElementById('stats').innerHTML = `
-    <h3>Siberman в цифрах · ${span}</h3><div class="sub-h">Личный зачёт</div>
+    <h3>Siberman в цифрах${span}</h3><div class="sub-h">Личный зачёт</div>
     <div class="st-two">
       <div class="st-grp"><div class="st-cap">Люди</div><div class="st-big">${i.people}</div>
         <div class="st-sub">${plural(i.people, 'человек стартовал', 'человека стартовали', 'человек стартовали')}<br>
