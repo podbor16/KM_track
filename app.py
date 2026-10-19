@@ -85,13 +85,18 @@ async def lifespan(app: FastAPI):
     # === REDIS ===
     import asyncio
     import redis.asyncio as aioredis
+    from redis.asyncio.retry import Retry
+    from redis.backoff import NoBackoff
     from src.krasmarafon.services.notification_hub import tracker_hub, notification_hub
     from src.krasmarafon.services.results_service import build_event_results
     from src.config.event_loader import load_events_cached, get_active_event as _get_active
     from src.analytics.db_connection_optimized import get_pooled_connection
 
     worker_id = str(os.getpid())
-    redis_client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
+    # Дефолтный Retry redis-py (3 повтора, backoff до 10с) без локального Redis держал старт 12–17с;
+    # в DEBUG Redis необязателен (фолбэк без SSE) — одна попытка. На проде повторы остаются.
+    _redis_retry = {"retry": Retry(NoBackoff(), 0)} if settings.DEBUG else {}
+    redis_client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False, **_redis_retry)
     try:
         await redis_client.ping()
         settings.logger.info(f"[Redis] Connected, worker_id={worker_id}")
