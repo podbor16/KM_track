@@ -58,6 +58,7 @@ a[data-card] { color: #1565c0; }
     <button class="admin-tab admin-tab--active" data-tab="reviews">Проверить <span id="reviews-count"></span></button>
     <button class="admin-tab" data-tab="search">Люди</button>
     <button class="admin-tab" data-tab="journal">Журнал</button>
+    <button class="admin-tab" data-tab="nocity">Без города <span id="nocity-count"></span></button>
     <button class="admin-tab" data-tab="import">Заявки и пересборка</button>
   </div>
   <div id="msg" class="msg"></div>
@@ -79,6 +80,14 @@ a[data-card] { color: #1565c0; }
 
   <section id="tab-journal" class="tab-content">
     <div id="journal" class="journal"></div>
+  </section>
+
+  <section id="tab-nocity" class="tab-content">
+    <p class="muted">Люди, у которых город неизвестен ни по протоколам, ни по заявкам (в протоколах эстафет города нет).
+      Введённый город попадёт в блок «География» в течение минуты; действие отменяется в журнале.</p>
+    <input id="nocity-q" class="search" placeholder="Фильтр по фамилии, году или команде" autocomplete="off">
+    <table class="tbl" id="nocity"></table>
+    <div id="nocoords"></div>
   </section>
 
   <section id="tab-import" class="tab-content">

@@ -8,6 +8,7 @@ let reviewStatus = 'open';
 let reviewsCache = [];
 let card = null;
 let searchTimer = null;
+let noCity = null;
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -144,6 +145,9 @@ function renderCard() {
     <div class="row">Дата рождения <input type="date" id="bd" value="${esc(p.birthdate || '')}">
       <button class="btn-small" id="bd-save">Сохранить</button>
       ${card.reviews.length ? `<span class="tag">в «проверить»: ${card.reviews.length}</span>` : ''}</div>
+    <div class="row">Город вручную <input id="city" value="${esc(p.city_manual || '')}" placeholder="${esc(p.city || '')}" maxlength="100" style="width:220px">
+      <button class="btn-small" id="city-save">Сохранить</button>
+      <span class="muted">для карты «География» главнее протокола; пусто — город из протоколов</span></div>
     <table class="tbl"><tr><th></th><th>Год</th><th>Формат</th><th>№</th><th>ФИ в протоколе</th><th>Статус</th><th>Город</th></tr>
     ${card.participations.map((x, i) => `<tr><td><input type="checkbox" data-k="${i}"></td><td>${x.year}</td>
       <td>${x.format === 'individual' ? 'личный' : 'эстафета, ' + esc(STAGES[x.stage]) + ' «' + esc(x.team) + '»'}</td>
@@ -156,6 +160,8 @@ function renderCard() {
       <span class="muted">выступления перейдут к указанному, этот человек исчезнет</span></div></div>`;
   document.getElementById('bd-save').onclick = () =>
     act(() => post(`/${p.id}/birthdate`, { birthdate: document.getElementById('bd').value || null }), 'Дата рождения сохранена');
+  document.getElementById('city-save').onclick = () =>
+    act(() => post(`/${p.id}/city`, { city: document.getElementById('city').value }), 'Город сохранён');
   document.getElementById('mv-new').onclick = () => {
     const keys = selectedKeys();
     if (!keys.length) return msg('Отметьте выступления галочками', 'error');
@@ -192,9 +198,38 @@ async function loadJournal() {
     || '<div class="jrow muted">Пока пусто</div>';
 }
 
+const norm = s => String(s ?? '').toLowerCase().replace(/ё/g, 'е');
+
+function startsText(r) {
+  return r.starts.map(s => `${s.year} ${s.format === 'individual' ? 'личный' : STAGES[s.stage] + ' «' + s.team + '»'}`).join('; ');
+}
+
+function renderNoCity() {
+  if (!noCity) return;
+  const q = norm(document.getElementById('nocity-q').value.trim());
+  const rows = noCity.people.filter(r => !q || norm(`${r.fio} ${startsText(r)}`).includes(q));
+  document.getElementById('nocity').innerHTML = '<tr><th>ФИ</th><th>Выступления</th><th>Город</th></tr>'
+    + rows.map(r => `<tr><td>${r.person_id ? `<a href="#" data-card="${r.person_id}">${esc(r.fio)}</a>` : esc(r.fio)}</td>
+      <td>${esc(startsText(r))}</td>
+      <td>${r.person_id ? `<input data-city-for="${r.person_id}" placeholder="Город" maxlength="100" style="width:160px">
+        <button class="btn-small" data-city-save="${r.person_id}">Сохранить</button>` : '<span class="muted">не в реестре</span>'}</td></tr>`).join('');
+  const nc = noCity.no_coords;
+  document.getElementById('nocoords').innerHTML = nc.length ? `<div class="card"><h2>Города без координат (${nc.length})</h2>
+    <p class="muted">В списках «Географии» есть, на карте нет. Добавить: <code>python scripts/siberman_geocode_cities.py</code>,
+    проверить <code>data/siberman/cities.json</code> и выложить.</p>
+    ${nc.map(c => `<div>${esc(c.name)}${c.country ? ', ' + esc(c.country) : ''} — ${c.count}</div>`).join('')}</div>` : '';
+}
+
+async function loadNoCity() {
+  noCity = await api('/no-city');
+  document.getElementById('nocity-count').textContent = noCity.people.length ? `(${noCity.people.length})` : '';
+  renderNoCity();
+}
+
 async function refreshAll() {
   await loadReviews();
   await loadJournal();
+  await loadNoCity();
   if (card) {
     try { card = await api(`/${card.person.id}`); } catch (e) { card = null; }
     renderCard();
@@ -237,6 +272,12 @@ document.addEventListener('click', e => {
     onReviewAction(reviewsCache[i], t.dataset.act);
     return;
   }
+  if (t.matches('[data-city-save]')) {
+    const id = t.dataset.citySave, v = document.querySelector(`[data-city-for="${id}"]`).value.trim();
+    if (!v) return msg('Введите город', 'error');
+    act(() => post(`/${id}/city`, { city: v }), 'Город сохранён');
+    return;
+  }
   if (t.matches('[data-undo]')) {
     act(() => post(`/undo/${t.dataset.undo}`), 'Действие отменено');
   }
@@ -246,6 +287,7 @@ document.getElementById('search').addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => doSearch().catch(err => msg(err.message, 'error')), 250);
 });
+document.getElementById('nocity-q').addEventListener('input', renderNoCity);
 
 document.getElementById('upload').onclick = async () => {
   const f = document.getElementById('csv').files[0];
