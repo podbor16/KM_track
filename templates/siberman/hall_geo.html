@@ -4,9 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Siberman — география</title>
+<link rel="stylesheet" href="/static/lib/leaflet-1.9.4/leaflet.css">
+<link rel="stylesheet" href="/static/lib/markercluster-1.5.3/MarkerCluster.css">
 <link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
 </head>
 <body>
-<div class="hall" id="geo"><div class="state-msg">Загрузка…</div></div>
+<div class="hall" id="geo">
+  <h3>География участников</h3>
+  <div class="geo-map"><div id="map"></div><div class="map-hint" id="map-hint">Двигайте карту двумя пальцами</div></div>
+  <div class="note" id="geo-note"></div>
+  <div class="geo-cols"><div class="geo-lst" id="countries"></div><div class="geo-lst" id="cities"></div></div>
+  <div class="note">Считаем людей, а не участия: человек с несколькими стартами — один раз, по городу последнего старта.</div>
+</div>
+<script src="/static/lib/leaflet-1.9.4/leaflet.js"></script>
+<script src="/static/lib/markercluster-1.5.3/leaflet.markercluster.js"></script>
+<script src="/static/lib/topojson-client-3.1.0/topojson-client.min.js"></script>
+<script src="/static/js/siberman-hall.js?v={{ v }}"></script>
+<script src="/static/js/siberman-hall-geo.js?v={{ v }}"></script>
 </body>
 </html>

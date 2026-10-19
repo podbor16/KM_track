@@ -76,6 +76,22 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
 .st-foot { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin: 10px 0 4px; font-size: 14px; color: var(--muted); }
 .years-tbl { white-space: nowrap; margin-top: 8px; }
 .note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
+.geo-map { position: relative; }
+#map { height: 380px; border-radius: 8px; }
+.map-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 20px; background: rgba(0, 0, 0, .45); color: #fff; font-weight: 800; text-align: center; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 1000; }
+.leaflet-container.leaflet-touch-zoom:not(.leaflet-touch-drag) { touch-action: pan-y; }
+.leaflet-control-attribution { font-size: 10px; background: rgba(255, 255, 255, .6) !important; }
+.hall .leaflet-bar a, .hall .leaflet-popup-close-button { border-bottom: 0; }
+.city-pt { background: rgba(190, 10, 33, .85); border: 2px solid #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px; box-sizing: border-box; }
+.city-pt span { line-height: 1; }
+.pop-people { max-height: 220px; overflow: auto; margin-top: 4px; line-height: 1.6; }
+.geo-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+.geo-h { font-weight: 800; margin-bottom: 4px; }
+.geo-lst { font-size: 14px; }
+.geo-lst > div:not(.geo-h) { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding: 6px 2px; }
+.geo-lst b { color: var(--navy); }
+.geo-lst i { font-style: normal; color: var(--muted); font-size: 12px; }
+.geo-more { margin-top: 6px; padding: 5px 10px; border: 1px solid var(--navy); border-radius: 6px; background: #fff; color: var(--navy); font: inherit; font-size: 13px; cursor: pointer; }
 @media (max-width: 640px) {
   .hall { padding: 12px 8px; }
   td, th { padding: 6px 2px; font-size: 13px; }
@@ -88,4 +104,5 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
   .desk { display: none; }
   .mob { display: block; }
   .st-two, .geo-cols { grid-template-columns: 1fr; }
+  #map { height: 320px; }
 }
