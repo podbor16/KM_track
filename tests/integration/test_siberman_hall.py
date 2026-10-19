@@ -14,6 +14,7 @@ from src.siberman.hall import service
 from src.siberman.hall.rating import build_rating
 from src.siberman.hall.records import build_records
 from src.siberman.hall.stats import build_stats
+from src.siberman.persons.linking import norm_city
 
 SIBERMAN = {"host": "siberman.localhost"}
 
@@ -97,6 +98,8 @@ def test_geo_on_archive(archive):
     g = archive["geo"]
     assert g["total"] == 337 and 168 <= g["known"] < g["total"]
     assert sum(c["count"] for c in g["cities"]) == g["known"] == sum(c["count"] for c in g["countries"])
+    assert all(c["name"] for c in g["countries"])
+    assert len({norm_city(c["name"]) for c in g["cities"]}) == len(g["cities"])
 
 
 def test_api_and_pages():

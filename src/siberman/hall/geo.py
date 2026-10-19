@@ -76,7 +76,8 @@ def applicant_cities(persons: list, applicants: list) -> dict:
 
 def resolve_places(entries: list, persons: list, applicants: list, directory: dict) -> dict:
     """Человек (data.person_of) → City или None; люди — все, у кого есть старт (data.is_start). Город
-    из админки или заявки получает страну, с которой этот город чаще пишут в протоколах."""
+    из админки или заявки получает страну, с которой этот город чаще пишут в протоколах. Город из заявки —
+    только если он есть в справочнике (в поле «город» заявки бывает что угодно)."""
     found, proto = {}, defaultdict(Counter)
     for e in sorted(entries, key=lambda e: e.year):
         if norm_city(e.city) and e.country:
@@ -99,7 +100,7 @@ def resolve_places(entries: list, persons: list, applicants: list, directory: di
         p = registry.get(k) if isinstance(k, int) else None
         if p is not None and norm_city(p.city_manual):
             place = with_country(p.city_manual)
-        elif place is None and k in from_apps:
+        elif place is None and k in from_apps and norm_city(from_apps[k]) in directory:
             place = with_country(from_apps[k])
         out[k] = city_of(*place, directory) if place else None
     return out

@@ -52,12 +52,14 @@ def test_place_priority_manual_then_last_start_then_applicant():
                start(2024, "Третий", fmt="relay", stage="run", pid=3),        # город из заявки
                start(2024, "Четвёртый", fmt="relay", stage="run", pid=4),     # неизвестно
                start(2024, "Пятый", "Алма-Аты", "Казахстан", pid=5, status="dns"),   # не стартовал
-               start(2024, "Шестой", "Санкт Петербург")]                      # без реестра — по ФИ
+               start(2024, "Шестой", "Санкт Петербург"),                      # без реестра — по ФИ
+               start(2024, "Седьмой", fmt="relay", stage="run", pid=11)]      # город заявки не из справочника
     persons = [person(1, "Первый", "Москва"), person(2, "Второй", "Красноярск"), person(3, "Третий", bd=BD),
-               person(4, "Четвёртый")]
-    places = resolve_places(entries, persons, [app("Третий", "Санкт-Петербург", BD)], DIR)
+               person(4, "Четвёртый"), person(11, "Седьмой", bd=BD)]
+    places = resolve_places(entries, persons, [app("Третий", "Санкт-Петербург", BD),
+                                               app("Седьмой", "Неизвестный посёлок", BD)], DIR)
     assert {k: (c.name if c else None) for k, c in places.items()} == {
-        1: "Москва", 2: "Красноярск", 3: "Санкт-Петербург", 4: None, "шестой тест": "Санкт-Петербург"}
+        1: "Москва", 2: "Красноярск", 3: "Санкт-Петербург", 4: None, "шестой тест": "Санкт-Петербург", 11: None}
 
 
 def test_geo_counts_people_once_by_last_city():
@@ -99,3 +101,19 @@ def test_broken_or_missing_cities_json_is_ignored(tmp_path):
     bad = tmp_path / "cities.json"
     bad.write_text("[{", encoding="utf-8")
     assert load_cities(bad) == {} and load_cities(tmp_path / "нет.json") == {}
+
+
+def test_cities_json_is_consistent():
+    import json
+    import re
+    from src.siberman.hall.geo import CITIES_PATH
+    from src.siberman.persons.linking import norm_city
+    seen = {}
+    for r in json.loads(CITIES_PATH.read_text(encoding="utf-8")):
+        assert set(r) == {"name", "country", "iso", "lat", "lon", "aliases"} and r["name"] and r["country"], r
+        assert re.fullmatch(r"\d{3}", r["iso"]) or r["iso"] == "", r
+        assert (r["lat"] is None) == (r["lon"] is None), r
+        if r["lat"] is not None:
+            assert -90 <= r["lat"] <= 90 and -180 <= r["lon"] <= 180, r
+        for spelling in (r["name"], *r["aliases"]):    # одно написание — один город (Железногорск!)
+            assert seen.setdefault(norm_city(spelling), (r["name"], r["country"])) == (r["name"], r["country"]), spelling
