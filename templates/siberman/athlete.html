@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman — спортсмен</title>
+<link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
+<link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
+</head>
+<body>
+<div class="ath-top"><a href="https://siberman515.com/results">← Результаты Siberman</a></div>
+{% if found %}
+<div class="hall ath" id="athlete" data-id="{{ person_id }}"><div class="state-msg">Загрузка…</div></div>
+<script src="/static/js/siberman-hall.js?v={{ v }}"></script>
+<script src="/static/js/siberman-athlete.js?v={{ v }}"></script>
+{% else %}
+<div class="hall ath"><div class="state-msg">Спортсмен не найден — возможно, ссылка устарела.
+  Найдите себя в <a href="https://siberman515.com/results#hall-rating">рейтинге Siberman</a>.</div></div>
+{% endif %}
+</body>
+</html>

@@ -25,6 +25,15 @@ LIBS = {
         "leaflet-1.9.4/images/marker-icon-2x.png",
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png":
         "leaflet-1.9.4/images/marker-shadow.png",
+    # Siberman /hall/geo: кластеры городов и границы стран
+    "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js":
+        "markercluster-1.5.3/leaflet.markercluster.js",
+    "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css":
+        "markercluster-1.5.3/MarkerCluster.css",
+    "https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js":
+        "topojson-client-3.1.0/topojson-client.min.js",
+    "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json":
+        "world-atlas-2.0.2/countries-110m.json",
 
     # Chart.js v4 (для results.html)
     "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js":

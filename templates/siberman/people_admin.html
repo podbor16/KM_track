@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman — Люди</title>
+<link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #f7f7f7; color: #1a1a1a; font-family: system-ui, sans-serif; }
+.header { background: #1a1a1a; color: #fff; padding: 14px 24px; display: flex; gap: 20px; align-items: center; }
+.header h1 { font-size: 18px; margin: 0; flex: 1; color: #fff; }
+.hlink { color: #ddd; text-decoration: none; font-size: 14px; }
+.container { max-width: 1280px; margin: 20px auto; padding: 0 20px; }
+.admin-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
+.admin-tab { padding: 10px 18px; border: none; background: transparent; color: #555; font-size: 15px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; }
+.admin-tab--active { color: #c0392b; border-bottom-color: #c0392b; }
+.tab-content { display: none; } .tab-content.active { display: block; }
+.msg { display: none; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 15px; }
+.msg-ok { background: #eafaf1; color: #1e8449; border: 1px solid #a9dfbf; }
+.msg-error { background: #fdecea; color: #b71c1c; border: 1px solid #f5c6c2; }
+.card { background: #fff; color: #1a1a1a; border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card h2 { font-size: 16px; margin: 0 0 10px; }
+.rtitle { font-weight: 700; margin-bottom: 6px; }
+.pboxes { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.pbox { flex: 1 1 260px; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px 10px; font-size: 14px; background: #fafafa; }
+.plabel { font-size: 11px; text-transform: uppercase; color: #777; letter-spacing: .5px; }
+.muted { color: #666; font-size: 13px; }
+.row { margin: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.search { width: 100%; padding: 12px 14px; font-size: 18px; background: #fff; color: #1a1a1a; border: 2px solid #1a1a1a; border-radius: 6px; }
+.res { padding: 10px 12px; background: #fff; color: #1a1a1a; border: 1px solid #e0e0e0; border-top: 0; cursor: pointer; font-size: 15px; }
+.res:hover { background: #fff3c4; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0; }
+.tbl td, .tbl th { padding: 6px 8px; border-top: 1px solid #eee; text-align: left; color: #1a1a1a; }
+.tbl th { color: #666; font-weight: 600; font-size: 12px; }
+.tag { background: #fff8e1; color: #6b4e00; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+.journal { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; max-height: 600px; overflow: auto; }
+.jrow { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #1a1a1a; }
+.jrow.cancelled b { text-decoration: line-through; color: #888; }
+input, select { font: inherit; padding: 6px 8px; border: 1px solid #bbb; border-radius: 6px; background: #fff; color: #1a1a1a; }
+.btn { padding: 9px 18px; border-radius: 6px; border: 1px solid #888; background: #fff; color: #1a1a1a; font-weight: 600; cursor: pointer; }
+.btn-primary { background: #c0392b; border-color: #c0392b; color: #fff; }
+.btn-small { padding: 5px 10px; font-size: 13px; border: 1px solid #888; background: #fff; color: #1a1a1a; border-radius: 4px; cursor: pointer; }
+.btn-small.danger { border-color: #c62828; color: #c62828; }
+.btn-small.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+a[data-card] { color: #1565c0; }
+.report { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; white-space: pre-wrap; color: #1a1a1a; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Siberman · Люди</h1>
+  <a href="/admin" class="hlink">← Админка</a>
+  <a href="/logout" class="hlink">Выйти</a>
+</div>
+<div class="container">
+  <div class="admin-tabs">
+    <button class="admin-tab admin-tab--active" data-tab="reviews">Проверить <span id="reviews-count"></span></button>
+    <button class="admin-tab" data-tab="search">Люди</button>
+    <button class="admin-tab" data-tab="journal">Журнал</button>
+    <button class="admin-tab" data-tab="nocity">Без города <span id="nocity-count"></span></button>
+    <button class="admin-tab" data-tab="import">Заявки и пересборка</button>
+  </div>
+  <div id="msg" class="msg"></div>
+
+  <section id="tab-reviews" class="tab-content active">
+    <div class="row">
+      <button class="btn-small active" data-status="open">Открытые</button>
+      <button class="btn-small" data-status="deferred">Отложенные</button>
+      <button class="btn-small" data-status="resolved">Решённые</button>
+    </div>
+    <div id="reviews"></div>
+  </section>
+
+  <section id="tab-search" class="tab-content">
+    <input id="search" class="search" placeholder="Фамилия, имя, личный номер или id человека" autocomplete="off">
+    <div id="results"></div>
+    <div id="card" style="margin-top:12px"></div>
+  </section>
+
+  <section id="tab-journal" class="tab-content">
+    <div id="journal" class="journal"></div>
+  </section>
+
+  <section id="tab-nocity" class="tab-content">
+    <p class="muted">Люди, у которых город неизвестен ни по протоколам, ни по заявкам (в протоколах эстафет города нет).
+      Введённый город попадёт в блок «География» в течение минуты; действие отменяется в журнале.</p>
+    <input id="nocity-q" class="search" aria-label="Фильтр" placeholder="Фильтр по фамилии, году или команде" autocomplete="off">
+    <table class="tbl" id="nocity"></table>
+    <div id="nocoords"></div>
+  </section>
+
+  <section id="tab-import" class="tab-content">
+    <div class="card">
+      <h2>Заявки Тильды → даты рождения</h2>
+      <p class="muted">CSV-выгрузка заявок с Тильды (как есть). Сохраняются только ФИ, пол, дата рождения, город и номер заявки — телефоны, e-mail и тексты не сохраняются. После загрузки привязки пересобираются.</p>
+      <div class="row"><input type="file" id="csv" accept=".csv,text/csv"> <button class="btn btn-primary" id="upload">Загрузить</button></div>
+    </div>
+    <div class="card">
+      <h2>Пересобрать привязки</h2>
+      <p class="muted">Привязать новые выступления к людям и дописать даты рождения. Ручные решения не меняются.</p>
+      <button class="btn" id="sync">Пересобрать</button>
+    </div>
+    <div id="report" class="report" style="display:none"></div>
+  </section>
+</div>
+<script src="/static/js/siberman-people-admin.js?v={{ v }}"></script>
+</body>
+</html>
