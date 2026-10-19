@@ -1,6 +1,9 @@
 """Медали Siberman за финиши (спецификация hall §9) — одно место для правила «N-й финиш → медаль».
-8-й и дальше — пока как 7-й. Картинки медалей добавит страница спортсмена (план 4)."""
+8-й и дальше — пока как 7-й. Картинка — static/img/siberman/medals/{key}.webp, если файл есть; иначе страница рисует кружок цвета медали."""
+from pathlib import Path
 from typing import Optional
+
+MEDALS_DIR = Path(__file__).resolve().parents[2] / "static" / "img" / "siberman" / "medals"
 
 INDIVIDUAL = {
     1: ("silver", "Античное серебро", "#a9a9a9"),
@@ -22,4 +25,5 @@ def medal_for(finish_no: Optional[int], relay: bool = False) -> Optional[dict]:
         return None
     else:
         key, name, color = INDIVIDUAL.get(finish_no, SEVENTH_AND_LATER)
-    return {"key": key, "name": name, "color": color}
+    image = f"/static/img/siberman/medals/{key}.webp" if (MEDALS_DIR / f"{key}.webp").exists() else None
+    return {"key": key, "name": name, "color": color, "image": image}

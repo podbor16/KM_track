@@ -7,7 +7,17 @@ def test_medals_by_finish_number():
     assert medal_for(12)["key"] == "hex_silver_red"
     assert medal_for(0) is None and medal_for(None) is None
     assert medal_for(None, relay=True)["key"] == "relay_silver"
-    assert set(medal_for(3)) == {"key", "name", "color"}
+    assert set(medal_for(3)) == {"key", "name", "color", "image"}
+
+
+def test_medal_image_only_when_file_exists(tmp_path, monkeypatch):
+    from src.siberman import medals
+    monkeypatch.setattr(medals, "MEDALS_DIR", tmp_path)
+    (tmp_path / "gold.webp").write_bytes(b"x")
+    assert medal_for(3)["image"] == "/static/img/siberman/medals/gold.webp"
+    assert medal_for(1)["image"] is None and medal_for(None, relay=True)["image"] is None
+
+
 from src.siberman.hall.data import Entry, build_teams, race_time, segment_time
 
 ALL = frozenset({"swim", "bike_day1", "bike_day2", "run"})
