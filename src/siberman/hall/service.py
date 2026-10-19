@@ -46,9 +46,28 @@ def _build() -> dict:
     records = build_records(entries, teams)
     places = hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities())
     geo = hgeo.build_geo(entries, places)
-    return {"records": records, "rating": build_rating(entries, teams, records),
-            "stats": build_stats(entries, teams, geo), "geo": geo,
-            "athletes": build_athletes(entries, teams, records, places, persons)}
+    rating = build_rating(entries, teams, records)
+    athletes = build_athletes(entries, teams, records, places, persons)
+    slugs = {p.id: p.bib_individual or f"r{p.id}" for p in persons}
+    for part in (records, rating, geo):
+        _add_slugs(part, slugs)
+    for pid, page in athletes.items():
+        page["person"]["slug"] = slugs.get(pid, f"r{pid}")
+    return {"records": records, "rating": rating, "stats": build_stats(entries, teams, geo), "geo": geo,
+            "athletes": athletes, "by_slug": {s: pid for pid, s in slugs.items()}}
+
+
+def _add_slugs(obj, slugs: dict) -> None:
+    """Каждой записи с person_id (рейтинг, рекорды, география) — slug для ссылки на страницу спортсмена:
+    личный стартовый номер (закреплён за человеком навсегда), без него — r{id}; вне реестра — None."""
+    if isinstance(obj, dict):
+        if "person_id" in obj:
+            obj["slug"] = slugs.get(obj["person_id"])
+        for v in obj.values():
+            _add_slugs(v, slugs)
+    elif isinstance(obj, list):
+        for v in obj:
+            _add_slugs(v, slugs)
 
 
 def _snapshot() -> dict:
@@ -99,3 +118,18 @@ def geography() -> dict:
 
 def athlete(person_id: int) -> Optional[dict]:
     return _snapshot()["athletes"].get(person_id)
+
+
+def athlete_by_slug(slug: str) -> tuple:
+    """Страница по адресу /athlete/{slug} → (страница или None, куда перенаправить или None). Адрес r{id}
+    у человека с личным номером (эстафетчик потом вышел лично) перенаправляется на номер."""
+    snap = _snapshot()
+    if slug[:1] == "r" and slug[1:].isascii() and slug[1:].isdigit():
+        page = snap["athletes"].get(int(slug[1:]))
+        return page, (page["person"]["slug"] if page and page["person"]["slug"] != slug else None)
+    pid = snap["by_slug"].get(slug)
+    return (snap["athletes"].get(pid) if pid is not None else None), None
+
+
+def athlete_page(slug: str) -> Optional[dict]:
+    return athlete_by_slug(slug)[0]

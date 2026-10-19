@@ -28,7 +28,7 @@ const icon = n => { const d = size(n); return L.divIcon({ className: 'city-pt', 
 
 function peopleHtml(c) {
   return `<b>${hallEsc(label(c))}</b> · ${c.count}<div class="pop-people">`
-    + c.people.map(p => hallAthlete(p.person_id, hallEsc(p.fio))).join('<br>') + '</div>';
+    + c.people.map(p => hallAthlete(p.slug, hallEsc(p.fio))).join('<br>') + '</div>';
 }
 
 function drawCities(cities) {

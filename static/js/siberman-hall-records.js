@@ -14,7 +14,7 @@ function holderHtml(rec, key) {
   if (h.type === 'team') {
     return hallCard(h.bib, h.year, `<b>${h.name ? '«' + hallEsc(h.name) + '»' : 'Команда №' + hallEsc(h.bib)}</b>`);
   }
-  const who = hallAthlete(h.person_id, hallEsc(h.fio));
+  const who = hallAthlete(h.slug, hallEsc(h.fio));
   if (!h.team) return who;
   const team = hallCard(h.bib, h.year, '«' + hallEsc(h.team) + '»');
   return col === 'absolute' ? `${who}<div class="team">эстафета<br>${team}</div>` : `${who}<div class="team">${team}</div>`;

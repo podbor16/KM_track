@@ -46,10 +46,10 @@ function renderIndividual() {
   const medal = r => r.medal ? `<span class="dot" style="background:${r.medal.color}" title="${hallEsc(r.medal.name)}"></span>` : '';
   const found = r => matches([`${r.surname} ${r.name}`], r.bib);
   const row = r => `<tr><td>${r.place}</td><td class="num">${hallEsc(r.bib)}</td>
-    <td class="l">${hallAthlete(r.person_id, fio(r))}${rec(r)}</td>${sex(r)}<td class="city">${hallEsc(r.city)}</td>
+    <td class="l">${hallAthlete(r.slug, fio(r))}${rec(r)}</td>${sex(r)}<td class="city">${hallEsc(r.city)}</td>
     <td>${hallCard(r.bib, r.year, '<b>' + hallTime(r.time_s) + '</b>')}</td><td>${r.year}</td><td>${medal(r)}${r.finish_no}</td></tr>`;
   const dnf = r => `<tr class="dnf"><td>—</td><td class="num">${hallEsc(r.bib)}</td>
-    <td class="l">${hallAthlete(r.person_id, fio(r))}</td>${sex(r)}<td class="city">${hallEsc(r.city)}</td>
+    <td class="l">${hallAthlete(r.slug, fio(r))}</td>${sex(r)}<td class="city">${hallEsc(r.city)}</td>
     <td>${hallCard(r.bib, r.year, outcome(r))}</td><td>${r.year}</td><td></td></tr>`;
   const f = fin.filter(found), o = out.filter(found);
   let html = `<tr><th>Место</th><th class="num">№</th><th class="l">Участник</th>${abs ? '<th>Пол</th>' : ''}
@@ -60,7 +60,7 @@ function renderIndividual() {
 }
 
 function memberLine(m) {
-  return `<span class="lbl">${HALL_STAGE[m.stage] || ''}</span>${hallAthlete(m.person_id, hallEsc(`${m.surname} ${m.name}`))}`;
+  return `<span class="lbl">${HALL_STAGE[m.stage] || ''}</span>${hallAthlete(m.slug, hallEsc(`${m.surname} ${m.name}`))}`;
 }
 
 function renderRelay() {

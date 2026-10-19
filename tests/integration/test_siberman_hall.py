@@ -147,12 +147,21 @@ def test_api_and_pages():
     for page in ("/hall/stats", "/hall/geo"):
         assert client.get(page, headers=SIBERMAN).status_code == 200
         assert client.get(page).status_code == 404
-    pid = records["current"]["race:individual:M"]["holder"]["person_id"]
-    a = client.get(f"/api/siberman/athlete/{pid}")
-    assert a.status_code == 200 and a.json()["person"]["id"] == pid and "birthdate" not in a.text
+    holder = records["current"]["race:individual:M"]["holder"]
+    slug, pid = holder["slug"], holder["person_id"]
+    assert slug == holder["bib"]                                           # адрес — личный стартовый номер
+    a = client.get(f"/api/siberman/athlete/{slug}")
+    assert a.status_code == 200 and a.json()["person"]["id"] == pid and a.json()["person"]["slug"] == slug
+    assert "birthdate" not in a.text
     assert client.get("/api/siberman/athlete/999999").status_code == 404
-    assert client.get(f"/athlete/{pid}", headers=SIBERMAN).status_code == 200
-    for bad in ("/athlete/999999", "/athlete/abc", "/athlete/%C2%B2"):
+    assert client.get(f"/athlete/{slug}", headers=SIBERMAN).status_code == 200
+    r = client.get(f"/athlete/r{pid}", headers=SIBERMAN, follow_redirects=False)   # r{id} у личника → номер
+    assert r.status_code == 301 and r.headers["location"] == f"/athlete/{slug}"
+    rating = client.get("/api/siberman/hall/rating").json()
+    relay_only = next(m["slug"] for t in rating["relay"] for m in t["members"] if (m["slug"] or "").startswith("r"))
+    assert client.get(f"/athlete/{relay_only}", headers=SIBERMAN).status_code == 200
+    assert all(r["slug"] == r["bib"] for r in rating["individual"] if r["person_id"])
+    for bad in ("/athlete/999999", "/athlete/abc", "/athlete/%C2%B2", "/athlete/r999999"):
         r = client.get(bad, headers=SIBERMAN)
         assert r.status_code == 404 and "Спортсмен не найден" in r.text
-    assert client.get(f"/athlete/{pid}").status_code == 404
+    assert client.get(f"/athlete/{slug}").status_code == 404

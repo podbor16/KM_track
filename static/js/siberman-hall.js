@@ -23,7 +23,8 @@ const HALL_STAGE = { swim: 'плавание', bike: 'велосипед', run: 
 
 // Ссылки из iframe — в новой вкладке: страница Тильды остаётся на месте.
 function hallLink(href, html) { return `<a href="${href}" target="_blank" rel="noopener">${html}</a>`; }
-function hallAthlete(personId, html) { return personId ? hallLink(`/athlete/${personId}`, html) : html; }
+// Страница спортсмена — по slug (личный стартовый номер или r{id}), его добавляет сервер к записям с person_id.
+function hallAthlete(slug, html) { return slug ? hallLink(`/athlete/${encodeURIComponent(slug)}`, html) : html; }
 function hallCard(bib, year, html) { return hallLink(`/participant/${encodeURIComponent(bib)}?year=${year}`, html); }
 
 async function hallLoad(path) {

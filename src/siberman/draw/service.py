@@ -470,8 +470,8 @@ def _athlete_brief(person_id) -> dict | None:
     if not page:
         return None
     best = next((b for b in page["best"] if b["seg"] == "race"), None)
-    return {"id": person_id, "summary": page["summary"], "best_race": best, "best_place": page["best_place"],
-            "rating": page["rating"]}
+    return {"id": person_id, "slug": page["person"]["slug"], "summary": page["summary"], "best_race": best,
+            "best_place": page["best_place"], "rating": page["rating"]}
 
 
 def _build_host_state(year: int, snap: dict) -> dict:

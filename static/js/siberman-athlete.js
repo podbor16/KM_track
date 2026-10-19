@@ -1,6 +1,6 @@
 'use strict';
-// Страница спортсмена Siberman (/athlete/{id}): шапка, сводка, медали, лучшие результаты, все участия,
-// рекорды (спецификация hall §8, макет athlete-v2). Данные — /api/siberman/athlete/{id}.
+// Страница спортсмена Siberman (/athlete/{номер} или /athlete/r{id}): шапка, сводка, медали, лучшие результаты, все участия,
+// рекорды (спецификация hall §8, макет athlete-v2). Данные — /api/siberman/athlete/{номер или r{id}}.
 
 const SEG = { race: 'Гонка 515', swim: 'Плавание 10', bike: 'Вело 421', bike1: 'Вело, 1 день', bike2: 'Вело, 2 день', run: 'Бег 84' };
 const COL = { individual: 'личный', relay: 'эстафета', absolute: 'абсолют' };

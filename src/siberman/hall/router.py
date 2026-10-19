@@ -6,7 +6,7 @@ Siberman.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from src.siberman.hall import service
 from src.siberman.hall.service import HallUnavailable
@@ -51,18 +51,21 @@ async def hall_geo_page(request: Request):
     return _page(request, "siberman/hall_geo.html")
 
 
-@router.get("/athlete/{person_id}", response_class=HTMLResponse)
-def athlete_page(request: Request, person_id: str):
-    """Страница спортсмена (не iframe). Нет такого человека или id не число — 404-страница Siberman;
+@router.get("/athlete/{slug}", response_class=HTMLResponse)
+def athlete_page(request: Request, slug: str):
+    """Страница спортсмена (не iframe): /athlete/{личный стартовый номер}, без номера — /athlete/r{id}.
+    Нет такого — 404-страница Siberman; r{id} у человека с номером — перенаправление на номер;
     БД недоступна — страница, которая сама покажет «временно недоступны»."""
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    pid = int(person_id) if person_id.isascii() and person_id.isdigit() else None
     try:
-        found = pid is not None and service.athlete(pid) is not None
+        page, moved = service.athlete_by_slug(slug)
     except HallUnavailable:
-        found = True
-    return templates.TemplateResponse("siberman/athlete.html", {"request": request, "person_id": pid, "found": found},
+        page, moved = True, None
+    if moved:
+        return RedirectResponse(f"/athlete/{moved}", status_code=301)
+    found = page is not None
+    return templates.TemplateResponse("siberman/athlete.html", {"request": request, "slug": slug, "found": found},
                                       status_code=200 if found else 404)
 
 
@@ -91,6 +94,6 @@ def api_hall_geo():
     return _json(service.geography)
 
 
-@router.get("/api/siberman/athlete/{person_id}")
-def api_athlete(person_id: int):
-    return _json(service.athlete, person_id)
+@router.get("/api/siberman/athlete/{slug}")
+def api_athlete(slug: str):
+    return _json(service.athlete_page, slug)

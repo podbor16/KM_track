@@ -35,7 +35,7 @@ function athleteHtml(ath) {
     `Финишей лично: <b>${s.finishes}</b> · эстафет: <b>${s.relays}</b> · рекордов сейчас: <b>${s.records}</b>`];
   if (b) lines.push(`Лучший результат: <b>${hms(b.time_s)}</b> (${b.year}${b.place ? `, ${b.place} место` : ''})`);
   if (ath.rating) lines.push(`Рейтинг «лучший на человека»: <b>${ath.rating.position}</b> из ${ath.rating.total}`);
-  lines.push(`<a href="/athlete/${ath.id}" target="_blank" rel="noopener">Страница спортсмена →</a>`);
+  lines.push(`<a href="/athlete/${encodeURIComponent(ath.slug)}" target="_blank" rel="noopener">Страница спортсмена →</a>`);
   return lines.map(l => `<div>${l}</div>`).join('');
 }
 
