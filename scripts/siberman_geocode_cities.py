@@ -70,9 +70,9 @@ def main() -> None:
     for c in places.values():   # нет в справочнике (запись «не найден» уже есть — правится вручную)
         if c is not None and norm_city(c.name) not in directory:
             todo.setdefault(norm_city(c.name), c)
-    from_apps = {}              # города из заявок, которых нет в справочнике (в places их нет: resolve_places)
-    for raw in hgeo.applicant_cities(persons, applicants).values():
-        if norm_city(raw) and norm_city(raw) not in directory and norm_city(raw) not in todo:
+    from_apps = {}              # города из заявок у стартовавших людей без города, которых нет в справочнике
+    for pid, raw in hgeo.applicant_cities(persons, applicants).items():
+        if pid in places and places[pid] is None and norm_city(raw) and norm_city(raw) not in directory                 and norm_city(raw) not in todo:
             from_apps.setdefault(norm_city(raw), raw)
     by_name = {(r["name"], r["country"]): r for r in rows}
     print(f"В справочнике: {len(rows)}; новых написаний: {len(todo)}; из заявок: {len(from_apps)}")
