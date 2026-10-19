@@ -207,3 +207,19 @@ def person_ids_by_key(conn) -> dict:
         key = plain_key(r["surname"], r["name"])
         out[key] = None if key in out else r["id"]
     return out
+
+
+# ── Контакты для счетов (draw_contacts, миграция 016) ───────────────────────
+
+def replace_contacts(conn, year: int, contacts: dict) -> None:
+    """Контакты года целиком заменяются новой выгрузкой заявок Тильды."""
+    cur = conn.cursor()
+    cur.execute("DELETE FROM draw_contacts WHERE draw_year=%s", (year,))
+    cur.executemany("INSERT INTO draw_contacts (draw_year, format, fio_key, email, phone) VALUES (%s, %s, %s, %s, %s)",
+                    [(year, fmt, key, c["email"][:255], c["phone"][:64]) for (fmt, key), c in contacts.items()])
+
+
+def load_contacts(conn, year: int) -> dict:
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT format, fio_key, email, phone FROM draw_contacts WHERE draw_year=%s", (year,))
+    return {(r["format"], r["fio_key"]): {"email": r["email"], "phone": r["phone"]} for r in cur.fetchall()}

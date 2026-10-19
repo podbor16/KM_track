@@ -16,11 +16,14 @@ import threading
 import time
 
 import mysql.connector
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from src.config import settings
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
-from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants
+from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
 from src.siberman.draw.logic import (
     CATEGORIES, CATEGORY_LABELS, ROUND_LABELS, build_lists, category_of, check_pick,
     in_round_pool, placement, round_counters,
@@ -49,9 +52,9 @@ CACHE_TTL_S = 1.0
 SIMS = 2000
 FEEDS = ("men", "women", "relay", "wildcard", "last")
 FEED_COLUMNS = {
-    "men": ("num", "name", "city", "section", "status"),
-    "women": ("num", "name", "city", "section", "status"),
-    "relay": ("num", "name", "city", "section", "status"),
+    "men": ("num", "name", "city", "section"),          # оплаты в эфире нет: счета — после трансляции
+    "women": ("num", "name", "city", "section"),
+    "relay": ("num", "name", "city", "section"),
     "wildcard": ("num", "name", "city", "category"),
     "last": ("name", "city", "category", "num", "round"),
 }
@@ -314,6 +317,7 @@ def admin_state(year: int) -> dict:
     conn = _connect()
     try:
         snap = _snapshot(conn, year)
+        contacts_count = len(ddb.load_contacts(conn, year))
     finally:
         conn.close()
     cfg, rnd = snap["config"], snap["config"]["current_round"]
@@ -334,7 +338,7 @@ def admin_state(year: int) -> dict:
     return {"year": year, "config": cfg, "round_labels": ROUND_LABELS, "category_labels": CATEGORY_LABELS,
             "applicants": snap["applicants"], "lists": snap["lists"], "journal": journal,
             "counters": round_counters(snap["applicants"], snap["lists"], rnd),
-            "host_link": f"/draw/{year}/host/{host_token(year)}"}
+            "host_link": f"/draw/{year}/host/{host_token(year)}", "contacts_count": contacts_count}
 
 
 def applicant_summary(year: int, applicant_id: int) -> dict:
@@ -352,6 +356,83 @@ def applicant_summary(year: int, applicant_id: int) -> dict:
         row = next(r for r in snap["lists"][placed[0]] if r["applicant_id"] == applicant_id)
         where = {"category": placed[0], "position": placed[1], "round": row["round"], "created_at": row["created_at"]}
     return {"applicant": a, "history": history, "placement": where, "audit": audit}
+
+
+# ── Счета: контакты из заявок Тильды и Excel ───────────────────────────────
+
+PAYMENT_LABELS = {"none": "—", "pending": "⏳ ожидает оплаты", "paid": "✅ оплачено", "unpaid": "❌ не оплачено"}
+EXPORT_COLUMNS = (("category", "Зачёт", 12), ("position", "№", 5), ("section", "Раздел", 15),
+                  ("fio", "Фамилия Имя", 28), ("city", "Город", 18), ("email", "E-mail", 30), ("phone", "Телефон", 18),
+                  ("payment", "Оплата", 18), ("comment", "Комментарий", 30), ("wildcard", "Wild card", 10),
+                  ("round", "Раунд", 14))
+
+
+def import_contacts(year: int, file_bytes: bytes, user: str = "") -> dict:
+    """CSV заявок Тильды → e-mail и телефоны (заменяют прошлую загрузку). Отчёт: сколько людей и у каких
+    победителей / приглашённых контакта нет."""
+    contacts, report = parse_contacts(file_bytes)
+    if not contacts:
+        raise DrawError("в файле нет заявок — нужна CSV-выгрузка заявок Тильды (столбцы surname, Name, Email, Phone, format)")
+
+    def op(conn, snap):
+        ddb.replace_contacts(conn, year, contacts)
+        rows = _payment_rows(snap, contacts)
+        return {**report, "matched": sum(1 for a in snap["applicants"] if contact_for(a, contacts)),
+                "applicants": len(snap["applicants"]),
+                "missing": [r["fio"] for r in rows if not r["email"] and not r["phone"]]}
+    return _write(year, op)
+
+
+def _payment_rows(snap: dict, contacts: dict) -> list[dict]:
+    """Кому выставлять счёт: победители (с wild card) и приглашённые из листа ожидания (⏳)."""
+    by_id = {a["id"]: a for a in snap["applicants"]}
+    out = []
+    for c in CATEGORIES:
+        for r in snap["lists"][c]:
+            if r["section"] == "waitlist" and r["payment_status"] != "pending":
+                continue
+            a = by_id[r["applicant_id"]]
+            ct = contact_for(a, contacts) or {"email": "", "phone": ""}
+            out.append({"category": CATEGORY_LABELS[c], "position": r["position"],
+                        "section": SECTION_LABELS[r["section"]], "fio": _fio(a), "city": a["city"],
+                        "email": ct["email"], "phone": ct["phone"], "payment": PAYMENT_LABELS[a["payment_status"]],
+                        "comment": a["payment_comment"] or "", "wildcard": "да" if a["is_wildcard"] else "",
+                        "round": ROUND_LABELS[r["round"]]})
+    return out
+
+
+def payment_rows(year: int) -> list[dict]:
+    conn = _connect()
+    try:
+        snap = _snapshot(conn, year)
+        contacts = ddb.load_contacts(conn, year)
+    finally:
+        conn.close()
+    return _payment_rows(snap, contacts)
+
+
+def payment_export(year: int) -> bytes:
+    """Excel для счетов (Коле): шапка закреплена, фильтры, у кого нет контакта — подсвечено."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Счета"
+    ws.append([title for _, title, _ in EXPORT_COLUMNS])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    keys = [k for k, _, _ in EXPORT_COLUMNS]
+    missing = PatternFill("solid", fgColor="FFF3C4")
+    for r in payment_rows(year):
+        ws.append([r[k] for k in keys])
+        if not r["email"] and not r["phone"]:
+            for k in ("email", "phone"):
+                ws.cell(row=ws.max_row, column=keys.index(k) + 1).fill = missing
+    for i, (_, _, width) in enumerate(EXPORT_COLUMNS, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 # ── Страница ведущих (секретная ссылка) ──────────────────────────────────────
@@ -584,13 +665,12 @@ def feed_rows(year: int, name: str) -> list[dict]:
     if name in CATEGORIES:
         cap = cfg[f"capacity_{name}"]
         rows = snap["lists"][name]
-        out = [{"num": r["position"], "name": _fio(r), "city": r["city"],
-                "section": SECTION_LABELS[r["section"]], "status": PAYMENT_ICONS[r["payment_status"]]}
+        out = [{"num": r["position"], "name": _fio(r), "city": r["city"], "section": SECTION_LABELS[r["section"]]}
                for r in rows]
         for i in range(len(rows) + 1, (cap or 0) + 1):
-            out.append({"num": i, "name": "", "city": "", "section": SECTION_LABELS["winner"], "status": ""})
+            out.append({"num": i, "name": "", "city": "", "section": SECTION_LABELS["winner"]})
         if not out:  # места не заданы и список пуст: одна пустая строка для настройки колонок в vMix
-            out.append({"num": "", "name": "", "city": "", "section": "", "status": ""})
+            out.append({"num": "", "name": "", "city": "", "section": ""})
         return out
     if name == "wildcard":
         wc = sorted(({**r, "category": c} for c, rows in snap["lists"].items() for r in rows if r["is_wildcard"]),

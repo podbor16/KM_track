@@ -387,6 +387,27 @@ function reportHtml(d) {
     + `${d.errors.length ? '' : diffHtml(d.diff)}<p>${note}</p>`;
 }
 
+function renderContactsInfo() {
+  $('contacts-info').textContent = S.contacts_count ? `Загружено контактов: ${S.contacts_count}` : 'Контакты ещё не загружены';
+}
+
+async function uploadContacts() {
+  const f = $('contacts-file').files[0];
+  if (!f) { msg('Выберите CSV-выгрузку заявок Тильды', 'error'); return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const d = (await request(`${API}/contacts`, { method: 'POST', body: fd })).data;
+    const miss = d.missing.length
+      ? `<div class="msg msg-error" style="display:block">Нет контакта у ${d.missing.length}: ${d.missing.map(esc).join(', ')}</div>` : '';
+    $('contacts-report').innerHTML = `${miss}<p>Строк в файле: ${d.rows}, людей: ${d.people} (повторных заявок: ${d.duplicates}`
+      + `${d.bad_format ? `, без формата: ${d.bad_format}` : ''}). Найдено в жеребьёвке: ${d.matched} из ${d.applicants}.</p>`;
+    msg('Контакты загружены');
+    await load(true);
+    renderContactsInfo();
+  } catch (e) { fail(e); }
+}
+
 async function importTable(dryRun) {
   const f = $('import-file').files[0];
   if (!f) { msg('Выберите файл', 'error'); return; }
@@ -414,7 +435,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === `tab-${name}`));
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('admin-tab--active', b === btn));
   if (!S) return;
-  if (name === 'payments') renderPayments();
+  if (name === 'payments') { renderPayments(); renderContactsInfo(); }
   if (name === 'settings') renderConfig();
 }
 

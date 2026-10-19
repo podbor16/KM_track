@@ -68,6 +68,9 @@ jobs:
             # Жеребьёвка: квоты раундов 2–3 общие на оба пола (правила 2028)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/015_draw_quota_total.sql
 
+            # Жеребьёвка: контакты заявителей для счетов (из заявок Тильды)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/016_draw_contacts.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

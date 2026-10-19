@@ -3,7 +3,7 @@ import io
 import openpyxl
 import pytest
 
-from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants
+from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
 
 HEADER = [
     "format", "surname Name", "sex", "city (исправлено)", "Wildcard",
@@ -189,3 +189,20 @@ def test_diff_against_loaded_table():
                                          {"field": "draw_accumulated", "old": 0, "new": 1}]}]
     assert d["balls"] == {"old": 7, "new": 8}
 
+
+def test_parse_tilda_contacts_latest_wins_and_formats():
+    head = "surname;Name;Email;Phone;Date;format"
+    rows = ["Иванов;Иван;old@ex.ru;111;2026-09-01 10:00:00;Индивидуальное участие",
+            "иванов;Иван ;new@ex.ru; 222 ;2026-09-03 10:00:00;Индивидуальное участие",   # последняя — главнее
+            "Ёлкина;Мария;e@ex.ru;333;2026-09-02 10:00:00;Индивидуальное участие",
+            "Капитан;Один;cap@ex.ru;444;2026-09-02 10:00:00;Эстафетная команда",
+            "Кто-то;Странный;x@ex.ru;555;2026-09-02 10:00:00;Непонятно"]
+    for enc in ("utf-8-sig", "cp1251"):
+        contacts, rep = parse_contacts("\n".join([head, *rows]).encode(enc))
+        assert (rep["rows"], rep["people"], rep["duplicates"], rep["bad_format"]) == (5, 3, 1, 1)
+        assert contact_for({"format": "individual", "surname": "Иванов", "name": "Иван"}, contacts) == {
+            "email": "new@ex.ru", "phone": "222"}
+        assert contact_for({"format": "individual", "surname": "Елкина", "name": "мария"}, contacts)["email"] == "e@ex.ru"
+        assert contact_for({"format": "relay", "surname": "Один", "name": "Капитан"}, contacts)["phone"] == "444"
+        assert contact_for({"format": "relay", "surname": "Иванов", "name": "Иван"}, contacts) is None
+    assert parse_contacts(b"not,a;tilda")[0] == {}

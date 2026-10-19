@@ -188,7 +188,7 @@ def test_public_aquarium_shows_unrevealed_wildcard_as_ordinary(draw):
 def test_feed_padded_to_capacity_and_csv(draw):
     rows = service.feed_rows(YEAR, "men")
     assert [r["num"] for r in rows] == [1, 2, 3] and all(r["name"] == "" for r in rows)
-    assert service.to_csv(rows, service.FEED_COLUMNS["men"]).startswith("\ufeffnum,name,city,section,status")
+    assert service.to_csv(rows, service.FEED_COLUMNS["men"]).startswith("\ufeffnum,name,city,section\n")
 
 
 def test_import_blocked_after_start(draw, monkeypatch):
@@ -353,7 +353,7 @@ def test_empty_category_feed_without_capacity_is_one_stub_row(draw):
         cur.execute("DELETE FROM draw_config WHERE draw_year=%s", (OTHER_YEAR,))
         for name in ("men", "women", "relay"):
             assert service.feed_rows(OTHER_YEAR, name) == [
-                {"num": "", "name": "", "city": "", "section": "", "status": ""}]
+                {"num": "", "name": "", "city": "", "section": ""}]
     finally:
         conn.close()
         service.clear_cache()
@@ -500,3 +500,54 @@ def test_host_page_and_state(draw, client):
     service.clear_cache()
     assert client.get(f"/api/siberman/draw/{YEAR}/host/{token}/state").json()["last"] == draw["Вайлдкардов"]
     assert service.admin_state(YEAR)["host_link"] == f"/draw/{YEAR}/host/{token}"
+
+
+def _tilda_csv(rows):
+    head = "surname;Name;Email;Phone;Date;format"
+    return ("\ufeff" + "\n".join([head, *(";".join(r) for r in rows)])).encode("utf-8")
+
+
+def test_contacts_and_payment_export(draw, client):
+    import io
+    import openpyxl
+    data = _tilda_csv([
+        ("Вайлдкардов", "Тест", "old@ex.ru", "+7 900 000-00-00", "2026-09-01 10:00:00", "Индивидуальное участие"),
+        ("Вайлдкардов", "Тест", "wc@ex.ru", "+7 900 111-11-11", "2026-09-02 10:00:00", "Индивидуальное участие"),
+        ("Последний", "Тест", "last@ex.ru", "+7 900 222-22-22", "2026-09-01 10:00:00", "Индивидуальное участие"),
+        ("Капитанов", "Тест", "cap@ex.ru", "+7 900 333-33-33", "2026-09-01 10:00:00", "Эстафетная команда"),
+    ])
+    rep = service.import_contacts(YEAR, data, "test")
+    assert (rep["people"], rep["duplicates"]) == (3, 1)
+    conn = get_siberman_connection()
+    try:                                                      # новая версия таблицы шансов — контакты остаются
+        ddb.replace_applicants(conn, YEAR, APPS)
+        ids = {a["surname"]: a["id"] for a in ddb.load_applicants(conn, YEAR)}
+    finally:
+        conn.close()
+    service.clear_cache()
+    service.pick(YEAR, ids["Вайлдкардов"])
+    service.set_round(YEAR, 4)
+    for s in ("Новиков", "Запасной", "Последний"):            # мест мужчин 3: Последний — лист ожидания
+        service.pick(YEAR, ids[s])
+    assert "Последний Тест" not in [r["fio"] for r in service.payment_rows(YEAR)]
+    service.set_payment(YEAR, ids["Последний"], "pending")    # приглашён из листа ожидания
+    rows = {r["fio"]: r for r in service.payment_rows(YEAR)}
+    assert set(rows) == {"Вайлдкардов Тест", "Новиков Тест", "Запасной Тест", "Последний Тест"}
+    assert (rows["Вайлдкардов Тест"]["email"], rows["Вайлдкардов Тест"]["wildcard"]) == ("wc@ex.ru", "да")
+    assert rows["Новиков Тест"]["email"] == "" and rows["Последний Тест"]["section"] == "Лист ожидания"
+    assert "contacts" not in str(service.public_state(YEAR)) and "wc@ex.ru" not in str(service.public_state(YEAR))
+    assert "wc@ex.ru" not in str(service.host_state(YEAR))
+
+    assert client.get(f"/api/siberman/admin/draw/{YEAR}/export.xlsx").status_code == 401
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        r = client.get(f"/api/siberman/admin/draw/{YEAR}/export.xlsx")
+        assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+        table = [[c.value for c in row] for row in ws.iter_rows()]
+        assert table[0][:7] == ["Зачёт", "№", "Раздел", "Фамилия Имя", "Город", "E-mail", "Телефон"]
+        assert ["wc@ex.ru"] == [row[5] for row in table[1:] if row[3] == "Вайлдкардов Тест"]
+        assert client.post(f"/api/siberman/admin/draw/{YEAR}/contacts",
+                           files={"file": ("z.csv", b"bad", "text/csv")}).status_code == 409
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)

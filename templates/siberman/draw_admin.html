@@ -103,6 +103,17 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
   </section>
 
   <section id="tab-payments" class="tab-content">
+    <div class="card">
+      <h2>Excel для счетов</h2>
+      <p class="muted">Победители (с wild card) и приглашённые из листа ожидания (⏳) — с e-mail и телефонами.
+        Контакты берутся из CSV-выгрузки заявок Тильды: загрузите её один раз (новая выгрузка заменяет прошлую,
+        перезаливка таблицы шансов контакты не стирает). Контакты видны только здесь и в Excel.</p>
+      <p id="contacts-info" class="muted"></p>
+      <input type="file" id="contacts-file" accept=".csv,text/csv">
+      <button class="btn" onclick="uploadContacts()">Загрузить контакты</button>
+      <a class="btn btn-primary" href="/api/siberman/admin/draw/{{ year }}/export.xlsx">Скачать Excel для счетов</a>
+      <div id="contacts-report"></div>
+    </div>
     <p class="muted">❌ «не оплачено» ставит ⏳ первому в листе ожидания того же зачёта (до даты из «Настроек»).</p>
     <div id="payments"></div>
   </section>

@@ -7,6 +7,7 @@
 используются: решение организаторов — обычные участники (2026-10-14).
 Эстафета — по капитану, названия команды в таблице нет.
 """
+import csv
 import io
 from operator import itemgetter
 
@@ -34,6 +35,15 @@ DIFF_FIELDS = ("gender", "city", "pool", "is_wildcard", "chances", *EXTRA_COLS,
 
 def _fold(t) -> str:
     return (t or "").lower().replace("ё", "е")
+
+
+def _format_of(raw: str):
+    """«Эстафетная команда» / «Индивидуальное участие» (таблица организаторов и заявки Тильды) → формат."""
+    if raw.startswith("Эстафет"):
+        return "relay"
+    if raw.startswith("Индивид"):
+        return "individual"
+    return None
 
 
 def _norm(v) -> str:
@@ -89,11 +99,8 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
             continue
         where = f"строка {n} «{full}»"
         fmt_raw = _norm(get(COL_FORMAT))
-        if fmt_raw.startswith("Эстафет"):
-            fmt = "relay"
-        elif fmt_raw.startswith("Индивид"):
-            fmt = "individual"
-        else:
+        fmt = _format_of(fmt_raw)
+        if fmt is None:
             errors.append(f"{where}: формат «{fmt_raw}»")
             continue
         gender = {"Мужской": "M", "Женский": "F"}.get(_norm(get(COL_SEX)))
@@ -193,3 +200,50 @@ def diff_applicants(old: list[dict], new: list[dict]) -> dict:
             "removed": sorted((brief(b) for k, b in before.items() if k not in after), key=by_fio),
             "changed": sorted(changed, key=by_fio),
             "balls": {"old": sum(a["chances"] for a in old), "new": sum(a["chances"] for a in new)}}
+
+
+# ── Контакты из выгрузки заявок Тильды (для счетов) ─────────────────────────
+
+def fio_key(surname: str, name: str) -> str:
+    return f"{_fold(_norm(surname))} {_fold(_norm(name))}"
+
+
+def _decode_csv(data: bytes) -> str:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp1251", errors="replace")
+    return text.lstrip(chr(0xFEFF))
+
+
+def parse_contacts(file_bytes: bytes) -> tuple[dict, dict]:
+    """CSV заявок Тильды («;», UTF-8 или cp1251) → ({(формат, ФИ): {email, phone}}, отчёт). Берём только
+    ФИ, формат, Email, Phone и дату заявки; у эстафеты — заявителя (капитана, как в таблице организаторов).
+    Повторная заявка — главнее последняя (правила жеребьёвки)."""
+    rows = list(csv.DictReader(io.StringIO(_decode_csv(file_bytes)), delimiter=";"))
+    report = {"rows": len(rows), "people": 0, "duplicates": 0, "bad_format": 0}
+    if not rows or not {"surname", "Name", "Email", "Phone", "format"} <= set(rows[0]):
+        return {}, report
+    best: dict = {}
+    for r in rows:
+        fmt = _format_of(_norm(r.get("format")))
+        if fmt is None or not _norm(r.get("surname")):
+            report["bad_format"] += 1
+            continue
+        key = (fmt, fio_key(r["surname"], r["Name"]))
+        when = _norm(r.get("Date"))
+        if key in best:
+            report["duplicates"] += 1
+            if when < best[key][0]:
+                continue
+        best[key] = (when, {"email": _norm(r.get("Email")), "phone": _norm(r.get("Phone"))})
+    report["people"] = len(best)
+    return {k: v for k, (_, v) in best.items()}, report
+
+
+def contact_for(a: dict, contacts: dict):
+    """Контакт заявки жеребьёвки: формат + ФИ (в любом порядке); нет — None."""
+    for key in (fio_key(a["surname"], a["name"]), fio_key(a["name"], a["surname"])):
+        if (a["format"], key) in contacts:
+            return contacts[(a["format"], key)]
+    return None

@@ -201,6 +201,26 @@ def draw_import(year: int, file: UploadFile = File(...), dry_run: bool = Form(Tr
     return _run(service.import_applicants, year, data, dry_run, user)
 
 
+@router.post(ADMIN + "/contacts", dependencies=_YEAR_OK)
+def draw_contacts(year: int, file: UploadFile = File(...), user: str = Depends(api_require_auth)):
+    data = file.file.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        return _json({"detail": "файл слишком большой"}, 409)
+    return _run(service.import_contacts, year, data, user)
+
+
+@router.get(ADMIN + "/export.xlsx", dependencies=_YEAR_OK)
+def draw_export(year: int, user: str = Depends(api_require_auth)):
+    """Excel для счетов: победители и приглашённые из листа ожидания с e-mail и телефонами."""
+    try:
+        data = service.payment_export(year)
+    except DrawError as e:
+        return _error(e)
+    name = f"siberman_{year}_scheta_{datetime.date.today():%Y%m%d}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
+
+
 @router.post(ADMIN + "/reset", dependencies=_YEAR_OK)
 def draw_reset(year: int, body: ResetIn, user: str = Depends(api_require_auth)):
     return _run(service.reset, year, body.confirm, user)
