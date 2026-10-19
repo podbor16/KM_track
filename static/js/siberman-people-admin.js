@@ -141,7 +141,7 @@ function renderCard() {
   if (!card) { el.innerHTML = ''; return; }
   const p = card.person;
   el.innerHTML = `<div class="card">
-    <h2>${esc(p.surname)} ${esc(p.name)} <span class="muted">id ${p.id}${p.bib_individual ? ' · личный №' + esc(p.bib_individual) : ''} · ${esc(p.city)}${p.country ? ', ' + esc(p.country) : ''}</span></h2>
+    <h2>${esc(p.surname)} ${esc(p.name)} <span class="muted">id ${p.id}${p.bib_individual ? ' · личный №' + esc(p.bib_individual) : ''}${[p.city_manual || p.city, p.country].filter(Boolean).length ? ' · ' + esc([p.city_manual || p.city, p.country].filter(Boolean).join(', ')) : ''}</span></h2>
     <div class="row">Дата рождения <input type="date" id="bd" value="${esc(p.birthdate || '')}">
       <button class="btn-small" id="bd-save">Сохранить</button>
       ${card.reviews.length ? `<span class="tag">в «проверить»: ${card.reviews.length}</span>` : ''}</div>

@@ -420,7 +420,7 @@ def _brief(p: Optional[dict], parts: dict) -> Optional[dict]:
         return None
     return {"id": p["id"], "fio": _fio(p), "bib": p["bib_individual"],
             "birthdate": p["birthdate"].isoformat() if p["birthdate"] else None,
-            "city": p["city"], "starts": [_start(r) for r in parts.get(p["id"], [])]}
+            "city": p["city_manual"] or p["city"], "starts": [_start(r) for r in parts.get(p["id"], [])]}
 
 
 def reviews(status: str = "open") -> list:
@@ -471,7 +471,7 @@ def search(q: str) -> list:
         rows = pdb.search_persons(conn, q)
     return [{"id": r["id"], "fio": _fio(r), "bib": r["bib_individual"],
              "birthdate": r["birthdate"].isoformat() if r["birthdate"] else None,
-             "city": r["city"], "years": r["years"] or ""} for r in rows]
+             "city": r["city_manual"] or r["city"], "years": r["years"] or ""} for r in rows]
 
 
 def journal() -> list:

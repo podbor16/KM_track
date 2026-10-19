@@ -105,4 +105,5 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
   .mob { display: block; }
   .st-two, .geo-cols { grid-template-columns: 1fr; }
   #map { height: 320px; }
+  .st-foot span:first-child { flex-basis: 100%; }
 }

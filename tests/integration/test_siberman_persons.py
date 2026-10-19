@@ -348,6 +348,14 @@ def test_manual_city_is_separate_and_undoable(conn):
     p = pdb.get_person(conn, pid)
     assert (p["city_manual"], p["city"]) == ("Абакан", "Норильск")
     assert service.set_city(pid, "Абакан", "test")["audit_id"] is None   # без изменений — не в журнал
+    cleared = service.set_city(pid, " ", "test")
+    assert cleared["audit_id"] is not None and pdb.get_person(conn, pid)["city_manual"] == ""
+    again = service.set_city(pid, "Абакан", "test")
+    # более поздние действия с тем же человеком блокируют отмену ранних — отменяем с последнего
+    service.undo(again["audit_id"], "test")
+    assert pdb.get_person(conn, pid)["city_manual"] == ""
+    service.undo(cleared["audit_id"], "test")
+    assert pdb.get_person(conn, pid)["city_manual"] == "Абакан"
     service.undo(res["audit_id"], "test")
     assert pdb.get_person(conn, pid)["city_manual"] == ""
 
@@ -359,8 +367,9 @@ def test_merge_keeps_manual_city(conn):
     src, dst = _pid(conn, YEAR, 9101, "swim"), _pid(conn, Y2, 9102, "run")
     assert src != dst
     service.set_city(src, "Абакан", "test")
+    service.set_city(dst, "Минусинск", "test")
     service.merge(src, dst, "test")
-    assert pdb.get_person(conn, dst)["city_manual"] == "Абакан"
+    assert pdb.get_person(conn, dst)["city_manual"] == "Минусинск"     # у обоих есть — остаётся у целевого
 
 
 def test_no_city_list_and_api(conn):

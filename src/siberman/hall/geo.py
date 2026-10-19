@@ -127,7 +127,10 @@ def build_geo(entries: list, places: dict) -> dict:
         row = cities.setdefault((norm_city(c.name), c.country), {
             "name": c.name, "country": c.country, "iso": c.iso, "lat": c.lat, "lon": c.lon, "people": []})
         row["people"].append({"person_id": last.person_id, "fio": last.fio})
-        countries.setdefault(c.country, {"name": c.country, "iso": c.iso, "count": 0})["count"] += 1
+        if c.country:                    # страна неизвестна (ручной город не из протоколов) — только в городах
+            row = countries.setdefault(c.country, {"name": c.country, "iso": "", "count": 0})
+            row["iso"] = row["iso"] or c.iso
+            row["count"] += 1
     for row in cities.values():
         row["people"].sort(key=lambda p: p["fio"])
         row["count"] = len(row["people"])

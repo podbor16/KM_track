@@ -98,7 +98,7 @@ def delete_orphans(conn, ids) -> list:
 def search_persons(conn, q: str, limit: int = 30) -> list:
     q = " ".join(q.split())
     cur = _cur(conn)
-    base = ("SELECT s.id, s.surname, s.name, s.bib_individual, s.birthdate, s.city, "
+    base = ("SELECT s.id, s.surname, s.name, s.bib_individual, s.birthdate, s.city, s.city_manual, "
             "GROUP_CONCAT(DISTINCT l.race_year ORDER BY l.race_year SEPARATOR ', ') AS years "
             "FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
             f"LEFT JOIN participants p ON {LINK_ON} ")

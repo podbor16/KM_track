@@ -117,3 +117,13 @@ def test_cities_json_is_consistent():
             assert -90 <= r["lat"] <= 90 and -180 <= r["lon"] <= 180, r
         for spelling in (r["name"], *r["aliases"]):    # одно написание — один город (Железногорск!)
             assert seen.setdefault(norm_city(spelling), (r["name"], r["country"])) == (r["name"], r["country"]), spelling
+
+
+def test_country_iso_from_any_city_and_unknown_country_not_listed():
+    entries = [start(2019, "Первый", "Норильск", pid=1),                     # нет в справочнике — без ISO
+               start(2020, "Второй", "Красноярск", pid=2),
+               start(2021, "Третий", fmt="relay", stage="run", pid=3)]
+    places = resolve_places(entries, [person(3, "Третий", "Бухара")], [], DIR)   # ручной, нигде не встречается
+    g = build_geo(entries, places)
+    assert g["countries"] == [{"name": "Россия", "iso": "643", "count": 2}]
+    assert ("Бухара", "") in [(c["name"], c["country"]) for c in g["cities"]] and g["known"] == 3

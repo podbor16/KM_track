@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import mysql.connector
+from mysql.connector import errorcode
 
 from src.siberman.persons import db as pdb
 from src.siberman.persons.linking import plain_key
@@ -157,7 +158,9 @@ def _person_ids(conn) -> dict:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("SELECT race_year, bib, relay_stage, person_id FROM siberman_person_links")
-    except mysql.connector.Error:
+    except mysql.connector.Error as e:
+        if e.errno != errorcode.ER_NO_SUCH_TABLE:   # нет миграции 014 — пусто; другие ошибки (нет колонки) — наружу
+            raise
         return {}
     return {(int(r["race_year"]), str(r["bib"]), r["relay_stage"]): r["person_id"] for r in cur.fetchall()}
 
@@ -194,5 +197,7 @@ def load_people(conn) -> tuple:
     """Люди реестра и заявки Тильды — для города человека; без таблиц реестра (миграция 014) — пусто."""
     try:
         return pdb.load_persons(conn), pdb.load_applicants(conn)
-    except mysql.connector.Error:
+    except mysql.connector.Error as e:
+        if e.errno != errorcode.ER_NO_SUCH_TABLE:   # нет миграции 014 — пусто; другие ошибки (нет колонки) — наружу
+            raise
         return [], []

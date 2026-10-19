@@ -2,10 +2,11 @@
 Справочник городов Siberman (data/siberman/cities.json) для географии: дописывает города людей,
 которых в справочнике нет, через Nominatim (OpenStreetMap; 1 запрос в секунду, свой User-Agent).
 Найденный город с тем же названием, что уже в справочнике, — только новое написание в aliases.
-Не найден — запись без координат (в списках есть, на карте нет). Город из заявки Тильды (в поле «город»
-бывает что угодно, в том числе ФИО) записывается, только если Nominatim нашёл населённый пункт ровно
-с этим названием; иначе не записывается и не печатается. После запуска — проверить глазами
-(тёзки-города: Железногорск, Радужный и т. п.) и поправить вручную.
+Не найден (или найден не населённый пункт) — запись без координат (в списках есть, на карте нет).
+Наружу (Nominatim) уходят только названия городов из протоколов и введённые в админке; поле «город»
+заявок Тильды не отправляется (там бывает ФИО) — город из заявки попадает на карту, только если он уже
+есть в справочнике. После запуска — проверить глазами (тёзки-города: Железногорск, Радужный и т. п.)
+и поправить вручную.
 
     python scripts/siberman_geocode_cities.py            # дописать и сохранить
     python scripts/siberman_geocode_cities.py --dry-run  # только показать
@@ -61,30 +62,27 @@ def main() -> None:
     conn = get_siberman_connection()
     try:
         entries = hdata.load_entries(conn)
-        persons, applicants = hdata.load_people(conn)
+        persons, _ = hdata.load_people(conn)
     finally:
         conn.close()
     directory = hgeo.load_cities(path)
-    places = hgeo.resolve_places(entries, persons, applicants, directory)
+    places = hgeo.resolve_places(entries, persons, [], directory)      # без заявок: они наружу не уходят
     todo = {}
     for c in places.values():   # нет в справочнике (запись «не найден» уже есть — правится вручную)
         if c is not None and norm_city(c.name) not in directory:
             todo.setdefault(norm_city(c.name), c)
-    from_apps = {}              # города из заявок у стартовавших людей без города, которых нет в справочнике
-    for pid, raw in hgeo.applicant_cities(persons, applicants).items():
-        if pid in places and places[pid] is None and norm_city(raw) and norm_city(raw) not in directory                 and norm_city(raw) not in todo:
-            from_apps.setdefault(norm_city(raw), raw)
     by_name = {(r["name"], r["country"]): r for r in rows}
-    print(f"В справочнике: {len(rows)}; новых написаний: {len(todo)}; из заявок: {len(from_apps)}")
+    print(f"В справочнике: {len(rows)}; новых написаний: {len(todo)}")
     for c in todo.values():
         hit = nominatim(f"{c.name}, {c.country}" if c.country else c.name) or (c.country and nominatim(c.name))
-        if not hit:
+        if not hit or hit.get("addresstype") not in PLACE_TYPES:
             rows.append({"name": c.name, "country": c.country, "iso": "", "lat": None, "lon": None, "aliases": []})
             print(f"  НЕ НАЙДЕН  {c.name} ({c.country})")
             continue
         addr = hit.get("address", {})
         name, country = hit.get("name") or c.name, addr.get("country", c.country)
         iso = ISO.get(addr.get("country_code", ""), "")
+        country = next((r["country"] for r in rows if iso and r["iso"] == iso), country)   # как уже решено в справочнике
         old = by_name.get((name, country))
         if old:
             if norm_city(c.name) != norm_city(name):
@@ -96,23 +94,6 @@ def main() -> None:
         rows.append(row)
         by_name[(name, country)] = row
         print(f"  {c.name} ({c.country}) → {name}, {country} [{iso or 'нет ISO'}] {row['lat']}, {row['lon']} · "
-              f"{hit.get('display_name', '')}")
-    for raw in from_apps.values():
-        hit = nominatim(raw)
-        addr = (hit or {}).get("address", {})
-        name, country = (hit or {}).get("name") or "", addr.get("country", "")
-        if (not hit or hit.get("addresstype") not in PLACE_TYPES or not country
-                or norm_city(name) != norm_city(raw)):
-            print("  из заявки: не найдено или не совпало — не записано")
-            continue
-        if (name, country) in by_name:
-            print(f"  (заявка) → {name}, {country} — уже в справочнике")
-            continue
-        row = {"name": name, "country": country, "iso": ISO.get(addr.get("country_code", ""), ""),
-               "lat": round(float(hit["lat"]), 4), "lon": round(float(hit["lon"]), 4), "aliases": []}
-        rows.append(row)
-        by_name[(name, country)] = row
-        print(f"  (заявка) → {name}, {country} [{row['iso'] or 'нет ISO'}] {row['lat']}, {row['lon']} · "
               f"{hit.get('display_name', '')}")
     if args.dry_run:
         return
