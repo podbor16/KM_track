@@ -1,5 +1,5 @@
 """
-Рейтинг, рекорды, статистика и география Siberman: снимок архива в памяти воркера на CACHE_TTL_S (спецификация hall §2).
+Рейтинг, рекорды, статистика, география и страницы спортсменов Siberman: снимок архива в памяти воркера на CACHE_TTL_S (спецификация hall §2).
 Архив меняется только загрузкой результатов; во время гонки снимок обновляется раз в минуту.
 БД недоступна — отдаём прошлый снимок, если он есть, и пробуем снова не раньше чем через RETRY_S
 (без снимка до этого сразу 503), чтобы запросы не ждали БД друг за другом под блокировкой.
@@ -14,6 +14,7 @@ import mysql.connector
 from src.siberman.db import get_siberman_connection
 from src.siberman.hall import data as hdata
 from src.siberman.hall import geo as hgeo
+from src.siberman.hall.athlete import build_athletes
 from src.siberman.hall.rating import build_rating
 from src.siberman.hall.records import build_records
 from src.siberman.hall.stats import build_stats
@@ -43,9 +44,11 @@ def _build() -> dict:
         conn.close()
     teams = hdata.build_teams(entries)
     records = build_records(entries, teams)
-    geo = hgeo.build_geo(entries, hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities()))
+    places = hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities())
+    geo = hgeo.build_geo(entries, places)
     return {"records": records, "rating": build_rating(entries, teams, records),
-            "stats": build_stats(entries, teams, geo), "geo": geo}
+            "stats": build_stats(entries, teams, geo), "geo": geo,
+            "athletes": build_athletes(entries, teams, records, places, persons)}
 
 
 def _snapshot() -> dict:
@@ -92,3 +95,7 @@ def stats() -> dict:
 
 def geography() -> dict:
     return _snapshot()["geo"]
+
+
+def athlete(person_id: int) -> Optional[dict]:
+    return _snapshot()["athletes"].get(person_id)

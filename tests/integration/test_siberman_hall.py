@@ -11,6 +11,7 @@ from src.siberman.db import get_siberman_connection
 from src.siberman.hall import data as hdata
 from src.siberman.hall import geo as hgeo
 from src.siberman.hall import service
+from src.siberman.hall.athlete import build_athletes
 from src.siberman.hall.rating import build_rating
 from src.siberman.hall.records import build_records
 from src.siberman.hall.stats import build_stats
@@ -49,9 +50,11 @@ def archive():
         pytest.skip("В локальной БД нет архива 2016–2025")
     teams = hdata.build_teams(entries)
     records = build_records(entries, teams)
-    geo = hgeo.build_geo(entries, hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities()))
+    places = hgeo.resolve_places(entries, persons, applicants, hgeo.load_cities())
+    geo = hgeo.build_geo(entries, places)
     return {"entries": entries, "teams": teams, "records": records,
-            "rating": build_rating(entries, teams, records), "geo": geo}
+            "rating": build_rating(entries, teams, records), "geo": geo,
+            "athletes": build_athletes(entries, teams, records, places, persons)}
 
 
 def test_records_match_organizers_table(archive):
@@ -102,6 +105,16 @@ def test_geo_on_archive(archive):
     assert len({norm_city(c["name"]) for c in g["cities"]}) == len(g["cities"])
 
 
+def test_athlete_pages_on_archive(archive):
+    pages, holder = archive["athletes"], archive["records"]["current"]["race:individual:M"]["holder"]
+    assert len(pages) == 337
+    p = pages[holder["person_id"]]
+    assert p["person"]["bib"] == holder["bib"] and p["summary"]["records"] >= 1
+    assert any(r["cell"] == "race:individual:M" and r["current"] for r in p["records"])
+    assert sorted(x["rating"]["position"] for x in pages.values() if x["rating"]) == list(range(1, 166))
+    assert sum(len(x["medals"]) for x in pages.values()) == 196
+
+
 def test_api_and_pages():
     service.clear_cache()
     client = TestClient(app)
@@ -126,3 +139,12 @@ def test_api_and_pages():
     for page in ("/hall/stats", "/hall/geo"):
         assert client.get(page, headers=SIBERMAN).status_code == 200
         assert client.get(page).status_code == 404
+    pid = records["current"]["race:individual:M"]["holder"]["person_id"]
+    a = client.get(f"/api/siberman/athlete/{pid}")
+    assert a.status_code == 200 and a.json()["person"]["id"] == pid and "birthdate" not in a.text
+    assert client.get("/api/siberman/athlete/999999").status_code == 404
+    assert client.get(f"/athlete/{pid}", headers=SIBERMAN).status_code == 200
+    for bad in ("/athlete/999999", "/athlete/abc"):
+        r = client.get(bad, headers=SIBERMAN)
+        assert r.status_code == 404 and "Спортсмен не найден" in r.text
+    assert client.get(f"/athlete/{pid}").status_code == 404
