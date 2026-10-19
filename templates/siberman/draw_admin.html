@@ -52,6 +52,8 @@ body { margin: 0; background: #f7f7f7; color: #1a1a1a; font-family: system-ui, s
 .lrow:hover { background: #f2f2f2; }
 .card { background: #fff; color: #1a1a1a; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .card h2 { font-size: 16px; margin: 0 0 12px; }
+.feed-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.feed-row b { min-width: 190px; }
 .config-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .config-form label { font-size: 13px; color: #444; display: flex; flex-direction: column; gap: 4px; }
 input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border-radius: 6px; background: #fff; color: #1a1a1a; }
@@ -128,6 +130,12 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
       <h2>Страница для ведущих</h2>
       <p class="muted">Зачёты и карточки участников без служебного — для Миши и Коли в эфире. Ссылка секретная: без пароля, не передавайте посторонним.</p>
       <div id="host-link"></div>
+    </div>
+    <div class="card">
+      <h2>Ссылки для режиссёра трансляции</h2>
+      <p class="muted">Источники данных для vMix (JSON или CSV, опрос раз в 3 с), без пароля. «Скопировать всё» —
+        готовый текст со ссылками и колонками, можно переслать режиссёру как есть.</p>
+      <div id="feed-links"></div>
     </div>
     <div class="card">
       <h2>Таблица организаторов</h2>

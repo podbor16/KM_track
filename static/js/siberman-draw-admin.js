@@ -338,12 +338,46 @@ function renderPayments() {
 function renderConfig() {
   $('config-form').innerHTML = CFG_FIELDS.map(([k, l]) => `<label>${l}<input type="number" min="0" id="cfg-${k}" value="${S.config[k] ?? ''}"></label>`).join('') +
     `<label>Автопередача ⏳ до (не включая)<input type="date" id="cfg-auto_invite_until" value="${S.config.auto_invite_until ?? ''}"></label>`;
+  renderFeedLinks();
   const hostUrl = location.origin + S.host_link;
   $('host-link').innerHTML = `<a href="${esc(hostUrl)}" target="_blank" rel="noopener">Открыть</a>
-    <button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(hostUrl)}').then(() => msg('Ссылка скопирована'))">Скопировать ссылку</button>`;
+    <button type="button" class="btn" id="copy-host">Скопировать ссылку</button>`;
+  $('copy-host').onclick = () => copyText(hostUrl, 'Ссылка скопирована');
   $('import-info').textContent = S.config.imported_at
     ? `Таблица загружена ${S.config.imported_at.replace('T', ' ').slice(0, 16)}, заявок: ${S.applicants.length}`
     : 'Таблица ещё не загружена';
+}
+
+// Фиды для vMix (service.FEEDS): название и колонки — для текста режиссёру.
+const FEEDS = [
+  ['men', 'Мужчины', 'num (место), name (Фамилия Имя), city, section (победитель / лист ожидания)'],
+  ['women', 'Женщины', 'num, name, city, section'],
+  ['relay', 'Эстафеты', 'num, name (капитан), city, section'],
+  ['wildcard', 'Wild card', 'num, name, city, category (зачёт)'],
+  ['last', 'Последний вытянутый', 'name, city, category (зачёт), num (место в зачёте), round (раунд)'],
+];
+const feedUrl = (name, fmt) => `${location.origin}/api/siberman/draw/${DRAW_YEAR}/feed/${name}.${fmt}`;
+
+function copyText(text, note) {
+  navigator.clipboard.writeText(text).then(() => msg(note || 'Скопировано'), () => msg('Не удалось скопировать', 'error'));
+}
+
+function feedsMessage() {
+  return [`Данные жеребьёвки Siberman ${DRAW_YEAR} для vMix — JSON или CSV на выбор, без авторизации, опрашивать раз в 3 секунды.`,
+    ...FEEDS.map(([n, label, cols]) => `\n${label}:\nJSON: ${feedUrl(n, 'json')}\nCSV: ${feedUrl(n, 'csv')}\nКолонки: ${cols}`),
+    `\nСписки зачётов полные: победители дополнены пустыми строками до числа мест, дальше — лист ожидания. ` +
+    'Если на компьютере с vMix включён VPN — проверьте, что ссылки открываются (при необходимости добавьте siberman515.com в исключения VPN).',
+  ].join('\n');
+}
+
+function renderFeedLinks() {
+  $('feed-links').innerHTML = FEEDS.map(([n, label]) => `<div class="feed-row"><b>${label}</b>
+      <button type="button" class="btn" data-copy="${feedUrl(n, 'json')}">JSON</button>
+      <button type="button" class="btn" data-copy="${feedUrl(n, 'csv')}">CSV</button>
+      <a href="${feedUrl(n, 'json')}" target="_blank" rel="noopener" class="muted">открыть</a></div>`).join('')
+    + '<button type="button" class="btn btn-primary" id="copy-all-feeds">Скопировать всё (текст для режиссёра)</button>';
+  $('feed-links').querySelectorAll('[data-copy]').forEach(b => { b.onclick = () => copyText(b.dataset.copy, 'Ссылка скопирована'); });
+  $('copy-all-feeds').onclick = () => copyText(feedsMessage(), 'Текст со ссылками скопирован');
 }
 
 async function saveConfig() {
