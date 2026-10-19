@@ -59,6 +59,9 @@ jobs:
             # Подписи/дистанции КТ 2025–2026 в БД (фронт берёт их из API за год)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/012_checkpoint_labels_2025_2026.sql
 
+            # Жеребьёвка регистраций (заявки, настройки, журнал, аудит)
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/013_draw.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

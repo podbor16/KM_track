@@ -21,6 +21,7 @@ from src.core.auth import (
     EXPIRY_SECONDS,
     create_session_cookie,
     require_auth,
+    safe_next,
 )
 
 logger = logging.getLogger(__name__)
@@ -276,9 +277,10 @@ async def race_analysis_page(request: Request):
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     domain = getattr(request.state, "domain", "krasmarafon")
+    ctx = {"request": request, "error": None, "next": safe_next(request.query_params.get("next"))}
     if domain == "siberman":
-        return templates.TemplateResponse("siberman/login.html", {"request": request, "error": None})
-    return templates.TemplateResponse("krasmarafon/login.html", {"request": request, "error": None})
+        return templates.TemplateResponse("siberman/login.html", ctx)
+    return templates.TemplateResponse("krasmarafon/login.html", ctx)
 
 
 @router.post("/login")
@@ -286,6 +288,7 @@ async def login_submit(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    next: str = Form(""),
 ):
     domain = getattr(request.state, "domain", "krasmarafon")
     creds_ok = (
@@ -294,7 +297,7 @@ async def login_submit(
     )
     if creds_ok:
         cookie_value = create_session_cookie(username)
-        redirect_target = "/admin"
+        redirect_target = safe_next(next) or "/admin"
         response = RedirectResponse(redirect_target, status_code=302)
         response.set_cookie(
             COOKIE_NAME,
@@ -307,7 +310,7 @@ async def login_submit(
     login_template = "siberman/login.html" if domain == "siberman" else "krasmarafon/login.html"
     return templates.TemplateResponse(
         login_template,
-        {"request": {}, "error": "Неверный логин или пароль"},
+        {"request": {}, "error": "Неверный логин или пароль", "next": safe_next(next)},
         status_code=401,
     )
 

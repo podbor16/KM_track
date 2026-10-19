@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman {{ year }} — Жеребьёвка: аквариум</title>
+<link rel="stylesheet" href="/static/css/siberman-draw.css?v={{ v }}">
+</head>
+<body>
+<div class="draw">
+  <div class="chips" id="chips"></div>
+  <div class="round" id="round"></div>
+  <input class="search" id="search" placeholder="Найти себя: фамилия">
+  <table><thead id="head"></thead><tbody id="rows"><tr><td class="state-msg">Загрузка…</td></tr></tbody></table>
+</div>
+<script src="/static/js/siberman-draw-public.js?v={{ v }}"></script>
+<script>
+const YEAR = {{ year }};
+let state = null;
+document.getElementById('search').addEventListener('input', render);
+function fmtProb(p) {
+  if (p == null) return '';
+  if (p >= 0.995) return '>99%';
+  if (p > 0 && p < 0.001) return '<0,1%';
+  return (p * 100).toFixed(1).replace('.', ',') + '%';
+}
+function render() {
+  if (!state) return;
+  const aq = state.aquarium;
+  document.getElementById('chips').innerHTML = aq.groups.map(g =>
+    `<span class="chip ${g.color}">● ${drawEscape(g.label)} · ${g.people} чел. · ${g.balls} шар.</span>`).join('');
+  document.getElementById('round').innerHTML = `Сейчас: <b>${drawEscape(state.round_label)}</b>`;
+  const withProb = aq.people.some(p => p.probability != null);
+  const cols = withProb ? 4 : 3;
+  document.getElementById('head').innerHTML =
+    `<tr><th>Участник</th><th class="city">Город</th><th>Шансы</th>${withProb ? '<th>Вероятность</th>' : ''}</tr>`;
+  const q = document.getElementById('search').value.trim().toLowerCase().replace(/ё/g, 'е');
+  const match = p => !q || (p.surname + ' ' + p.name).toLowerCase().replace(/ё/g, 'е').includes(q);
+  let html = '';
+  for (const g of aq.groups) {
+    const people = aq.people.filter(p => p.group === g.key && match(p));
+    if (!people.length) continue;
+    html += `<tr class="section-row ${g.color}"><td colspan="${cols}">${drawEscape(g.label)}</td></tr>`;
+    html += people.map(p => `<tr><td>${drawEscape(p.surname + ' ' + p.name)}</td><td class="city">${drawEscape(p.city)}</td>` +
+      `<td><span class="dots">${'●'.repeat(Math.min(p.chances, 10))}</span> ${p.chances}</td>` +
+      `${withProb ? `<td class="prob">${fmtProb(p.probability)}</td>` : ''}</tr>`).join('');
+  }
+  document.getElementById('rows').innerHTML = html || `<tr><td class="state-msg" colspan="${cols}">Никого не найдено</td></tr>`;
+}
+drawPoll(YEAR, s => { state = s; render(); });
+</script>
+</body>
+</html>

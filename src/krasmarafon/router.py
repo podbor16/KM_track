@@ -28,3 +28,6 @@ router.include_router(duathlon222_router)
 
 from src.siberman.router import router as siberman_router
 router.include_router(siberman_router)
+
+from src.siberman.draw.router import router as siberman_draw_router
+router.include_router(siberman_draw_router)
