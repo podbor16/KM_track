@@ -93,9 +93,11 @@ async def lifespan(app: FastAPI):
     from src.analytics.db_connection_optimized import get_pooled_connection
 
     worker_id = str(os.getpid())
-    # Дефолтный Retry redis-py (3 повтора, backoff до 10с) без локального Redis держал старт 12–17с;
-    # в DEBUG Redis необязателен (фолбэк без SSE) — одна попытка. На проде повторы остаются.
-    _redis_retry = {"retry": Retry(NoBackoff(), 0)} if settings.DEBUG else {}
+    # Без локального Redis дефолтный Retry redis-py (3 повтора, backoff до 10с) держал старт 12–17с.
+    # REDIS_CONNECT_RETRIES=0 — одна попытка (локальный запуск); не задано — повторы по умолчанию:
+    # на проде DEBUG не выключен, и при загрузке сервера Redis может подняться позже приложения.
+    _retries = os.getenv("REDIS_CONNECT_RETRIES")
+    _redis_retry = {"retry": Retry(NoBackoff(), int(_retries))} if _retries else {}
     redis_client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False, **_redis_retry)
     try:
         await redis_client.ping()
