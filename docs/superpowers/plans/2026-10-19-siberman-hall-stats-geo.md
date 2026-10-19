@@ -1064,6 +1064,75 @@ def test_cities_json_is_consistent():
 
 ---
 
+### Task 7a: Ревью задач 5a–7 — заявки не уходят наружу, ISO и пустая страна, ручной город в поиске
+
+1. **Скрипт отправлял в Nominatim строки из поля «город» заявок** — в одной из них ФИО. Пользователь разрешал только названия городов. Теперь наружу уходят только города из протоколов и введённые в админке (`places` без заявок): города заявок скрипт не запрашивает вовсе — в справочник они попадают, когда такой город есть в протоколах или его вводят вручную (тогда он геокодируется как ручной).
+2. **ISO страны** брался у первого города страны: город без ISO первым → вся Россия не закрашена.
+3. **Город без страны** (ручной, которого нет ни в протоколах, ни в справочнике) → строка «» в странах. Такие люди считаются в городах, но не в странах.
+4. Скрипт: тип найденного места проверяется и для протокольных/ручных (`PLACE_TYPES` — вместо Алматы была гостиница); название страны — как уже записано в справочнике для этого ISO (ОАЭ, Кыргызстан, Крым — решения пользователя).
+5. Реестр: `except` в `load_people` / `_person_ids` — только «нет таблицы»; в поиске и «проверить» виден ручной город.
+
+**Files:** Modify `scripts/siberman_geocode_cities.py`, `src/siberman/hall/geo.py`, `src/siberman/hall/data.py`, `src/siberman/persons/service.py`, `src/siberman/persons/db.py`, `tests/unit/test_siberman_hall_geo.py`, `tests/integration/test_siberman_persons.py`.
+
+- [ ] **Step 1: Тесты.**
+  - `tests/unit/test_siberman_hall_geo.py`, в конец:
+```python
+def test_country_iso_from_any_city_and_unknown_country_not_listed():
+    entries = [start(2019, "Первый", "Норильск", pid=1),                     # нет в справочнике — без ISO
+               start(2020, "Второй", "Красноярск", pid=2),
+               start(2021, "Третий", fmt="relay", stage="run", pid=3)]
+    places = resolve_places(entries, [person(3, "Третий", "Бухара")], [], DIR)   # ручной, нигде не встречается
+    g = build_geo(entries, places)
+    assert g["countries"] == [{"name": "Россия", "iso": "643", "count": 2}]
+    assert ("Бухара", "") in [(c["name"], c["country"]) for c in g["cities"]] and g["known"] == 3
+```
+  - `tests/integration/test_siberman_persons.py`, в `test_manual_city_is_separate_and_undoable` перед `service.undo(...)`:
+```python
+    assert service.set_city(pid, " ", "test")["audit_id"] is not None and pdb.get_person(conn, pid)["city_manual"] == ""
+    service.set_city(pid, "Абакан", "test")
+```
+    (undo первой записи журнала после двух следующих — проверь, что `service.undo(res["audit_id"], …)` не блокируется более поздними действиями с тем же человеком; если блокируется — отменяй по порядку: последнюю, затем предыдущие, и проверяй `""` в конце. Опиши, что выбрал.)
+  - в `test_merge_keeps_manual_city` перед `service.merge(...)`: `service.set_city(dst, "Минусинск", "test")` и ожидание `"Минусинск"` (у обоих есть — остаётся у целевого).
+
+- [ ] **Step 2: Красный прогон** — новый unit-тест падает (`iso ''` / строка «» в странах); persons — по ожиданию `"Минусинск"`.
+
+- [ ] **Step 3: `geo.py` → `build_geo`**, подсчёт стран:
+```python
+        if c.country:                    # страна неизвестна (ручной город не из протоколов) — только в городах
+            row = countries.setdefault(c.country, {"name": c.country, "iso": "", "count": 0})
+            row["iso"] = row["iso"] or c.iso
+            row["count"] += 1
+```
+
+- [ ] **Step 4: `persons/service.py`.** `merge`: уже `dst["city_manual"] or src["city_manual"]` — оставить (целевой главнее). `_brief` и `search`: город — `p["city_manual"] or p["city"]` (в `search_persons` в `db.py` — добавить `s.city_manual` в SELECT и в `search` — `r["city_manual"] or r["city"]`).
+
+- [ ] **Step 5: `data.py`.** В `_person_ids` и `load_people`:
+```python
+    except mysql.connector.Error as e:
+        if e.errno != errorcode.ER_NO_SUCH_TABLE:   # нет миграции 014 — пусто; другие ошибки (нет колонки) — наружу
+            raise
+        return …
+```
+  импорт `from mysql.connector import errorcode`.
+
+- [ ] **Step 6: Скрипт.**
+  - Убрать сбор городов из заявок целиком (блок `applicant_cities(...)`, пометки «из заявки», счётчик «из заявок») и ветку их записи. `resolve_places` вызывается с `applicants=[]` — в `todo` только протокольные и ручные города. Докстринг: «Наружу (Nominatim) уходят только названия городов из протоколов и введённые в админке; поле «город» заявок Тильды не отправляется (там бывает ФИО) — город из заявки попадает на карту, только если он уже есть в справочнике.»
+  - Найденное место записывать, только если `hit.get("addresstype") in PLACE_TYPES` (иначе «НЕ НАЙДЕН», без координат).
+  - Название страны: `country = next((r["country"] for r in rows if iso and r["iso"] == iso), country)` (как уже решено в справочнике).
+  - Поправить склеенную строку условия (след прошлой правки).
+  - `--dry-run`: «новых написаний: 0», запросов к Nominatim — ноль (проверь, что при пустом `todo` скрипт не делает ни одного запроса).
+
+- [ ] **Step 7: Прогоны** — unit 979; persons 23; hall 7.
+
+- [ ] **Step 8: Commit** — `fix(siberman/hall): заявки не уходят в Nominatim; ISO страны от любого города, без страны — не в странах; ручной город в поиске`.
+
+**Вид (по проверке Task 11), в том же коммите:**
+- `static/css/siberman-hall.css`, в `@media (max-width: 640px)`: `.st-foot span:first-child { flex-basis: 100%; }` — «Всего людей…» своей строкой, «стран / городов» под ней (на 390 px «71» прижималось к краю).
+- `static/js/siberman-people-admin.js`, `renderCard`, заголовок: вместо `· ${esc(p.city)}${p.country ? ', ' + esc(p.country) : ''}` — `${[p.city_manual || p.city, p.country].filter(Boolean).length ? ' · ' + esc([p.city_manual || p.city, p.country].filter(Boolean).join(', ')) : ''}` (без висящей запятой «· , Россия»; ручной город главнее).
+- `node --check` для JS.
+
+---
+
 ### Task 8: Блок «Статистика»
 
 **Files:** Modify `templates/siberman/hall_stats.html`, `static/css/siberman-hall.css`. Create `static/js/siberman-hall-stats.js`.
@@ -1439,6 +1508,12 @@ iframe: локальная страница в scratchpad с 4 iframe и скр�
 - [ ] **Step 5: Отчёт координатору** — числа Step 2–3, пути к скриншотам, замечания по виду. Если пункт не выполняется — код не чинить, описать.
 
 ---
+
+### Task 11a (по ревью 8–11, сделано a0d4247)
+Подсказка кластера — 5 крупнейших городов и «и ещё N» (было 32 города в одну строку ~2000 px); черновики городов во вкладке «Без города» не теряются при сохранении и фильтре; списки рисуются раньше карты; `fitBounds` с `maxZoom: 6`; подсказка «двумя пальцами» — только при движении; `String(c.iso)`; «из N человека»; заголовок статистики без «null»; `loadNoCity` в конце `refreshAll` с перехватом ошибки; `aria-label`; формулировка сниппета.
+
+## Итог выполнения (2026-10-19)
+Коммиты: fd6106f…8247066 (T1–5), 96192c2 (5a), 2844a39 (6+6a), 91eee15, a9d60c8 (7), 952f79c (7a), 4fe02bd, 34962d6, 111db0d (8–10), fde1509 (11), a0d4247 (11a). Тесты: unit 979, интеграционные hall 7 + persons 23. Браузер: статистика 204/196, 170/165, 156/14, 189/184, 15/12, 73/71, 337, стран 11, городов 71; география — город известен у 186 из 337, 11 закрашенных стран; «Без города» — 151; iframe-автовысота всех четырёх блоков.
 
 ## Self-review (сделан при написании плана)
 
