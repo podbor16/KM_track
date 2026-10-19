@@ -479,3 +479,24 @@ def test_login_returns_to_requested_page(client):
                     data={"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD, "next": "//evil.example"})
     assert r.headers["location"] == "/admin"
     client.cookies.clear()
+
+def test_host_page_and_state(draw, client):
+    host, token, bad = {"host": "siberman.localhost"}, service.host_token(YEAR), "0" * 32
+    assert client.get(f"/draw/{YEAR}/host/{bad}", headers=host).status_code == 404
+    r = client.get(f"/draw/{YEAR}/host/{token}", headers=host)
+    assert r.status_code == 200 and "noindex" in r.headers.get("x-robots-tag", "")
+    assert client.get(f"/draw/{YEAR}/host/{token}").status_code == 404                 # чужой домен
+    assert client.get(f"/api/siberman/draw/{YEAR}/host/{bad}/state").status_code == 404
+    service.pick(YEAR, draw["Вайлдкардов"])
+    service.set_round(YEAR, 4)
+    service.pick(YEAR, draw["Новиков"])
+    service.clear_cache()
+    st = client.get(f"/api/siberman/draw/{YEAR}/host/{token}/state").json()
+    assert st["last"] == draw["Новиков"]
+    assert [r["applicant_id"] for r in st["lists"]["men"]] == [draw["Вайлдкардов"], draw["Новиков"]]
+    wc = st["people"][str(draw["Вайлдкардов"])]
+    assert wc["is_wildcard"] and wc["chances"] == 1 and "history" in wc and "payment_status" not in wc
+    service.cancel(YEAR, service.admin_state(YEAR)["journal"][0]["pick_id"])
+    service.clear_cache()
+    assert client.get(f"/api/siberman/draw/{YEAR}/host/{token}/state").json()["last"] == draw["Вайлдкардов"]
+    assert service.admin_state(YEAR)["host_link"] == f"/draw/{YEAR}/host/{token}"

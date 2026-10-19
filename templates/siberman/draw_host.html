@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Siberman {{ year }} — жеребьёвка: ведущим</title>
+<link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
+<link rel="stylesheet" href="/static/css/siberman-draw.css?v={{ v }}">
+<link rel="stylesheet" href="/static/css/siberman-draw-host.css?v={{ v }}">
+</head>
+<body>
+<div class="host" id="host" data-year="{{ year }}" data-token="{{ token }}">
+  <header class="host-top">
+    <b>Жеребьёвка Siberman {{ year }}</b>
+    <span id="round"></span>
+    <span id="status" class="host-status"></span>
+  </header>
+  <section class="host-card" id="card"><div class="state-msg">Загрузка…</div></section>
+  <nav class="host-tabs" id="tabs">
+    <button type="button" class="tab active" data-cat="men">Мужчины</button>
+    <button type="button" class="tab" data-cat="women">Женщины</button>
+    <button type="button" class="tab" data-cat="relay">Эстафеты</button>
+  </nav>
+  <section class="host-cols" id="cols"></section>
+</div>
+<script src="/static/js/siberman-draw-host.js?v={{ v }}"></script>
+</body>
+</html>

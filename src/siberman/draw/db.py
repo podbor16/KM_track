@@ -2,8 +2,12 @@
 import datetime
 from typing import Optional
 
+import mysql.connector
+from mysql.connector import errorcode
+
 from src.siberman.db import get_finished_years_by_name
 from src.siberman.finish_counts import person_key
+from src.siberman.persons.linking import plain_key
 
 CONFIG_INT_FIELDS = ("capacity_men", "capacity_women", "capacity_relay", "quota_repeat", "quota_novice")
 APPLICANT_COLUMNS = ("format", "surname", "name", "gender", "city", "pool", "is_wildcard", "chances",
@@ -167,13 +171,39 @@ def reset_draw(conn, year: int) -> None:
 
 def siberman_history(conn, surname: str, name: str) -> dict:
     """Годы стартов (лично/эстафета) и личных финишей Siberman — из архива 2016+ (participants)."""
-    key = person_key(surname, name)
+    return siberman_histories(conn, [{"id": 0, "surname": surname, "name": name}])[0]
+
+
+def siberman_histories(conn, apps: list[dict]) -> dict:
+    """То же для многих заявок (страница ведущих) — архив читается один раз: {id заявки: история}."""
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT race_year, format, surname, name FROM participants")
-    years: dict[str, set] = {"individual": set(), "relay": set()}
+    years: dict[str, dict] = {}
     for r in cur.fetchall():
-        if person_key(r["surname"], r["name"]) == key:
-            years[r["format"]].add(r["race_year"])
-    finished = get_finished_years_by_name(conn).get(key, set())
-    return {"individual": sorted(years["individual"]), "relay": sorted(years["relay"]),
-            "finished": sorted(finished)}
+        years.setdefault(person_key(r["surname"], r["name"]), {"individual": set(), "relay": set()})[r["format"]].add(
+            r["race_year"])
+    finished = get_finished_years_by_name(conn)
+    out = {}
+    for a in apps:
+        key = person_key(a["surname"], a["name"])
+        y = years.get(key, {"individual": set(), "relay": set()})
+        out[a["id"]] = {"individual": sorted(y["individual"]), "relay": sorted(y["relay"]),
+                        "finished": sorted(finished.get(key, set()))}
+    return out
+
+
+def person_ids_by_key(conn) -> dict:
+    """ФИ (persons.linking.plain_key) → id человека реестра; у тёзок с одним ФИ — None (не угадываем).
+    Без реестра (миграция 014) — пусто."""
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, surname, name FROM siberman_persons")
+    except mysql.connector.Error as e:
+        if e.errno != errorcode.ER_NO_SUCH_TABLE:
+            raise
+        return {}
+    out: dict = {}
+    for r in cur.fetchall():
+        key = plain_key(r["surname"], r["name"])
+        out[key] = None if key in out else r["id"]
+    return out

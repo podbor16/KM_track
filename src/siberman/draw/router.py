@@ -100,6 +100,29 @@ async def draw_results_page(request: Request, year: int):
     return _siberman_page(request, "siberman/draw_results.html", year)
 
 
+def _host_check(year: int, token: str) -> None:
+    _check_year(year)
+    if not service.host_token_ok(year, token):
+        raise HTTPException(status_code=404)
+
+
+@router.get("/draw/{year}/host/{token}", response_class=HTMLResponse)
+async def draw_host_page(request: Request, year: int, token: str):
+    """Страница ведущих эфира (Миша и Коля): зачёты и карточки участников — по секретной ссылке
+    (в админке, «Настройки»), не индексируется."""
+    _host_check(year, token)
+    if getattr(request.state, "domain", "") != "siberman":
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse("siberman/draw_host.html", {"request": request, "year": year, "token": token},
+                                      headers={"X-Robots-Tag": "noindex, nofollow"})
+
+
+@router.get("/api/siberman/draw/{year}/host/{token}/state")
+def draw_host_state(year: int, token: str):
+    _host_check(year, token)
+    return _run(service.host_state, year)
+
+
 # ── Публичное API и фиды vMix ───────────────────────────────────────────────
 
 @router.get("/api/siberman/draw/{year}/state")

@@ -1,0 +1,46 @@
+/* Страница ведущих жеребьёвки: широкий экран — колонки зачётов слева, карточка справа;
+   узкий — карточка сверху, зачёты вкладками. Шрифт и цвета — из siberman-draw.css. */
+.host { max-width: 1400px; margin: 0 auto; padding: 12px 16px; box-sizing: border-box; display: grid; gap: 14px;
+        grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); grid-template-areas: "top top" "cols card"; }
+.host-top { grid-area: top; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; font-size: 18px; }
+.host-top b { color: var(--navy); }
+.host-status { color: var(--red); font-size: 14px; }
+.host-cols { grid-area: cols; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.host-col h2 { margin: 0 0 6px; font-size: 17px; color: var(--navy); }
+.host-col .muted { color: var(--muted); font-weight: 300; }
+.host-row { display: block; width: 100%; text-align: left; padding: 7px 8px; border: 0; border-top: 1px solid var(--line);
+            background: #fff; color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
+.host-row:hover { background: #f3f7fa; }
+.host-row .n { display: inline-block; min-width: 26px; color: var(--muted); }
+.host-row.wait { color: #6b6b6b; }
+.host-row.last { background: #fff8e1; }
+.host-row.sel { outline: 2px solid var(--navy); outline-offset: -2px; }
+.host-sep { margin-top: 6px; padding: 4px 8px; background: #f4c7cc; font-size: 13px; font-weight: 800; }
+.host-card { grid-area: card; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow: auto;
+             border: 2px solid var(--navy); border-radius: 10px; padding: 14px 16px; box-sizing: border-box; font-size: 16px; line-height: 1.45; }
+.host-card h1 { margin: 6px 0 2px; font-size: 30px; line-height: 1.15; }
+.host-card h3 { margin: 14px 0 4px; font-size: 15px; color: var(--navy); text-transform: uppercase; letter-spacing: .4px; }
+.host-card a { color: var(--blue); }
+.host-where { font-size: 15px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.host-meta { color: var(--muted); }
+.host-chances { margin-top: 8px; }
+.host-chances > b { font-size: 28px; color: var(--navy); }
+.host-chances .chips { justify-content: flex-start; margin: 6px 0 0; }
+.host-chances .chip { font-size: 13px; padding: 3px 9px; }
+.host-card .text { white-space: pre-wrap; background: #f6f6f6; border-radius: 6px; padding: 8px 10px; }
+.badge { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 10px; }
+.badge.win { background: var(--navy); color: #fff; }
+.badge.wait { background: #f4c7cc; color: var(--ink); }
+.badge.last { background: #fff3c4; color: var(--ink); }
+.to-last { border: 1px solid var(--navy); background: #fff; color: var(--navy); border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.wc { background: var(--red); color: #fff; font-size: 11px; font-weight: 800; padding: 1px 5px; border-radius: 4px; vertical-align: 2px; }
+.host-tabs { display: none; }
+@media (max-width: 900px) {
+  .host { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "card" "tabs" "cols"; }
+  .host-card { position: static; max-height: none; }
+  .host-card h1 { font-size: 24px; }
+  .host-tabs { grid-area: tabs; display: flex; gap: 6px; justify-content: center; }
+  .host-cols { grid-template-columns: minmax(0, 1fr); }
+  .host-col { display: none; }
+  .host-col.active { display: block; }
+}

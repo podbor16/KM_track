@@ -338,6 +338,9 @@ function renderPayments() {
 function renderConfig() {
   $('config-form').innerHTML = CFG_FIELDS.map(([k, l]) => `<label>${l}<input type="number" min="0" id="cfg-${k}" value="${S.config[k] ?? ''}"></label>`).join('') +
     `<label>Автопередача ⏳ до (не включая)<input type="date" id="cfg-auto_invite_until" value="${S.config.auto_invite_until ?? ''}"></label>`;
+  const hostUrl = location.origin + S.host_link;
+  $('host-link').innerHTML = `<a href="${esc(hostUrl)}" target="_blank" rel="noopener">Открыть</a>
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(hostUrl)}').then(() => msg('Ссылка скопирована'))">Скопировать ссылку</button>`;
   $('import-info').textContent = S.config.imported_at
     ? `Таблица загружена ${S.config.imported_at.replace('T', ' ').slice(0, 16)}, заявок: ${S.applicants.length}`
     : 'Таблица ещё не загружена';

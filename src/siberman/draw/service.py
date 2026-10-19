@@ -8,6 +8,8 @@
 """
 import csv
 import datetime
+import hashlib
+import hmac
 import io
 import logging
 import threading
@@ -15,6 +17,7 @@ import time
 
 import mysql.connector
 
+from src.config import settings
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
 from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants
@@ -24,6 +27,9 @@ from src.siberman.draw.logic import (
 )
 from src.siberman.draw.payments import PAYMENT_ICONS, auto_invite_allowed, next_invitee
 from src.siberman.draw.simulation import win_probabilities
+from src.siberman.hall import service as hall_service
+from src.siberman.hall.service import HallUnavailable
+from src.siberman.persons.linking import plain_key
 
 
 log = logging.getLogger(__name__)
@@ -55,6 +61,7 @@ AQUARIUM_GROUPS = {"relay": ("Эстафеты", "blue"), "repeat": ("Повто
 
 _cache: dict[int, tuple[int, float, dict]] = {}
 _state_cache: dict[int, tuple[tuple, dict]] = {}  # готовый public_state: (ключ версий, ответ)
+_host_cache: dict[int, tuple[int, dict]] = {}     # готовый host_state: (версия снимка, ответ)
 _probs: dict[int, tuple[int, dict | None]] = {}
 _probs_running: set[int] = set()
 _lock = threading.Lock()
@@ -65,6 +72,7 @@ def clear_cache() -> None:
     with _lock:
         _cache.clear()
         _state_cache.clear()
+        _host_cache.clear()
         _probs.clear()
 
 
@@ -325,7 +333,8 @@ def admin_state(year: int) -> dict:
     } for p in sorted(snap["picks"], key=lambda p: p["id"], reverse=True)]
     return {"year": year, "config": cfg, "round_labels": ROUND_LABELS, "category_labels": CATEGORY_LABELS,
             "applicants": snap["applicants"], "lists": snap["lists"], "journal": journal,
-            "counters": round_counters(snap["applicants"], snap["lists"], rnd)}
+            "counters": round_counters(snap["applicants"], snap["lists"], rnd),
+            "host_link": f"/draw/{year}/host/{host_token(year)}"}
 
 
 def applicant_summary(year: int, applicant_id: int) -> dict:
@@ -343,6 +352,80 @@ def applicant_summary(year: int, applicant_id: int) -> dict:
         row = next(r for r in snap["lists"][placed[0]] if r["applicant_id"] == applicant_id)
         where = {"category": placed[0], "position": placed[1], "round": row["round"], "created_at": row["created_at"]}
     return {"applicant": a, "history": history, "placement": where, "audit": audit}
+
+
+# ── Страница ведущих (секретная ссылка) ──────────────────────────────────────
+
+HOST_FIELDS = ("id", "format", "surname", "name", "gender", "city", "pool", "is_wildcard", "chances",
+               "starts_individual", "starts_relay", "draw_accumulated", "is_local", "duathlon_222", "race_24h",
+               "tattoo", "relay_swim", "relay_bike", "relay_run", "wildcard_reason", "results_text")
+
+
+def host_token(year: int) -> str:
+    """Ключ ссылки ведущих: HMAC от SECRET_KEY — не хранится в БД, у каждого года свой."""
+    return hmac.new(settings.SECRET_KEY.encode(), f"draw-host:{year}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def host_token_ok(year: int, token: str) -> bool:
+    return hmac.compare_digest(token or "", host_token(year))
+
+
+def match_person(a: dict, by_key: dict):
+    """Человек реестра по ФИ заявки (в любом порядке); тёзки в реестре или нет такого — None."""
+    for key in (plain_key(a["surname"], a["name"]), plain_key(a["name"], a["surname"])):
+        if key in by_key:
+            return by_key[key]
+    return None
+
+
+def _athlete_brief(person_id) -> dict | None:
+    """Со страницы спортсмена: финиши, лучший результат гонки, рейтинг, действующие рекорды."""
+    if person_id is None:
+        return None
+    try:
+        page = hall_service.athlete(person_id)
+    except HallUnavailable:
+        return None
+    if not page:
+        return None
+    best = next((b for b in page["best"] if b["seg"] == "race"), None)
+    return {"id": person_id, "summary": page["summary"], "best_race": best, "best_place": page["best_place"],
+            "rating": page["rating"]}
+
+
+def _build_host_state(year: int, snap: dict) -> dict:
+    by_id = {a["id"]: a for a in snap["applicants"]}
+    drawn = [by_id[r["applicant_id"]] for rows in snap["lists"].values() for r in rows]
+    conn = _connect()
+    try:
+        histories = ddb.siberman_histories(conn, drawn)
+        persons = ddb.person_ids_by_key(conn)
+    finally:
+        conn.close()
+    people = {a["id"]: {**{k: a[k] for k in HOST_FIELDS}, "history": histories[a["id"]],
+                        "athlete": _athlete_brief(match_person(a, persons))} for a in drawn}
+    active = [p for p in snap["picks"] if p["cancelled_at"] is None]
+    return {
+        "year": year, "current_round": snap["config"]["current_round"], "round_labels": ROUND_LABELS,
+        "category_labels": CATEGORY_LABELS,
+        "lists": {c: [{k: r[k] for k in ("applicant_id", "position", "section", "round", "is_wildcard")}
+                      for r in rows] for c, rows in snap["lists"].items()},
+        "people": people,
+        "last": max(active, key=lambda p: p["id"])["applicant_id"] if active else None,
+    }
+
+
+def host_state(year: int) -> dict:
+    """Страница ведущих: зачёты, карточки всех вытянутых (заявка, история Siberman, страница спортсмена),
+    последний вытянутый. Пересчитывается только при изменении жеребьёвки (версия снимка)."""
+    snap = _cached_snapshot(year)
+    hit = _host_cache.get(year)
+    if hit and hit[0] == snap["version"]:
+        return hit[1]
+    state = _build_host_state(year, snap)
+    with _lock:
+        _host_cache[year] = (snap["version"], state)
+    return state
 
 
 # ── Чтение: публика (кэш) ───────────────────────────────────────────────────
