@@ -1,4 +1,4 @@
-import { clamp, constrainCrop } from './composition.js';
+import { clamp, constrainCrop } from './composition.js?v=2';
 
 function metrics(points) {
   const [a, b] = points;

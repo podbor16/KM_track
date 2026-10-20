@@ -619,6 +619,9 @@ async def domain_middleware(request: Request, call_next):
 # Подключение статических файлов
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    # Сертификат «Забега Единства» — статика с относительными путями, отдаётся по /medals/
+    # (на проде — nginx напрямую, здесь — для localhost; /medals → /medals/ редиректом)
+    app.mount("/medals", StaticFiles(directory=str(STATIC_DIR / "medals"), html=True), name="medals")
     settings.logger.info(f"Static files mounted: {STATIC_DIR}")
 
 settings.logger.info(f"Templates directory: {TEMPLATES_DIR}")

@@ -1,8 +1,9 @@
-import { createCrop, constrainCrop, zoomCrop, renderCertificate } from './composition.js';
-import { attachPhotoGestures } from './gestures.js?v=2';
+import { createCrop, constrainCrop, zoomCrop, renderCertificate } from './composition.js?v=2';
+import { attachPhotoGestures } from './gestures.js?v=3';
+import { attachFramePicker } from './frame-picker.js?v=5';
 
 const $ = (id) => document.getElementById(id);
-const ui = Object.fromEntries(['photo-input', 'choose-button', 'choose-text', 'selected-photo', 'thumbnail', 'filename', 'quality-note', 'error-message', 'error-text', 'retry-template', 'live-status', 'preview', 'certificate-frame', 'empty-preview', 'preview-state', 'preview-badge', 'crop-controls', 'zoom', 'reset-button', 'download-button', 'download-text', 'save-description', 'export-format', 'download-result', 'open-image', 'share-button'].map(id => [id, $(id)]));
+const ui = Object.fromEntries(['photo-input', 'choose-button', 'choose-text', 'selected-photo', 'thumbnail', 'filename', 'quality-note', 'error-message', 'error-text', 'retry-template', 'live-status', 'preview', 'certificate-frame', 'empty-preview', 'preview-state', 'preview-badge', 'crop-controls', 'zoom', 'reset-button', 'download-button', 'download-text', 'save-description', 'export-format', 'download-result', 'open-image', 'share-button', 'edit-toggle', 'edit-toggle-text', 'save-hint', 'result-where'].map(id => [id, $(id)]));
 let config;
 let overlay = null;
 let photo = null;
@@ -11,16 +12,33 @@ let reading = false;
 let exporting = false;
 let selectionId = 0;
 let templateId = 0;
+let selectedTemplate = 0;
+let templateLoading = false;
+let pendingTemplateImage = null;
 let revision = 0;
 let animationFrame = 0;
 let shareTimer;
 let shareFile = null;
 let downloadUrl = null;
 let filename = '';
+let editing = false;
+// On touch screens the certificate would otherwise trap every swipe, so the photo
+// moves only in an explicit edit mode and the page scrolls normally the rest of the time.
+const coarsePointer = matchMedia('(pointer: coarse)');
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isAndroid = /Android/i.test(navigator.userAgent);
+// iOS saves downloads to «Файлы»; the share sheet's «Сохранить изображение» puts the file into «Фото».
+const savesToPhotos = isIOS && typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+const canEdit = () => Boolean(photo && overlay && !reading && !exporting);
+const photoMovable = () => canEdit() && (editing || !coarsePointer.matches);
 const gestures = attachPhotoGestures(ui.preview, {
   getCrop: () => crop,
-  enabled: () => Boolean(photo && overlay && !reading && !exporting),
+  enabled: photoMovable,
   onChange: cropChanged,
+});
+const framePicker = attachFramePicker({
+  track: $('frame-options'), previous: $('previous-frame'), next: $('next-frame'), counter: $('frame-counter'),
+  onSelect: index => loadTemplate(index), isDisabled: () => reading || exporting,
 });
 
 function setStatus(message = '') { ui['live-status'].textContent = message; }
@@ -33,33 +51,64 @@ function showError(message, retry = false, nearSave = false) {
   ui['retry-template'].hidden = !retry;
 }
 
+function saveLabel() {
+  if (exporting) return coarsePointer.matches ? 'Готовим…' : 'Готовим сертификат…';
+  if (savesToPhotos) return 'Сохранить в Фото';
+  return coarsePointer.matches ? 'Сохранить' : 'Скачать сертификат';
+}
+
 function updateUI() {
-  const ready = Boolean(photo && overlay && !reading && !exporting);
+  const ready = canEdit();
+  if (!ready) editing = false;
+  const gated = coarsePointer.matches;
+  const movable = photoMovable();
+  document.body.classList.toggle('uses-edit-mode', gated);
+  document.body.classList.toggle('is-editing', editing);
+  ui['edit-toggle'].hidden = !(ready && gated);
+  ui['edit-toggle'].setAttribute('aria-pressed', String(editing));
+  ui['edit-toggle-text'].textContent = editing ? 'Готово' : 'Подвинуть фото';
   ui['choose-button'].disabled = reading || exporting;
   ui['choose-text'].textContent = reading ? 'Открываем фото…' : photo ? 'Заменить фото' : 'Выбрать фото';
   ui['choose-button'].classList.toggle('is-selected', Boolean(photo));
   ui['download-button'].disabled = !ready;
-  ui['download-text'].textContent = exporting ? 'Готовим сертификат…' : 'Скачать сертификат';
+  ui['download-text'].textContent = saveLabel();
+  ui['save-hint'].hidden = !(savesToPhotos && ready);
   ui['selected-photo'].hidden = !photo;
   ui['empty-preview'].hidden = Boolean(photo);
   ui['crop-controls'].hidden = !photo;
   ui['preview-badge'].hidden = !ready;
   ui['preview-state'].textContent = reading ? 'Открываем фото…' : !overlay ? 'Загружаем оформление…' : photo ? 'С вашим фото' : 'Осталось добавить фото';
   ui['certificate-frame'].setAttribute('aria-busy', String(reading || !overlay));
-  ui.preview.classList.toggle('is-editable', ready);
-  ui.preview.tabIndex = ready ? 0 : -1;
-  ui.preview.setAttribute('role', ready ? 'group' : 'img');
+  ui.preview.classList.toggle('is-editable', movable);
+  ui.preview.tabIndex = movable ? 0 : -1;
+  ui.preview.setAttribute('role', movable ? 'group' : 'img');
   ui.preview.setAttribute('aria-label', photo ? 'Ваш сертификат. Можно передвинуть фото стрелками или перетаскиванием.' : 'Предпросмотр сертификата. Выберите своё фото.');
   if (photo) ui.preview.setAttribute('aria-describedby', 'keyboard-hint');
   ui.zoom.disabled = !ready;
   ui['reset-button'].disabled = !ready;
   ui['share-button'].disabled = !ready || !shareFile;
   ui['save-description'].textContent = photo ? 'Нравится результат? Скачайте готовое изображение.' : 'Сначала выберите фото — и сертификат будет готов.';
+  if (config?.templates) {
+    const hint = config.templates[selectedTemplate].placeholder;
+    if (hint) {
+      for (const [property, value] of Object.entries({ left: hint.x, top: hint.y, width: hint.width, height: hint.height })) {
+        ui['certificate-frame'].style.setProperty(`--placeholder-${property}`, `${value * 100}%`);
+      }
+    }
+    ui['certificate-frame'].classList.toggle('is-dark-empty', config.templates[selectedTemplate].emptyTone === 'dark');
+    framePicker.update(selectedTemplate, { scroll: false });
+    $('frame-status').textContent = templateLoading ? 'Загружаем рамку…' : config.templates[selectedTemplate].label;
+    $('frame-picker').classList.toggle('is-disabled', reading || exporting);
+    $('frame-picker').setAttribute('aria-disabled', String(reading || exporting));
+    $('frame-loading').hidden = Boolean(overlay);
+    $('frame-loading-text').textContent = templateLoading ? 'Загружаем рамку…' : 'Рамка не загрузилась. Выберите другую или повторите загрузку.';
+  }
 }
 
 function draw() {
   animationFrame = 0;
-  try { renderCertificate(ui.preview, photo, crop, overlay, config?.width, config?.height); }
+  const dark = config?.templates?.[selectedTemplate]?.emptyTone === 'dark';
+  try { renderCertificate(ui.preview, photo, crop, overlay, config?.width, config?.height, dark ? '#2b2d31' : '#f1f2f3'); }
   catch { showError('Не удалось показать сертификат. Попробуйте выбрать фото поменьше.'); }
 }
 
@@ -87,34 +136,56 @@ function cropChanged() {
   scheduleDraw();
 }
 
-async function loadTemplate() {
+async function loadTemplate(index = selectedTemplate) {
   const id = ++templateId;
+  if (pendingTemplateImage) pendingTemplateImage.src = '';
+  pendingTemplateImage = null;
+  selectedTemplate = Number.isInteger(index) ? index : selectedTemplate;
+  templateLoading = true;
+  overlay = null;
+  gestures.cancel();
+  invalidateExport();
   clearError();
+  $('frame-error').hidden = true;
   setStatus('Загружаем оформление сертификата…');
+  updateUI();
+  scheduleDraw();
   try {
     if (!config) {
-      const response = await fetch('/static/medals/certificate.config.json?v=1');
+      const response = await fetch('./certificate.config.json', { cache: 'no-cache' });
       if (!response.ok) throw new Error('config');
       const next = await response.json();
       if (next.width !== 1080 || next.height !== 1920 || !next.overlay || next.maxFileBytes <= 0 || next.maxImageSide <= 0) throw new Error('config');
       config = next;
+      if (!Array.isArray(config.templates) || !config.templates.length) {
+        config.templates = [{ id: 'medal', label: 'Медаль', src: config.overlay, width: config.width, height: config.height }];
+      }
+      selectedTemplate = Math.max(0, Math.min(config.templates.length - 1, selectedTemplate));
+      $('frame-picker').hidden = false;
+      framePicker.init(config.templates);
+      updateUI();
     }
+    const frame = config.templates[selectedTemplate];
     const image = new Image();
-    image.src = config.overlay;
+    pendingTemplateImage = image;
+    image.src = frame.src;
     await image.decode();
-    if (image.naturalWidth !== config.width || image.naturalHeight !== config.height) throw new Error('size');
+    if (image.naturalWidth !== frame.width || image.naturalHeight !== frame.height) throw new Error('size');
     if (id !== templateId) return;
     overlay = image;
+    pendingTemplateImage = null;
     invalidateExport();
     setStatus();
     scheduleDraw();
   } catch {
     if (id !== templateId) return;
-    showError('Не удалось загрузить оформление сертификата. Проверьте интернет и попробуйте ещё раз.', true);
+    if (config?.templates) $('frame-error').hidden = false;
+    else showError('Не удалось загрузить оформление сертификата. Проверьте интернет и попробуйте ещё раз.', true);
     setStatus();
     ui['preview-state'].textContent = 'Оформление не загрузилось';
   } finally {
     if (id === templateId) {
+      templateLoading = false;
       updateUI();
       if (!overlay) {
         ui['preview-state'].textContent = 'Оформление не загрузилось';
@@ -236,47 +307,83 @@ async function prepareShare() {
     if (current !== revision || reading || exporting) return;
     if (navigator.canShare({ files: [file] })) {
       shareFile = file;
-      ui['share-button'].hidden = false;
+      ui['share-button'].hidden = savesToPhotos;
       updateUI();
     }
   } catch { /* File sharing is optional; ordinary downloading remains available. */ }
 }
 
-async function download() {
-  if (!photo || !overlay || reading || exporting) return;
+function showResult(file, where) {
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  downloadUrl = URL.createObjectURL(file);
+  ui['open-image'].href = downloadUrl;
+  ui['export-format'].textContent = `${file.type === 'image/png' ? 'PNG' : 'JPG'} · 1080 × 1920 · бесплатно`;
+  ui['result-where'].textContent = where;
+  ui['result-where'].hidden = !where;
+  ui['download-result'].hidden = false;
+}
+
+function startExport() {
   exporting = true;
   gestures.cancel();
   clearTimeout(shareTimer);
   clearError();
   setStatus('Готовим сертификат…');
   updateUI();
+}
+
+const exportError = 'Не удалось создать файл. Попробуйте ещё раз. Если ошибка повторяется, выберите фото поменьше.';
+
+async function download() {
+  if (!canEdit()) return;
+  startExport();
   try {
-    const blob = await makeExport();
-    const file = fileForBlob(blob);
-    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-    downloadUrl = URL.createObjectURL(blob);
-    ui['open-image'].href = downloadUrl;
-    ui['export-format'].textContent = `${blob.type === 'image/png' ? 'PNG' : 'JPG'} · 1080 × 1920 · бесплатно`;
+    const file = fileForBlob(await makeExport());
+    showResult(file, isAndroid ? 'Он сохранён в «Загрузки». Его также можно найти в Галерее, в альбоме «Download».' : '');
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = file.name;
     document.body.append(link);
     link.click();
     link.remove();
-    ui['download-result'].hidden = false;
     setStatus('Сертификат готов. Если скачивание не началось, откройте изображение по ссылке ниже.');
     try {
       if (navigator.canShare?.({ files: [file] })) {
         shareFile = file;
-        ui['share-button'].hidden = false;
+        ui['share-button'].hidden = savesToPhotos;
       }
     } catch { /* Optional sharing must not turn a successful download into an error. */ }
   } catch {
-    showError('Не удалось создать файл. Попробуйте скачать ещё раз. Если ошибка повторяется, выберите фото поменьше.', false, true);
+    showError(exportError, false, true);
     setStatus();
   } finally {
     exporting = false;
     updateUI();
+  }
+}
+
+async function saveToPhotos() {
+  if (!canEdit()) return;
+  let file = shareFile;
+  if (!file) {
+    // Usually prepared in advance; otherwise build it now, still within the tap's activation window.
+    startExport();
+    try { file = fileForBlob(await makeExport()); shareFile = file; }
+    catch { showError(exportError, false, true); setStatus(); }
+    finally { exporting = false; updateUI(); }
+    if (!file) return;
+  }
+  editing = false;
+  updateUI();
+  try {
+    if (!navigator.canShare({ files: [file] })) throw new Error('unsupported');
+    await navigator.share({ files: [file] });
+    showResult(file, 'Если вы выбрали «Сохранить изображение», он уже в приложении «Фото».');
+    setStatus('Сертификат готов.');
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    // The share sheet is unavailable (in-app browsers, expired activation): fall back to a file.
+    await download();
   }
 }
 
@@ -287,6 +394,7 @@ ui['photo-input'].addEventListener('change', event => {
   selectPhoto(file);
 });
 ui['retry-template'].addEventListener('click', loadTemplate);
+$('retry-frame').addEventListener('click', () => loadTemplate());
 ui.zoom.addEventListener('input', () => {
   if (!crop || reading || exporting) return;
   gestures.cancel();
@@ -309,11 +417,19 @@ ui.preview.addEventListener('keydown', event => {
   crop.dy += moves[event.key][1] * step;
   constrainCrop(crop); cropChanged();
 });
-ui['download-button'].addEventListener('click', download);
+ui['download-button'].addEventListener('click', () => (savesToPhotos ? saveToPhotos() : download()));
+ui['edit-toggle'].addEventListener('click', () => {
+  if (!canEdit()) return;
+  editing = !editing;
+  gestures.cancel();
+  updateUI();
+  setStatus(editing ? 'Двигайте фото пальцем. Нажмите «Готово», когда закончите.' : 'Кадр сохранён.');
+});
+coarsePointer.addEventListener?.('change', () => { gestures.cancel(); updateUI(); });
 ui['share-button'].addEventListener('click', async () => {
   if (!shareFile || exporting || reading) return;
   // Prepare the file earlier so share() runs directly within user activation.
-  try { await navigator.share({ files: [shareFile], title: 'Мой сертификат — Забег Единства 2026' }); }
+  try { await navigator.share({ files: [shareFile] }); }
   catch (error) {
     if (error.name !== 'AbortError') showError('Не удалось поделиться файлом. Скачайте сертификат и отправьте его из «Загрузок».', false, true);
   }

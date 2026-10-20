@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#d90024">
   <meta name="description" content="Создайте памятный сертификат «Забега Единства»: выберите своё фото и скачайте готовое изображение. Бесплатно, без регистрации.">
   <title>Ваш сертификат — Забег Единства 2026</title>
-  <link rel="icon" href="/static/medals/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/medals/styles.css?v=2">
-  <script type="module" src="/static/medals/app.js?v=2"></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=11">
+  <script type="module" src="./app.js?v=11"></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -17,10 +17,13 @@
     <symbol id="check-icon" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="shield-icon" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></symbol>
     <symbol id="share-icon" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M5 13H3v8h18v-8h-2"/></symbol>
+    <symbol id="chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+    <symbol id="chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="move-icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
   </svg>
   <header class="site-header">
-    <a class="wordmark" href="/medals" aria-label="Забег Единства, главная">ЗАБЕГ ЕДИНСТВА <span>/ 2026</span></a>
-    <p class="event-info">Красноярск <span aria-hidden="true">·</span> 22 октября <span aria-hidden="true">·</span> 5 км</p>
+    <a class="wordmark" href="./" aria-label="Забег Единства, главная">ЗАБЕГ ЕДИНСТВА <span>/ 2026</span></a>
+    <p class="event-info"><span class="event-city">Красноярск<span class="dot" aria-hidden="true">·</span></span>22 октября<span class="dot" aria-hidden="true">·</span>5 км</p>
   </header>
   <main class="workspace">
     <section class="intro" aria-labelledby="page-title">
@@ -48,17 +51,30 @@
 
     <section class="preview-section" aria-labelledby="preview-title">
       <div class="preview-heading"><h2 id="preview-title">Ваш сертификат</h2><span id="preview-state">Осталось добавить фото</span></div>
+      <span class="preview-badge" id="preview-badge" hidden><svg class="icon" aria-hidden="true"><use href="#check-icon"/></svg> Можно скачивать</span>
       <div class="certificate-frame" id="certificate-frame" aria-busy="true">
         <canvas id="preview" width="540" height="960" role="img" aria-label="Предпросмотр сертификата. Выберите своё фото."></canvas>
         <div class="empty-preview" id="empty-preview">
           <svg class="placeholder-icon" aria-hidden="true"><use href="#photo-icon"/></svg>
-          <p>Здесь будет<br>ваше фото</p>
-          <span>Выберите его кнопкой<br>«Выбрать фото»</span>
+          <p><strong>Здесь будет<br>ваше фото</strong></p>
+          <span>Нажмите<br>«Выбрать фото»</span>
         </div>
-        <span class="preview-badge" id="preview-badge" hidden><svg class="icon" aria-hidden="true"><use href="#check-icon"/></svg> Можно скачивать</span>
+        <button class="edit-toggle" id="edit-toggle" type="button" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="#move-icon"/></svg><span id="edit-toggle-text">Подвинуть фото</span></button>
+        <div class="frame-loading" id="frame-loading" hidden><span id="frame-loading-text">Загружаем рамку…</span></div>
       </div>
+      <section class="frame-picker" id="frame-picker" aria-labelledby="frame-picker-title" hidden>
+        <div class="frame-picker-heading"><h3 id="frame-picker-title">Выберите рамку</h3><span id="frame-counter"></span></div>
+        <p class="frame-picker-hint">Листайте рамки влево или вправо</p>
+        <div class="frame-options" id="frame-options" role="group" aria-label="Рамки для сертификата" aria-roledescription="карусель"></div>
+        <div class="frame-navigation">
+          <button class="frame-arrow" id="previous-frame" type="button" aria-label="Предыдущая рамка"><svg class="icon" aria-hidden="true"><use href="#chevron-left"/></svg></button>
+          <p id="frame-status" role="status" aria-live="polite"></p>
+          <button class="frame-arrow" id="next-frame" type="button" aria-label="Следующая рамка"><svg class="icon" aria-hidden="true"><use href="#chevron-right"/></svg></button>
+        </div>
+        <div class="error-message" id="frame-error" role="alert" hidden><p>Не удалось загрузить рамку. Выберите другую или попробуйте ещё раз.</p><button class="text-button" id="retry-frame" type="button">Повторить загрузку рамки</button></div>
+      </section>
       <div class="crop-controls" id="crop-controls" hidden>
-        <p class="crop-hint">Двигайте фото одним пальцем. Разведите два пальца, чтобы увеличить, или сведите, чтобы уменьшить. На компьютере — перетащите мышью.</p>
+        <p class="crop-hint">Двигайте фото одним пальцем. Разведите два пальца, чтобы увеличить, или сведите, чтобы уменьшить.<span class="mouse-hint"> На компьютере — перетащите мышью.</span></p>
         <div class="zoom-label"><label for="zoom">Увеличить фото</label><button class="text-button" id="reset-button" type="button">Сбросить</button></div>
         <div class="zoom-row"><span aria-hidden="true">−</span><input id="zoom" type="range" min="1" max="4" step="0.01" value="1" aria-valuetext="100 процентов"><span aria-hidden="true">+</span></div>
         <span class="visually-hidden" id="keyboard-hint">Стрелки передвигают фото. Используйте ползунок, чтобы увеличить фото.</span>
@@ -71,10 +87,12 @@
       <p class="section-copy" id="save-description">Сначала выберите фото — и сертификат будет готов.</p>
       <button class="button button-primary download-button" id="download-button" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#download-icon"/></svg><span id="download-text">Скачать сертификат</span></button>
       <p class="format-note" id="export-format">JPG · 1080 × 1920 · бесплатно</p>
+      <p class="save-hint" id="save-hint" hidden>Откроется меню — выберите в нём «Сохранить изображение».</p>
       <button class="button button-secondary" id="share-button" type="button" hidden disabled><svg class="icon" aria-hidden="true"><use href="#share-icon"/></svg>Поделиться</button>
       <div class="download-result" id="download-result" hidden>
         <p class="result-title">Сертификат готов!</p>
-        <p>Если скачивание не началось, <a id="open-image" target="_blank" rel="noopener">откройте изображение</a>. На телефоне нажмите на него и удерживайте, затем выберите «Сохранить».</p>
+        <p id="result-where" hidden></p>
+        <p>Если не получилось, <a id="open-image" target="_blank" rel="noopener">откройте изображение</a>. На телефоне нажмите на него и удерживайте, затем выберите «Сохранить» или «Добавить в Фото».</p>
       </div>
       <p class="privacy-note"><svg class="icon" aria-hidden="true"><use href="#shield-icon"/></svg><span>Ваше фото остаётся на вашем устройстве.<br>Регистрация не нужна.</span></p>
       <details class="help"><summary>Как найти скачанный сертификат?</summary><p>Посмотрите папку «Загрузки» на телефоне или компьютере. Если хотите сохранить в «Фото» или «Галерею», откройте готовое изображение по ссылке после скачивания и сохраните его.</p><p>Если внутри Telegram или VK сохранить не получается, откройте эту страницу в Safari или Chrome через меню браузера и выберите фото снова.</p></details>

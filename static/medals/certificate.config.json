@@ -1,11 +1,41 @@
 {
   "width": 1080,
   "height": 1920,
-  "overlay": "/static/medals/certificate-overlay-1080x1920.png?v=571360d9",
+  "overlay": "./template/medal-krasnoyarsk-1080x1920.png?v=c2e8ec62",
   "quality": 0.94,
   "filename": "zabeg-edinstva-2026-certificate",
   "maxFileBytes": 31457280,
   "maxImageSide": 4096,
   "minZoom": 1,
-  "maxZoom": 4
+  "maxZoom": 4,
+  "templates": [
+    {
+      "id": "medal-krasnoyarsk",
+      "label": "Медаль",
+      "src": "./template/medal-krasnoyarsk-1080x1920.png?v=c2e8ec62",
+      "thumbnail": "./template/previews/medal-krasnoyarsk.png?v=7b087fba",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.072,
+        "y": 0.059,
+        "width": 0.578,
+        "height": 0.475
+      }
+    },
+    {
+      "id": "medal-russia",
+      "label": "Оборот",
+      "src": "./template/medal-russia-1080x1920.png?v=15955ef6",
+      "thumbnail": "./template/previews/medal-russia.png?v=e252fd06",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.074,
+        "y": 0.06,
+        "width": 0.593,
+        "height": 0.483
+      }
+    }
+  ]
 }

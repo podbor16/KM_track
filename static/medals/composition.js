@@ -24,7 +24,7 @@ export function zoomCrop(crop, zoom, anchorX = crop.width / 2, anchorY = crop.he
 }
 
 // One composition for both the reduced preview and the full-size export.
-export function renderCertificate(canvas, photo, crop, overlay, width = 1080, height = 1920) {
+export function renderCertificate(canvas, photo, crop, overlay, width = 1080, height = 1920, emptyFill = '#f1f2f3') {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas недоступен');
   ctx.save();
@@ -37,7 +37,8 @@ export function renderCertificate(canvas, photo, crop, overlay, width = 1080, he
     const scale = crop.base * crop.zoom;
     ctx.drawImage(photo, crop.dx, crop.dy, crop.iw * scale, crop.ih * scale);
   } else {
-    ctx.fillStyle = '#f1f2f3';
+    // Only the photo-less preview shows this; light-text frames need a dark backdrop to be visible.
+    ctx.fillStyle = emptyFill;
     ctx.fillRect(0, 0, width, height);
   }
   if (overlay) ctx.drawImage(overlay, 0, 0, width, height);
