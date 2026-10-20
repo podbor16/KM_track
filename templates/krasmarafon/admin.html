@@ -57,6 +57,7 @@
             <button class="admin-tab" onclick="switchTab('broadcast', this)">Трансляция</button>
             <button class="admin-tab" onclick="switchTab('monitoring', this)">Мониторинг</button>
             <button class="admin-tab" onclick="switchTab('data-quality', this)">Качество данных</button>
+            <button class="admin-tab" onclick="switchTab('medals', this)">Сертификаты</button>
         </div>
 
         <!-- ================================================================ -->
@@ -186,6 +187,20 @@
                 <div id="dq-journal-list"><div class="admin-loading">Загрузка…</div></div>
             </details>
             <div id="dq-content"><div class="admin-loading">Загрузка…</div></div>
+        </div>
+        <div id="tab-medals" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Статистика страницы сертификата «Забега Единства» (<a href="/medals/" target="_blank">/medals/</a>):
+                сколько раз открыли страницу, скачали сертификат и поделились им — всего, по рамкам и по часам.
+                Страница передаёт только событие и рамку, без фото и данных участника.
+            </div>
+            <div class="admin-leads-toolbar">
+                <div>
+                    <button class="km-btn km-btn--secondary" onclick="loadMedalsTab()">Обновить</button>
+                    <a class="km-btn km-btn--primary" style="text-decoration:none" href="/api/admin/medals-stats.xlsx">Скачать Excel</a>
+                </div>
+            </div>
+            <div id="medals-content"><div class="admin-loading">Загрузка…</div></div>
         </div>
         <!-- ================================================================ -->
         <!-- ВКЛАДКА: ВОЗРАСТНЫЕ ГРУППЫ                                       -->
@@ -427,6 +442,7 @@
     <script src="/static/js/admin-state.js?v={{ v }}"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
     <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
+    <script src="/static/js/admin-medals.js?v={{ v }}"></script>
     <script src="/static/js/admin-bibs.js?v={{ v }}"></script>
     <script>
     // ========================================================================
@@ -454,6 +470,7 @@
             if (name === 'analytics') loadAnalyticsTab();
             if (name === 'monitoring') loadMonitoringTab();
             if (name === 'data-quality') loadDataQualityTab();
+            if (name === 'medals') loadMedalsTab();
         }
         adminOnTabSwitch(name);
     }

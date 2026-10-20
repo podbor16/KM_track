@@ -41,6 +41,18 @@ const framePicker = attachFramePicker({
   onSelect: index => loadTemplate(index), isDisabled: () => reading || exporting,
 });
 
+// Minimal statistics: only the event name and frame id, no photo, no personal data.
+// The server logs these requests (see README, «Статистика»); failures are ignored.
+let openTracked = false;
+function track(event) {
+  const base = config?.statsUrl;
+  if (!base) return;
+  const frame = config.templates?.[selectedTemplate]?.id;
+  const url = `${base}?e=${event}${event !== 'open' && frame ? `&f=${encodeURIComponent(frame)}` : ''}`;
+  try { if (navigator.sendBeacon?.(url)) return; } catch { /* Fall back to fetch below. */ }
+  try { fetch(url, { method: 'POST', keepalive: true, credentials: 'omit' }).catch(() => {}); } catch { /* Statistics are optional. */ }
+}
+
 function setStatus(message = '') { ui['live-status'].textContent = message; }
 function clearError() { ui['error-message'].hidden = true; ui['retry-template'].hidden = true; }
 function showError(message, retry = false, nearSave = false) {
@@ -163,6 +175,7 @@ async function loadTemplate(index = selectedTemplate) {
       selectedTemplate = Math.max(0, Math.min(config.templates.length - 1, selectedTemplate));
       $('frame-picker').hidden = false;
       framePicker.init(config.templates);
+      if (!openTracked) { openTracked = true; track('open'); }
       updateUI();
     }
     const frame = config.templates[selectedTemplate];
@@ -346,6 +359,7 @@ async function download() {
     document.body.append(link);
     link.click();
     link.remove();
+    track('download');
     setStatus('Сертификат готов. Если скачивание не началось, откройте изображение по ссылке ниже.');
     try {
       if (navigator.canShare?.({ files: [file] })) {
@@ -378,6 +392,7 @@ async function saveToPhotos() {
   try {
     if (!navigator.canShare({ files: [file] })) throw new Error('unsupported');
     await navigator.share({ files: [file] });
+    track('share');
     showResult(file, 'Если вы выбрали «Сохранить изображение», он уже в приложении «Фото».');
     setStatus('Сертификат готов.');
   } catch (error) {
@@ -429,7 +444,7 @@ coarsePointer.addEventListener?.('change', () => { gestures.cancel(); updateUI()
 ui['share-button'].addEventListener('click', async () => {
   if (!shareFile || exporting || reading) return;
   // Prepare the file earlier so share() runs directly within user activation.
-  try { await navigator.share({ files: [shareFile] }); }
+  try { await navigator.share({ files: [shareFile] }); track('share'); }
   catch (error) {
     if (error.name !== 'AbortError') showError('Не удалось поделиться файлом. Скачайте сертификат и отправьте его из «Загрузок».', false, true);
   }

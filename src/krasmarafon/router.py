@@ -11,6 +11,7 @@ from src.krasmarafon.routers.admin import router as admin_router
 from src.krasmarafon.routers.webhook import router as webhook_router
 from src.krasmarafon.routers.data_quality import router as data_quality_router
 from src.krasmarafon.routers.bibs import router as bibs_router
+from src.krasmarafon.routers.medals import router as medals_router
 
 router = APIRouter(prefix="", tags=["tracker"])
 router.include_router(pages_router)
@@ -19,6 +20,7 @@ router.include_router(admin_router)
 router.include_router(webhook_router)
 router.include_router(data_quality_router)
 router.include_router(bibs_router)
+router.include_router(medals_router)
 
 from src.race_triatleta.router import router as triatleta_router
 router.include_router(triatleta_router)

@@ -8,6 +8,7 @@
   "maxImageSide": 4096,
   "minZoom": 1,
   "maxZoom": 4,
+  "statsUrl": "./stat",
   "templates": [
     {
       "id": "medal-krasnoyarsk",
