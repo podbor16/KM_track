@@ -57,4 +57,4 @@ def test_xlsx_has_sheets_and_no_ip(tmp_path):
     assert wb.sheetnames == ["Итоги", "По рамкам", "По часам", "События"]
     values = [str(c.value) for ws in wb for row in ws.iter_rows() for c in row]
     assert "10.9.8.7" not in " ".join(values)
-    assert [c.value for c in wb["События"][3]] == ["2026-10-22 10:20:00", "Скачали сертификат", "Оборот"]
+    assert [c.value for c in wb["События"][3]] == ["2026-10-22 10:20:00", "Скачали сертификат", "Оборот медали"]

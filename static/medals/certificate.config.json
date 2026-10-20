@@ -26,7 +26,7 @@
     },
     {
       "id": "medal-russia",
-      "label": "Оборот",
+      "label": "Оборот медали",
       "src": "./template/medal-russia-1080x1920.png?v=15955ef6",
       "thumbnail": "./template/previews/medal-russia.png?v=e252fd06",
       "width": 1080,
