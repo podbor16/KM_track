@@ -47,7 +47,8 @@ jobs:
             mkdir -p /opt/km_track/logs
             cp /opt/km_track/deploy/nginx.conf /etc/nginx/nginx.conf
             nginx -t
-            systemctl reload nginx
+            # остановленный nginx (не стартовал после перезагрузки VPS) reload не поднимает — start
+            if systemctl is-active --quiet nginx; then systemctl reload nginx; else systemctl start nginx; fi
 
             # Применить systemd unit если изменился
             cp /opt/km_track/deploy/km_track.service /etc/systemd/system/km_track.service
