@@ -41,8 +41,8 @@
     {
       "id": "medal-ribbon",
       "label": "Медаль на ленте",
-      "src": "./template/medal-ribbon-1080x1920.png?v=6c913648",
-      "thumbnail": "./template/previews/medal-ribbon.png?v=7839e112",
+      "src": "./template/medal-ribbon-1080x1920.png?v=45c5a881",
+      "thumbnail": "./template/previews/medal-ribbon.png?v=91ed9823",
       "width": 1080,
       "height": 1920,
       "placeholder": {
