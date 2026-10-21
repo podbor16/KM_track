@@ -51,6 +51,20 @@
         "width": 0.84,
         "height": 0.22
       }
+    },
+    {
+      "id": "medal-only",
+      "label": "Только медаль",
+      "src": "./template/medal-only-1080x1920.png?v=90a7d79c",
+      "thumbnail": "./template/previews/medal-only.png?v=5fbe00a0",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.08,
+        "y": 0.08,
+        "width": 0.84,
+        "height": 0.28
+      }
     }
   ]
 }

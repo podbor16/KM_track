@@ -36,7 +36,8 @@ def test_summary_counts_frames_hours_visitors_conversion(tmp_path):
     assert s["totals"] == {"open": 3, "download": 1, "share": 1}
     assert s["visitors"] == 2 and s["conversion"] == 50.0       # из двух посетителей скачал один
     frames = {r["frame"]: (r["download"], r["share"]) for r in s["by_frame"]}
-    assert frames == {"medal-krasnoyarsk": (1, 0), "medal-russia": (0, 1), "medal-ribbon": (0, 0)}   # все рамки из конфига, даже без событий
+    assert set(frames) == set(ms.frames())                       # все рамки из конфига, даже без событий
+    assert {f: v for f, v in frames.items() if v != (0, 0)} == {"medal-krasnoyarsk": (1, 0), "medal-russia": (0, 1)}
     assert [(r["hour"], r["open"], r["share"]) for r in s["by_hour"]] == [("2026-10-22 11:00", 0, 1), ("2026-10-22 10:00", 3, 0)]
 
 
