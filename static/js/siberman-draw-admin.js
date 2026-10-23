@@ -357,13 +357,19 @@ const FEEDS = [
   ['last', 'Последний вытянутый', 'name, city, category (зачёт), num (место в зачёте), round (раунд)'],
 ];
 const feedUrl = (name, fmt) => `${location.origin}/api/siberman/draw/${DRAW_YEAR}/feed/${name}.${fmt}`;
+// Готовая инфографика (оверлеи по макетам): мужчины и женщины — когда будут макеты.
+const OVERLAYS = [['relay', 1, 'Эстафеты, строки 1–20'], ['relay', 2, 'Эстафеты, строки 21–40'], ['wildcard', 1, 'Wild card']];
+const overlayUrl = (name, page) => `${location.origin}/draw/${DRAW_YEAR}/overlay/${name}${page > 1 ? `?page=${page}` : ''}`;
 
 function copyText(text, note) {
   navigator.clipboard.writeText(text).then(() => msg(note || 'Скопировано'), () => msg('Не удалось скопировать', 'error'));
 }
 
 function feedsMessage() {
-  return [`Данные жеребьёвки Siberman ${DRAW_YEAR} для vMix — JSON или CSV на выбор, без авторизации, опрашивать раз в 3 секунды.`,
+  return [`Готовая инфографика жеребьёвки Siberman ${DRAW_YEAR} (по макетам): vMix → Add Input → Web Browser, 1920×1080, `
+    + 'фон прозрачный, обновляется сама; только что вытянутый на несколько секунд подсвечен рамкой.',
+    ...OVERLAYS.map(([n, p, label]) => `${label}: ${overlayUrl(n, p)}`),
+    `\nДанные без оформления (если нужны свои шаблоны) — JSON или CSV на выбор, без авторизации, опрашивать раз в 3 секунды.`,
     ...FEEDS.map(([n, label, cols]) => `\n${label}:\nJSON: ${feedUrl(n, 'json')}\nCSV: ${feedUrl(n, 'csv')}\nКолонки: ${cols}`),
     `\nСписки зачётов полные: победители дополнены пустыми строками до числа мест, дальше — лист ожидания. ` +
     'Если на компьютере с vMix включён VPN — проверьте, что ссылки открываются (при необходимости добавьте siberman515.com в исключения VPN).',
@@ -371,7 +377,12 @@ function feedsMessage() {
 }
 
 function renderFeedLinks() {
-  $('feed-links').innerHTML = FEEDS.map(([n, label]) => `<div class="feed-row"><b>${label}</b>
+  $('feed-links').innerHTML = '<h3>Готовая инфографика (vMix → Web Browser, 1920×1080)</h3>'
+    + OVERLAYS.map(([n, p, label]) => `<div class="feed-row"><b>${label}</b>
+      <button type="button" class="btn" data-copy="${overlayUrl(n, p)}">Скопировать</button>
+      <a href="${overlayUrl(n, p)}" target="_blank" rel="noopener" class="muted">открыть</a></div>`).join('')
+    + '<h3>Данные без оформления</h3>'
+    + FEEDS.map(([n, label]) => `<div class="feed-row"><b>${label}</b>
       <button type="button" class="btn" data-copy="${feedUrl(n, 'json')}">JSON</button>
       <button type="button" class="btn" data-copy="${feedUrl(n, 'csv')}">CSV</button>
       <a href="${feedUrl(n, 'json')}" target="_blank" rel="noopener" class="muted">открыть</a></div>`).join('')

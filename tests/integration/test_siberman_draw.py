@@ -551,3 +551,23 @@ def test_contacts_and_payment_export(draw, client):
                            files={"file": ("z.csv", b"bad", "text/csv")}).status_code == 409
     finally:
         app.dependency_overrides.pop(api_require_auth, None)
+
+def test_overlay_pages_and_rows(draw, client):
+    host = {"host": "siberman.localhost"}
+    for name in ("relay", "wildcard"):
+        assert client.get(f"/draw/{YEAR}/overlay/{name}", headers=host).status_code == 200
+    assert client.get(f"/draw/{YEAR}/overlay/men", headers=host).status_code == 404     # макета ещё нет
+    assert client.get(f"/draw/{YEAR}/overlay/relay").status_code == 404                  # чужой домен
+    relay = service.overlay_rows(YEAR, "relay")
+    assert relay["label"] == "Эстафетный зачёт"
+    assert relay["rows"] == [{"num": 1, "name": "", "section": "winner"}]     # 1 эстафета, 1 место — номер есть, имени нет
+    assert service.overlay_rows(YEAR, "wildcard")["rows"] == [{"num": 1, "name": "", "section": "wildcard"}]
+    service.pick(YEAR, draw["Вайлдкардов"])
+    service.clear_cache()
+    assert service.overlay_rows(YEAR, "wildcard")["rows"] == [{"num": 1, "name": "Вайлдкардов Тест", "section": "wildcard"}]
+    service.set_round(YEAR, 1)
+    service.pick(YEAR, draw["Капитанов"])
+    service.clear_cache()
+    data = client.get(f"/api/siberman/draw/{YEAR}/overlay/relay").json()
+    assert data["rows"] == [{"num": 1, "name": "Капитанов Тест", "section": "winner"}]
+    assert client.get(f"/api/siberman/draw/{YEAR}/overlay/women").status_code == 404

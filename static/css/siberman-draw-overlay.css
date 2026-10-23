@@ -1,0 +1,29 @@
+/* Оверлей жеребьёвки для vMix (1920×1080, прозрачный фон). Сетка и цвета — с макетов дизайнера
+   («Эстафеты 1-20», «Эстафеты 21-39», «Wild card»): строка 41 px, шаг 47 px, столбцы 32–82 / 91–163 / 171–534. */
+@font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-Light.ttf') format('truetype'); font-weight: 300; font-display: block; }
+@font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-ExtraBold.ttf') format('truetype'); font-weight: 800; font-display: block; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+.ov { position: relative; width: 1920px; height: 1080px; font-family: 'Onest', Arial, sans-serif; color: #fff;
+      --cell: rgba(67, 66, 66, .96); --head: rgba(44, 43, 42, .99); --winner: rgba(109, 172, 214, .96);
+      --waitlist: rgba(245, 178, 182, .96); --wildcard: rgba(190, 32, 46, .96); }
+.ov-head > div, .ov-row > div, .ov-label { position: absolute; box-sizing: border-box; height: 41px; }
+.ov-head > div { top: 38px; background: var(--head); }
+.ov-logo { left: 32px; width: 51px; }
+.ov-logo img { display: block; width: 51px; height: 41px; }
+.ov-num { left: 91px; width: 72px; display: flex; align-items: center; justify-content: center; font-size: 27px; font-weight: 800; }
+.ov-name { left: 171px; width: 363px; display: flex; align-items: center; padding: 0 16px; font-size: 25px; font-weight: 800;
+           white-space: nowrap; overflow: hidden; }
+.ov-row .ov-num, .ov-row .ov-name { background: var(--cell); }
+.wildcard .ov-row .ov-num, .wildcard .ov-row .ov-name { background: var(--wildcard); }
+.ov-row .ov-name { font-weight: 800; font-size: 24px; text-overflow: ellipsis; }
+.ov-label { left: 32px; width: 51px; overflow: hidden; }
+.ov-label span { position: absolute; top: 10px; left: 50%; transform-origin: 0 0; transform: rotate(-90deg) translate(-100%, -50%);
+                 white-space: nowrap; font-size: 23px; font-weight: 300; line-height: 1; color: #2c2b2a; }
+.ov-label.winner { background: var(--winner); }
+.ov-label.waitlist { background: var(--waitlist); }
+.ov-label.wildcard { background: var(--wildcard); }
+.ov-label.wildcard span { color: #fff; font-weight: 800; }
+/* Только что вытянутый: имя проявляется, ячейка несколько секунд в белой рамке. */
+.ov-row.fresh .ov-name { animation: ov-in .6s ease-out, ov-ring 4s ease-out; }
+@keyframes ov-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ov-ring { 0%, 85% { box-shadow: inset 0 0 0 3px #fff; } 100% { box-shadow: inset 0 0 0 0 transparent; } }

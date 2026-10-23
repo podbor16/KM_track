@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<title>Siberman {{ year }} — оверлей: {{ name }}, стр. {{ page }}</title>
+<link rel="stylesheet" href="/static/css/siberman-draw-overlay.css?v={{ v }}">
+</head>
+<body>
+<div class="ov {{ name }}" id="ov" data-year="{{ year }}" data-name="{{ name }}" data-page="{{ page }}">
+  <div class="ov-head">
+    <div class="ov-logo"><img src="/static/images/siberman/draw-overlay-logo.png?v={{ v }}" alt=""></div>
+    <div class="ov-num">#</div>
+    <div class="ov-name">Участник жеребьевки</div>
+  </div>
+  <div class="ov-body" id="body"></div>
+</div>
+<script src="/static/js/siberman-draw-overlay.js?v={{ v }}"></script>
+</body>
+</html>

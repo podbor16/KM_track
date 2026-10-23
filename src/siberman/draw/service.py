@@ -688,6 +688,31 @@ def feed_rows(year: int, name: str) -> list[dict]:
     raise DrawError("нет такого фида")
 
 
+# Оверлеи для vMix (готовая инфографика по макетам дизайнера): мужчины и женщины — когда будут макеты.
+OVERLAY_LABELS = {"relay": "Эстафетный зачёт", "wildcard": "Wild card"}
+
+
+def overlay_rows(year: int, name: str) -> dict:
+    """Строки оверлея: все номера сразу (эстафеты — по числу эстафетных заявок, но не меньше мест;
+    wild card — по числу wild card), имя — когда вытянут; раздел — победитель / лист ожидания / wild card."""
+    if name not in OVERLAY_LABELS:
+        raise DrawError("нет такого оверлея")
+    snap = _cached_snapshot(year)
+    if name == "wildcard":
+        drawn = sorted((r for rows in snap["lists"].values() for r in rows if r["is_wildcard"]),
+                       key=lambda r: r["position_key"])
+        rows = [{"num": i, "name": _fio(r), "section": "wildcard"} for i, r in enumerate(drawn, start=1)]
+        total = sum(1 for a in snap["applicants"] if a["is_wildcard"])
+        rows += [{"num": i, "name": "", "section": "wildcard"} for i in range(len(rows) + 1, total + 1)]
+    else:
+        cap = snap["config"][f"capacity_{name}"] or 0
+        rows = [{"num": r["position"], "name": _fio(r), "section": r["section"] or "winner"} for r in snap["lists"][name]]
+        total = max(cap, sum(1 for a in snap["applicants"] if category_of(a) == name))
+        rows += [{"num": i, "name": "", "section": "winner" if i <= cap else "waitlist"}
+                 for i in range(len(rows) + 1, total + 1)]
+    return {"label": OVERLAY_LABELS[name], "rows": rows}
+
+
 def to_csv(rows: list[dict], columns: tuple) -> str:
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=list(columns), lineterminator="\n")
