@@ -357,8 +357,12 @@ const FEEDS = [
   ['last', 'Последний вытянутый', 'name, city, category (зачёт), num (место в зачёте), round (раунд)'],
 ];
 const feedUrl = (name, fmt) => `${location.origin}/api/siberman/draw/${DRAW_YEAR}/feed/${name}.${fmt}`;
-// Готовая инфографика (оверлеи по макетам): мужчины и женщины — когда будут макеты.
-const OVERLAYS = [['relay', 1, 'Эстафеты, строки 1–20'], ['relay', 2, 'Эстафеты, строки 21–40'], ['wildcard', 1, 'Wild card']];
+// Готовая инфографика (оверлеи по макетам): страницы по 20 строк, дальше — ?page=4 и т. д.
+const OVERLAYS = [
+  ['men', 1, 'Мужчины, строки 1–20'], ['men', 2, 'Мужчины, строки 21–40'], ['men', 3, 'Мужчины, строки 41–60'],
+  ['women', 1, 'Женщины, строки 1–20'], ['women', 2, 'Женщины, строки 21–40'],
+  ['relay', 1, 'Эстафеты, строки 1–20'], ['relay', 2, 'Эстафеты, строки 21–40'], ['wildcard', 1, 'Wild card'],
+];
 const overlayUrl = (name, page) => `${location.origin}/draw/${DRAW_YEAR}/overlay/${name}${page > 1 ? `?page=${page}` : ''}`;
 
 function copyText(text, note) {

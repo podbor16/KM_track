@@ -554,9 +554,9 @@ def test_contacts_and_payment_export(draw, client):
 
 def test_overlay_pages_and_rows(draw, client):
     host = {"host": "siberman.localhost"}
-    for name in ("relay", "wildcard"):
+    for name in ("men", "women", "relay", "wildcard"):
         assert client.get(f"/draw/{YEAR}/overlay/{name}", headers=host).status_code == 200
-    assert client.get(f"/draw/{YEAR}/overlay/men", headers=host).status_code == 404     # макета ещё нет
+    assert client.get(f"/draw/{YEAR}/overlay/nope", headers=host).status_code == 404
     assert client.get(f"/draw/{YEAR}/overlay/relay").status_code == 404                  # чужой домен
     relay = service.overlay_rows(YEAR, "relay")
     assert relay["label"] == "Эстафетный зачёт"
@@ -570,4 +570,6 @@ def test_overlay_pages_and_rows(draw, client):
     service.clear_cache()
     data = client.get(f"/api/siberman/draw/{YEAR}/overlay/relay").json()
     assert data["rows"] == [{"num": 1, "name": "Капитанов Тест", "section": "winner"}]
-    assert client.get(f"/api/siberman/draw/{YEAR}/overlay/women").status_code == 404
+    men = service.overlay_rows(YEAR, "men")
+    assert men["label"] == "Индивидуальный зачёт. Мужчины" and [r["section"] for r in men["rows"]][:3] == ["winner"] * 3
+    assert client.get(f"/api/siberman/draw/{YEAR}/overlay/nope").status_code == 404

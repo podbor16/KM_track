@@ -1,5 +1,5 @@
-/* Оверлей жеребьёвки для vMix (1920×1080, прозрачный фон). Сетка и цвета — с макетов дизайнера
-   («Эстафеты 1-20», «Эстафеты 21-39», «Wild card»): строка 41 px, шаг 47 px, столбцы 32–82 / 91–163 / 171–534. */
+/* Оверлей жеребьёвки для vMix (1920×1080, прозрачный фон). Сетка и цвета — с макетов дизайнера («Мужчины», «Женщины»,
+   «Эстафеты», «Wild card»): строка 41 px, шаг 47 px, столбцы 32–82 / 91–163 / 171–534. */
 @font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-Light.ttf') format('truetype'); font-weight: 300; font-display: block; }
 @font-face { font-family: 'Onest'; src: url('/static/fonts/siberman/Onest-ExtraBold.ttf') format('truetype'); font-weight: 800; font-display: block; }
 html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
@@ -18,10 +18,13 @@ html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; backgro
 .ov-row .ov-name { font-weight: 800; font-size: 24px; text-overflow: ellipsis; }
 .ov-label { left: 32px; width: 51px; overflow: hidden; }
 .ov-label span { position: absolute; top: 10px; left: 50%; transform-origin: 0 0; transform: rotate(-90deg) translate(-100%, -50%);
-                 white-space: nowrap; font-size: 23px; font-weight: 300; line-height: 1; color: #2c2b2a; }
+                 white-space: nowrap; font-size: 22px; font-weight: 300; line-height: 1; color: #2c2b2a; }
 .ov-label.winner { background: var(--winner); }
 .ov-label.waitlist { background: var(--waitlist); }
 .ov-label.wildcard { background: var(--wildcard); }
+.men .ov-label.waitlist { background: rgba(161, 179, 193, .96); }      /* цвета плашек — с макетов «Мужчины», «Женщины» */
+.women .ov-label.winner { background: rgba(254, 121, 146, .96); }
+.women .ov-label.waitlist { background: rgba(226, 182, 190, .96); }
 .ov-label.wildcard span { color: #fff; font-weight: 800; }
 /* Только что вытянутый: имя проявляется, ячейка несколько секунд в белой рамке. */
 .ov-row.fresh .ov-name { animation: ov-in .6s ease-out, ov-ring 4s ease-out; }

@@ -688,8 +688,9 @@ def feed_rows(year: int, name: str) -> list[dict]:
     raise DrawError("нет такого фида")
 
 
-# Оверлеи для vMix (готовая инфографика по макетам дизайнера): мужчины и женщины — когда будут макеты.
-OVERLAY_LABELS = {"relay": "Эстафетный зачёт", "wildcard": "Wild card"}
+# Оверлеи для vMix (готовая инфографика по макетам дизайнера): название зачёта на плашке слева.
+OVERLAY_LABELS = {"men": "Индивидуальный зачёт. Мужчины", "women": "Индивидуальный зачёт. Женщины",
+                  "relay": "Эстафетный зачёт", "wildcard": "Wild card"}
 
 
 def overlay_rows(year: int, name: str) -> dict:

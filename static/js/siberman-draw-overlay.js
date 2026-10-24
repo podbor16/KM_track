@@ -1,6 +1,6 @@
 'use strict';
-// Оверлей жеребьёвки для vMix: строки страницы (?page=1 — 1–20, 2 — 21–40) по макету, подпись разделов
-// слева («Эстафетный зачёт. Победители» / «Лист ожидания»), только что вытянутый — подсвечен.
+// Оверлей жеребьёвки для vMix (мужчины, женщины, эстафеты, wild card): строки страницы (?page=1 — 1–20,
+// 2 — 21–40) по макету, подпись разделов слева («… Победители» / «Лист ожидания»), только что вытянутый — подсвечен.
 // Данные — /api/siberman/draw/{год}/overlay/{name} раз в 2 с.
 
 const ov = document.getElementById('ov');
@@ -12,19 +12,31 @@ let shown = null;   // имена на экране: номер → ФИ (null �
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function labels(rows, title) {
-  // подряд идущие строки одного раздела — одна плашка; у первой на странице — название зачёта
+  // подряд идущие строки одного раздела — одна плашка; полный текст с названием зачёта — у первой плашки
+  // страницы, где он помещается (у женщин 6 мест — название уходит на лист ожидания, как в макете)
   const out = [];
   rows.forEach((r, i) => {
     const last = out[out.length - 1];
     if (last && last.section === r.section) last.end = i;
     else out.push({ section: r.section, start: i, end: i });
   });
-  return out.map((b, i) => {
-    const text = b.section === 'wildcard' ? title
-      : (i === 0 && title ? `${title}. ${SECTION[b.section]}` : SECTION[b.section]);
+  const long = { winner: ov.dataset.name === 'relay' ? 'Победители' : 'Победители жеребьёвки', waitlist: 'Лист ожидания' };
+  return out.map(b => {
+    const full = b.section === 'wildcard' ? title : `${title}. ${long[b.section]}`;
     const top = TOP + b.start * STEP, height = (b.end - b.start) * STEP + H;
-    return `<div class="ov-label ${b.section}" style="top:${top}px;height:${height}px"><span>${esc(text)}</span></div>`;
+    return `<div class="ov-label ${b.section}" style="top:${top}px;height:${height}px" data-full="${esc(full)}"
+      data-short="${esc(SECTION[b.section] || title)}"><span></span></div>`;
   }).join('');
+}
+
+function fitLabels() {
+  let titled = false;
+  document.querySelectorAll('.ov-label').forEach(el => {
+    const span = el.firstElementChild;
+    span.textContent = el.dataset.full;
+    if (!titled && span.offsetWidth <= el.offsetHeight - 14) titled = true;   // 10 px сверху + запас
+    else span.textContent = el.dataset.short;
+  });
 }
 
 function render(data) {
@@ -36,6 +48,7 @@ function render(data) {
       <div class="ov-num" style="top:${top}px">${r.num}</div>
       <div class="ov-name" style="top:${top}px">${esc(r.name)}</div></div>`;
   }).join('');
+  fitLabels();
   shown = Object.fromEntries(rows.map(r => [r.num, r.name]));
 }
 
@@ -46,4 +59,4 @@ async function poll() {
   } catch (e) { /* сеть моргнула — оставляем прошлую картинку */ }
   setTimeout(poll, 2000);
 }
-poll();
+document.fonts.ready.then(poll);   // ширину подписей меряем уже в Onest

@@ -102,8 +102,8 @@ async def draw_results_page(request: Request, year: int):
 
 @router.get("/draw/{year}/overlay/{name}", response_class=HTMLResponse)
 async def draw_overlay_page(request: Request, year: int, name: str, page: int = 1):
-    """Готовая инфографика для vMix (вход Web Browser, 1920×1080, прозрачный фон): ?page=1 — строки 1–20,
-    ?page=2 — 21–40. Есть для эстафет и wild card (мужчины и женщины — когда будут макеты)."""
+    """Готовая инфографика для vMix (вход Web Browser, 1920×1080, прозрачный фон): мужчины, женщины, эстафеты,
+    wild card; ?page=1 — строки 1–20, ?page=2 — 21–40 и т. д."""
     if name not in service.OVERLAY_LABELS or page < 1:
         raise HTTPException(status_code=404)
     _check_year(year)
