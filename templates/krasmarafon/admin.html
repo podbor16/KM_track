@@ -209,8 +209,9 @@
             <div class="admin-section-note">
                 Границы возрастных групп для стартового списка и стартового списка в
                 админке (не влияет на результаты после финиша — там категория берётся
-                из Copernico). Без настроенных границ показывается стандартный
-                развёрнутый формат («мужчины до 49 лет…»).
+                из Copernico). Возраст считается от года забега: по году рождения
+                (на 31 декабря) или полных лет на день старта — выбирается для каждой
+                дистанции.
             </div>
 
             <div class="admin-leads-toolbar">
@@ -1532,7 +1533,7 @@
             const url = `/api/admin/age-groups?event_name=${encodeURIComponent(eventName)}&event_distance=${encodeURIComponent(distance)}`;
             const r = await fetch(url);
             const data = await r.json();
-            renderAgeGroups(data.items);
+            renderAgeGroups(data.items, data.mode);
         } catch(e) {
             content.innerHTML = `<div class="admin-error">Ошибка загрузки: ${e.message}</div>`;
         } finally {
@@ -1545,9 +1546,18 @@
         return `ag:${document.getElementById('ag-event-name').value}|${document.getElementById('ag-distance').value}:`;
     }
 
-    function renderAgeGroups(items) {
+    function renderAgeGroups(items, mode) {
         const content = document.getElementById('age-groups-content');
-        content.innerHTML = ['M', 'F'].map(sex => `<div class="ag-col" id="ag-col-${sex}"></div>`).join('');
+        const opt = (value, title, hint) => `<label class="admin-checkbox-label ag-mode-option">
+            <input type="radio" name="ag-mode" value="${value}" ${(mode || 'birth_year') === value ? 'checked' : ''}
+                   onchange="saveAgeGroupMode(this)"> <span><b>${title}</b> — ${hint}</span></label>`;
+        content.innerHTML = `<div class="admin-section-note ag-mode">
+                <div class="ag-mode-title">Как считать возраст для группы</div>
+                ${opt('birth_year', 'По году рождения', 'на 31 декабря года забега: 2013 г.р. на забеге 2027 года — 14 лет')}
+                ${opt('event_date', 'На день старта', 'полных лет на дату мероприятия (если дата у события не указана — по году рождения)')}
+                <span class="ag-mode-status" id="ag-mode-status"></span>
+            </div>`
+            + ['M', 'F'].map(sex => `<div class="ag-col" id="ag-col-${sex}"></div>`).join('');
         ['M', 'F'].forEach(sex => renderAgeGroupTable(sex, items.filter(i => i.sex === sex)));
     }
 
@@ -1630,6 +1640,26 @@
 
     // «Сохранить» таблицы одного пола: её правки и заполненные новые границы — одним
     // запросом (одна транзакция, ошибка — ничего не записано). Другая таблица не трогается.
+    async function saveAgeGroupMode(input) {
+        const status = document.getElementById('ag-mode-status');
+        const body = {
+            event_name: document.getElementById('ag-event-name').value,
+            event_distance: document.getElementById('ag-distance').value,
+            mode: input.value,
+        };
+        status.textContent = 'Сохраняю…';
+        try {
+            const r = await fetch('/api/admin/age-groups/mode', {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            });
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+            status.textContent = 'Сохранено — стартовый список пересчитается в течение минуты';
+        } catch (e) {
+            status.textContent = `Ошибка: ${e.message}`;
+            loadAgeGroups();
+        }
+    }
+
     async function saveAgeGroups(sex, btn) {
         const col = document.getElementById(`ag-col-${sex}`);
         const status = document.getElementById(`ag-status-${sex}`);

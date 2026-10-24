@@ -1026,6 +1026,35 @@ def _parse_age_and_sex(birthdate_or_age, sex: str = None):
     return age, is_male
 
 
+AGE_MODES = ("birth_year", "event_date")
+
+
+def _age_for_group(birthdate_or_age, event_year=None, event_date=None, mode="birth_year"):
+    """Возраст для возрастной группы — от СОБЫТИЯ, не от сегодняшнего дня (баг 2026-10-24:
+    заявки на Жару 2027 считались от 2026 года, 2013 г.р. попадал в Ж12-13):
+    birth_year — на 31.12 года забега (год забега − год рождения); event_date — полных лет
+    на дату старта (даты нет — как birth_year). Без года события — от текущего года (старые
+    вызовы). ДР-заглушка 1900 и пустое значение — None; готовый возраст (int) — как есть."""
+    if isinstance(birthdate_or_age, int):
+        return birthdate_or_age
+    birth = birthdate_or_age
+    if isinstance(birth, datetime.datetime):
+        birth = birth.date()
+    elif isinstance(birth, str):
+        try:
+            birth = datetime.datetime.strptime(birth[:10], "%Y-%m-%d").date()
+        except ValueError:
+            try:
+                return int(birthdate_or_age)
+            except ValueError:
+                return None
+    if not isinstance(birth, datetime.date) or birth.year == 1900:
+        return None
+    if mode == "event_date" and isinstance(event_date, datetime.date):
+        return event_date.year - birth.year - ((event_date.month, event_date.day) < (birth.month, birth.day))
+    return int(event_year or datetime.date.today().year) - birth.year
+
+
 _age_group_cache: dict = {}
 _age_group_cache_ts: float = 0.0
 AGE_GROUP_CACHE_TTL = 60  # админ-конфиг — короткий TTL, правки видны быстро
@@ -1075,8 +1104,78 @@ def _get_age_group_configs() -> dict:
             pass
 
 
+_age_mode_cache: dict = {}
+_event_date_cache: dict = {}
+_age_mode_cache_ts: float = 0.0
+
+
+def _load_age_mode_data():
+    """Режимы расчёта возраста (age_group_modes) и даты стартов (events.event_date) — одним
+    заходом, кеш AGE_GROUP_CACHE_TTL. Нет таблицы/БД — режимов нет (все birth_year)."""
+    global _age_mode_cache, _event_date_cache, _age_mode_cache_ts
+    now = time.time()
+    if (now - _age_mode_cache_ts) < AGE_GROUP_CACHE_TTL:
+        return
+    _age_mode_cache_ts = now - AGE_GROUP_CACHE_TTL + AGE_GROUP_RETRY_S   # ошибка — повтор через 5 с
+    conn = get_pooled_connection()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute("SELECT event_name, event_distance, mode FROM age_group_modes")
+        modes = {(r.get("event_name"), r.get("event_distance")): r.get("mode") for r in cur.fetchall()
+                 if r.get("mode") in AGE_MODES}
+        cur.execute("SELECT id, event_date FROM events WHERE event_date IS NOT NULL")
+        dates = {r.get("id"): r.get("event_date") for r in cur.fetchall() if r.get("id") is not None}
+        cur.close()
+        _age_mode_cache, _event_date_cache, _age_mode_cache_ts = modes, dates, now
+    except Exception as e:
+        logger.error(f"_load_age_mode_data error: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _get_age_group_modes() -> dict:
+    """{(event_name, event_distance): 'birth_year' | 'event_date'} — нет записи = birth_year."""
+    _load_age_mode_data()
+    return _age_mode_cache
+
+
+def _get_event_dates() -> dict:
+    """{event_id: event_date} для режима «на день старта»."""
+    _load_age_mode_data()
+    return _event_date_cache
+
+
+def get_age_group_mode(event_name: str, event_distance: str) -> str:
+    return _get_age_group_modes().get((event_name, event_distance), "birth_year")
+
+
+def set_age_group_mode(event_name: str, event_distance: str, mode: str) -> str:
+    """Режим расчёта возраста для события+дистанции (/admin → «Возрастные группы»)."""
+    global _age_mode_cache_ts
+    if mode not in AGE_MODES:
+        raise ValueError(f"режим: {', '.join(AGE_MODES)}")
+    conn = get_pooled_connection()
+    if not conn:
+        raise ValueError("нет соединения с БД")
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO age_group_modes (event_name, event_distance, mode) VALUES (%s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE mode = VALUES(mode)", (event_name, event_distance, mode))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    _age_mode_cache_ts = 0.0
+    return mode
+
+
 def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, sex: str = None,
-                         source: str = None) -> str:
+                         source: str = None, event_year=None, event_id=None) -> str:
     """Возрастная группа с учётом границ, заданных в /admin для конкретных
     (event_name, event_distance). Два разных случая "нет подходящего
     брекета" различаются осознанно:
@@ -1091,8 +1190,12 @@ def get_age_group_label(event_name: str, event_distance: str, birthdate_or_age, 
       случаями) вместо "Ошибка возраста" присваиваем минимальную
       возрастную категорию дистанции. Для остальных источников (вебхук,
       source не передан) — по-прежнему "Ошибка возраста", требует ручной
-      проверки организатором (2026-08-19)."""
-    age, is_male = _parse_age_and_sex(birthdate_or_age, sex)
+      проверки организатором (2026-08-19).
+    Возраст — от события (event_year, event_id), режим — age_group_modes, см. _age_for_group()."""
+    _, is_male = _parse_age_and_sex(None, sex)
+    mode = _get_age_group_modes().get((event_name, event_distance), "birth_year")
+    event_date = _get_event_dates().get(event_id) if mode == "event_date" and event_id else None
+    age = _age_for_group(birthdate_or_age, event_year, event_date, mode)
     if age is None:
         return 'Неизвестно'
 
@@ -1429,7 +1532,7 @@ def get_test_table_data() -> List[Dict[str, Any]]:
         )
         record['category'] = get_age_group_label(
             record.get('event_name'), record.get('event_distance'), age_info, sex_info,
-            source=record.get('source'),
+            source=record.get('source'), event_year=record.get('event_year'), event_id=record.get('event_id'),
         ) if age_info else 'Неизвестно'
     _start_list_cache = records
     _start_list_cache_ts = time.time()
@@ -1493,7 +1596,8 @@ def get_leads_by_event(event_id: int, include_duplicates: bool = True) -> List[D
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'),
+                                            source=d.get('source'), event_year=d.get('event_year'), event_id=d.get('event_id'))
             result.append(d)
         prune(_startlist_cache_ts, STARTLIST_CACHE_TTL, _startlist_cache)
         _startlist_cache[key] = result
@@ -1600,7 +1704,8 @@ def get_leads_admin(
         result = []
         for row in rows:
             d = dict(row)
-            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
+            d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'),
+                                            source=d.get('source'), event_year=d.get('event_year'), event_id=d.get('event_id'))
             result.append(d)
         return result
     except Exception as e:
@@ -1813,7 +1918,8 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         if not row:
             return None
         d = dict(row)
-        d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'), source=d.get('source'))
+        d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'),
+                                            source=d.get('source'), event_year=d.get('event_year'), event_id=d.get('event_id'))
         return d
     except Exception as e:
         logger.error(f"update_lead error: {e}")

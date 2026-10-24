@@ -22,7 +22,7 @@ from src.krasmarafon.models.startlist import (
     LeadImportPreviewRow, LeadImportPreviewResponse, LeadImportApplyResponse,
     LeadImportFailedRow, LeadImportDeleteRow,
 )
-from src.krasmarafon.models.age_groups import AgeGroupBulkSave, AgeGroupConfig, AgeGroupCreate, AgeGroupPatch
+from src.krasmarafon.models.age_groups import AgeGroupBulkSave, AgeGroupConfig, AgeGroupCreate, AgeGroupMode, AgeGroupPatch
 from src.krasmarafon.models.participant_photos import DbEvent, ParticipantPhoto, ParticipantPhotoUpsert
 
 from src.config import settings
@@ -510,12 +510,30 @@ async def list_age_groups_endpoint(
     event_distance: Optional[str] = Query(None),
     user: str = Depends(api_require_auth),
 ) -> dict:
-    from src.analytics.db_results import list_age_groups
+    from src.analytics.db_results import get_age_group_mode, list_age_groups
 
     rows = await asyncio.get_event_loop().run_in_executor(
         None, lambda: list_age_groups(event_name, event_distance)
     )
-    return {"items": [AgeGroupConfig.model_validate(r).model_dump() for r in rows]}
+    out = {"items": [AgeGroupConfig.model_validate(r).model_dump() for r in rows]}
+    if event_name and event_distance:
+        out["mode"] = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: get_age_group_mode(event_name, event_distance))
+    return out
+
+
+@router.put("/api/admin/age-groups/mode")
+async def set_age_group_mode_endpoint(
+    body: AgeGroupMode, user: str = Depends(api_require_auth)
+) -> dict:
+    from src.analytics.db_results import set_age_group_mode
+
+    try:
+        mode = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: set_age_group_mode(body.event_name, body.event_distance, body.mode))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "mode": mode}
 
 
 @router.post("/api/admin/age-groups")

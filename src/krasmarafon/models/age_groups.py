@@ -62,3 +62,12 @@ class AgeGroupBulkSave(BaseModel):
     event_name: str
     event_distance: str
     items: List[AgeGroupItem]
+
+
+class AgeGroupMode(BaseModel):
+    """Тело PUT /api/admin/age-groups/mode — как считать возраст для события+дистанции:
+    birth_year — на 31.12 года забега, event_date — полных лет на день старта."""
+
+    event_name: str
+    event_distance: str
+    mode: Literal["birth_year", "event_date"]
