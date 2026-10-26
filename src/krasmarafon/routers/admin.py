@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from src.krasmarafon.models.startlist import (
@@ -846,3 +847,46 @@ async def admin_datalens_embeds(user: str = Depends(api_require_auth)) -> dict:
             import logging
             logging.getLogger(__name__).error(f"DataLens admin embed error: {e}")
     return {"embeds": embeds}
+
+
+# ---------------------------------------------------------------------------
+# Экспорт вкладки DataLens в Excel (src/analytics/dash_export.py)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/admin/analytics-export/filters")
+async def admin_analytics_export_filters(tab: str = Query(...), user: str = Depends(api_require_auth)) -> dict:
+    """Вкладки дашборда и селекторы вкладки tab с вариантами — для панели «Скачать Excel»."""
+    from src.analytics import dash_export
+
+    try:
+        return await run_in_threadpool(lambda: {"tabs": dash_export.tabs(), "filters": dash_export.filters(tab)})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"DataLens export filters error: {e}")
+        raise HTTPException(502, "DataLens не ответил, попробуйте позже")
+
+
+@router.get("/api/admin/analytics-export.xlsx")
+async def admin_analytics_export_xlsx(request: Request, tab: str = Query(...),
+                                      user: str = Depends(api_require_auth)) -> Response:
+    """Excel вкладки tab; остальные query-параметры — значения селекторов (мультиселект — повтором)."""
+    from urllib.parse import quote
+
+    from src.analytics import dash_export
+
+    params = {}
+    for k, v in request.query_params.multi_items():
+        if k != "tab" and v != "":
+            params.setdefault(k, []).append(v)
+    params = {k: v[0] if len(v) == 1 else v for k, v in params.items()}
+    try:
+        data, name = await run_in_threadpool(dash_export.build_xlsx, tab, params)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"DataLens export error: {e}")
+        raise HTTPException(502, "DataLens не ответил, попробуйте позже")
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="analytics_{tab}.xlsx"; '
+                                                    f"filename*=UTF-8''{quote(name)}"})

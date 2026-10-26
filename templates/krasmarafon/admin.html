@@ -258,6 +258,14 @@
             <div id="analytics-vpn-notice" class="admin-section-note" style="display:none">
                 ⚠️ Дашборды DataLens недоступны за пределами России и СНГ. При использовании VPN они не загрузятся.
             </div>
+            <div class="admin-leads-toolbar dlx-toolbar">
+                <div class="dlx-filters">
+                    <strong id="dlx-title">Выгрузка в Excel</strong>
+                    <span id="dlx-fields"></span>
+                    <button class="km-btn km-btn--primary" id="dlx-btn" onclick="downloadAnalyticsExcel()" disabled>Скачать Excel</button>
+                    <span id="dlx-status" class="dlx-status"></span>
+                </div>
+            </div>
             <div id="analytics-iframe-wrap">
                 <div class="admin-loading">Загрузка дашборда...</div>
             </div>
@@ -468,7 +476,7 @@
             if (name === 'leads') loadLeadsTab();
             if (name === 'age-groups') loadAgeGroupsTab();
             if (name === 'photos') loadPhotosTab();
-            if (name === 'analytics') loadAnalyticsTab();
+            if (name === 'analytics') { loadAnalyticsTab(); loadAnalyticsExport(); }
             if (name === 'monitoring') loadMonitoringTab();
             if (name === 'data-quality') loadDataQualityTab();
             if (name === 'medals') loadMedalsTab();
@@ -1882,6 +1890,115 @@
             try { localStorage.setItem(dlSearchKey(i), search); } catch { /* без памяти — просто не запомним */ }
         });
     });
+
+    // Выгрузка вкладки дашборда в Excel (/api/admin/analytics-export.xlsx): фильтры — свои,
+    // повторяют селекторы вкладки DataLens; выбор запоминается в localStorage.
+    const DLX_TAB = 'XbA';
+    const dlxKey = 'adm-dlx-' + DLX_TAB;
+    let _dlxFilters = [];
+    function dlxSaved() {
+        try { return JSON.parse(localStorage.getItem(dlxKey)) || {}; } catch { return {}; }
+    }
+    function dlxValues() {
+        const v = {};
+        _dlxFilters.forEach(f => {
+            const els = [...document.querySelectorAll(`[data-dlx="${f.param}"]`)];
+            v[f.param] = f.multiselect ? els.filter(c => c.checked).map(c => c.value) : (els[0] ? els[0].value : '');
+        });
+        return v;
+    }
+    function dlxMsLabel(f, vals) {
+        return f.title + ': ' + (vals.length ? vals.join(', ') : 'все');
+    }
+    function dlxSave() {
+        const v = dlxValues();
+        try { localStorage.setItem(dlxKey, JSON.stringify(v)); } catch { /* без памяти — просто не запомним */ }
+        _dlxFilters.filter(f => f.multiselect).forEach(f => {
+            const sum = document.getElementById('dlx-sum-' + f.param);
+            if (sum) sum.textContent = dlxMsLabel(f, v[f.param]);
+        });
+    }
+    document.addEventListener('click', e => {
+        document.querySelectorAll('.dlx-ms[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
+    });
+    async function loadAnalyticsExport() {
+        const box = document.getElementById('dlx-fields');
+        const status = document.getElementById('dlx-status');
+        try {
+            const r = await fetch('/api/admin/analytics-export/filters?tab=' + DLX_TAB);
+            if (!r.ok) throw new Error((await r.json()).detail || r.status);
+            const data = await r.json();
+            const tab = data.tabs.find(t => t.id === DLX_TAB);
+            if (tab) document.getElementById('dlx-title').textContent = 'Выгрузка в Excel: «' + tab.title + '»';
+            _dlxFilters = data.filters;
+            const saved = dlxSaved();
+            box.innerHTML = '';
+            _dlxFilters.forEach(f => {
+                const cur = saved[f.param];
+                if (f.multiselect) {
+                    const vals = Array.isArray(cur) ? cur : [];
+                    const det = document.createElement('details');
+                    det.className = 'dlx-ms';
+                    const sum = document.createElement('summary');
+                    sum.id = 'dlx-sum-' + f.param;
+                    sum.className = 'admin-select';
+                    sum.textContent = dlxMsLabel(f, vals);
+                    det.appendChild(sum);
+                    const list = document.createElement('div');
+                    list.className = 'dlx-ms-list';
+                    f.options.forEach(o => {
+                        const lab = document.createElement('label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox'; cb.value = o; cb.dataset.dlx = f.param;
+                        cb.checked = vals.includes(o);
+                        cb.onchange = dlxSave;
+                        lab.append(cb, ' ' + o);
+                        list.appendChild(lab);
+                    });
+                    det.appendChild(list);
+                    box.appendChild(det);
+                } else {
+                    const sel = document.createElement('select');
+                    sel.className = 'admin-select';
+                    sel.dataset.dlx = f.param;
+                    sel.title = f.title;
+                    sel.add(new Option(f.title + ': все', ''));
+                    f.options.forEach(o => sel.add(new Option(o, o)));
+                    sel.value = f.options.includes(cur) ? cur : '';
+                    sel.onchange = dlxSave;
+                    box.appendChild(sel);
+                }
+            });
+            document.getElementById('dlx-btn').disabled = false;
+            status.textContent = '';
+        } catch (e) {
+            status.textContent = 'Выгрузка недоступна: ' + e.message;
+        }
+    }
+    async function downloadAnalyticsExcel() {
+        const btn = document.getElementById('dlx-btn');
+        const status = document.getElementById('dlx-status');
+        const q = new URLSearchParams({ tab: DLX_TAB });
+        Object.entries(dlxValues()).forEach(([k, v]) => (Array.isArray(v) ? v : [v]).forEach(x => { if (x) q.append(k, x); }));
+        btn.disabled = true;
+        status.textContent = 'Собираю данные из DataLens…';
+        try {
+            const r = await fetch('/api/admin/analytics-export.xlsx?' + q);
+            if (!r.ok) throw new Error((await r.json()).detail || r.status);
+            const cd = r.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(await r.blob());
+            a.download = m ? decodeURIComponent(m[1]) : 'analytics.xlsx';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            status.textContent = '';
+        } catch (e) {
+            status.textContent = 'Ошибка: ' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
 
     async function loadAnalyticsTab() {
         const wrap = document.getElementById('analytics-iframe-wrap');

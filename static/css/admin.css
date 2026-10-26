@@ -523,6 +523,22 @@
     .admin-leads-toolbar { flex-direction: column; align-items: flex-start; }
 }
 
+/* ------- Аналитика: выгрузка в Excel ------- */
+
+.dlx-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dlx-filters > span#dlx-fields { display: contents; }
+.dlx-ms { position: relative; }
+.dlx-ms > summary { list-style: none; cursor: pointer; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlx-ms > summary::-webkit-details-marker { display: none; }
+.dlx-ms-list {
+    position: absolute; z-index: 20; top: calc(100% + 4px); left: 0;
+    min-width: 240px; max-height: 320px; overflow-y: auto; padding: 8px;
+    background: var(--km-bg-card); border: 1px solid var(--km-border-light); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .12);
+}
+.dlx-ms-list label { display: block; padding: 3px 2px; white-space: nowrap; cursor: pointer; }
+.dlx-status { color: var(--km-text-secondary); font-size: 0.9rem; }
+
 /* ------- Качество данных ------- */
 
 .dq-summary { margin: 8px 0; color: var(--km-text-secondary); font-size: 0.9rem; }

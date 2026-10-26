@@ -37,7 +37,9 @@ def make_embed_token(embed_id: str, key_secret: str, ttl: int = 3600) -> str:
     payload = _b64({
         "embedId": embed_id,
         "dlEmbedService": "YC_DATALENS_EMBEDDING_SERVICE_MARK",
-        "iat": now,
+        # iat на 30 с назад: свежий токен с iat «сейчас» DataLens при первом запросе отклонял
+        # (403 ERR.ENTRY.CONFIG_LOADING_ERROR, через 3 с тот же токен — 200; расхождение часов)
+        "iat": now - 30,
         "exp": now + ttl,
     })
     signing = f"{header}.{payload}"
