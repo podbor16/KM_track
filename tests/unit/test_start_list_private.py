@@ -1,40 +1,45 @@
 """Стартовый список не публикуется (персональные данные, 2026-10-26):
-ни страница, ни API с заявками не доступны без входа в админку."""
+ни страница, ни API с заявками не доступны без входа в админку.
+
+Без TestClient: в CI starlette старый, а httpx новый (TestClient там не создаётся) —
+проверяем, что на маршрутах висит зависимость авторизации, и что делает она сама."""
+
+from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
-from starlette.testclient import TestClient
+from fastapi import HTTPException
 
+from src.core.auth import api_require_auth, require_auth
 from src.krasmarafon.routers import api, pages
 
-
-@pytest.fixture
-def anon():
-    app = FastAPI()
-    app.include_router(pages.router)
-    app.include_router(api.router)
-    return TestClient(app)
+HEADER = Path(__file__).resolve().parents[2] / "templates" / "krasmarafon" / "header.html"
 
 
-def test_page_redirects_to_login(anon):
-    r = anon.get("/start_list")
-    assert [h.status_code for h in r.history] == [302]
-    assert r.history[0].headers["location"].startswith("/login")
+def _deps(router, path):
+    route = next(r for r in router.routes if r.path == path)
+    return {d.call for d in route.dependant.dependencies}
 
 
-@pytest.mark.parametrize("url", [
+def test_page_requires_login():
+    assert require_auth in _deps(pages.router, "/start_list")
+
+
+@pytest.mark.parametrize("path", [
     "/api/registered-runners",
-    "/api/registered-runners?event_name=Жара&event_year=2026",
-    "/api/registered-runners-years?event_name=Жара",
-    "/api/startlist/104",
-    "/api/export/startlist/104",
-    "/api/export/startlist?event_name=Жара",
+    "/api/registered-runners-years",
+    "/api/startlist/{event_id}",
+    "/api/export/startlist/{event_id}",
+    "/api/export/startlist",
 ])
-def test_leads_api_requires_auth(anon, url):
-    assert anon.get(url).status_code == 401
+def test_leads_api_requires_auth(path):
+    assert api_require_auth in _deps(api.router, path)
 
 
-def test_nav_has_no_start_list_link(anon):
-    r = anon.get("/results")
-    assert r.status_code == 200
-    assert "/start_list" not in r.text
+def test_anonymous_gets_401():
+    with pytest.raises(HTTPException) as e:
+        api_require_auth(None)
+    assert e.value.status_code == 401
+
+
+def test_nav_has_no_start_list_link():
+    assert "/start_list" not in HEADER.read_text(encoding="utf-8")
