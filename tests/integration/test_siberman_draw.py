@@ -4,6 +4,7 @@
 Год теста 2090–2099 (от PID), чистится до и после.
 """
 import datetime
+import io
 import os
 import threading
 import time
@@ -117,11 +118,47 @@ def test_replace_keeps_position_cancel_shifts(draw):
     assert service.pick(YEAR, draw["Запасной"])["position"] == 3
 
 
-def test_replace_other_category_rejected(draw):
+def test_replace_other_category_keeps_draw_order(draw):
+    # вытянули мужчину, а ввели женщину: исправленный встаёт к мужчинам на свою очередь, соседи сдвигаются
+    service.save_config(YEAR, {"capacity_men": 2})
     service.set_round(YEAR, 4)
-    a = service.pick(YEAR, draw["Новиков"])
-    with pytest.raises(DrawError, match="другой зачёт"):
-        service.replace(YEAR, a["pick_id"], draw["Новикова"])
+    service.pick(YEAR, draw["Новиков"])
+    wrong = service.pick(YEAR, draw["Новикова"])
+    service.pick(YEAR, draw["Последний"])
+    r = service.replace(YEAR, wrong["pick_id"], draw["Запасной"])
+    assert (r["category"], r["position"]) == ("men", 2)
+    assert r["shifted"] == [{"surname": "Последний", "name": "Тест", "category": "men", "position": 3,
+                             "section": "waitlist"}]
+    lists = service.admin_state(YEAR)["lists"]
+    assert [r["surname"] for r in lists["men"]] == ["Новиков", "Запасной", "Последний"] and lists["women"] == []
+    back = service.replace(YEAR, r["pick_id"], draw["Новикова"])      # и обратно
+    assert (back["category"], back["position"], back["shifted"][0]["section"]) == ("women", 1, "winner")
+
+
+def test_replace_still_checks_round_of_the_record(draw):
+    service.set_round(YEAR, 1)
+    team = service.pick(YEAR, draw["Капитанов"])
+    with pytest.raises(DrawError, match="не в этом раунде"):
+        service.replace(YEAR, team["pick_id"], draw["Новиков"])
+
+
+def test_backup_excel_has_whole_course(draw):
+    from openpyxl import load_workbook
+    service.set_round(YEAR, 4)
+    wrong = service.pick(YEAR, draw["Новикова"])
+    service.pick(YEAR, draw["Последний"])
+    service.replace(YEAR, wrong["pick_id"], draw["Новиков"])
+    wb = load_workbook(io.BytesIO(service.draw_backup(YEAR)))
+    assert wb.sheetnames == ["Ход жеребьёвки", "Итог", "Журнал действий", "Параметры"]
+    course = [[c.value for c in row] for row in wb["Ход жеребьёвки"].iter_rows(min_row=2)]
+    assert [(r[3], r[5], r[6], r[9]) for r in course] == [
+        ("Новикова Тест", "Женщины", None, "исправлено → Новиков Тест"),
+        ("Новиков Тест", "Мужчины", 1, "в списке"),           # исправление — на очереди исправленного
+        ("Последний Тест", "Мужчины", 2, "в списке")]
+    final = [[c.value for c in row] for row in wb["Итог"].iter_rows(min_row=2)]
+    assert [(r[0], r[1], r[3]) for r in final] == [("Мужчины", 1, "Новиков Тест"), ("Мужчины", 2, "Последний Тест")]
+    log = [[c.value for c in row] for row in wb["Журнал действий"].iter_rows(min_row=2)]
+    assert [(r[1], r[2], r[3], r[4]) for r in log] == [("исправление", "Новиков Тест", "Новикова Тест", "Новиков Тест")]
 
 
 def test_unpaid_auto_invites_next_and_suggests_revert(draw):
@@ -427,7 +464,7 @@ def test_cancel_and_replace_reset_payment_status(draw):
 ADMIN_CALLS = [
     ("get", "state", None), ("get", "applicant/1", None), ("post", "round", {"round": 1}),
     ("post", "pick", {"applicant_id": 1}), ("post", "picks/1/cancel", None),
-    ("post", "picks/1/replace", {"applicant_id": 1}),
+    ("post", "picks/1/replace", {"applicant_id": 1}), ("get", "backup.xlsx", None),
     ("post", "payment", {"applicant_id": 1, "status": "paid"}), ("post", "config", {}),
     ("post", "reset", {"confirm": "x"}),
 ]

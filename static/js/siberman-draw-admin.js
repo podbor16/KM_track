@@ -142,7 +142,6 @@ function inRound(a, rnd) { // зеркало logic.in_round_pool
 function reasonFor(a) {
   if (a.placed) return `уже вытянут — ${catLabel(a.placed.category)} №${a.placed.position}`;
   if (replacing) {
-    if (a.category !== replacing.category) return `другой зачёт: ${catLabel(a.category)}`;
     if (!inRound(a, replacing.round)) return 'не из раунда исправляемой записи';
     return '';
   }
@@ -151,14 +150,14 @@ function reasonFor(a) {
 
 const query = () => norm($('search').value.trim());
 
-// Пустой поиск — весь список участников раунда (при исправлении — раунда и зачёта исправляемой
-// записи), сначала доступные; набран текст — найденные среди всех заявок.
+// Пустой поиск — весь список участников раунда (при исправлении — раунда исправляемой записи, любой
+// зачёт), сначала доступные; набран текст — найденные среди всех заявок.
 function candidates() {
   const q = query();
   const rnd = replacing ? replacing.round : S.config.current_round;
   const list = q
     ? S.applicants.filter(a => norm(fio(a)).startsWith(q))
-    : S.applicants.filter(a => inRound(a, rnd) && (!replacing || a.category === replacing.category));
+    : S.applicants.filter(a => inRound(a, rnd));
   const sorted = list
     .map(a => ({ a, reason: reasonFor(a) }))
     .sort((x, y) => (x.reason ? 1 : 0) - (y.reason ? 1 : 0) || fio(x.a).localeCompare(fio(y.a), 'ru'));
@@ -197,8 +196,9 @@ async function choose(id) {
   const typed = $('search').value;
   try {
     if (replacing) {
-      await api(`/picks/${replacing.pick_id}/replace`, { applicant_id: id });
-      msg(`Исправлено: ${fio(a)} → ${catLabel(replacing.category)} №${replacing.position}`);
+      const r = await api(`/picks/${replacing.pick_id}/replace`, { applicant_id: id });
+      const moved = r.shifted.map(s => `${s.surname} ${s.name} — ${catLabel(s.category)} №${s.position}, ${s.section === 'winner' ? 'теперь победитель' : 'теперь в листе ожидания'}`);
+      msg(`Исправлено: ${fio(a)} → ${catLabel(r.category)} №${r.position}` + (moved.length ? `. Сдвинулись: ${moved.join('; ')}` : ''), moved.length ? 'warn' : 'ok');
       replacing = null;
     } else {
       const r = await api('/pick', { applicant_id: id });

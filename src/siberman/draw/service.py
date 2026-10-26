@@ -181,20 +181,32 @@ def cancel(year: int, pick_id: int, user: str = "") -> dict:
 
 
 def replace(year: int, pick_id: int, applicant_id: int, user: str = "") -> dict:
-    """Исправить: другой участник на то же место (тот же зачёт, раунд исходной записи)."""
+    """Исправить: другой участник на ту же точку хода жеребьёвки (раунд и очерёдность исходной записи).
+    Зачёт может быть другим (ввели женщину вместо вытянутого мужчины): новый встаёт в свой зачёт так,
+    будто его ввели сразу, соседи по зачётам сдвигаются. Кто из-за этого перешёл между победителями
+    и листом ожидания — в ответе (shifted)."""
     def op(conn, snap):
         p = _active_pick(snap, pick_id)
         a = _applicant(snap, applicant_id)
-        if category_of(a) != p["category"]:
-            raise DrawError(f"{_fio(a)}: другой зачёт — используйте «Отменить»")
         reason = check_pick(a, p["round"], snap["lists"])
         if reason:
             raise DrawError(f"{_fio(a)}: {reason}")
-        new_id = ddb.insert_pick(conn, year, a["id"], p["round"], p["category"], position_key=p["position_key"])
+        category = category_of(a)
+        new_id = ddb.insert_pick(conn, year, a["id"], p["round"], category, position_key=p["position_key"])
         ddb.cancel_pick(conn, pick_id, replaced_by=new_id)
         ddb.audit(conn, year, a["id"], "replace_pick", str(p["applicant_id"]), str(a["id"]), p["applicant_id"], user)
         _reset_payment(conn, year, snap, p["applicant_id"], user)
-        return {"pick_id": new_id}
+        picks = [{**x, "cancelled_at": "исправлено"} if x["id"] == pick_id else x for x in snap["picks"]]
+        picks.append({"id": new_id, "applicant_id": a["id"], "round": p["round"], "category": category,
+                      "position_key": p["position_key"], "created_at": None, "cancelled_at": None})
+        after = build_lists({x["id"]: x for x in snap["applicants"]}, picks, snap["config"])
+        before = {r["applicant_id"]: r["section"] for rows in snap["lists"].values() for r in rows}
+        rows = [(c, r) for c, rows in after.items() for r in rows]
+        shifted = [{"surname": r["surname"], "name": r["name"], "category": c, "position": r["position"],
+                    "section": r["section"]}
+                   for c, r in rows if r["applicant_id"] != a["id"] and before.get(r["applicant_id"]) != r["section"]]
+        position = next(r["position"] for c, r in rows if r["applicant_id"] == a["id"])
+        return {"pick_id": new_id, "category": category, "position": position, "shifted": shifted}
     return _write(year, op)
 
 
@@ -430,6 +442,93 @@ def payment_export(year: int) -> bytes:
         ws.column_dimensions[get_column_letter(i)].width = width
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ── Бэкап всей жеребьёвки в Excel ───────────────────────────────────────────
+
+AUDIT_LABELS = {"replace_pick": "исправление", "cancel_pick": "отмена", "payment": "оплата",
+                "payment_comment": "комментарий к оплате", "auto_invite": "приглашение из листа"}
+CONFIG_LABELS = (("capacity_men", "Мест: мужчины"), ("capacity_women", "Мест: женщины"),
+                 ("capacity_relay", "Мест: эстафеты"), ("quota_repeat", "Квота повторных"),
+                 ("quota_novice", "Квота новичков"), ("auto_invite_until", "Автопередача до"),
+                 ("current_round", "Текущий раунд"), ("imported_at", "Таблица загружена"))
+
+
+def _sheet(wb: Workbook, title: str, columns: tuple, rows: list[list]) -> None:
+    ws = wb.create_sheet(title)
+    ws.append([t for t, _ in columns])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for r in rows:
+        ws.append(r)
+    for i, (_, width) in enumerate(columns, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+
+def draw_backup(year: int) -> bytes:
+    """Весь ход жеребьёвки: каждая запись по очерёдности вытягивания (исправление — сразу за исправленной,
+    отменённые тоже), итоговые списки, журнал действий и параметры — чтобы восстановить картину без БД."""
+    conn = _connect()
+    try:
+        snap = _snapshot(conn, year)
+        audit = ddb.load_year_audit(conn, year)
+    finally:
+        conn.close()
+    by_id = {a["id"]: a for a in snap["applicants"]}
+    pick_by_id = {p["id"]: p for p in snap["picks"]}
+    placed = {r["pick_id"]: r for rows in snap["lists"].values() for r in rows}
+    fio_of = lambda aid: _fio(by_id[aid]) if aid in by_id else ""  # noqa: E731
+
+    def status(p):
+        if p["replaced_by"]:
+            return f"исправлено → {fio_of(pick_by_id[p['replaced_by']]['applicant_id'])}"
+        return "отменено" if p["cancelled_at"] else "в списке"
+
+    course = []
+    for i, p in enumerate(sorted(snap["picks"], key=lambda p: (p["position_key"], p["id"])), start=1):
+        a, row = by_id[p["applicant_id"]], placed.get(p["id"])
+        course.append([i, p["created_at"], ROUND_LABELS[p["round"]], _fio(a), a["city"],
+                       CATEGORY_LABELS[p["category"]], row["position"] if row else "",
+                       SECTION_LABELS[row["section"]] if row else "", "да" if a["is_wildcard"] else "",
+                       status(p), p["cancelled_at"] or ""])
+    final = [[CATEGORY_LABELS[c], r["position"], SECTION_LABELS[r["section"]], f"{r['surname']} {r['name']}".strip(),
+              r["city"], "да" if r["is_wildcard"] else "", ROUND_LABELS[r["round"]], r["created_at"],
+              PAYMENT_LABELS[r["payment_status"]], by_id[r["applicant_id"]]["payment_comment"] or ""]
+             for c in CATEGORIES for r in snap["lists"][c]]
+    log_rows = []
+    for x in audit:
+        old, new = x["old_value"], x["new_value"]
+        if x["action"] == "replace_pick":
+            old, new = fio_of(int(old)) if old.isdigit() else old, fio_of(int(new)) if new.isdigit() else new
+        elif x["action"] in ("payment", "auto_invite"):
+            old, new = PAYMENT_LABELS.get(old, old), PAYMENT_LABELS.get(new, new)
+        log_rows.append([x["created_at"], AUDIT_LABELS.get(x["action"], x["action"]), fio_of(x["applicant_id"]),
+                         old, new, fio_of(x["ref_applicant_id"]) if x["ref_applicant_id"] else "", x["admin_user"]])
+    cfg = snap["config"]
+    params = [[label, ROUND_LABELS.get(cfg[k], cfg[k]) if k == "current_round" else cfg.get(k)]
+              for k, label in CONFIG_LABELS]
+    params.append(["Выгружено", datetime.datetime.now().replace(microsecond=0)])
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    _sheet(wb, "Ход жеребьёвки", (("№", 6), ("Время", 20), ("Раунд", 14), ("Фамилия Имя", 28), ("Город", 18),
+                                  ("Зачёт", 11), ("Место", 7), ("Раздел", 15), ("Wild card", 10), ("Статус", 34),
+                                  ("Отменено / исправлено", 20)), course)
+    _sheet(wb, "Итог", (("Зачёт", 11), ("№", 5), ("Раздел", 15), ("Фамилия Имя", 28), ("Город", 18),
+                        ("Wild card", 10), ("Раунд", 14), ("Время", 20), ("Оплата", 18), ("Комментарий", 30)), final)
+    _sheet(wb, "Журнал действий", (("Время", 20), ("Действие", 22), ("Участник", 28), ("Было", 28),
+                                   ("Стало", 28), ("Связан с", 28), ("Кто", 14)), log_rows)
+    _sheet(wb, "Параметры", (("Параметр", 22), ("Значение", 22)), params)
+    for ws in wb.worksheets:
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                if isinstance(cell.value, datetime.datetime):
+                    cell.number_format = "DD.MM.YYYY HH:MM:SS"
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

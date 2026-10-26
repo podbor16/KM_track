@@ -242,6 +242,18 @@ def draw_export(year: int, user: str = Depends(api_require_auth)):
                     headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
 
 
+@router.get(ADMIN + "/backup.xlsx", dependencies=_YEAR_OK)
+def draw_backup(year: int, user: str = Depends(api_require_auth)):
+    """Бэкап всей жеребьёвки: ход по порядку (с исправленными и отменёнными), итог, журнал действий."""
+    try:
+        data = service.draw_backup(year)
+    except DrawError as e:
+        return _error(e)
+    name = f"siberman_{year}_zherebyovka_{datetime.datetime.now():%Y%m%d_%H%M}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
+
+
 @router.post(ADMIN + "/reset", dependencies=_YEAR_OK)
 def draw_reset(year: int, body: ResetIn, user: str = Depends(api_require_auth)):
     return _run(service.reset, year, body.confirm, user)

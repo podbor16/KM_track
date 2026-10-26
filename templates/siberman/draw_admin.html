@@ -97,7 +97,7 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
         <div id="replace-banner" class="msg msg-warn"></div>
         <input id="search" class="search" placeholder="Фамилия вытянутого участника…" autocomplete="off" autofocus>
         <div id="results"></div>
-        <div class="label">Журнал</div>
+        <div class="label">Журнал <a class="btn-small" href="/api/siberman/admin/draw/{{ year }}/backup.xlsx">Скачать Excel всей жеребьёвки</a></div>
         <div id="journal" class="journal"></div>
       </div>
       <div id="lists" class="lists"></div>
@@ -147,7 +147,8 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
     </div>
     <div class="card">
       <h2>Очистить журнал (после репетиции)</h2>
-      <p class="muted">Удаляет все вытягивания и статусы оплаты {{ year }} года, раунд — Wild card. Для подтверждения введите {{ year }}.</p>
+      <p class="muted">Удаляет все вытягивания и статусы оплаты {{ year }} года, раунд — Wild card. Для подтверждения введите {{ year }}.
+        Перед очисткой можно <a href="/api/siberman/admin/draw/{{ year }}/backup.xlsx">скачать Excel всей жеребьёвки</a>.</p>
       <input id="reset-confirm" placeholder="{{ year }}">
       <button class="btn btn-danger" onclick="resetDraw()">Очистить</button>
     </div>

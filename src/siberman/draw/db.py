@@ -113,6 +113,13 @@ def audit(conn, year: int, applicant_id: int, action: str, old: str, new: str,
     )
 
 
+def load_year_audit(conn, year: int) -> list[dict]:
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT applicant_id, action, old_value, new_value, ref_applicant_id, admin_user, created_at "
+                "FROM draw_audit WHERE draw_year=%s ORDER BY id", (year,))
+    return cur.fetchall()
+
+
 def load_audit(conn, year: int, applicant_id: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT action, old_value, new_value, admin_user, created_at FROM draw_audit "
