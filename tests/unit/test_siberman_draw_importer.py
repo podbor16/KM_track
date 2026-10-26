@@ -5,30 +5,28 @@ import pytest
 
 from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
 
-HEADER = [
-    "format", "surname Name", "sex", "city (исправлено)", "Wildcard",
+HEADER = [   # формат таблицы организаторов 2028 («Книга11.xlsx»)
+    "Wildcard", "Формат участия", "Участник жеребьёвки", "Плавание", "Велосипед", "Бег", "Пол", "Город",
     "Старты на гонке (индивидуально)", "Старты на гонке (эстафета)",
     "Накопленные шансы за участия в жеребьёвке", "Карточка для местных атлетов",
     "Участие в 222 Дуатлоне", "Участие в суточной велогонке 24часа", "Тату Siberman",
-    "Сумма дополнительных шансов", "Общая сумма шансов", "Участвует 2027", "wildcard_reason",
-    "Расскажите_о_ваших_результатах", "surname_swim", "name_swim", "surname_bike", "name_bike",
-    "surname_run", "name_run",
+    "Сумма дополнительных шансов", "Общая сумма шансов",
 ]
 
 
-def _row(fmt, full, sex, wc=None, starts=0, relay_starts="", accum="", extra_sum=None, total=None, swim=("", "")):
+def _row(fmt, full, sex, wc=None, starts=0, relay_starts="", accum="", extra_sum=None, total=None, swim=""):
     extra = sum(v for v in (starts, relay_starts, accum) if isinstance(v, int))  # «два» — проверка ошибки
     extra_sum = extra if extra_sum is None else extra_sum
     total = extra_sum + 1 if total is None else total
-    return [fmt, full, sex, "Красноярск", wc, starts or "", relay_starts, accum, None, "", "", "",
-            extra_sum, total, None, "причина" if wc else None, "результаты",
-            swim[0], swim[1], "Вело", "Велосипедист", "Бег", "Бегун"]
+    relay = (swim, "Вело Велосипедист", "Бег Бегун") if fmt.startswith("Эстафет") else (None, None, None)
+    return [wc, fmt, full, *relay, sex, "Красноярск", starts or "", relay_starts, accum, None, "", "", "",
+            extra_sum, total]
 
 
 def _xlsx(rows, header=HEADER):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Спец вставка"
+    ws.title = "Лист1"
     ws.append(header)
     for r in rows:
         ws.append(r)
@@ -42,7 +40,7 @@ def test_pools_and_fields():
         _row("Индивидуальное участие", "Русскин Дмитрий", "Мужской", wc="Wildcard", starts=7),
         _row("Индивидуальное участие", "Акулич Степан", "Мужской", starts=3, accum=1),
         _row("Индивидуальное участие", "Новикова Анна", "Женский"),
-        _row("Эстафетная команда", "Летницкий Дмитрий", None, relay_starts=2, swim=("Летницкий", "Дмитрий")),
+        _row("Эстафетная команда", "Летницкий Дмитрий", None, relay_starts=2, swim="Летницкий  Дмитрий"),
         _row("Индивидуальное участие", "Баранов Роман", "Мужской", wc="!", starts=1),
     ]))
     assert errors == []
@@ -55,7 +53,8 @@ def test_pools_and_fields():
     assert by["Летницкий"]["relay_bike"] == "Вело Велосипедист"
     # «!» — организаторы решили не давать wild card: обычный участник
     assert by["Баранов"]["pool"] == "repeat" and by["Баранов"]["is_wildcard"] is False
-    assert by["Акулич"]["name"] == "Степан" and by["Акулич"]["results_text"] == "результаты"
+    assert by["Акулич"]["name"] == "Степан" and by["Акулич"]["relay_swim"] == ""
+    assert by["Русскин"]["wildcard_reason"] == "" and by["Русскин"]["results_text"] == ""   # тексты — из CSV Тильды
 
 
 def test_chances_mismatch_is_error():
@@ -191,9 +190,9 @@ def test_diff_against_loaded_table():
 
 
 def test_parse_tilda_contacts_latest_wins_and_formats():
-    head = "surname;Name;Email;Phone;Date;format"
-    rows = ["Иванов;Иван;old@ex.ru;111;2026-09-01 10:00:00;Индивидуальное участие",
-            "иванов;Иван ;new@ex.ru; 222 ;2026-09-03 10:00:00;Индивидуальное участие",   # последняя — главнее
+    head = "surname;Name;Email;Phone;Date;format;wildcard_reason;Расскажите_о_ваших_результатах"
+    rows = ["Иванов;Иван;old@ex.ru;111;2026-09-01 10:00:00;Индивидуальное участие;старая;",
+            "иванов;Иван ;new@ex.ru; 222 ;2026-09-03 10:00:00;Индивидуальное участие;Тату и 5 стартов; Финишер ",
             "Ёлкина;Мария;e@ex.ru;333;2026-09-02 10:00:00;Индивидуальное участие",
             "Капитан;Один;cap@ex.ru;444;2026-09-02 10:00:00;Эстафетная команда",
             "Кто-то;Странный;x@ex.ru;555;2026-09-02 10:00:00;Непонятно"]
@@ -201,7 +200,7 @@ def test_parse_tilda_contacts_latest_wins_and_formats():
         contacts, rep = parse_contacts("\n".join([head, *rows]).encode(enc))
         assert (rep["rows"], rep["people"], rep["duplicates"], rep["bad_format"]) == (5, 3, 1, 1)
         assert contact_for({"format": "individual", "surname": "Иванов", "name": "Иван"}, contacts) == {
-            "email": "new@ex.ru", "phone": "222"}
+            "email": "new@ex.ru", "phone": "222", "wildcard_reason": "Тату и 5 стартов", "results_text": "Финишер"}
         assert contact_for({"format": "individual", "surname": "Елкина", "name": "мария"}, contacts)["email"] == "e@ex.ru"
         assert contact_for({"format": "relay", "surname": "Один", "name": "Капитан"}, contacts)["phone"] == "444"
         assert contact_for({"format": "relay", "surname": "Иванов", "name": "Иван"}, contacts) is None

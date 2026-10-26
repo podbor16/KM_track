@@ -1,11 +1,13 @@
 """
-Таблица организаторов жеребьёвки (лист «Спец вставка») → заявки draw_applicants.
+Таблица организаторов жеребьёвки (формат 2028: «Участник жеребьёвки», «Формат участия», «Пол», «Город»,
+составы эстафет — «Плавание», «Велосипед», «Бег») → заявки draw_applicants.
 
 Колонки ищутся по заголовку. Пул (цвет шарика): wild card (красные) → 'wildcard',
 эстафета (синие) → 'relay', личник со стартами в личном зачёте → 'repeat',
 иначе → 'novice' (чёрные, две ёмкости). Отметки «!» и «Участвует 2027» не
 используются: решение организаторов — обычные участники (2026-10-14).
-Эстафета — по капитану, названия команды в таблице нет.
+Эстафета — по капитану, названия команды в таблице нет. Тексты «Почему wild card» и «О результатах» —
+не из таблицы, а из CSV заявок Тильды (вместе с контактами, parse_contacts).
 """
 import csv
 import io
@@ -14,9 +16,9 @@ from operator import itemgetter
 import openpyxl
 
 SHEET = "Спец вставка"
-COL_FORMAT, COL_NAME, COL_SEX, COL_CITY = "format", "surname Name", "sex", "city (исправлено)"
+COL_FORMAT, COL_NAME, COL_SEX, COL_CITY = "Формат участия", "Участник жеребьёвки", "Пол", "Город"
 COL_WILDCARD, COL_TOTAL, COL_EXTRA = "Wildcard", "Общая сумма шансов", "Сумма дополнительных шансов"
-COL_WILDCARD_REASON, COL_RESULTS = "wildcard_reason", "Расскажите_о_ваших_результатах"
+RELAY_COLS = {"swim": "Плавание", "bike": "Велосипед", "run": "Бег"}   # «Фамилия Имя» участника этапа
 EXTRA_COLS = {
     "starts_individual": "Старты на гонке (индивидуально)",
     "starts_relay": "Старты на гонке (эстафета)",
@@ -26,8 +28,10 @@ EXTRA_COLS = {
     "race_24h": "Участие в суточной велогонке 24часа",
     "tattoo": "Тату Siberman",
 }
-REQUIRED = (COL_FORMAT, COL_NAME, COL_SEX, COL_CITY, COL_WILDCARD, COL_TOTAL, COL_EXTRA, *EXTRA_COLS.values())
-RELAY_ROLES = ("swim", "bike", "run")
+REQUIRED = (COL_FORMAT, COL_NAME, COL_SEX, COL_CITY, COL_WILDCARD, COL_TOTAL, COL_EXTRA, *EXTRA_COLS.values(),
+            *RELAY_COLS.values())
+# Тексты заявки Тильды: поле заявки → поле draw_applicants
+TILDA_TEXTS = {"wildcard_reason": "wildcard_reason", "results_text": "Расскажите_о_ваших_результатах"}
 # Что сравнивать между версиями таблицы (тексты «причина wild card» и «о результатах» — нет)
 DIFF_FIELDS = ("gender", "city", "pool", "is_wildcard", "chances", *EXTRA_COLS,
                "relay_swim", "relay_bike", "relay_run")
@@ -145,16 +149,13 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
             pool = "relay"
         else:
             pool = "repeat" if extra["starts_individual"] > 0 else "novice"
-        relay = {
-            f"relay_{r}": _norm(f"{_norm(get('surname_' + r))} {_norm(get('name_' + r))}") if fmt == "relay" else ""
-            for r in RELAY_ROLES
-        }
+        relay = {f"relay_{r}": _norm(get(col)) if fmt == "relay" else "" for r, col in RELAY_COLS.items()}
         apps.append({
             "format": fmt, "surname": surname, "name": name,
             "gender": gender if fmt == "individual" else None,
             "city": _norm(get(COL_CITY)), "pool": pool, "is_wildcard": is_wildcard,
             "chances": total, **extra, **relay,
-            "wildcard_reason": _norm(get(COL_WILDCARD_REASON)), "results_text": _norm(get(COL_RESULTS)),
+            "wildcard_reason": "", "results_text": "",
         })
     return apps, errors
 
@@ -217,8 +218,9 @@ def _decode_csv(data: bytes) -> str:
 
 
 def parse_contacts(file_bytes: bytes) -> tuple[dict, dict]:
-    """CSV заявок Тильды («;», UTF-8 или cp1251) → ({(формат, ФИ): {email, phone}}, отчёт). Берём только
-    ФИ, формат, Email, Phone и дату заявки; у эстафеты — заявителя (капитана, как в таблице организаторов).
+    """CSV заявок Тильды («;», UTF-8 или cp1251) → ({(формат, ФИ): {email, phone, wildcard_reason, results_text}},
+    отчёт). Берём только ФИ, формат, Email, Phone, тексты TILDA_TEXTS и дату заявки; у эстафеты — заявителя
+    (капитана, как в таблице организаторов).
     Повторная заявка — главнее последняя (правила жеребьёвки)."""
     rows = list(csv.DictReader(io.StringIO(_decode_csv(file_bytes)), delimiter=";"))
     report = {"rows": len(rows), "people": 0, "duplicates": 0, "bad_format": 0}
@@ -236,7 +238,8 @@ def parse_contacts(file_bytes: bytes) -> tuple[dict, dict]:
             report["duplicates"] += 1
             if when < best[key][0]:
                 continue
-        best[key] = (when, {"email": _norm(r.get("Email")), "phone": _norm(r.get("Phone"))})
+        best[key] = (when, {"email": _norm(r.get("Email")), "phone": _norm(r.get("Phone")),
+                            **{k: (r.get(f) or "").strip() for k, f in TILDA_TEXTS.items()}})
     report["people"] = len(best)
     return {k: v for k, (_, v) in best.items()}, report
 

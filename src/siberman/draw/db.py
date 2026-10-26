@@ -222,11 +222,23 @@ def replace_contacts(conn, year: int, contacts: dict) -> None:
     """Контакты года целиком заменяются новой выгрузкой заявок Тильды."""
     cur = conn.cursor()
     cur.execute("DELETE FROM draw_contacts WHERE draw_year=%s", (year,))
-    cur.executemany("INSERT INTO draw_contacts (draw_year, format, fio_key, email, phone) VALUES (%s, %s, %s, %s, %s)",
-                    [(year, fmt, key, c["email"][:255], c["phone"][:64]) for (fmt, key), c in contacts.items()])
+    cur.executemany("INSERT INTO draw_contacts (draw_year, format, fio_key, email, phone, wildcard_reason, results_text) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    [(year, fmt, key, c["email"][:255], c["phone"][:64], c["wildcard_reason"], c["results_text"])
+                     for (fmt, key), c in contacts.items()])
 
 
 def load_contacts(conn, year: int) -> dict:
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT format, fio_key, email, phone FROM draw_contacts WHERE draw_year=%s", (year,))
-    return {(r["format"], r["fio_key"]): {"email": r["email"], "phone": r["phone"]} for r in cur.fetchall()}
+    cur.execute("SELECT format, fio_key, email, phone, wildcard_reason, results_text FROM draw_contacts "
+                "WHERE draw_year=%s", (year,))
+    return {(r["format"], r["fio_key"]): {"email": r["email"], "phone": r["phone"],
+                                          "wildcard_reason": r["wildcard_reason"] or "",
+                                          "results_text": r["results_text"] or ""} for r in cur.fetchall()}
+
+
+def update_texts(conn, rows: list[dict]) -> None:
+    """[{id, wildcard_reason, results_text}] — тексты заявки Тильды в заявки жеребьёвки."""
+    if rows:
+        conn.cursor().executemany("UPDATE draw_applicants SET wildcard_reason=%(wildcard_reason)s, "
+                                  "results_text=%(results_text)s WHERE id=%(id)s", rows)

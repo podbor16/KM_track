@@ -244,6 +244,12 @@ def _against(snap: dict, apps: list[dict]) -> dict:
     return {"diff": diff_applicants(snap["applicants"], apps) if loaded else None, "blocked": bool(snap["picks"])}
 
 
+def _texts(a: dict, contacts: dict) -> dict:
+    """Тексты «Почему wild card» и «О результатах» из заявки Тильды; нет заявки или текста — прежние."""
+    c = contact_for(a, contacts) or {}
+    return {k: c.get(k) or a[k] or "" for k in ("wildcard_reason", "results_text")}
+
+
 def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: str = "") -> dict:
     """Таблица заменяет заявки года целиком — можно перезаливать сколько угодно до первого вытянутого.
     Проверка (dry_run) ничего не пишет: отчёт, ошибки и что изменится относительно загруженной таблицы."""
@@ -261,7 +267,8 @@ def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: 
         if snap["picks"]:
             raise DrawError("жеребьёвка уже началась — загрузка таблицы запрещена (сначала «Очистить журнал»)")
         result = {"report": report, "errors": [], "written": True, **_against(snap, apps)}
-        ddb.replace_applicants(conn, year, apps)
+        contacts = ddb.load_contacts(conn, year)
+        ddb.replace_applicants(conn, year, [{**a, **_texts(a, contacts)} for a in apps])
         return result
     return _write(year, op)
 
@@ -380,14 +387,15 @@ EXPORT_COLUMNS = (("category", "Зачёт", 12), ("position", "№", 5), ("sect
 
 
 def import_contacts(year: int, file_bytes: bytes, user: str = "") -> dict:
-    """CSV заявок Тильды → e-mail и телефоны (заменяют прошлую загрузку). Отчёт: сколько людей и у каких
-    победителей / приглашённых контакта нет."""
+    """CSV заявок Тильды → e-mail, телефоны и тексты «Почему wild card» / «О результатах» (заменяют прошлую
+    загрузку; тексты переносятся и в заявки). Отчёт: сколько людей и у каких победителей / приглашённых контакта нет."""
     contacts, report = parse_contacts(file_bytes)
     if not contacts:
         raise DrawError("в файле нет заявок — нужна CSV-выгрузка заявок Тильды (столбцы surname, Name, Email, Phone, format)")
 
     def op(conn, snap):
         ddb.replace_contacts(conn, year, contacts)
+        ddb.update_texts(conn, [{**_texts(a, contacts), "id": a["id"]} for a in snap["applicants"]])
         rows = _payment_rows(snap, contacts)
         return {**report, "matched": sum(1 for a in snap["applicants"] if contact_for(a, contacts)),
                 "applicants": len(snap["applicants"]),

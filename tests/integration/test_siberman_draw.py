@@ -539,9 +539,23 @@ def test_host_page_and_state(draw, client):
     assert service.admin_state(YEAR)["host_link"] == f"/draw/{YEAR}/host/{token}"
 
 
-def _tilda_csv(rows):
-    head = "surname;Name;Email;Phone;Date;format"
+def _tilda_csv(rows, head="surname;Name;Email;Phone;Date;format"):
     return ("\ufeff" + "\n".join([head, *(";".join(r) for r in rows)])).encode("utf-8")
+
+
+def test_tilda_texts_reach_applicants_and_survive_table_reupload(draw, monkeypatch):
+    # \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0442\u043e\u0440\u043e\u0432 2028 \u0442\u0435\u043a\u0441\u0442\u043e\u0432 \u043d\u0435\u0442 \u2014 \u00ab\u041f\u043e\u0447\u0435\u043c\u0443 wild card\u00bb \u0438 \u00ab\u041e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u0445\u00bb \u0438\u0437 CSV \u0437\u0430\u044f\u0432\u043e\u043a \u0422\u0438\u043b\u044c\u0434\u044b
+    service.import_contacts(YEAR, _tilda_csv(
+        [("\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432", "\u0422\u0435\u0441\u0442", "wc@ex.ru", "1", "2026-09-02 10:00:00", "\u0418\u043d\u0434\u0438\u0432\u0438\u0434\u0443\u0430\u043b\u044c\u043d\u043e\u0435 \u0443\u0447\u0430\u0441\u0442\u0438\u0435", "10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440")],
+        head="surname;Name;Email;Phone;Date;format;wildcard_reason;\u0420\u0430\u0441\u0441\u043a\u0430\u0436\u0438\u0442\u0435_\u043e_\u0432\u0430\u0448\u0438\u0445_\u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u0445"), "test")
+
+    def texts():
+        service.clear_cache()
+        return {a["surname"]: (a["wildcard_reason"], a["results_text"]) for a in service.admin_state(YEAR)["applicants"]}
+    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440") and texts()["\u041d\u043e\u0432\u0438\u043a\u043e\u0432"] == ("", "")
+    monkeypatch.setattr(service, "parse_applicants", lambda b: (APPS, []))   # \u043d\u043e\u0432\u0430\u044f \u0432\u0435\u0440\u0441\u0438\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u044b \u2014 \u0431\u0435\u0437 \u0442\u0435\u043a\u0441\u0442\u043e\u0432
+    assert service.import_applicants(YEAR, b"x", dry_run=False)["written"]
+    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440")
 
 
 def test_contacts_and_payment_export(draw, client):

@@ -108,7 +108,7 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
     <div class="card">
       <h2>Excel для счетов</h2>
       <p class="muted">Победители (с wild card) и приглашённые из листа ожидания (⏳) — с e-mail и телефонами.
-        Контакты берутся из CSV-выгрузки заявок Тильды: загрузите её один раз (новая выгрузка заменяет прошлую,
+        Контакты (и тексты «Почему wild card» / «О результатах» для ведущих) берутся из CSV-выгрузки заявок Тильды: загрузите её один раз (новая выгрузка заменяет прошлую,
         перезаливка таблицы шансов контакты не стирает). Контакты видны только здесь и в Excel.</p>
       <p id="contacts-info" class="muted"></p>
       <input type="file" id="contacts-file" accept=".csv,text/csv">
@@ -139,6 +139,8 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
     </div>
     <div class="card">
       <h2>Таблица организаторов</h2>
+      <p class="muted">Формат 2028: «Участник жеребьёвки», «Формат участия», «Пол», «Город», составы эстафет —
+        «Плавание», «Велосипед», «Бег», дальше колонки шансов.</p>
       <p id="import-info" class="muted"></p>
       <input type="file" id="import-file" accept=".xlsx">
       <button class="btn" onclick="importTable(true)">Проверить</button>

@@ -71,6 +71,9 @@ jobs:
             # Жеребьёвка: контакты заявителей для счетов (из заявок Тильды)
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/016_draw_contacts.sql
 
+            # Жеребьёвка: тексты заявки («Почему wild card», «О результатах») рядом с контактами
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/017_draw_contacts_texts.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"
