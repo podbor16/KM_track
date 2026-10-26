@@ -373,8 +373,10 @@ async def get_registered_runners(
     limit: int = Query(10000, ge=1, le=10000),
     event_name: str = Query("Ночной забег"),
     event_year: int = Query(2026),
+    user: str = Depends(api_require_auth),
 ) -> RegisteredRunnersListResponse:
-    """Зарегистрированные участники из БД, фильтрация по событию и году."""
+    """Зарегистрированные участники из БД, фильтрация по событию и году.
+    Персональные данные — только с сессией (стартовый список не публикуется, 2026-10-26)."""
     try:
         from src.analytics.db_connection_optimized import get_test_table_data
         from src.krasmarafon.models.analytics import RegisteredRunnerInfo
@@ -427,7 +429,10 @@ async def get_registered_runners(
 
 
 @router.get("/api/registered-runners-years")
-async def get_registered_runners_years(event_name: str = Query(...)) -> dict:
+async def get_registered_runners_years(
+    event_name: str = Query(...),
+    user: str = Depends(api_require_auth),
+) -> dict:
     """Годы, в которых у события есть заявки (leads), по убыванию — список
     селектора года на /start_list (первый — дефолт при смене события)."""
     from src.analytics.db_results import get_leads_filter_options
@@ -963,8 +968,11 @@ async def get_server_metrics_snapshot(user: str = Depends(api_require_auth)):
 # ============================================================================
 
 @router.get("/api/startlist/{event_id}")
-async def get_startlist(event_id: int = PathParam(..., description="ID события в БД")):
-    """Публичный стартовый список события. Кеш 60с."""
+async def get_startlist(
+    event_id: int = PathParam(..., description="ID события в БД"),
+    user: str = Depends(api_require_auth),
+):
+    """Стартовый список события. Требует авторизации (не публикуется, 2026-10-26). Кеш 60с."""
     from src.analytics.db_results import get_leads_by_event
     from src.krasmarafon.models.startlist import StartlistItem, StartlistResponse
 

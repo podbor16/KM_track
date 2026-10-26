@@ -162,8 +162,11 @@ async def tracker_event_page(request: Request, event: str):
 # ============================================================================
 
 @router.get("/start_list", response_class=HTMLResponse)
-async def start_list_page(request: Request):
-    """Стартовый список участников."""
+async def start_list_page(request: Request, user=Depends(require_auth)):
+    """Стартовый список участников. Не публикуется (персональные данные,
+    решение 2026-10-26) — только после входа в админку."""
+    if isinstance(user, RedirectResponse):
+        return user
     return templates.TemplateResponse("krasmarafon/start_list.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,

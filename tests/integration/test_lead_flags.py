@@ -129,7 +129,13 @@ def test_refund_out_of_duplicates_site_and_bibs(db, client):
     assert set_lead_refund(new, True)                         # вернули деньги за свежую заявку
     cur.execute("SELECT id, refund, is_duplicate FROM leads WHERE id IN (%s, %s) ORDER BY id", (old, new))
     assert [tuple(r.values()) for r in cur.fetchall()] == [(old, 0, 0), (new, 1, 0)]   # основная — оставшаяся
-    runners = client.get("/api/registered-runners", params={"event_name": EV, "event_year": 2099}).json()["runners"]
+    from app import app
+    from src.core.auth import api_require_auth
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        runners = client.get("/api/registered-runners", params={"event_name": EV, "event_year": 2099}).json()["runners"]
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)
     assert [r["lead_id"] for r in runners] == [old]           # возврат скрыт с сайта
     assert [l["id"] for l in bibs.load_leads(conn, EV, 2099)] == [old]   # и без номера
     assert set_lead_refund(new, False)

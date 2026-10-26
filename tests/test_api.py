@@ -68,30 +68,10 @@ class TestRaceConfigEndpoints:
 class TestAnalyticsEndpoints:
     """Test analytics endpoints"""
     
-    def test_get_registered_runners(self, client):
-        """Test registered runners endpoint with database integration"""
+    def test_registered_runners_requires_auth(self, client):
+        """Стартовый список не публикуется — без сессии 401"""
         response = client.get("/api/registered-runners")
-        assert response.status_code == 200
-        data = response.json()
-        assert "total" in data
-        assert "runners" in data
-        assert isinstance(data["runners"], list)
-        
-        # Verify data structure
-        if data["runners"]:
-            runner = data["runners"][0]
-            assert "id" in runner
-            assert "name" in runner
-            assert "surname" in runner
-            assert "full_name" in runner
-            assert "category" in runner
-    
-    def test_get_registered_runners_with_limit(self, client):
-        """Test registered runners endpoint with limit parameter"""
-        response = client.get("/api/registered-runners?limit=5")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] <= 5
+        assert response.status_code == 401
 
 
 class TestPageEndpoints:

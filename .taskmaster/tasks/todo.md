@@ -1,3 +1,11 @@
+# Красмарафон: стартовый список не публикуется (ПДн, 2026-10-26)
+
+- [x] `/start_list` — только после входа (`require_auth`, аноним → `/login`)
+- [x] `/api/registered-runners`, `/api/registered-runners-years`, `/api/startlist/{id}` — `api_require_auth` (401 без сессии); экспорт CSV был закрыт и раньше
+- [x] Пункт «СТАРТОВЫЙ СПИСОК» убран из шапки, индексы подсветки сдвинуты
+- [x] Тесты: `tests/unit/test_start_list_private.py`; `test_api.py` и `test_lead_flags.py` под авторизацию
+
+**Ревью:** главная утечка была не в странице, а в публичном `/api/registered-runners` (ФИО + дата рождения + город/клуб). Вернуть публикацию — откатить зависимости auth в трёх эндпоинтах и странице + ссылку в шапке. unit: 1020 passed.
 # Siberman: жеребьёвка 2028 — эфир 27.10.2026 15:00 МСК
 
 Спецификация: `docs/superpowers/specs/2026-10-14-siberman-draw-2028-design.md`, план: `docs/superpowers/plans/2026-10-14-siberman-draw-2028.md` (полный код задач). Контекст — Obsidian `knowledge/decisions/2026-10-12-siberman-draw-2028-tasks.md`. Ждём от организаторов: места и квоты (до 23.10); правило — что делать, если в раундах 2–3 вытянули шарик пола, чья квота уже набрана (пока: не добавлять, шарик откладывается до раунда 4). Ветка `feature/siberman-draw-2028`, worktree `.worktrees/siberman-draw-2028`.
