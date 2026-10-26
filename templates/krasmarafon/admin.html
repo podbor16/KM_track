@@ -1861,6 +1861,28 @@
 
     let _analyticsRefreshTimer = null;
 
+    // Вкладка дашборда переживает F5: встроенный DataLens шлёт родителю
+    // {code: 'URL_CHANGED', data: {search: '?tab=…'}} — запоминаем search и открываем
+    // дашборд с ним (параметр tab — из документации приватного встраивания).
+    // Значения селекторов DataLens наружу не сообщает — их так не сохранить.
+    const DL_ORIGIN = 'https://datalens.ru';
+    const dlSearchKey = i => 'adm-dl-search-' + i;
+    function dlSavedSearch(i) {
+        try { return localStorage.getItem(dlSearchKey(i)) || ''; } catch { return ''; }
+    }
+    function dlWithSearch(url, search) {
+        const [base, hash] = url.split('#');
+        return base.split('?')[0] + (search || '') + (hash ? '#' + hash : '');
+    }
+    window.addEventListener('message', e => {
+        if (e.origin !== DL_ORIGIN || !e.data || e.data.code !== 'URL_CHANGED') return;
+        document.querySelectorAll('[id^="adm-dl-"]').forEach((f, i) => {
+            if (f.contentWindow !== e.source) return;
+            const search = (e.data.data && e.data.data.search) || '';
+            try { localStorage.setItem(dlSearchKey(i), search); } catch { /* без памяти — просто не запомним */ }
+        });
+    });
+
     async function loadAnalyticsTab() {
         const wrap = document.getElementById('analytics-iframe-wrap');
         try {
@@ -1875,7 +1897,7 @@
             data.embeds.forEach((embed, i) => {
                 const iframe = document.createElement('iframe');
                 iframe.id = 'adm-dl-' + i;
-                iframe.src = embed.url;
+                iframe.src = dlWithSearch(embed.url, dlSavedSearch(i));
                 iframe.title = embed.title || 'DataLens';
                 iframe.allowFullscreen = true;
                 iframe.style.cssText = 'width:100%;height:calc(100vh - 180px);border:none;border-radius:8px;display:block;margin-bottom:16px';
@@ -1888,7 +1910,9 @@
                 };
                 wrap.appendChild(iframe);
             });
-            // Обновляем токены каждые 50 минут (JWT живёт 1 час)
+            // Обновляем токены каждые 50 минут (JWT живёт 1 час) — сообщением в iframe, без
+            // перезагрузки: фильтры и вкладка не сбрасываются (SECURE_EMBEDDING_TOKEN_UPDATE)
+            clearInterval(_analyticsRefreshTimer);
             _analyticsRefreshTimer = setInterval(async () => {
                 try {
                     const rr = await fetch('/api/admin/datalens-embeds');
@@ -1896,7 +1920,9 @@
                     const dd = await rr.json();
                     dd.embeds.forEach((e, i) => {
                         const f = document.getElementById('adm-dl-' + i);
-                        if (f) f.src = e.url;
+                        const token = (e.url.split('dl_embed_token=')[1] || '');
+                        if (f && f.contentWindow && token)
+                            f.contentWindow.postMessage({ type: 'SECURE_EMBEDDING_TOKEN_UPDATE', token }, DL_ORIGIN);
                     });
                 } catch { /* silent */ }
             }, 50 * 60 * 1000);
