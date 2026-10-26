@@ -2,13 +2,14 @@
 География Siberman (спецификация hall §7). Город человека — введённый в админке; нет — последнего
 старта с городом; нет — из заявки Тильды с той же ФИ и ДР. Название, страна и координаты —
 из справочника data/siberman/cities.json по нормализованному написанию: в протоколах страна бывает
-записана по-разному или с ошибкой. Города нет в справочнике — в списках как написан, без точки на карте.
+записана по-разному или с ошибкой. Спорные города (Шуши, крымская Апрелевка) — со страной, как в заявке
+человека, если она из списка countries города. Города нет в справочнике — в списках как написан, без точки на карте.
 """
 import datetime
 import json
 import logging
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,7 @@ class City:
     iso: str                       # ISO 3166-1 numeric страны, 3 цифры; '' — неизвестно
     lat: Optional[float]
     lon: Optional[float]
+    countries: tuple = ()          # спорный город: ((страна, iso), …) — допустимые страны из заявки
 
 
 def load_cities(path: Path = CITIES_PATH) -> dict:
@@ -35,7 +37,8 @@ def load_cities(path: Path = CITIES_PATH) -> dict:
     try:
         out = {}
         for r in json.loads(path.read_text(encoding="utf-8")):
-            c = City(r["name"], r["country"], r.get("iso") or "", r.get("lat"), r.get("lon"))
+            c = City(r["name"], r["country"], r.get("iso") or "", r.get("lat"), r.get("lon"),
+                     tuple(r.get("countries", {}).items()))
             for s in (r["name"], *r.get("aliases", ())):
                 out[norm_city(s)] = c
         return out
@@ -50,7 +53,12 @@ def city_of(raw: str, country: str, directory: dict) -> Optional[City]:
     key = norm_city(raw)
     if not key:
         return None
-    return directory.get(key) or City(" ".join(raw.split()), (country or "").strip(), "", None, None)
+    country = (country or "").strip()
+    c = directory.get(key)
+    if c is None:
+        return City(" ".join(raw.split()), country, "", None, None)
+    iso = dict(c.countries).get(country)
+    return replace(c, country=country, iso=iso) if iso else c
 
 
 def applicant_cities(persons: list, applicants: list) -> dict:

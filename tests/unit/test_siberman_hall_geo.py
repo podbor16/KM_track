@@ -33,6 +33,22 @@ def test_city_spellings_and_unknown_city():
     assert city_of("-", "Россия", DIR) is None and city_of("", "Россия", DIR) is None
 
 
+def test_disputed_city_takes_country_from_application():
+    shushi = City("Шуши", "Азербайджан", "031", 39.76, 46.75, (("Азербайджан", "031"), ("Армения", "051")))
+    d = {"шуши": shushi}
+    am = city_of("Шуши", "Армения", d)
+    assert (am.name, am.country, am.iso, am.lat) == ("Шуши", "Армения", "051", 39.76)
+    assert city_of("Шуши", "Азербайджан", d) == shushi
+    assert city_of("Шуши", "Россия", d) is shushi and city_of("Шуши", "", d) is shushi   # не из списка — по умолчанию
+    assert city_of("Алма-Аты", "Россия", DIR) is ALA                                     # обычный город — справочник
+
+
+def test_directory_disputed_cities():
+    d = load_cities()
+    assert dict(d["апрелевка"].countries) == {"Россия": "643", "Украина": "804"}
+    assert dict(d["шуши"].countries) == {"Азербайджан": "031", "Армения": "051"}
+
+
 def test_applicant_city_needs_same_birthdate_and_one_person():
     persons = [person(1, "Иванов", bd=BD), person(2, "Петров", bd=BD), person(3, "Петров", bd=BD),
                person(4, "Сидоров"), person(5, "Кузнецов", bd=BD)]
@@ -110,7 +126,10 @@ def test_cities_json_is_consistent():
     from src.siberman.persons.linking import norm_city
     seen = {}
     for r in json.loads(CITIES_PATH.read_text(encoding="utf-8")):
-        assert set(r) == {"name", "country", "iso", "lat", "lon", "aliases"} and r["name"] and r["country"], r
+        assert set(r) - {"countries"} == {"name", "country", "iso", "lat", "lon", "aliases"} and r["name"] and r["country"], r
+        if "countries" in r:                           # спорный город: страна по умолчанию — среди допустимых
+            assert r["countries"].get(r["country"]) == r["iso"], r
+            assert all(re.fullmatch(r"\d{3}", iso) for iso in r["countries"].values()), r
         assert re.fullmatch(r"\d{3}", r["iso"]) or r["iso"] == "", r
         assert (r["lat"] is None) == (r["lon"] is None), r
         if r["lat"] is not None:

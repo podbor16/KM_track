@@ -1,6 +1,6 @@
 [
 {"name": "Абакан", "country": "Россия", "iso": "643", "lat": 53.7207, "lon": 91.4406, "aliases": []},
-{"name": "Апрелевка", "country": "Россия", "iso": "643", "lat": 45.6894, "lon": 34.7391, "aliases": []},
+{"name": "Апрелевка", "country": "Россия", "iso": "643", "lat": 45.6894, "lon": 34.7391, "aliases": [], "countries": {"Россия": "643", "Украина": "804"}},
 {"name": "Архангельск", "country": "Россия", "iso": "643", "lat": 64.541, "lon": 40.5287, "aliases": []},
 {"name": "Астрахань", "country": "Россия", "iso": "643", "lat": 46.3498, "lon": 48.0326, "aliases": []},
 {"name": "Балашиха", "country": "Россия", "iso": "643", "lat": 55.7998, "lon": 37.9374, "aliases": []},
@@ -63,7 +63,7 @@
 {"name": "Югорск", "country": "Россия", "iso": "643", "lat": 61.315, "lon": 63.3316, "aliases": []},
 {"name": "Якутск", "country": "Россия", "iso": "643", "lat": 62.0274, "lon": 129.732, "aliases": []},
 {"name": "Ярославль", "country": "Россия", "iso": "643", "lat": 57.6508, "lon": 39.8719, "aliases": []},
-{"name": "Шуши", "country": "Азербайджан", "iso": "031", "lat": 39.7589, "lon": 46.7483, "aliases": []},
+{"name": "Шуши", "country": "Азербайджан", "iso": "031", "lat": 39.7589, "lon": 46.7483, "aliases": [], "countries": {"Азербайджан": "031", "Армения": "051"}},
 {"name": "Минск", "country": "Беларусь", "iso": "112", "lat": 53.9025, "lon": 27.5618, "aliases": []},
 {"name": "Bad Soden am Taunus", "country": "Германия", "iso": "276", "lat": 50.1517, "lon": 8.49, "aliases": ["Bad Soden"]},
 {"name": "Вадодара", "country": "Индия", "iso": "356", "lat": 22.3072, "lon": 73.1812, "aliases": ["Vadodara, Gujarat"]},
