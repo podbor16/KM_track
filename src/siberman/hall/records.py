@@ -1,9 +1,9 @@
 """
 Рекорды Siberman из архива (спецификация hall §5): таблица как у организаторов и история — кто и
 когда улучшал. Строки: гонка, плавание, вело всего, вело д1, вело д2, бег. Столбцы: личный зачёт
-М/Ж, эстафета М/Ж (в строке «гонка» — одна клетка без пола, X), абсолютно лучшее М/Ж.
-Абсолютно лучшее (вариант А): в отрезках — личники и эстафетчики своего пола; в «гонке» М —
-личники-мужчины и эстафеты, Ж — личницы. В рекорды отрезков — только не сошедшие и дошедшие до
+М/Ж, эстафета М/Ж, абсолютно лучшее М/Ж (в строке «гонка» эстафета и абсолют — по одной клетке
+без пола, X). Абсолютно лучшее: в отрезках — личники и эстафетчики своего пола; в «гонке» — все
+личники и эстафеты вместе (быстрее эстафета — в клетке команда). В рекорды отрезков — только не сошедшие и дошедшие до
 последней КТ этапа (как живые рекорды трекера). Ничья рекорд не меняет.
 """
 from src.siberman.hall.data import Entry, Team, bib_order, race_time, segment_time
@@ -20,8 +20,8 @@ def cell_keys() -> list:
     keys = []
     for seg in SEGMENTS:
         for col in COLUMNS:
-            if seg == "race" and col == "relay":
-                keys.append("race:relay:X")
+            if seg == "race" and col != "individual":
+                keys.append(f"race:{col}:X")
             else:
                 keys += [f"{seg}:{col}:{g}" for g in GENDERS]
     return keys
@@ -65,8 +65,9 @@ def candidates(key: str, entries: list, teams: list) -> list:
     if seg == "race":
         if col == "relay":
             return list(_teams(teams))
-        individual = list(_individual(entries, seg, g))
-        return individual + list(_teams(teams)) if col == "absolute" and g == "M" else individual
+        if col == "absolute":
+            return [c for sex in GENDERS for c in _individual(entries, seg, sex)] + list(_teams(teams))
+        return list(_individual(entries, seg, g))
     if col == "individual":
         return list(_individual(entries, seg, g))
     if col == "relay":

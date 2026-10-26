@@ -22,7 +22,7 @@ SIBERMAN = {"host": "siberman.localhost"}
 # Рекорды организаторов на 2025 год, секунды (времена — с листа «Рекорды»).
 ORGANIZERS = {
     "race:individual:M": 71429, "race:individual:F": 95387, "race:relay:X": 76811,
-    "race:absolute:M": 71429, "race:absolute:F": 95387,
+    "race:absolute:X": 71429,
     "swim:individual:M": 8647, "swim:individual:F": 12570, "swim:relay:M": 7588, "swim:relay:F": 9330,
     "swim:absolute:M": 7588, "swim:absolute:F": 9330,
     "bike:individual:M": 38943, "bike:individual:F": 51112, "bike:relay:M": 41071, "bike:relay:F": 47671,

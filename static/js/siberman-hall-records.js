@@ -33,8 +33,8 @@ function renderTable() {
   for (const [seg, label] of SEGS) {
     h += `<tr><td class="row">${label}</td>`;
     for (const [col] of COLS) {
-      if (seg === 'race' && col === 'relay') {
-        h += `<td class="x" colspan="2" data-cell="race:relay:X" tabindex="0" role="button">${body('race:relay:X')}</td>`;
+      if (seg === 'race' && col !== 'individual') {     // эстафета и абсолют гонки — без деления по полу
+        h += `<td class="x" colspan="2" data-cell="race:${col}:X" tabindex="0" role="button">${body(`race:${col}:X`)}</td>`;
       } else {
         h += `<td class="m" data-cell="${seg}:${col}:M" tabindex="0" role="button">${body(`${seg}:${col}:M`)}</td>`
            + `<td class="f" data-cell="${seg}:${col}:F" tabindex="0" role="button">${body(`${seg}:${col}:F`)}</td>`;
@@ -51,12 +51,12 @@ function card(key, title, cls, wide) {
 
 function renderCards() {
   document.getElementById('cards').innerHTML = SEGS.map(([seg, label]) => {
-    const relay = seg === 'race'
-      ? card('race:relay:X', 'Эстафета', 'x', true)
-      : card(`${seg}:relay:M`, 'Эстафета · М', 'm') + card(`${seg}:relay:F`, 'Эстафета · Ж', 'f');
+    const pair = (col, title) => seg === 'race'
+      ? card(`race:${col}:X`, title, 'x', true)
+      : card(`${seg}:${col}:M`, `${title} · М`, 'm') + card(`${seg}:${col}:F`, `${title} · Ж`, 'f');
     return `<div class="rowt">${label}</div><div class="cards">`
       + card(`${seg}:individual:M`, 'Личный · М', 'm') + card(`${seg}:individual:F`, 'Личный · Ж', 'f')
-      + relay + card(`${seg}:absolute:M`, 'Абсолют · М', 'm') + card(`${seg}:absolute:F`, 'Абсолют · Ж', 'f') + '</div>';
+      + pair('relay', 'Эстафета') + pair('absolute', 'Абсолют') + '</div>';
   }).join('');
 }
 

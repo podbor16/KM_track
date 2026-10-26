@@ -94,19 +94,22 @@ def recs(entries):
 
 def test_cell_keys_like_organizers_table():
     keys = cell_keys()
-    assert len(keys) == 35 and "race:relay:X" in keys and "race:relay:M" not in keys
+    assert len(keys) == 34 and "race:relay:X" in keys and "race:relay:M" not in keys
+    assert "race:absolute:X" in keys and "race:absolute:F" not in keys
     assert keys[0] == "race:individual:M" and keys[-1] == "run:absolute:F"
 
 
-def test_race_absolute_men_includes_relays_women_do_not():
+def test_race_absolute_is_one_cell_for_everyone():
     entries = [ind(2020, 7, "Мужчинов", "M", total=100), ind(2020, 8, "Женщинова", "F", total=90),
                *team(2020, 101, "M"), *team(2020, 102, "F", swim=5, b1=20, b2=20, run=15)]
     cur = recs(entries)["current"]
     assert cur["race:individual:M"]["time_s"] == 100
     assert cur["race:relay:X"]["time_s"] == 60 and cur["race:relay:X"]["holder"]["type"] == "team"
-    # вариант А: абсолют М в «гонке» — мужчины-личники и все эстафеты (у эстафеты на гонке нет пола)
-    assert cur["race:absolute:M"]["time_s"] == 60 and cur["race:absolute:M"]["holder"]["bib"] == "102"
-    assert cur["race:absolute:F"]["time_s"] == 90
+    # абсолют «гонки» без пола: личники обоих полов и эстафеты; быстрее всех эстафета — в клетке команда
+    assert cur["race:absolute:X"]["time_s"] == 60 and cur["race:absolute:X"]["holder"]["type"] == "team"
+    assert cur["race:absolute:X"]["holder"]["bib"] == "102"
+    solo = recs([ind(2020, 7, "Мужчинов", "M", total=100), ind(2020, 8, "Женщинова", "F", total=90)])["current"]
+    assert solo["race:absolute:X"]["holder"]["bib"] == "8"
 
 
 def test_stage_absolute_mixes_individuals_and_relay_of_same_gender():
