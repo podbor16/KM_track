@@ -13,13 +13,13 @@ def anon():
     app = FastAPI()
     app.include_router(pages.router)
     app.include_router(api.router)
-    return TestClient(app, follow_redirects=False)
+    return TestClient(app)
 
 
 def test_page_redirects_to_login(anon):
     r = anon.get("/start_list")
-    assert r.status_code == 302
-    assert r.headers["location"].startswith("/login")
+    assert [h.status_code for h in r.history] == [302]
+    assert r.history[0].headers["location"].startswith("/login")
 
 
 @pytest.mark.parametrize("url", [
