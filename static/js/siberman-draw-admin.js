@@ -483,6 +483,8 @@ async function resetDraw() {
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === `tab-${name}`));
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('admin-tab--active', b === btn));
+  if (name === 'entries') { entriesLoad(); history.replaceState(null, '', '#entries'); return; }
+  if (location.hash === '#entries') history.replaceState(null, '', location.pathname + location.search);
   if (!S) return;
   if (name === 'payments') { renderPayments(); renderContactsInfo(); }
   if (name === 'settings') renderConfig();
