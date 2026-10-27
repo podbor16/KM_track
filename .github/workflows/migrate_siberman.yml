@@ -74,6 +74,9 @@ jobs:
             # Жеребьёвка: тексты заявки («Почему wild card», «О результатах») рядом с контактами
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/017_draw_contacts_texts.sql
 
+            # Заявки на Siberman из формы Тильды и статусы директора
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/018_entries.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

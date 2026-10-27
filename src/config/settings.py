@@ -67,6 +67,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set — add it to .env")
 TILDA_WEBHOOK_SECRET = os.getenv("TILDA_WEBHOOK_SECRET", "")
+SIBERMAN_WEBHOOK_SECRET = os.getenv("SIBERMAN_WEBHOOK_SECRET", "")
 
 # --- DataLens приватный embed ---
 DATALENS_KEY_SECRET = os.getenv("DATALENS_KEY_SECRET", "")
@@ -125,6 +126,7 @@ __all__ = [
     "ADMIN_PASSWORD",
     "SECRET_KEY",
     "TILDA_WEBHOOK_SECRET",
+    "SIBERMAN_WEBHOOK_SECRET",
     "DATALENS_KEY_SECRET",
     "DATALENS_EMBEDS",
     "logger",
