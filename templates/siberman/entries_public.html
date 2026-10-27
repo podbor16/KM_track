@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman {{ year }} — заявки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400&display=swap">
+<link rel="stylesheet" href="/static/css/siberman-entries.css?v={{ v }}">
+</head>
+<body>
+<div class="hall entries" id="entries" data-year="{{ year }}">
+  <p class="lead">Список обновляется автоматически</p>
+  <p class="counts" id="counts"></p>
+  <ul class="legend">
+    <li>✅ — заявка допущена к жеребьёвке</li>
+    <li>❌ — заявка не соответствует требованиям</li>
+    <li>⌛️ — заявка в процессе изучения</li>
+    <li>🚫 — отказ от участия в жеребьёвке</li>
+  </ul>
+  <input id="q" class="search" type="search" placeholder="Поиск по фамилии и имени" autocomplete="off">
+  <table class="list">
+    <thead><tr><th class="n"></th><th>Фамилия Имя</th><th>Формат участия</th><th class="st">Статус заявки</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="4" class="msg">Загрузка…</td></tr></tbody>
+  </table>
+</div>
+<script src="/static/js/siberman-hall.js?v={{ v }}"></script>
+<script src="/static/js/siberman-entries-search.js?v={{ v }}"></script>
+<script src="/static/js/siberman-entries.js?v={{ v }}"></script>
+</body>
+</html>

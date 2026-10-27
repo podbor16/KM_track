@@ -37,3 +37,5 @@ from src.siberman.persons.router import router as siberman_persons_router
 router.include_router(siberman_persons_router)
 from src.siberman.hall.router import router as siberman_hall_router
 router.include_router(siberman_hall_router)
+from src.siberman.entries.router import router as siberman_entries_router
+router.include_router(siberman_entries_router)

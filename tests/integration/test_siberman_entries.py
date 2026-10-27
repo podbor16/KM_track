@@ -187,3 +187,47 @@ def test_spool_corrupt_file_goes_to_failed(entries, tmp_path, monkeypatch):
     done = spool.replay(service.ingest, min_age_s=0)
     assert done["bad"] == 1 and done["failed"] == 0
     assert not (tmp_path / "x.json").exists() and (tmp_path / "failed" / "x.json").exists()
+
+
+def test_webhook_secret_ping_and_entry(entries, client, monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "SIBERMAN_WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setattr(spool, "SPOOL_DIR", tmp_path)
+    url = f"/webhook/siberman/s3cret/{YEAR}"
+    assert client.post(f"/webhook/siberman/wrong/{YEAR}", data={"test": "test"}).status_code == 403
+    assert client.post("/webhook/siberman/s3cret/1999", data={"test": "test"}).status_code == 404
+    r = client.post(url, data={"test": "test"})
+    assert r.status_code == 200 and r.text == "ok"
+    assert client.post(url, data=body(f"{YEAR}:5", "Вебхуков")).status_code == 200
+    assert client.post(url, data={"tranid": f"{YEAR}:6", "format": "???"}).status_code == 200   # не заявка — 200, в failed/
+    assert "Вебхуков" in [e["surname"] for e in service.admin_list(YEAR)["entries"]]
+    assert not list(tmp_path.glob("*.json")) and len(list((tmp_path / "failed").glob("*.json"))) == 1
+
+
+def test_admin_api_requires_auth_and_works(entries, client):
+    base = f"/api/siberman/admin/entries/{YEAR}"
+    assert client.get(base).status_code == 401
+    app.dependency_overrides[api_require_auth] = lambda: "director"
+    try:
+        assert client.get(base).json()["counts"]["total"] == 3
+        eid = entries["Ёлкина"]
+        assert client.post(f"{base}/{eid}/status", json={"status": "rejected"}).status_code == 200
+        assert client.post(f"{base}/{eid}/status", json={"status": "maybe"}).status_code == 409
+        assert client.post(f"{base}/{eid}/comment", json={"comment": "нет ДР"}).status_code == 200
+        card = client.get(f"{base}/{eid}").json()
+        assert card["status"] == "rejected" and card["comment"] == "нет ДР" and len(card["audit"]) == 2
+        assert client.get(f"{base}/999999999").status_code == 409
+        x = client.get(f"{base}/export.xlsx")
+        assert x.status_code == 200 and x.headers["content-type"].startswith("application/vnd.openxml")
+        up = client.post(f"{base}/import", files={"file": ("a.csv", b"a;b\n1;2", "text/csv")})
+        assert up.status_code == 409 and "tranid" in up.json()["detail"]
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)
+
+
+def test_public_api_and_page(entries, client):
+    service.clear_cache()
+    data = client.get(f"/api/siberman/entries/{YEAR}").json()
+    assert data["total"] == 3 and set(data["entries"][0]) == {"n", "fio", "format", "status"}
+    assert client.get(f"/entries/{YEAR}", headers=SIBERMAN).status_code == 200
+    assert client.get(f"/entries/{YEAR}").status_code == 404                  # только домен Siberman
+    assert client.get("/api/siberman/entries/1999").status_code == 404

@@ -440,6 +440,10 @@ _MAINTENANCE_ALLOWED_PREFIXES = (
     "/api/siberman/athlete",
     "/hall/",
     "/athlete/",
+    # заявки Siberman: вебхук Тильды и публичный список не должны падать при техработах Красмарафона
+    "/webhook/siberman/",
+    "/entries/",
+    "/api/siberman/entries",
     "/static",
     "/docs",
     "/redoc",
