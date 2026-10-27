@@ -2,7 +2,9 @@
 // Вкладка «Заявки» админки жеребьёвки: заявки года по порядку прихода, статус и комментарий директора
 // (сохраняются сразу), поиск, фильтр, карточка с журналом, Excel, загрузка CSV Тильды, адрес вебхука.
 
-const ENT_API = `/api/siberman/admin/entries/${DRAW_YEAR}`;
+// Год заявок — свой, не год жеребьёвки страницы: заявки собираются на гонку после разыгрываемой
+let entYear = DRAW_YEAR + 1;
+const entApi = () => `/api/siberman/admin/entries/${entYear}`;
 const ENT_STATUS = { review: '⌛️ на изучении', admitted: '✅ допущена', rejected: '❌ не соответствует',
                      withdrawn: '🚫 отказ от жеребьёвки' };
 const ENT_FORMAT = { individual: 'Личное', relay: 'Эстафета' };
@@ -13,7 +15,7 @@ const entUrl = s => /^https?:\/\//i.test(String(s ?? '').trim()) ? String(s).tri
 const entDate = s => s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : '';
 
 async function entFetch(path, opt = {}) {
-  const r = await fetch(ENT_API + path, { cache: 'no-store', ...opt });
+  const r = await fetch(entApi() + path, { cache: 'no-store', ...opt });
   if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search + '#entries'); throw new Error('нужен вход'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail || `ошибка ${r.status}`);
@@ -28,10 +30,8 @@ function entMsg(text, kind = 'ok') {
 async function entriesLoad() {
   try {
     ENT = await entFetch('');
-    const next = Math.max(...ENT.years) + 1;
-    entEl('ent-year').innerHTML = ENT.years.map(y => `<option${y === DRAW_YEAR ? ' selected' : ''}>${y}</option>`).join('')
-      + (ENT.years.includes(next) ? '' : `<option value="${next}">${next}</option>`);
-    entEl('ent-export').href = `${ENT_API}/export.xlsx`;
+    entEl('ent-year').innerHTML = ENT.years.map(y => `<option${y === entYear ? ' selected' : ''}>${y}</option>`).join('');
+    entEl('ent-export').href = `${entApi()}/export.xlsx`;
     entEl('ent-webhook').textContent = ENT.webhook_path ? location.origin + ENT.webhook_path : 'не настроен (нет SIBERMAN_WEBHOOK_SECRET)';
     entRender();
   } catch (e) { entMsg(e.message, 'err'); }
@@ -103,7 +103,13 @@ async function entUpload() {
 
 entEl('ent-q').addEventListener('input', () => ENT && entRender());
 entEl('ent-filter').addEventListener('change', () => ENT && entRender());
-entEl('ent-year').addEventListener('change', e => { location.href = `${location.pathname}?year=${e.target.value}#entries`; });
+entEl('ent-year').addEventListener('change', e => {
+  entYear = +e.target.value;
+  entEl('ent-card').hidden = true;
+  entEl('ent-import-report').innerHTML = '';
+  entMsg('');
+  entriesLoad();
+});
 entEl('ent-upload').addEventListener('click', entUpload);
 entEl('ent-webhook-copy').addEventListener('click', () => navigator.clipboard.writeText(entEl('ent-webhook').textContent).then(() => entMsg('Адрес вебхука скопирован')));
 entEl('ent-rows').addEventListener('change', e => { if (e.target.dataset.status) entSetStatus(e.target); });
@@ -114,7 +120,7 @@ entEl('ent-rows').addEventListener('click', e => {
   if (tr) entOpenCard(+tr.dataset.id);
 });
 
-// Смена года во вкладке «Заявки» перезагружает страницу с ?year= — вкладка открывается снова
+// Ссылка …#entries (вход после 401) открывает сразу вкладку «Заявки»
 if (location.hash === '#entries') {
   const btn = [...document.querySelectorAll('.admin-tab')].find(b => b.textContent.trim() === 'Заявки');
   if (btn) switchTab('entries', btn);

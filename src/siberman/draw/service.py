@@ -472,6 +472,9 @@ def _sheet(wb: Workbook, title: str, columns: tuple, rows: list[list]) -> None:
         cell.font = Font(bold=True)
     for r in rows:
         ws.append(r)
+        for cell in ws[ws.max_row]:
+            if cell.data_type == "f":   # «=…» из формы Тильды — текст, не формула
+                cell.data_type = "s"
     for i, (_, width) in enumerate(columns, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
     ws.freeze_panes = "A2"
@@ -485,9 +488,11 @@ def draw_backup(year: int) -> bytes:
     try:
         snap = _snapshot(conn, year)
         audit = ddb.load_year_audit(conn, year)
+        contacts = ddb.load_contacts(conn, year)
     finally:
         conn.close()
     by_id = {a["id"]: a for a in snap["applicants"]}
+    contact_of = lambda aid: contact_for(by_id[aid], contacts) or {"email": "", "phone": ""}  # noqa: E731
     pick_by_id = {p["id"]: p for p in snap["picks"]}
     placed = {r["pick_id"]: r for rows in snap["lists"].values() for r in rows}
     fio_of = lambda aid: _fio(by_id[aid]) if aid in by_id else ""  # noqa: E731
@@ -505,7 +510,8 @@ def draw_backup(year: int) -> bytes:
                        SECTION_LABELS[row["section"]] if row else "", "да" if a["is_wildcard"] else "",
                        status(p), p["cancelled_at"] or ""])
     final = [[CATEGORY_LABELS[c], r["position"], SECTION_LABELS[r["section"]], f"{r['surname']} {r['name']}".strip(),
-              r["city"], "да" if r["is_wildcard"] else "", ROUND_LABELS[r["round"]], r["created_at"],
+              r["city"], contact_of(r["applicant_id"])["email"], contact_of(r["applicant_id"])["phone"],
+              "да" if r["is_wildcard"] else "", ROUND_LABELS[r["round"]], r["created_at"],
               PAYMENT_LABELS[r["payment_status"]], by_id[r["applicant_id"]]["payment_comment"] or ""]
              for c in CATEGORIES for r in snap["lists"][c]]
     log_rows = []
@@ -528,7 +534,7 @@ def draw_backup(year: int) -> bytes:
                                   ("Зачёт", 11), ("Место", 7), ("Раздел", 15), ("Wild card", 10), ("Статус", 34),
                                   ("Отменено / исправлено", 20)), course)
     _sheet(wb, "Итог", (("Зачёт", 11), ("№", 5), ("Раздел", 15), ("Фамилия Имя", 28), ("Город", 18),
-                        ("Wild card", 10), ("Раунд", 14), ("Время", 20), ("Оплата", 18), ("Комментарий", 30)), final)
+                        ("E-mail", 28), ("Телефон", 18), ("Wild card", 10), ("Раунд", 14), ("Время", 20), ("Оплата", 18), ("Комментарий", 30)), final)
     _sheet(wb, "Журнал действий", (("Время", 20), ("Действие", 22), ("Участник", 28), ("Было", 28),
                                    ("Стало", 28), ("Связан с", 28), ("Кто", 14)), log_rows)
     _sheet(wb, "Параметры", (("Параметр", 22), ("Значение", 22)), params)

@@ -148,6 +148,8 @@ def test_backup_excel_has_whole_course(draw):
     wrong = service.pick(YEAR, draw["Новикова"])
     service.pick(YEAR, draw["Последний"])
     service.replace(YEAR, wrong["pick_id"], draw["Новиков"])
+    service.import_contacts(YEAR, _tilda_csv(
+        [("Последний", "Тест", "last@ex.ru", "=HYPERLINK(1)", "2026-09-01 10:00:00", "Индивидуальное участие")]), "test")
     wb = load_workbook(io.BytesIO(service.draw_backup(YEAR)))
     assert wb.sheetnames == ["Ход жеребьёвки", "Итог", "Журнал действий", "Параметры"]
     course = [[c.value for c in row] for row in wb["Ход жеребьёвки"].iter_rows(min_row=2)]
@@ -157,6 +159,8 @@ def test_backup_excel_has_whole_course(draw):
         ("Последний Тест", "Мужчины", 2, "в списке")]
     final = [[c.value for c in row] for row in wb["Итог"].iter_rows(min_row=2)]
     assert [(r[0], r[1], r[3]) for r in final] == [("Мужчины", 1, "Новиков Тест"), ("Мужчины", 2, "Последний Тест")]
+    assert [(r[5], r[6]) for r in final] == [(None, None), ("last@ex.ru", "=HYPERLINK(1)")]
+    assert wb["Итог"]["G3"].data_type == "s"                      # текст из формы — не формула
     log = [[c.value for c in row] for row in wb["Журнал действий"].iter_rows(min_row=2)]
     assert [(r[1], r[2], r[3], r[4]) for r in log] == [("исправление", "Новиков Тест", "Новикова Тест", "Новиков Тест")]
 
