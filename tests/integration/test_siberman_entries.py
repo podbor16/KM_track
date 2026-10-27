@@ -270,3 +270,18 @@ def test_public_api_503_when_db_unavailable(entries, client, monkeypatch):
     service.clear_cache()
     assert client.get(f"/api/siberman/entries/{YEAR}").status_code == 503
     service.clear_cache()
+
+
+def test_trimmed_csv_does_not_wipe_known_entry(entries):
+    service.ingest(YEAR, body(f"{YEAR}:1", "Яковлев", result_url="https://ex.ru/r", wildcard_reason="10 стартов",
+                              tattoo="да"), T0)
+    head = "surname;Name;Date;format;tranid"           # урезанная выгрузка: ни контактов, ни текстов
+    service.import_csv(YEAR, "\n".join([head, f"Яковлев;Тест;2026-10-30 09:00:00;Индивидуальное участие;{YEAR}:1"]).encode("utf-8"))
+    e = service.entry_card(YEAR, entries["Яковлев"])
+    assert (e["email"], e["result_url"], e["wildcard_reason"]) == (f"{YEAR}:1@ex.ru", "https://ex.ru/r", "10 стартов")
+    conn = get_siberman_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT JSON_UNQUOTE(JSON_EXTRACT(raw, '$.tattoo')) FROM siberman_entries WHERE tranid=%s", (f"{YEAR}:1",))
+    tattoo = cur.fetchone()[0]
+    conn.close()
+    assert tattoo == "да"

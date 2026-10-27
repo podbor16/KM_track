@@ -9,14 +9,16 @@ LIST_FIELDS = ("id", "race_year", "tranid", "submitted_at", *FORM_FIELDS, "statu
 
 
 def upsert(conn, year: int, e: dict, submitted_at) -> bool:
-    """True — новая заявка. Повтор того же tranid обновляет поля формы и raw; год, время подачи, статус и
-    комментарий не трогает."""
+    """True — новая заявка. Повтор того же tranid обновляет поля формы непустыми значениями (пустые/отсутствующие
+    не затирают сохранённые), raw сливается (JSON_MERGE_PATCH); год, время подачи, статус и комментарий не трогает."""
     cols = ", ".join(FORM_FIELDS)
+    keep = ", ".join(f"{c}=COALESCE(VALUES({c}), {c})" if c == "birthdate" else   # DATE: NULLIF с '' недопустим
+                     f"{c}=COALESCE(NULLIF(VALUES({c}), ''), {c})" for c in FORM_FIELDS)
     cur = conn.cursor()
     cur.execute(
         f"INSERT INTO siberman_entries (race_year, tranid, submitted_at, raw, {cols}) "
         f"VALUES (%s, %s, %s, %s, {', '.join(['%s'] * len(FORM_FIELDS))}) "
-        f"ON DUPLICATE KEY UPDATE {', '.join(f'{c}=VALUES({c})' for c in FORM_FIELDS)}, raw=VALUES(raw)",
+        f"ON DUPLICATE KEY UPDATE {keep}, raw=JSON_MERGE_PATCH(COALESCE(raw, JSON_OBJECT()), VALUES(raw))",
         (year, e["tranid"], submitted_at, json.dumps(e["raw"], ensure_ascii=False), *[e[c] for c in FORM_FIELDS]))
     return cur.rowcount == 1          # MySQL: 1 — вставка, 2 — обновление, 0 — без изменений
 

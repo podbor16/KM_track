@@ -621,7 +621,7 @@ async def log_request_duration(request: Request, call_next):
     duration = _time.time() - start
     response.headers["X-Process-Time"] = f"{duration:.3f}"
     if duration > 0.5:
-        _perf_logger.warning(f"SLOW {request.method} {_log_path(request.url.path)}{duration:.3f}s")
+        _perf_logger.warning(f"SLOW {request.method} {_log_path(request.url.path)} {duration:.3f}s")
     else:
         _perf_logger.debug(f"{request.method} {_log_path(request.url.path)} {duration:.3f}s {response.status_code}")
     metrics_collector.record(

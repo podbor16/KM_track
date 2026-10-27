@@ -9,6 +9,7 @@ const ENT_FORMAT = { individual: 'Личное', relay: 'Эстафета' };
 let ENT = null;
 const entEl = id => document.getElementById(id);
 const entEsc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const entUrl = s => /^https?:\/\//i.test(String(s ?? '').trim()) ? String(s).trim() : '';
 const entDate = s => s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : '';
 
 async function entFetch(path, opt = {}) {
@@ -81,7 +82,8 @@ async function entOpenCard(id) {
       <p>${ENT_FORMAT[e.format]} · ${entEsc(e.city)} · ДР ${e.birthdate ? e.birthdate.split('-').reverse().join('.') : '—'}<br>${entEsc(e.email)} · ${entEsc(e.phone)}</p>${relay}
       ${e.wildcard_reason ? `<h4>Почему wild card</h4><div class="text">${entEsc(e.wildcard_reason)}</div>` : ''}
       ${e.results_text ? `<h4>О результатах</h4><div class="text">${entEsc(e.results_text)}</div>` : ''}
-      ${e.result_url ? `<p><a href="${entEsc(e.result_url)}" target="_blank" rel="noopener">Ссылка на результаты</a></p>` : ''}
+      ${entUrl(e.result_url) ? `<p><a href="${entEsc(entUrl(e.result_url))}" target="_blank" rel="noopener noreferrer">Ссылка на результаты</a></p>`
+        : e.result_url ? `<p>Ссылка на результаты: ${entEsc(e.result_url)}</p>` : ''}
       <h4>Журнал</h4><ul>${audit || '<li class="muted">изменений не было</li>'}</ul>`;
     entEl('ent-card').hidden = false;
   } catch (err) { entMsg(err.message, 'err'); }
