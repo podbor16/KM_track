@@ -13,7 +13,7 @@ from app import app
 from src.config import settings
 from src.core.auth import api_require_auth
 from src.siberman.db import get_siberman_connection
-from src.siberman.entries import service
+from src.siberman.entries import service, spool
 from src.siberman.entries.service import EntryError
 
 YEAR = 2090 + os.getpid() % 10
@@ -108,3 +108,22 @@ def test_export_xlsx(entries):
     assert rows[0][:4] == ["№", "Дата заявки", "Фамилия Имя", "Формат участия"]
     assert [r[2] for r in rows[1:]] == ["Яковлев Тест", "Ёлкина Тест", "Абрамов Тест"]
     assert "уточнить ДР" in rows[2] and "⌛️ на изучении" in rows[1]
+
+
+def test_spool_replay_saves_entry_and_moves_bad_to_failed(entries, tmp_path, monkeypatch):
+    monkeypatch.setattr(spool, "SPOOL_DIR", tmp_path)
+    good = spool.save(body(f"{YEAR}:7", "Повторный"), YEAR, T0)
+    bad = spool.save({"tranid": f"{YEAR}:8", "format": "???"}, YEAR, T0)
+    assert spool.replay(service.ingest, min_age_s=0) == {"replayed": 1, "failed": 0, "bad": 1, "oldest_failed_age_s": 0}
+    assert not good.exists() and (tmp_path / "failed" / bad.name).exists()
+    assert "Повторный" in [e["surname"] for e in service.admin_list(YEAR)["entries"]]
+
+
+def test_spool_keeps_file_when_db_fails(entries, tmp_path, monkeypatch):
+    monkeypatch.setattr(spool, "SPOOL_DIR", tmp_path)
+    path = spool.save(body(f"{YEAR}:7", "Повторный"), YEAR, T0)
+
+    def broken(*a):
+        raise RuntimeError("БД упала")
+    done = spool.replay(broken, min_age_s=0)
+    assert (done["replayed"], done["failed"]) == (0, 1) and path.exists()

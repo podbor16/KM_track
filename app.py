@@ -339,6 +339,14 @@ async def lifespan(app: FastAPI):
                 if not (current and current.decode() == worker_id):
                     continue
                 done = await asyncio.get_event_loop().run_in_executor(None, replay_spool)
+                from src.siberman.entries import service as entries_service, spool as entries_spool
+                sib = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: entries_spool.replay(entries_service.ingest))
+                if sib["replayed"] or sib["failed"] or sib["bad"]:
+                    settings.logger.info(f"[webhook] спул заявок Siberman: {sib}")
+                done["failed"] += sib["failed"]
+                done["bad"] = done.get("bad", 0) + sib["bad"]
+                done["oldest_failed_age_s"] = max(done["oldest_failed_age_s"], sib["oldest_failed_age_s"])
                 if done["replayed"] or done["failed"]:
                     settings.logger.info(f"[webhook] спул: {done}")
                 stuck = done["oldest_failed_age_s"] > 1800
