@@ -6,6 +6,7 @@ import datetime
 import io
 import os
 
+import mysql.connector
 import openpyxl
 import pytest
 
@@ -82,8 +83,7 @@ def test_status_errors(entries):
 
 def test_public_list_alphabetical_without_contacts(entries):
     service.set_status(YEAR, entries["Абрамов"], "withdrawn", "u")
-    service.clear_cache()
-    p = service.public_list(YEAR)
+    p =service.public_list(YEAR)
     assert (p["total"], p["admitted"]) == (3, 0)
     assert p["entries"] == [{"n": 1, "fio": "Абрамов Тест", "format": "Эстафетная команда", "status": "withdrawn"},
                             {"n": 2, "fio": "Ёлкина Тест", "format": "Индивидуальное участие", "status": "review"},
@@ -99,6 +99,58 @@ def test_csv_import_adds_new_and_skips_known(entries):
     r = service.import_csv(YEAR, data)
     assert (r["rows"], r["new"], r["known"], len(r["errors"])) == (3, 1, 1, 1)
     assert service.admin_list(YEAR)["entries"][0]["surname"] == "Новенький"     # по Date из CSV — раньше всех
+
+
+def test_csv_import_skips_entry_already_in_other_year(entries):
+    head = "surname;Name;Email;Phone;Date;format;sex;birthday;city;tranid"
+    data = "\n".join([head, f"Яковлев;Тест;x@ex.ru;1;2026-10-30 09:00:00;Индивидуальное участие;Мужской;;Красноярск;{YEAR}:1"]
+                     ).encode("utf-8")
+    try:
+        r = service.import_csv(YEAR + 1, data)
+        assert (r["new"], r["known"]) == (0, 0)
+        assert any(f"уже учтена в {YEAR} году" in er for er in r["errors"])
+        assert service.admin_list(YEAR + 1)["counts"]["total"] == 0
+    finally:
+        conn = get_siberman_connection()
+        conn.cursor().execute("DELETE FROM siberman_entries WHERE race_year=%s", (YEAR + 1,))
+        conn.close()
+
+
+def test_export_xlsx_does_not_execute_formulas(entries):
+    service.ingest(YEAR, body(f"{YEAR}:11", "=1+1"), T0)
+    ws = openpyxl.load_workbook(io.BytesIO(service.export_xlsx(YEAR))).active
+    cell = next(r[2] for r in ws.iter_rows(min_row=2) if str(r[2].value).startswith("=1+1"))
+    assert cell.data_type == "s" and cell.value.startswith("=1+1")
+
+
+def test_unavailable_db_raises_entries_unavailable(entries, monkeypatch):
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: None)
+    with pytest.raises(service.EntriesUnavailable):
+        service.admin_list(YEAR)
+
+
+def test_db_error_midway_raises_entries_unavailable(entries, monkeypatch):
+    class Broken:
+        def cursor(self, *a, **k):
+            raise mysql.connector.errors.OperationalError("оборвалось")
+
+        def close(self):
+            pass
+    service.clear_cache()
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: Broken())
+    with pytest.raises(service.EntriesUnavailable):
+        service.public_list(YEAR)
+
+
+def test_identical_redelivery_returns_false(entries):
+    assert service.ingest(YEAR, body(f"{YEAR}:1", "Яковлев"), T0) is False
+
+
+def test_unchanged_comment_not_audited(entries):
+    service.set_comment(YEAR, entries["Яковлев"], "x", "u")
+    service.set_comment(YEAR, entries["Яковлев"], "x", "u")
+    audit = service.entry_card(YEAR, entries["Яковлев"])["audit"]
+    assert [a["action"] for a in audit] == ["comment"]
 
 
 def test_export_xlsx(entries):

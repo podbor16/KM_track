@@ -6,8 +6,10 @@ import datetime
 import io
 import threading
 import time
+from contextlib import contextmanager
 from zoneinfo import ZoneInfo
 
+import mysql.connector
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -40,11 +42,18 @@ def clear_cache() -> None:
         _public_cache.clear()
 
 
-def _connect():
+@contextmanager
+def _db():
+    """Соединение с БД заявок; недоступна или оборвалась посреди запроса — EntriesUnavailable (503)."""
     conn = get_siberman_connection()
     if conn is None:
         raise EntriesUnavailable("база данных временно недоступна")
-    return conn
+    try:
+        yield conn
+    except mysql.connector.Error as e:
+        raise EntriesUnavailable("база данных временно недоступна") from e
+    finally:
+        conn.close()
 
 
 def now_krs() -> datetime.datetime:
@@ -67,11 +76,8 @@ def ingest(year: int, body: dict, received_at: datetime.datetime):
     if is_test_ping(body):
         return None
     e = parse_entry(body, received_at.date())
-    conn = _connect()
-    try:
+    with _db() as conn:
         new = edb.upsert(conn, year, e, received_at)
-    finally:
-        conn.close()
     clear_cache()
     return new
 
@@ -79,19 +85,24 @@ def ingest(year: int, body: dict, received_at: datetime.datetime):
 def import_csv(year: int, data: bytes) -> dict:
     """Разовая загрузка выгрузки Тильды: новые добавляются (время — Date из CSV), известные обновляют поля формы."""
     try:
-        rows, errors = parse_csv(data, datetime.date.today())
+        rows, errors = parse_csv(data, now_krs().date())
     except BadEntry as e:
         raise EntryError(str(e)) from None
-    conn = _connect()
-    try:
-        known = edb.known_tranids(conn, [e["tranid"] for e, _ in rows])
+    with _db() as conn:
+        seen = edb.known_tranids(conn, [e["tranid"] for e, _ in rows])
+        total = len(rows) + len(errors)
+        known = {t for t, y in seen.items() if y == year}
+        to_write = []
         for e, at in rows:
+            if seen.get(e["tranid"], year) != year:
+                errors.append(f"{e['surname']} {e['name']}: заявка уже учтена в {seen[e['tranid']]} году")
+            else:
+                to_write.append((e, at))
+        for e, at in to_write:
             edb.upsert(conn, year, e, at or now_krs())
-    finally:
-        conn.close()
     clear_cache()
-    return {"rows": len(rows) + len(errors), "new": sum(1 for e, _ in rows if e["tranid"] not in known),
-            "known": sum(1 for e, _ in rows if e["tranid"] in known), "errors": errors}
+    return {"rows": total, "new": sum(1 for e, _ in to_write if e["tranid"] not in known),
+            "known": sum(1 for e, _ in to_write if e["tranid"] in known), "errors": errors}
 
 
 # ── Админка ─────────────────────────────────────────────────────────────────
@@ -102,11 +113,8 @@ def webhook_path(year: int):
 
 
 def admin_list(year: int) -> dict:
-    conn = _connect()
-    try:
+    with _db() as conn:
         rows, years = edb.list_year(conn, year), edb.years(conn)
-    finally:
-        conn.close()
     counts = {"total": len(rows), **{s: sum(1 for r in rows if r["status"] == s) for s in STATUSES}}
     for n, r in enumerate(rows, start=1):
         r["n"], r["comment"] = n, r["comment"] or ""
@@ -122,38 +130,29 @@ def _entry(conn, year: int, entry_id: int) -> dict:
 
 
 def entry_card(year: int, entry_id: int) -> dict:
-    conn = _connect()
-    try:
+    with _db() as conn:
         e = _entry(conn, year, entry_id)
         e["audit"] = edb.audit(conn, entry_id)
-    finally:
-        conn.close()
     return e
 
 
 def set_status(year: int, entry_id: int, status: str, user: str) -> dict:
     if status not in STATUSES:
         raise EntryError("нет такого статуса")
-    conn = _connect()
-    try:
+    with _db() as conn:
         e = _entry(conn, year, entry_id)
         if e["status"] != status:
             edb.update(conn, entry_id, "status", e["status"], status, user)
-    finally:
-        conn.close()
     clear_cache()
     return {"ok": True}
 
 
 def set_comment(year: int, entry_id: int, comment: str, user: str) -> dict:
     comment = (comment or "").strip()[:2000]
-    conn = _connect()
-    try:
+    with _db() as conn:
         e = _entry(conn, year, entry_id)
         if (e["comment"] or "") != comment:
             edb.update(conn, entry_id, "comment", e["comment"] or "", comment, user)
-    finally:
-        conn.close()
     return {"ok": True}
 
 
@@ -178,6 +177,9 @@ def export_xlsx(year: int) -> bytes:
         v = {**r, "fio": _fio(r), "format": FORMAT_LABELS[r["format"]], "status": STATUS_LABELS[r["status"]],
              "gender": {"M": "М", "F": "Ж"}.get(r["gender"], "")}
         ws.append([v.get(k) if v.get(k) is not None else "" for k, _, _ in EXPORT_COLUMNS])
+        for cell in ws[ws.max_row]:
+            if cell.data_type == "f":         # текст из формы, начинающийся с «=», — не формула
+                cell.data_type = "s"
     for i, (key, _, width) in enumerate(EXPORT_COLUMNS, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
         fmt = {"submitted_at": "DD.MM.YYYY HH:MM", "birthdate": "DD.MM.YYYY"}.get(key)
@@ -199,11 +201,8 @@ def public_list(year: int) -> dict:
         hit = _public_cache.get(year)
         if hit and time.monotonic() - hit[0] < PUBLIC_TTL_S:
             return hit[1]
-    conn = _connect()
-    try:
+    with _db() as conn:
         rows = edb.public_rows(conn, year)
-    finally:
-        conn.close()
     rows.sort(key=lambda r: (_norm(r["surname"]), _norm(r["name"]), r["id"]))
     data = {"year": year, "total": len(rows), "admitted": sum(1 for r in rows if r["status"] == "admitted"),
             "entries": [{"n": n, "fio": _fio(r), "format": FORMAT_LABELS[r["format"]], "status": r["status"]}

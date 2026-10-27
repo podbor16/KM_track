@@ -21,12 +21,14 @@ def upsert(conn, year: int, e: dict, submitted_at) -> bool:
     return cur.rowcount == 1          # MySQL: 1 — вставка, 2 — обновление, 0 — без изменений
 
 
-def known_tranids(conn, tranids: list) -> set:
+def known_tranids(conn, tranids: list) -> dict:
+    """{tranid: race_year} для уже сохранённых заявок."""
     if not tranids:
-        return set()
+        return {}
     cur = conn.cursor()
-    cur.execute(f"SELECT tranid FROM siberman_entries WHERE tranid IN ({', '.join(['%s'] * len(tranids))})", tranids)
-    return {r[0] for r in cur.fetchall()}
+    cur.execute(f"SELECT tranid, race_year FROM siberman_entries "
+                f"WHERE tranid IN ({', '.join(['%s'] * len(tranids))})", tranids)
+    return {r[0]: r[1] for r in cur.fetchall()}
 
 
 def list_year(conn, year: int) -> list[dict]:
@@ -63,7 +65,10 @@ def update(conn, entry_id: int, field: str, old: str, new: str, user: str) -> No
                     "VALUES (%s, %s, %s, %s, %s, NOW())", (entry_id, field, old, new, user[:64]))
         conn.commit()
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass                              # соединение оборвалось — не скрываем исходную ошибку
         raise
 
 
