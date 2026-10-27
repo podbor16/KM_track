@@ -992,3 +992,11 @@ timestamp'ы»): если не прокинуть `Payment date` в `created_at`
 - [x] Миграция 017: `draw_contacts.wildcard_reason/results_text` (переживают перезаливку таблицы); `_texts` при загрузке CSV и таблицы
 - [x] Тесты (unit + integration); реальный файл: 253 заявки, 0 ошибок, 29 эстафет с составом
 - [x] Прод: бэкап `/root/backups/siberman_before_draw_contacts_texts_20261026.sql.gz` → миграция 017 → деплой
+
+## Siberman: приём и проверка заявок 2029 (часть A) (2026-10-27)
+Спека `docs/superpowers/specs/2026-10-27-siberman-entries-design.md`, план `docs/superpowers/plans/2026-10-27-siberman-entries.md`; части B+C (шансы) — Obsidian `inbox/2026-10-27-siberman-draw-chances-automation.md`.
+- [x] Миграция 018 (`siberman_entries`, журнал), `SIBERMAN_WEBHOOK_SECRET`
+- [x] Модуль `src/siberman/entries/` (parser, db, service, spool, router): вебхук Тильды со спулом и повтором, CSV, статусы ⌛️/✅/❌/🚫 с журналом, Excel, публичный список
+- [x] Вкладка «Заявки» в `/admin/draw?year=…#entries`; публичная `/entries/{год}` в стиле `2028_applications`; nginx (`entries/`, вебхук без access_log)
+- [x] Ревью по задачам + финальное: формулы в Excel, 503 при сбое БД, изоляция спула от Красмарафона, XSS через result_url, урезанный CSV не затирает данные
+- Сделано (ветка feat/siberman-entries → main, 12 коммитов, до 5c1c8ed): тесты 1132; браузер — админка и публичная страница на тестовом 2091 (удалён); прод — бэкап `/root/backups/siberman_before_entries_20261027.sql.gz`, миграция 018, секрет в .env (бэкап .env `/root/backups/env_before_entries_20261027`), деплой; `/entries/2029` 200 (0 заявок), вебхук: неверный секрет 403, тест-пинг ok, секрета в access-логе нет. Пользователю: подключить вебхук в форме Тильды и блок T123 на `2029_applications` (`docs/siberman/entries-tilda-snippet.md`).
