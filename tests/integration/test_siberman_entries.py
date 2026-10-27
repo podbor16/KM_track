@@ -231,3 +231,42 @@ def test_public_api_and_page(entries, client):
     assert client.get(f"/entries/{YEAR}", headers=SIBERMAN).status_code == 200
     assert client.get(f"/entries/{YEAR}").status_code == 404                  # только домен Siberman
     assert client.get("/api/siberman/entries/1999").status_code == 404
+
+
+def test_webhook_spool_save_fails_still_ingests(entries, client, monkeypatch):
+    monkeypatch.setattr(settings, "SIBERMAN_WEBHOOK_SECRET", "s3cret")
+
+    def broken_save(*a, **k):
+        raise OSError("диск")
+    monkeypatch.setattr(spool, "save", broken_save)
+    r = client.post(f"/webhook/siberman/s3cret/{YEAR}", data=body(f"{YEAR}:9", "Безспула"))
+    assert r.status_code == 200
+    assert "Безспула" in [e["surname"] for e in service.admin_list(YEAR)["entries"]]
+
+
+def test_webhook_ingest_fails_keeps_spool_and_returns_200(entries, client, monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "SIBERMAN_WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setattr(spool, "SPOOL_DIR", tmp_path)
+
+    def broken_ingest(*a, **k):
+        raise RuntimeError("БД упала")
+    monkeypatch.setattr(service, "ingest", broken_ingest)
+    r = client.post(f"/webhook/siberman/s3cret/{YEAR}", data=body(f"{YEAR}:9", "Повторится"))
+    assert r.status_code == 200 and len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_webhook_nothing_saved_returns_500(entries, client, monkeypatch):
+    monkeypatch.setattr(settings, "SIBERMAN_WEBHOOK_SECRET", "s3cret")
+
+    def broken(*a, **k):
+        raise RuntimeError("сбой")
+    monkeypatch.setattr(spool, "save", broken)
+    monkeypatch.setattr(service, "ingest", broken)
+    assert client.post(f"/webhook/siberman/s3cret/{YEAR}", data=body(f"{YEAR}:9", "Потерян")).status_code == 500
+
+
+def test_public_api_503_when_db_unavailable(entries, client, monkeypatch):
+    monkeypatch.setattr(service, "get_siberman_connection", lambda: None)
+    service.clear_cache()
+    assert client.get(f"/api/siberman/entries/{YEAR}").status_code == 503
+    service.clear_cache()

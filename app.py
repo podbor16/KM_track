@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 import json
 import logging
 import os
+import re
 import time as _time
 from pathlib import Path
 
@@ -603,6 +604,12 @@ app.add_middleware(
 )
 
 _perf_logger = logging.getLogger("km_track.perf")
+_WEBHOOK_SECRET_RE = re.compile(r"^(/webhook/(?:siberman|tilda)/)[^/]+")
+
+
+def _log_path(p: str) -> str:
+    return _WEBHOOK_SECRET_RE.sub(r"\1***", p)
+
 
 @app.middleware("http")
 async def log_request_duration(request: Request, call_next):
@@ -614,9 +621,9 @@ async def log_request_duration(request: Request, call_next):
     duration = _time.time() - start
     response.headers["X-Process-Time"] = f"{duration:.3f}"
     if duration > 0.5:
-        _perf_logger.warning(f"SLOW {request.method} {request.url.path} {duration:.3f}s")
+        _perf_logger.warning(f"SLOW {request.method} {_log_path(request.url.path)}{duration:.3f}s")
     else:
-        _perf_logger.debug(f"{request.method} {request.url.path} {duration:.3f}s {response.status_code}")
+        _perf_logger.debug(f"{request.method} {_log_path(request.url.path)} {duration:.3f}s {response.status_code}")
     metrics_collector.record(
         ip=request.client.host if request.client else None,
         duration_ms=duration * 1000,

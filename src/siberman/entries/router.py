@@ -2,7 +2,6 @@
 Заявки Siberman: вебхук Тильды (POST /webhook/siberman/{секрет}/{год}), API вкладки «Заявки» админки
 (/api/siberman/admin/entries/{год}/…) и публичный список для iframe (/entries/{год}, /api/siberman/entries/{год}).
 """
-import datetime
 import hmac
 import logging
 
@@ -66,22 +65,36 @@ async def entries_webhook(token: str, year: int, request: Request):
             body = parse_body(await request.body(), ct)
     except Exception as e:
         _log.error(f"siberman entries webhook: тело не разобрано: {e}")
-        ntfy.send("Siberman: заявка из Тильды не разобрана", ["Тело запроса не читается — см. лог сервера"],
-                  priority="high")
+        await run_in_threadpool(ntfy.send, "Siberman: заявка из Тильды не разобрана",
+                                ["Тело запроса не читается — см. лог сервера"], priority="high")
         return PlainTextResponse("ok")
     if is_test_ping(body):
         return PlainTextResponse("ok")
     received_at = service.now_krs()
-    path = spool.save(body, year, received_at)
+    try:
+        path = spool.save(body, year, received_at)
+    except Exception:
+        _log.error("siberman entries webhook: спул недоступен, пишем напрямую в БД", exc_info=True)
+        path = None
     try:
         await run_in_threadpool(service.ingest, year, body, received_at)
-        spool.done(path)
+        if path:
+            spool.done(path)
     except BadEntry as e:
-        spool.fail(path)
-        _log.error(f"siberman entries webhook: не заявка ({e}) — {path.name} в failed/")
-        ntfy.send("Siberman: заявка из Тильды не разобрана", [str(e), f"Файл: failed/{path.name}"], priority="high")
+        if path:
+            spool.fail(path)
+        _log.error(f"siberman entries webhook: не заявка ({e}) — {path.name if path else 'без спула'}")
+        await run_in_threadpool(ntfy.send, "Siberman: заявка из Тильды не разобрана",
+                                [str(e), f"Файл: failed/{path.name}" if path else "Спул недоступен"],
+                                priority="high")
     except Exception as e:
-        _log.error(f"siberman entries webhook: запись не удалась, повтор из спула: {e}")
+        if path:
+            _log.error(f"siberman entries webhook: запись не удалась, повтор из спула: {e}")
+        else:
+            _log.error(f"siberman entries webhook: заявка потеряна — спул и БД недоступны: {e}")
+            await run_in_threadpool(ntfy.send, "Siberman: заявка из Тильды потеряна — спул и БД недоступны",
+                                    ["Тильда получила 500 и может повторить запрос"], priority="high")
+            return PlainTextResponse("error", status_code=500)
     return PlainTextResponse("ok")
 
 
@@ -103,7 +116,7 @@ def entries_export(year: int, user: str = Depends(api_require_auth)):
         data = service.export_xlsx(year)
     except EntryError as e:
         return JSONResponse({"detail": str(e)}, status_code=503, headers=NO_STORE)
-    name = f"siberman_{year}_zayavki_{datetime.datetime.now():%Y%m%d_%H%M}.xlsx"
+    name = f"siberman_{year}_zayavki_{service.now_krs():%Y%m%d_%H%M}.xlsx"
     return Response(data, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
 
 
