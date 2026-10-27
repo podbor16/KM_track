@@ -46,18 +46,27 @@ def replay(process, min_age_s: int = REPLAY_MIN_AGE_S) -> dict:
         return out
     now = time.time()
     for path in sorted(SPOOL_DIR.glob("*.json")):
-        age = now - path.stat().st_mtime
-        if age < min_age_s:
-            continue
         try:
-            rec = json.loads(path.read_text(encoding="utf-8"))
-            process(rec["year"], rec["body"], datetime.datetime.fromisoformat(rec["received_at"]))
+            age = now - path.stat().st_mtime
+            if age < min_age_s:
+                continue
+            try:
+                rec = json.loads(path.read_text(encoding="utf-8"))
+                args = (rec["year"], rec["body"], datetime.datetime.fromisoformat(rec["received_at"]))
+            except (ValueError, KeyError, TypeError) as e:
+                raise BadEntry(f"битый файл спула: {type(e).__name__}: {e}") from e
+            process(*args)
             done(path)
             out["replayed"] += 1
+        except FileNotFoundError:
+            continue
         except BadEntry as e:
-            fail(path)
             out["bad"] += 1
             _log.error(f"siberman entries: {path.name} не заявка — в failed/: {e}")
+            try:
+                fail(path)
+            except Exception as e2:
+                _log.error(f"siberman entries: не удалось перенести {path.name} в failed/: {e2}")
         except Exception as e:
             out["failed"] += 1
             out["oldest_failed_age_s"] = max(out["oldest_failed_age_s"], int(age))

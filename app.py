@@ -331,6 +331,7 @@ async def lifespan(app: FastAPI):
         разбирается — алерт в ntfy (не чаще раза в час)."""
         from src.common import ntfy
         from src.krasmarafon.routers.webhook import SPOOL_DIR, replay_spool
+        from src.siberman.entries import service as entries_service, spool as entries_spool
         last_alert = 0.0
         while True:
             await asyncio.sleep(300)
@@ -339,11 +340,14 @@ async def lifespan(app: FastAPI):
                 if not (current and current.decode() == worker_id):
                     continue
                 done = await asyncio.get_event_loop().run_in_executor(None, replay_spool)
-                from src.siberman.entries import service as entries_service, spool as entries_spool
-                sib = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: entries_spool.replay(entries_service.ingest))
-                if sib["replayed"] or sib["failed"] or sib["bad"]:
-                    settings.logger.info(f"[webhook] спул заявок Siberman: {sib}")
+                sib = {"replayed": 0, "failed": 0, "bad": 0, "oldest_failed_age_s": 0}
+                try:
+                    sib = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: entries_spool.replay(entries_service.ingest))
+                    if sib["replayed"] or sib["failed"] or sib["bad"]:
+                        settings.logger.info(f"[webhook] спул заявок Siberman: {sib}")
+                except Exception as _e:
+                    settings.logger.warning(f"[webhook] спул заявок Siberman: ошибка повтора: {_e}")
                 done["failed"] += sib["failed"]
                 done["bad"] = done.get("bad", 0) + sib["bad"]
                 done["oldest_failed_age_s"] = max(done["oldest_failed_age_s"], sib["oldest_failed_age_s"])
@@ -355,6 +359,9 @@ async def lifespan(app: FastAPI):
                     lines = [f"Не записаны в БД: {done['failed']} (старейшая — {done['oldest_failed_age_s'] // 60} мин)",
                              f"Не разбираются (failed/): {done.get('bad', 0)}",
                              f"Спул: {SPOOL_DIR}"]
+                    if sib["failed"] or sib["bad"]:
+                        lines.append(f"Siberman: не записаны {sib['failed']}, не разбираются {sib['bad']}, "
+                                     f"спул {entries_spool.SPOOL_DIR}")
                     await asyncio.get_event_loop().run_in_executor(
                         None, lambda: ntfy.send("KM_track — заявки Tilda не записываются", lines, priority="high"))
             except Exception as _e:

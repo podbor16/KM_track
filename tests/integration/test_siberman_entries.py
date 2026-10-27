@@ -83,7 +83,7 @@ def test_status_errors(entries):
 
 def test_public_list_alphabetical_without_contacts(entries):
     service.set_status(YEAR, entries["Абрамов"], "withdrawn", "u")
-    p =service.public_list(YEAR)
+    p = service.public_list(YEAR)
     assert (p["total"], p["admitted"]) == (3, 0)
     assert p["entries"] == [{"n": 1, "fio": "Абрамов Тест", "format": "Эстафетная команда", "status": "withdrawn"},
                             {"n": 2, "fio": "Ёлкина Тест", "format": "Индивидуальное участие", "status": "review"},
@@ -179,3 +179,11 @@ def test_spool_keeps_file_when_db_fails(entries, tmp_path, monkeypatch):
         raise RuntimeError("БД упала")
     done = spool.replay(broken, min_age_s=0)
     assert (done["replayed"], done["failed"]) == (0, 1) and path.exists()
+
+
+def test_spool_corrupt_file_goes_to_failed(entries, tmp_path, monkeypatch):
+    monkeypatch.setattr(spool, "SPOOL_DIR", tmp_path)
+    (tmp_path / "x.json").write_text("{не json", encoding="utf-8")
+    done = spool.replay(service.ingest, min_age_s=0)
+    assert done["bad"] == 1 and done["failed"] == 0
+    assert not (tmp_path / "x.json").exists() and (tmp_path / "failed" / "x.json").exists()
