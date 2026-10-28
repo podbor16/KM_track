@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Базовые пути
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-RACE_DATA_FILE = BASE_DIR / "tracker" / "race_data.json"  # legacy JSON (race-stats endpoint)
+RACE_DATA_FILE = BASE_DIR / "data" / "race_data.json"  # снимок Copernico от загрузчика (legacy race-stats endpoint)
 
 # --- КОНФИГУРАЦИЯ МЕРОПРИЯТИЙ ---
 # Единственная точка правды — YAML-файлы в config/events/.

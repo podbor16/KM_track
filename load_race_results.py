@@ -50,7 +50,7 @@ from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
 from src.common.categories import canonical_category
 
 # === КОНСТАНТЫ ===
-RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "src/tracker/race_data.json"))
+RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "data/race_data.json"))   # тот же файл, что settings.RACE_DATA_FILE
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 UPDATE_INTERVAL = int(os.getenv("CONTINUOUS_UPDATE_INTERVAL", "5"))
 # Забег Икс 27.09.2026: успешный ответ Copernico — 0.3–0.6с, но ~половина запросов

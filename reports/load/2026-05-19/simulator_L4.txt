@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "C:\Users\podbo\–‡·ÓÚ‡\ –¿—Ã¿–¿‘ŒÕ\KM_track\tests\load\race_simulator.py", line 14, in <module>
-    from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
-ModuleNotFoundError: No module named 'deploy'

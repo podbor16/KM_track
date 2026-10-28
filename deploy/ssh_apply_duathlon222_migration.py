@@ -2,8 +2,8 @@
 Применяет миграцию duathlon_222 на проде (по умолчанию 001_init.sql).
 
 paramiko (прямой сокет из python.exe) блокируется файрволом на порт 22 в
-этом окружении — используем plink.exe (PuTTY) как отдельный процесс, см.
-deploy/ssh_apply_siberman_migration.py (тот же паттерн).
+этом окружении — используем plink.exe (PuTTY) как отдельный процесс
+(миграции Siberman — через .github/workflows/migrate_siberman.yml).
 
 Usage: python -m deploy.ssh_apply_duathlon222_migration [migration_file.sql]
 """
