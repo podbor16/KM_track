@@ -1,9 +1,12 @@
 """Дела и вопросы «Качества данных» (src/analytics/dq_cases.py) — без БД."""
 import datetime
+import itertools
 import re
 
-from src.analytics.dq_cases import (FIELD_ANSWERS, STAGES, build_question, case_view, group_cases, is_live,
-                                    questions_for)
+import pytest
+
+from src.analytics import dq_actions, dq_cases
+from src.analytics.dq_cases import STAGES, build_question, case_view, group_cases, is_live, questions_for
 from src.analytics.dq_checks import Data, Finding, run_checks
 from src.common.names import Names
 
@@ -251,13 +254,255 @@ def test_is_live_today_or_yesterday():
     assert not is_live(ev, datetime.date(2026, 10, 29)) and not is_live({"event_date": None}, datetime.date(2026, 10, 28))
 
 
-def test_live_race_keeps_moves_hides_field_answers():
+def test_live_race_keeps_only_moves_and_postpone():
     d = pcarev()
     v = case_view(pcarev_case(d), d, decided={}, today=datetime.date(2016, 8, 29))   # Детский 2016-08-28 — вчера
     live = [q for q in v["questions"] if q["live"]]
     assert live
-    assert all(not set(ids(q)) & FIELD_ANSWERS for q in live)
+    assert all(a == "new" or a == "postpone" or a.startswith("to:") for q in live for a in ids(q))
     foreign = next(q for q in live if q["code"] == "R-FOREIGN" and q["result_id"] == 101)
     assert ids(foreign)[0].startswith("to:")
     later = case_view(pcarev_case(d), d, decided={}, today=datetime.date(2016, 8, 30))
     assert not any(q["live"] for q in later["questions"])
+
+
+# ---------------------------------------------------------------- проверки по карточкам дела
+
+def leads_only():
+    """Тёзки только с заявками (одна — с ДР-заглушкой) и пара «карточка с результатом — карточка без»."""
+    clients = [C(1, "Пцарев", "Александр", "1900-01-01"), C(2, "Пцарев", "Александр", "1985-04-04"),
+               C(3, "Ветров", "Олег", "1990-05-05"), C(4, "Ветров", "Олег", "1990-01-01")]
+    leads = [L(1, 1, "Пцарев", "Александр", "1900-01-01", 11), L(2, 2, "Пцарев", "Александр", "1985-04-04", 11),
+             L(3, 4, "Ветров", "Олег", "1990-01-01", 11, bib=77)]
+    results = [R(1, 3, "Ветров", "Олег", "1990-05-05", 11, 77)]
+    return data(clients, leads=leads, results=results)
+
+
+@pytest.mark.parametrize("make", [pcarev, everything, leads_only])
+def test_card_scope_equals_full_run_restricted_to_cards(make):
+    d = make()
+    full = run_checks(d)
+    ids_ = sorted(d.clients)
+    for S in [{i} for i in ids_] + [set(p) for p in itertools.combinations(ids_, 2)]:
+        want = {f.key for f in full if set(f.client_ids) & S}
+        assert {f.key for f in run_checks(d, card_ids=S)} == want, S
+
+
+# ---------------------------------------------------------------- ответы (БД заменена данными в памяти)
+
+class Fake:
+    """dq_cases.load и dq_actions.load_decisions — из памяти; действия dq_actions — записывающие заглушки."""
+    ACTIONS = {"merge_cards": (0, 1), "move_row": (0, 1), "edit_record": (0, 1), "dismiss": 1, "delete_result": 1,
+               "fix_fio": (0, 1)}
+
+    def __init__(self, monkeypatch, d):
+        self.d, self.decided, self.calls, self.loads, self.fail = d, {}, [], 0, None
+        monkeypatch.setattr(dq_cases, "load", self._load)
+        monkeypatch.setattr(dq_actions, "load_decisions", lambda conn: dict(self.decided))
+        monkeypatch.setattr(dq_cases, "_today", lambda: datetime.date(2026, 10, 28))
+        for name, ret in self.ACTIONS.items():
+            monkeypatch.setattr(dq_actions, name, self._stub(name, ret))
+
+    def _load(self, conn):
+        self.loads += 1
+        return self.d
+
+    def _stub(self, name, ret):
+        def act(conn, *args, **kw):
+            if self.fail and self.fail(name, args):
+                raise ValueError("такие ФИ и ДР уже у карточки #14 — склейте карточки")
+            self.calls.append((name, args, kw))
+            return ret
+        return act
+
+    def answer(self, key, answer_id, inputs=None, only=True):
+        """Ответ на вопрос key; only — прочие вопросы дела отложены (вопрос не закрыт ступенью)."""
+        case = next(c for c in group_cases(run_checks(self.d), self.d) if any(f.key == key for f in c["findings"]))
+        self.decided = {f.key: "postponed" for f in case["findings"] if f.key != key} if only else {}
+        self.calls, self.loads = [], 0
+        return dq_cases.apply_answer(None, case["key"], key, answer_id, inputs or {}, "u")
+
+
+def dup_auto():
+    return data([C(1, "Иванов", "Иван", "1985-07-14")], leads=[L(1, 1, "Иванов", "Иван", "1985-07-14", 11, bib=7)],
+                results=[R(1, 1, "Иванов", "Иван", "1985-07-14", 11, 5, status="Not started"),
+                         R(2, 1, "Иванов", "Иван", "1985-07-14", 11, 9, status="Not started")])
+
+
+def kid_lead():
+    year = datetime.date.today().year
+    return Data([C(1, "Пцарев", "Александр", "1980-03-09"), C(2, "Пцарев", "Саша", f"{year - 8}-12-20")],
+                [L(1, 1, "Пцарев", "Александр", "1980-03-09", 20)], [],
+                [{"id": 20, "event_name": "Детский забег", "event_distance": 1.0, "event_year": year, "event_date": None}])
+
+
+def vetrova_twin():
+    """R-CARD Ветровой и карточка #14 с ФИ+ДР строки — склейка после конфликта."""
+    return data([C(11, "Ветрова", "Елизавета", "2014-12-12"), C(14, "Ветрова", "Елизавета", "2014-01-01")],
+                results=[R(6, 11, "Ветрова", "Елизавета", "2014-01-01", 10, 4102, sex="Женщина")])
+
+
+FIO = {"surname": "Ветрова", "name": "Елизавета"}
+U = "u"
+ANSWERS = [
+    (everything, "C-TWIN::5-6", "merge", {"surname": "Иванов", "name": "Иван", "birthday": "1985-07-14"},
+     [("merge_cards", ([5, 6], "Иванов", "Иван", "1985-07-14", U), {})]),
+    (everything, "C-TWIN::5-6", "different", {}, [("dismiss", ("different_people", "", U), {})]),
+    (everything, "R-LEAD:r3:7-8", "to:8", {}, [("move_row", ("results", 3, U), {"align": True, "to_client_id": 8})]),
+    (everything, "R-FOREIGN:r101:1-2-3", "to:2", {},
+     [("move_row", ("results", 101, U), {"align": True, "to_client_id": 2})]),
+    (everything, "R-FOREIGN:l2:1-2-3", "to:3", {}, [("move_row", ("leads", 2, U), {"align": True, "to_client_id": 3})]),
+    (kid_lead, "L-KID:l1:1", "to:2", {}, [("move_row", ("leads", 1, U), {"align": True, "to_client_id": 2})]),
+    (everything, "R-FOREIGN:r8:13", "new", {"surname": "Орлов", "name": "Олег", "birthday": "2010-02-02"},
+     [("move_row", ("results", 8, U), {"align": True, "new_card": {"surname": "Орлов", "name": "Олег",
+                                                                   "birthday": "2010-02-02"}})]),
+    (everything, "R-DUP:r4:9", "to:10", {"row_id": "5"},
+     [("move_row", ("results", 5, U), {"align": True, "to_client_id": 10})]),
+    (everything, "R-DUP:r4:9", "new", {"row_id": 5, "surname": "Козлов", "name": "Олег", "birthday": "1990-03-03"},
+     [("move_row", ("results", 5, U), {"align": True, "new_card": {"surname": "Козлов", "name": "Олег",
+                                                                   "birthday": "1990-03-03"}})]),
+    (everything, "HYG:r7:12", "keep", {}, [("dismiss", ("keep", "", U), {})]),
+    (dup_auto, "R-DUP:r1:1", "delete", {}, [("delete_result", (1, U), {})]),
+    (everything, "R-CARD:r6:11", "row_from_card", {}, [("edit_record", ("results", 6, {"birthday": "2014-12-12"}, U), {})]),
+    (everything, "R-CARD:r6:11", "card_from_row", {}, [("edit_record", ("clients", 11, {"birthday": "2014-01-01"}, U), {})]),
+    (everything, "R-CARD:r6:11", "other", {**FIO, "birthday": "2014-06-06"},
+     [("edit_record", ("clients", 11, {"birthday": "2014-06-06"}, U), {}),
+      ("edit_record", ("results", 6, {"birthday": "2014-06-06"}, U), {})]),
+    (everything, "R-CARD:r6:11", "other", {**FIO, "birthday": "2014-12-12"},       # как в карточке — правится строка
+     [("edit_record", ("results", 6, {"birthday": "2014-12-12"}, U), {})]),
+    (vetrova_twin, "R-CARD:r6:11", "merge_with:14", {**FIO, "birthday": "2014-01-01"},
+     [("merge_cards", ([11, 14], "Ветрова", "Елизавета", "2014-01-01", U), {})]),
+    (everything, "R-CAT:r101:1", "birthday", {"birthday": "2010-01-01", "category": "лишнее"},
+     [("edit_record", ("results", 101, {"birthday": "2010-01-01"}, U), {})]),
+    (everything, "R-CAT:r101:1", "category", {"category": "М35-39", "sex": "лишнее"},
+     [("edit_record", ("results", 101, {"category": "М35-39"}, U), {})]),
+    (everything, "R-CAT:r101:1", "sex", {"sex": "Женщина", "category": "Ж35-39", "birthday": "лишнее"},
+     [("edit_record", ("results", 101, {"sex": "Женщина", "category": "Ж35-39"}, U), {})]),
+    (everything, "L-KID:l2:1", "distance", {"event_distance": "500 м"},
+     [("edit_record", ("leads", 2, {"event_distance": "500 м"}, U), {})]),
+    (everything, "HYG:r7:12", "manual", {"surname": "Петров", "name": "Пётр"},
+     [("fix_fio", (7, "Петров", "Пётр", U), {})]),
+    (everything, "HYG:r7:12", "postpone", {}, [("dismiss", ("postponed", "не знаю ДР", U), {})]),
+]
+
+
+def _with_key(calls, key):
+    """Ожидаемые вызовы: ключ находки — последним аргументом (у dismiss — первым)."""
+    return [(name, (key, *args) if name == "dismiss" else (*args, key), kw) for name, args, kw in calls]
+
+
+@pytest.mark.parametrize("make,key,answer_id,inputs,calls", ANSWERS,
+                         ids=[f"{a[1].split(':')[0]}-{a[2]}" for a in ANSWERS])
+def test_answer_runs_its_chain(monkeypatch, make, key, answer_id, inputs, calls):
+    fake = Fake(monkeypatch, make())
+    fake.answer(key, answer_id, inputs)
+    assert fake.calls == _with_key(calls, key)
+    assert fake.loads == 2
+
+
+def test_fix_takes_canonical_fio(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    f = next(f for f in run_checks(fake.d) if f.key == "HYG:r7:12")
+    fake.answer(f.key, "fix")
+    assert fake.calls == [("fix_fio", (7, *f.fix, U, f.key), {})]
+
+
+def test_other_without_changes_writes_nothing(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    with pytest.raises(ValueError, match="значения не изменились"):
+        fake.answer("R-CARD:r6:11", "other", {})
+    assert fake.calls == []
+
+
+def test_card_conflict_writes_nothing_and_offers_merge(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    fake.fail = lambda name, args: name == "edit_record" and args[0] == "clients"
+    out = fake.answer("R-CARD:r6:11", "other", {**FIO, "birthday": "2014-06-06"})
+    assert fake.calls == [] and out["action_ids"] == []
+    assert out["conflict"]["merge_with"] == 14 and "Склеить" in out["conflict"]["message"]
+    assert out["conflict"]["birthday"] == "2014-06-06"
+
+
+def test_merge_with_needs_card_with_same_fio_and_bd(monkeypatch):
+    fake = Fake(monkeypatch, vetrova_twin())
+    with pytest.raises(ValueError, match="те же ФИ и ДР"):
+        fake.answer("R-CARD:r6:11", "merge_with:14", {**FIO, "birthday": "2014-02-02"})
+    assert fake.calls == []
+
+
+def test_dup_row_must_be_finish_of_this_card(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    with pytest.raises(ValueError, match="финиш этой карточки"):
+        fake.answer("R-DUP:r4:9", "to:10", {"row_id": "1"})
+    assert fake.calls == []
+
+
+def test_locked_stage_answer_rejected_postpone_allowed(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    with pytest.raises(ValueError, match="сначала ответьте на вопросы ступени «Кто есть кто»"):
+        fake.answer("R-CAT:r101:1", "keep", only=False)
+    fake.answer("R-CAT:r101:1", "postpone", only=False)
+    assert {c[1][0] for c in fake.calls} == {"R-CAT:r101:1", "L-KID:l2:1", "R-FOREIGN:r101:1-2-3",
+                                             "R-FOREIGN:l2:1-2-3"}
+
+
+def test_live_race_rejects_all_but_moves(monkeypatch):
+    fake = Fake(monkeypatch, pcarev())
+    monkeypatch.setattr(dq_cases, "_today", lambda: datetime.date(2016, 8, 29))
+    with pytest.raises(ValueError, match="загружается"):
+        fake.answer("R-FOREIGN:r101:1-2-3", "keep")
+    fake.answer("R-FOREIGN:r101:1-2-3", "to:2")
+    assert [c[0] for c in fake.calls] == ["move_row"]
+
+
+def test_unknown_answer_and_stale_question(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    with pytest.raises(ValueError, match="неизвестный ответ"):
+        fake.answer("R-FOREIGN:r101:1-2-3", "to:1")
+    with pytest.raises(dq_cases.StaleQuestion):
+        dq_cases.apply_answer(None, "c1", "R-FOREIGN:r999:1", "keep", {}, U)
+
+
+def test_loads_once_per_read(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    for call in (lambda: dq_cases.get_case(None, "c1"), lambda: dq_cases.list_cases(None, "open"),
+                 lambda: dq_cases.case_for_card(None, 1), lambda: dq_cases.postpone_case(None, "c1", "", U)):
+        fake.loads = 0
+        call()
+        assert fake.loads == 1
+
+
+def test_case_for_card_joins_namesake_case_else_unknown_key(monkeypatch):
+    d = data([C(1, "Пцарев", "Александр", "1980-03-09"), C(2, "Пцарев", "Саша", "2013-12-20"),
+              C(3, "Орлов", "Олег", "1990-02-02")],
+             results=[R(100, 1, "Пцарев", "Александр", "1980-03-08", 11, 3470)])
+    Fake(monkeypatch, d)
+    case = dq_cases.case_for_card(None, 2)
+    assert case["key"] == "c1" and {c["id"] for c in case["cards"]} == {1, 2}
+    assert [q["id"] for q in case["questions"]] == ["R-CARD:r100:1"]
+    alone = dq_cases.case_for_card(None, 3)
+    assert alone["key"] == "p3" and alone["questions"] == []
+    with pytest.raises(dq_cases.StaleQuestion):
+        dq_cases.postpone_case(None, "p3", "", U)
+
+
+def test_list_cases_event_filter_by_card_rows(monkeypatch):
+    Fake(monkeypatch, everything())
+    assert "c5" in {c["key"] for c in dq_cases.list_cases(None, "open", event_id=11)}       # C-TWIN без забега
+    assert "c5" not in {c["key"] for c in dq_cases.list_cases(None, "open", event_id=10)}
+
+
+def test_find_case_prefers_largest_overlap():
+    cases = [{"key": "c1", "cards": [1]}, {"key": "c2", "cards": [2, 3]}]
+    assert dq_cases._find_case(cases, "c9", [1, 2, 3])["key"] == "c2"
+
+
+def test_rows_result_before_lead_in_one_event_and_category_options_with_sex():
+    d = data([C(1, "Пцарев", "Александр", "1980-03-09")], leads=[L(1, 1, "Пцарев", "Александр", "1980-03-09", 11)],
+             results=[R(100, 1, "Пцарев", "Александр", "1980-03-09", 11, 3470)])
+    assert [r["table"] for r in dq_cases._rows(d, 1, {"results": set(), "leads": set()})] == ["results", "leads"]
+    d = pcarev()
+    q = next(q for q in case_view(pcarev_case(d), d, {}, datetime.date(2026, 10, 28))["questions"]
+             if q["code"] == "R-CAT")
+    opts = next(a for a in q["answers"] if a["id"] == "category")["inputs"][0]["options"]
+    assert opts and all(set(o) == {"label", "sex"} for o in opts)

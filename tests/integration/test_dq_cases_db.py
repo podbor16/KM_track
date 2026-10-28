@@ -76,6 +76,11 @@ def test_answer_foreign_moves_and_aligns_then_case_has_no_question(db):
     cur.execute("SELECT client_id, name, birthday FROM results WHERE id = %s", (rid,))
     assert cur.fetchone() == {"client_id": son, "name": "Саша", "birthday": datetime.date(2093, 12, 20)}
     assert out["case"] is None          # других вопросов у дела нет — дело закрыто
+    for aid in out["action_ids"]:
+        dq.undo_action(conn, aid, USER)
+    conn.commit()
+    cur.execute("SELECT client_id, name, birthday FROM results WHERE id = %s", (rid,))
+    assert cur.fetchone() == {"client_id": father, "name": "Александр", "birthday": datetime.date(1980, 3, 9)}
 
 
 def test_stale_question_raises(db):
@@ -88,28 +93,22 @@ def test_stale_question_raises(db):
         dq_cases.apply_answer(conn, case["key"], q["id"], f"to:{son}", {}, USER)
 
 
-def test_unknown_answer_raises(db):
-    conn, cur = db
-    rid, father, son = foreign_case(conn, cur)
-    case = dq_cases.case_for_card(conn, father)
-    q = next(q for q in case["questions"] if q["code"] == "R-FOREIGN")
-    with pytest.raises(ValueError, match="неизвестный ответ"):
-        dq_cases.apply_answer(conn, case["key"], q["id"], f"to:{father}", {}, USER)
-
-
 def test_card_from_row_conflict_offers_merge(db):
+    """ДР карточек не похожи (2080-05-05 и 2093-07-08) — двойника C-TWIN нет, вопрос R-CARD открыт."""
     conn, cur = db
     ev = event(cur, "Конфликт", 5.0)
-    _, a = result(cur, ev, 1, "2093-12-12", name="Елизавета")
-    rid, b = result(cur, event(cur, "Конфликт 2", 5.0), 2, "2093-01-01", name="Елизавета")
-    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (a, rid))   # строка 2093-01-01 — на карточке A
+    _, a = result(cur, ev, 1, "2080-05-05", name="Елизавета")
+    rid, b = result(cur, event(cur, "Конфликт 2", 5.0), 2, "2093-07-08", name="Елизавета")
+    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (a, rid))   # строка 2093-07-08 — на карточке A
     conn.commit()
     case = dq_cases.case_for_card(conn, a)
     q = next(q for q in case["questions"] if q["code"] == "R-CARD" and q["result_id"] == rid)
+    assert q["state"] == "current"
     out = dq_cases.apply_answer(conn, case["key"], q["id"], "card_from_row", {}, USER)
     assert out["conflict"]["merge_with"] == b and "Склеить" in out["conflict"]["message"]
+    assert out["action_ids"] == []
     out = dq_cases.apply_answer(conn, case["key"], q["id"], f"merge_with:{b}",
-                                {"surname": SUR, "name": "Елизавета", "birthday": "2093-12-12"}, USER)
+                                {"surname": SUR, "name": "Елизавета", "birthday": "2093-07-08"}, USER)
     cur.execute("SELECT COUNT(*) n FROM clients WHERE id IN (%s, %s)", (a, b))
     assert cur.fetchone()["n"] == 1
 
@@ -140,7 +139,7 @@ def test_live_race_hides_and_rejects_field_answers(db):
     conn.commit()
     case = dq_cases.case_for_card(conn, cid)
     q = next(q for q in case["questions"] if q["code"] == "R-CARD")
-    assert q["live"] and not {a["id"] for a in q["answers"]} & dq_cases.FIELD_ANSWERS
+    assert q["live"] and [a["id"] for a in q["answers"]] == ["postpone"]
     with pytest.raises(ValueError, match="загружается"):
         dq_cases.apply_answer(conn, case["key"], q["id"], "row_from_card", {}, USER)
 

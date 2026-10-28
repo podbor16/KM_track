@@ -516,24 +516,43 @@ def check_foreign(data, results, leads):
     return out
 
 
+def _rows_touching(data, results, leads, card_ids):
+    """Строки, из которых могут выйти находки карточек card_ids: строки самих карточек и тёзок по фамилии
+    (R-FOREIGN называет тёзок второй карточкой) и результаты, похожие на их заявки (R-LEAD: номер или ФИ)."""
+    near = set(card_ids) | {j for i in card_ids if i in data.clients
+                            for j in data.cards_by_surname[norm(data.clients[i]["surname"])]}
+    hooks = set()
+    for i in card_ids:
+        for l in data.leads_by_card[i]:
+            k = fio_key(l)
+            hooks |= {(l["event_id"], k), (l["event_id"], k[::-1])}
+            if l["start_number"]:
+                hooks.add((l["event_id"], l["start_number"]))
+    results = [r for r in results if r["client_id"] in near or (r["event_id"], fio_key(r)) in hooks
+               or (r["event_id"], r["start_number"]) in hooks]
+    return results, [l for l in leads if l["client_id"] in near]
+
+
 def run_checks(data, event_ids=None, card_ids=None):
     """Без event_ids — вся база (двойники — для карточек с результатами); с event_ids —
     результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта).
-    card_ids — только находки, касающиеся этих карточек (дело после ответа на вопрос)."""
+    card_ids — только находки, касающиеся этих карточек (дело после ответа на вопрос): ровно те же, что
+    у полного прогона с этими event_ids, но проверяются только строки, от которых они могут зависеть."""
     results = [r for r in data.results if not event_ids or r["event_id"] in event_ids]
     leads = [l for l in data.leads if not event_ids or l["event_id"] in event_ids]
-    if card_ids:
-        results = [r for r in results if r["client_id"] in card_ids]
-        leads = [l for l in leads if l["client_id"] in card_ids]
     cards = {r["client_id"] for r in results}
     if event_ids:
         cards |= {l["client_id"] for l in leads}
     if card_ids:
-        cards = set(card_ids)
-    cards = sorted(cards)
+        card_ids = set(card_ids)
+        results, leads = _rows_touching(data, results, leads, card_ids)
+        # пара двойников находится с любой из двух карточек — ищем от card_ids, оставляем пары полного прогона
+        twins = [f for f in check_twins(data, sorted(card_ids)) if set(f.client_ids) & cards]
+    else:
+        twins = check_twins(data, sorted(cards))
     found = (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
-             + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results)
+             + check_category(data, results) + twins + check_hygiene(data, results)
              + check_kids_leads(data, event_ids, from_year=datetime.now().year) + check_foreign(data, results, leads))
     if card_ids:
-        found = [f for f in found if set(f.client_ids) & set(card_ids)]
+        found = [f for f in found if set(f.client_ids) & card_ids]
     return found
