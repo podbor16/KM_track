@@ -7,12 +7,15 @@
 """
 
 import collections
+import datetime as _dt
 import re
 
-from src.analytics.dq_actions import propose_final
-from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, merge_blockers, names_compatible,
-                                     real_bd)
+from src.analytics import dq_actions
+from src.analytics.dq_actions import edit_record_view, propose_final
+from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, merge_blockers,
+                                     names_compatible, real_bd, run_checks)
 from src.common.names import norm
+from src.config.settings import KRASNOYARSK_TZ
 
 STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3, "L-KID": 3}
 STAGE_TITLES = {1: "Кто есть кто", 2: "Лишние строки", 3: "Поля"}
@@ -22,10 +25,13 @@ def _rows_count(data, cid):
     return len(data.res_by_card[cid]) + len(data.leads_by_card[cid])
 
 
-def _namesakes(data, a, b):
-    ca, cb = data.clients.get(a), data.clients.get(b)
-    return bool(ca and cb and norm(ca["surname"]) == norm(cb["surname"])
-                and names_compatible(ca["name"], cb["name"], data.names))
+def _namesakes_of(data, cid, ok=lambda bd: True):
+    """Другие карточки с той же фамилией и совместимым именем («Саша» — «Александр»), ДР которых подходит ok."""
+    c = data.clients.get(cid)
+    if not c:
+        return []
+    return [i for i in data.cards_by_surname[norm(c["surname"])] if i != cid
+            and names_compatible(c["name"], data.clients[i]["name"], data.names) and ok(data.clients[i]["birthday"])]
 
 
 def group_cases(findings, data):
@@ -53,15 +59,10 @@ def group_cases(findings, data):
         for i in ids[1:]:
             union(ids[0], i)
     cards = sorted(parent)
-    by_surname = collections.defaultdict(list)
     for i in cards:
-        c = data.clients.get(i)
-        if c:
-            by_surname[norm(c["surname"])].append(i)
-    for same in by_surname.values():
-        for x, y in ((x, y) for k, x in enumerate(same) for y in same[k + 1:]):
-            if _namesakes(data, x, y):
-                union(x, y)
+        for j in _namesakes_of(data, i):
+            if j in parent:
+                union(i, j)
     groups = collections.defaultdict(list)
     for i in cards:
         groups[find(i)].append(i)
@@ -155,15 +156,6 @@ def _row(data, f):
     return "leads", data.lead_by_id.get(f.lead_id)
 
 
-def _namesakes_of(data, cid, ok=lambda bd: True):
-    """Другие карточки с той же фамилией и совместимым именем («Саша» — «Александр»), ДР которых подходит ok."""
-    c = data.clients.get(cid)
-    if not c:
-        return []
-    return [i for i in data.cards_by_surname[norm(c["surname"])] if i != cid
-            and names_compatible(c["name"], data.clients[i]["name"], data.names) and ok(data.clients[i]["birthday"])]
-
-
 def _q_twin(f, data):
     a, b = f.client_ids
     _, s, n, bd = propose_final([a, b], data)
@@ -214,7 +206,7 @@ def _finish_label(r):
 
 def _q_dup(f, data):
     """Лишняя строка. Два финиша: у ответов «вынести на …» (to:<карточка>, new) поле row_id — какой из финишей
-    выносить (по умолчанию строка находки); Задача 6 берёт строку из inputs["row_id"]."""
+    выносить (по умолчанию строка находки); apply_answer берёт строку из inputs["row_id"]."""
     _, row = _row(data, f)
     cid = f.client_ids[0]
     who = _card(data, cid)
@@ -236,10 +228,13 @@ def _q_dup(f, data):
     def fits(bd):
         return not (year and real_bd(bd)) or card_fits_category(bd, row["category"], year) is not False
 
+    def finished(i):            # у тёзки уже есть финиш в этом забеге — перенос дал бы ему два финиша
+        return any(r["event_id"] == f.event_id and r["race_status"] != NOT_STARTED for r in data.res_by_card[i])
+
     return (f'{who}: два финиша в забеге {_ev(data, f)} ({", ".join(_finish_label(r) for r in fin)}). '
             f"Это два разных человека?", "", [
                 *[_a(f"to:{i}", f"Да — вынести на {_card(data, i)}", False, [pick])
-                  for i in _namesakes_of(data, cid, fits)],
+                  for i in _namesakes_of(data, cid, fits) if not finished(i)],
                 _a("new", "Да — вынести на новую карточку", False,
                    [pick, *_fio_inputs(row["surname"], row["name"], "")]),
                 _a("keep", "Нет, оставить", True)])
@@ -350,3 +345,237 @@ def questions_for(findings, data):
         elif q["hint"] and q["hint"] not in out[f.key]["hint"].split("; "):
             out[f.key]["hint"] = "; ".join(x for x in (out[f.key]["hint"], q["hint"]) if x)
     return list(out.values())
+
+
+# ---------------------------------------------------------------- дело целиком
+
+FIELD_ANSWERS = {"row_from_card", "card_from_row", "other", "birthday", "category", "sex", "distance", "fix",
+                 "manual", "delete"}
+LIVE_HINT = "Забег ещё загружается: исправьте в Copernico — загрузчик перезапишет ФИО, ДР, пол, категорию и места"
+
+
+def is_live(event, today):
+    """Забег «живой» — дата сегодня или вчера (Красноярск): загрузчик Copernico ещё перезаписывает его строки."""
+    d = event.get("event_date")
+    return bool(d) and 0 <= (today - d).days <= 1
+
+
+def _today():
+    return _dt.datetime.now(KRASNOYARSK_TZ).date()
+
+
+def _live(f, data, today):
+    """Вопрос о строке результата «живого» забега (заявки загрузчик не трогает)."""
+    return bool(f.result_id and f.event_id and is_live(data.events.get(f.event_id, {}), today))
+
+
+def _rows(data, cid, problems):
+    rows = [{"table": "results", "id": r["id"], "year": data.year(r["event_id"]), "event": data.event_label(r["event_id"]),
+             "start_number": r["start_number"], "category": r["category"], "status": r["race_status"],
+             "birthday": r["birthday"], "problem": r["id"] in problems["results"]} for r in data.res_by_card[cid]]
+    rows += [{"table": "leads", "id": l["id"], "year": data.year(l["event_id"]), "event": data.event_label(l["event_id"]),
+              "start_number": l["start_number"], "category": "", "status": "заявка", "birthday": l["birthday"],
+              "problem": l["id"] in problems["leads"]} for l in data.leads_by_card[cid]]
+    return sorted(rows, key=lambda r: (-r["year"], r["event"], r["table"]))
+
+
+def case_view(case, data, decided, today):
+    """Дело для экрана: карточки со строками по годам (проблемные подсвечены), вопросы по ступеням."""
+    problems = {"results": {f.result_id for f in case["findings"]}, "leads": {f.lead_id for f in case["findings"]}}
+    findings = sorted(case["findings"],
+                      key=lambda f: (STAGES[f.code], -data.year(f.event_id) if f.event_id else 0, f.key))
+    by_key = {}
+    for f in findings:
+        by_key.setdefault(f.key, f)
+    questions = questions_for(findings, data)
+    for q in questions:
+        f = by_key[q["id"]]
+        rec = None
+        for a in q["answers"]:
+            for inp in a["inputs"]:
+                if isinstance(inp.get("options"), str):
+                    rec = rec or edit_record_view(f, data) or {}
+                    inp["options"] = [o["label"] if isinstance(o, dict) else o for o in rec.get(inp["options"], [])]
+        q["live"] = _live(f, data, today)
+        if q["live"]:
+            q["answers"] = [a for a in q["answers"] if a["id"] not in FIELD_ANSWERS]
+            q["hint"] = LIVE_HINT
+        q["state"] = "postponed" if decided.get(f.key) == "postponed" else "open"
+    open_stages = [q["stage"] for q in questions if q["state"] == "open"]
+    current = min(open_stages) if open_stages else None
+    for q in questions:
+        if q["state"] == "open":
+            q["state"] = "current" if q["stage"] == current else "locked"
+    cards = [{**{k: data.clients[i][k] for k in ("id", "surname", "name", "birthday")},
+              "rows": _rows(data, i, problems)} for i in case["cards"] if i in data.clients]
+    return {"key": case["key"], "title": case["title"], "cards": cards, "questions": questions,
+            "stage_titles": STAGE_TITLES}
+
+
+# ---------------------------------------------------------------- ответы, отложить, очередь
+
+class StaleQuestion(Exception):
+    """Вопроса больше нет (дело изменилось в другой вкладке) — 409 «обновите дело»."""
+
+
+def _state(conn, card_ids=None):
+    data = load(conn)
+    return data, run_checks(data, card_ids=card_ids), dq_actions.load_decisions(conn)
+
+
+def _cases(data, findings, decided):
+    """Дела из нерешённых и отложенных находок; «разные люди»/«оставить» — решены."""
+    return group_cases([f for f in findings if decided.get(f.key) in (None, "postponed")], data)
+
+
+def _find_case(cases, key, cards=()):
+    """Дело по ключу; ключ сменился (склейка или перенос убрали наименьшую карточку) — по общим карточкам."""
+    return (next((c for c in cases if c["key"] == key), None)
+            or next((c for c in cases if set(c["cards"]) & set(cards)), None))
+
+
+def _case_after(conn, case, extra_cards=()):
+    """Дело после ответа: проверки только по карточкам дела, его тёзкам и карточкам, куда ушли строки."""
+    data = load(conn)
+    cards = {i for i in (*case["cards"], *extra_cards) if i in data.clients}
+    cards |= {j for i in cards for j in _namesakes_of(data, i)}
+    findings = run_checks(data, card_ids=cards)
+    decided = dq_actions.load_decisions(conn)
+    found = _find_case(_cases(data, findings, decided), case["key"], cards)
+    return case_view(found, data, decided, _today()) if found else None
+
+
+def _postpone(conn, case, decided, reason, user):
+    keys = dict.fromkeys(f.key for f in case["findings"] if decided.get(f.key) != "postponed")
+    return [dq_actions.dismiss(conn, k, "postponed", reason or "не знаю ДР", user) for k in keys]
+
+
+def _dup_row(data, f, row, inputs):
+    """R-DUP «два финиша»: какой финиш выносить — inputs["row_id"] (финиш этой карточки в этом забеге)."""
+    if f.code != "R-DUP" or not inputs.get("row_id"):
+        return row
+    r = data.result_by_id.get(int(inputs["row_id"]))
+    if not r or r["client_id"] != f.client_ids[0] or r["event_id"] != f.event_id or r["race_status"] == NOT_STARTED:
+        raise ValueError("выберите финиш этой карточки в этом забеге")
+    return r
+
+
+def _edit_card(conn, f, c, target, user, aid):
+    """Правка карточки; ФИ+ДР уже у другой карточки -> предложение склеить (спецификация, «Цепочки»)."""
+    try:
+        aid.append(dq_actions.edit_record(conn, "clients", c["id"], target, user, f.key)[1])
+    except ValueError as e:
+        other = re.search(r"уже у карточки #(\d+)", str(e))
+        if not other:
+            raise
+        final = {k: target.get(k, str(c[k])) for k in ("surname", "name", "birthday")}
+        return {"message": f"{final['surname']} {final['name']} {final['birthday']} — уже есть такая карточка. "
+                           f"Склеить с ней?", "merge_with": int(other[1]), **final}
+    return None
+
+
+def apply_answer(conn, case_key, question_id, answer_id, inputs, user):
+    """Выполнить цепочку ответа -> {"action_ids": [...], "case": дело после ответа (None — дело закрыто)};
+    правка карточки упёрлась в чужие ФИ+ДР -> ещё "conflict": {message, merge_with, surname, name, birthday}."""
+    inputs = {k: str(v if v is not None else "").strip() for k, v in (inputs or {}).items()}
+    data, findings, decided = _state(conn)
+    case = _find_case(_cases(data, findings, decided), case_key)
+    f = next((x for x in (case or {}).get("findings", ()) if x.key == question_id), None)
+    if f is None:
+        raise StaleQuestion("Дело изменилось — обновите")
+    if answer_id == "postpone":
+        return {"action_ids": _postpone(conn, case, decided, inputs.get("reason", ""), user),
+                "case": _case_after(conn, case)}
+    offered = {a["id"] for a in build_question(f, data)["answers"]}
+    if answer_id not in offered and not (answer_id.startswith("merge_with:") and "card_from_row" in offered):
+        raise ValueError(f"неизвестный ответ {answer_id}")
+    if answer_id in FIELD_ANSWERS and _live(f, data, _today()):
+        raise ValueError("забег ещё загружается из хронометража — поля правьте в Copernico, иначе загрузчик перезапишет")
+    table, row = _row(data, f)
+    fio = {k: inputs[k] for k in ("surname", "name", "birthday") if inputs.get(k)}
+    aid, moved, conflict = [], [], None
+    if answer_id in ("keep", "different"):
+        aid.append(dq_actions.dismiss(conn, f.key, "different_people" if answer_id == "different" else "keep", "", user))
+    elif answer_id == "merge":
+        aid.append(dq_actions.merge_cards(conn, list(f.client_ids), fio.get("surname"), fio.get("name"),
+                                          fio.get("birthday"), user, f.key)[1])
+    elif answer_id.startswith("to:") or answer_id == "new":
+        row = _dup_row(data, f, row, inputs)
+        to = {"new_card": fio} if answer_id == "new" else {"to_client_id": int(answer_id[3:])}
+        target, a = dq_actions.move_row(conn, table, row["id"], user, f.key, align=True, **to)
+        aid.append(a)
+        moved.append(target)
+    elif answer_id == "delete":
+        aid.append(dq_actions.delete_result(conn, row["id"], user, f.key))
+    elif answer_id == "row_from_card":
+        c = data.clients[f.client_ids[0]]
+        diff = {k: str(c[k]) for k in ("surname", "name", "birthday") if str(row[k]) != str(c[k])}
+        aid.append(dq_actions.edit_record(conn, "results", row["id"], diff, user, f.key)[1])
+    elif answer_id in ("card_from_row", "other"):
+        c = data.clients[f.client_ids[0]]
+        if answer_id == "other":
+            aid.append(dq_actions.edit_record(conn, "results", row["id"], fio, user, f.key)[1])
+            target = fio
+        else:
+            target = {k: str(row[k]) for k in ("surname", "name", "birthday") if str(row[k]) != str(c[k])}
+        conflict = _edit_card(conn, f, c, target, user, aid)
+    elif answer_id.startswith("merge_with:"):
+        aid.append(dq_actions.merge_cards(conn, [f.client_ids[0], int(answer_id.split(":", 1)[1])], fio.get("surname"),
+                                          fio.get("name"), fio.get("birthday"), user, f.key)[1])
+    elif answer_id in ("birthday", "category", "sex", "distance"):
+        fields = {k: inputs[k] for k in ("birthday", "category", "sex", "event_distance") if inputs.get(k)}
+        aid.append(dq_actions.edit_record(conn, table, row["id"], fields, user, f.key)[1])
+    elif answer_id == "fix":
+        aid.append(dq_actions.fix_fio(conn, row["id"], f.fix[0], f.fix[1], user, f.key)[1])
+    elif answer_id == "manual":
+        aid.append(dq_actions.fix_fio(conn, row["id"], fio.get("surname", ""), fio.get("name", ""), user, f.key)[1])
+    out = {"action_ids": aid, "case": _case_after(conn, case, moved)}
+    if conflict:
+        out["conflict"] = conflict
+    return out
+
+
+def postpone_case(conn, case_key, reason, user):
+    """Отложить все вопросы дела (решение «postponed» с причиной, по умолчанию «не знаю ДР») -> id записей журнала."""
+    data, findings, decided = _state(conn)
+    case = _find_case(_cases(data, findings, decided), case_key)
+    if not case:
+        raise StaleQuestion("Дело изменилось — обновите")
+    return _postpone(conn, case, decided, reason, user)
+
+
+def list_cases(conn, status="open", event_id=None):
+    """Очередь дел: open — есть нерешённые неотложенные вопросы; postponed — все вопросы отложены."""
+    data, findings, decided = _state(conn)
+    out = []
+    for c in _cases(data, findings, decided):
+        open_ = {f.key for f in c["findings"] if f.key not in decided}
+        if (status == "open") != bool(open_):
+            continue
+        if event_id and not any(f.event_id == event_id for f in c["findings"]):
+            continue
+        out.append({"key": c["key"], "title": c["title"], "cards": len(c["cards"]),
+                    "questions_left": len(open_ or {f.key for f in c["findings"]}),
+                    "events": sorted({data.event_label(f.event_id) for f in c["findings"] if f.event_id})})
+    return sorted(out, key=lambda c: (c["title"], c["key"]))
+
+
+def get_case(conn, case_key):
+    """Дело по ключу (None — дела больше нет: все вопросы решены)."""
+    data, findings, decided = _state(conn)
+    case = _find_case(_cases(data, findings, decided), case_key)
+    return case_view(case, data, decided, _today()) if case else None
+
+
+def case_for_card(conn, client_id):
+    """Дело человека по карточке — для поиска по ФИО: его дело с вопросами или карточка и тёзки без вопросов."""
+    data, findings, decided = _state(conn)
+    case = next((c for c in _cases(data, findings, decided) if client_id in c["cards"]), None)
+    if case:
+        return case_view(case, data, decided, _today())
+    if client_id not in data.clients:
+        return None
+    ids = sorted({client_id, *_namesakes_of(data, client_id)})
+    c = data.clients[client_id]
+    return case_view({"key": f"c{ids[0]}", "title": f'{c["surname"]} {c["name"]}', "cards": ids, "findings": []},
+                     data, decided, _today())

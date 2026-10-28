@@ -2,7 +2,8 @@
 import datetime
 import re
 
-from src.analytics.dq_cases import STAGES, build_question, group_cases, questions_for
+from src.analytics.dq_cases import (FIELD_ANSWERS, STAGES, build_question, case_view, group_cases, is_live,
+                                    questions_for)
 from src.analytics.dq_checks import Data, Finding, run_checks
 from src.common.names import Names
 
@@ -218,3 +219,45 @@ def test_kid_lead_question_keeps_abbreviation_and_offers_kid_namesake():
              [{"id": 20, "event_name": "Детский забег", "event_distance": 1.0, "event_year": year, "event_date": None}])
     q = _q(d, "L-KID")
     assert "ДР родителя" in q["text"] and "to:2" in ids(q) and ids(q)[-1] == "postpone"
+
+
+def test_two_finishes_skip_namesake_who_finished_this_race():
+    d = everything()
+    d = Data(list(d.clients.values()), d.leads, d.results + [R(9, 10, "Козлов", "Олег", "1990-01-01", 11, 12)],
+             list(d.events.values()))
+    assert ids(_q(d, "R-DUP", result_id=4)) == ["new", "keep", "postpone"]
+
+
+
+def pcarev_case(d):
+    return next(c for c in group_cases(run_checks(d), d) if 1 in c["cards"])
+
+
+def test_case_view_rows_by_year_and_locked_stages():
+    d = pcarev()
+    v = case_view(pcarev_case(d), d, decided={}, today=datetime.date(2026, 10, 28))
+    father = next(c for c in v["cards"] if c["id"] == 1)
+    assert [r["year"] for r in father["rows"]] == sorted((r["year"] for r in father["rows"]), reverse=True)
+    assert any(r["problem"] for r in father["rows"] if r["id"] == 101)
+    stages = [q["stage"] for q in v["questions"]]
+    assert stages == sorted(stages)
+    first = min(stages)
+    assert all(q["state"] == ("current" if q["stage"] == first else "locked") for q in v["questions"])
+
+
+def test_is_live_today_or_yesterday():
+    ev = {"event_date": datetime.date(2026, 10, 27)}
+    assert is_live(ev, datetime.date(2026, 10, 27)) and is_live(ev, datetime.date(2026, 10, 28))
+    assert not is_live(ev, datetime.date(2026, 10, 29)) and not is_live({"event_date": None}, datetime.date(2026, 10, 28))
+
+
+def test_live_race_keeps_moves_hides_field_answers():
+    d = pcarev()
+    v = case_view(pcarev_case(d), d, decided={}, today=datetime.date(2016, 8, 29))   # Детский 2016-08-28 — вчера
+    live = [q for q in v["questions"] if q["live"]]
+    assert live
+    assert all(not set(ids(q)) & FIELD_ANSWERS for q in live)
+    foreign = next(q for q in live if q["code"] == "R-FOREIGN" and q["result_id"] == 101)
+    assert ids(foreign)[0].startswith("to:")
+    later = case_view(pcarev_case(d), d, decided={}, today=datetime.date(2016, 8, 30))
+    assert not any(q["live"] for q in later["questions"])
