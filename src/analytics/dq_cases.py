@@ -7,9 +7,11 @@
 """
 
 import collections
+import re
 
 from src.analytics.dq_actions import propose_final
-from src.analytics.dq_checks import NOT_STARTED, _is_kid, jan1, merge_blockers, names_compatible, real_bd
+from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, merge_blockers, names_compatible,
+                                     real_bd)
 from src.common.names import norm
 
 STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3, "L-KID": 3}
@@ -110,6 +112,11 @@ def _years(n):
     return f"{n} года" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else f"{n} лет"
 
 
+def _age(bd, year):
+    """Возраст в год забега; None — нет ДР или у события нет года."""
+    return year - int(bd[:4]) if year and real_bd(bd) else None
+
+
 def _ev(data, f):
     return f"«{data.event_label(f.event_id)}»"
 
@@ -123,14 +130,38 @@ def _why(f):
     return f.message.split(": ", 1)[-1].split(" — ")[0]
 
 
-def _caution(blockers):
-    return "Осторожно: " + "; ".join(blockers) if blockers else ""
+def _blocker_text(b, data):
+    if b.startswith("обе финишировали в одном забеге: "):
+        return "у обеих карточек есть финиш в одном забеге: " + b.split(": ", 1)[1]
+    if b.startswith("несовместимые ДР: "):
+        return "даты рождения не похожи на одного человека: " + b.split(": ", 1)[1]
+    if b == "разный пол в протоколах":
+        return "в протоколах разный пол"
+    if b.startswith("разные имена: "):
+        return "разные имена: " + b.split(": ", 1)[1].replace(" / ", " и ")
+    if m := re.fullmatch(r"ДР-заглушка #(\d+) подходит нескольким людям", b):
+        return (f"у карточки {_card(data, int(m[1]))} ДР не указана, а тёзок с разными ДР несколько — "
+                f"непонятно, чья она")
+    return re.sub(r"\s*#\d+", "", b)
+
+
+def _caution(blockers, data):
+    return "Осторожно: " + "; ".join(_blocker_text(b, data) for b in blockers) if blockers else ""
 
 
 def _row(data, f):
     if f.result_id:
         return "results", data.result_by_id.get(f.result_id)
     return "leads", data.lead_by_id.get(f.lead_id)
+
+
+def _namesakes_of(data, cid, ok=lambda bd: True):
+    """Другие карточки с той же фамилией и совместимым именем («Саша» — «Александр»), ДР которых подходит ok."""
+    c = data.clients.get(cid)
+    if not c:
+        return []
+    return [i for i in data.cards_by_surname[norm(c["surname"])] if i != cid
+            and names_compatible(c["name"], data.clients[i]["name"], data.names) and ok(data.clients[i]["birthday"])]
 
 
 def _q_twin(f, data):
@@ -140,7 +171,7 @@ def _q_twin(f, data):
     la, lb = _card(data, a), _card(data, b)
     text = f"{la} и {lb} — один человек?" if la != lb else f"Две карточки «{la}» — один человек?"
     why = _why(f)
-    return text, _caution(blockers) or TWIN_REASONS.get(why, why), [
+    return text, _caution(blockers, data) or TWIN_REASONS.get(why, why), [
         _a("merge", "Да — одна карточка", not blockers, _fio_inputs(s, n, bd)),
         _a("different", "Нет, разные люди")]
 
@@ -154,7 +185,7 @@ def _q_lead(f, data):
             f"а заявка — на {_card(data, lead_card)}. Это один человек?")
     _, s, n, bd = propose_final([res_card, lead_card], data)
     hint = "Номер в протоколе совпадает с номером заявки" if same_bib else "Совпадают фамилия и имя"
-    return text, _caution(blockers) or hint, [
+    return text, _caution(blockers, data) or hint, [
         _a("merge", "Да — одна карточка", same_bib and not blockers, _fio_inputs(s, n, bd)),
         _a(f"to:{lead_card}", f"Нет — результат принадлежит {_card(data, lead_card)}"),
         _a("keep", "Нет, всё верно — разные люди")]
@@ -163,24 +194,34 @@ def _q_lead(f, data):
 def _q_foreign(f, data):
     table, row = _row(data, f)
     owner, others = f.client_ids[0], f.client_ids[1:]
-    bd = data.clients[owner]["birthday"]
-    age = f" — возраст по карточке: {_years(data.year(f.event_id) - int(bd[:4]))}" if real_bd(bd) else ""
+    age = _age(data.clients[owner]["birthday"], data.year(f.event_id))
+    shown = f" — возраст по карточке: {_years(age)}" if age is not None else ""
     what, verb, whose = ("результат", "записан", "Чей") if table == "results" else ("заявка", "записана", "Чья")
-    text = f"{_ev(data, f)}: {what}{_bib(row)} {verb} на {_card(data, owner)}{age}. {whose} это {what}?"
+    text = f"{_ev(data, f)}: {what}{_bib(row)} {verb} на {_card(data, owner)}{shown}. {whose} это {what}?"
+    why = _why(f)
+    hint = "" if "возраст" in why else why[:1].upper() + why[1:]      # детский забег: возраст уже в тексте
     answers = [_a(f"to:{i}", _card(data, i), k == 0) for k, i in enumerate(others)]
     answers += [_a("new", "Другой человек — новая карточка", False, _fio_inputs(row["surname"], row["name"], "")),
                 _a("keep", "Всё верно — оставить")]
-    return text, _why(f), answers
+    return text, hint, answers
+
+
+def _finish_label(r):
+    t = r.get("time_clear_finish")
+    bib = f'№{r["start_number"]}' if r.get("start_number") else "без номера"
+    return f"{bib} ({t})" if t else bib
 
 
 def _q_dup(f, data):
+    """Лишняя строка. Два финиша: у ответов «вынести на …» (to:<карточка>, new) поле row_id — какой из финишей
+    выносить (по умолчанию строка находки); Задача 6 берёт строку из inputs["row_id"]."""
     _, row = _row(data, f)
     cid = f.client_ids[0]
     who = _card(data, cid)
     fin = [r for r in data.res_by_card[cid] if r["event_id"] == f.event_id and r["race_status"] != NOT_STARTED]
     if f.auto and fin:
-        return (f"{who}: в забеге {_ev(data, f)} есть «не стартовал»{_bib(row)} и другой результат. "
-                f"Удалить «не стартовал»?", "Обычно это старый номер",
+        return (f"{who}: в забеге {_ev(data, f)} есть «не стартовал(а)»{_bib(row)} и другой результат. "
+                f"Удалить «не стартовал(а)»?", "Обычно это старый номер",
                 [_a("delete", "Да, удалить", True), _a("keep", "Оставить")])
     if f.auto:
         bibs = sorted(l["start_number"] for l in data.leads_by_card[cid]
@@ -188,20 +229,29 @@ def _q_dup(f, data):
         return (f"{who}: в забеге {_ev(data, f)} результат{_bib(row)}, а в заявке номер "
                 f'{", ".join(map(str, bibs))}. Удалить результат{_bib(row)}?', "Обычно это старый номер",
                 [_a("delete", "Да, удалить", True), _a("keep", "Оставить")])
-    return (f'{who}: два финиша в забеге {_ev(data, f)} (№{" и №".join(str(r["start_number"]) for r in fin)}). '
+    year = data.year(f.event_id)
+    pick = {"name": "row_id", "label": "Какой результат", "type": "select", "value": str(row["id"]),
+            "options": [{"value": str(r["id"]), "label": _finish_label(r)} for r in fin]}
+
+    def fits(bd):
+        return not (year and real_bd(bd)) or card_fits_category(bd, row["category"], year) is not False
+
+    return (f'{who}: два финиша в забеге {_ev(data, f)} ({", ".join(_finish_label(r) for r in fin)}). '
             f"Это два разных человека?", "", [
-                _a("new", f"Да — вынести{_bib(row)} на новую карточку", False,
-                   _fio_inputs(row["surname"], row["name"], "")),
+                *[_a(f"to:{i}", f"Да — вынести на {_card(data, i)}", False, [pick])
+                  for i in _namesakes_of(data, cid, fits)],
+                _a("new", "Да — вынести на новую карточку", False,
+                   [pick, *_fio_inputs(row["surname"], row["name"], "")]),
                 _a("keep", "Нет, оставить", True)])
 
 
 def _q_card(f, data):
     _, row = _row(data, f)
     if not row:
-        return f.message[:1].upper() + f.message[1:], "", []
+        return re.sub(r"\s*#\d+", "", f.message[:1].upper() + f.message[1:]), "", []
     if not f.client_ids:
-        return (f'{_ev(data, f)}{_bib(row)}: {row["surname"]} {row["name"]}, {_bd(row["birthday"])} — '
-                f"результат не привязан ни к одной карточке.", "", [])
+        return (f"Результат{_bib(row)} в {_ev(data, f)} ({row['surname']} {row['name']}, {_bd(row['birthday'])}) "
+                f"не привязан ни к одной карточке — разберите вручную через «⋯»", "", [])
     c = data.clients[f.client_ids[0]]
     diff = [k for k in ("surname", "name") if norm(row[k]) != norm(c[k])]
     if row["birthday"] != c["birthday"]:
@@ -211,14 +261,19 @@ def _q_card(f, data):
         fio = " ".join(o[k] for k in diff if k != "birthday")
         return ", ".join(x for x in (fio, _bd(o["birthday"]) if "birthday" in diff else "") if x)
 
-    placeholder = ("birthday" in diff and real_bd(c["birthday"])
-                   and (not real_bd(row["birthday"]) or (jan1(row["birthday"]) and not jan1(c["birthday"]))))
+    rbd, cbd = row["birthday"], c["birthday"]
+    bd_diff = "birthday" in diff
+    row_placeholder = bd_diff and real_bd(cbd) and (
+        not real_bd(rbd) or (jan1(rbd) and not jan1(cbd) and rbd[:4] == cbd[:4]))
+    card_placeholder = bd_diff and not real_bd(cbd) and real_bd(rbd)
     who = "" if {"surname", "name"} & set(diff) else f' {row["surname"]} {row["name"]}'
     text = f"{_ev(data, f)}{_bib(row)}{who}: в протоколе «{show(row)}», в карточке «{show(c)}». Как правильно?"
-    return text, "В протоколе вместо ДР заглушка или только год" if placeholder else "", [
-        _a("row_from_card", f"Как в карточке: {show(c)}", placeholder or "birthday" not in diff),
-        _a("card_from_row", f"Как в протоколе: {show(row)}"),
-        _a("other", "Другое значение", False, _fio_inputs(row["surname"], row["name"], row["birthday"]))]
+    hint = ("В протоколе вместо ДР заглушка или только год" if row_placeholder
+            else "В карточке ДР не указана" if card_placeholder else "")
+    return text, hint, [
+        _a("row_from_card", f"Как в карточке: {show(c)}", row_placeholder or not bd_diff),
+        _a("card_from_row", f"Как в протоколе: {show(row)}", card_placeholder),
+        _a("other", "Другое значение", False, _fio_inputs(row["surname"], row["name"], rbd))]
 
 
 def _q_cat(f, data):
@@ -248,18 +303,27 @@ def _q_hyg(f, data):
 
 def _q_kid(f, data):
     _, row = _row(data, f)
-    owner, year = data.clients.get(row["client_id"]), data.year(f.event_id)
-    kids = [i for i in data.cards_by_surname[norm(owner["surname"])] if i != row["client_id"]
-            and names_compatible(owner["name"], data.clients[i]["name"], data.names)
-            and _is_kid(data.clients[i]["birthday"], year)] if owner else []
+    year = data.year(f.event_id)
+    owner = data.clients.get(row["client_id"])
+    kids = (_namesakes_of(data, row["client_id"], lambda bd: is_kid(bd, year))
+            if year and owner and not is_kid(owner["birthday"], year) else [])
+    age = _age(row["birthday"], year)
     why = f.message.split(" — ", 1)[-1]
+    if not real_bd(row["birthday"]):
+        why = "Нет даты рождения"
+    elif why.startswith("возраст"):
+        why = (f"Возраст {_years(age)} — не детский (возможно, ДР родителя)" if age is not None
+               else "У забега не указан год — возраст не проверить")
+    else:
+        at = f" ({_years(age)})" if age is not None else ""
+        why = f'Дистанция {row["event_distance"]}, а по возрасту{at} — {why.rsplit(" — ", 1)[-1]}'
     text = (f'Заявка на {_ev(data, f)}: {row["surname"]} {row["name"]}, {_bd(row["birthday"])}. '
-            f"{why[:1].upper() + why[1:]}. Что исправить?")
+            f"{why}. Что исправить?")
     return text, "", [
         _a("birthday", "ДР ребёнка", False, [{"name": "birthday", "label": "ДР", "value": "", "type": "date"}]),
         *[_a(f"to:{i}", f"Перенести на {_card(data, i)}") for i in kids],
         _a("distance", "Дистанция", False, [{"name": "event_distance", "label": "Дистанция",
-                                             "value": row.get("event_distance", ""), "type": "select",
+                                             "value": str(row.get("event_distance") or ""), "type": "select",
                                              "options": "distance_options"}]),
         _a("keep", "Всё верно — оставить")]
 
@@ -273,3 +337,16 @@ def build_question(f, data):
     text, hint, answers = BUILDERS[f.code](f, data)
     return {"id": f.key, "code": f.code, "stage": STAGES[f.code], "text": text, "hint": hint,
             "result_id": f.result_id, "lead_id": f.lead_id, "answers": answers + [dict(POSTPONE)]}
+
+
+def questions_for(findings, data):
+    """Находки -> вопросы без повторов: находки с одним ключом (R-CAT по полу и по ДР одной строки) — один вопрос,
+    подсказки через «; »."""
+    out = {}
+    for f in findings:
+        q = build_question(f, data)
+        if f.key not in out:
+            out[f.key] = q
+        elif q["hint"] and q["hint"] not in out[f.key]["hint"].split("; "):
+            out[f.key]["hint"] = "; ".join(x for x in (out[f.key]["hint"], q["hint"]) if x)
+    return list(out.values())

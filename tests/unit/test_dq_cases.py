@@ -1,7 +1,9 @@
 """Дела и вопросы «Качества данных» (src/analytics/dq_cases.py) — без БД."""
 import datetime
+import re
 
-from src.analytics.dq_checks import Data, run_checks
+from src.analytics.dq_cases import STAGES, build_question, group_cases, questions_for
+from src.analytics.dq_checks import Data, Finding, run_checks
 from src.common.names import Names
 
 EVENTS = [
@@ -15,9 +17,9 @@ def C(i, s, n, bd):
     return {"id": i, "surname": s, "name": n, "birthday": bd}
 
 
-def R(i, cid, s, n, bd, eid, bib, cat="", status="Finished", sex="Мужчина"):
+def R(i, cid, s, n, bd, eid, bib, cat="", status="Finished", sex="Мужчина", time=None):
     return {"id": i, "client_id": cid, "surname": s, "name": n, "birthday": bd, "sex": sex, "event_id": eid,
-            "start_number": bib, "category": cat, "race_status": status}
+            "start_number": bib, "category": cat, "race_status": status, "time_clear_finish": time}
 
 
 def L(i, cid, s, n, bd, eid, dist="1 км", bib=None):
@@ -51,8 +53,6 @@ def test_run_checks_card_scope_keeps_only_findings_of_these_cards():
     assert any(f.code == "R-FOREIGN" and f.result_id == 101 for f in scoped)
 
 
-from src.analytics.dq_cases import STAGES, group_cases
-from src.analytics.dq_checks import Finding
 
 
 def test_namesakes_with_findings_join_one_case_brother_does_not():
@@ -78,7 +78,6 @@ def test_stages_order():
     assert {STAGES[c] for c in ("R-CARD", "R-CAT", "HYG", "L-KID")} == {3}
 
 
-from src.analytics.dq_cases import build_question
 
 
 def _q(d, code, **kw):
@@ -115,12 +114,92 @@ def test_card_question_recommends_card_bd_for_placeholder_row():
     assert ids(q) == ["row_from_card", "card_from_row", "other", "postpone"] and q["answers"][0]["recommended"]
 
 
+YEAR = datetime.date.today().year
+
+
+def everything():
+    """Все 8 кодов, C-TWIN с предохранителем, номер None, событие без года."""
+    events = EVENTS + [
+        {"id": 20, "event_name": "Детский забег", "event_distance": 1.0, "event_year": YEAR, "event_date": None},
+        {"id": 31, "event_name": "Детский забег", "event_distance": 1.0, "event_year": None, "event_date": None}]
+    clients = [C(1, "Пцарев", "Александр", "1980-03-09"), C(2, "Пцарев", "Саша", "2013-12-20"),
+               C(3, "Пцарев", "Александр", "2013-01-01"),
+               C(5, "Иванов", "Иван", "1985-07-14"), C(6, "Иванов", "Иван", "1900-01-01"),
+               C(7, "Сидоров", "Петр", "1990-05-05"), C(8, "Сидоров", "Пётр", "1990-05-05"),
+               C(9, "Козлов", "Олег", "1985-07-14"), C(10, "Козлов", "Олег", "1990-01-01"),
+               C(11, "Ветрова", "Елизавета", "2014-12-12"), C(12, "ПЕТРОВ", "петр", "1970-02-02"),
+               C(13, "Орлов", "Олег", "1990-02-02")]
+    leads = [L(1, 8, "Сидоров", "Пётр", "1990-05-05", 11, bib=1012), L(2, 1, "Пцарев", "Александр", "1980-03-09", 20)]
+    results = [R(100, 1, "Пцарев", "Александр", "1980-03-09", 11, 3470, "М35-39"),
+               R(101, 1, "Пцарев", "Александр", "1980-03-09", 10, 1012, "Мальчики 2005 г.р. и младше"),
+               R(103, 3, "Пцарев", "Александр", "2013-01-01", 12, 104, "Мальчики"),
+               R(1, 5, "Иванов", "Иван", "1985-07-14", 11, 5), R(2, 6, "Иванов", "Иван", "1900-01-01", 11, None),
+               R(3, 7, "Сидоров", "Петр", "1990-05-05", 11, 1012),
+               R(4, 9, "Козлов", "Олег", "1985-07-14", 11, 5, time=datetime.timedelta(minutes=42, seconds=10)),
+               R(5, 9, "Козлов", "Олег", "1985-07-14", 11, 8),
+               R(6, 11, "Ветрова", "Елизавета", "2014-01-01", 10, 4102, sex="Женщина"),
+               R(7, 12, "ПЕТРОВ", "петр", "1970-02-02", 11, 9),
+               R(8, 13, "Орлов", "Олег", "1990-02-02", 31, None)]
+    d = Data(clients, leads, results, events)
+    d.names = Names([("Пцарев", "Александр", "Мужчина"), ("Петров", "Петр", "Мужчина")] * 5)
+    return d
+
+
 def test_every_finding_type_has_question_with_postpone():
-    d = pcarev()
-    for f in run_checks(d):
+    d = everything()
+    found = run_checks(d) + run_checks(d, event_ids={31})
+    assert {f.code for f in found} == set(STAGES)
+    twin = next(f for f in found if f.code == "C-TWIN" and set(f.client_ids) == {5, 6})
+    assert sum(a["recommended"] for a in build_question(twin, d)["answers"]) == 0
+    for f in found:
         q = build_question(f, d)
         assert q["id"] == f.key and q["text"] and ids(q)[-1] == "postpone" and q["stage"] in (1, 2, 3)
         assert sum(a["recommended"] for a in q["answers"]) <= 1
+        shown = " ".join([q["text"], q["hint"]] + [a["label"] for a in q["answers"]])
+        assert not re.search(r"#\d", shown) and "None" not in shown, shown
+
+
+def test_same_key_findings_make_one_question():
+    d = data([C(1, "Белова", "Ева", "2010-05-05")],
+             results=[R(1, 1, "Белова", "Ева", "2010-05-05", 11, 3, "М35-39", sex="Женщина")])
+    found = [f for f in run_checks(d) if f.code == "R-CAT"]
+    assert len(found) == 2 and found[0].key == found[1].key
+    [q] = questions_for(found, d)
+    assert q["id"] == found[0].key and q["hint"] == "Категория не для этого пола; ДР не подходит к категории"
+
+
+def test_event_without_year_shows_no_age():
+    d = everything()
+    q = _q(d, "R-FOREIGN", result_id=8)
+    assert "возраст" not in q["text"].lower() and "-" not in q["text"].split("Орлов")[1].replace("1990-02-02", "")
+    d = Data(list(d.clients.values()), d.leads + [L(3, 13, "Орлов", "Олег", "1990-02-02", 31)], d.results,
+             list(d.events.values()))
+    f = next(f for f in run_checks(d, event_ids={31}) if f.code == "L-KID")
+    assert "-" not in build_question(f, d)["text"].split("Орлов Олег")[1].replace("1990-02-02", "")
+
+
+def test_twin_blockers_in_plain_words():
+    q = _q(everything(), "C-TWIN", client_ids=(5, 6))
+    assert q["hint"].startswith("Осторожно: ") and "#" not in q["hint"] and "в одном забеге" in q["hint"]
+
+
+def test_two_finishes_offer_namesake_and_row_choice():
+    q = _q(everything(), "R-DUP", result_id=4)
+    assert ids(q) == ["to:10", "new", "keep", "postpone"] and q["answers"][2]["recommended"]
+    for a in q["answers"][:2]:
+        row = next(i for i in a["inputs"] if i["name"] == "row_id")
+        assert row["type"] == "select" and row["value"] == "4"
+        assert row["options"] == [{"value": "4", "label": "№5 (0:42:10)"}, {"value": "5", "label": "№8"}]
+
+
+def test_card_question_recommends_protocol_when_card_has_placeholder():
+    d = data([C(1, "Ветрова", "Елизавета", "1900-01-01")],
+             results=[R(1, 1, "Ветрова", "Елизавета", "2014-12-12", 10, 4102, sex="Женщина")])
+    q = _q(d, "R-CARD")
+    assert [a["id"] for a in q["answers"] if a["recommended"]] == ["card_from_row"]
+    d = data([C(1, "Ветрова", "Елизавета", "2014-12-12")],
+             results=[R(1, 1, "Ветрова", "Елизавета", "2015-01-01", 10, 4102, sex="Женщина")])
+    assert not any(a["recommended"] for a in _q(d, "R-CARD")["answers"])
 
 
 def test_dup_question_tells_not_started_from_foreign_bib():

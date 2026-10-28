@@ -85,7 +85,7 @@ class Data:
 
     def event_label(self, event_id):
         e = self.events.get(event_id, {})
-        return f'{e.get("event_name", "?")} {e.get("event_distance", "")} {e.get("event_year", "")}'.replace("  ", " ").strip()
+        return f'{e.get("event_name", "?")} {e.get("event_distance", "")} {e.get("event_year") or ""}'.replace("  ", " ").strip()
 
     def card_label(self, i):
         c = self.clients.get(i, {})
@@ -102,8 +102,8 @@ def load(conn):
     clients = cur.fetchall()
     cur.execute("SELECT id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number FROM leads")
     leads = cur.fetchall()
-    cur.execute("""SELECT id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status
-                   FROM results""")
+    cur.execute("""SELECT id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status,
+                          time_clear_finish FROM results""")
     results = cur.fetchall()
     cur.execute("SELECT id, event_name, event_distance, event_year, event_date FROM events")
     events = cur.fetchall()
@@ -442,7 +442,7 @@ def _kid_age(bd, year):
     return None if not real_bd(bd) else year - int(bd[:4])
 
 
-def _is_kid(bd, year):
+def is_kid(bd, year):
     """Возраст детского забега: 0 лет — тоже (категории «2013-2018 г.р.» на старте 2018)."""
     age = _kid_age(bd, year)
     return age is not None and 0 <= age <= KIDS_MAX_AGE
@@ -490,8 +490,8 @@ def check_foreign(data, results, leads):
         year = int(ev.get("event_year") or 0)
         if ev.get("event_name") == KIDS_EVENT:
             age = _kid_age(c["birthday"], year)
-            if not _is_kid(c["birthday"], year):
-                kids = namesakes(r["client_id"], lambda bd: _is_kid(bd, year))
+            if not is_kid(c["birthday"], year):
+                kids = namesakes(r["client_id"], lambda bd: is_kid(bd, year))
                 add(r, f"детский забег, а по ДР карточки возраст {age}", kids)
             continue
         if card_fits_category(c["birthday"], r["category"], year) is not False:
@@ -508,9 +508,9 @@ def check_foreign(data, results, leads):
             continue
         year = int(ev.get("event_year") or 0)
         age = _kid_age(c["birthday"], year)
-        if _is_kid(c["birthday"], year):
+        if is_kid(c["birthday"], year):
             continue
-        kids = namesakes(l["client_id"], lambda bd: _is_kid(bd, year))
+        kids = namesakes(l["client_id"], lambda bd: is_kid(bd, year))
         if kids:
             add(l, f"заявка на детский забег, а по ДР карточки возраст {age}", kids, lead=True)
     return out
