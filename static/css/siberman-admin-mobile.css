@@ -1,0 +1,23 @@
+/* Админка Siberman (/admin, /admin/draw, /admin/people) на телефоне: всё в ширину экрана, широкие таблицы
+   листаются по горизонтали внутри себя. Подключается после встроенных стилей страницы. */
+a.btn { display: inline-block; text-decoration: none; }
+
+@media (max-width: 700px) {
+  .header { flex-wrap: wrap; gap: 6px 16px; padding: 12px 16px; }
+  .header h1 { flex: 1 1 100%; font-size: 17px; }
+  .container { margin: 12px auto; padding: 0 12px; }
+  .admin-tabs { flex-wrap: wrap; gap: 0; }
+  .admin-tab { padding: 8px 10px; font-size: 14px; }
+  .card { padding: 16px; }
+  /* iOS увеличивает страницу при фокусе на поле со шрифтом меньше 16px */
+  input, select, textarea { font-size: 16px; max-width: 100%; }
+
+  /* жеребьёвка: поиск и журнал над списками, зачёты листаются вбок по одному */
+  .operator { flex-direction: column; }
+  .left, .lists { width: 100%; }
+  .lists { overflow-x: auto; scroll-snap-type: x mandatory; align-items: flex-start; }
+  .list { flex: 0 0 85%; scroll-snap-align: start; max-height: 70vh; overflow-y: auto; }
+  .feed-row b { min-width: 0; }
+
+  .pay-table, .tbl { display: block; overflow-x: auto; }
+}
