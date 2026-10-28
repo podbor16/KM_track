@@ -336,14 +336,3 @@ async def admin_page(request: Request, user=Depends(require_auth)):
     if domain == "siberman":
         return templates.TemplateResponse("siberman/admin.html", {"request": request})
     return templates.TemplateResponse("krasmarafon/admin.html", {"request": request})
-
-
-@router.get("/admin/server-metrics", response_class=HTMLResponse)
-async def server_metrics_page(
-    request: Request,
-    user=Depends(require_auth),
-):
-    """Дашборд реальной нагрузки на сервер."""
-    if isinstance(user, RedirectResponse):
-        return user
-    return templates.TemplateResponse("krasmarafon/server-metrics.html", {"request": request})
