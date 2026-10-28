@@ -38,8 +38,10 @@ function best(a) {
 
 function outcome(r) {
   if (r.status === 'finished') {
-    return `<b>${hallTime(r.time_s)}</b>${r.format === 'relay' ? ' <span class="muted">команда</span>' : ''}`
-      + (r.record ? ' <span class="rec">РЕКОРД</span>' : '');
+    // подписи — строкой ниже, чтобы время стояло по центру одинаково у личных и эстафетных строк
+    const tags = [r.format === 'relay' ? '<span class="muted">команда</span>' : '',
+                  r.record ? '<span class="rec">РЕКОРД</span>' : ''].filter(Boolean).join(' ');
+    return `<b>${hallTime(r.time_s)}</b>${tags ? '<br>' + tags : ''}`;
   }
   if (r.status === 'racing') return '<span class="muted">на дистанции</span>';
   const st = r.dnf_stage && HALL_STAGE[r.dnf_stage] ? ` (${HALL_STAGE[r.dnf_stage]})` : '';
