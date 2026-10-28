@@ -351,3 +351,15 @@ def test_check_foreign_kids_and_adult_rows_on_namesake_cards():
     assert found[103].client_ids == (8,) and found[103].severity == "medium"      # тёзки нет — новая карточка
     assert found[200].client_ids == (6, 7) and found[200].lead_id == 200 and found[200].result_id is None
 
+
+def test_check_foreign_namesake_by_short_name():
+    from src.analytics.data_quality import check_foreign
+    events = [{"id": 10, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2016}]
+    clients = [C(1, "Пцарев", "Александр", "1980-03-09"), C(2, "Пцарев", "Саша", "2013-12-20"),
+               C(3, "Пцарев", "Марк", "2006-06-20"), C(4, "Пцарева", "Александра", "2012-01-01")]
+    results = [R(100, 1, "Пцарев", "Александр", "1980-03-09", 10, 1012, cat="Мальчики 2005 г.р. и младше")]
+    d = data(clients, results=results)
+    d.events = {10: events[0]}
+    [f] = check_foreign(d, results, [])
+    assert f.client_ids == (1, 2)                        # Саша — да; брат Марк и Пцарева Александра — нет
+

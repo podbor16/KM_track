@@ -79,6 +79,9 @@ class Data:
         self.cards_by_fio = collections.defaultdict(list)
         for i, c in self.clients.items():
             self.cards_by_fio[fio_key(c)].append(i)
+        self.cards_by_surname = collections.defaultdict(list)
+        for i, c in self.clients.items():
+            self.cards_by_surname[norm(c["surname"])].append(i)
         self.names = Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
 
     def year(self, event_id):
@@ -470,8 +473,10 @@ def check_foreign(data, results, leads):
     out = []
 
     def namesakes(cid, ok):
+        """Та же фамилия и то же имя, в том числе уменьшительное («Саша» — «Александр»)."""
         c = data.clients[cid]
-        return [i for i in data.cards_by_fio[fio_key(c)] if i != cid and ok(data.clients[i]["birthday"])]
+        return [i for i in data.cards_by_surname[norm(c["surname"])] if i != cid
+                and names_compatible(c["name"], data.clients[i]["name"], data.names) and ok(data.clients[i]["birthday"])]
 
     def add(row, why, others, lead=False):
         bib = "" if lead else f' №{row["start_number"]}'
