@@ -17,8 +17,7 @@ from .db_pool import (
 
 from .db_athletes import (
     search_clients_optimized,
-    get_athlete_results_optimized,
-    get_athlete_results,
+    get_athlete_by_client,
     search_clients,
 )
 
@@ -54,8 +53,7 @@ __all__ = [
     "get_table_row_count_fast",
     # db_athletes
     "search_clients_optimized",
-    "get_athlete_results_optimized",
-    "get_athlete_results",
+    "get_athlete_by_client",
     "search_clients",
     # db_results
     "RESULTS_CACHE_TTL",
