@@ -213,5 +213,12 @@ def test_edit_validation(db):
                         ({"surname": " "}, "пустыми"), ({"race_status": "Finished"}, "не правятся"), ({}, "нет полей")):
         with pytest.raises(ValueError, match=msg):
             dq.edit_record(conn, "results", rid, fields, USER)
+    cur.execute("UPDATE results SET category = 'М18-29' WHERE id = %s", (rid,))
+    conn.commit()
+    with pytest.raises(ValueError, match="для пола «Мужчина»"):
+        dq.edit_record(conn, "results", rid, {"sex": "Женщина"}, USER)
+    with pytest.raises(ValueError, match="для пола «Женщина»"):
+        dq.edit_record(conn, "results", rid, {"category": "Ж18-29"}, USER)
+    dq.edit_record(conn, "results", rid, {"sex": "Женщина", "category": "Ж18-29"}, USER)
     with pytest.raises(ValueError, match="не поддерживается"):
         dq.edit_record(conn, "events", 1, {"name": "x"}, USER)

@@ -72,6 +72,9 @@ class Data:
         for r in results:
             self.res_by_card[r["client_id"]].append(r)
         self.result_by_id = {r["id"]: r for r in results}
+        self.res_by_event = collections.defaultdict(list)
+        for r in results:
+            self.res_by_event[r["event_id"]].append(r)
         self.lead_by_id = {l["id"]: l for l in leads}
         self.cards_by_fio = collections.defaultdict(list)
         for i, c in self.clients.items():
@@ -515,8 +518,31 @@ def edit_record_view(f, data):
         return {"table": "leads", "id": l["id"], **{k: l[k] for k in EDITABLE["leads"]}, "distance_options": options}
     if f.result_id and f.result_id in data.result_by_id:
         r = data.result_by_id[f.result_id]
-        return {"table": "results", "id": r["id"], **{k: r[k] for k in EDITABLE["results"]}}
+        return {"table": "results", "id": r["id"], **{k: r[k] for k in EDITABLE["results"]},
+                "category_options": category_options(data.res_by_event[r["event_id"]])}
     return None
+
+
+def category_sex(category, sexes):
+    """Пол категории: по названию («Ж30-34», «Девочки…»), иначе — единственный пол бежавших в ней; «» — любой."""
+    sex = cat_rule(category, 0)[0]
+    if sex:
+        return SEXES[0] if sex == "М" else SEXES[1]
+    sexes = {x for x in sexes if x in SEXES}
+    return sexes.pop() if len(sexes) == 1 else ""
+
+
+def _natural(text):
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", text)]
+
+
+def category_options(results):
+    """Категории протокола забега (одна дистанция = одно событие) с полом — для выпадающего списка."""
+    sexes = collections.defaultdict(set)
+    for r in results:
+        if r["category"]:
+            sexes[r["category"]].add(r["sex"])
+    return [{"label": c, "sex": category_sex(c, sx)} for c, sx in sorted(sexes.items(), key=lambda x: _natural(x[0]))]
 
 
 def _log_action(cur, action, key, details, user):
@@ -707,6 +733,14 @@ def distance_km(text):
     return round(v / 1000, 1) if m.group(2) == "м" else v
 
 
+def _check_category_sex(cur, row_id, category, sex):
+    cur.execute("""SELECT DISTINCT r2.sex FROM results r JOIN results r2 ON r2.event_id = r.event_id
+                   WHERE r.id = %s AND r2.category = %s AND r2.id <> r.id""", (int(row_id), category))
+    need = category_sex(category, {x["sex"] for x in cur.fetchall()})
+    if need and need != sex:
+        raise ValueError(f"категория «{category}» — для пола «{need}»")
+
+
 def edit_record(conn, table, row_id, fields, user, key=""):
     """Правка полей строки находки: результата, заявки или карточки. В журнал — значения «до» и «после»
     изменённых полей; отмена возвращает «до». Карточке нельзя дать ФИ+ДР другой карточки — это склейка.
@@ -726,6 +760,8 @@ def edit_record(conn, table, row_id, fields, user, key=""):
             changed["event_id"] = _lead_event_id(cur, row, changed["event_distance"])
         if not changed:
             raise ValueError("значения не изменились")
+        if table == "results" and {"sex", "category"} & set(changed):
+            _check_category_sex(cur, row_id, changed.get("category", before["category"]), changed.get("sex", before["sex"]))
         if table == "clients":
             final = {k: changed.get(k, before[k]) for k in ("surname", "name", "birthday")}
             cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",

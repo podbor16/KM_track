@@ -149,8 +149,10 @@ function dqEditHtml(f, idx) {
         const v = rec[k] ?? '';
         let el;
         if (k === 'sex') {
-            el = `<select class="admin-select" data-field="sex">${DQ_SEXES.map(o =>
+            el = `<select class="admin-select" data-field="sex" onchange="dqFillCategories(${idx})">${DQ_SEXES.map(o =>
                 `<option${o === v ? ' selected' : ''}>${dqEsc(o)}</option>`).join('')}</select>`;
+        } else if (k === 'category' && rec.category_options) {
+            el = `<select class="admin-select dq-in-category" data-field="category"></select>`;
         } else if (k === 'event_distance' && (rec.distance_options || []).length) {
             const opts = rec.distance_options.includes(v) ? rec.distance_options : [v, ...rec.distance_options];
             el = `<select class="admin-select" data-field="event_distance">${opts.map(o =>
@@ -170,7 +172,22 @@ function dqEditHtml(f, idx) {
 
 function dqToggleEdit(idx) {
     const box = document.getElementById(`dq-edit-${idx}`);
-    if (box) box.hidden = !box.hidden;
+    if (!box) return;
+    box.hidden = !box.hidden;
+    if (!box.hidden) dqFillCategories(idx);
+}
+
+// Категории протокола этого забега — только подходящие выбранному полу («» у категории — любой пол)
+function dqFillCategories(idx) {
+    const rec = dqFindings[idx].record;
+    const sel = document.querySelector(`#dq-edit-${idx} .dq-in-category`);
+    if (!sel || !rec.category_options) return;
+    const sex = document.querySelector(`#dq-edit-${idx} [data-field="sex"]`).value;
+    const current = sel.options.length ? sel.value : rec.category;
+    const opts = rec.category_options.filter(o => !o.sex || o.sex === sex).map(o => o.label);
+    const keep = opts.includes(current) ? current : '';
+    sel.innerHTML = (keep ? '' : '<option value="">— выберите категорию —</option>')
+        + opts.map(o => `<option${o === keep ? ' selected' : ''}>${dqEsc(o)}</option>`).join('');
 }
 
 // R-CARD: две очевидные правки — строку результата под карточку или карточку под результат
@@ -215,6 +232,10 @@ function dqSaveEdit(idx, btn) {
         const v = el.value.trim();
         if (v !== String(f.record[el.dataset.field] ?? '')) fields[el.dataset.field] = v;
     });
+    if (fields.category === '') {
+        document.querySelector(`#dq-item-${idx} .dq-status`).textContent = 'Выберите категорию';
+        return;
+    }
     if (!Object.keys(fields).length) {
         document.querySelector(`#dq-item-${idx} .dq-status`).textContent = 'Ничего не изменено';
         return;

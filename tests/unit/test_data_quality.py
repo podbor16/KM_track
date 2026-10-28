@@ -305,10 +305,23 @@ def test_edit_record_view_for_result_and_kids_lead():
              results=[R(5, 1, "Ветрова", "Елизавета", "2014-01-01", 2, 4102, cat="Д11", sex="Женщина")])
     rec = edit_record_view(Finding("R-CARD", "medium", "", (1,), 5, 2), d)
     assert rec == {"table": "results", "id": 5, "surname": "Ветрова", "name": "Елизавета", "birthday": "2014-01-01",
-                   "sex": "Женщина", "category": "Д11"}
+                   "sex": "Женщина", "category": "Д11", "category_options": [{"label": "Д11", "sex": "Женщина"}]}
     rec = edit_record_view(Finding("L-KID", "low", "", (1,), event_id=2, lead_id=7), d)
     assert rec["table"] == "leads" and rec["event_distance"] == "1 км"
     assert rec["distance_options"] == ["500 м", "1 км"]          # только дистанции этого же забега и года
     assert edit_record_view(Finding("C-TWIN", "high", "", (1, 2)), d) is None
     assert [distance_km(x) for x in ("500 м", "1 км", "21.1", "10,5 км", "?")] == [0.5, 1.0, 21.1, 10.5, None]
+
+
+def test_category_options_sex_from_label_or_runners():
+    from src.analytics.data_quality import category_options
+    rs = [R(1, 1, "А", "Б", "", 2, 1, cat="М10-12"), R(2, 1, "А", "Б", "", 2, 2, cat="Ж12-13", sex="Женщина"),
+          R(3, 1, "А", "Б", "", 2, 3, cat="Девочки 2014 г.р.", sex="Женщина"),
+          R(4, 1, "А", "Б", "", 2, 4, cat="Абсолют"), R(5, 1, "А", "Б", "", 2, 5, cat="Абсолют", sex="Женщина"),
+          R(6, 1, "А", "Б", "", 2, 6, cat="Элита", sex="Женщина"), R(7, 1, "А", "Б", "", 2, 7, cat="М2-5"),
+          R(8, 1, "А", "Б", "", 2, 8, cat="")]
+    assert category_options(rs) == [
+        {"label": "Абсолют", "sex": ""}, {"label": "Девочки 2014 г.р.", "sex": "Женщина"},
+        {"label": "Ж12-13", "sex": "Женщина"}, {"label": "М2-5", "sex": "Мужчина"},
+        {"label": "М10-12", "sex": "Мужчина"}, {"label": "Элита", "sex": "Женщина"}]
 
