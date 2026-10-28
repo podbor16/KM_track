@@ -1,6 +1,6 @@
 """Интеграционные тесты: раздел «История участия» скрыт/доступен по
 флагу get_history_enabled() — роуты /history, /athlete-profile и API
-/api/search-athletes, /api/athlete/{surname}/{name}."""
+/api/search-athletes, /api/athlete/{client_id}."""
 from unittest.mock import patch
 
 import pytest
@@ -73,7 +73,7 @@ def test_search_athletes_ok_when_enabled(client):
 
 def test_athlete_profile_api_404_when_disabled(client):
     with patch("src.krasmarafon.routers.api.get_history_enabled", return_value=False):
-        r = client.get("/api/athlete/Иванов/Иван")
+        r = client.get("/api/athlete/1")
     assert r.status_code == 404
 
 

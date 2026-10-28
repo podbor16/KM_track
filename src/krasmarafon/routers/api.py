@@ -178,30 +178,20 @@ async def search_athletes(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/api/athlete/{surname}/{name}")
-async def get_athlete_profile(
-    surname: str = PathParam(..., description="Фамилия"),
-    name: str = PathParam(..., description="Имя"),
-):
-    """Профиль спортсмена и все его результаты."""
+@router.get("/api/athlete/{client_id}")
+async def get_athlete_profile(client_id: int = PathParam(..., description="Номер карточки участника")):
+    """Профиль участника по карточке и все его результаты."""
     if not get_history_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
     try:
-        from src.analytics.db_connection_optimized import get_athlete_results_optimized
+        from src.analytics.db_connection_optimized import get_athlete_by_client
 
-        athlete_info, results = get_athlete_results_optimized(surname, name)
-
-        if not athlete_info and not results:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Спортсмен {surname} {name} не найден"
-            )
+        athlete_info, results = await asyncio.get_event_loop().run_in_executor(None, get_athlete_by_client, client_id)
+        if not athlete_info:
+            raise HTTPException(status_code=404, detail=f"Участник #{client_id} не найден")
 
         def _format(d: dict) -> dict:
-            return {
-                k: v.isoformat() if hasattr(v, 'isoformat') else v
-                for k, v in d.items()
-            }
+            return {k: v.isoformat() if hasattr(v, 'isoformat') else v for k, v in d.items()}
 
         return {
             'athlete': _format(athlete_info),
