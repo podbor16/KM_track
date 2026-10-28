@@ -218,7 +218,7 @@ def test_fix_fio_result_only_when_card_is_canonical():
     from src.analytics.data_quality import fix_fio
     conn, cur = _fix_conn({"id": 9, "client_id": 30537, "surname": "Роман", "name": "Маркус",
                            "c_surname": "Маркус", "c_name": "Роман", "birthday": "2019-10-26"})
-    with patch("src.analytics.data_quality.apply_merge") as am:
+    with patch("src.analytics.dq_actions.apply_merge") as am:
         assert fix_fio(conn, 9, "Маркус", "Роман", "u", "k")[0] == 30537
     am.assert_not_called()
     assert cur.execute.call_args_list[0].args[1] == ("Маркус", "Роман", 9)
@@ -231,7 +231,7 @@ def test_fix_fio_renames_card_made_from_result():
     conn, cur = _fix_conn({"id": 7, "client_id": 53428, "surname": "Tsimis", "name": "Егор",
                            "c_surname": "Tsimis", "c_name": "Егор", "birthday": "1992-01-01"})
     snapshot = lambda conn, cards, final, merged, path: open(path, "w").write("{}")
-    with patch("src.analytics.data_quality.apply_merge", side_effect=snapshot) as am:
+    with patch("src.analytics.dq_actions.apply_merge", side_effect=snapshot) as am:
         fix_fio(conn, 7, "Цимис", "Егор", "u", "k")
     assert am.call_args.args[2:4] == ({53428: ("Цимис", "Егор", "1992-01-01")}, {})
 
