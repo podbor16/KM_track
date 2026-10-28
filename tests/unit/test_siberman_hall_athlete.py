@@ -50,7 +50,7 @@ def test_header_summary_and_medals():
     assert p["summary"] == {"starts": 4, "finishes": 2, "relays": 1, "records": 2}
     assert [(m["n"], m["year"], m["medal"]["key"]) for m in p["medals"]] == [(1, 2019, "silver"), (2, 2021, "black")]
     assert [(m["year"], m["team"], m["medal"]["key"]) for m in p["relay_medals"]] == [(2020, "Столбы", "relay_silver")]
-    assert p["next_medal"]["key"] == "gold"
+    assert "next_medal" not in p                                   # только полученные медали
 
 
 def test_participations_places_and_stage_times():

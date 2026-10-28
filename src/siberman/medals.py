@@ -1,21 +1,23 @@
 """Медали Siberman за финиши (спецификация hall §9) — одно место для правила «N-й финиш → медаль».
-8-й и дальше — пока как 7-й. Картинка — static/img/siberman/medals/{key}.webp, если файл есть (новый файл — после перезапуска); иначе страница рисует кружок цвета медали."""
+1–5 — круглые, 6–10 — шестигранники тех же цветов в том же порядке; 11-й и дальше — пока как 10-й.
+Картинка — static/img/siberman/medals/{key}.webp, если файл есть (новый файл — после перезапуска); иначе страница рисует кружок цвета медали."""
 import functools
 from pathlib import Path
 from typing import Optional
 
 MEDALS_DIR = Path(__file__).resolve().parents[2] / "static" / "img" / "siberman" / "medals"
 
+_COLORS = (("silver", "Серебряная", "Серебряный", "#a9a9a9"),
+           ("black", "Чёрная", "Чёрный", "#222222"),
+           ("gold", "Золотая", "Золотой", "#d4a017"),
+           ("copper", "Медная", "Медный", "#b06a3b"),
+           ("chameleon", "Хамелеон", "Хамелеон", "linear-gradient(135deg, #6a3cbc, #1fa3a3, #c2b21f)"))
 INDIVIDUAL = {
-    1: ("silver", "Античное серебро", "#a9a9a9"),
-    2: ("black", "Матовая чёрная", "#222222"),
-    3: ("gold", "Золотая", "#d4a017"),
-    4: ("copper", "Античная медь", "#b06a3b"),
-    5: ("chameleon", "Хамелеон", "linear-gradient(135deg, #6a3cbc, #1fa3a3, #c2b21f)"),
-    6: ("hex_black", "Чёрный шестигранник", "#111111"),
+    **{i: (key, disc, color) for i, (key, disc, _, color) in enumerate(_COLORS, start=1)},
+    **{i: (f"hex_{key}", f"{hex_} шестигранник", color) for i, (key, _, hex_, color) in enumerate(_COLORS, start=6)},
 }
-SEVENTH_AND_LATER = ("hex_silver_red", "Серебряный шестигранник с красной плашкой", "#c0c0c0")
-RELAY = ("relay_silver", "Античное серебро 70 мм (эстафета)", "#a9a9a9")
+LAST = INDIVIDUAL[max(INDIVIDUAL)]
+RELAY = ("relay_silver", "Серебряная", "#a9a9a9")
 
 
 @functools.lru_cache(maxsize=None)
@@ -30,5 +32,5 @@ def medal_for(finish_no: Optional[int], relay: bool = False) -> Optional[dict]:
     elif not finish_no or finish_no < 1:
         return None
     else:
-        key, name, color = INDIVIDUAL.get(finish_no, SEVENTH_AND_LATER)
+        key, name, color = INDIVIDUAL.get(finish_no, LAST)
     return {"key": key, "name": name, "color": color, "image": _image(MEDALS_DIR, key)}

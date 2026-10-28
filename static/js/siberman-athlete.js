@@ -23,7 +23,6 @@ function medals(a) {
   const shortName = m => hallEsc(m.name.split(' (')[0]);
   const items = a.medals.map(x => medal(x.medal, x.n, `${x.n}-й финиш<br>${shortName(x.medal)} · ${x.year}`))
     .concat(a.relay_medals.map(x => medal(x.medal, 'Э', `эстафета<br>${x.year} · «${hallEsc(x.team)}»`, 'small')));
-  if (a.next_medal) items.push(medal(a.next_medal, a.medals.length + 1, `следующая<br>${shortName(a.next_medal)}`, 'next'));
   return `<h2>Медали</h2><div class="medals">${items.join('')}</div>`;
 }
 

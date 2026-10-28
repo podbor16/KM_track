@@ -111,7 +111,6 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
 .md .hex { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
 .md img { display: block; width: 72px; height: 72px; margin: 0 auto 6px; object-fit: contain; }
 .md.small .disc, .md.small .hex, .md.small img { width: 58px; height: 58px; margin-top: 7px; font-size: 16px; }
-.md.next { opacity: .45; }
 .best { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .bx { border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: center; font-size: 13px; }
 .bx b { display: block; font-size: 16px; }

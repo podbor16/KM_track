@@ -153,7 +153,6 @@ def _page(pid: int, starts: list, team_of: dict, places: dict, rating: dict, bib
         "medals": [{"n": i, "year": e.year, "medal": medal_for(i)} for i, e in enumerate(finishes, 1)],
         "relay_medals": [{"year": t.year, "team": t.name, "medal": medal_for(None, relay=True)}
                          for t in relays.values() if t.time_s is not None],
-        "next_medal": medal_for(len(finishes) + 1),
         "best": best,
         "best_place": {"place": min(placed)[0], "year": min(placed)[1]} if placed else None,
         "rating": rating.get(pid),
