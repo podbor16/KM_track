@@ -16,18 +16,21 @@ logger = logging.getLogger(__name__)
 
 def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Карточки по началу фамилии или имени -> [{client_id, surname, name, birth_year, events_count}]."""
+    term = f"{search_query.strip()}%"
+    if term == "%":
+        return []
     connection = get_pooled_connection()
     if not connection:
         logger.error("❌ Не удалось получить соединение")
         return []
     try:
-        cursor = connection.cursor(dictionary=True)
-        term = f"{search_query.strip()}%"
+        cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
             """SELECT c.id AS client_id, c.surname, c.name, c.birthday,
                       (SELECT COUNT(*) FROM results r WHERE r.client_id = c.id) AS events_count
                FROM clients c
                WHERE c.id <> 0 AND (c.surname LIKE %s OR c.name LIKE %s)
+                 AND EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)
                ORDER BY c.surname, c.name, c.birthday
                LIMIT %s""",
             (term, term, int(limit)),
@@ -47,14 +50,14 @@ def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[st
 
 
 def get_athlete_by_client(client_id: int) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Карточка и её результаты -> (athlete, results). Нет карточки -> ({}, []).
+    """Карточка и её результаты -> (athlete, results). Нет карточки или у неё нет результатов -> ({}, []).
     athlete: поля последнего результата (пол, категория…) + ФИО и ДР карточки + client_id."""
     connection = get_pooled_connection()
     if not connection:
         logger.error("❌ Не удалось установить соединение")
         return {}, []
     try:
-        cursor = connection.cursor(dictionary=True)
+        cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute("SELECT id, surname, name, birthday FROM clients WHERE id = %s AND id <> 0", (int(client_id),))
         card = cursor.fetchone()
         if not card:
@@ -70,7 +73,9 @@ def get_athlete_by_client(client_id: int) -> Tuple[Dict[str, Any], List[Dict[str
         )
         results = [dict(r) for r in cursor.fetchall()]
         cursor.close()
-        athlete = dict(results[0]) if results else {}
+        if not results:
+            return {}, []
+        athlete = dict(results[0])
         athlete.update(client_id=card["id"], surname=card["surname"], name=card["name"], birthday=card["birthday"])
         return athlete, results
     except Exception as e:

@@ -32,8 +32,8 @@ def db():
     conn.close()
 
 
-def add_result(cur, dist, bib, bd, name="Александр"):
-    cur.execute("INSERT INTO events (event_name, event_distance, event_year) VALUES (%s, %s, 2099)", (EV, dist))
+def add_result(cur, dist, bib, bd, name="Александр", year=2099):
+    cur.execute("INSERT INTO events (event_name, event_distance, event_year) VALUES (%s, %s, %s)", (EV, dist, year))
     cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status) VALUES (%s, %s, %s, 0, %s, 'Мужчина', %s, 'М18-49', 'Finished')""",
                 (SUR, name, bd, cur.lastrowid, bib))
@@ -69,3 +69,27 @@ def test_profile_by_card_has_only_its_results(db):
 
     assert db_athletes.get_athlete_by_client(father)[1][0]["start_number"] == 1
     assert db_athletes.get_athlete_by_client(999_999_999) == ({}, [])
+
+
+def test_card_without_results_is_hidden(db):
+    conn, cur = db
+    cur.execute("INSERT INTO clients (surname, name, birthday) VALUES (%s, 'Пётр', '1990-01-01')", (SUR,))
+    empty = cur.lastrowid
+    conn.commit()
+
+    assert empty not in {c["client_id"] for c in db_athletes.search_clients_optimized(SUR)}
+    assert db_athletes.get_athlete_by_client(empty) == ({}, [])
+
+
+def test_profile_results_latest_year_first(db):
+    conn, cur = db
+    cid = add_result(cur, 10.0, 1, "1980-03-09", year=2098)
+    assert add_result(cur, 21.1, 2, "1980-03-09", year=2099) == cid
+    conn.commit()
+
+    _, results = db_athletes.get_athlete_by_client(cid)
+    assert [r["event_year"] for r in results] == [2099, 2098]
+
+
+def test_blank_query_returns_nothing():
+    assert db_athletes.search_clients_optimized("   ") == []
