@@ -163,10 +163,7 @@
         // Получить параметры из URL
         function getUrlParams() {
             const params = new URLSearchParams(window.location.search);
-            return {
-                surname: params.get('surname'),
-                name: params.get('name')
-            };
+            return { id: params.get('id') };
         }
 
         // Форматирование времени
@@ -304,13 +301,13 @@
         async function loadAthleteProfile() {
             const params = getUrlParams();
             
-            if (!params.surname || !params.name) {
-                showError('Параметры спортсмена не найдены');
+            if (!/^\d+$/.test(params.id || '')) {
+                showError('Участник не указан — найдите его на странице «История участия»');
                 return;
             }
 
             try {
-                const response = await fetch(`/api/athlete/${encodeURIComponent(params.surname)}/${encodeURIComponent(params.name)}`);
+                const response = await fetch(`/api/athlete/${params.id}`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);

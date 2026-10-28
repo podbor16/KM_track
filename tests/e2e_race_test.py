@@ -410,11 +410,17 @@ async def run():
 
         # Проверяем профиль атлета по реальному имени
         async with httpx.AsyncClient() as c:
-            r2 = await c.get(f"{BASE}/api/athlete/TEST_Петров/Алексей", timeout=10)
-        if r2.status_code == 200:
-            ok(f"/api/athlete/TEST_Петров/Алексей: {r2.json()}")
-        else:
-            warn(f"/api/athlete: {r2.status_code} — {r2.text[:100]}")
+            rs = await c.get(f"{BASE}/api/search-athletes", params={"q": "TEST_Петров"}, timeout=10)
+            found = rs.json() if rs.status_code == 200 else []
+            if found:
+                cid = found[0]["client_id"]
+                r2 = await c.get(f"{BASE}/api/athlete/{cid}", timeout=10)
+                if r2.status_code == 200:
+                    ok(f"/api/athlete/{cid}: {r2.json()}")
+                else:
+                    warn(f"/api/athlete/{cid}: {r2.status_code} — {r2.text[:100]}")
+            else:
+                warn(f"/api/search-athletes?q=TEST_Петров: {rs.status_code}, не найдено")
         await page.close()
 
         # ═══════════════════════════════════════════════════

@@ -42,7 +42,7 @@ async def check_api():
         "/api/registered-runners?event_id=104",
         "/api/registered-runners?event_id=67",
         "/api/search-athletes?q=Иванов",
-        "/api/athlete/Иванов/Иван",
+        "/api/athlete/1",
         "/api/status",
     ]
     async with httpx.AsyncClient(base_url=BASE, timeout=30) as c:

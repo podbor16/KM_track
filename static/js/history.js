@@ -79,9 +79,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = athlete.name || 'Не указано';
             const birth_year = athlete.birth_year || 'Неизвестно';
 
+            const races = athlete.events_count ? ` · забегов: ${athlete.events_count}` : '';
             html += `
-                <div class="autocomplete-item" data-index="${index}" data-surname="${surname}" data-name="${name}">
-                    <div class="athlete-info">${surname} ${name}, ${birth_year} г.р.</div>
+                <div class="autocomplete-item" data-index="${index}" data-client-id="${Number(athlete.client_id)}"
+                     data-surname="${surname}" data-name="${name}">
+                    <div class="athlete-info">${surname} ${name}, ${birth_year} г.р.${races}</div>
                 </div>
             `;
         });
@@ -111,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         resultsContainer.classList.remove('show');
         searchStatus.textContent = '✓ Спортсмен выбран';
 
-        window.location.href = `/athlete-profile?surname=${encodeURIComponent(surname)}&name=${encodeURIComponent(name)}`;
+        window.location.href = `/athlete-profile?id=${encodeURIComponent(element.dataset.clientId)}`;
     }
 
     document.addEventListener('click', function(e) {

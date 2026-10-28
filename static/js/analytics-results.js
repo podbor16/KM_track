@@ -1294,7 +1294,7 @@ function buildDetailPanelHTML(runner) {
     const rankSexClean = runner.rank_sex_clean      ? `${genderShort} ${fmtRank(runner.rank_sex_clean,      nSex)}` : '—';
     const rankCatClean = runner.rank_category_clean ? fmtRank(runner.rank_category_clean, nCat) : '—';
 
-    const profileUrl = `/athlete-profile?surname=${encodeURIComponent(runner.surname || '')}&name=${encodeURIComponent(runner.name || '')}`;
+    const profileUrl = `/athlete-profile?id=${encodeURIComponent(runner.client_id || '')}`;
     const profileBtn = PROFILE_BUTTON_ENABLED
         ? `<a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>`
         : '';
