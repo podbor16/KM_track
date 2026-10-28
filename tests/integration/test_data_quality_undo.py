@@ -340,3 +340,69 @@ def test_postponed_decision_and_undo(db):
     assert journal[did]["text"] == "Решение: отложено (не знаю ДР)"
     dq.undo_action(conn, did, USER)
     assert "TEST-UNDO::postpone" not in dq.load_decisions(conn)
+
+
+def _runners(cur, ev, spec):
+    """spec: (sex, category, мин гонга, мин чистого|None, rank_category, rank_category_clean, rank_sex) -> [id]."""
+    ids = []
+    for i, (sex, cat, gun, clean, rc, rcc, rs) in enumerate(spec, 1):
+        rid, _ = result(cur, ev, i, f"1990-01-0{i}", name=f"Иван{i}")
+        cur.execute("""UPDATE results SET sex = %s, category = %s, time_gun_finish = SEC_TO_TIME(%s),
+                       time_clear_finish = SEC_TO_TIME(%s), rank_category = %s, rank_category_clean = %s, rank_sex = %s
+                       WHERE id = %s""", (sex, cat, gun * 60, clean * 60 if clean else None, rc, rcc, rs, rid))
+        ids.append(rid)
+    return ids
+
+
+def ranks(cur, rid):
+    cur.execute("""SELECT rank_category, rank_category_clean, rank_sex, rank_sex_clean FROM results WHERE id = %s""",
+                (rid,))
+    return cur.fetchone()
+
+
+def test_sex_change_sets_rank_sex_only(db):
+    conn, cur = db
+    m, w = "Мужчина", "Женщина"
+    ids = _runners(cur, event(cur, 5.0), ((m, "Абсолют", 24, None, 4, None, 2), (w, "Абсолют", 21, None, 1, None, 1),
+                                          (w, "Абсолют", 23, None, 3, None, 2), (m, "Абсолют", 22, None, 2, None, 1)))
+    conn.commit()
+    _, aid = dq.edit_record(conn, "results", ids[3], {"sex": w}, USER)
+    assert ranks(cur, ids[3]) == {"rank_category": 2, "rank_category_clean": None, "rank_sex": 2, "rank_sex_clean": None}
+    dq.undo_action(conn, aid, USER)
+    assert ranks(cur, ids[3])["rank_sex"] == 1
+
+
+def test_category_change_in_race_without_places_creates_none(db):
+    conn, cur = db
+    ids = _runners(cur, event(cur, 5.0), (("Мужчина", "М18-29", 20, 20, None, None, None),
+                                          ("Мужчина", "М30-39", 21, 21, None, None, None)))
+    conn.commit()
+    dq.edit_record(conn, "results", ids[0], {"category": "М30-39"}, USER)
+    assert ranks(cur, ids[0]) == {"rank_category": None, "rank_category_clean": None, "rank_sex": None,
+                                  "rank_sex_clean": None}
+
+
+def test_empty_category_with_places_in_race_is_first(db):
+    conn, cur = db
+    ids = _runners(cur, event(cur, 5.0), (("Мужчина", "М18-29", 20, 20, 1, 1, 1),
+                                          ("Мужчина", "М30-39", 21, 21, 1, 1, 2),
+                                          ("Мужчина", "М30-39", 23, 22, 3, 3, 3)))
+    conn.commit()
+    _, aid = dq.edit_record(conn, "results", ids[2], {"category": "М60-69"}, USER)
+    assert ranks(cur, ids[2])["rank_category"] == 1 and ranks(cur, ids[2])["rank_category_clean"] == 1
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert "место в категории 3 → 1" in journal[aid]["text"]
+    dq.undo_action(conn, aid, USER)
+    assert ranks(cur, ids[2])["rank_category"] == 3 and ranks(cur, ids[2])["rank_category_clean"] == 3
+
+
+def test_undo_decision_restores_previous(db):
+    conn, cur = db
+    key = "TEST-UNDO::prev"
+    dq.dismiss(conn, key, "postponed", "не знаю ДР", USER)
+    did = dq.dismiss(conn, key, "keep", "", USER)
+    assert dq.load_decisions(conn)[key] == "keep"
+    dq.undo_action(conn, did, USER)
+    assert dq.load_decisions(conn)[key] == "postponed"
+    cur.execute("SELECT note FROM dq_decisions WHERE finding_key = %s", (key,))
+    assert cur.fetchone()["note"] == "не знаю ДР"

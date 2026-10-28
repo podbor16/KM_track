@@ -363,3 +363,35 @@ def test_check_foreign_namesake_by_short_name():
     [f] = check_foreign(d, results, [])
     assert f.client_ids == (1, 2)                        # Саша — да; брат Марк и Пцарева Александра — нет
 
+
+
+def _nr(me, *others):
+    """_neighbor_rank: me — (сек, мс); others — ((сек, мс), место)."""
+    from src.analytics.dq_actions import _neighbor_rank
+    return _neighbor_rank(me, [{"g": g, "rank_category": r} for g, r in others], "rank_category", "g")
+
+
+def test_neighbor_rank_slower_neighbor():
+    assert _nr((1320, 0), ((1260, 0), 1), ((1380, 0), 2), ((1440, 0), 3)) == 2
+
+
+def test_neighbor_rank_equal_time_shares_place():
+    assert _nr((1320, 0), ((1260, 0), 1), ((1320, 0), 2), ((1440, 0), 3)) == 2
+
+
+def test_neighbor_rank_ms_tiebreak_within_second():
+    assert _nr((1320, 500), ((1320, 400), 1), ((1320, 600), 2)) == 2
+    assert _nr((1320, 300), ((1320, 400), 1), ((1320, 600), 2)) == 1
+
+
+def test_neighbor_rank_slowest_gets_last_plus_one():
+    assert _nr((2000, 0), ((1260, 0), 1), ((1380, 0), 2)) == 3
+
+
+def test_neighbor_rank_empty_group_is_first():
+    assert _nr((1320, 0)) == 1
+
+
+def test_neighbor_rank_ignores_null_places():
+    assert _nr((1320, 0), ((1260, 0), 1), ((1380, 0), None), ((1440, 0), 2)) == 2
+    assert _nr((1320, 0), ((1260, 0), 1), ((1380, 0), None)) == 2

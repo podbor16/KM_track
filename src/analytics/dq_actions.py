@@ -120,16 +120,22 @@ def _log_action(cur, action, key, details, user):
     return cur.lastrowid
 
 
-def dismiss(conn, key, decision, note, user):
-    """Запомнить решение по находке — больше не показывается. -> id записи журнала."""
-    if decision not in DECISIONS:
-        raise ValueError(f"решение: {', '.join(DECISIONS)}")
-    cur = conn.cursor()
+def _save_decision(cur, key, decision, note, user):
     cur.execute("""INSERT INTO dq_decisions (finding_key, decision, note, decided_by) VALUES (%s, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE decision = VALUES(decision), note = VALUES(note),
                                            decided_by = VALUES(decided_by), decided_at = NOW()""",
                 (key, decision, note or "", user or ""))
-    action_id = _log_action(cur, "dismiss", key, {"decision": decision, "note": note}, user)
+
+
+def dismiss(conn, key, decision, note, user):
+    """Запомнить решение по находке — больше не показывается. -> id записи журнала."""
+    if decision not in DECISIONS:
+        raise ValueError(f"решение: {', '.join(DECISIONS)}")
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT decision, note FROM dq_decisions WHERE finding_key = %s", (key,))
+    prev = cur.fetchone()
+    _save_decision(cur, key, decision, note, user)
+    action_id = _log_action(cur, "dismiss", key, {"decision": decision, "note": note, "prev": prev}, user)
     conn.commit()
     cur.close()
     return action_id
@@ -310,6 +316,7 @@ def _check_category_sex(cur, row_id, category, sex):
 
 
 RANK_COLS = {"category": ("rank_category", "rank_category_clean"), "sex": ("rank_sex", "rank_sex_clean")}
+RANK_FIELDS = RANK_COLS["category"] + RANK_COLS["sex"]
 
 
 def _finish_key(t, ms):
@@ -317,7 +324,7 @@ def _finish_key(t, ms):
 
 
 def _neighbor_rank(me_key, group, rank_col, time_key):
-    """Место первого не быстрее (место на двоих); быстрее всех медленных нет — последнее + 1."""
+    """Место первого не быстрее (место на двоих); медленнее никого — последнее + 1 (пустая группа — 1)."""
     others = [r for r in group if r[time_key] is not None and r[rank_col] is not None]
     slower = [r for r in others if r[time_key] >= me_key]
     if slower:
@@ -327,9 +334,10 @@ def _neighbor_rank(me_key, group, rank_col, time_key):
 
 def _neighbor_ranks(cur, row_id, category, sex, fields):
     """Места строки результата в новой категории (и при смене пола — среди пола) по правилу «как у соседа снизу»
-    (решение пользователя 2026-10-28): места остальных участников не трогаем. -> {колонка: место}."""
-    cur.execute("""SELECT event_id, race_status, time_gun_finish, time_gun_finish_ms, time_clear_finish,
-                          time_clear_finish_ms FROM results WHERE id = %s""", (row_id,))
+    (решение пользователя 2026-10-28): места остальных участников не трогаем. Колонку места ставим, только если
+    в забеге места есть (у строки или у кого-то в событии); чистое — ещё и при чистом времени строки. -> {колонка: место}."""
+    cur.execute(f"""SELECT event_id, race_status, time_gun_finish, time_gun_finish_ms, time_clear_finish,
+                           time_clear_finish_ms, {', '.join(RANK_FIELDS)} FROM results WHERE id = %s""", (row_id,))
     me = cur.fetchone()
     if not me or me["race_status"] != "Finished" or me["time_gun_finish"] is None:
         return {}
@@ -341,14 +349,18 @@ def _neighbor_ranks(cur, row_id, category, sex, fields):
     for r in rows + [me]:
         r["g"] = _finish_key(r["time_gun_finish"], r["time_gun_finish_ms"])
         r["c"] = _finish_key(r["time_clear_finish"], r["time_clear_finish_ms"])
+    def has_ranks(col):
+        return me[col] is not None or any(r[col] is not None for r in rows)
+
     out = {}
     for field, value in (("category", category), ("sex", sex)):
         if field not in fields:
             continue
         group = [r for r in rows if r[field] == value]
         gun_col, clean_col = RANK_COLS[field]
-        out[gun_col] = _neighbor_rank(me["g"], group, gun_col, "g")
-        if me["c"] is not None and any(r[clean_col] is not None for r in group):
+        if has_ranks(gun_col):
+            out[gun_col] = _neighbor_rank(me["g"], group, gun_col, "g")
+        if me["c"] is not None and has_ranks(clean_col):
             out[clean_col] = _neighbor_rank(me["c"], group, clean_col, "c")
     return out
 
@@ -358,7 +370,7 @@ def edit_record(conn, table, row_id, fields, user, key=""):
     изменённых полей; отмена возвращает «до». Карточке нельзя дать ФИ+ДР другой карточки — это склейка.
     -> (карточка, id записи журнала)."""
     fields = _clean_edit(table, fields)
-    cols = list(EDITABLE[table]) + (["event_id"] if table == "leads" else []) + (list(RANK_COLS["category"] + RANK_COLS["sex"]) if table == "results" else [])
+    cols = list(EDITABLE[table]) + (["event_id"] if table == "leads" else []) + (list(RANK_FIELDS) if table == "results" else [])
     cur = conn.cursor(dictionary=True)
     try:
         cid_col = "id" if table == "clients" else "client_id"
@@ -374,7 +386,6 @@ def edit_record(conn, table, row_id, fields, user, key=""):
             raise ValueError("значения не изменились")
         if table == "results" and {"sex", "category"} & set(changed):
             _check_category_sex(cur, row_id, changed.get("category", before["category"]), changed.get("sex", before["sex"]))
-        if table == "results" and {"sex", "category"} & set(changed):
             ranks = _neighbor_ranks(cur, row_id, changed.get("category", before["category"]),
                                     changed.get("sex", before["sex"]), set(changed))
             changed.update({k: v for k, v in ranks.items() if str(v) != before.get(k)})
@@ -602,7 +613,7 @@ def _describe(action, d):
         what = "заявки" if d.get("table") == "leads" else "результата"
         return f'Перенос {what} #{d.get("row_id", d.get("result_id"))}: с карточки #{d["from"]} на {how} #{d["to"]}{tail}'
     if action == "dismiss":
-        label = {"different_people": "разные люди", "keep": "оставить как есть", "postponed": "отложено"}[d["decision"]]
+        label = {"different_people": "разные люди", "keep": "оставить как есть", "postponed": "отложено"}.get(d["decision"], d["decision"])
         return f"Решение: {label}" + (f' ({d["note"]})' if d.get("note") else "")
     return action
 
@@ -707,7 +718,9 @@ def _restore_result(cur, row):
 
 
 EDIT_LABELS = {"surname": "фамилия", "name": "имя", "birthday": "ДР", "sex": "пол", "category": "категория",
-               "event_distance": "дистанция"}
+               "event_distance": "дистанция", "rank_category": "место в категории",
+               "rank_category_clean": "место в категории (чистое)", "rank_sex": "место среди пола",
+               "rank_sex_clean": "место среди пола (чистое)"}
 
 
 def _restore_edit(cur, d):
@@ -787,6 +800,8 @@ def undo_action(conn, action_id, user):
             _restore_edit(cur, d)
         elif row["action"] == "move_result":
             _restore_move(cur, d)
+        elif d.get("prev"):
+            _save_decision(cur, row["finding_key"], d["prev"]["decision"], d["prev"]["note"], user)
         else:
             cur.execute("DELETE FROM dq_decisions WHERE finding_key = %s AND decision = %s",
                         (row["finding_key"], d["decision"]))
