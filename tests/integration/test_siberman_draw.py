@@ -523,7 +523,7 @@ def test_login_returns_to_requested_page(client):
 
 def test_host_page_and_state(draw, client):
     host, token, bad = {"host": "siberman.localhost"}, service.host_token(YEAR), "0" * 32
-    assert client.get(f"/draw/{YEAR}/host/{bad}", headers=host).status_code == 404
+    assert client.get(f"/draw/{YEAR}/host/{bad}", headers=host, follow_redirects=False).status_code == 302   # → 404 Тильды
     r = client.get(f"/draw/{YEAR}/host/{token}", headers=host)
     assert r.status_code == 200 and "noindex" in r.headers.get("x-robots-tag", "")
     assert client.get(f"/draw/{YEAR}/host/{token}").status_code == 404                 # чужой домен
@@ -611,7 +611,7 @@ def test_overlay_pages_and_rows(draw, client):
     host = {"host": "siberman.localhost"}
     for name in ("men", "women", "relay", "wildcard"):
         assert client.get(f"/draw/{YEAR}/overlay/{name}", headers=host).status_code == 200
-    assert client.get(f"/draw/{YEAR}/overlay/nope", headers=host).status_code == 404
+    assert client.get(f"/draw/{YEAR}/overlay/nope", headers=host, follow_redirects=False).status_code == 302   # → 404 Тильды
     assert client.get(f"/draw/{YEAR}/overlay/relay").status_code == 404                  # чужой домен
     relay = service.overlay_rows(YEAR, "relay")
     assert relay["label"] == "Эстафетный зачёт"

@@ -10,7 +10,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import json
 import logging
 import os
@@ -506,6 +507,8 @@ p {{ color: var(--muted); font-size: 14px; line-height: 1.55; }}
 <html lang="ru"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Технические работы — Triatleta 24h</title>
+<link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_dark.ico" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_light.ico" media="(prefers-color-scheme: dark)">
 <style>
 :root {{ --bg: #f5f5f5; --surface: #fff; --border: #e8e8e8; --accent: #FF8562; --text: #050505; --muted: #888; --header-bg: linear-gradient(135deg, #050505 0%, #263146 100%); }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -562,6 +565,8 @@ _DUATHLON222_MAINTENANCE_PAGE = f"""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Технические работы — 222 Дуатлон</title>
+<link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_dark.ico" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_light.ico" media="(prefers-color-scheme: dark)">
 <style>
 :root {{ --bg: #f5f5f5; --surface: #fff; --border: #e8e8e8; --accent: #FF8562; --text: #050505; --muted: #888; --header-bg: linear-gradient(135deg, #050505 0%, #263146 100%); }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -661,9 +666,31 @@ async def km_track_exception_handler(request, exc: KMTrackException):
     )
 
 
+SIBERMAN_404_URL = "https://siberman515.com/page"   # страница 404 Siberman на Тильде (решение пользователя 2026-10-28)
+_SIBERMAN_404_KEEP = ("/api/", "/webhook/", "/static/")
+
+
+def _siberman_404_redirect(request: Request, status_code: int):
+    """Несуществующая страница live.siberman515.com → 404 на Тильде; API, вебхук и статика — как были."""
+    if (status_code == 404 and getattr(request.state, "domain", "") == "siberman"
+            and request.method in ("GET", "HEAD") and not request.url.path.startswith(_SIBERMAN_404_KEEP)):
+        return RedirectResponse(SIBERMAN_404_URL, status_code=302)
+    return None
+
+
+@app.exception_handler(StarletteHTTPException)
+async def route_not_found_handler(request, exc: StarletteHTTPException):
+    """Нет такого маршрута (404/405 от Starlette) — тот же JSON, что по умолчанию; Siberman — на 404 Тильды."""
+    return _siberman_404_redirect(request, exc.status_code) or JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers=getattr(exc, "headers", None))
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
     """Обработчик HTTP исключений"""
+    redirect = _siberman_404_redirect(request, exc.status_code)
+    if redirect:
+        return redirect
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
