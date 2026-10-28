@@ -52,7 +52,7 @@ function participations(a) {
     const fmt = r.format === 'individual'
       ? `Личный${r.finish_no ? ` · <b>${r.finish_no}-й финиш</b>` : ''}`
       : `Эстафета · ${r.stages.map(s => HALL_STAGE[s]).join(', ')}<br>${hallCard(r.bib, r.year, '«' + hallEsc(r.team) + '»')}`;
-    const place = !r.place ? '—' : r.format === 'individual' ? `${r.place.abs} / ${r.place.gender} ${SEX[r.gender] || ''}` : `${r.place.relay} эстаф.`;
+    const place = !r.place ? '—' : r.format === 'individual' ? `${r.place.gender} ${SEX[r.gender] || ''} · ${r.place.abs} абс.` : `${r.place.relay} эстаф.`;
     return `<tr class="${r.status === 'finished' || r.status === 'racing' ? '' : 'dnf'}"><td>${r.year}</td><td class="l">${fmt}</td>
       <td>${outcome(r)}</td><td>${place}</td><td>${time(r, 'swim')}</td><td>${time(r, 'bike')}</td><td>${time(r, 'run')}</td>
       <td>${hallCard(r.bib, r.year, 'карточка')}</td></tr>`;
