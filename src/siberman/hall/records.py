@@ -5,6 +5,8 @@
 без пола, X). Абсолютно лучшее: в отрезках — личники и эстафетчики своего пола; в «гонке» — все
 личники и эстафеты вместе (быстрее эстафета — в клетке команда). В рекорды отрезков — только не сошедшие и дошедшие до
 последней КТ этапа (как живые рекорды трекера). Ничья рекорд не меняет.
+Справочно (не рекорды: вне таблицы, рекордов спортсмена и рейтинга) — лучшая женская эстафета: все
+участницы команды с полом Ж.
 """
 from src.siberman.hall.data import Entry, Team, bib_order, race_time, segment_time
 
@@ -14,6 +16,7 @@ SEG_STAGES = {"swim": ("swim",), "bike": ("bike_day1", "bike_day2"), "bike1": ("
 SEG_ROLE = {"swim": "swim", "bike": "bike", "bike1": "bike", "bike2": "bike", "run": "run"}
 COLUMNS = ("individual", "relay", "absolute")
 GENDERS = ("M", "F")
+REFERENCE_KEYS = ("race:relay_women:X",)
 
 
 def cell_keys() -> list:
@@ -65,6 +68,8 @@ def candidates(key: str, entries: list, teams: list) -> list:
     if seg == "race":
         if col == "relay":
             return list(_teams(teams))
+        if col == "relay_women":
+            return list(_teams([t for t in teams if all(m.gender == "F" for m in t.members)]))
         if col == "absolute":
             return [c for sex in GENDERS for c in _individual(entries, seg, sex)] + list(_teams(teams))
         return list(_individual(entries, seg, g))
@@ -75,14 +80,9 @@ def candidates(key: str, entries: list, teams: list) -> list:
     return list(_individual(entries, seg, g)) + list(_relay_members(entries, seg, g))
 
 
-def build_records(entries: list, teams: list) -> dict:
-    """→ {'current': {клетка: запись | None}, 'history': {клетка: [записи по годам]}, 'last_year'}.
-    Запись: {'time_s', 'year', 'holder', 'delta_s'}; у текущей ещё 'new' — поставлен в последнем году."""
-    years = sorted({e.year for e in entries})
-    entries_by_year = {y: [e for e in entries if e.year == y] for y in years}
-    teams_by_year = {y: [t for t in teams if t.year == y] for y in years}
-    history = {k: [] for k in cell_keys()}
-    for y in years:
+def _histories(keys, entries_by_year: dict, teams_by_year: dict) -> dict:
+    history = {k: [] for k in keys}
+    for y in sorted(entries_by_year):
         for key, h in history.items():
             cands = candidates(key, entries_by_year[y], teams_by_year[y])
             if not cands:
@@ -91,6 +91,22 @@ def build_records(entries: list, teams: list) -> dict:
             if not h or value < h[-1]["time_s"]:
                 h.append({"time_s": value, "year": y, "holder": holder,
                           "delta_s": h[-1]["time_s"] - value if h else None})
+    return history
+
+
+def build_records(entries: list, teams: list) -> dict:
+    """→ {'current': {клетка: запись | None}, 'history': {клетка: [записи по годам]}, 'reference',
+    'reference_history' (то же для справочных REFERENCE_KEYS), 'last_year'}.
+    Запись: {'time_s', 'year', 'holder', 'delta_s'}; у текущей ещё 'new' — поставлен в последнем году."""
+    years = sorted({e.year for e in entries})
+    entries_by_year = {y: [e for e in entries if e.year == y] for y in years}
+    teams_by_year = {y: [t for t in teams if t.year == y] for y in years}
+    history = _histories(cell_keys(), entries_by_year, teams_by_year)
+    reference = _histories(REFERENCE_KEYS, entries_by_year, teams_by_year)
     last_year = max((e.year for e in entries if e.finished or race_time(e)), default=None)
-    current = {k: ({**h[-1], "new": h[-1]["year"] == last_year} if h else None) for k, h in history.items()}
-    return {"current": current, "history": history, "last_year": last_year}
+
+    def current(hs: dict) -> dict:
+        return {k: ({**h[-1], "new": h[-1]["year"] == last_year} if h else None) for k, h in hs.items()}
+
+    return {"current": current(history), "history": history, "reference": current(reference),
+            "reference_history": reference, "last_year": last_year}

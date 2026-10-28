@@ -6,7 +6,9 @@
 const SEGS = [['race', 'Гонка 515'], ['swim', 'Плавание 10'], ['bike', 'Вело 421'],
               ['bike1', 'Вело, 1 день'], ['bike2', 'Вело, 2 день'], ['run', 'Бег 84']];
 const COLS = [['individual', 'Личный зачёт'], ['relay', 'Эстафета'], ['absolute', 'Абсолютно лучшее время']];
-const COL_TITLE = { individual: 'личный зачёт', relay: 'эстафета', absolute: 'абсолютно лучшее' };
+const COL_TITLE = { individual: 'личный зачёт', relay: 'эстафета', absolute: 'абсолютно лучшее',
+                    relay_women: 'женская эстафета (справочно)' };
+const REFS = [['race:relay_women:X', 'Справочно: лучшая женская эстафета']];   // не рекорды — вне таблицы
 let data = null;
 
 function holderHtml(rec, key) {
@@ -21,7 +23,7 @@ function holderHtml(rec, key) {
 }
 
 function body(key) {
-  const rec = data.current[key];
+  const rec = data.current[key] || data.reference[key];
   if (!rec) return '<div class="yr">—</div>';
   return `<div class="t">${hallTime(rec.time_s)}</div>${holderHtml(rec, key)}
     <div class="yr">${rec.year}${rec.new ? ' <span class="new">НОВЫЙ</span>' : ''}</div>`;
@@ -58,6 +60,11 @@ function renderCards() {
       + card(`${seg}:individual:M`, 'Личный · М', 'm') + card(`${seg}:individual:F`, 'Личный · Ж', 'f')
       + pair('relay', 'Эстафета') + pair('absolute', 'Абсолют') + '</div>';
   }).join('');
+}
+
+function renderRefs() {
+  document.getElementById('refs').innerHTML = REFS.filter(([key]) => data.reference[key])
+    .map(([key, title]) => card(key, title, 'f')).join('');
 }
 
 function cellTitle(key) {
@@ -121,5 +128,5 @@ document.addEventListener('keydown', e => {
   if (cell && e.target === cell) { e.preventDefault(); openHistory(cell.dataset.cell, cell); }
 });
 
-hallLoad('/api/siberman/hall/records').then(d => { data = d; renderTable(); renderCards(); })
+hallLoad('/api/siberman/hall/records').then(d => { data = d; renderTable(); renderCards(); renderRefs(); })
   .catch(err => { document.getElementById('table').innerHTML = `<tr><td class="state-msg">${hallEsc(err.message)}</td></tr>`; });

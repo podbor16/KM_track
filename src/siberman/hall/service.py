@@ -101,11 +101,12 @@ def rating() -> dict:
 
 def records() -> dict:
     r = _snapshot()["records"]
-    return {"current": r["current"], "last_year": r["last_year"]}
+    return {"current": r["current"], "reference": r["reference"], "last_year": r["last_year"]}
 
 
 def record_history(cell: str) -> Optional[list]:
-    return _snapshot()["records"]["history"].get(cell)
+    r = _snapshot()["records"]
+    return r["history"][cell] if cell in r["history"] else r["reference_history"].get(cell)
 
 
 def stats() -> dict:

@@ -147,6 +147,21 @@ def test_stage_without_last_checkpoint_is_not_a_record():
     assert recs(entries)["current"]["swim:individual:M"]["holder"]["bib"] == "8"
 
 
+
+def test_women_relay_is_reference_only_all_members_female():
+    mixed = team(2020, 103, "F", swim=1, b1=1, b2=1, run=1)
+    mixed[1] = rel(2020, 103, "bike", "Велосипедов", "M", {"bike_day1": 1, "bike_day2": 1})
+    unknown = team(2021, 104, "F", swim=1, b1=1, b2=1, run=1)
+    unknown[2] = rel(2021, 104, "run", "Бегунов", None, {"run": 1})
+    r = recs([*team(2019, 101, "M"), *team(2019, 102, "F", run=20), *mixed, *team(2021, 105, "F", run=10), *unknown])
+    h = r["reference_history"]["race:relay_women:X"]
+    assert [(x["year"], x["holder"]["bib"], x["time_s"], x["delta_s"]) for x in h] == [(2019, "102", 80, None),
+                                                                                       (2021, "105", 70, 10)]
+    assert r["reference"]["race:relay_women:X"]["new"] is True
+    assert "race:relay_women:X" not in r["history"] and "race:relay_women:X" not in r["current"]
+    assert r["current"]["race:relay:X"]["holder"]["bib"] == "103"
+    assert recs([*team(2019, 101, "M")])["reference"]["race:relay_women:X"] is None
+
 from src.siberman.hall.rating import build_rating
 
 

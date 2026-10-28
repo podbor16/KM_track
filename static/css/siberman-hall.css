@@ -52,6 +52,7 @@ th { color: var(--muted); font-weight: 300; font-size: 13px; }
 .card2.m { background: var(--m); border-color: var(--m2); }
 .card2.f { background: var(--f); border-color: var(--f2); }
 .card2 .lbl2 { color: var(--ink); font-weight: 800; }
+.refs .card2 { max-width: 360px; margin: 12px auto 0; }
 .pop { position: absolute; left: 50%; transform: translateX(-50%); width: min(560px, 94%); background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); padding: 14px 16px; z-index: 10; box-sizing: border-box; }
 .pop h4 { margin: 0 0 4px; color: var(--navy); }
 .pop .close { position: absolute; right: 8px; top: 4px; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; background: none; border: 0; padding: 4px 6px; }

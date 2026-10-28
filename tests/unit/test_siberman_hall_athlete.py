@@ -100,3 +100,14 @@ def test_relay_dnf_stage_is_where_team_dropped():
     teams = build_teams(entries)
     row = build_athletes(entries, teams, build_records(entries, teams), {}, [])[1]["participations"][0]
     assert (row["status"], row["dnf_stage"], row["time_s"]) == ("dnf", "bike_day2", None)
+
+
+def test_women_relay_reference_is_not_an_athlete_record():
+    entries = [replace(rel(2020, 101, role, pid, t), gender="F")
+               for role, pid, t in (("swim", 1, (25,)), ("bike", 2, (40, 50)), ("run", 3, (50,)))]
+    teams = build_teams(entries)
+    records = build_records(entries, teams)
+    assert records["reference"]["race:relay_women:X"]["holder"]["bib"] == "101"
+    p = build_athletes(entries, teams, records, {}, [])[1]
+    assert "race:relay_women:X" not in {r["cell"] for r in p["records"]}
+    assert p["summary"]["records"] == 4             # официальные: эстафета и абсолют гонки, плавание эстафета/абсолют Ж
