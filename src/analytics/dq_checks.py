@@ -105,7 +105,7 @@ def load(conn):
     cur.execute("""SELECT id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status
                    FROM results""")
     results = cur.fetchall()
-    cur.execute("SELECT id, event_name, event_distance, event_year FROM events")
+    cur.execute("SELECT id, event_name, event_distance, event_year, event_date FROM events")
     events = cur.fetchall()
     cur.close()
     for r in clients + leads + results:
@@ -516,15 +516,24 @@ def check_foreign(data, results, leads):
     return out
 
 
-def run_checks(data, event_ids=None):
+def run_checks(data, event_ids=None, card_ids=None):
     """Без event_ids — вся база (двойники — для карточек с результатами); с event_ids —
-    результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта)."""
+    результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта).
+    card_ids — только находки, касающиеся этих карточек (дело после ответа на вопрос)."""
     results = [r for r in data.results if not event_ids or r["event_id"] in event_ids]
+    leads = [l for l in data.leads if not event_ids or l["event_id"] in event_ids]
+    if card_ids:
+        results = [r for r in results if r["client_id"] in card_ids]
+        leads = [l for l in leads if l["client_id"] in card_ids]
     cards = {r["client_id"] for r in results}
     if event_ids:
-        cards |= {l["client_id"] for l in data.leads if l["event_id"] in event_ids}
+        cards |= {l["client_id"] for l in leads}
+    if card_ids:
+        cards = set(card_ids)
     cards = sorted(cards)
-    return (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
-            + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results)
-            + check_kids_leads(data, event_ids, from_year=datetime.now().year)
-            + check_foreign(data, results, [l for l in data.leads if not event_ids or l["event_id"] in event_ids]))
+    found = (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
+             + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results)
+             + check_kids_leads(data, event_ids, from_year=datetime.now().year) + check_foreign(data, results, leads))
+    if card_ids:
+        found = [f for f in found if set(f.client_ids) & set(card_ids)]
+    return found

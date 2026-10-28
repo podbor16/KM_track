@@ -288,7 +288,7 @@ def test_checks_use_only_columns_that_load_selects():
            "event_id": 9, "event_distance": "1 км", "start_number": None}
     d = Data([only({"id": 1, "surname": "Сидоров", "name": "Ваня", "birthday": "2027-01-01"}, "clients")],
              [only(kid, "leads")], [],
-             [only({"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2030}, "events")])
+             [only({"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2030, "event_date": None}, "events")])
     d.names = NAMES
     # 3 года на 1 км — проверка обязана прочитать дистанцию заявки
     assert [(f.code, f.severity) for f in run_checks(d, {9})] == [("L-KID", "low")]
