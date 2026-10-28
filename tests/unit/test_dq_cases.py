@@ -49,3 +49,30 @@ def test_run_checks_card_scope_keeps_only_findings_of_these_cards():
     assert scoped and all(set(f.client_ids) & {1, 2} for f in scoped)
     assert {f.key for f in scoped} <= {f.key for f in every}
     assert any(f.code == "R-FOREIGN" and f.result_id == 101 for f in scoped)
+
+
+from src.analytics.dq_cases import STAGES, group_cases
+from src.analytics.dq_checks import Finding
+
+
+def test_namesakes_with_findings_join_one_case_brother_does_not():
+    d = pcarev()
+    findings = run_checks(d)
+    cases = group_cases(findings, d)
+    p = next(c for c in cases if 1 in c["cards"])
+    assert p["key"] == "c1" and set(p["cards"]) >= {1, 2, 3} and 4 not in p["cards"]
+    assert p["title"] == "Пцарев Александр"              # карточка с наибольшим числом строк — отца
+    assert {f.key for f in p["findings"]} == {f.key for f in findings if set(f.client_ids) & set(p["cards"])}
+
+
+def test_finding_without_cards_is_own_case():
+    d = pcarev()
+    f = Finding("R-CARD", "high", "результат #999 без карточки", (), 999, 10)
+    [case] = group_cases([f], d)
+    assert case["key"] == "r999" and case["cards"] == [] and case["title"] == "Результат #999 без карточки"
+
+
+def test_stages_order():
+    assert [STAGES[c] for c in ("C-TWIN", "R-LEAD", "R-FOREIGN")] == [1, 1, 1]
+    assert STAGES["R-DUP"] == 2
+    assert {STAGES[c] for c in ("R-CARD", "R-CAT", "HYG", "L-KID")} == {3}
