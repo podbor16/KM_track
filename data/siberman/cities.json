@@ -74,6 +74,7 @@
 {"name": "Минск", "country": "Беларусь", "iso": "112", "lat": 53.9025, "lon": 27.5618, "aliases": []},
 {"name": "Bad Soden am Taunus", "country": "Германия", "iso": "276", "lat": 50.1517, "lon": 8.49, "aliases": ["Bad Soden"]},
 {"name": "Вадодара", "country": "Индия", "iso": "356", "lat": 22.3072, "lon": 73.1812, "aliases": ["Vadodara, Gujarat"]},
+{"name": "Барселона", "country": "Испания", "iso": "724", "lat": 41.3874, "lon": 2.1686, "aliases": []},
 {"name": "Алматы", "country": "Казахстан", "iso": "398", "lat": 43.2389, "lon": 76.8897, "aliases": ["Алма-Аты"]},
 {"name": "Астана", "country": "Казахстан", "iso": "398", "lat": 51.1283, "lon": 71.4305, "aliases": ["Нур Султан"]},
 {"name": "Караганда", "country": "Казахстан", "iso": "398", "lat": 49.8047, "lon": 73.1094, "aliases": []},
