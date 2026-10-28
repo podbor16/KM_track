@@ -20,7 +20,7 @@ from src.common.names import norm, normalize_person_name
 # ---------------------------------------------------------------- решения и действия (dq_decisions, dq_actions)
 
 MERGEABLE = ("C-TWIN", "R-LEAD")
-DECISIONS = ("different_people", "keep")
+DECISIONS = ("different_people", "keep", "postponed")
 
 
 def load_decisions(conn):
@@ -309,12 +309,56 @@ def _check_category_sex(cur, row_id, category, sex):
         raise ValueError(f"категория «{category}» — для пола «{need}»")
 
 
+RANK_COLS = {"category": ("rank_category", "rank_category_clean"), "sex": ("rank_sex", "rank_sex_clean")}
+
+
+def _finish_key(t, ms):
+    return None if t is None else (int(t.total_seconds()), (ms % 1000) if ms is not None else 0)
+
+
+def _neighbor_rank(me_key, group, rank_col, time_key):
+    """Место первого не быстрее (место на двоих); быстрее всех медленных нет — последнее + 1."""
+    others = [r for r in group if r[time_key] is not None and r[rank_col] is not None]
+    slower = [r for r in others if r[time_key] >= me_key]
+    if slower:
+        return min(slower, key=lambda r: (r[time_key], r[rank_col]))[rank_col]
+    return max((r[rank_col] for r in others), default=0) + 1
+
+
+def _neighbor_ranks(cur, row_id, category, sex, fields):
+    """Места строки результата в новой категории (и при смене пола — среди пола) по правилу «как у соседа снизу»
+    (решение пользователя 2026-10-28): места остальных участников не трогаем. -> {колонка: место}."""
+    cur.execute("""SELECT event_id, race_status, time_gun_finish, time_gun_finish_ms, time_clear_finish,
+                          time_clear_finish_ms FROM results WHERE id = %s""", (row_id,))
+    me = cur.fetchone()
+    if not me or me["race_status"] != "Finished" or me["time_gun_finish"] is None:
+        return {}
+    cur.execute("""SELECT id, sex, category, time_gun_finish, time_gun_finish_ms, time_clear_finish, time_clear_finish_ms,
+                          rank_category, rank_category_clean, rank_sex, rank_sex_clean
+                   FROM results WHERE event_id = %s AND id <> %s AND race_status = 'Finished'
+                     AND time_gun_finish IS NOT NULL""", (me["event_id"], row_id))
+    rows = cur.fetchall()
+    for r in rows + [me]:
+        r["g"] = _finish_key(r["time_gun_finish"], r["time_gun_finish_ms"])
+        r["c"] = _finish_key(r["time_clear_finish"], r["time_clear_finish_ms"])
+    out = {}
+    for field, value in (("category", category), ("sex", sex)):
+        if field not in fields:
+            continue
+        group = [r for r in rows if r[field] == value]
+        gun_col, clean_col = RANK_COLS[field]
+        out[gun_col] = _neighbor_rank(me["g"], group, gun_col, "g")
+        if me["c"] is not None and any(r[clean_col] is not None for r in group):
+            out[clean_col] = _neighbor_rank(me["c"], group, clean_col, "c")
+    return out
+
+
 def edit_record(conn, table, row_id, fields, user, key=""):
     """Правка полей строки находки: результата, заявки или карточки. В журнал — значения «до» и «после»
     изменённых полей; отмена возвращает «до». Карточке нельзя дать ФИ+ДР другой карточки — это склейка.
     -> (карточка, id записи журнала)."""
     fields = _clean_edit(table, fields)
-    cols = list(EDITABLE[table]) + (["event_id"] if table == "leads" else [])
+    cols = list(EDITABLE[table]) + (["event_id"] if table == "leads" else []) + (list(RANK_COLS["category"] + RANK_COLS["sex"]) if table == "results" else [])
     cur = conn.cursor(dictionary=True)
     try:
         cid_col = "id" if table == "clients" else "client_id"
@@ -330,6 +374,10 @@ def edit_record(conn, table, row_id, fields, user, key=""):
             raise ValueError("значения не изменились")
         if table == "results" and {"sex", "category"} & set(changed):
             _check_category_sex(cur, row_id, changed.get("category", before["category"]), changed.get("sex", before["sex"]))
+        if table == "results" and {"sex", "category"} & set(changed):
+            ranks = _neighbor_ranks(cur, row_id, changed.get("category", before["category"]),
+                                    changed.get("sex", before["sex"]), set(changed))
+            changed.update({k: v for k, v in ranks.items() if str(v) != before.get(k)})
         if table == "clients":
             final = {k: changed.get(k, before[k]) for k in ("surname", "name", "birthday")}
             cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",
@@ -399,10 +447,11 @@ MOVABLE = {"results": "результат", "leads": "заявка"}
 CONTACTS = ("phone", "email", "city", "club")
 
 
-def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None):
+def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None, align=False):
     """Перенести результат или заявку на другую карточку — существующую (to_client_id) или новую (new_card: фамилия,
     имя, ДР). ФИ и ДР строки не меняются. Опустевшая прежняя карточка удаляется (отмена её вернёт). Заявка
     переносит на карточку свои контакты (trg_leads_after_update) — снимок контактов обеих карточек в журнале.
+    align=True — строка получает ФИ и ДР новой карточки (снимок «до» — в журнале).
     -> (карточка, id записи журнала)."""
     if table not in MOVABLE:
         raise ValueError(f"перенос из {table} не поддерживается")
@@ -435,6 +484,13 @@ def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None
         cur.execute(f"SELECT id, {', '.join(CONTACTS)} FROM clients WHERE id IN (%s, %s)", (src, target))
         contacts = {str(c.pop("id")): c for c in cur.fetchall()}
         cur.execute(f"UPDATE {table} SET client_id = %s WHERE id = %s", (target, row["id"]))
+        row_before = None
+        if align:
+            cur.execute(f"SELECT surname, name, birthday FROM {table} WHERE id = %s", (row["id"],))
+            row_before = {k: str(v) for k, v in cur.fetchone().items()}
+            cur.execute(f"""UPDATE {table} r JOIN clients c ON c.id = %s
+                            SET r.surname = c.surname, r.name = c.name, r.birthday = c.birthday WHERE r.id = %s""",
+                        (target, row["id"]))
         deleted = None
         cur.execute("""SELECT c.* FROM clients c WHERE c.id = %s
                        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
@@ -449,7 +505,7 @@ def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None
             recompute_duplicates(cur, live)
         action_id = _log_action(cur, "move_result", key, {"table": table, "row_id": row["id"], "from": src, "to": target,
                                                            "created": created, "deleted_card": deleted,
-                                                           "contacts": contacts}, user)
+                                                           "contacts": contacts, "row_before": row_before}, user)
         conn.commit()
         return target, action_id
     except Exception:
@@ -537,7 +593,7 @@ def _describe(action, d):
     if action == "edit":
         what = {"results": "результат", "leads": "заявка", "clients": "карточка"}[d["table"]]
         diff = ", ".join(f'{EDIT_LABELS.get(k, k)} {d["before"][k]} → {d["after"][k]}'
-                         for k in d["after"] if k != "event_id")
+                         for k in d["after"] if k in EDIT_LABELS)
         card = "" if d["table"] == "clients" else f', карточка #{d["client_id"]}'
         return f'Правка ({what} #{d["id"]}{card}): {diff}'
     if action == "move_result":
@@ -546,7 +602,8 @@ def _describe(action, d):
         what = "заявки" if d.get("table") == "leads" else "результата"
         return f'Перенос {what} #{d.get("row_id", d.get("result_id"))}: с карточки #{d["from"]} на {how} #{d["to"]}{tail}'
     if action == "dismiss":
-        return "Решение: " + ("разные люди" if d["decision"] == "different_people" else "оставить как есть")
+        label = {"different_people": "разные люди", "keep": "оставить как есть", "postponed": "отложено"}[d["decision"]]
+        return f"Решение: {label}" + (f' ({d["note"]})' if d.get("note") else "")
     return action
 
 
@@ -685,6 +742,10 @@ def _restore_move(cur, d):
         cur.execute(f"INSERT INTO clients ({', '.join(f'`{k}`' for k in cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
                     [card[k] for k in cols])
     cur.execute(f"UPDATE {table} SET client_id = %s WHERE id = %s", (d["from"], row_id))
+    if d.get("row_before"):
+        b = d["row_before"]
+        cur.execute(f"UPDATE {table} SET surname = %s, name = %s, birthday = %s WHERE id = %s",
+                    (b["surname"], b["name"], b["birthday"], row_id))
     if d["created"]:
         cur.execute("""DELETE c FROM clients c WHERE c.id = %s
                        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)

@@ -295,3 +295,48 @@ def test_move_lead_restores_contacts_on_undo(db):
     with pytest.raises(ValueError, match="не поддерживается"):
         dq.move_row(conn, "clients", kid, USER, to_client_id=parent)
 
+
+
+def test_move_with_align_sets_row_fio_bd_of_target_and_undo(db):
+    conn, cur = db
+    e1 = event(cur, 1.0)
+    rid, father = result(cur, e1, 1012, "1980-03-09", name="Александр")
+    _, son = result(cur, event(cur, 5.0), 1141, "2013-12-20", name="Саша")
+    conn.commit()
+    to, aid = dq.move_row(conn, "results", rid, USER, "k", to_client_id=son, align=True)
+    cur.execute("SELECT client_id, surname, name, birthday FROM results WHERE id = %s", (rid,))
+    assert cur.fetchone() == {"client_id": son, "surname": SUR, "name": "Саша", "birthday": datetime.date(2013, 12, 20)}
+    dq.undo_action(conn, aid, USER)
+    cur.execute("SELECT client_id, name, birthday FROM results WHERE id = %s", (rid,))
+    assert cur.fetchone() == {"client_id": father, "name": "Александр", "birthday": datetime.date(1980, 3, 9)}
+
+
+def test_category_change_sets_neighbor_rank_and_undo(db):
+    conn, cur = db
+    ev = event(cur, 5.0)
+    rows = []
+    for bib, cat, mins in ((1, "М18-29", 24), (2, "М30-39", 21), (3, "М30-39", 23), (4, "М18-29", 22)):
+        rid, _ = result(cur, ev, bib, f"1990-01-0{bib}", name=f"Иван{bib}")
+        cur.execute("""UPDATE results SET category = %s, time_gun_finish = SEC_TO_TIME(%s), rank_category = %s
+                       WHERE id = %s""", (cat, mins * 60, {1: 2, 2: 1, 3: 2, 4: 1}[bib], rid))
+        rows.append(rid)
+    conn.commit()
+    # №4 (22 мин) переводим в М30-39: сосед снизу — №3 (23 мин, место 2) → №4 получает место 2
+    _, aid = dq.edit_record(conn, "results", rows[3], {"category": "М30-39"}, USER)
+    cur.execute("SELECT category, rank_category FROM results WHERE id = %s", (rows[3],))
+    assert cur.fetchone() == {"category": "М30-39", "rank_category": 2}
+    cur.execute("SELECT rank_category FROM results WHERE id IN (%s, %s) ORDER BY id", (rows[1], rows[2]))
+    assert [r["rank_category"] for r in cur.fetchall()] == [1, 2]            # остальных не трогаем
+    dq.undo_action(conn, aid, USER)
+    cur.execute("SELECT category, rank_category FROM results WHERE id = %s", (rows[3],))
+    assert cur.fetchone() == {"category": "М18-29", "rank_category": 1}
+
+
+def test_postponed_decision_and_undo(db):
+    conn, cur = db
+    did = dq.dismiss(conn, "TEST-UNDO::postpone", "postponed", "не знаю ДР", USER)
+    assert dq.load_decisions(conn)["TEST-UNDO::postpone"] == "postponed"
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert journal[did]["text"] == "Решение: отложено (не знаю ДР)"
+    dq.undo_action(conn, did, USER)
+    assert "TEST-UNDO::postpone" not in dq.load_decisions(conn)
