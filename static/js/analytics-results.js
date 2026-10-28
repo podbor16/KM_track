@@ -427,6 +427,7 @@ function normalizeRunnerData(runners) {
         return {
             // ID результата (важно для загрузки сегментов!)
             id: runner.id || runner.client_id || '',
+            client_id: runner.client_id,
             
             // Основная информация
             surname: runner.surname || '',
@@ -1295,7 +1296,7 @@ function buildDetailPanelHTML(runner) {
     const rankCatClean = runner.rank_category_clean ? fmtRank(runner.rank_category_clean, nCat) : '—';
 
     const profileUrl = `/athlete-profile?id=${encodeURIComponent(runner.client_id || '')}`;
-    const profileBtn = PROFILE_BUTTON_ENABLED
+    const profileBtn = (PROFILE_BUTTON_ENABLED && runner.client_id)
         ? `<a href="${profileUrl}" class="km-btn-profile" target="_blank">Профиль</a>`
         : '';
 
