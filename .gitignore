@@ -103,3 +103,8 @@ config/duathlon222_maintenance_mode.local
 
 # Мокапы brainstorming-скилла (визуальный компаньон) — локальный черновой вывод
 .superpowers/
+
+# Рантайм-файлы прода: журнал высокой нагрузки (src/monitoring/collector.py) и копия
+# deploy/run_loader.sh, которую автодеплой кладёт в корень (.github/workflows/deploy.yml)
+data/high_load_alerts.csv
+/run_loader.sh
