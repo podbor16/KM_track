@@ -101,3 +101,19 @@ def test_actions_journal_limit_clamped(conn):
         r = client.get("/api/admin/data-quality/actions?limit=100000")
     assert r.json() == {"actions": [{"id": 1}]}
     assert m.call_args.args == (conn, 500)
+
+
+def test_move_result_requires_exactly_one_target(conn):
+    with patch(f"{R}.dq.move_result", return_value=(49463, 1656)) as m:
+        r = client.post("/api/admin/data-quality/move-result", json={"result_id": 118233, "to_client_id": 49463, "key": "k"})
+    assert r.json() == {"ok": True, "client_id": 49463, "action_id": 1656}
+    assert m.call_args.args == (conn, 118233, "testuser", "k", 49463, None)
+    assert client.post("/api/admin/data-quality/move-result", json={"result_id": 1}).status_code == 422
+    both = {"result_id": 1, "to_client_id": 2, "new_card": {"surname": "А", "name": "Б", "birthday": "2000-01-01"}}
+    assert client.post("/api/admin/data-quality/move-result", json=both).status_code == 422
+
+
+def test_cards_search(conn):
+    with patch(f"{R}.dq.search_cards", return_value=[{"id": 1}]) as m:
+        r = client.get("/api/admin/data-quality/cards?q=Чернова Соф")
+    assert r.json() == {"cards": [{"id": 1}]} and m.call_args.args == (conn, "Чернова Соф")

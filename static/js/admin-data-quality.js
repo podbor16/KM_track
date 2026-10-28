@@ -120,6 +120,8 @@ function dqItemHtml(f) {
             + `<button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить как есть</button>`;
     }
     if (f.record) actions += `<button class="km-btn km-btn--secondary" onclick="dqToggleEdit(${idx})">Исправить…</button>`;
+    if (f.record && f.record.table === 'results')
+        actions += `<button class="km-btn km-btn--secondary" onclick="dqToggleMove(${idx})">Перенести на карточку…</button>`;
     return `<div class="dq-item dq-item--${dqEsc(f.severity)}" id="dq-item-${idx}">
         <div class="dq-item-head">
             <span class="admin-badge dq-sev--${dqEsc(f.severity)}">${dqEsc(DQ_SEVERITY[f.severity] || f.severity)}</span>
@@ -131,6 +133,7 @@ function dqItemHtml(f) {
         ${blockers}
         <div class="dq-actions">${actions}<span class="dq-status"></span></div>
         ${f.record ? dqEditHtml(f, idx) : ''}
+        ${f.record && f.record.table === 'results' ? dqMoveHtml(f, idx) : ''}
     </div>`;
 }
 
@@ -362,4 +365,94 @@ async function dqLoadJournal() {
     } catch (e) {
         box.innerHTML = `<div class="admin-error">Ошибка: ${dqEsc(e.message)}</div>`;
     }
+}
+
+// ---- Перенос результата на другую карточку (поиск по ФИО) ----
+
+function dqCardLine(c) {
+    return `<span class="dq-move-card">#${Number(c.id)} ${dqEsc(c.surname)} ${dqEsc(c.name)} <b>${dqEsc(c.birthday)}</b></span>`;
+}
+
+function dqMoveHtml(f, idx) {
+    const rec = f.record;
+    const cur = (f.cards || [])[0];                     // у находок с результатом первая карточка — карточка результата
+    const leadCard = f.code === 'R-LEAD' && f.cards.length > 1 ? f.cards[1] : null;
+    const hint = leadCard ? `<div class="dq-move-row">На карточку заявки: ${dqCardLine(leadCard)}
+        <button class="km-btn km-btn--primary" onclick="dqMove(${idx}, ${Number(leadCard.id)}, this)">Сюда</button></div>` : '';
+    return `<div class="dq-edit dq-move" id="dq-move-${idx}" hidden>
+        <div class="dq-muted">Перенос результата #${Number(rec.id)} (${dqEsc(rec.surname)} ${dqEsc(rec.name)} ${dqEsc(rec.birthday)})
+            ${cur ? ` с карточки #${Number(cur.id)}` : ''}. ФИО и ДР в результате не меняются.</div>
+        ${hint}
+        <input class="admin-select dq-move-q" placeholder="Поиск карточки: фамилия имя" value="${dqEsc(rec.surname)}"
+               oninput="dqSearchCards(${idx})">
+        <div class="dq-move-list"></div>
+        <details class="dq-move-new"><summary>Новая карточка</summary>
+            <div class="dq-merge">
+                <input class="admin-select" data-new="surname" value="${dqEsc(rec.surname)}" placeholder="Фамилия">
+                <input class="admin-select" data-new="name" value="${dqEsc(rec.name)}" placeholder="Имя">
+                <input class="admin-select" data-new="birthday" value="${dqEsc(rec.birthday)}" placeholder="ГГГГ-ММ-ДД">
+                <button class="km-btn km-btn--primary" onclick="dqMoveNew(${idx}, this)">Создать и перенести</button>
+            </div>
+        </details>
+    </div>`;
+}
+
+function dqToggleMove(idx) {
+    const box = document.getElementById(`dq-move-${idx}`);
+    if (!box) return;
+    box.hidden = !box.hidden;
+    if (!box.hidden) dqSearchCards(idx);
+}
+
+const dqSearchTimers = {};
+function dqSearchCards(idx) {
+    clearTimeout(dqSearchTimers[idx]);
+    dqSearchTimers[idx] = setTimeout(async () => {
+        const box = document.getElementById(`dq-move-${idx}`);
+        const q = box.querySelector('.dq-move-q').value.trim();
+        const list = box.querySelector('.dq-move-list');
+        if (q.length < 2) { list.innerHTML = ''; return; }
+        list.innerHTML = '<div class="dq-muted">Поиск…</div>';
+        try {
+            const { cards } = await dqRequest('/api/admin/data-quality/cards?q=' + encodeURIComponent(q));
+            if (box.querySelector('.dq-move-q').value.trim() !== q) return;      // ввод изменился — ждём свежий ответ
+            const own = new Set((dqFindings[idx].cards || []).slice(0, 1).map(c => c.id));
+            list.innerHTML = cards.length ? cards.map(c => `<div class="dq-move-row">
+                <span>${dqCardLine(c)} <span class="dq-muted">${dqEsc((c.events || []).join('; ') || 'без забегов')}</span></span>
+                ${own.has(c.id) ? '<span class="dq-muted">текущая</span>'
+                    : `<button class="km-btn km-btn--secondary" onclick="dqMove(${idx}, ${Number(c.id)}, this)">Сюда</button>`}
+            </div>`).join('') : '<div class="dq-muted">Ничего не найдено</div>';
+        } catch (e) {
+            list.innerHTML = `<div class="dq-status">${dqEsc(e.message)}</div>`;
+        }
+    }, 300);
+}
+
+async function dqSendMove(idx, body, text, btn) {
+    const f = dqFindings[idx];
+    btn.disabled = true;
+    try {
+        const r = await dqRequest('/api/admin/data-quality/move-result', { result_id: f.record.id, key: f.key, ...body });
+        dqDone(idx, `${text} #${r.client_id}`, r.action_id);
+        document.getElementById(`dq-move-${idx}`).hidden = true;
+    } catch (e) {
+        btn.disabled = false;
+        const st = document.querySelector(`#dq-item-${idx} .dq-status`);
+        if (st) st.textContent = e.message;
+        alert(e.message);
+    }
+}
+
+function dqMove(idx, clientId, btn) {
+    const card = btn.closest('.dq-move-row')?.querySelector('.dq-move-card')?.innerText || `#${clientId}`;
+    if (!confirm(`Перенести результат на карточку ${card}?`)) return;
+    dqSendMove(idx, { to_client_id: clientId }, 'Результат перенесён на карточку', btn);
+}
+
+function dqMoveNew(idx, btn) {
+    const box = document.getElementById(`dq-move-${idx}`);
+    const card = {};
+    box.querySelectorAll('[data-new]').forEach(el => { card[el.dataset.new] = el.value.trim(); });
+    if (!confirm(`Создать карточку ${card.surname} ${card.name} ${card.birthday} и перенести на неё результат?`)) return;
+    dqSendMove(idx, { new_card: card }, 'Результат перенесён на новую карточку', btn);
 }

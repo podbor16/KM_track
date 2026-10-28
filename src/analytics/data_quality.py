@@ -786,6 +786,100 @@ def edit_record(conn, table, row_id, fields, user, key=""):
         cur.close()
 
 
+CARD_SEARCH_LIMIT = 20
+
+
+def search_cards(conn, q, limit=CARD_SEARCH_LIMIT):
+    """Карточки по ФИО (начало фамилии и имени, в любом порядке) -> [{id, surname, name, birthday, events}]."""
+    words = [w for w in re.split(r"\s+", normalize_person_name(q or "")) if w][:2]
+    if not words or len(words[0]) < 2:
+        return []
+    like = [w.replace("%", "").replace("_", "") + "%" for w in words]
+    if len(like) == 1:
+        where, args = "surname LIKE %s", like
+    else:
+        where, args = "(surname LIKE %s AND name LIKE %s) OR (surname LIKE %s AND name LIKE %s)", like + like[::-1]
+    cur = conn.cursor(dictionary=True)
+    cur.execute(f"SELECT id, surname, name, birthday FROM clients WHERE id <> 0 AND ({where}) "
+                f"ORDER BY surname, name, birthday LIMIT %s", (*args, int(limit)))
+    cards = cur.fetchall()
+    if cards:
+        ph = ",".join(str(c["id"]) for c in cards)
+        cur.execute(f"""SELECT x.client_id, e.event_name, e.event_distance, e.event_year, x.kind FROM (
+                            SELECT client_id, event_id, 'результат' kind FROM results WHERE client_id IN ({ph})
+                            UNION SELECT client_id, event_id, 'заявка' FROM leads WHERE client_id IN ({ph})) x
+                        JOIN events e ON e.id = x.event_id ORDER BY e.event_year, e.event_name""")
+        events = collections.defaultdict(list)
+        for r in cur.fetchall():
+            events[r["client_id"]].append(f'{r["event_name"]} {r["event_distance"]} {r["event_year"]} ({r["kind"]})'
+                                          .replace(".0 ", " "))
+        for c in cards:
+            c["birthday"] = str(c["birthday"])
+            c["events"] = events[c["id"]]
+    cur.close()
+    return cards
+
+
+def _card_by_fio(cur, surname, name, birthday, exclude=0):
+    cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",
+                (surname, name, birthday, exclude))
+    row = cur.fetchone()
+    return row["id"] if row else None
+
+
+def move_result(conn, result_id, user, key="", to_client_id=None, new_card=None):
+    """Перенести результат на другую карточку — существующую (to_client_id) или новую (new_card: фамилия, имя,
+    ДР). ФИ и ДР строки результата не меняются. Опустевшая прежняя карточка удаляется (отмена её вернёт).
+    -> (карточка, id записи журнала)."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, client_id FROM results WHERE id = %s", (int(result_id),))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"нет результата #{result_id}")
+        src = row["client_id"]
+        created = False
+        if new_card:
+            f = _clean_edit("clients", {k: new_card.get(k, "") for k in ("surname", "name", "birthday")})
+            if len(f) < 3:
+                raise ValueError("для новой карточки нужны фамилия, имя и ДР")
+            other = _card_by_fio(cur, f["surname"], f["name"], f["birthday"])
+            if other:
+                raise ValueError(f"такие ФИ и ДР уже у карточки #{other} — выберите её")
+            cur.execute("INSERT INTO clients (surname, name, birthday) VALUES (%s, %s, %s)",
+                        (f["surname"], f["name"], f["birthday"]))
+            target, created = cur.lastrowid, True
+        else:
+            target = int(to_client_id or 0)
+            cur.execute("SELECT id FROM clients WHERE id = %s AND id <> 0", (target,))
+            if not cur.fetchone():
+                raise ValueError(f"нет карточки #{to_client_id}")
+        if target == src:
+            raise ValueError("результат уже на этой карточке")
+        cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (target, row["id"]))
+        deleted = None
+        cur.execute("""SELECT c.* FROM clients c WHERE c.id = %s
+                       AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
+                       AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)""", (src,))
+        empty = cur.fetchone()
+        if empty:
+            deleted = dict(empty)
+            cur.execute("DELETE FROM clients WHERE id = %s", (src,))
+            recompute_aggregates(cur, [target])
+        else:
+            recompute_aggregates(cur, [src, target])
+        action_id = _log_action(cur, "move_result", key, {"result_id": row["id"], "from": src, "to": target,
+                                                           "created": created, "deleted_card": deleted}, user)
+        conn.commit()
+        return target, action_id
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
 def apply_auto(conn, user):
     """Очевидное без ревью: «Not started» со старым номером; двойники и R-LEAD уровня high,
     если склейке не мешает ни один предохранитель и ДР определяется."""
@@ -832,7 +926,7 @@ def apply_auto(conn, user):
 
 # ---------------------------------------------------------------- отмена действий (запись «undo» в dq_actions)
 
-UNDOABLE = ("merge", "fix_fio", "delete_result", "dismiss", "edit")
+UNDOABLE = ("merge", "fix_fio", "delete_result", "dismiss", "edit", "move_result")
 
 
 def _cards_of(action, d):
@@ -845,6 +939,8 @@ def _cards_of(action, d):
         return {d["before"]["client_id"]}
     if action == "edit":
         return {d["client_id"]}
+    if action == "move_result":
+        return {d["from"], d["to"]}
     return set()
 
 
@@ -864,6 +960,10 @@ def _describe(action, d):
                          for k in d["after"] if k != "event_id")
         card = "" if d["table"] == "clients" else f', карточка #{d["client_id"]}'
         return f'Правка ({what} #{d["id"]}{card}): {diff}'
+    if action == "move_result":
+        how = "новую карточку" if d["created"] else "карточку"
+        tail = f' (пустая карточка #{d["from"]} удалена)' if d.get("deleted_card") else ""
+        return f'Перенос результата #{d["result_id"]}: с карточки #{d["from"]} на {how} #{d["to"]}{tail}'
     if action == "dismiss":
         return "Решение: " + ("разные люди" if d["decision"] == "different_people" else "оставить как есть")
     return action
@@ -992,6 +1092,24 @@ def _restore_edit(cur, d):
         recompute_duplicates(cur, [d["client_id"]])
 
 
+def _restore_move(cur, d):
+    """Результат — обратно на прежнюю карточку (удалённую — вернуть с прежним id); созданную переносом — удалить."""
+    card = d.get("deleted_card")
+    if card:
+        if _card_by_fio(cur, card["surname"], card["name"], card["birthday"]):
+            raise ValueError(f'{card["surname"]} {card["name"]} {card["birthday"]} уже у другой карточки — отмена невозможна')
+        cols = list(card)
+        cur.execute(f"INSERT INTO clients ({', '.join(f'`{k}`' for k in cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
+                    [card[k] for k in cols])
+    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (d["from"], d["result_id"]))
+    if d["created"]:
+        cur.execute("""DELETE c FROM clients c WHERE c.id = %s
+                       AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
+                       AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)""", (d["to"],))
+    cur.execute("SELECT id FROM clients WHERE id IN (%s, %s)", (d["from"], d["to"]))
+    recompute_aggregates(cur, [r["id"] for r in cur.fetchall()])
+
+
 def undo_action(conn, action_id, user):
     """Отменить действие из журнала по снимку «до». Нельзя, если уже отменено или после него было
     неотменённое действие с теми же карточками (сначала отменить его). -> id записи «undo»."""
@@ -1018,6 +1136,8 @@ def undo_action(conn, action_id, user):
             _restore_result(cur, d["before"])
         elif row["action"] == "edit":
             _restore_edit(cur, d)
+        elif row["action"] == "move_result":
+            _restore_move(cur, d)
         else:
             cur.execute("DELETE FROM dq_decisions WHERE finding_key = %s AND decision = %s",
                         (row["finding_key"], d["decision"]))

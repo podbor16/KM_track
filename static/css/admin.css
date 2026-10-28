@@ -590,6 +590,14 @@
 .dq-edit { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--km-border-light); }
 .dq-edit .dq-merge { align-items: flex-end; margin-top: 6px; }
 .dq-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--km-text-secondary); min-width: 0; max-width: 100%; }
+.dq-move .dq-move-q { width: 100%; max-width: 360px; margin: 8px 0 4px; }
+.dq-move-list { max-height: 280px; overflow-y: auto; }
+.dq-move-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 6px 0;
+               border-bottom: 1px solid var(--km-border-light); overflow-wrap: anywhere; }
+.dq-move-row > :last-child { flex-shrink: 0; white-space: nowrap; }
+.dq-move-card b { white-space: nowrap; }
+.dq-move-new { margin-top: 8px; }
+.dq-move-new summary { cursor: pointer; color: var(--km-text-secondary); font-size: 0.9rem; margin-bottom: 6px; }
 .dq-edit .dq-in-category { width: auto; min-width: 150px; max-width: 100%; }
 .dq-status { font-size: 0.9rem; color: #721c24; }
 .dq-status--ok { color: #155724; }

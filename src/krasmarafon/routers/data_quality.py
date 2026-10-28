@@ -48,6 +48,13 @@ class EditBody(BaseModel):
     key: str = ""
 
 
+class MoveResultBody(BaseModel):
+    result_id: int
+    to_client_id: Optional[int] = None
+    new_card: Optional[dict[str, str]] = None
+    key: str = ""
+
+
 class UndoBody(BaseModel):
     action_id: int
 
@@ -104,6 +111,20 @@ async def fix_fio(body: FixFioBody, user: str = Depends(api_require_auth)) -> di
 @router.post("/api/admin/data-quality/edit")
 async def edit(body: EditBody, user: str = Depends(api_require_auth)) -> dict:
     cid, action_id = await run_in_threadpool(_with_conn, dq.edit_record, body.table, body.id, body.fields, user, body.key)
+    return {"ok": True, "client_id": cid, "action_id": action_id}
+
+
+@router.get("/api/admin/data-quality/cards")
+async def cards(q: str = "", user: str = Depends(api_require_auth)) -> dict:
+    return {"cards": await run_in_threadpool(_with_conn, dq.search_cards, q)}
+
+
+@router.post("/api/admin/data-quality/move-result")
+async def move_result(body: MoveResultBody, user: str = Depends(api_require_auth)) -> dict:
+    if (body.to_client_id is None) == (body.new_card is None):
+        raise HTTPException(status_code=422, detail="нужна либо карточка, либо данные новой карточки")
+    cid, action_id = await run_in_threadpool(
+        _with_conn, lambda conn: dq.move_result(conn, body.result_id, user, body.key, body.to_client_id, body.new_card))
     return {"ok": True, "client_id": cid, "action_id": action_id}
 
 

@@ -222,3 +222,54 @@ def test_edit_validation(db):
     dq.edit_record(conn, "results", rid, {"sex": "Женщина", "category": "Ж18-29"}, USER)
     with pytest.raises(ValueError, match="не поддерживается"):
         dq.edit_record(conn, "events", 1, {"name": "x"}, USER)
+
+
+def test_move_result_to_existing_card_deletes_empty_source_and_undo(db):
+    conn, cur = db
+    e1, e2 = event(cur, 1.0), event(cur, 0.5)
+    r_own, girl = result(cur, e1, 686, "2016-08-02", name="София")
+    r_moved, wrong = result(cur, e2, 6020, "1900-01-01", name="София")       # заглушка ДР — своя карточка
+    conn.commit()
+    assert girl != wrong
+    wrong_before = card(cur, wrong)
+
+    to, aid = dq.move_result(conn, r_moved, USER, "TEST-UNDO::move", to_client_id=girl)
+    assert to == girl and owner(cur, "results", r_moved) == {"client_id": girl, "birthday": datetime.date(1900, 1, 1)}
+    assert card(cur, wrong) is None                                          # опустела — удалена
+    assert card(cur, girl)["last_result_id"] == max(r_own, r_moved)
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert f"пустая карточка #{wrong} удалена" in journal[aid]["text"]
+    with pytest.raises(ValueError, match="уже на этой карточке"):
+        dq.move_result(conn, r_moved, USER, to_client_id=girl)
+
+    dq.undo_action(conn, aid, USER)
+    assert owner(cur, "results", r_moved)["client_id"] == wrong and card(cur, wrong) == wrong_before
+
+
+def test_move_result_to_new_card_and_undo(db):
+    conn, cur = db
+    e1, e2 = event(cur, 21.1), event(cur, 10.0)
+    r1, cid = result(cur, e1, 1, "1980-03-09")
+    r2, cid2 = result(cur, e2, 2, "1980-03-09")                               # тёзки с одной ДР — одна карточка
+    lead(cur, e1, "1980-03-09")
+    conn.commit()
+    assert cid == cid2
+    with pytest.raises(ValueError, match=f"#{cid}"):
+        dq.move_result(conn, r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1980-03-09"})
+    to, aid = dq.move_result(conn, r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1981-03-09"})
+    assert to != cid and owner(cur, "results", r2)["client_id"] == to and card(cur, cid)   # у старой остались строки
+    assert card(cur, to)["birthday"] == datetime.date(1981, 3, 9)
+    dq.undo_action(conn, aid, USER)
+    assert owner(cur, "results", r2)["client_id"] == cid and card(cur, to) is None
+
+
+def test_search_cards_by_fio_any_order(db):
+    conn, cur = db
+    _, cid = result(cur, event(cur, 5.0), 1, "1990-05-05", name="Софья")
+    conn.commit()
+    for q in (f"{SUR.lower()} соф", f"Соф {SUR[:5]}", SUR):
+        found = {c["id"]: c for c in dq.search_cards(conn, q)}
+        assert cid in found, q
+    c = found[cid]
+    assert c["birthday"] == "1990-05-05" and c["events"] == [f"{EV} 5 2099 (результат)"]
+    assert dq.search_cards(conn, "Т") == [] and dq.search_cards(conn, "") == []
