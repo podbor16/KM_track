@@ -325,3 +325,29 @@ def test_category_options_sex_from_label_or_runners():
         {"label": "Ж12-13", "sex": "Женщина"}, {"label": "М2-5", "sex": "Мужчина"},
         {"label": "М10-12", "sex": "Мужчина"}, {"label": "Элита", "sex": "Женщина"}]
 
+
+# ---------------------------------------------------------------- «Похоже, чужая строка» (как Черновы)
+
+def test_check_foreign_kids_and_adult_rows_on_namesake_cards():
+    from src.analytics.data_quality import check_foreign
+    events = [{"id": 10, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2018},
+              {"id": 11, "event_name": "Жара", "event_distance": 21.1, "event_year": 2020},
+              {"id": 12, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2024}]
+    clients = [C(1, "Карпова", "Ольга", "1982-12-14"), C(2, "Карпова", "Ольга", "2013-11-22"),
+               C(3, "Николаев", "Дмитрий", "2015-03-18"), C(4, "Николаев", "Дмитрий", "1987-01-01"),
+               C(5, "Шкуратова", "Таисия", "2018-01-26"), C(6, "Дягель", "Алексей", "1994-06-30"),
+               C(7, "Дягель", "Алексей", "2017-04-15"), C(8, "Юдина", "Оксана", "1988-10-31")]
+    results = [R(100, 1, "Карпова", "Ольга", "1982-12-14", 10, 1246, cat="Девочки 2013-2018 г.р.", sex="Женщина"),
+               R(101, 3, "Николаев", "Дмитрий", "2015-03-18", 11, 2363, cat="М30-34"),
+               R(102, 5, "Шкуратова", "Таисия", "2018-01-26", 10, 1190, cat="Девочки 2013-2018 г.р.", sex="Женщина"),
+               R(103, 8, "Юдина", "Оксана", "1988-10-31", 10, 1137, cat="Девочки 2012 г.р. и младше", sex="Женщина")]
+    leads = [dict(L(200, 6, "Дягель", "Алексей", "2017-04-15", 12), event_distance="1 км"),
+             dict(L(201, 1, "Карпова", "Ольга", "1982-12-14", 11), event_distance="21.1")]
+    d = Data(clients, leads, results, events)
+    found = {(f.result_id or f.lead_id): f for f in check_foreign(d, results, leads)}
+    assert set(found) == {100, 101, 103, 200}          # 0 лет в категории «2013-2018» — норма; взрослая заявка — норма
+    assert found[100].client_ids == (1, 2) and found[100].severity == "high"
+    assert found[101].client_ids == (3, 4)
+    assert found[103].client_ids == (8,) and found[103].severity == "medium"      # тёзки нет — новая карточка
+    assert found[200].client_ids == (6, 7) and found[200].lead_id == 200 and found[200].result_id is None
+

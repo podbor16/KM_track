@@ -48,8 +48,9 @@ class EditBody(BaseModel):
     key: str = ""
 
 
-class MoveResultBody(BaseModel):
-    result_id: int
+class MoveBody(BaseModel):
+    table: Literal["results", "leads"] = "results"
+    row_id: int
     to_client_id: Optional[int] = None
     new_card: Optional[dict[str, str]] = None
     key: str = ""
@@ -119,12 +120,12 @@ async def cards(q: str = "", user: str = Depends(api_require_auth)) -> dict:
     return {"cards": await run_in_threadpool(_with_conn, dq.search_cards, q)}
 
 
-@router.post("/api/admin/data-quality/move-result")
-async def move_result(body: MoveResultBody, user: str = Depends(api_require_auth)) -> dict:
+@router.post("/api/admin/data-quality/move")
+async def move(body: MoveBody, user: str = Depends(api_require_auth)) -> dict:
     if (body.to_client_id is None) == (body.new_card is None):
         raise HTTPException(status_code=422, detail="нужна либо карточка, либо данные новой карточки")
     cid, action_id = await run_in_threadpool(
-        _with_conn, lambda conn: dq.move_result(conn, body.result_id, user, body.key, body.to_client_id, body.new_card))
+        _with_conn, lambda conn: dq.move_row(conn, body.table, body.row_id, user, body.key, body.to_client_id, body.new_card))
     return {"ok": True, "client_id": cid, "action_id": action_id}
 
 

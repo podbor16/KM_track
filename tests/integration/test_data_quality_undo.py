@@ -233,14 +233,14 @@ def test_move_result_to_existing_card_deletes_empty_source_and_undo(db):
     assert girl != wrong
     wrong_before = card(cur, wrong)
 
-    to, aid = dq.move_result(conn, r_moved, USER, "TEST-UNDO::move", to_client_id=girl)
+    to, aid = dq.move_row(conn, "results", r_moved, USER, "TEST-UNDO::move", to_client_id=girl)
     assert to == girl and owner(cur, "results", r_moved) == {"client_id": girl, "birthday": datetime.date(1900, 1, 1)}
     assert card(cur, wrong) is None                                          # опустела — удалена
     assert card(cur, girl)["last_result_id"] == max(r_own, r_moved)
     journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
     assert f"пустая карточка #{wrong} удалена" in journal[aid]["text"]
-    with pytest.raises(ValueError, match="уже на этой карточке"):
-        dq.move_result(conn, r_moved, USER, to_client_id=girl)
+    with pytest.raises(ValueError, match="результат уже на этой карточке"):
+        dq.move_row(conn, "results", r_moved, USER, to_client_id=girl)
 
     dq.undo_action(conn, aid, USER)
     assert owner(cur, "results", r_moved)["client_id"] == wrong and card(cur, wrong) == wrong_before
@@ -255,8 +255,8 @@ def test_move_result_to_new_card_and_undo(db):
     conn.commit()
     assert cid == cid2
     with pytest.raises(ValueError, match=f"#{cid}"):
-        dq.move_result(conn, r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1980-03-09"})
-    to, aid = dq.move_result(conn, r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1981-03-09"})
+        dq.move_row(conn, "results", r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1980-03-09"})
+    to, aid = dq.move_row(conn, "results", r2, USER, new_card={"surname": SUR, "name": "Иван", "birthday": "1981-03-09"})
     assert to != cid and owner(cur, "results", r2)["client_id"] == to and card(cur, cid)   # у старой остались строки
     assert card(cur, to)["birthday"] == datetime.date(1981, 3, 9)
     dq.undo_action(conn, aid, USER)
@@ -273,3 +273,25 @@ def test_search_cards_by_fio_any_order(db):
     c = found[cid]
     assert c["birthday"] == "1990-05-05" and c["events"] == [f"{EV} 5 2099 (результат)"]
     assert dq.search_cards(conn, "Т") == [] and dq.search_cards(conn, "") == []
+
+
+def test_move_lead_restores_contacts_on_undo(db):
+    conn, cur = db
+    e1 = event(cur, 1.0)
+    _, kid = result(cur, e1, 5, "2017-04-15", name="Иван")
+    lid, parent = lead(cur, e1, "1994-06-30", phone="+70000000009")       # заявка ребёнка на карточке родителя
+    conn.commit()
+    cur.execute("UPDATE clients SET phone = '+70000000001', email = 'kid@test.ru' WHERE id = %s", (kid,))
+    conn.commit()
+    before = {i: card(cur, i) for i in (kid, parent)}
+    to, aid = dq.move_row(conn, "leads", lid, USER, "TEST-UNDO::lead", to_client_id=kid)
+    assert to == kid and owner(cur, "leads", lid)["client_id"] == kid
+    assert card(cur, parent) is None                                       # у родителя больше ничего — удалена
+    assert card(cur, kid)["count_leads"] == 1 and card(cur, kid)["phone"] == "+70000000009"   # триггер заявок
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert journal[aid]["text"].startswith(f"Перенос заявки #{lid}")
+    dq.undo_action(conn, aid, USER)
+    assert {i: card(cur, i) for i in (kid, parent)} == before and owner(cur, "leads", lid)["client_id"] == parent
+    with pytest.raises(ValueError, match="не поддерживается"):
+        dq.move_row(conn, "clients", kid, USER, to_client_id=parent)
+

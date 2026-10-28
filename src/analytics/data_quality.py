@@ -436,6 +436,85 @@ def check_kids_leads(data, event_ids=None, from_year=None):
     return out
 
 
+FOREIGN_GAP = 5          # лет мимо категории — и без подходящего тёзки строка явно чужая
+
+
+def _kid_age(bd, year):
+    return None if not real_bd(bd) else year - int(bd[:4])
+
+
+def _is_kid(bd, year):
+    """Возраст детского забега: 0 лет — тоже (категории «2013-2018 г.р.» на старте 2018)."""
+    age = _kid_age(bd, year)
+    return age is not None and 0 <= age <= KIDS_MAX_AGE
+
+
+def card_fits_category(bd, cat, year):
+    """Категория подходит к ДР (допуск 1 год; ребёнок в младшей доступной категории — норма); None — не проверить."""
+    fits = bd_fits_category(bd, cat, year)
+    if fits is not False:
+        return fits
+    _, lo, hi = cat_rule(cat, year)
+    return lo is not None and int(bd[:4]) > lo + 1 and (hi is None or year - hi <= 18)
+
+
+def _category_gap(bd, cat, year):
+    _, lo, hi = cat_rule(cat, year)
+    y = int(bd[:4])
+    return (lo - y) if lo is not None and y < lo else (y - hi) if hi is not None and y > hi else 0
+
+
+def check_foreign(data, results, leads):
+    """Строка, похоже, на карточке тёзки (как Черновы): детский результат/заявка на карточке не ребёнка, результат
+    взрослого забега, чья категория не подходит ДР карточки. Подходящие тёзки — вторыми карточками находки."""
+    out = []
+
+    def namesakes(cid, ok):
+        c = data.clients[cid]
+        return [i for i in data.cards_by_fio[fio_key(c)] if i != cid and ok(data.clients[i]["birthday"])]
+
+    def add(row, why, others, lead=False):
+        bib = "" if lead else f' №{row["start_number"]}'
+        msg = f'{data.event_label(row["event_id"])}{bib}: {why} — {data.card_label(row["client_id"])}'
+        if others:
+            msg += "; подходит: " + ", ".join(data.card_label(i) for i in others[:3])
+        out.append(Finding("R-FOREIGN", "high" if others else "medium", msg, (row["client_id"], *others[:3]),
+                           None if lead else row["id"], row["event_id"], lead_id=row["id"] if lead else None))
+
+    for r in results:
+        c = data.clients.get(r["client_id"])
+        if not c or not real_bd(c["birthday"]):
+            continue
+        ev = data.events.get(r["event_id"], {})
+        year = int(ev.get("event_year") or 0)
+        if ev.get("event_name") == KIDS_EVENT:
+            age = _kid_age(c["birthday"], year)
+            if not _is_kid(c["birthday"], year):
+                kids = namesakes(r["client_id"], lambda bd: _is_kid(bd, year))
+                add(r, f"детский забег, а по ДР карточки возраст {age}", kids)
+            continue
+        if card_fits_category(c["birthday"], r["category"], year) is not False:
+            continue
+        fit = namesakes(r["client_id"], lambda bd: real_bd(bd) and card_fits_category(bd, r["category"], year) is True)
+        gap = _category_gap(c["birthday"], r["category"], year)
+        # ДР строки = ДР карточки и тёзки нет — это уже R-CAT; здесь — только явно чужое
+        if fit or (r["birthday"] != c["birthday"] and gap > FOREIGN_GAP) or gap > 2 * FOREIGN_GAP:
+            add(r, f'категория «{r["category"]}» не подходит к ДР карточки', fit)
+    for l in leads:
+        ev = data.events.get(l["event_id"], {})
+        c = data.clients.get(l["client_id"])
+        if ev.get("event_name") != KIDS_EVENT or not c or not real_bd(c["birthday"]):
+            continue
+        year = int(ev.get("event_year") or 0)
+        age = _kid_age(c["birthday"], year)
+        if _is_kid(c["birthday"], year):
+            continue
+        kids = namesakes(l["client_id"], lambda bd: _is_kid(bd, year))
+        if kids:
+            add(l, f"заявка на детский забег, а по ДР карточки возраст {age}", kids, lead=True)
+    return out
+
+
 def run_checks(data, event_ids=None):
     """Без event_ids — вся база (двойники — для карточек с результатами); с event_ids —
     результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта)."""
@@ -446,7 +525,8 @@ def run_checks(data, event_ids=None):
     cards = sorted(cards)
     return (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
             + check_category(data, results) + check_twins(data, cards) + check_hygiene(data, results)
-            + check_kids_leads(data, event_ids, from_year=datetime.now().year))
+            + check_kids_leads(data, event_ids, from_year=datetime.now().year)
+            + check_foreign(data, results, [l for l in data.leads if not event_ids or l["event_id"] in event_ids]))
 
 
 # ---------------------------------------------------------------- решения и действия (dq_decisions, dq_actions)
@@ -827,16 +907,24 @@ def _card_by_fio(cur, surname, name, birthday, exclude=0):
     return row["id"] if row else None
 
 
-def move_result(conn, result_id, user, key="", to_client_id=None, new_card=None):
-    """Перенести результат на другую карточку — существующую (to_client_id) или новую (new_card: фамилия, имя,
-    ДР). ФИ и ДР строки результата не меняются. Опустевшая прежняя карточка удаляется (отмена её вернёт).
+MOVABLE = {"results": "результат", "leads": "заявка"}
+CONTACTS = ("phone", "email", "city", "club")
+
+
+def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None):
+    """Перенести результат или заявку на другую карточку — существующую (to_client_id) или новую (new_card: фамилия,
+    имя, ДР). ФИ и ДР строки не меняются. Опустевшая прежняя карточка удаляется (отмена её вернёт). Заявка
+    переносит на карточку свои контакты (trg_leads_after_update) — снимок контактов обеих карточек в журнале.
     -> (карточка, id записи журнала)."""
+    if table not in MOVABLE:
+        raise ValueError(f"перенос из {table} не поддерживается")
+    what = MOVABLE[table]
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("SELECT id, client_id FROM results WHERE id = %s", (int(result_id),))
+        cur.execute(f"SELECT id, client_id FROM {table} WHERE id = %s", (int(row_id),))
         row = cur.fetchone()
         if not row:
-            raise ValueError(f"нет результата #{result_id}")
+            raise ValueError(f"нет строки #{row_id}")
         src = row["client_id"]
         created = False
         if new_card:
@@ -855,8 +943,10 @@ def move_result(conn, result_id, user, key="", to_client_id=None, new_card=None)
             if not cur.fetchone():
                 raise ValueError(f"нет карточки #{to_client_id}")
         if target == src:
-            raise ValueError("результат уже на этой карточке")
-        cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (target, row["id"]))
+            raise ValueError(f"{what} уже на этой карточке")
+        cur.execute(f"SELECT id, {', '.join(CONTACTS)} FROM clients WHERE id IN (%s, %s)", (src, target))
+        contacts = {str(c.pop("id")): c for c in cur.fetchall()}
+        cur.execute(f"UPDATE {table} SET client_id = %s WHERE id = %s", (target, row["id"]))
         deleted = None
         cur.execute("""SELECT c.* FROM clients c WHERE c.id = %s
                        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
@@ -865,11 +955,13 @@ def move_result(conn, result_id, user, key="", to_client_id=None, new_card=None)
         if empty:
             deleted = dict(empty)
             cur.execute("DELETE FROM clients WHERE id = %s", (src,))
-            recompute_aggregates(cur, [target])
-        else:
-            recompute_aggregates(cur, [src, target])
-        action_id = _log_action(cur, "move_result", key, {"result_id": row["id"], "from": src, "to": target,
-                                                           "created": created, "deleted_card": deleted}, user)
+        live = [target] if empty else [src, target]
+        recompute_aggregates(cur, live)
+        if table == "leads":
+            recompute_duplicates(cur, live)
+        action_id = _log_action(cur, "move_result", key, {"table": table, "row_id": row["id"], "from": src, "to": target,
+                                                           "created": created, "deleted_card": deleted,
+                                                           "contacts": contacts}, user)
         conn.commit()
         return target, action_id
     except Exception:
@@ -963,7 +1055,8 @@ def _describe(action, d):
     if action == "move_result":
         how = "новую карточку" if d["created"] else "карточку"
         tail = f' (пустая карточка #{d["from"]} удалена)' if d.get("deleted_card") else ""
-        return f'Перенос результата #{d["result_id"]}: с карточки #{d["from"]} на {how} #{d["to"]}{tail}'
+        what = "заявки" if d.get("table") == "leads" else "результата"
+        return f'Перенос {what} #{d.get("row_id", d.get("result_id"))}: с карточки #{d["from"]} на {how} #{d["to"]}{tail}'
     if action == "dismiss":
         return "Решение: " + ("разные люди" if d["decision"] == "different_people" else "оставить как есть")
     return action
@@ -1093,7 +1186,9 @@ def _restore_edit(cur, d):
 
 
 def _restore_move(cur, d):
-    """Результат — обратно на прежнюю карточку (удалённую — вернуть с прежним id); созданную переносом — удалить."""
+    """Строку — обратно на прежнюю карточку (удалённую — вернуть с прежним id); созданную переносом — удалить;
+    контакты карточек — как до переноса (их переписывает триггер заявок)."""
+    table, row_id = d.get("table", "results"), d.get("row_id", d.get("result_id"))
     card = d.get("deleted_card")
     if card:
         if _card_by_fio(cur, card["surname"], card["name"], card["birthday"]):
@@ -1101,13 +1196,18 @@ def _restore_move(cur, d):
         cols = list(card)
         cur.execute(f"INSERT INTO clients ({', '.join(f'`{k}`' for k in cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
                     [card[k] for k in cols])
-    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (d["from"], d["result_id"]))
+    cur.execute(f"UPDATE {table} SET client_id = %s WHERE id = %s", (d["from"], row_id))
     if d["created"]:
         cur.execute("""DELETE c FROM clients c WHERE c.id = %s
                        AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id)
                        AND NOT EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)""", (d["to"],))
+    for cid, c in (d.get("contacts") or {}).items():
+        cur.execute(f"UPDATE clients SET {', '.join(f'{k} = %s' for k in c)} WHERE id = %s", [*c.values(), int(cid)])
     cur.execute("SELECT id FROM clients WHERE id IN (%s, %s)", (d["from"], d["to"]))
-    recompute_aggregates(cur, [r["id"] for r in cur.fetchall()])
+    live = [r["id"] for r in cur.fetchall()]
+    recompute_aggregates(cur, live)
+    if table == "leads":
+        recompute_duplicates(cur, live)
 
 
 def undo_action(conn, action_id, user):

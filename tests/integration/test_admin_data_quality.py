@@ -103,14 +103,15 @@ def test_actions_journal_limit_clamped(conn):
     assert m.call_args.args == (conn, 500)
 
 
-def test_move_result_requires_exactly_one_target(conn):
-    with patch(f"{R}.dq.move_result", return_value=(49463, 1656)) as m:
-        r = client.post("/api/admin/data-quality/move-result", json={"result_id": 118233, "to_client_id": 49463, "key": "k"})
+def test_move_requires_exactly_one_target(conn):
+    with patch(f"{R}.dq.move_row", return_value=(49463, 1656)) as m:
+        r = client.post("/api/admin/data-quality/move", json={"table": "leads", "row_id": 7, "to_client_id": 49463, "key": "k"})
     assert r.json() == {"ok": True, "client_id": 49463, "action_id": 1656}
-    assert m.call_args.args == (conn, 118233, "testuser", "k", 49463, None)
-    assert client.post("/api/admin/data-quality/move-result", json={"result_id": 1}).status_code == 422
-    both = {"result_id": 1, "to_client_id": 2, "new_card": {"surname": "А", "name": "Б", "birthday": "2000-01-01"}}
-    assert client.post("/api/admin/data-quality/move-result", json=both).status_code == 422
+    assert m.call_args.args == (conn, "leads", 7, "testuser", "k", 49463, None)
+    assert client.post("/api/admin/data-quality/move", json={"row_id": 1}).status_code == 422
+    both = {"row_id": 1, "to_client_id": 2, "new_card": {"surname": "А", "name": "Б", "birthday": "2000-01-01"}}
+    assert client.post("/api/admin/data-quality/move", json=both).status_code == 422
+    assert client.post("/api/admin/data-quality/move", json={"table": "clients", "row_id": 1, "to_client_id": 2}).status_code == 422
 
 
 def test_cards_search(conn):
