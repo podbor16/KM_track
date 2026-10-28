@@ -76,6 +76,16 @@ def test_fix_fio_passes_user_and_returns_card(conn):
     assert m.call_args.args == (conn, 7, "Цимис", "Егор", "testuser", "k")
 
 
+def test_edit_passes_user_and_rejects_unknown_table(conn):
+    with patch(f"{R}.dq.edit_record", return_value=(23881, 610)) as m:
+        r = client.post("/api/admin/data-quality/edit",
+                        json={"table": "results", "id": 5, "fields": {"birthday": "2014-12-12"}, "key": "k"})
+    assert r.json() == {"ok": True, "client_id": 23881, "action_id": 610}
+    assert m.call_args.args == (conn, "results", 5, {"birthday": "2014-12-12"}, "testuser", "k")
+    r = client.post("/api/admin/data-quality/edit", json={"table": "events", "id": 1, "fields": {}})
+    assert r.status_code == 422
+
+
 def test_undo_passes_user_and_maps_refusal_to_400(conn):
     with patch(f"{R}.dq.undo_action", return_value=900) as m:
         r = client.post("/api/admin/data-quality/undo", json={"action_id": 501})

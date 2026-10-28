@@ -157,3 +157,61 @@ def test_fix_fio_result_only_and_dismiss_undo(db):
     assert "TEST-UNDO::keep" in dq.load_decisions(conn)
     dq.undo_action(conn, did, USER)
     assert "TEST-UNDO::keep" not in dq.load_decisions(conn)
+
+
+def test_edit_result_and_card_then_undo(db):
+    conn, cur = db
+    e1 = event(cur, 1.0)
+    r_ok, cid = result(cur, e1, 466, "2014-12-12")
+    e2 = event(cur, 0.5)
+    rid, cid2 = result(cur, e2, 4102, "2014-01-01")
+    conn.commit()
+    assert cid != cid2
+    cur.execute("SELECT category FROM results WHERE id = %s", (rid,))
+    category = cur.fetchone()["category"]
+    # R-CARD «в результат — как в карточке»: правится только строка результата
+    _, aid = dq.edit_record(conn, "results", rid, {"birthday": "2014-12-12", "category": "Д7"}, USER, "TEST-UNDO::card")
+    cur.execute("SELECT birthday, category, client_id FROM results WHERE id = %s", (rid,))
+    assert cur.fetchone() == {"birthday": datetime.date(2014, 12, 12), "category": "Д7", "client_id": cid2}
+    with pytest.raises(ValueError, match="не изменились"):
+        dq.edit_record(conn, "results", rid, {"birthday": "2014-12-12"}, USER)
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert "ДР 2014-01-01 → 2014-12-12" in journal[aid]["text"]
+    dq.undo_action(conn, aid, USER)
+    cur.execute("SELECT birthday, category FROM results WHERE id = %s", (rid,))
+    assert cur.fetchone() == {"birthday": datetime.date(2014, 1, 1), "category": category}
+
+    # карточка: ФИ+ДР другой карточки — нельзя (это склейка); своя правка — отменяется
+    with pytest.raises(ValueError, match=f"#{cid}"):
+        dq.edit_record(conn, "clients", cid2, {"birthday": "2014-12-12"}, USER)
+    _, cid_aid = dq.edit_record(conn, "clients", cid2, {"birthday": "2014-12-13"}, USER)
+    assert card(cur, cid2)["birthday"] == datetime.date(2014, 12, 13)
+    dq.undo_action(conn, cid_aid, USER)
+    assert card(cur, cid2)["birthday"] == datetime.date(2014, 1, 1)
+
+
+def test_edit_lead_distance_moves_to_same_race_event_and_undo(db):
+    conn, cur = db
+    e5, e10 = event(cur, 5.0), event(cur, 10.0)
+    lid, cid = lead(cur, e5, "2018-05-05")
+    conn.commit()
+    _, aid = dq.edit_record(conn, "leads", lid, {"event_distance": "10 км", "birthday": "2019-05-05"}, USER)
+    cur.execute("SELECT event_id, event_distance, birthday FROM leads WHERE id = %s", (lid,))
+    assert cur.fetchone() == {"event_id": e10, "event_distance": "10 км", "birthday": datetime.date(2019, 5, 5)}
+    with pytest.raises(ValueError, match="нет дистанции"):
+        dq.edit_record(conn, "leads", lid, {"event_distance": "42.2"}, USER)
+    dq.undo_action(conn, aid, USER)
+    cur.execute("SELECT event_id, event_distance, birthday FROM leads WHERE id = %s", (lid,))
+    assert cur.fetchone() == {"event_id": e5, "event_distance": "5", "birthday": datetime.date(2018, 5, 5)}
+
+
+def test_edit_validation(db):
+    conn, cur = db
+    rid, _ = result(cur, event(cur, 5.0), 1, "1990-01-01")
+    conn.commit()
+    for fields, msg in (({"birthday": "01.01.1990"}, "ГГГГ-ММ-ДД"), ({"sex": "М"}, "пол"),
+                        ({"surname": " "}, "пустыми"), ({"race_status": "Finished"}, "не правятся"), ({}, "нет полей")):
+        with pytest.raises(ValueError, match=msg):
+            dq.edit_record(conn, "results", rid, fields, USER)
+    with pytest.raises(ValueError, match="не поддерживается"):
+        dq.edit_record(conn, "events", 1, {"name": "x"}, USER)

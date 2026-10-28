@@ -292,3 +292,23 @@ def test_checks_use_only_columns_that_load_selects():
     d.names = NAMES
     # 3 года на 1 км — проверка обязана прочитать дистанцию заявки
     assert [(f.code, f.severity) for f in run_checks(d, {9})] == [("L-KID", "low")]
+
+
+# ---------------------------------------------------------------- форма «Исправить…»
+
+def test_edit_record_view_for_result_and_kids_lead():
+    from src.analytics.data_quality import Finding, distance_km, edit_record_view
+    d = data([C(1, "Ветрова", "Елизавета", "2014-12-12")],
+             leads=[dict(L(7, 1, "Ветрова", "Елизавета", "2014-12-12", 2), event_distance="1 км"),
+                    dict(L(8, 2, "Иванов", "Иван", "2020-01-01", 2), event_distance="500 м"),
+                    dict(L(9, 3, "Петров", "Пётр", "2000-01-01", 3), event_distance="5")],
+             results=[R(5, 1, "Ветрова", "Елизавета", "2014-01-01", 2, 4102, cat="Д11", sex="Женщина")])
+    rec = edit_record_view(Finding("R-CARD", "medium", "", (1,), 5, 2), d)
+    assert rec == {"table": "results", "id": 5, "surname": "Ветрова", "name": "Елизавета", "birthday": "2014-01-01",
+                   "sex": "Женщина", "category": "Д11"}
+    rec = edit_record_view(Finding("L-KID", "low", "", (1,), event_id=2, lead_id=7), d)
+    assert rec["table"] == "leads" and rec["event_distance"] == "1 км"
+    assert rec["distance_options"] == ["500 м", "1 км"]          # только дистанции этого же забега и года
+    assert edit_record_view(Finding("C-TWIN", "high", "", (1, 2)), d) is None
+    assert [distance_km(x) for x in ("500 м", "1 км", "21.1", "10,5 км", "?")] == [0.5, 1.0, 21.1, 10.5, None]
+

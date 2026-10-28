@@ -71,6 +71,8 @@ class Data:
             self.leads_by_event[l["event_id"]].append(l)
         for r in results:
             self.res_by_card[r["client_id"]].append(r)
+        self.result_by_id = {r["id"]: r for r in results}
+        self.lead_by_id = {l["id"]: l for l in leads}
         self.cards_by_fio = collections.defaultdict(list)
         for i, c in self.clients.items():
             self.cards_by_fio[fio_key(c)].append(i)
@@ -492,12 +494,29 @@ def finding_view(f, data):
         })
     out = {**dataclasses.asdict(f), "key": f.key, "cards": cards,
            "event": data.event_label(f.event_id) if f.event_id else ""}
+    out["record"] = edit_record_view(f, data)
     if f.code in MERGEABLE and len(cards) > 1:
         ids = [c["id"] for c in cards]
         _, s, n, bd = propose_final(ids, data)
         out["blockers"] = merge_blockers(ids, data)
         out["proposal"] = {"surname": s, "name": n, "birthday": bd or ""}
     return out
+
+
+def edit_record_view(f, data):
+    """Строка находки для формы «Исправить…»: результат или заявка с правимыми полями (None — нет строки)."""
+    if f.lead_id and f.lead_id in data.lead_by_id:
+        l = data.lead_by_id[f.lead_id]
+        ev = data.events.get(l["event_id"], {})
+        same = {i for i, e in data.events.items()
+                if (e["event_name"], e["event_year"]) == (ev.get("event_name"), ev.get("event_year"))}
+        options = sorted({x["event_distance"] for x in data.leads if x["event_id"] in same and x["event_distance"]},
+                         key=lambda d: (distance_km(d) is None, distance_km(d) or 0, d))
+        return {"table": "leads", "id": l["id"], **{k: l[k] for k in EDITABLE["leads"]}, "distance_options": options}
+    if f.result_id and f.result_id in data.result_by_id:
+        r = data.result_by_id[f.result_id]
+        return {"table": "results", "id": r["id"], **{k: r[k] for k in EDITABLE["results"]}}
+    return None
 
 
 def _log_action(cur, action, key, details, user):
@@ -631,6 +650,106 @@ def delete_result(conn, result_id, user, key=""):
     return action_id
 
 
+EDITABLE = {
+    "results": ("surname", "name", "birthday", "sex", "category"),
+    "leads": ("surname", "name", "birthday", "event_distance"),
+    "clients": ("surname", "name", "birthday"),
+}
+SEXES = ("Мужчина", "Женщина")
+
+
+def _clean_edit(table, fields):
+    """Проверка и нормализация полей правки -> dict (только разрешённые поля таблицы)."""
+    if table not in EDITABLE:
+        raise ValueError(f"правка таблицы {table} не поддерживается")
+    unknown = set(fields) - set(EDITABLE[table])
+    if unknown:
+        raise ValueError(f"поля {', '.join(sorted(unknown))} не правятся")
+    out = {}
+    for k, v in fields.items():
+        v = str(v or "").strip()
+        if k in ("surname", "name"):
+            v = normalize_person_name(v)
+            if not v:
+                raise ValueError("фамилия и имя не могут быть пустыми")
+        elif k == "birthday":
+            try:
+                datetime.strptime(v, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError("ДР — в формате ГГГГ-ММ-ДД") from None
+        elif k == "sex" and v not in SEXES:
+            raise ValueError(f"пол: {', '.join(SEXES)}")
+        elif k in ("category", "event_distance") and not v:
+            raise ValueError("категория и дистанция не могут быть пустыми")
+        out[k] = v
+    if not out:
+        raise ValueError("нет полей для правки")
+    return out
+
+
+def _lead_event_id(cur, row, distance):
+    """Событие того же забега и года с другой дистанцией (новые события не заводим)."""
+    cur.execute("""SELECT e2.id FROM events e JOIN events e2 ON e2.event_name = e.event_name AND e2.event_year = e.event_year
+                   WHERE e.id = %s AND e2.event_distance = %s""", (row["event_id"], distance_km(distance)))
+    found = cur.fetchone()
+    if not found:
+        raise ValueError(f"у этого забега нет дистанции «{distance}»")
+    return found["id"]
+
+
+def distance_km(text):
+    """«500 м» -> 0.5, «1 км» / «21.1» -> число (как trg_leads_before_insert)."""
+    t = str(text).strip().replace(",", ".")
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(км|м)?", t)
+    if not m:
+        return None
+    v = float(m.group(1))
+    return round(v / 1000, 1) if m.group(2) == "м" else v
+
+
+def edit_record(conn, table, row_id, fields, user, key=""):
+    """Правка полей строки находки: результата, заявки или карточки. В журнал — значения «до» и «после»
+    изменённых полей; отмена возвращает «до». Карточке нельзя дать ФИ+ДР другой карточки — это склейка.
+    -> (карточка, id записи журнала)."""
+    fields = _clean_edit(table, fields)
+    cols = list(EDITABLE[table]) + (["event_id"] if table == "leads" else [])
+    cur = conn.cursor(dictionary=True)
+    try:
+        cid_col = "id" if table == "clients" else "client_id"
+        cur.execute(f"SELECT {cid_col} AS cid, {', '.join(cols)} FROM {table} WHERE id = %s", (int(row_id),))
+        row = cur.fetchone()
+        if not row or (table == "clients" and not row["cid"]):
+            raise ValueError(f"нет строки #{row_id}")
+        before = {k: str(row[k]) if row[k] is not None else None for k in cols}
+        changed = {k: v for k, v in fields.items() if before.get(k) != v}
+        if table == "leads" and "event_distance" in changed:
+            changed["event_id"] = _lead_event_id(cur, row, changed["event_distance"])
+        if not changed:
+            raise ValueError("значения не изменились")
+        if table == "clients":
+            final = {k: changed.get(k, before[k]) for k in ("surname", "name", "birthday")}
+            cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",
+                        (final["surname"], final["name"], final["birthday"], row["cid"]))
+            other = cur.fetchone()
+            if other:
+                raise ValueError(f"такие ФИ и ДР уже у карточки #{other['id']} — склейте карточки")
+        cur.execute(f"UPDATE {table} SET {', '.join(f'`{k}` = %s' for k in changed)} WHERE id = %s",
+                    [*changed.values(), int(row_id)])
+        if "event_id" in changed:
+            recompute_duplicates(cur, [row["cid"]])
+        action_id = _log_action(cur, "edit", key, {"table": table, "id": int(row_id), "client_id": row["cid"],
+                                                    "before": {k: before[k] for k in changed},
+                                                    "after": {k: str(v) for k, v in changed.items()}}, user)
+        conn.commit()
+        return row["cid"], action_id
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
 def apply_auto(conn, user):
     """Очевидное без ревью: «Not started» со старым номером; двойники и R-LEAD уровня high,
     если склейке не мешает ни один предохранитель и ДР определяется."""
@@ -677,7 +796,7 @@ def apply_auto(conn, user):
 
 # ---------------------------------------------------------------- отмена действий (запись «undo» в dq_actions)
 
-UNDOABLE = ("merge", "fix_fio", "delete_result", "dismiss")
+UNDOABLE = ("merge", "fix_fio", "delete_result", "dismiss", "edit")
 
 
 def _cards_of(action, d):
@@ -688,6 +807,8 @@ def _cards_of(action, d):
         return {d["client_id"], *d.get("merged", [])}
     if action == "delete_result":
         return {d["before"]["client_id"]}
+    if action == "edit":
+        return {d["client_id"]}
     return set()
 
 
@@ -701,6 +822,12 @@ def _describe(action, d):
     if action == "delete_result":
         b = d["before"]
         return f'Удалён «Not started»: {b["surname"]} {b["name"]} №{b["start_number"]} (забег #{b["event_id"]})'
+    if action == "edit":
+        what = {"results": "результат", "leads": "заявка", "clients": "карточка"}[d["table"]]
+        diff = ", ".join(f'{EDIT_LABELS.get(k, k)} {d["before"][k]} → {d["after"][k]}'
+                         for k in d["after"] if k != "event_id")
+        card = "" if d["table"] == "clients" else f', карточка #{d["client_id"]}'
+        return f'Правка ({what} #{d["id"]}{card}): {diff}'
     if action == "dismiss":
         return "Решение: " + ("разные люди" if d["decision"] == "different_people" else "оставить как есть")
     return action
@@ -805,6 +932,30 @@ def _restore_result(cur, row):
     recompute_aggregates(cur, [r["id"] for r in cur.fetchall()])
 
 
+EDIT_LABELS = {"surname": "фамилия", "name": "имя", "birthday": "ДР", "sex": "пол", "category": "категория",
+               "event_distance": "дистанция"}
+
+
+def _restore_edit(cur, d):
+    """Правку — обратно к значениям «до»; карточке — если её прежние ФИ+ДР не заняла другая."""
+    b = d["before"]
+    if d["table"] == "clients":
+        cur.execute("SELECT surname, name, birthday FROM clients WHERE id = %s", (d["client_id"],))
+        now = cur.fetchone()
+        if not now:
+            raise ValueError(f'карточки #{d["client_id"]} уже нет — отмена невозможна')
+        final = {k: b.get(k, str(now[k])) for k in ("surname", "name", "birthday")}
+        cur.execute("SELECT id FROM clients WHERE surname = %s AND name = %s AND birthday = %s AND id <> %s",
+                    (final["surname"], final["name"], final["birthday"], d["client_id"]))
+        other = cur.fetchone()
+        if other:
+            raise ValueError(f'{" ".join(final.values())} уже у карточки #{other["id"]} — отмена невозможна')
+    cur.execute(f'UPDATE {d["table"]} SET {", ".join(f"`{k}` = %s" for k in b)} WHERE id = %s',
+                [*b.values(), d["id"]])
+    if "event_id" in b:
+        recompute_duplicates(cur, [d["client_id"]])
+
+
 def undo_action(conn, action_id, user):
     """Отменить действие из журнала по снимку «до». Нельзя, если уже отменено или после него было
     неотменённое действие с теми же карточками (сначала отменить его). -> id записи «undo»."""
@@ -829,6 +980,8 @@ def undo_action(conn, action_id, user):
                 cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (*d["before"], d["result_id"]))
         elif row["action"] == "delete_result":
             _restore_result(cur, d["before"])
+        elif row["action"] == "edit":
+            _restore_edit(cur, d)
         else:
             cur.execute("DELETE FROM dq_decisions WHERE finding_key = %s AND decision = %s",
                         (row["finding_key"], d["decision"]))

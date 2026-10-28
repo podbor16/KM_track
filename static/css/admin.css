@@ -587,6 +587,9 @@
 .dq-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
 .dq-merge { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .dq-merge .admin-select { width: 150px; }
+.dq-edit { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--km-border-light); }
+.dq-edit .dq-merge { align-items: flex-end; margin-top: 6px; }
+.dq-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--km-text-secondary); }
 .dq-status { font-size: 0.9rem; color: #721c24; }
 .dq-status--ok { color: #155724; }
 

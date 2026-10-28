@@ -41,6 +41,13 @@ class FixFioBody(BaseModel):
     key: str = ""
 
 
+class EditBody(BaseModel):
+    table: Literal["results", "leads", "clients"]
+    id: int
+    fields: dict[str, str]
+    key: str = ""
+
+
 class UndoBody(BaseModel):
     action_id: int
 
@@ -91,6 +98,12 @@ async def delete_result(body: DeleteResultBody, user: str = Depends(api_require_
 async def fix_fio(body: FixFioBody, user: str = Depends(api_require_auth)) -> dict:
     cid, action_id = await run_in_threadpool(_with_conn, dq.fix_fio, body.result_id, body.surname, body.name,
                                              user, body.key)
+    return {"ok": True, "client_id": cid, "action_id": action_id}
+
+
+@router.post("/api/admin/data-quality/edit")
+async def edit(body: EditBody, user: str = Depends(api_require_auth)) -> dict:
+    cid, action_id = await run_in_threadpool(_with_conn, dq.edit_record, body.table, body.id, body.fields, user, body.key)
     return {"ok": True, "client_id": cid, "action_id": action_id}
 
 

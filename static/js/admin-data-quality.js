@@ -2,7 +2,7 @@
 // Вкладка "Качество данных" в /admin — находки проверок привязки заявок и
 // результатов к карточкам клиентов (src/analytics/data_quality.py) и действия
 // по ним: склеить карточки, удалить «Not started» со старым номером, исправить ФИО
-// не в каноническом виде, запомнить
+// не в каноническом виде, поправить поля результата / заявки / карточки, запомнить
 // решение «разные люди»/«оставить как есть» (больше не показывается); отменить
 // любое из этих действий («Отменить» сразу после него или в «Последних действиях»).
 // API: src/krasmarafon/routers/data_quality.py
@@ -116,8 +116,10 @@ function dqItemHtml(f) {
         actions += `<button class="km-btn km-btn--primary" onclick="dqDeleteResult(${idx}, this)">Удалить «Not started»</button>
             <button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить</button>`;
     } else {
-        actions += `<button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить как есть</button>`;
+        actions += dqQuickFixHtml(f, idx)
+            + `<button class="km-btn km-btn--secondary" onclick="dqDismiss(${idx}, 'keep', this)">Оставить как есть</button>`;
     }
+    if (f.record) actions += `<button class="km-btn km-btn--secondary" onclick="dqToggleEdit(${idx})">Исправить…</button>`;
     return `<div class="dq-item dq-item--${dqEsc(f.severity)}" id="dq-item-${idx}">
         <div class="dq-item-head">
             <span class="admin-badge dq-sev--${dqEsc(f.severity)}">${dqEsc(DQ_SEVERITY[f.severity] || f.severity)}</span>
@@ -128,7 +130,96 @@ function dqItemHtml(f) {
         <div class="dq-cards">${f.cards.map(dqCardHtml).join('')}</div>
         ${blockers}
         <div class="dq-actions">${actions}<span class="dq-status"></span></div>
+        ${f.record ? dqEditHtml(f, idx) : ''}
     </div>`;
+}
+
+// ---- Правка полей строки находки (результат / заявка / карточка) ----
+
+const DQ_EDIT_FIELDS = {
+    results: [['surname', 'Фамилия'], ['name', 'Имя'], ['birthday', 'ДР'], ['sex', 'Пол'], ['category', 'Категория']],
+    leads: [['surname', 'Фамилия'], ['name', 'Имя'], ['birthday', 'ДР'], ['event_distance', 'Дистанция']],
+};
+const DQ_SEXES = ['Мужчина', 'Женщина'];
+const DQ_WHAT = { results: 'результат', leads: 'заявку', clients: 'карточку' };
+
+function dqEditHtml(f, idx) {
+    const rec = f.record;
+    const input = ([k, label]) => {
+        const v = rec[k] ?? '';
+        let el;
+        if (k === 'sex') {
+            el = `<select class="admin-select" data-field="sex">${DQ_SEXES.map(o =>
+                `<option${o === v ? ' selected' : ''}>${dqEsc(o)}</option>`).join('')}</select>`;
+        } else if (k === 'event_distance' && (rec.distance_options || []).length) {
+            const opts = rec.distance_options.includes(v) ? rec.distance_options : [v, ...rec.distance_options];
+            el = `<select class="admin-select" data-field="event_distance">${opts.map(o =>
+                `<option${o === v ? ' selected' : ''}>${dqEsc(o)}</option>`).join('')}</select>`;
+        } else {
+            el = `<input class="admin-select" data-field="${k}" value="${dqEsc(v)}"${k === 'birthday' ? ' placeholder="ГГГГ-ММ-ДД"' : ''}>`;
+        }
+        return `<label class="dq-edit-field"><span>${label}</span>${el}</label>`;
+    };
+    return `<div class="dq-edit" id="dq-edit-${idx}" hidden>
+        <div class="dq-muted">Правка: ${DQ_WHAT[rec.table]} #${Number(rec.id)}</div>
+        <div class="dq-merge">${DQ_EDIT_FIELDS[rec.table].map(input).join('')}
+            <button class="km-btn km-btn--primary" onclick="dqSaveEdit(${idx}, this)">Сохранить</button>
+        </div>
+    </div>`;
+}
+
+function dqToggleEdit(idx) {
+    const box = document.getElementById(`dq-edit-${idx}`);
+    if (box) box.hidden = !box.hidden;
+}
+
+// R-CARD: две очевидные правки — строку результата под карточку или карточку под результат
+function dqQuickFixHtml(f, idx) {
+    const rec = f.record, c = (f.cards || [])[0];
+    if (f.code !== 'R-CARD' || !rec || rec.table !== 'results' || !c) return '';
+    const diff = ['surname', 'name', 'birthday'].filter(k => String(rec[k]) !== String(c[k]));
+    if (!diff.length) return '';
+    const show = o => diff.map(k => o[k]).join(' ');
+    return `<button class="km-btn km-btn--primary" onclick="dqQuickFix(${idx}, 'results', this)">В результат — как в карточке (${dqEsc(show(c))})</button>
+        <button class="km-btn km-btn--secondary" onclick="dqQuickFix(${idx}, 'clients', this)">В карточку — как в результате (${dqEsc(show(rec))})</button>`;
+}
+
+async function dqSendEdit(idx, table, id, fields, btn) {
+    const f = dqFindings[idx];
+    btn.disabled = true;
+    try {
+        const r = await dqRequest('/api/admin/data-quality/edit', { table, id, fields, key: f.key });
+        const text = Object.entries(fields).map(([k, v]) => v).join(' ');
+        dqDone(idx, `Исправлено (${DQ_WHAT[table]}): ${text}`, r.action_id);
+        const box = document.getElementById(`dq-edit-${idx}`);
+        if (box) box.hidden = true;
+    } catch (e) {
+        btn.disabled = false;
+        const st = document.querySelector(`#dq-item-${idx} .dq-status`);
+        if (st) st.textContent = e.message;
+    }
+}
+
+function dqQuickFix(idx, table, btn) {
+    const f = dqFindings[idx], rec = f.record, c = f.cards[0];
+    const [src, id] = table === 'results' ? [c, rec.id] : [rec, c.id];
+    const fields = {};
+    ['surname', 'name', 'birthday'].forEach(k => { if (String(rec[k]) !== String(c[k])) fields[k] = String(src[k]); });
+    dqSendEdit(idx, table, id, fields, btn);
+}
+
+function dqSaveEdit(idx, btn) {
+    const f = dqFindings[idx];
+    const fields = {};
+    document.querySelectorAll(`#dq-edit-${idx} [data-field]`).forEach(el => {
+        const v = el.value.trim();
+        if (v !== String(f.record[el.dataset.field] ?? '')) fields[el.dataset.field] = v;
+    });
+    if (!Object.keys(fields).length) {
+        document.querySelector(`#dq-item-${idx} .dq-status`).textContent = 'Ничего не изменено';
+        return;
+    }
+    dqSendEdit(idx, f.record.table, f.record.id, fields, btn);
 }
 
 function dqDone(idx, text, actionId) {
