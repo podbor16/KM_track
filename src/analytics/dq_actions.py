@@ -640,6 +640,9 @@ def _undo_blocker(row, later, undone):
     for x in later:
         if x["action"] in UNDOABLE and x["id"] not in undone and cards & _cards_of(x["action"], x["details"]):
             return f'сначала отмените более позднее действие #{x["id"]} с теми же карточками'
+        if (row["action"] == x["action"] == "dismiss" and x["id"] not in undone
+                and x["finding_key"] == row["finding_key"]):
+            return f'сначала отмените более позднее решение #{x["id"]} по этой находке'
     return None
 
 

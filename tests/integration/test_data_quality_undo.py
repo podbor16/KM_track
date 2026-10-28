@@ -406,3 +406,17 @@ def test_undo_decision_restores_previous(db):
     assert dq.load_decisions(conn)[key] == "postponed"
     cur.execute("SELECT note FROM dq_decisions WHERE finding_key = %s", (key,))
     assert cur.fetchone()["note"] == "не знаю ДР"
+
+
+def test_undo_earlier_decision_blocked_by_later(db):
+    conn, cur = db
+    key = "TEST-UNDO::order"
+    d1 = dq.dismiss(conn, key, "postponed", "", USER)
+    d2 = dq.dismiss(conn, key, "keep", "", USER)
+    with pytest.raises(ValueError, match=f"#{d2}"):
+        dq.undo_action(conn, d1, USER)
+    journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
+    assert journal[d1]["can_undo"] is False and f"#{d2}" in journal[d1]["why_not"]
+    dq.undo_action(conn, d2, USER)
+    dq.undo_action(conn, d1, USER)
+    assert key not in dq.load_decisions(conn)
