@@ -589,7 +589,8 @@
 .dq-merge .admin-select { width: 150px; }
 .dq-edit { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--km-border-light); }
 .dq-edit .dq-merge { align-items: flex-end; margin-top: 6px; }
-.dq-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--km-text-secondary); }
+.dq-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--km-text-secondary); min-width: 0; max-width: 100%; }
+.dq-edit .dq-in-category { width: auto; min-width: 150px; max-width: 100%; }
 .dq-status { font-size: 0.9rem; color: #721c24; }
 .dq-status--ok { color: #155724; }
 
