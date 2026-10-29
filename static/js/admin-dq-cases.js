@@ -7,7 +7,10 @@
 const DQC_API = '/api/admin/data-quality';
 const DQC = {
     tab: 'open', lists: null, cases: [], key: null, caseData: null, person: null, done: {}, extra: [],
-    moved: new Set(), pos: 0, eventsFilled: false, searchTimer: null, timers: {},
+    moved: new Set(), pos: 0, eventsFilled: false, timers: {}, inited: false,
+    seq: 0,             // номер открытия дела: ответ на устаревшее открытие не рисуется
+    qseq: 0,            // номер загрузки очереди
+    gone: new Set(),    // закрытые дела: другой процесс сервера может отдавать их из кеша до 10 мин
 };
 const DQC_SITE_NOTE = 'На сайте обновится в течение 5 минут';
 const DQC_LEAD_NOTE = 'Повторный импорт файла организатора может перезаписать правку заявки';
@@ -131,7 +134,7 @@ function rowHtml(r) {
     const moved = DQC.moved.has(`${r.table}:${r.id}`) ? ' <small>перенесена</small>' : '';
     return `<div class="dqc-row${r.problem ? ' dqc-row--problem' : ''}">
         <span style="flex:1">${parts.map(dqEsc).join(' · ')}${moved}</span>
-        <details class="dqc-menu"><summary title="Действия со строкой">⋯</summary>
+        <details class="dqc-menu"><summary title="Действия со строкой" aria-label="Действия со строкой">⋯</summary>
             <div class="dqc-menu-body" data-table="${dqEsc(r.table)}" data-row="${Number(r.id)}">
                 <button class="km-btn km-btn--secondary" onclick="dqcRowAction(this, 'move')">Перенести на…</button>
                 <button class="km-btn km-btn--secondary" onclick="dqcRowAction(this, 'new')">Новая карточка</button>
@@ -146,7 +149,7 @@ function cardHtml(c) {
     const rows = (c.rows || []).length ? c.rows.map(rowHtml).join('') : '<div class="dq-muted">Нет заявок и результатов</div>';
     return `<div class="dqc-card" data-card="${Number(c.id)}">
         <div class="dqc-card-title"><span>${dqEsc(c.surname)} ${dqEsc(c.name)} · ${bd}</span>
-            <details class="dqc-menu"><summary title="Действия с карточкой">⋯</summary>
+            <details class="dqc-menu"><summary title="Действия с карточкой" aria-label="Действия с карточкой">⋯</summary>
                 <div class="dqc-menu-body" data-card="${Number(c.id)}">
                     <button class="km-btn km-btn--secondary" onclick="dqcMenu(this, 'merge')">Склеить с…</button>
                     <button class="km-btn km-btn--secondary" onclick="dqcMenu(this, 'edit')">Исправить ФИО/ДР</button>
@@ -160,7 +163,7 @@ function cardHtml(c) {
 
 function doneHtml(key) {
     return (DQC.done[key] || []).map((d, i) => `<div class="dqc-done">✓ ${dqEsc(d.text)}${d.ids.length
-        ? ` · <button class="km-btn km-btn--secondary" data-ids="${d.ids.map(Number).join(',')}" data-done="${i}" onclick="dqcUndo(this)">Отменить</button>`
+        ? ` · <button class="km-btn km-btn--secondary" data-ids="${d.ids.map(Number).join(',')}" data-key="${dqEsc(key)}" data-done="${i}" onclick="dqcUndo(this)">Отменить</button>`
         : ''}</div>`).join('');
 }
 
@@ -171,7 +174,7 @@ function caseHtml(c) {
     const after = current ? titles[current.stage] : '';     // серые вопросы ждут ступень текущего
     const open = qs.some(q => q.state === 'current' || q.state === 'locked');
     const postpone = open ? `<div class="dq-actions">
-            <input class="admin-select" id="dqc-reason" value="не знаю ДР" placeholder="Причина">
+            <input class="admin-select" id="dqc-reason" value="не знаю ДР" placeholder="Причина" aria-label="Причина, почему дело откладывается">
             <button class="km-btn km-btn--secondary" onclick="dqcPostpone(this)">Отложить дело</button></div>` : '';
     const questions = qs.length
         ? qs.map((q, qi) => questionHtml(q, qi, { after })).join('')
@@ -213,23 +216,30 @@ function dqcArmed(btn, question) {
 }
 
 function dqcInit() {
+    if (DQC.inited) { dqcRenderQueue(); return; }
+    DQC.inited = true;
+    // клик мимо закрывает список поиска и раскрытые меню «⋯» (открытие одного меню закрывает остальные)
     document.addEventListener('click', e => {
         const box = dqcEl('dqc-search-list');
         if (box && !e.target.closest('.dqc-search')) box.hidden = true;
+        document.querySelectorAll('details.dqc-menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
     });
     dqcLoadQueue();
 }
 
 async function dqcLoadQueue() {
+    const seq = ++DQC.qseq;
     const queue = dqcEl('dqc-queue');
     if (!DQC.lists) queue.innerHTML = '<div class="admin-loading">Собираю очередь… (до 10 секунд)</div>';
     try {
         const [open, postponed] = await Promise.all(['open', 'postponed'].map(s => dqcRequest(`${DQC_API}/cases?status=${s}`)));
-        DQC.lists = { open: open.cases, postponed: postponed.cases };
+        if (seq !== DQC.qseq) return;
+        const alive = c => !DQC.gone.has(c.key);
+        DQC.lists = { open: open.cases.filter(alive), postponed: postponed.cases.filter(alive) };
         if (!DQC.eventsFilled) dqcFillEvents();
         dqcRenderQueue();
     } catch (e) {
-        queue.innerHTML = `<div class="admin-error">Не удалось собрать очередь: ${dqEsc(e.message)}</div>`;
+        if (seq === DQC.qseq) queue.innerHTML = `<div class="admin-error">Не удалось собрать очередь: ${dqEsc(e.message)}</div>`;
     }
 }
 
@@ -244,7 +254,7 @@ function dqcFillEvents() {
 
 function dqcFiltered(list) {
     const ev = dqcEl('dqc-event').value;
-    return ev ? list.filter(c => (c.events || []).includes(ev)) : list;
+    return list.filter(c => !DQC.gone.has(c.key) && (!ev || (c.events || []).includes(ev)));
 }
 
 function dqcRenderQueue() {
@@ -261,8 +271,9 @@ function dqcRenderQueue() {
         : `<div class="admin-loading">${DQC.tab === 'open' ? 'Дел нет — всё сходится' : 'Отложенных дел нет'}</div>`;
 }
 
-// Дело закрыто — убрать из очереди без полного пересчёта очереди на сервере
+// Дело закрыто — убрать из очереди без полного пересчёта очереди на сервере; ключ помнится закрытым
 function dqcDropFromQueue(key) {
+    DQC.gone.add(key);
     if (!DQC.lists) return;
     const i = DQC.cases.findIndex(c => c.key === key);
     if (i >= 0) DQC.pos = i;
@@ -272,10 +283,14 @@ function dqcDropFromQueue(key) {
 
 function dqcTab(name) {
     DQC.tab = name;
-    document.querySelectorAll('.dqc-tab').forEach(b => b.classList.toggle('dqc-tab--on', b.dataset.tab === name));
+    document.querySelectorAll('.dqc-tab').forEach(b => {
+        b.classList.toggle('dqc-tab--on', b.dataset.tab === name);
+        b.setAttribute('aria-selected', String(b.dataset.tab === name));
+    });
     const journal = name === 'journal';
     dqcEl('dqc-layout').hidden = journal;
     dqcEl('dqc-journal').hidden = !journal;
+    dqcBack();                                  // телефон: сначала список
     if (journal) dqcLoadJournal();
     else dqcRenderQueue();
 }
@@ -285,31 +300,52 @@ function dqcFetchCase(key) {
     return dqcRequest(p ? `${DQC_API}/person/${Number(p)}` : `${DQC_API}/cases/${encodeURIComponent(key)}`);
 }
 
-// Новое дело на экране; ключ дела мог смениться после ответа (склейка убрала наименьшую карточку) — решённое переезжает
-function dqcShowCase(c) {
-    if (DQC.key && c.key !== DQC.key && DQC.done[DQC.key]) {
-        DQC.done[c.key] = [...(DQC.done[c.key] || []), ...DQC.done[DQC.key]];
-        delete DQC.done[DQC.key];
+// Ключ дела сменился после действия в нём (склейка убрала наименьшую карточку) — решённое этого дела переезжает
+function dqcRekey(fromKey, toKey) {
+    if (!fromKey || fromKey === toKey) return;
+    if (DQC.done[fromKey]) {
+        DQC.done[toKey] = [...(DQC.done[toKey] || []), ...DQC.done[fromKey]];
+        delete DQC.done[fromKey];
     }
-    if (DQC.person && DQC.person.key === DQC.key) DQC.person.key = c.key;
-    const oldKey = DQC.key;
+    if (DQC.person && DQC.person.key === fromKey) DQC.person.key = toKey;
+    if (DQC.key === fromKey) DQC.key = toKey;
+}
+
+// Дело на экране; fromKey — ключ дела, действием в котором получено c (не задан — просто открыто другое дело)
+function dqcShowCase(c, fromKey) {
+    dqcRekey(fromKey, c.key);
     DQC.key = c.key;
     DQC.caseData = c;
     dqcEl('dqc-case').innerHTML = caseHtml(c);
     dqcEl('dqc-layout').classList.add('dqc-layout--case');
-    dqcSyncQueue(oldKey, c);
+    dqcSyncQueue(fromKey, c);
 }
 
-// Пункт очереди по свежему делу: ключ, число карточек и вопросов; все вопросы отложены — во «Отложено», и обратно
+// Дело после действия в деле key: открыто оно же — перерисовать, открыто другое — только пункт очереди
+function dqcCaseResult(key, c) {
+    if (!c) {
+        if (DQC.key === key) dqcClosed(key);
+        else dqcDropFromQueue(key);
+        return;
+    }
+    if (DQC.key === key) dqcShowCase(c, key);
+    else { dqcRekey(key, c.key); dqcSyncQueue(key, c); }
+}
+
+// Пункт очереди по свежему делу: ключ, число карточек и вопросов; все вопросы отложены — во «Отложено», и обратно;
+// дела нет в очереди (вернулось отменой) — пункт добавляется
 function dqcSyncQueue(oldKey, c) {
     const qs = c.questions || [];
     if (DQC.lists && qs.length) {
+        DQC.gone.delete(c.key);
         const to = qs.some(q => q.state !== 'postponed') ? 'open' : 'postponed';
         const left = qs.filter(q => q.state !== 'postponed').length || qs.length;
+        let found = false;
         ['open', 'postponed'].forEach(s => {
             const list = DQC.lists[s];
             const i = list.findIndex(x => x.key === c.key || (oldKey && x.key === oldKey));
             if (i < 0) return;
+            found = true;
             const item = { ...list[i], key: c.key, cards: (c.cards || []).length, questions_left: left };
             if (s === to) { list[i] = item; return; }
             const j = DQC.cases.indexOf(list[i]);
@@ -317,30 +353,38 @@ function dqcSyncQueue(oldKey, c) {
             list.splice(i, 1);
             DQC.lists[to].push(item);
         });
+        if (!found && !/^p\d+$/.test(c.key)) {
+            DQC.lists[to].push({ key: c.key, title: c.title, cards: (c.cards || []).length, questions_left: left,
+                                 events: [...new Set((c.cards || []).flatMap(k => (k.rows || []).filter(r => r.problem).map(r => r.event)))] });
+        }
     }
     dqcRenderQueue();
 }
 
 async function dqcOpen(key, extraCards) {
+    const seq = ++DQC.seq;
     if (extraCards !== undefined) {           // открыто из очереди — новое дело
         DQC.extra = extraCards;
         DQC.person = null;
     }
     const box = dqcEl('dqc-case');
     if (key !== DQC.key) {
+        DQC.key = key;
+        DQC.caseData = null;
         box.innerHTML = '<div class="admin-loading">Открываю дело…</div>';
         dqcEl('dqc-layout').classList.add('dqc-layout--case');
     }
     try {
-        dqcShowCase(await dqcFetchCase(key));
+        const c = await dqcFetchCase(key);
+        if (seq === DQC.seq) dqcShowCase(c);
     } catch (e) {
+        if (seq !== DQC.seq) return;
         const back = '<button class="km-btn km-btn--secondary dqc-back" onclick="dqcBack()">← К списку</button>';
         if (e.status === 404) {
-            dqcSay('Дело уже закрыто — обновляю очередь');
+            dqcSay('Дело уже закрыто');
             DQC.caseData = null;
             box.innerHTML = `${back}<div class="admin-loading">Дело закрыто</div>`;
             dqcDropFromQueue(key);
-            dqcLoadQueue();
         } else {
             box.innerHTML = `${back}<div class="admin-error">Не удалось открыть дело: ${dqEsc(e.message)}</div>`;
         }
@@ -388,8 +432,8 @@ function dqcValues(qi, ai) {
     return values;
 }
 
-function dqcRecord(text, ids) {
-    (DQC.done[DQC.key] = DQC.done[DQC.key] || []).push({ text, ids: (ids || []).filter(Boolean) });
+function dqcRecord(key, text, ids) {
+    (DQC.done[key] = DQC.done[key] || []).push({ text, ids: (ids || []).filter(Boolean) });
 }
 
 function dqcClosed(key) {
@@ -402,28 +446,30 @@ function dqcClosed(key) {
     dqcDropFromQueue(key);
 }
 
-async function dqcSendAnswer(qi, body, text, btn) {
+// statusId — куда писать ход и ошибку: под «Применить» или в блоке конфликта
+async function dqcSendAnswer(qi, body, text, btn, statusId) {
     const key = DQC.key;
-    const st = dqcEl(`dqc-st-${qi}`);
+    const st = dqcEl(statusId || `dqc-st-${qi}`);
     btn.disabled = true;
     if (st) st.textContent = 'Выполняю…';
     try {
         const r = await dqcRequest(`${DQC_API}/cases/${encodeURIComponent(key)}/answer`, body);
         if (r.conflict) {
+            if (DQC.key !== key) return;            // открыто другое дело — ничего не записано, показывать некуда
             btn.disabled = false;
             if (st) st.textContent = '';
-            DQC.conflict = { qi, conflict: r.conflict };
+            DQC.conflict = { key, qi, conflict: r.conflict };
             dqcEl(`dqc-conf-${qi}`).innerHTML = `<div class="dqc-conflict">${dqEsc(r.conflict.message)}
                 <div class="dq-actions"><button class="km-btn km-btn--primary" onclick="dqcMergeConflict(${qi}, this)">Склеить</button>
                 <span class="dq-status" id="dqc-cst-${qi}"></span></div></div>`;
             return;
         }
-        dqcRecord(text, r.action_ids);
+        dqcRecord(key, text, r.action_ids);
         dqcSay(DQC_SITE_NOTE, true);
-        if (r.case) dqcShowCase(r.case);
-        else dqcClosed(key);
+        dqcCaseResult(key, r.case);
     } catch (e) {
         btn.disabled = false;
+        if (DQC.key !== key) { dqcSay(`Ответ в другом деле не выполнен: ${e.message}`); return; }
         if (e.status === 409) {
             dqcSay('Дело изменилось — обновляю');
             dqcOpen(key);
@@ -444,17 +490,19 @@ function dqcApply(qi, btn) {
     if (a.inputs.some(isCategoryInput) && !values.category) { st.textContent = 'Выберите категорию'; return; }
     const shown = a.inputs.map(i => values[i.name]).filter(Boolean).join(' ');
     const body = answerBody(q, a.id, values, DQC.extra);
+    const reason = dqcEl('dqc-reason');
+    if (a.id === 'postpone' && reason && reason.value.trim()) body.inputs.reason = reason.value.trim();
     dqcSendAnswer(qi, body, shown ? `${a.label}: ${shown}` : a.label, btn);
 }
 
 function dqcMergeConflict(qi, btn) {
-    const c = DQC.conflict && DQC.conflict.qi === qi ? DQC.conflict.conflict : null;
-    if (!c) return;
+    const k = DQC.conflict;
+    if (!k || k.qi !== qi || k.key !== DQC.key) return;
+    const c = k.conflict;
     const q = dqcQuestion(qi);
     const body = { question_id: q.id, answer_id: `merge_with:${Number(c.merge_with)}`,
                    inputs: { surname: c.surname, name: c.name, birthday: c.birthday }, extra_cards: DQC.extra };
-    DQC.conflict = null;
-    dqcSendAnswer(qi, body, `Склеено с карточкой ${c.surname} ${c.name} ${c.birthday}`, btn);
+    dqcSendAnswer(qi, body, `Склеено с карточкой ${c.surname} ${c.name} ${c.birthday}`, btn, `dqc-cst-${qi}`);
 }
 
 async function dqcPostpone(btn) {
@@ -463,11 +511,12 @@ async function dqcPostpone(btn) {
     btn.disabled = true;
     try {
         const r = await dqcRequest(`${DQC_API}/cases/${encodeURIComponent(key)}/postpone`, { reason });
-        dqcRecord(`Дело отложено: ${reason}`, r.action_ids);
+        dqcRecord(key, `Дело отложено: ${reason}`, r.action_ids);
         dqcSay('Дело отложено — оно во вкладке «Отложено»', true);
-        dqcOpen(key);
+        if (DQC.key === key) dqcOpen(key);
     } catch (e) {
         btn.disabled = false;
+        if (DQC.key !== key) return;
         if (e.status === 409) { dqcSay('Дело изменилось — обновляю'); dqcOpen(key); }
         else dqcSay(e.message);
     }
@@ -478,19 +527,30 @@ async function dqcPostpone(btn) {
 async function dqcUndo(btn) {
     if (!dqcArmed(btn, 'Точно отменить?')) return;
     const ids = btn.dataset.ids.split(',').map(Number).filter(Boolean).reverse();   // позднее — первым
+    const key = btn.dataset.key;                                // строка «✓ …» — дело, к которому она относится
+    const entry = key !== undefined ? (DQC.done[key] || [])[Number(btn.dataset.done)] : null;
+    const undone = [];
     btn.disabled = true;
     try {
-        for (const id of ids) await dqcRequest(`${DQC_API}/undo`, { action_id: id });
+        for (const id of ids) {
+            await dqcRequest(`${DQC_API}/undo`, { action_id: id });
+            undone.push(id);
+        }
         dqcSay(`Отменено. ${DQC_SITE_NOTE}`, true);
-        if (btn.dataset.done !== undefined && DQC.done[DQC.key]) DQC.done[DQC.key].splice(Number(btn.dataset.done), 1);
+        if (entry) DQC.done[key].splice(DQC.done[key].indexOf(entry), 1);
+        if (key !== undefined) DQC.gone.delete(key);            // закрытое дело вернулось
         if (DQC.tab === 'journal') dqcLoadJournal();
-        if (DQC.key) dqcOpen(DQC.key);
-        dqcLoadQueue();
+        if (DQC.key) dqcOpen(DQC.key);                          // дело и его пункт очереди — по свежим данным
+        if (key === undefined) dqcLoadQueue();                  // из журнала: какое дело вернулось — неизвестно
     } catch (e) {
+        // частичная отмена: отменённое не предлагать снова
+        const left = ids.filter(id => !undone.includes(id)).reverse();
+        btn.dataset.ids = left.join(',');
+        if (entry) entry.ids = left;
         btn.disabled = false;
         delete btn.dataset.armed;
         btn.textContent = btn.dataset.label || 'Отменить';
-        dqcSay(`Не удалось отменить: ${e.message}`);
+        dqcSay(`Не удалось отменить${undone.length ? ' до конца' : ''}: ${e.message}`);
     }
 }
 
@@ -562,17 +622,22 @@ function dqcSearch() {
 }
 
 async function dqcOpenPerson(id) {
+    const seq = ++DQC.seq;
     dqcEl('dqc-search-list').hidden = true;
     DQC.extra = [id];
+    DQC.key = `p${id}`;                 // до ответа: действия прежнего дела не перерисуют экран
+    DQC.caseData = null;
+    DQC.person = null;
     const box = dqcEl('dqc-case');
     box.innerHTML = '<div class="admin-loading">Открываю дело…</div>';
     dqcEl('dqc-layout').classList.add('dqc-layout--case');
     try {
         const c = await dqcRequest(`${DQC_API}/person/${Number(id)}`);
-        DQC.key = null;
+        if (seq !== DQC.seq) return;
         DQC.person = { id, key: c.key };
         dqcShowCase(c);
     } catch (e) {
+        if (seq !== DQC.seq) return;
         box.innerHTML = `<button class="km-btn km-btn--secondary dqc-back" onclick="dqcBack()">← К списку</button>
             <div class="admin-error">Не удалось открыть: ${dqEsc(e.message)}</div>`;
     }
@@ -684,31 +749,42 @@ function dqcMoveNew(btn) {
 
 // Ручное действие → запись «✓ … · Отменить», дело перечитывается (с карточкой, куда ушла строка)
 async function dqcManual(btn, action, body, text, otherCard) {
+    const key = DQC.key;
     const st = btn.parentElement.querySelector('.dq-status') || btn.closest('.dqc-menu-body').querySelector('.dq-status');
     btn.disabled = true;
+    let r;
     try {
-        const r = await dqcRequest(`${DQC_API}/${action}`, { ...body, key: DQC.key || '' });
-        if (action === 'move') DQC.moved.add(`${body.table}:${body.row_id}`);
-        const target = r.client_id || otherCard;
-        if (target && !DQC.extra.includes(target)) DQC.extra.push(target);
-        dqcRecord(text, [r.action_id]);
-        dqcSay(DQC_SITE_NOTE, true);
-        await dqcReopen(target);
+        r = await dqcRequest(`${DQC_API}/${action}`, { ...body, key: key || '' });
     } catch (e) {
         btn.disabled = false;
-        if (st) st.textContent = e.message;
+        if (DQC.key !== key) dqcSay(`Действие в другом деле не выполнено: ${e.message}`);
+        else if (st) st.textContent = e.message;
         else dqcSay(e.message);
+        return;
+    }
+    if (action === 'move') DQC.moved.add(`${body.table}:${body.row_id}`);
+    dqcRecord(key, text, [r.action_id]);
+    dqcSay(DQC_SITE_NOTE, true);
+    if (DQC.key !== key) return;                     // открыто другое дело — его не трогаем
+    const target = r.client_id || otherCard;
+    if (target && !DQC.extra.includes(target)) DQC.extra.push(target);
+    try {
+        await dqcReopen(key, target);
+    } catch (e) {
+        if (DQC.key === key) dqcSay(`Выполнено, но дело не перечитано: ${e.message}`);
     }
 }
 
-// Дело после ручного действия; ключ пропал (склейка/перенос) — дело карточки, на которую ушли данные
-async function dqcReopen(cid) {
+// Дело key после ручного действия; ключ пропал (склейка/перенос) — дело карточки, на которую ушли данные
+async function dqcReopen(key, cid) {
+    const seq = ++DQC.seq;
+    let c;
     try {
-        dqcShowCase(await dqcFetchCase(DQC.key));
+        c = await dqcFetchCase(key);
     } catch (e) {
         if (e.status !== 404 || !cid) throw e;
-        const c = await dqcRequest(`${DQC_API}/person/${Number(cid)}`);
-        DQC.person = { id: cid, key: c.key };
-        dqcShowCase(c);
+        c = await dqcRequest(`${DQC_API}/person/${Number(cid)}`);
+        if (seq === DQC.seq) DQC.person = { id: cid, key: c.key };
     }
+    if (seq === DQC.seq) dqcShowCase(c, key);
 }

@@ -165,18 +165,18 @@
             </div>
             <div class="dqc-toolbar">
                 <div class="dqc-search">
-                    <input id="dqc-q" class="admin-select" placeholder="Найти человека: фамилия имя" oninput="dqcSearch()" autocomplete="off">
+                    <input id="dqc-q" class="admin-select" placeholder="Найти человека: фамилия имя" aria-label="Найти человека по фамилии и имени" oninput="dqcSearch()" autocomplete="off">
                     <div id="dqc-search-list" class="dqc-search-list" hidden></div>
                 </div>
-                <select id="dqc-event" class="admin-select" onchange="dqcRenderQueue()"><option value="">Все забеги</option></select>
+                <select id="dqc-event" class="admin-select" aria-label="Забег" onchange="dqcRenderQueue()"><option value="">Все забеги</option></select>
                 <button class="km-btn km-btn--secondary" onclick="dqcApplyAuto(this)">Применить очевидное</button>
             </div>
             <div class="dqc-tabs" role="tablist">
-                <button class="dqc-tab dqc-tab--on" data-tab="open" onclick="dqcTab('open')">Нужно решить <span id="dqc-n-open"></span></button>
-                <button class="dqc-tab" data-tab="postponed" onclick="dqcTab('postponed')">Отложено <span id="dqc-n-postponed"></span></button>
-                <button class="dqc-tab" data-tab="journal" onclick="dqcTab('journal')">Журнал</button>
+                <button class="dqc-tab dqc-tab--on" role="tab" aria-selected="true" data-tab="open" onclick="dqcTab('open')">Нужно решить <span id="dqc-n-open"></span></button>
+                <button class="dqc-tab" role="tab" aria-selected="false" data-tab="postponed" onclick="dqcTab('postponed')">Отложено <span id="dqc-n-postponed"></span></button>
+                <button class="dqc-tab" role="tab" aria-selected="false" data-tab="journal" onclick="dqcTab('journal')">Журнал</button>
             </div>
-            <div class="dqc-status" id="dqc-status"></div>
+            <div class="dqc-status" id="dqc-status" aria-live="polite"></div>
             <div class="dqc-layout" id="dqc-layout">
                 <div class="dqc-queue" id="dqc-queue"><div class="admin-loading">Собираю очередь…</div></div>
                 <div class="dqc-case" id="dqc-case"><div class="admin-loading">Выберите дело слева</div></div>

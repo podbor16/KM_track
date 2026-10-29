@@ -581,6 +581,8 @@
 .dqc-qitem:hover { background: var(--km-bg, #fafafa); }
 .dqc-qitem--on { background: #eef3fd; }
 .dqc-qitem small { display: block; color: var(--km-text-secondary); }
+#tab-data-quality [hidden] { display: none !important; }   /* hidden сильнее display: flex/grid классов */
+.dqc-toolbar .admin-select { max-width: 100%; }
 .dqc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dqc-back { display: none; }
 .dqc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 10px 0; }
