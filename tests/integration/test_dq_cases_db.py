@@ -154,3 +154,45 @@ def test_postpone_case_moves_it_to_postponed_and_back_on_undo(db):
     for aid in ids:
         dq.undo_action(conn, aid, USER)
     assert key in {c["key"] for c in dq_cases.list_cases(conn, "open")}
+
+
+def test_answer_is_visible_in_results_profile_and_card_counters(db):
+    from src.analytics import db_athletes, db_results
+    conn, cur = db
+    rid, father, son = foreign_case(conn, cur)
+    cur.execute("SELECT event_id FROM results WHERE id = %s", (rid,))
+    ev = cur.fetchone()["event_id"]
+    case = dq_cases.case_for_card(conn, father)
+    q = next(q for q in case["questions"] if q["code"] == "R-FOREIGN")
+    dq_cases.apply_answer(conn, case["key"], q["id"], f"to:{son}", {}, USER)
+
+    db_results._results_cache.clear()                     # кеш результатов (TTL) — как после его истечения
+    row = next(r for r in db_results.get_race_results_by_event_id(ev) if r["start_number"] == 1012)
+    assert row["client_id"] == son and row["name"] == "Саша"
+    assert [r["start_number"] for r in db_athletes.get_athlete_by_client(son)[1]].count(1012) == 1
+    assert 1012 not in [r["start_number"] for r in db_athletes.get_athlete_by_client(father)[1]]
+    cur.execute("SELECT c.last_result_id, (SELECT MAX(id) FROM results r WHERE r.client_id = c.id) AS mx "
+                "FROM clients c WHERE c.id = %s", (son,))
+    counters = cur.fetchone()
+    assert counters["last_result_id"] == counters["mx"]
+
+
+def test_moved_lead_visible_in_admin_leads_and_duplicates(db):
+    from src.analytics import db_results
+    conn, cur = db
+    ev = event(cur, "Детский заявки", 1.0)
+    cur.execute("UPDATE events SET event_name = 'Детский забег', event_year = 2099 WHERE id = %s", (ev,))
+    _, kid = result(cur, event(cur, "Детский 3", 1.0), 7, "2093-04-15", name="Алексей", cat="Мальчики")
+    cur.execute("""INSERT INTO leads (surname, name, sex, city, birthday, phone, email, event_name, event_distance,
+                   event_year, products, amount, client_id, event_id, start_number, created_at)
+                   VALUES (%s, 'Алексей', 'Мужчина', '', '2064-06-30', '+70000000002', 'p@test.ru', 'Детский забег',
+                           '1 км', 2099, '', 0, 0, %s, NULL, '2026-01-01 10:00:00')""", (SUR, ev))
+    lid = cur.lastrowid
+    cur.execute("SELECT client_id FROM leads WHERE id = %s", (lid,))
+    parent = cur.fetchone()["client_id"]
+    conn.commit()
+    case = dq_cases.case_for_card(conn, parent)
+    q = next(q for q in case["questions"] if q["code"] == "R-FOREIGN" and q["lead_id"] == lid)
+    dq_cases.apply_answer(conn, case["key"], q["id"], f"to:{kid}", {}, USER)
+    leads = db_results.get_leads_admin(event_id=ev, limit=10)
+    assert [(l["id"], l["client_id"], l["is_duplicate"]) for l in leads] == [(lid, kid, 0)]
