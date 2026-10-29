@@ -43,6 +43,16 @@ def describe(data, f):
             "by": " и ".join(by)}
 
 
+def outcome(fio, bd, out):
+    """Результат apply_answer -> (done | conflict | skipped, строка отчёта)."""
+    ids = ", ".join(map(str, out.get("action_ids") or []))
+    if out.get("conflict"):
+        return "conflict", f'{fio} {bd}: {out["conflict"]["message"]}'
+    if out.get("error"):
+        return "skipped", f'{fio} {bd}: записано частично (действия журнала {ids or "—"}): {out["error"]}'
+    return "done", f"{fio} → {bd}: действия журнала {ids}"
+
+
 def connect():
     import mysql.connector
     from src.config import settings
@@ -71,19 +81,19 @@ def main():
         if not a.apply:
             print("dry-run (без --apply БД не меняется)")
             return
-        done, conflicts, skipped = [], [], []
+        res = {"done": [], "conflict": [], "skipped": []}
         for f in chosen:
             fio = describe(data, f)["fio"]
             try:
                 out = dq_cases.apply_answer(conn, case_of[f.client_ids[0]], f.key, f"bd:{f.fix[0]}", {}, a.user)
             except (ValueError, dq_cases.StaleQuestion) as e:      # открыта ранняя ступень, дело изменилось
-                skipped.append(f"{fio} {f.fix[0]}: {e}")
+                res["skipped"].append(f"{fio} {f.fix[0]}: {e}")
                 continue
-            if out.get("conflict"):
-                conflicts.append(f'{fio} {f.fix[0]}: {out["conflict"]["message"]}')
-            else:
-                done.append(f.key)
-                print(f'{fio} → {f.fix[0]}: действия журнала {", ".join(map(str, out["action_ids"]))}')
+            kind, line = outcome(fio, f.fix[0], out)
+            res[kind].append(line)
+            if kind == "done":
+                print(line)
+        done, conflicts, skipped = res["done"], res["conflict"], res["skipped"]
         for title, items in (("конфликты ФИ+ДР (остались вопросами)", conflicts), ("пропущены", skipped)):
             if items:
                 print(f"{title}:\n  " + "\n  ".join(items))

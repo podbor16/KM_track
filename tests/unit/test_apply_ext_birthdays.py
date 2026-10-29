@@ -43,3 +43,11 @@ def test_pick_only_reliable_undecided_and_describe_without_contacts():
                                         "events": "Жара 5.0 2025", "by": "телефон"}
     shown = " ".join(map(str, m.describe(d, chosen[1]).values()))
     assert m.describe(d, chosen[1])["by"] == "почта" and "@" not in shown and "923" not in shown
+
+
+def test_outcome_partial_write_is_skipped_with_written_ids():
+    assert m.outcome("Иванов Иван", "1985-07-14", {"action_ids": [5, 6]}) == (
+        "done", "Иванов Иван → 1985-07-14: действия журнала 5, 6")
+    kind, line = m.outcome("Иванов Иван", "1985-07-14", {"action_ids": [5], "error": "нет строки #9"})
+    assert kind == "skipped" and line == "Иванов Иван 1985-07-14: записано частично (действия журнала 5): нет строки #9"
+    assert m.outcome("Иванов Иван", "1985-07-14", {"action_ids": [], "conflict": {"message": "Склеить?"}})[0] == "conflict"

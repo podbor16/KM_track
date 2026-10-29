@@ -110,6 +110,24 @@ def test_twin_question_prefills_proposal():
     assert merge["recommended"] and {i["name"]: i["value"] for i in merge["inputs"]}["birthday"] == "1985-07-14"
 
 
+def test_twin_merge_star_needs_birthday_from_registrations():
+    """Обе карточки с заглушкой: ДР итога нет — без ★; регистрация с почтой из заявки — ДР подставлена, ★ есть."""
+    clients = [C(1, "Иванов", "Иван", "1900-01-01"), C(2, "Иванов", "Иван", "1905-01-01")]
+    leads = [{**L(1, 1, "Иванов", "Иван", "1900-01-01", 11), "phone": "", "email": "i@mail.ru"}]
+    results = [R(1, 1, "Иванов", "Иван", "1900-01-01", 11, 5), R(2, 2, "Иванов", "Иван", "1905-01-01", 10, 6)]
+    reg = {"id": 1, "surname": "Иванов", "name": "Иван", "birthday": "1985-07-14", "sex": "", "phone": "",
+           "email": "i@mail.ru", "product": "", "event_year": 2019}
+
+    def merge(ext):
+        d = Data(clients, leads, results, EVENTS, ext=ext)
+        d.names = Names([("Пцарев", "Александр", "Мужчина")] * 5)
+        a = _q(d, "C-TWIN")["answers"][0]
+        return a["recommended"], {i["name"]: i["value"] for i in a["inputs"]}["birthday"]
+
+    assert merge([]) == (False, "")
+    assert merge([reg]) == (True, "1985-07-14")
+
+
 def test_card_question_recommends_card_bd_for_placeholder_row():
     d = data([C(1, "Ветрова", "Елизавета", "2014-12-12")],
              results=[R(1, 1, "Ветрова", "Елизавета", "2014-01-01", 10, 4102, sex="Женщина")])

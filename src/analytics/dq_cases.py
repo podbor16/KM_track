@@ -172,12 +172,13 @@ def _row(data, f):
 def _q_twin(f, data):
     a, b = f.client_ids
     _, s, n, bd = propose_final([a, b], data)
+    bd = bd or _contact_bd(data, (a, b))         # ДР итога не определить — из регистраций по контакту
     blockers = merge_blockers([a, b], data)
     la, lb = _card(data, a), _card(data, b)
     text = f"{la} и {lb} — один человек?" if la != lb else f"Две карточки «{la}» — один человек?"
     why = _why(f)
     return text, _caution(blockers, data) or TWIN_REASONS.get(why, why), [
-        _a("merge", "Да — одна карточка", not blockers, _fio_inputs(s, n, bd)),
+        _a("merge", "Да — одна карточка", not blockers and bool(bd), _fio_inputs(s, n, bd)),
         _a("different", "Нет, разные люди")]
 
 
