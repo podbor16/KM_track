@@ -190,7 +190,7 @@ function caseHtml(c) {
         ${postpone}`;
 }
 
-globalThis.dqcTest = { esc: dqEsc, categoriesFor, answerBody, defaultAnswer, questionHtml, cardHtml };
+globalThis.dqcTest = { esc: dqEsc, categoriesFor, answerBody, defaultAnswer, questionHtml, cardHtml, outsideClick: dqcOutsideClick };
 
 // ---- Экран ----
 
@@ -218,13 +218,17 @@ function dqcArmed(btn, question) {
 function dqcInit() {
     if (DQC.inited) { dqcRenderQueue(); return; }
     DQC.inited = true;
-    // клик мимо закрывает список поиска и раскрытые меню «⋯» (открытие одного меню закрывает остальные)
-    document.addEventListener('click', e => {
-        const box = dqcEl('dqc-search-list');
-        if (box && !e.target.closest('.dqc-search')) box.hidden = true;
-        document.querySelectorAll('details.dqc-menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
-    });
+    document.addEventListener('click', dqcOutsideClick);
     dqcLoadQueue();
+}
+
+// Клик мимо закрывает список поиска и раскрытые меню «⋯» (открытие одного меню закрывает остальные).
+// Цель, которую обработчик клика уже убрал со страницы («Выбрать» → форма склейки), — не «мимо».
+function dqcOutsideClick(e) {
+    if (!e.target.isConnected) return;
+    const box = dqcEl('dqc-search-list');
+    if (box && !e.target.closest('.dqc-search')) box.hidden = true;
+    document.querySelectorAll('details.dqc-menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
 }
 
 async function dqcLoadQueue() {

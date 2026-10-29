@@ -37,4 +37,12 @@ const card = T.cardHtml({id: 1, surname: 'Пцарев', name: 'Александ
 assert.ok(card.includes('dqc-row--problem') && card.includes('№1012'));
 assert.ok(!card.includes('#1'));
 
+// клик мимо закрывает меню «⋯»; кнопка, которую клик уже убрал со страницы («Выбрать» при склейке), — не закрывает
+const menu = {open: true, contains: () => false};
+ctx.document.querySelectorAll = () => [menu];
+T.outsideClick({target: {isConnected: false, closest: () => null}});
+assert.strictEqual(menu.open, true);
+T.outsideClick({target: {isConnected: true, closest: () => null}});
+assert.strictEqual(menu.open, false);
+
 console.log('ALL PASSED');
