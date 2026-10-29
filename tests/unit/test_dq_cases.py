@@ -343,7 +343,7 @@ def scoped_subset(full, card_ids, event_ids=()):
                 [r for r in full.results if r["client_id"] in cards or r["event_id"] in event_ids],
                 list(full.events.values()), full.names,
                 scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids},
-                ext=[x for x in full.ext if norm(x["surname"]) in keys])
+                ext=[x for x in full.ext if norm(x["surname"]) in keys], busy=full.busy)
 
 
 class Fake:

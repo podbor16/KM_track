@@ -322,8 +322,7 @@ def test_contacts_of_cards_and_registration_indexes():
     d = Data([C(1, "Иванов", "Иван", "1985-07-14"), C(2, "Иванов", "Иван", "1900-01-01")], leads, [], EVENTS, ext=ext)
     assert d.card_phones == {1: {"9231234567"}, 2: {"9231234567"}} and d.phone_cards["9231234567"] == {1, 2}
     assert d.card_emails == {1: {"ivan@mail.ru"}} and dict(d.email_cards) == {"ivan@mail.ru": {1}}
-    assert d.ext_by_fio[("иванов", "иван")] == d.ext_by_phone["9231234567"] == d.ext
-    assert not d.ext_by_email
+    assert d.ext_by_fio[("иванов", "иван")] == d.ext and not d.busy
 
 
 # ---------------------------------------------------------------- форма «Исправить…»
@@ -536,3 +535,57 @@ def test_ext_birthday_diff_tie_is_question_and_needs_contact():
     other = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)],
                    [E(1, "Козлов", "Олег", "1998-07-04", "9001112233", year=2024)], lead_bd="")
     assert not codes(other, "X-BDDIFF")                    # телефон чужой — не тот человек
+
+
+def test_ext_birthday_strong_by_email_only_and_several_strong_dates():
+    lead = LP(1, 1, "Иванов", "Иван", "1900-01-01", 2, email=EMAIL)
+    one = ext_data([C(1, "Иванов", "Иван", "1900-01-01")], leads=[lead], results=[R(1, 1, "Иванов", "Иван", "1900-01-01", 2, 5)],
+                   ext=[E(1, "Иванов", "Иван", "1985-07-14", email=EMAIL), E(2, "Иванов", "Иван", "1990-03-03")])
+    assert [(f.severity, f.fix) for f in codes(one, "X-BD")] == [("high", ("1985-07-14",))]
+    two = ext_data([C(1, "Иванов", "Иван", "1900-01-01")], leads=[lead], results=[R(1, 1, "Иванов", "Иван", "1900-01-01", 2, 5)],
+                   ext=[E(1, "Иванов", "Иван", "1985-07-14", email=EMAIL), E(2, "Иванов", "Иван", "1986-07-14", email=EMAIL),
+                        E(3, "Иванов", "Иван", "1990-03-03")])
+    assert [(f.severity, f.fix) for f in codes(two, "X-BD")] == [("medium", ("1985-07-14", "1986-07-14"))]
+
+
+def test_shared_phone_needs_same_surname():
+    d = ext_data([C(1, "Сидоров", "Александр", "1980-03-09"), C(2, "Петров", "Александр", "1980-03-09")],
+                 leads=[LP(1, 1, "Сидоров", "Александр", "1980-03-09", 2, PHONE), LP(2, 2, "Петров", "Александр", "1980-03-09", 4, PHONE)],
+                 results=[R(1, 1, "Сидоров", "Александр", "1980-03-09", 2, 5)])
+    assert not codes(d, "X-PHONE")
+
+
+@pytest.mark.parametrize("phone, extra", [("+7 999 999-99-99", 0), (PHONE, 19)])
+def test_shared_phone_service_contacts_are_ignored(phone, extra):
+    """Телефон из одной цифры и общий у больше чем 20 карточек (клуб) людей не связывает; 20 карточек — ещё связывает."""
+    clients = [C(1, "Сидоров", "Александр", "1980-03-09"), C(2, "Сидоров", "Александр", "2010-06-01")]
+    clients += [C(10 + i, f"Клубов{i}", "Иван", "1990-01-02") for i in range(extra)]
+    leads = [LP(c["id"], c["id"], c["surname"], c["name"], c["birthday"], 2, phone) for c in clients]
+    d = ext_data(clients, leads=leads, results=[R(1, 1, "Сидоров", "Александр", "1980-03-09", 2, 5)])
+    assert not codes(d, "X-PHONE")
+    d = ext_data(clients[:-1], leads=leads[:-1], results=[R(1, 1, "Сидоров", "Александр", "1980-03-09", 2, 5)])
+    assert bool(codes(d, "X-PHONE")) == (extra > 0)
+
+
+def test_ext_birthday_diff_fewer_but_fresher_is_ours():
+    d = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 2, 1)],                       # 2026
+               [E(i, "Козлов", "Олег", "1998-07-04", "9231234567", year=2021) for i in (1, 2, 3)], lead_bd="")
+    assert not codes(d, "X-BDDIFF")
+
+
+def test_ext_birthday_diff_without_years_compares_counts_only():
+    rows = [R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)]
+    more = bddiff(rows, [E(i, "Козлов", "Олег", "1998-07-04", "9231234567") for i in (1, 2)], lead_bd="")
+    assert [f.fix for f in codes(more, "X-BDDIFF")] == [("1998-07-04",)]     # наша строка свежее, но год не с чем сравнить
+    fewer = bddiff(rows + [R(2, 1, "Козлов", "Олег", "1986-07-04", 2, 2)],
+                   [E(1, "Козлов", "Олег", "1998-07-04", "9231234567")], lead_bd="")
+    assert not codes(fewer, "X-BDDIFF")
+
+
+def test_ext_birthday_diff_picks_strongest_other_date():
+    d = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)],
+               [E(1, "Козлов", "Олег", "1996-07-04", "9231234567", year=2024),
+                E(2, "Козлов", "Олег", "1998-07-04", "9231234567", year=2024), E(3, "Козлов", "Олег", "1998-07-04", year=2022)],
+               lead_bd="")
+    [f] = codes(d, "X-BDDIFF")
+    assert f.fix == ("1998-07-04",) and "2 раз" in f.message

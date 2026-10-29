@@ -69,10 +69,36 @@ def norm_email(raw):
     return "" if "@" not in s or s.startswith("example@") else s
 
 
-class Data:
-    """Строки clients/leads/results/events (dict) + индексы; ext — внешние регистрации (ext_registrations)."""
+BUSY_CONTACT = 20                     # карточек с одним телефоном/почтой больше — служебный/клубный контакт
 
-    def __init__(self, clients, leads, results, events, names=None, scope=None, ext=()):
+
+def contact_index(leads):
+    """Контакты из заявок -> (карточка -> телефоны, карточка -> почты, телефон -> карточки, почта -> карточки)."""
+    card_phones, card_emails = collections.defaultdict(set), collections.defaultdict(set)
+    phone_cards, email_cards = collections.defaultdict(set), collections.defaultdict(set)
+    for l in leads:
+        if not l["client_id"]:
+            continue
+        if p := norm_phone(l.get("phone")):
+            card_phones[l["client_id"]].add(p)
+            phone_cards[p].add(l["client_id"])
+        if e := norm_email(l.get("email")):
+            card_emails[l["client_id"]].add(e)
+            email_cards[e].add(l["client_id"])
+    return card_phones, card_emails, phone_cards, email_cards
+
+
+def busy_contacts(phone_cards, email_cards):
+    """Контакты, по которым людей не связывать: телефон из одной цифры, контакт больше чем у BUSY_CONTACT карточек."""
+    return ({p for p, ids in phone_cards.items() if len(set(p)) == 1 or len(ids) > BUSY_CONTACT}
+            | {e for e, ids in email_cards.items() if len(ids) > BUSY_CONTACT})
+
+
+class Data:
+    """Строки clients/leads/results/events (dict) + индексы; ext — внешние регистрации (ext_registrations);
+    busy — служебные контакты по всей базе (None — по этим заявкам, busy_contacts)."""
+
+    def __init__(self, clients, leads, results, events, names=None, scope=None, ext=(), busy=None):
         self.scope = scope                  # None — вся база; иначе что загрузила load_scoped (см. covers)
         self.clients = {int(c["id"]): c for c in clients}
         self.events = {int(e["id"]): e for e in events}
@@ -97,27 +123,12 @@ class Data:
         for i, c in self.clients.items():
             self.cards_by_surname[norm(c["surname"])].append(i)
         self.names = names if names is not None else Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
-        # контакты карточек — из заявок
-        self.card_phones, self.card_emails = collections.defaultdict(set), collections.defaultdict(set)
-        self.phone_cards, self.email_cards = collections.defaultdict(set), collections.defaultdict(set)
-        for l in leads:
-            if not l["client_id"]:
-                continue
-            if p := norm_phone(l.get("phone")):
-                self.card_phones[l["client_id"]].add(p)
-                self.phone_cards[p].add(l["client_id"])
-            if e := norm_email(l.get("email")):
-                self.card_emails[l["client_id"]].add(e)
-                self.email_cards[e].add(l["client_id"])
+        self.card_phones, self.card_emails, self.phone_cards, self.email_cards = contact_index(leads)
+        self.busy = busy if busy is not None else busy_contacts(self.phone_cards, self.email_cards)
         self.ext = list(ext)                # телефон и почта — уже нормализованы (scripts/import_ext_registrations.py)
         self.ext_by_fio = collections.defaultdict(list)
-        self.ext_by_phone, self.ext_by_email = collections.defaultdict(list), collections.defaultdict(list)
         for x in self.ext:
             self.ext_by_fio[fio_key(x)].append(x)
-            if x["phone"]:
-                self.ext_by_phone[x["phone"]].append(x)
-            if x["email"]:
-                self.ext_by_email[x["email"]].append(x)
 
     def year(self, event_id):
         return int(self.events.get(event_id, {}).get("event_year") or 0)
@@ -194,9 +205,9 @@ def load(conn):
     return Data(clients, leads, results, events, ext=ext)
 
 
-NAMES_TTL = 600                       # с: справочник имён по всей базе для load_scoped
+NAMES_TTL = 600                       # с: справочники по всей базе (имена, служебные контакты) для load_scoped
 _names_lock = threading.Lock()
-_names_cache = None                   # (когда, Names) — заменяется целиком
+_names_cache = None                   # (когда, (Names, служебные контакты)) — заменяется целиком
 
 
 def _fresh_names():
@@ -204,25 +215,30 @@ def _fresh_names():
     return c[1] if c and time.monotonic() - c[0] <= NAMES_TTL else None
 
 
-def remember_names(names):
-    """Справочник имён, построенный полной load, — в кеш (один источник для очереди и дела)."""
+def remember_refs(data):
+    """Справочники полной load (имена, служебные контакты) — в кеш (один источник для очереди и дела)."""
     global _names_cache
-    _names_cache = (time.monotonic(), names)
+    _names_cache = (time.monotonic(), (data.names, data.busy))
 
 
-def cached_names(conn):
-    """Names по всем заявкам и результатам (как у load) — кеш процесса на NAMES_TTL с; строит один поток."""
-    if (names := _fresh_names()) is not None:
-        return names
+def cached_refs(conn):
+    """(Names, служебные контакты) по всем заявкам и результатам (как у load) — кеш процесса на NAMES_TTL с;
+    строит один поток."""
+    global _names_cache
+    if (refs := _fresh_names()) is not None:
+        return refs
     with _names_lock:
-        if (names := _fresh_names()) is not None:
-            return names
-        cur = conn.cursor()
+        if (refs := _fresh_names()) is not None:
+            return refs
+        cur = conn.cursor(dictionary=True)
         cur.execute("SELECT surname, name, sex FROM leads UNION ALL SELECT surname, name, sex FROM results")
-        names = Names(cur.fetchall())
+        names = Names([(r["surname"], r["name"], r["sex"]) for r in cur.fetchall()])
+        cur.execute("SELECT client_id, phone, email FROM leads")
+        _, _, phone_cards, email_cards = contact_index(cur.fetchall())
         cur.close()
-        remember_names(names)
-        return names
+        refs = (names, busy_contacts(phone_cards, email_cards))
+        _names_cache = (time.monotonic(), refs)
+        return refs
 
 
 def with_namesakes(data, ids):
@@ -260,11 +276,12 @@ def load_scoped(conn, card_ids, event_ids=()):
     у каждой загруженной карточки — все её строки; регистрации (ext) с этими фамилиями и именами. Карточки с общим
     телефоном/почтой отдельно не ищутся: пару X-PHONE дают только та же фамилия или переставленные ФИ — такие
     карточки со всеми заявками уже загружены. event_ids — забеги, чьи строки нужны целиком (варианты
-    категорий и дистанций в вопросах). События — все, справочник имён — по всей базе (cached_names).
+    категорий и дистанций в вопросах). События — все, справочники имён и служебных контактов — по всей базе
+    (cached_refs).
     Ключи фамилий — после norm, сравнивает их колляция БД (регистр, ё/е); строки с пробелами по краям или
     двойными пробелами в фамилии (NO PAD) тёзками не находятся — в базе таких 0 (2026-10-29), допустимо."""
     cur = conn.cursor(dictionary=True)
-    names, events = cached_names(conn), _events(cur)
+    (names, busy), events = cached_refs(conn), _events(cur)
     ids = {int(i) for i in card_ids}
     clients = {c["id"]: c for c in _select(cur, "clients", [_in("id", ids)])}
     clients |= {c["id"]: c for c in _select(cur, "clients", [_in("surname", {c["surname"] for c in clients.values()})])}
@@ -296,7 +313,7 @@ def load_scoped(conn, card_ids, event_ids=()):
 
     return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
                 scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids},
-                ext=sorted(ext, key=lambda x: x["id"]))
+                ext=sorted(ext, key=lambda x: x["id"]), busy=busy)
 
 
 def load_row_scoped(conn, table, row_id):
@@ -304,7 +321,7 @@ def load_row_scoped(conn, table, row_id):
     с её фамилией или именем, с её номером и без карточки (R-DUP по client_id 0), карточки этих строк
     со всеми их строками. run_checks — без card_ids, нужные — находки без карточек."""
     cur = conn.cursor(dictionary=True)
-    names, events = cached_names(conn), _events(cur)
+    (names, _), events = cached_refs(conn), _events(cur)
     row = next(iter(_select(cur, table, [("id = %s", (row_id,))])), None)
     if not row:
         cur.close()
@@ -780,13 +797,14 @@ def check_ext_birthday(data, cards):
 
 def check_shared_contact(data, start, cards, skip):
     """X-PHONE: две карточки одного человека по общему телефону/почте заявок — та же фамилия и совместимое имя
-    или переставленные ФИ. Ищем от start, пары — хотя бы с одной карточкой из cards, кроме пар skip (C-TWIN)."""
+    или переставленные ФИ; служебные контакты (data.busy) не связывают. Ищем от start, пары — хотя бы с одной
+    карточкой из cards, кроме пар skip (C-TWIN)."""
     out, seen = [], set(skip)
     for a in start:
         c = data.clients.get(a)
         if not c:
             continue
-        phones, emails = data.card_phones.get(a, set()), data.card_emails.get(a, set())
+        phones, emails = data.card_phones.get(a, set()) - data.busy, data.card_emails.get(a, set()) - data.busy
         others = {b for p in phones for b in data.phone_cards[p]} | {b for e in emails for b in data.email_cards[e]}
         for b in sorted(others - {a}):
             k, d = (min(a, b), max(a, b)), data.clients.get(b)
@@ -812,7 +830,8 @@ def _far(x, y):
 def check_ext_birthday_diff(data, cards):
     """X-BDDIFF: надёжная ДР карточки расходится (больше чем на год) с надёжной ДР регистраций с теми же ФИ и её
     телефоном/почтой. Наша ДР — истина, если строк карточки с ней больше, чем регистраций с другой, или наша
-    последняя строка свежее; иначе (в том числе при равенстве) — находка (решение пользователя 2026-10-29)."""
+    последняя строка свежее; иначе (в том числе при равенстве) — находка (решение пользователя 2026-10-29).
+    Ни у одной регистрации с другой ДР нет года — свежесть не сравнить, решает только количество."""
     out = []
     for cid in cards:
         c = data.clients.get(cid)
@@ -829,7 +848,8 @@ def check_ext_birthday_diff(data, cards):
         for o in sorted(other):
             theirs_rows = [x for x in rows if x["birthday"] == o]
             theirs, theirs_last = len(theirs_rows), max((x["event_year"] or 0 for x in theirs_rows), default=0)
-            if not (ours > theirs or ours_last > theirs_last) and (not best or (theirs, theirs_last) > best[1:]):
+            if not (ours > theirs or theirs_last and ours_last > theirs_last) and (
+                    not best or (theirs, theirs_last) > best[1:]):
                 best = (o, theirs, theirs_last)
         if best:
             o, theirs, theirs_last = best

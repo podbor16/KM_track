@@ -18,7 +18,7 @@ import time
 from src.analytics import dq_actions
 from src.analytics.dq_actions import edit_record_view, propose_final
 from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, load_row_scoped, load_scoped,
-                                     merge_blockers, names_compatible, real_bd, remember_names, run_checks,
+                                     merge_blockers, names_compatible, real_bd, remember_refs, run_checks,
                                      with_namesakes)
 from src.common.names import norm
 from src.config.settings import KRASNOYARSK_TZ
@@ -476,7 +476,7 @@ def _full(conn):
         gen = _gen
         data = load(conn)
         findings = run_checks(data)
-        remember_names(data.names)
+        remember_refs(data)
         if gen == _gen:
             _queue = (time.monotonic(), gen, data, findings)
         return data, findings
