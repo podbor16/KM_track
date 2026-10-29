@@ -159,34 +159,29 @@
         <!-- ================================================================ -->
         <div id="tab-data-quality" class="admin-tab-content" style="display:none">
             <div class="admin-section-note">
-                Проверка привязки заявок и результатов к карточкам клиентов: двойники карточек
-                (дата-заглушка, опечатка, «Катя/Екатерина»), заявка на забег у другой карточки,
-                «Not started» со старым номером, ДР не по категории. Дата рождения при склейке —
-                по хронометражу. «Разные люди» и «Оставить как есть» запоминаются — находка больше
-                не показывается. Очевидное (без предохранителей) каждую ночь применяется автоматически.
+                Дела о людях: всё, что не сходится в карточках, заявках и результатах одного человека и его тёзок.
+                Откройте дело и отвечайте на вопросы сверху вниз — ответ сам выполнит нужные правки (их можно отменить).
+                «Не знаю» откладывает дело во вкладку «Отложено». Очевидное каждую ночь применяется автоматически.
             </div>
-            <div class="admin-leads-toolbar">
-                <div class="admin-leads-filters">
-                    <select id="dq-event" class="admin-select" onchange="dqRender()"><option value="">Все забеги</option></select>
-                    <select id="dq-severity" class="admin-select" onchange="dqRender()">
-                        <option value="">Любая важность</option>
-                        <option value="high">важно</option>
-                        <option value="medium">проверить</option>
-                        <option value="low">скорее норма</option>
-                    </select>
+            <div class="dqc-toolbar">
+                <div class="dqc-search">
+                    <input id="dqc-q" class="admin-select" placeholder="Найти человека: фамилия имя" oninput="dqcSearch()" autocomplete="off">
+                    <div id="dqc-search-list" class="dqc-search-list" hidden></div>
                 </div>
-                <div>
-                    <button class="km-btn km-btn--secondary" onclick="loadDataQualityTab()">Проверить заново</button>
-                    <button class="km-btn km-btn--primary" onclick="dqApplyAuto(this)">Применить очевидное</button>
-                </div>
+                <select id="dqc-event" class="admin-select" onchange="dqcRenderQueue()"><option value="">Все забеги</option></select>
+                <button class="km-btn km-btn--secondary" onclick="dqcApplyAuto(this)">Применить очевидное</button>
             </div>
-            <div class="dq-summary" id="dq-summary"></div>
-            <div class="dq-summary" id="dq-auto-result"></div>
-            <details class="dq-journal" id="dq-journal" ontoggle="if (this.open) dqLoadJournal()">
-                <summary>Последние действия — отменить ошибочное</summary>
-                <div id="dq-journal-list"><div class="admin-loading">Загрузка…</div></div>
-            </details>
-            <div id="dq-content"><div class="admin-loading">Загрузка…</div></div>
+            <div class="dqc-tabs" role="tablist">
+                <button class="dqc-tab dqc-tab--on" data-tab="open" onclick="dqcTab('open')">Нужно решить <span id="dqc-n-open"></span></button>
+                <button class="dqc-tab" data-tab="postponed" onclick="dqcTab('postponed')">Отложено <span id="dqc-n-postponed"></span></button>
+                <button class="dqc-tab" data-tab="journal" onclick="dqcTab('journal')">Журнал</button>
+            </div>
+            <div class="dqc-status" id="dqc-status"></div>
+            <div class="dqc-layout" id="dqc-layout">
+                <div class="dqc-queue" id="dqc-queue"><div class="admin-loading">Собираю очередь…</div></div>
+                <div class="dqc-case" id="dqc-case"><div class="admin-loading">Выберите дело слева</div></div>
+            </div>
+            <div class="dqc-journal" id="dqc-journal" hidden></div>
         </div>
         <div id="tab-medals" class="admin-tab-content" style="display:none">
             <div class="admin-section-note">
@@ -450,7 +445,7 @@
     <script src="/static/js/utils.js?v={{ v }}"></script>
     <script src="/static/js/admin-state.js?v={{ v }}"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
-    <script src="/static/js/admin-data-quality.js?v={{ v }}"></script>
+    <script src="/static/js/admin-dq-cases.js?v={{ v }}"></script>
     <script src="/static/js/admin-medals.js?v={{ v }}"></script>
     <script src="/static/js/admin-bibs.js?v={{ v }}"></script>
     <script>
@@ -478,7 +473,7 @@
             if (name === 'photos') loadPhotosTab();
             if (name === 'analytics') { loadAnalyticsTab(); loadAnalyticsExport(); }
             if (name === 'monitoring') loadMonitoringTab();
-            if (name === 'data-quality') loadDataQualityTab();
+            if (name === 'data-quality') dqcInit();
             if (name === 'medals') loadMedalsTab();
         }
         adminOnTabSwitch(name);

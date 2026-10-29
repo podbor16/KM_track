@@ -19,13 +19,13 @@ const ADMIN_TAB_FIELDS = {
     photos: { 'ph-event': 'event' },
     broadcast: { 'bcp-distance': 'distance', 'bcp-checkpoint': 'checkpoint' },
     monitoring: { 'mon-range': 'range' },
-    'data-quality': { 'dq-event': 'event', 'dq-severity': 'severity' },
+    'data-quality': { 'dqc-event': 'event' },
 };
 
 // варианты этих списков приходят с сервера — восстанавливают загрузчики вкладок
 const ADMIN_LOADED_FIELDS = new Set([
     'leads-event-name', 'leads-year-filter', 'leads-distance-filter', 'ag-event-name', 'ag-distance',
-    'ph-event', 'bcp-checkpoint', 'dq-event',
+    'ph-event', 'bcp-checkpoint', 'dqc-event',
 ]);
 
 const adminState = (() => {

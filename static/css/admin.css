@@ -539,27 +539,10 @@
 .dlx-ms-list label { display: block; padding: 3px 2px; white-space: nowrap; cursor: pointer; }
 .dlx-status { color: var(--km-text-secondary); font-size: 0.9rem; }
 
-/* ------- Качество данных ------- */
+/* ------- Общие подписи/статусы (вкладки «Качество данных», «Номера», «Сертификаты») ------- */
 
 .dq-summary { margin: 8px 0; color: var(--km-text-secondary); font-size: 0.9rem; }
-.dq-item {
-    border: 1px solid var(--km-border-light);
-    border-left: 4px solid var(--km-border-light);
-    border-radius: var(--km-radius-card);
-    background: var(--km-bg-card);
-    padding: 12px 14px;
-    margin-bottom: 10px;
-}
-.dq-item--high { border-left-color: #c0392b; }
-.dq-item--medium { border-left-color: #e0a800; }
-.dq-item--done { opacity: 0.6; }
-.dq-item-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
-.dq-code { font-weight: 600; }
 .dq-muted { color: var(--km-text-secondary); font-size: 0.85rem; }
-.dq-sev--high { background: #f8d7da; color: #721c24; }
-.dq-sev--medium { background: #fff3cd; color: #856404; }
-.dq-sev--low { background: #f0f0f0; color: var(--km-text-secondary); }
-.dq-message { margin-bottom: 8px; overflow-wrap: anywhere; }
 /* ------- Возрастные группы: режим расчёта возраста ------- */
 .ag-mode { width: 100%; }
 .ag-mode-title { font-weight: 600; margin-bottom: 4px; }
@@ -572,35 +555,65 @@
 .md-card-value { font-size: 1.6rem; font-weight: 700; color: var(--km-dark); }
 .md-card-title { font-size: 0.8rem; color: var(--km-text-secondary); }
 
-.dq-journal { margin: 8px 0 16px; }
-.dq-journal summary { cursor: pointer; color: var(--km-text-secondary); font-size: 0.9rem; }
 .dq-journal-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 0;
                   border-bottom: 1px solid var(--km-border-light); font-size: 0.85rem; }
 .dq-journal-row--undone .dq-journal-text { text-decoration: line-through; opacity: 0.6; }
 .dq-journal-text { flex: 1 1 320px; overflow-wrap: anywhere; }
-.dq-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
-.dq-card { background: var(--km-bg, #fafafa); border: 1px solid var(--km-border-light); border-radius: 8px; padding: 8px 10px; min-width: 0; }
-.dq-card-title { font-weight: 600; margin-bottom: 4px; }
-.dq-card-list { font-size: 0.85rem; overflow-wrap: anywhere; }
-.dq-card-list span { color: var(--km-text-secondary); }
-.dq-blockers { margin-top: 8px; color: #721c24; font-size: 0.9rem; }
 .dq-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-.dq-merge { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.dq-merge .admin-select { width: 150px; }
-.dq-edit { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--km-border-light); }
-.dq-edit .dq-merge { align-items: flex-end; margin-top: 6px; }
-.dq-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--km-text-secondary); min-width: 0; max-width: 100%; }
-.dq-move .dq-move-q { width: 100%; max-width: 360px; margin: 8px 0 4px; }
-.dq-move-list { max-height: 280px; overflow-y: auto; }
-.dq-move-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 6px 0;
-               border-bottom: 1px solid var(--km-border-light); overflow-wrap: anywhere; }
-.dq-move-row > :last-child { flex-shrink: 0; white-space: nowrap; }
-.dq-move-card b { white-space: nowrap; }
-.dq-move-new { margin-top: 8px; }
-.dq-move-new summary { cursor: pointer; color: var(--km-text-secondary); font-size: 0.9rem; margin-bottom: 6px; }
-.dq-edit .dq-in-category { width: auto; min-width: 150px; max-width: 100%; }
 .dq-status { font-size: 0.9rem; color: #721c24; }
 .dq-status--ok { color: #155724; }
+
+/* ------- Качество данных: дела ------- */
+.dqc-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.dqc-search { position: relative; flex: 1 1 280px; max-width: 420px; }
+.dqc-search input { width: 100%; }
+.dqc-search-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 320px; overflow-y: auto;
+    background: var(--km-bg-card); border: 1px solid var(--km-border-light); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+.dqc-search-item { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; background: none; cursor: pointer; }
+.dqc-search-item:hover { background: var(--km-bg, #fafafa); }
+.dqc-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--km-border-light); margin-bottom: 10px; }
+.dqc-tab { border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--km-text-secondary); border-bottom: 2px solid transparent; }
+.dqc-tab--on { color: inherit; font-weight: 600; border-bottom-color: #c0392b; }
+.dqc-status { min-height: 1.2em; font-size: 0.9rem; color: var(--km-text-secondary); }
+.dqc-layout { display: grid; grid-template-columns: 280px 1fr; gap: 14px; align-items: start; }
+.dqc-queue { border-right: 1px solid var(--km-border-light); padding-right: 10px; max-height: 75vh; overflow-y: auto; }
+.dqc-qitem { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px; border-radius: 8px; cursor: pointer; }
+.dqc-qitem:hover { background: var(--km-bg, #fafafa); }
+.dqc-qitem--on { background: #eef3fd; }
+.dqc-qitem small { display: block; color: var(--km-text-secondary); }
+.dqc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dqc-back { display: none; }
+.dqc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 10px 0; }
+.dqc-card { border: 1px solid var(--km-border-light); border-radius: 8px; padding: 8px 10px; min-width: 0; font-size: 0.9rem; }
+.dqc-card-title { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; }
+.dqc-row { display: flex; gap: 6px; padding: 2px 0; overflow-wrap: anywhere; }
+.dqc-row--problem { background: #fde2e2; border-radius: 4px; }
+.dqc-row small { color: var(--km-text-secondary); }
+.dqc-done { color: #155724; font-size: 0.9rem; margin: 4px 0; }
+.dqc-q { border: 1px solid var(--km-border-light); border-radius: 8px; padding: 10px; margin: 8px 0; }
+.dqc-q--current { border-color: #2a6fd6; }
+.dqc-q--locked { color: var(--km-text-secondary); }
+.dqc-q-text { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+.dqc-hint { font-size: 0.85rem; color: var(--km-text-secondary); margin-bottom: 6px; }
+.dqc-answer { display: block; padding: 4px 0; }
+.dqc-answer-inputs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 4px 22px; }
+.dqc-answer-inputs label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--km-text-secondary); }
+.dqc-answer-inputs .admin-select { min-width: 140px; max-width: 100%; }
+.dqc-star { color: #2a9d4b; font-size: 0.85rem; }
+.dqc-conflict { margin-top: 8px; padding: 8px; border-radius: 8px; background: #fff3cd; }
+.dqc-menu { position: relative; }
+.dqc-menu > summary { list-style: none; cursor: pointer; padding: 0 4px; }
+.dqc-menu > summary::-webkit-details-marker { display: none; }
+.dqc-menu-body { position: absolute; right: 0; z-index: 15; min-width: 260px; padding: 8px; background: var(--km-bg-card);
+    border: 1px solid var(--km-border-light); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+@media (max-width: 899px) {
+    .dqc-layout { grid-template-columns: 1fr; }
+    .dqc-layout--case .dqc-queue { display: none; }
+    .dqc-layout:not(.dqc-layout--case) .dqc-case { display: none; }
+    .dqc-queue { border-right: 0; padding-right: 0; max-height: none; }
+    .dqc-back { display: inline-block; }
+    .dqc-cards { grid-template-columns: 1fr; }
+}
 
 /* ------- Присвоение номеров ------- */
 
