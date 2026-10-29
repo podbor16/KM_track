@@ -149,13 +149,20 @@ def everything():
     return d
 
 
+def test_every_code_of_checks_has_stage_and_question():
+    import inspect
+    from src.analytics import dq_checks
+    codes = set(re.findall(r'Finding\("([A-Z-]+)"', inspect.getsource(dq_checks)))
+    assert codes == set(STAGES) == set(dq_cases.BUILDERS)
+
+
 def test_every_finding_type_has_question_with_postpone():
-    d = everything()
-    found = run_checks(d) + run_checks(d, event_ids={31})
-    assert {f.code for f in found} == set(STAGES)
-    twin = next(f for f in found if f.code == "C-TWIN" and set(f.client_ids) == {5, 6})
+    d, ext = everything(), contacts()
+    found = [(f, d) for f in run_checks(d) + run_checks(d, event_ids={31})] + [(f, ext) for f in run_checks(ext)]
+    assert {f.code for f, _ in found} == set(STAGES)
+    twin = next(f for f, _ in found if f.code == "C-TWIN" and set(f.client_ids) == {5, 6})
     assert sum(a["recommended"] for a in build_question(twin, d)["answers"]) == 0
-    for f in found:
+    for f, d in found:
         q = build_question(f, d)
         assert q["id"] == f.key and q["text"] and ids(q)[-1] == "postpone" and q["stage"] in (1, 2, 3)
         assert sum(a["recommended"] for a in q["answers"]) <= 1
@@ -317,6 +324,62 @@ def test_card_scope_equals_full_run_restricted_to_cards(make):
         assert {f.key for f in run_checks(scoped_subset(d, S), card_ids=S)} == want, S
 
 
+def ivanov_twin():
+    """X-BD Иванова-заглушки и карточка с найденной ДР (конфликт ФИ+ДР -> склейка)."""
+    d = contacts()
+    return Data([*d.clients.values(), C(9, "Иванов", "Иван", "1985-07-14")], d.leads, d.results, EVENTS, d.names,
+                ext=d.ext)
+
+
+def test_registration_questions_texts():
+    d = contacts()
+    q = {f.code + str(f.client_ids): build_question(f, d) for f in run_checks(d) if f.code.startswith("X-")}
+    bd = q["X-BD(1,)"]
+    assert bd["text"] == "Иванов Иван: в карточке ДР не указана. В регистрациях на «2019»: ДР 1985-07-14. Записать?"
+    assert bd["hint"] == "Совпал телефон или почта из заявок" and bd["stage"] == 3
+    assert [(a["id"], a["recommended"]) for a in bd["answers"]] == [("bd:1985-07-14", True), ("keep", False),
+                                                                     ("postpone", False)]
+    phone = q["X-PHONE(3, 4)"]
+    assert phone["text"] == ("В заявках у Сидоров Александр (ДР 1980-03-09) и Сидоров Александр (ДР 2010-06-01) "
+                             "один и тот же телефон. Это один человек?")
+    assert "ребёнка с телефона родителя" in phone["hint"] or phone["hint"].startswith("Осторожно")
+    assert [a["id"] for a in phone["answers"]] == ["merge", "different", "postpone"] and phone["stage"] == 1
+    assert not any(a["recommended"] for a in phone["answers"])
+    diff = q["X-BDDIFF(6,)"]
+    assert diff["text"] == ("Козлов Олег: ДР в карточке 1986-07-04 (подтверждена 1 строкой, последняя — 2016), "
+                            "в регистрациях — 1998-07-04 (2 раза, последняя — 2021). Какая верная?")
+    assert [a["id"] for a in diff["answers"]] == ["bd:1998-07-04", "keep", "postpone"]
+    assert not any(a["recommended"] for a in diff["answers"])
+
+
+def test_ext_birthday_question_lists_dates_with_their_races():
+    d = contacts()
+    d.ext += [{"id": 9, "surname": "Иванов", "name": "Иван", "birthday": "1990-03-03", "sex": "", "phone": "",
+               "email": "", "product": "Ночной забег 2021, 10 км", "event_year": 2021}]
+    # без заявки Иванова совпадений по телефону нет — все ДР по ФИ
+    d = Data(list(d.clients.values()), [l for l in d.leads if l["client_id"] != 1], d.results, EVENTS, d.names, ext=d.ext)
+    [f] = [f for f in run_checks(d) if f.code == "X-BD"]
+    q = build_question(f, d)
+    assert q["text"] == ("Иванов Иван: в карточке ДР не указана. В регистрациях разные ДР: 1985-07-14 («2019»), "
+                         "1990-01-02 («2018»), 1990-03-03 («Ночной забег 2021, 10 км»). Какую записать?")
+    assert q["hint"] == "Совпали только фамилия и имя — проверьте" and not any(a["recommended"] for a in q["answers"])
+
+
+def test_bd_answer_is_field_edit_in_live_race():
+    assert not dq_cases._live_ok("bd:1985-07-14")
+
+
+def test_bd_conflict_offers_merge_then_merge_with_is_accepted(monkeypatch):
+    fake = Fake(monkeypatch, ivanov_twin())
+    fake.fail = lambda name, args: name == "edit_record" and args[0] == "clients"
+    out = fake.answer("X-BD::1", "bd:1985-07-14")
+    assert fake.calls == [] and out["action_ids"] == []
+    assert out["conflict"]["merge_with"] == 14 and out["conflict"]["birthday"] == "1985-07-14"
+    fake.fail = None
+    fake.answer("X-BD::1", "merge_with:9", {"surname": "Иванов", "name": "Иван", "birthday": "1985-07-14"})
+    assert fake.calls == [("merge_cards", ([1, 9], "Иванов", "Иван", "1985-07-14", U, "X-BD::1"), {})]
+
+
 def test_contacts_fixture_has_every_registration_code():
     found = {(f.code, f.client_ids, f.severity) for f in run_checks(contacts()) if f.code.startswith("X-")}
     assert found == {("X-BD", (1,), "high"), ("X-PHONE", (3, 4), "low"), ("X-PHONE", (3, 5), "low"),
@@ -448,6 +511,19 @@ ANSWERS = [
     (everything, "HYG:r7:12", "manual", {"surname": "Петров", "name": "Пётр"},
      [("fix_fio", (7, "Петров", "Пётр", U), {})]),
     (everything, "HYG:r7:12", "postpone", {}, [("dismiss", ("postponed", "не знаю ДР", U), {})]),
+    # регистрации: ДР карточки, затем строки с заглушкой / прежней ДР (заявка Козлова уже с новой ДР — не трогаем)
+    (contacts, "X-BD::1", "bd:1985-07-14", {},
+     [("edit_record", ("clients", 1, {"birthday": "1985-07-14"}, U), {}),
+      ("edit_record", ("results", 1, {"birthday": "1985-07-14"}, U), {}),
+      ("edit_record", ("leads", 1, {"birthday": "1985-07-14"}, U), {})]),
+    (contacts, "X-BD::1", "keep", {}, [("dismiss", ("keep", "", U), {})]),
+    (contacts, "X-BDDIFF::6", "bd:1998-07-04", {},
+     [("edit_record", ("clients", 6, {"birthday": "1998-07-04"}, U), {}),
+      ("edit_record", ("results", 6, {"birthday": "1998-07-04"}, U), {})]),
+    (contacts, "X-BDDIFF::6", "keep", {}, [("dismiss", ("keep", "", U), {})]),
+    (contacts, "X-PHONE::3-4", "merge", {"surname": "Сидоров", "name": "Александр", "birthday": "1980-03-09"},
+     [("merge_cards", ([3, 4], "Сидоров", "Александр", "1980-03-09", U), {})]),
+    (contacts, "X-PHONE::3-4", "different", {}, [("dismiss", ("different_people", "", U), {})]),
 ]
 
 

@@ -768,9 +768,25 @@ def real(bd):
     return real_bd(bd) and not jan1(bd)
 
 
-def _same_contact(data, cid, x):
+def same_contact(data, cid, x):
     """Регистрация x с телефоном или почтой из заявок карточки cid."""
     return x["phone"] in data.card_phones.get(cid, ()) or x["email"] in data.card_emails.get(cid, ())
+
+
+def ext_of(data, c, swapped=True):
+    """Регистрации с ФИ карточки c (swapped — и с переставленными)."""
+    key = fio_key(c)
+    return data.ext_by_fio.get(key, []) + (data.ext_by_fio.get(key[::-1], []) if swapped and key != key[::-1] else [])
+
+
+def bd_support(data, cid, other):
+    """-> (строк карточки с её ДР, последний год их забегов, регистраций с её ФИ и ДР other, последний их год);
+    год 0 — неизвестен."""
+    bd = data.clients[cid]["birthday"]
+    mine = [r for r in data.leads_by_card[cid] + data.res_by_card[cid] if r["birthday"] == bd]
+    theirs = [x for x in ext_of(data, data.clients[cid], swapped=False) if x["birthday"] == other]
+    return (len(mine), max((data.year(r["event_id"]) for r in mine), default=0),
+            len(theirs), max((x["event_year"] or 0 for x in theirs), default=0))
 
 
 def check_ext_birthday(data, cards):
@@ -782,10 +798,8 @@ def check_ext_birthday(data, cards):
         if not c or not data.res_by_card[cid] or real(c["birthday"]):
             continue
         year = c["birthday"][:4] if real_bd(c["birthday"]) else None
-        key = fio_key(c)
-        rows = data.ext_by_fio.get(key, []) + (data.ext_by_fio.get(key[::-1], []) if key != key[::-1] else [])
-        found = [x for x in rows if real(x["birthday"]) and (not year or x["birthday"][:4] == year)]
-        strong = [x for x in found if _same_contact(data, cid, x)]
+        found = [x for x in ext_of(data, c) if real(x["birthday"]) and (not year or x["birthday"][:4] == year)]
+        strong = [x for x in found if same_contact(data, cid, x)]
         bds = sorted({x["birthday"] for x in strong or found})
         if bds:
             how = "совпал телефон/почта" if strong else "совпали только фамилия и имя"
@@ -837,17 +851,12 @@ def check_ext_birthday_diff(data, cards):
         c = data.clients.get(cid)
         if not c or not real(c["birthday"]):
             continue
-        bd, rows = c["birthday"], data.ext_by_fio.get(fio_key(c), [])
-        other = {x["birthday"] for x in rows if real(x["birthday"]) and _same_contact(data, cid, x)
-                 and _far(x["birthday"], bd)}
-        if not other:
-            continue
-        mine = [r for r in data.leads_by_card[cid] + data.res_by_card[cid] if r["birthday"] == bd]
-        ours, ours_last = len(mine), max((data.year(r["event_id"]) for r in mine), default=0)
+        bd = c["birthday"]
+        other = {x["birthday"] for x in ext_of(data, c, swapped=False) if real(x["birthday"])
+                 and same_contact(data, cid, x) and _far(x["birthday"], bd)}
         best = None
         for o in sorted(other):
-            theirs_rows = [x for x in rows if x["birthday"] == o]
-            theirs, theirs_last = len(theirs_rows), max((x["event_year"] or 0 for x in theirs_rows), default=0)
+            ours, ours_last, theirs, theirs_last = bd_support(data, cid, o)
             if not (ours > theirs or theirs_last and ours_last > theirs_last) and (
                     not best or (theirs, theirs_last) > best[1:]):
                 best = (o, theirs, theirs_last)

@@ -315,3 +315,33 @@ def test_scoped_load_finds_registration_findings(db):
     for S in ({ivan}, {oleg}, {kid}, {swapped}, {boris}, {ivan, kid, boris}):
         want = {f.key for f in every if set(f.client_ids) & S}
         assert {f.key for f in dq_checks.run_checks(dq_checks.load_scoped(conn, S), card_ids=S)} == want, S
+
+
+def test_answer_bd_writes_card_and_placeholder_rows_undo_restores(db):
+    conn, cur = db
+    cur.execute("SHOW TABLES LIKE 'ext_registrations'")
+    if not cur.fetchall():
+        pytest.skip("Нет ext_registrations")
+    ev = event(cur, "Телефон", 5.0)
+    rid, ivan = result(cur, ev, 1, "1900-01-01", name="Иван", cat="")
+    lid, _ = lead(cur, ev, SUR, "Иван", "1900-01-01", "+7 (900) 000-00-01")
+    cur.execute("""INSERT INTO ext_registrations (source, source_row, surname, name, birthday, sex, phone, email,
+                   product, event_year) VALUES (%s, 1, %s, 'Иван', '1985-07-14', 'М', '9000000001', '', 'Тест 2099', 2099)""",
+                (USER, SUR))
+    conn.commit()
+    case = dq_cases.case_for_card(conn, ivan)
+    q = next(q for q in case["questions"] if q["code"] == "X-BD")
+    assert q["answers"][0] == {"id": "bd:1985-07-14", "label": "Записать 1985-07-14", "recommended": True, "inputs": []}
+    out = dq_cases.apply_answer(conn, case["key"], q["id"], "bd:1985-07-14", {}, USER)
+    assert len(out["action_ids"]) == 3 and out["case"] is None
+
+    def bds():
+        cur.execute("SELECT birthday FROM clients WHERE id = %s UNION ALL SELECT birthday FROM results WHERE id = %s "
+                    "UNION ALL SELECT birthday FROM leads WHERE id = %s", (ivan, rid, lid))
+        return [str(r["birthday"]) for r in cur.fetchall()]
+
+    assert bds() == ["1985-07-14"] * 3
+    for aid in reversed(out["action_ids"]):
+        dq.undo_action(conn, aid, USER)
+    conn.commit()
+    assert bds() == ["1900-01-01"] * 3

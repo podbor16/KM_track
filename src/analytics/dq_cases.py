@@ -17,15 +17,16 @@ import time
 
 from src.analytics import dq_actions
 from src.analytics.dq_actions import edit_record_view, propose_final
-from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, load_row_scoped, load_scoped,
-                                     merge_blockers, names_compatible, real_bd, remember_refs, run_checks,
-                                     with_namesakes)
+from src.analytics.dq_checks import (NOT_STARTED, bd_support, card_fits_category, ext_of, is_kid, jan1, load,
+                                     load_row_scoped, load_scoped, merge_blockers, names_compatible, real_bd,
+                                     remember_refs, run_checks, same_contact, with_namesakes)
 from src.common.names import norm
 from src.config.settings import KRASNOYARSK_TZ
 
 logger = logging.getLogger(__name__)
 
-STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3, "L-KID": 3}
+STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "X-PHONE": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3,
+          "L-KID": 3, "X-BD": 3, "X-BDDIFF": 3}
 STAGE_TITLES = {1: "Кто есть кто", 2: "Лишние строки", 3: "Поля"}
 
 
@@ -331,8 +332,80 @@ def _q_kid(f, data):
         _a("keep", "Всё верно — оставить")]
 
 
+def _plural(n, one, few, many):
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} {one}"
+    return f"{n} {few}" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else f"{n} {many}"
+
+
+EXT_EVENTS = 3                      # забегов регистрации в тексте вопроса X-BD
+
+
+def _ext_events(rows):
+    """Забеги регистраций (товар или год) — свежие первыми, до EXT_EVENTS: «Жара 2019», «РЖД 2021»."""
+    out = []
+    for x in sorted(rows, key=lambda x: -(x["event_year"] or 0)):
+        label = (x["product"] or str(x["event_year"] or "")).strip()
+        label = label if len(label) <= 40 else label[:39] + "…"
+        if label and f"«{label}»" not in out:
+            out.append(f"«{label}»")
+    return ", ".join(out[:EXT_EVENTS])
+
+
+def _q_ext_bd(f, data):
+    cid = f.client_ids[0]
+    c = data.clients[cid]
+    have = f'только год {c["birthday"][:4]}' if real_bd(c["birthday"]) else "ДР не указана"
+    rows = [x for x in ext_of(data, c) if x["birthday"] in f.fix]
+    strong = any(same_contact(data, cid, x) for x in rows)
+    found = []
+    for bd in f.fix:
+        where = _ext_events([x for x in rows if x["birthday"] == bd])
+        found.append(f"{bd} ({where})" if where else bd)
+    who = f'{c["surname"]} {c["name"]}: в карточке {have}.'
+    if len(f.fix) == 1:
+        where = _ext_events(rows)
+        text = f"{who} В регистрациях{' на ' + where if where else ''}: ДР {f.fix[0]}. Записать?"
+    else:
+        text = f'{who} В регистрациях разные ДР: {", ".join(found)}. Какую записать?'
+    hint = "Совпал телефон или почта из заявок" if strong else "Совпали только фамилия и имя — проверьте"
+    return text, hint, [*[_a(f"bd:{bd}", f"Записать {bd}", f.severity == "high") for bd in f.fix],
+                        _a("keep", "Оставить как есть")]
+
+
+def _q_ext_phone(f, data):
+    a, b = f.client_ids
+    _, s, n, bd = propose_final([a, b], data)
+    blockers = merge_blockers([a, b], data)
+    phone = (data.card_phones.get(a, set()) & data.card_phones.get(b, set())) - data.busy
+    email = (data.card_emails.get(a, set()) & data.card_emails.get(b, set())) - data.busy
+    what = ("один и тот же телефон и почта" if phone and email else "один и тот же телефон" if phone
+            else "одна и та же почта")
+    text = f"В заявках у {_card(data, a)} и {_card(data, b)} {what}. Это один человек?"
+    hint = _caution(blockers, data) or ("Обычно так регистрируют ребёнка с телефона родителя"
+                                        if f.severity == "low" else "")
+    return text, hint, [_a("merge", "Да — одна карточка", f.severity == "high" and not blockers, _fio_inputs(s, n, bd)),
+                        _a("different", "Нет, разные люди")]
+
+
+def _q_ext_bddiff(f, data):
+    cid, other = f.client_ids[0], f.fix[0]
+    c = data.clients[cid]
+    ours, ours_last, theirs, theirs_last = bd_support(data, cid, other)
+
+    def last(y):
+        return f", последняя — {y}" if y else ""
+
+    text = (f'{c["surname"]} {c["name"]}: ДР в карточке {c["birthday"]} (подтверждена '
+            f'{_plural(ours, "строкой", "строками", "строками")}{last(ours_last)}), в регистрациях — {other} '
+            f'({_plural(theirs, "раз", "раза", "раз")}{last(theirs_last)}). Какая верная?')
+    return text, "Совпал телефон или почта из заявок", [_a(f"bd:{other}", f"Как в регистрациях: {other}"),
+                                                         _a("keep", f'Как в карточке: {c["birthday"]}')]
+
+
 BUILDERS = {"C-TWIN": _q_twin, "R-LEAD": _q_lead, "R-FOREIGN": _q_foreign, "R-DUP": _q_dup, "R-CARD": _q_card,
-            "R-CAT": _q_cat, "HYG": _q_hyg, "L-KID": _q_kid}
+            "R-CAT": _q_cat, "HYG": _q_hyg, "L-KID": _q_kid, "X-BD": _q_ext_bd, "X-PHONE": _q_ext_phone,
+            "X-BDDIFF": _q_ext_bddiff}
 
 
 def build_question(f, data):
@@ -483,8 +556,7 @@ def _full(conn):
 
 
 def _open(findings, decided):
-    """Нерешённые и отложенные находки; коды без вопроса (STAGES) — не в делах."""
-    return [f for f in findings if f.code in STAGES and decided.get(f.key) in (None, "postponed")]
+    return [f for f in findings if decided.get(f.key) in (None, "postponed")]
 
 
 def _cases(data, findings, decided):
@@ -627,7 +699,9 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
         return {"action_ids": _postpone(conn, case, decided, inputs.get("reason", ""), user),
                 "case": _case_after(conn, case, extra_cards)}
     offered = {a["id"] for a in build_question(f, data)["answers"]}
-    if answer_id not in offered and not (answer_id.startswith("merge_with:") and "card_from_row" in offered):
+    # merge_with:<id> — после конфликта правки карточки (ответы card_from_row/other, bd:<дата>)
+    if answer_id not in offered and not (answer_id.startswith("merge_with:") and (
+            "card_from_row" in offered or any(a.startswith("bd:") for a in offered))):
         raise ValueError(f"неизвестный ответ {answer_id}")
     stage = _locked_by(case, f, decided)
     if stage:
@@ -669,6 +743,19 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
             aid.append(a)
         if row_diff:
             aid.append(dq_actions.edit_record(conn, "results", row["id"], row_diff, user, f.key)[1])
+    elif answer_id.startswith("bd:"):
+        # ДР карточки, затем её строки с заглушкой, «ГГГГ-01-01» того же года или прежней ДР карточки
+        c = data.clients[f.client_ids[0]]
+        new, old = answer_id[3:], c["birthday"]
+        a, conflict = _edit_card(conn, f, c, {"birthday": new}, user)
+        if conflict:
+            return {"action_ids": [], "case": _case_after(conn, case, extra_cards), "conflict": conflict}
+        aid.append(a)
+        for t, rows in (("results", data.res_by_card[c["id"]]), ("leads", data.leads_by_card[c["id"]])):
+            for r in rows:
+                bd = r["birthday"]
+                if bd != new and (not real_bd(bd) or bd == old or (jan1(bd) and bd[:4] == new[:4])):
+                    aid.append(dq_actions.edit_record(conn, t, r["id"], {"birthday": new}, user, f.key)[1])
     elif answer_id.startswith("merge_with:"):
         other = _merge_target(data, f, answer_id, fio)
         aid.append(dq_actions.merge_cards(conn, [f.client_ids[0], other], fio["surname"], fio["name"],
