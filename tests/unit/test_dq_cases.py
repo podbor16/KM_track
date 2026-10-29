@@ -7,8 +7,8 @@ import pytest
 
 from src.analytics import dq_actions, dq_cases
 from src.analytics.dq_cases import STAGES, build_question, case_view, group_cases, is_live, questions_for
-from src.analytics.dq_checks import Data, Finding, run_checks
-from src.common.names import Names
+from src.analytics.dq_checks import Data, Finding, _needs, run_checks, with_namesakes
+from src.common.names import Names, norm
 
 EVENTS = [
     {"id": 10, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2016, "event_date": datetime.date(2016, 8, 28)},
@@ -290,13 +290,34 @@ def test_card_scope_equals_full_run_restricted_to_cards(make):
 
 # ---------------------------------------------------------------- ответы (БД заменена данными в памяти)
 
+def scoped_subset(full, card_ids, event_ids=()):
+    """Что выбрала бы load_scoped из базы full (те же правила, в памяти) — Data с настоящим scope для covers()."""
+    ids, event_ids = set(card_ids), set(event_ids)
+    surnames = {norm(full.clients[i]["surname"]) for i in ids if i in full.clients}
+    base = with_namesakes(Data([c for c in full.clients.values() if norm(c["surname"]) in surnames], [], [], [],
+                               full.names), ids)
+    keys, bds, bibs = _needs(full, base)
+    cards = base | {i for i, c in full.clients.items() if norm(c["surname"]) in keys or c["birthday"] in bds}
+    cards |= {r["client_id"] for r in full.leads + full.results if r["client_id"] in cards
+              or norm(r["surname"]) in keys or (r["event_id"], r["start_number"]) in bibs}
+    same = {(e["event_name"], e["event_year"]) for i, e in full.events.items() if i in event_ids}
+    lead_events = {i for i, e in full.events.items() if (e["event_name"], e["event_year"]) in same}
+    return Data([c for i, c in full.clients.items() if i in cards],
+                [l for l in full.leads if l["client_id"] in cards or l["event_id"] in lead_events],
+                [r for r in full.results if r["client_id"] in cards or r["event_id"] in event_ids],
+                list(full.events.values()), full.names,
+                scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids})
+
+
 class Fake:
     """dq_cases.load/load_scoped и dq_actions.load_decisions — из памяти; действия dq_actions — записывающие заглушки.
-    loads — вызовы load_scoped, full_loads — полной load."""
+    loads — вызовы load_scoped, full_loads — полной load; scoped — load_scoped отдаёт подмножество (scoped_subset),
+    иначе всю базу (covers() — всегда да)."""
     ACTIONS = {"merge_cards": (0, 1), "move_row": (0, 1), "edit_record": (0, 1), "dismiss": 1, "delete_result": 1,
                "fix_fio": (0, 1)}
 
-    def __init__(self, monkeypatch, d):
+    def __init__(self, monkeypatch, d, scoped=False):
+        self.scoped = scoped
         self.d, self.decided, self.calls, self.loads, self.full_loads, self.fail = d, {}, [], 0, 0, None
         monkeypatch.setattr(dq_cases, "load", self._load)
         monkeypatch.setattr(dq_cases, "load_scoped", self._load_scoped)
@@ -312,7 +333,7 @@ class Fake:
 
     def _load_scoped(self, conn, card_ids, event_ids=()):
         self.loads += 1
-        return self.d
+        return scoped_subset(self.d, card_ids, event_ids) if self.scoped else self.d
 
     def _stub(self, name, ret):
         def act(conn, *args, **kw):
@@ -481,15 +502,85 @@ def test_loads_once_per_read(monkeypatch):
 
 def test_queue_is_cached_until_an_action(monkeypatch):
     fake = Fake(monkeypatch, everything())
-    dq_cases.list_cases(None, "open")
-    dq_cases.list_cases(None, "postponed")
-    assert (fake.loads, fake.full_loads) == (0, 1)
-    fake.answer("HYG:r7:12", "keep")
-    dq_cases.list_cases(None, "open")
-    assert fake.full_loads == 1
+
+    def full_loads(call):
+        before = fake.full_loads
+        call()
+        return fake.full_loads - before
+
+    assert full_loads(lambda: dq_cases.list_cases(None, "open")) == 1
+    assert full_loads(lambda: dq_cases.list_cases(None, "postponed")) == 0
+    fake.answer("HYG:r7:12", "keep")                    # answer() обнуляет счётчики
+    assert full_loads(lambda: dq_cases.list_cases(None, "open")) == 1
     dq_cases.postpone_case(None, "c1", "", U)
+    assert full_loads(lambda: dq_cases.list_cases(None, "open")) == 1
+
+
+def test_invalidate_during_load_is_not_lost(monkeypatch):
+    """Поток A грузит базу, поток B ответил и сбросил кеш — данные A (до ответа) в кеш не попадают."""
+    fake = Fake(monkeypatch, everything())
+
+    def load_while_answered(conn):
+        fake.full_loads += 1
+        dq_cases.invalidate()
+        return fake.d
+
+    monkeypatch.setattr(dq_cases, "load", load_while_answered)
+    dq_cases.list_cases(None, "open")
     dq_cases.list_cases(None, "open")
     assert fake.full_loads == 2
+
+
+def test_failed_chain_still_invalidates_queue(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    dq_cases.list_cases(None, "open")
+    fake.fail = lambda name, args: name == "edit_record" and args[0] == "results"     # карточка записана, строка — нет
+    with pytest.raises(ValueError):
+        fake.answer("R-CARD:r6:11", "other", {**FIO, "birthday": "2014-06-06"})
+    before = fake.full_loads
+    dq_cases.list_cases(None, "open")
+    assert fake.full_loads - before == 1
+
+
+def test_case_not_converged_falls_back_to_full_run(monkeypatch, caplog):
+    fake = Fake(monkeypatch, everything(), scoped=True)
+    want = dq_cases.get_case(None, "c5")             # 5 -> тёзка 6 -> неподвижная точка на второй итерации
+    monkeypatch.setattr(dq_cases, "EXPAND", 1)
+    fake.loads = fake.full_loads = 0
+    with caplog.at_level("WARNING"):
+        assert dq_cases.get_case(None, "c5") == want
+    assert fake.full_loads == 1 and "[5]" in caplog.text
+
+
+def test_scoped_case_equals_full_run_case(monkeypatch):
+    d = everything()
+    Fake(monkeypatch, d, scoped=True)
+    today = datetime.date(2026, 10, 28)
+    for case in group_cases(run_checks(d), d):
+        assert dq_cases.get_case(None, case["key"]) == case_view(case, d, {}, today), case["key"]
+
+
+def merge_other_surname():
+    """R-CARD Ветровой; карточка с итоговыми ФИ+ДР — другой фамилии (Орлова)."""
+    return data([C(11, "Ветрова", "Елизавета", "2014-12-12"), C(14, "Орлова", "Елизавета", "2014-06-06")],
+                results=[R(6, 11, "Ветрова", "Елизавета", "2014-01-01", 10, 4102, sex="Женщина")])
+
+
+# фактическое число load_scoped на ответ (поиск дела + дело после ответа) при настоящем covers()
+SCOPED_ANSWERS = [
+    (everything, "R-FOREIGN:r101:1-2-3", "to:2", {}, 2),                       # перенос на тёзку
+    (merge_other_surname, "R-CARD:r6:11", "merge_with:14",                       # склейка с другой фамилией
+     {"surname": "Орлова", "name": "Елизавета", "birthday": "2014-06-06"}, 2),
+]
+
+
+@pytest.mark.parametrize("make,key,answer_id,inputs,loads", SCOPED_ANSWERS, ids=["to-namesake", "merge-other-surname"])
+def test_answer_load_count_with_real_scope(monkeypatch, make, key, answer_id, inputs, loads):
+    whole = Fake(monkeypatch, make()).answer(key, answer_id, inputs)
+    fake = Fake(monkeypatch, make(), scoped=True)
+    out = fake.answer(key, answer_id, inputs)
+    assert fake.calls and (fake.loads, fake.full_loads) == (loads, 0)
+    assert out == whole
 
 
 def test_case_for_card_joins_namesake_case_else_unknown_key(monkeypatch):
@@ -546,3 +637,36 @@ def test_extra_cards_are_kept_in_case_after_answer(monkeypatch):
     assert 3 not in case["cards"]
     dq_cases.apply_answer(None, case["key"], "R-CARD:r6:11", "card_from_row", {}, U, extra_cards=[3])
     assert 3 in seen[-1]
+
+
+def row_subset(full, table, row_id):
+    """Что выбрала бы load_row_scoped из базы full (в БД строку без карточки не создать: client_id NOT NULL + FK)."""
+    row = (full.result_by_id if table == "results" else full.lead_by_id).get(row_id)
+    if not row:
+        return None
+    keys = {norm(row["surname"]), norm(row["name"])}
+
+    def near(r):
+        return r["event_id"] == row["event_id"] and (not r["client_id"] or norm(r["surname"]) in keys or bool(
+            row["start_number"] and r["start_number"] == row["start_number"]))
+
+    cards = {r["client_id"] for r in full.leads + full.results if near(r)} - {0, None}
+    return Data([c for i, c in full.clients.items() if i in cards],
+                [x for x in full.leads if near(x) or x["client_id"] in cards],
+                [x for x in full.results if near(x) or x["client_id"] in cards], list(full.events.values()), full.names)
+
+
+def test_orphan_row_case_equals_full_run(monkeypatch):
+    """Дела «r<id>» — результаты без карточки (client_id 0): R-DUP «два финиша» группы (0, забег), R-CARD."""
+    d = data([C(1, "Пцарев", "Александр", "1980-03-09")],
+             results=[R(100, 0, "Пцарев", "Александр", "1980-03-09", 11, 1), R(101, 0, "Орлов", "Олег", "1990-02-02", 11, 2),
+                      R(102, 1, "Пцарев", "Александр", "1980-03-09", 12, 3)])
+    fake = Fake(monkeypatch, d)
+    monkeypatch.setattr(dq_cases, "load_row_scoped", lambda conn, table, row_id: row_subset(d, table, row_id))
+    orphans = [c for c in group_cases(run_checks(d), d) if not c["cards"]]
+    assert {"R-DUP", "R-CARD"} <= {f.code for c in orphans if c["key"] == "r100" for f in c["findings"]}
+    for key in {c["key"] for c in orphans}:
+        want = next(c for c in orphans if c["key"] == key)
+        assert dq_cases.get_case(None, key) == case_view(want, d, {}, datetime.date(2026, 10, 28)), key
+    assert dq_cases.get_case(None, "r999") is None
+    assert (fake.loads, fake.full_loads) == (0, 0)

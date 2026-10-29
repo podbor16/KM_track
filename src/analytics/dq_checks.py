@@ -14,6 +14,7 @@ import dataclasses
 from datetime import datetime
 import itertools
 import re
+import threading
 import time
 
 from src.common.names import SENTINELS, Names, _near_bd, canonical_fio, lev, norm
@@ -80,7 +81,7 @@ class Data:
         self.cards_by_surname = collections.defaultdict(list)
         for i, c in self.clients.items():
             self.cards_by_surname[norm(c["surname"])].append(i)
-        self.names = names or Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
+        self.names = names if names is not None else Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
 
     def year(self, event_id):
         return int(self.events.get(event_id, {}).get("event_year") or 0)
@@ -146,18 +147,34 @@ def load(conn):
 
 
 NAMES_TTL = 600                       # с: справочник имён по всей базе для load_scoped
-_names_cache = {}
+_names_lock = threading.Lock()
+_names_cache = None                   # (когда, Names) — заменяется целиком
+
+
+def _fresh_names():
+    c = _names_cache
+    return c[1] if c and time.monotonic() - c[0] <= NAMES_TTL else None
+
+
+def remember_names(names):
+    """Справочник имён, построенный полной load, — в кеш (один источник для очереди и дела)."""
+    global _names_cache
+    _names_cache = (time.monotonic(), names)
 
 
 def cached_names(conn):
-    """Names по всем заявкам и результатам (как у load) — кеш процесса на NAMES_TTL с."""
-    if not _names_cache or time.monotonic() - _names_cache["at"] > NAMES_TTL:
+    """Names по всем заявкам и результатам (как у load) — кеш процесса на NAMES_TTL с; строит один поток."""
+    if (names := _fresh_names()) is not None:
+        return names
+    with _names_lock:
+        if (names := _fresh_names()) is not None:
+            return names
         cur = conn.cursor()
         cur.execute("SELECT surname, name, sex FROM leads UNION ALL SELECT surname, name, sex FROM results")
         names = Names(cur.fetchall())
         cur.close()
-        _names_cache.update(at=time.monotonic(), names=names)
-    return _names_cache["names"]
+        remember_names(names)
+        return names
 
 
 def with_namesakes(data, ids):
@@ -193,7 +210,8 @@ def load_scoped(conn, card_ids, event_ids=()):
     карточки и их тёзки, все их строки; карточки и строки с их фамилиями и именами (в том числе имя на месте
     фамилии), карточки с их ДР (похожие ФИ), строки тех же забегов с теми же номерами (опечатка в фамилии);
     у каждой загруженной карточки — все её строки. event_ids — забеги, чьи строки нужны целиком (варианты
-    категорий и дистанций в вопросах). События — все, справочник имён — по всей базе (cached_names)."""
+    категорий и дистанций в вопросах). События — все, справочник имён — по всей базе (cached_names).
+    Фамилии сравнивает колляция БД (NO PAD), а не norm: пробелы по краям/двойные пробелы разошлись бы."""
     cur = conn.cursor(dictionary=True)
     names, events = cached_names(conn), _events(cur)
     ids = {int(i) for i in card_ids}
@@ -226,6 +244,33 @@ def load_scoped(conn, card_ids, event_ids=()):
 
     return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
                 scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids})
+
+
+def load_row_scoped(conn, table, row_id):
+    """Data для находок строки без карточки (дело «r<id>»/«l<id>», None — строки нет): строки того же забега
+    с её фамилией или именем, с её номером и без карточки (R-DUP по client_id 0), карточки этих строк
+    со всеми их строками. run_checks — без card_ids, нужные — находки без карточек."""
+    cur = conn.cursor(dictionary=True)
+    names, events = cached_names(conn), _events(cur)
+    row = next(iter(_select(cur, table, [("id = %s", (row_id,))])), None)
+    if not row:
+        cur.close()
+        return None
+    keys = tuple({norm(row["surname"]), norm(row["name"])} - {""}) or ("",)
+    where = (f"event_id = %s AND (client_id = 0 OR client_id IS NULL OR start_number = %s OR surname IN "
+             f"({','.join(['%s'] * len(keys))}))", (row["event_id"], row["start_number"], *keys))
+    rows = {t: {r["id"]: r for r in _select(cur, t, [where])} for t in ("leads", "results")}
+    cards = {r["client_id"] for t in rows for r in rows[t].values()} - {0, None}
+    clients = {c["id"]: c for c in _select(cur, "clients", [_in("id", cards)])}
+    for t in rows:
+        rows[t] |= {r["id"]: r for r in _select(cur, t, [_in("client_id", cards)])}
+    cur.close()
+
+    def by_id(d):
+        return [d[k] for k in sorted(d)]
+
+    return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
+                scope={"cards": set(), "keys": set(), "bds": set(), "bibs": set(), "events": set()})
 
 
 # ---------------------------------------------------------------- правила

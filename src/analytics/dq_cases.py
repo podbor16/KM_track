@@ -8,15 +8,22 @@
 
 import collections
 import datetime as _dt
+import functools
+import itertools
+import logging
 import re
+import threading
 import time
 
 from src.analytics import dq_actions
 from src.analytics.dq_actions import edit_record_view, propose_final
-from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, load_scoped, merge_blockers,
-                                     names_compatible, real_bd, run_checks, with_namesakes)
+from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, load_row_scoped, load_scoped,
+                                     merge_blockers, names_compatible, real_bd, remember_names, run_checks,
+                                     with_namesakes)
 from src.common.names import norm
 from src.config.settings import KRASNOYARSK_TZ
+
+logger = logging.getLogger(__name__)
 
 STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3, "L-KID": 3}
 STAGE_TITLES = {1: "Кто есть кто", 2: "Лишние строки", 3: "Поля"}
@@ -428,20 +435,51 @@ class StaleQuestion(Exception):
 QUEUE_TTL = 60                      # с: полный прогон для очереди дел (другие процессы сервера — не позже)
 EXPAND = 4                          # итераций расширения дела карточками его находок
 OPTION_CODES = ("R-CAT", "L-KID")   # вопросы с выбором категории/дистанции — нужны строки забега целиком
-_queue = {}
+_queue_lock = threading.Lock()
+_generations = itertools.count(1)   # next() атомарен: invalidate() не ждёт загрузку
+_gen = 0
+_queue = None                       # (когда, поколение, data, находки) — заменяется целиком
 
 
 def invalidate():
-    """Сбросить кеш очереди этого процесса — после любого действия «Качества данных»."""
-    _queue.clear()
+    """Сбросить кеш очереди этого процесса — после любого действия «Качества данных»; загрузка, начатая до сброса,
+    в кеш не попадёт."""
+    global _gen, _queue
+    _gen = next(_generations)
+    _queue = None
+
+
+def _cached():
+    q = _queue
+    return q if q and q[1] == _gen and time.monotonic() - q[0] <= QUEUE_TTL else None
+
+
+def _invalidating(fn):
+    """Действие пишет в базу — кеш очереди сбрасывается и при ошибке посреди цепочки."""
+    @functools.wraps(fn)
+    def run(*args, **kw):
+        try:
+            return fn(*args, **kw)
+        finally:
+            invalidate()
+    return run
 
 
 def _full(conn):
-    """Полный прогон (данные, находки) — кеш процесса на QUEUE_TTL с."""
-    if not _queue or time.monotonic() - _queue["at"] > QUEUE_TTL:
+    """Полный прогон (данные, находки) — кеш процесса на QUEUE_TTL с; холодную загрузку делает один поток."""
+    global _queue
+    if q := _cached():
+        return q[2], q[3]
+    with _queue_lock:
+        if q := _cached():
+            return q[2], q[3]
+        gen = _gen
         data = load(conn)
-        _queue.update(at=time.monotonic(), data=data, findings=run_checks(data))
-    return _queue["data"], _queue["findings"]
+        findings = run_checks(data)
+        remember_names(data.names)
+        if gen == _gen:
+            _queue = (time.monotonic(), gen, data, findings)
+        return data, findings
 
 
 def _open(findings, decided):
@@ -466,6 +504,7 @@ def _scoped(conn, cards, events=(), view=False):
     с вариантами категорий/дистанций. load_scoped — только когда загруженного не хватает."""
     decided = dq_actions.load_decisions(conn)
     cards, events, data = set(cards), set(events), None
+    start = sorted(cards)
     for _ in range(EXPAND):
         if data is None or not data.covers(cards, events):
             data = load_scoped(conn, cards, events)
@@ -473,21 +512,19 @@ def _scoped(conn, cards, events=(), view=False):
         more = with_namesakes(data, cards | {i for f in found for i in f.client_ids if i})
         more_events = events | ({f.event_id for f in found if f.code in OPTION_CODES and f.event_id} if view else set())
         if more <= cards and more_events <= events:
-            break
+            return data, group_cases(found, data), decided
         cards, events = cards | more, more_events
-    return data, group_cases(found, data), decided
+    logger.warning("Дело карточек %s не сошлось за %d итераций (%d карточек) — полный прогон", start, EXPAND, len(cards))
+    data, findings = _full(conn)
+    return data, _cases(data, findings, decided), decided
 
 
 def _row_case(conn, key):
     """Дело «r<id>»/«l<id>» — находка строки без карточки -> (data, дела, решения)."""
-    cur = conn.cursor(dictionary=True)
-    cur.execute(f"SELECT client_id FROM {'results' if key[0] == 'r' else 'leads'} WHERE id = %s", (int(key[1:]),))
-    row = cur.fetchone()
-    cur.close()
     decided = dq_actions.load_decisions(conn)
-    if not row:
+    data = load_row_scoped(conn, "results" if key[0] == "r" else "leads", int(key[1:]))
+    if data is None:
         return None, [], decided
-    data = load_scoped(conn, {row["client_id"] or 0})
     return data, _cases(data, [f for f in run_checks(data) if not any(f.client_ids)], decided), decided
 
 
@@ -513,7 +550,7 @@ def _find_case(cases, key, cards=()):
 
 def _case_after(conn, case, extra_cards=()):
     """Дело после ответа: проверки только по карточкам дела, его тёзкам и карточкам, куда ушли строки."""
-    invalidate()
+    invalidate()                    # откат к полному прогону (_scoped) должен увидеть записанное
     cards = {*case["cards"], *extra_cards}
     events = {f.event_id for f in case["findings"] if f.code in OPTION_CODES and f.event_id}
     data, found, decided = _case_by_key(conn, case["key"], cards, events, view=True, cards=cards)
@@ -573,6 +610,7 @@ def _locked_by(case, f, decided):
     return None
 
 
+@_invalidating
 def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_cards=()):
     """Выполнить цепочку ответа -> {"action_ids": [...], "case": дело после ответа (None — дело закрыто)};
     правка карточки упёрлась в чужие ФИ+ДР -> ничего не записано, ещё
@@ -644,14 +682,13 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
     return {"action_ids": aid, "case": _case_after(conn, case, [*moved, *extra_cards])}
 
 
+@_invalidating
 def postpone_case(conn, case_key, reason, user):
     """Отложить все вопросы дела (решение «postponed» с причиной, по умолчанию «не знаю ДР») -> id записей журнала."""
     _, case, decided = _case_by_key(conn, case_key)
     if not case:
         raise StaleQuestion("Дело изменилось — обновите")
-    ids = _postpone(conn, case, decided, reason, user)
-    invalidate()
-    return ids
+    return _postpone(conn, case, decided, reason, user)
 
 
 def list_cases(conn, status="open", event_id=None):

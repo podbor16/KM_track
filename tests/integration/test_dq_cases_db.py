@@ -2,6 +2,7 @@
 Тестовые данные — события 2099 года, фамилия «Тестделов<суффикс прогона>», убираются после теста."""
 import datetime
 import random
+import uuid
 
 import pytest
 
@@ -10,7 +11,7 @@ from src.analytics import data_quality as dq
 from src.analytics.db_pool import get_pooled_connection
 
 # суффикс прогона: параллельные прогоны не убирают данные друг друга
-RUN = "".join(random.choice("бвгджзклмнпрстф") for _ in range(4))
+RUN = uuid.uuid4().hex[:6].translate(str.maketrans("0123456789abcdef", "бвгджзклмнпрстфх"))   # кириллица: ФИО без HYG
 EV, SUR, USER = f"Тест дел {RUN}", f"Тестделов{RUN}", f"test-cases-{RUN}"
 
 
@@ -205,7 +206,7 @@ def test_moved_lead_visible_in_admin_leads_and_duplicates(db):
 # ---------------------------------------------------------------- загрузка по фамилиям = полный прогон (данные базы)
 
 def _full_run(conn):
-    dq_checks._names_cache.clear()                  # справочник имён — по текущей базе, как у load
+    dq_checks._names_cache = None                   # справочник имён — по текущей базе, как у load
     data = dq_checks.load(conn)
     return data, dq_checks.run_checks(data)
 
@@ -213,7 +214,8 @@ def _full_run(conn):
 def test_scoped_load_finds_what_full_run_finds(db):
     conn, _ = db
     data, every = _full_run(conn)
-    cards = sorted({i for f in every for i in f.client_ids if i})[:10]
+    found = sorted({i for f in every for i in f.client_ids if i})
+    cards = sorted(set(found[:10]) | set(random.Random(11).sample(found, min(10, len(found)))))
     bib = next((f for f in every if f.code == "R-LEAD" and "(тот же номер)" in f.message), None)
     if bib:
         cards.append(min(bib.client_ids))

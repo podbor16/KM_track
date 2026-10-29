@@ -1,6 +1,6 @@
 """Поиск карточек и профиль по client_id на локальной БД (.env.local): тёзки — раздельно.
 Тестовые данные — на событиях 2099 года, убираются после теста."""
-import random
+import uuid
 
 import pytest
 
@@ -8,7 +8,7 @@ from src.analytics import db_athletes
 from src.analytics.db_pool import get_pooled_connection
 
 # суффикс прогона: параллельные прогоны не убирают данные друг друга
-RUN = "".join(random.choice("бвгджзклмнпрстф") for _ in range(4))
+RUN = uuid.uuid4().hex[:6].translate(str.maketrans("0123456789abcdef", "бвгджзклмнпрстфх"))   # кириллица: ФИО без HYG
 EV, SUR = f"Тест профиля {RUN}", f"Тестпрофилев{RUN}"
 
 
