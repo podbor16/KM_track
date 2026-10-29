@@ -300,8 +300,9 @@ def test_scoped_load_finds_registration_findings(db):
     _, kid = lead(cur, ev, SUR, "Олег", "2010-06-01", "8 900 000 00 02")
     _, swapped = lead(cur, ev, "Олег", SUR, "1975-05-05", "89000000002")
     _, boris = result(cur, ev, 3, "1986-07-04", name="Борис", cat="")
-    lid, _ = lead(cur, ev, SUR, "Борис", "1998-07-04", "+79000000003")
+    lid, made = lead(cur, ev, SUR, "Борис", "1998-07-04", "+79000000003")
     cur.execute("UPDATE leads SET client_id = %s WHERE id = %s", (boris, lid))
+    cur.execute("DELETE FROM clients WHERE id = %s", (made,))      # иначе ДР регистраций — у тёзки (namesake_bds)
     for n, (name, bd, phone) in enumerate([("Иван", "1985-07-14", "9000000001"), ("Борис", "1998-07-04", "9000000003"),
                                            ("Борис", "1998-07-04", "")]):
         cur.execute("""INSERT INTO ext_registrations (source, source_row, surname, name, birthday, sex, phone, email,

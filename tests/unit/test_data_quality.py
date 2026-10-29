@@ -589,3 +589,26 @@ def test_ext_birthday_diff_picks_strongest_other_date():
                lead_bd="")
     [f] = codes(d, "X-BDDIFF")
     assert f.fix == ("1998-07-04",) and "2 раз" in f.message
+
+
+def test_ext_birthday_diff_ignores_namesake_birthday_pcarevy():
+    """Сын 2013-12-20; регистрации 1980-03-09 с телефона отца — это ДР отца-тёзки с отдельной карточкой."""
+    son = [R(i, 1, "Пцарев", "Александр", "2013-12-20", 3, i) for i in (1, 2)]
+    ext = [E(i, "Пцарев", "Александр", "1980-03-09", "9231234567", year=2025) for i in (1, 2, 3)]
+    leads = [LP(1, 1, "Пцарев", "Александр", "2013-12-20", 1, PHONE)]
+    alone = ext_data([C(1, "Пцарев", "Александр", "2013-12-20")], leads, son, ext)
+    assert [f.fix for f in codes(alone, "X-BDDIFF")] == [("1980-03-09",)]
+    father = ext_data([C(1, "Пцарев", "Александр", "2013-12-20"), C(2, "Пцарев", "Александр", "1980-03-09")],
+                      leads, son, ext)
+    assert not codes(father, "X-BDDIFF")
+
+
+def test_ext_birthday_skips_namesake_birthday_keeps_other():
+    d = ext_data([C(1, "Иванов", "Иван", "1900-01-01"), C(2, "Иван", "Иванов", "1985-07-14")],
+                 leads=[LP(1, 1, "Иванов", "Иван", "1900-01-01", 2, PHONE)],
+                 results=[R(1, 1, "Иванов", "Иван", "1900-01-01", 2, 5)],
+                 ext=[E(1, "Иванов", "Иван", "1985-07-14", "9231234567"), E(2, "Иванов", "Иван", "1990-03-03")])
+    [f] = codes(d, "X-BD")
+    assert (f.severity, f.fix) == ("medium", ("1990-03-03",))       # сильный кандидат — ДР тёзки, отброшен
+    only = ext_data(list(d.clients.values()), d.leads, d.results, [E(1, "Иванов", "Иван", "1985-07-14", "9231234567")])
+    assert not codes(only, "X-BD")

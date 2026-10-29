@@ -779,6 +779,14 @@ def ext_of(data, c, swapped=True):
     return data.ext_by_fio.get(key, []) + (data.ext_by_fio.get(key[::-1], []) if swapped and key != key[::-1] else [])
 
 
+def namesake_bds(data, c):
+    """ДР других карточек с ФИ карточки c (или переставленными): регистрации с такой ДР — регистрации тёзки
+    (Пцаревы: отец регистрировал сына со своего телефона, 2026-10-29)."""
+    key = fio_key(c)
+    return {data.clients[i]["birthday"] for k in {key, key[::-1]} for i in data.cards_by_fio.get(k, ())
+            if i != c["id"]}
+
+
 def bd_support(data, cid, other):
     """-> (строк карточки с её ДР, последний год их забегов, регистраций с её ФИ и ДР other, последний их год);
     год 0 — неизвестен."""
@@ -791,14 +799,17 @@ def bd_support(data, cid, other):
 
 def check_ext_birthday(data, cards):
     """X-BD: у карточки с результатами ДР-заглушка или «ГГГГ-01-01» — надёжные ДР регистраций с теми же (или
-    переставленными) ФИ, для «ГГГГ-01-01» — того же года; есть совпавшие по телефону/почте — только их ДР."""
+    переставленными) ФИ, для «ГГГГ-01-01» — того же года, кроме ДР тёзок (namesake_bds); есть совпавшие по
+    телефону/почте — только их ДР."""
     out = []
     for cid in cards:
         c = data.clients.get(cid)
         if not c or not data.res_by_card[cid] or real(c["birthday"]):
             continue
         year = c["birthday"][:4] if real_bd(c["birthday"]) else None
-        found = [x for x in ext_of(data, c) if real(x["birthday"]) and (not year or x["birthday"][:4] == year)]
+        taken = namesake_bds(data, c)
+        found = [x for x in ext_of(data, c) if real(x["birthday"]) and (not year or x["birthday"][:4] == year)
+                 and x["birthday"] not in taken]
         strong = [x for x in found if same_contact(data, cid, x)]
         bds = sorted({x["birthday"] for x in strong or found})
         if bds:
@@ -843,7 +854,7 @@ def _far(x, y):
 
 def check_ext_birthday_diff(data, cards):
     """X-BDDIFF: надёжная ДР карточки расходится (больше чем на год) с надёжной ДР регистраций с теми же ФИ и её
-    телефоном/почтой. Наша ДР — истина, если строк карточки с ней больше, чем регистраций с другой, или наша
+    телефоном/почтой, кроме ДР тёзок (namesake_bds). Наша ДР — истина, если строк карточки с ней больше, чем регистраций с другой, или наша
     последняя строка свежее; иначе (в том числе при равенстве) — находка (решение пользователя 2026-10-29).
     Ни у одной регистрации с другой ДР нет года — свежесть не сравнить, решает только количество."""
     out = []
@@ -853,7 +864,7 @@ def check_ext_birthday_diff(data, cards):
             continue
         bd = c["birthday"]
         other = {x["birthday"] for x in ext_of(data, c, swapped=False) if real(x["birthday"])
-                 and same_contact(data, cid, x) and _far(x["birthday"], bd)}
+                 and same_contact(data, cid, x) and _far(x["birthday"], bd)} - namesake_bds(data, c)
         best = None
         for o in sorted(other):
             ours, ours_last, theirs, theirs_last = bd_support(data, cid, o)

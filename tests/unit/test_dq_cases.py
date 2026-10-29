@@ -313,7 +313,24 @@ def contacts():
     return d
 
 
-@pytest.mark.parametrize("make", [pcarev, everything, leads_only, contacts])
+def pcarevy_registrations():
+    """Регистрации отца с телефона в заявке сына: ДР отца — у тёзки (своя карточка), у сына находки X-BDDIFF нет;
+    у карточки-заглушки (переставленные ФИ) ДР отца тоже не кандидат."""
+    def E(i, bd, year):
+        return {"id": i, "surname": "Пцарев", "name": "Александр", "birthday": bd, "sex": "", "phone": "9230000009",
+                "email": "", "product": "", "event_year": year}
+
+    clients = [C(1, "Пцарев", "Александр", "2013-12-20"), C(2, "Пцарев", "Александр", "1980-03-09"),
+               C(3, "Александр", "Пцарев", "1900-01-01")]
+    leads = [{**L(1, 1, "Пцарев", "Александр", "2013-12-20", 11), "phone": "+79230000009", "email": ""},
+             {**L(3, 3, "Александр", "Пцарев", "1900-01-01", 11), "phone": "+79230000009", "email": ""}]
+    results = [R(1, 1, "Пцарев", "Александр", "2013-12-20", 11, 1), R(3, 3, "Александр", "Пцарев", "1900-01-01", 11, 3)]
+    d = Data(clients, leads, results, EVENTS, ext=[E(1, "1980-03-09", 2019), E(2, "1980-03-09", 2021)])
+    d.names = Names([("Пцарев", "Александр", "Мужчина")] * 5)
+    return d
+
+
+@pytest.mark.parametrize("make", [pcarev, everything, leads_only, contacts, pcarevy_registrations])
 def test_card_scope_equals_full_run_restricted_to_cards(make):
     d = make()
     full = run_checks(d)
@@ -322,13 +339,6 @@ def test_card_scope_equals_full_run_restricted_to_cards(make):
         want = {f.key for f in full if set(f.client_ids) & S}
         assert {f.key for f in run_checks(d, card_ids=S)} == want, S
         assert {f.key for f in run_checks(scoped_subset(d, S), card_ids=S)} == want, S
-
-
-def ivanov_twin():
-    """X-BD Иванова-заглушки и карточка с найденной ДР (конфликт ФИ+ДР -> склейка)."""
-    d = contacts()
-    return Data([*d.clients.values(), C(9, "Иванов", "Иван", "1985-07-14")], d.leads, d.results, EVENTS, d.names,
-                ext=d.ext)
 
 
 def test_registration_questions_texts():
@@ -369,15 +379,19 @@ def test_bd_answer_is_field_edit_in_live_race():
     assert not dq_cases._live_ok("bd:1985-07-14")
 
 
-def test_bd_conflict_offers_merge_then_merge_with_is_accepted(monkeypatch):
-    fake = Fake(monkeypatch, ivanov_twin())
+def test_bd_conflict_writes_nothing_then_question_gives_way_to_twin(monkeypatch):
+    """Карточка с найденной ДР появилась после прогона (ФИ+ДР заняты): ничего не записано; с ней ДР — уже тёзки,
+    кандидат отброшен (дальше — двойник C-TWIN)."""
+    fake = Fake(monkeypatch, contacts())
     fake.fail = lambda name, args: name == "edit_record" and args[0] == "clients"
     out = fake.answer("X-BD::1", "bd:1985-07-14")
     assert fake.calls == [] and out["action_ids"] == []
     assert out["conflict"]["merge_with"] == 14 and out["conflict"]["birthday"] == "1985-07-14"
-    fake.fail = None
-    fake.answer("X-BD::1", "merge_with:9", {"surname": "Иванов", "name": "Иван", "birthday": "1985-07-14"})
-    assert fake.calls == [("merge_cards", ([1, 9], "Иванов", "Иван", "1985-07-14", U, "X-BD::1"), {})]
+    d = fake.d
+    fake.d = Data([*d.clients.values(), C(14, "Иванов", "Иван", "1985-07-14")], d.leads, d.results, EVENTS, d.names,
+                  ext=d.ext)
+    assert [f.fix for f in run_checks(fake.d) if f.code == "X-BD"] == [("1990-01-02",)]   # остался другой кандидат
+    assert any(f.code == "C-TWIN" and 14 in f.client_ids for f in run_checks(fake.d))
 
 
 def test_contacts_fixture_has_every_registration_code():
