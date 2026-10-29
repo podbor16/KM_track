@@ -5,7 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import app
-from src.analytics.data_quality import Finding
 from src.core.auth import api_require_auth
 
 R = "src.krasmarafon.routers.data_quality"
@@ -26,18 +25,6 @@ def conn():
 
 
 client = TestClient(app)
-
-
-def test_list_sorted_by_severity_and_connection_closed(conn):
-    low = Finding("R-DUP", "low", "б", (1,), 10, 5)
-    high = Finding("C-TWIN", "high", "а", (2, 3))
-    with patch(f"{R}.dq.pending_findings", return_value=([low, high], "data")) as pf, \
-            patch(f"{R}.dq.finding_view", side_effect=lambda f, d: {"key": f.key}):
-        r = client.get("/api/admin/data-quality?event_id=5")
-    assert r.status_code == 200
-    assert [f["key"] for f in r.json()["findings"]] == [high.key, low.key]
-    assert pf.call_args.args[1] == {5}
-    conn.close.assert_called_once()
 
 
 def test_merge_passes_user_and_returns_survivor(conn):
@@ -63,7 +50,7 @@ def test_dismiss_rejects_unknown_decision(conn):
 
 def test_no_db_connection_is_503():
     with patch(f"{R}.get_pooled_connection", return_value=None):
-        r = client.get("/api/admin/data-quality")
+        r = client.get("/api/admin/data-quality/actions")
     assert r.status_code == 503
 
 

@@ -19,9 +19,6 @@ from src.core.auth import api_require_auth
 
 router = APIRouter(tags=["Admin: качество данных"])
 
-ORDER = {"high": 0, "medium": 1, "low": 2}
-
-
 class MergeBody(BaseModel):
     client_ids: list[int]
     surname: str
@@ -95,17 +92,6 @@ def _change(fn, *args):
     out = _with_conn(fn, *args)
     dq_cases.invalidate()
     return out
-
-
-def _list(conn, event_id):
-    findings, data = dq.pending_findings(conn, {event_id} if event_id else None)
-    findings.sort(key=lambda f: (ORDER[f.severity], f.code, f.message))
-    return {"findings": [dq.finding_view(f, data) for f in findings]}
-
-
-@router.get("/api/admin/data-quality")
-async def list_findings(event_id: Optional[int] = None, user: str = Depends(api_require_auth)) -> dict:
-    return await run_in_threadpool(_with_conn, _list, event_id)
 
 
 @router.get("/api/admin/data-quality/cases")
