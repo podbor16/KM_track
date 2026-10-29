@@ -588,8 +588,11 @@
 .dqc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 10px 0; }
 .dqc-card { border: 1px solid var(--km-border-light); border-radius: 8px; padding: 8px 10px; min-width: 0; font-size: 0.9rem; }
 .dqc-card-title { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; }
-.dqc-row { display: flex; gap: 6px; padding: 2px 0; overflow-wrap: anywhere; }
-.dqc-row--problem { background: #fde2e2; border-radius: 4px; }
+.dqc-row { display: flex; gap: 6px; padding: 2px 6px; margin: 0 -6px; border-radius: 4px; overflow-wrap: anywhere; }
+.dqc-row:nth-child(even) { background: #f4f1f5; }
+.dqc-row:hover, .dqc-row:has(details[open]) { background: #e9e2ee; }
+.dqc-row--problem, .dqc-row--problem:nth-child(even) { background: #fde2e2; }
+.dqc-row--problem:hover, .dqc-row--problem:has(details[open]) { background: #f9cfcf; }
 .dqc-row small { color: var(--km-text-secondary); }
 .dqc-done { color: #155724; font-size: 0.9rem; margin: 4px 0; }
 .dqc-q { border: 1px solid var(--km-border-light); border-radius: 8px; padding: 10px; margin: 8px 0; }
