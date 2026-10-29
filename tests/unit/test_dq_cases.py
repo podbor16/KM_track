@@ -345,7 +345,7 @@ def test_registration_questions_texts():
     d = contacts()
     q = {f.code + str(f.client_ids): build_question(f, d) for f in run_checks(d) if f.code.startswith("X-")}
     bd = q["X-BD(1,)"]
-    assert bd["text"] == "Иванов Иван: в карточке ДР не указана. В регистрациях на «2019»: ДР 1985-07-14. Записать?"
+    assert bd["text"] == "Иванов Иван: в карточке ДР не указана. Регистрация 2019: ДР 1985-07-14. Записать?"
     assert bd["hint"] == "Совпал телефон или почта из заявок" and bd["stage"] == 3
     assert [(a["id"], a["recommended"]) for a in bd["answers"]] == [("bd:1985-07-14", True), ("keep", False),
                                                                      ("postpone", False)]
@@ -370,8 +370,8 @@ def test_ext_birthday_question_lists_dates_with_their_races():
     d = Data(list(d.clients.values()), [l for l in d.leads if l["client_id"] != 1], d.results, EVENTS, d.names, ext=d.ext)
     [f] = [f for f in run_checks(d) if f.code == "X-BD"]
     q = build_question(f, d)
-    assert q["text"] == ("Иванов Иван: в карточке ДР не указана. В регистрациях разные ДР: 1985-07-14 («2019»), "
-                         "1990-01-02 («2018»), 1990-03-03 («Ночной забег 2021, 10 км»). Какую записать?")
+    assert q["text"] == ("Иванов Иван: в карточке ДР не указана. В регистрациях разные ДР: 1985-07-14 (регистрация 2019), "
+                         "1990-01-02 (регистрация 2018), 1990-03-03 («Ночной забег 2021, 10 км»). Какую записать?")
     assert q["hint"] == "Совпали только фамилия и имя — проверьте" and not any(a["recommended"] for a in q["answers"])
 
 
@@ -387,11 +387,70 @@ def test_bd_conflict_writes_nothing_then_question_gives_way_to_twin(monkeypatch)
     out = fake.answer("X-BD::1", "bd:1985-07-14")
     assert fake.calls == [] and out["action_ids"] == []
     assert out["conflict"]["merge_with"] == 14 and out["conflict"]["birthday"] == "1985-07-14"
+    assert out["conflict"]["message"].endswith("При склейке ДР всех строк карточки станет 1985-07-14.")
     d = fake.d
     fake.d = Data([*d.clients.values(), C(14, "Иванов", "Иван", "1985-07-14")], d.leads, d.results, EVENTS, d.names,
                   ext=d.ext)
     assert [f.fix for f in run_checks(fake.d) if f.code == "X-BD"] == [("1990-01-02",)]   # остался другой кандидат
     assert any(f.code == "C-TWIN" and 14 in f.client_ids for f in run_checks(fake.d))
+
+
+def phone_pair(clients, leads, results=(), ext=()):
+    d = Data(clients, [{**l, "email": l.get("email", "")} for l in leads], list(results), EVENTS, ext=list(ext))
+    d.names = Names([("Петров", "Иван", "Мужчина"), ("Петров", "Александр", "Мужчина")] * 5)
+    return d
+
+
+def test_shared_phone_swapped_fio_proposes_right_order():
+    """«Иван Сидоров» (больше строк — основная) и «Сидоров Иван»: итог «Сидоров Иван», а не «Иван Иван»."""
+    lp = lambda i, cid, s, n, bd, eid: {**L(i, cid, s, n, bd, eid), "phone": "+79230000005"}
+    d = phone_pair([C(1, "Сидоров", "Иван", "1980-05-05"), C(2, "Иван", "Сидоров", "1975-05-05")],
+                   [lp(1, 1, "Сидоров", "Иван", "1980-05-05", 11), lp(2, 2, "Иван", "Сидоров", "1975-05-05", 11),
+                    lp(3, 2, "Иван", "Сидоров", "1975-05-05", 10), lp(4, 2, "Иван", "Сидоров", "1975-05-05", 12)],
+                   [R(1, 1, "Сидоров", "Иван", "1980-05-05", 11, 1)])
+    [f] = [f for f in run_checks(d) if f.code == "X-PHONE"]
+    q = build_question(f, d)
+    merge = next(a for a in q["answers"] if a["id"] == "merge")
+    assert [i["value"] for i in merge["inputs"][:2]] == ["Сидоров", "Иван"]
+    assert "фамилия и имя переставлены" in q["hint"] and "разные имена" not in q["hint"]
+
+
+def test_shared_phone_merge_star_needs_birthday_from_registrations():
+    lp = lambda i, cid, n: {**L(i, cid, "Сидоров", n, "1900-01-01", 11), "phone": "", "email": "s@mail.ru"}
+    clients = [C(1, "Сидоров", "Саша", "1900-01-01"), C(2, "Сидоров", "Александр", "1900-01-01")]
+    leads, results = [lp(1, 1, "Саша"), lp(2, 2, "Александр")], [R(1, 1, "Сидоров", "Саша", "1900-01-01", 11, 1)]
+
+    def merge(d):
+        [f] = [f for f in run_checks(d) if f.code == "X-PHONE"]
+        assert f.severity == "high"
+        a = next(a for a in build_question(f, d)["answers"] if a["id"] == "merge")
+        return a["recommended"], a["inputs"][2]["value"]
+
+    assert merge(phone_pair(clients, leads, results)) == (False, "")        # ДР итога нет — без ★, поле пустое
+    reg = {"id": 1, "surname": "Сидоров", "name": "Александр", "birthday": "1985-07-14", "sex": "", "phone": "",
+           "email": "s@mail.ru", "product": "", "event_year": 2019}
+    assert merge(phone_pair(clients, leads, results, [reg])) == (True, "1985-07-14")
+
+
+def contacts_with_real_row():
+    """У карточки-заглушки Иванова ещё результат с настоящей другой ДР — ответ bd: его не трогает."""
+    d = contacts()
+    return Data(list(d.clients.values()), d.leads, d.results + [R(9, 1, "Иванов", "Иван", "1970-02-02", 12, 9)],
+                EVENTS, d.names, ext=d.ext)
+
+
+def test_bd_answer_keeps_row_with_other_real_birthday(monkeypatch):
+    fake = Fake(monkeypatch, contacts_with_real_row())
+    fake.answer("X-BD::1", "bd:1985-07-14")
+    assert [c[1][:2] for c in fake.calls] == [("clients", 1), ("results", 1), ("leads", 1)]
+
+
+def test_bd_answer_error_on_row_returns_written_actions(monkeypatch):
+    fake = Fake(monkeypatch, contacts())
+    fake.fail = lambda name, args: name == "edit_record" and args[0] == "leads"
+    out = fake.answer("X-BD::1", "bd:1985-07-14")
+    assert [c[1][:2] for c in fake.calls] == [("clients", 1), ("results", 1)]
+    assert out["action_ids"] == [1, 1] and out["error"] and "conflict" not in out
 
 
 def test_contacts_fixture_has_every_registration_code():

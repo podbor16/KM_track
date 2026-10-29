@@ -465,7 +465,7 @@ async function dqcSendAnswer(qi, body, text, btn, statusId) {
             return;
         }
         dqcRecord(key, text, r.action_ids);
-        dqcSay(DQC_SITE_NOTE, true);
+        dqcSay(r.error ? `Записано частично: ${r.error}` : DQC_SITE_NOTE, !r.error);
         dqcCaseResult(key, r.case);
     } catch (e) {
         btn.disabled = false;

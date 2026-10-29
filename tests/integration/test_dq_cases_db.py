@@ -210,6 +210,7 @@ def test_moved_lead_visible_in_admin_leads_and_duplicates(db):
 
 def _full_run(conn):
     dq_checks._names_cache = None                   # справочник имён — по текущей базе, как у load
+    dq_checks.invalidate_ext()                      # и регистрации — с записанными тестом
     data = dq_checks.load(conn)
     return data, dq_checks.run_checks(data)
 
@@ -346,3 +347,11 @@ def test_answer_bd_writes_card_and_placeholder_rows_undo_restores(db):
         dq.undo_action(conn, aid, USER)
     conn.commit()
     assert bds() == ["1900-01-01"] * 3
+
+
+def test_cached_busy_contacts_equal_full_load(db):
+    conn, _ = db
+    dq_checks._names_cache = None
+    names, busy = dq_checks.cached_refs(conn)
+    data = dq_checks.load(conn)
+    assert busy == data.busy and names.first == data.names.first

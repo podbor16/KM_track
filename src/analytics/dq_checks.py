@@ -159,6 +159,12 @@ def fio_key(row):
     return norm(row["surname"]), norm(row["name"])
 
 
+def swapped_fio(a, b):
+    """У строк a и b фамилия и имя переставлены («Иван Сидоров» и «Сидоров Иван»)."""
+    k = fio_key(a)
+    return k != k[::-1] and k == fio_key(b)[::-1]
+
+
 COLUMNS = {"clients": "id, surname, name, birthday",
            "leads": "id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number, phone, email",
            "results": "id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status, "
@@ -196,11 +202,32 @@ def _ext(cur, conds=None):
     return rows
 
 
+EXT_TTL = 600                         # с: справочник регистраций (меняется только скриптом загрузки)
+_ext_lock = threading.Lock()
+_ext_cache = None                     # (когда, строки ext_registrations) — заменяется целиком
+
+
+def invalidate_ext():
+    """Сбросить кеш справочника регистраций этого процесса (после загрузки в том же процессе, в тестах)."""
+    global _ext_cache
+    _ext_cache = None
+
+
+def cached_ext(cur):
+    """Все строки ext_registrations (_ext) — кеш процесса на EXT_TTL с; читает один поток."""
+    global _ext_cache
+    with _ext_lock:
+        c = _ext_cache
+        if not c or time.monotonic() - c[0] > EXT_TTL:
+            c = _ext_cache = (time.monotonic(), _ext(cur))
+        return c[1]
+
+
 def load(conn):
     cur = conn.cursor(dictionary=True)
     clients = [c for c in _select(cur, "clients") if c["id"] != 0]
     leads, results, events = _select(cur, "leads"), _select(cur, "results"), _events(cur)
-    ext = _ext(cur)
+    ext = cached_ext(cur)
     cur.close()
     return Data(clients, leads, results, events, ext=ext)
 
@@ -321,7 +348,7 @@ def load_row_scoped(conn, table, row_id):
     с её фамилией или именем, с её номером и без карточки (R-DUP по client_id 0), карточки этих строк
     со всеми их строками. run_checks — без card_ids, нужные — находки без карточек."""
     cur = conn.cursor(dictionary=True)
-    (names, _), events = cached_refs(conn), _events(cur)
+    (names, busy), events = cached_refs(conn), _events(cur)
     row = next(iter(_select(cur, table, [("id = %s", (row_id,))])), None)
     if not row:
         cur.close()
@@ -340,7 +367,7 @@ def load_row_scoped(conn, table, row_id):
         return [d[k] for k in sorted(d)]
 
     return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
-                scope={"cards": set(), "keys": set(), "bds": set(), "bibs": set(), "events": set()})
+                scope={"cards": set(), "keys": set(), "bds": set(), "bibs": set(), "events": set()}, busy=busy)
 
 
 # ---------------------------------------------------------------- правила
@@ -436,6 +463,9 @@ def merge_blockers(ids, data):
     if len(single) > 1:
         out.append("разный пол в протоколах")
     for a, b in itertools.combinations(ids, 2):
+        if swapped_fio(data.clients[a], data.clients[b]):
+            out.append("фамилия и имя переставлены")
+            break
         if not names_compatible(data.clients[a]["name"], data.clients[b]["name"], data.names):
             out.append(f'разные имена: {data.clients[a]["name"]} / {data.clients[b]["name"]}')
             break
@@ -788,8 +818,9 @@ def namesake_bds(data, c):
 
 
 def bd_support(data, cid, other):
-    """-> (строк карточки с её ДР, последний год их забегов, регистраций с её ФИ и ДР other, последний их год);
-    год 0 — неизвестен."""
+    """Поддержка двух ДР карточки cid -> (ours, ours_last, theirs, theirs_last): ours — её заявок и результатов
+    с ДР карточки, ours_last — последний год их забегов; theirs — регистраций с теми же ФИ (не переставленными;
+    любой телефон/почта) и ДР other, theirs_last — последний их event_year. Год 0 — неизвестен."""
     bd = data.clients[cid]["birthday"]
     mine = [r for r in data.leads_by_card[cid] + data.res_by_card[cid] if r["birthday"] == bd]
     theirs = [x for x in ext_of(data, data.clients[cid], swapped=False) if x["birthday"] == other]

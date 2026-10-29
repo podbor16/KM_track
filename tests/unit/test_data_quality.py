@@ -6,6 +6,15 @@ from src.analytics.data_quality import (Data, check_category, check_duplicates, 
                                         propose_birthday, run_checks)
 from src.common.names import Names
 
+@pytest.fixture(autouse=True)
+def _fresh_ext_cache():
+    """load() с заглушкой соединения не должна ни взять, ни оставить кеш справочника регистраций."""
+    from src.analytics.dq_checks import invalidate_ext
+    invalidate_ext()
+    yield
+    invalidate_ext()
+
+
 _FILL = ([("Иванов", n, "Мужчина") for n in ("Виктор", "Сергей", "Владимир", "Вадим", "Иван", "Матвей")] * 6
          + [("Иванова", n, "Женщина") for n in ("Виктория", "Ирина", "Анна", "Марина", "Юлия", "Дарья", "Мария")] * 6)
 NAMES = Names(_FILL)

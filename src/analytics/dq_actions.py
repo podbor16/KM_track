@@ -13,7 +13,7 @@ import tempfile
 
 from src.analytics.client_merge import apply as apply_merge, recompute_aggregates
 from src.analytics.db_results import recompute_duplicates
-from src.analytics.dq_checks import (NOT_STARTED, SHORT_NAMES, cat_rule, load, merge_blockers,
+from src.analytics.dq_checks import (NOT_STARTED, SHORT_NAMES, cat_rule, load, merge_blockers, swapped_fio,
                                      propose_birthday, real_bd, run_checks)
 from src.common.names import norm, normalize_person_name
 
@@ -47,6 +47,13 @@ def propose_final(ids, data):
     name = max(full, key=lambda n: (data.names.first.get(norm(n), 0), len(n)))
     surv_bd = data.clients[surv]["birthday"]
     bd = propose_birthday(ids, data) or (surv_bd if real_bd(surv_bd) else None)
+    cards = [data.clients[i] for i in ids]
+    if len(cards) == 2 and swapped_fio(*cards):
+        # переставленные ФИ: порядок — карточки, где имя — имя, а фамилия — нет (иначе основной)
+        main = data.clients[surv]
+        right = next((c for c in [main, *cards] if data.names.is_first(c["name"])
+                      and not data.names.is_first(c["surname"])), main)
+        return surv, normalize_person_name(right["surname"]), normalize_person_name(right["name"]), bd
     return surv, normalize_person_name(data.clients[surv]["surname"]), normalize_person_name(name), bd
 
 
