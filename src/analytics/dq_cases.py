@@ -460,6 +460,11 @@ def _postpone(conn, case, decided, reason, user):
     return [dq_actions.dismiss(conn, k, "postponed", reason or "не знаю ДР", user) for k in keys]
 
 
+def _differs(field, new, old):
+    """Значение поля меняется: ФИ сравниваются без учёта регистра и ё, ДР — строкой."""
+    return (norm(new) != norm(old)) if field in ("surname", "name") else new != str(old)
+
+
 def _dup_row(data, f, row, inputs):
     """R-DUP «два финиша»: какой финиш выносить — inputs["row_id"] (финиш этой карточки в этом забеге)."""
     if f.code != "R-DUP" or not inputs.get("row_id"):
@@ -503,7 +508,7 @@ def _locked_by(case, f, decided):
     return None
 
 
-def apply_answer(conn, case_key, question_id, answer_id, inputs, user):
+def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_cards=()):
     """Выполнить цепочку ответа -> {"action_ids": [...], "case": дело после ответа (None — дело закрыто)};
     правка карточки упёрлась в чужие ФИ+ДР -> ничего не записано, ещё
     "conflict": {message, merge_with, surname, name, birthday}."""
@@ -515,7 +520,7 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user):
         raise StaleQuestion("Дело изменилось — обновите")
     if answer_id == "postpone":
         return {"action_ids": _postpone(conn, case, decided, inputs.get("reason", ""), user),
-                "case": _case_after(conn, case)}
+                "case": _case_after(conn, case, extra_cards)}
     offered = {a["id"] for a in build_question(f, data)["answers"]}
     if answer_id not in offered and not (answer_id.startswith("merge_with:") and "card_from_row" in offered):
         raise ValueError(f"неизвестный ответ {answer_id}")
@@ -548,14 +553,14 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user):
         # только отличающиеся поля; сначала карточка (конфликт — ничего не записано), потом строка
         c = data.clients[f.client_ids[0]]
         want = fio if answer_id == "other" else {k: str(row[k]) for k in FIO}
-        card_diff = {k: v for k, v in want.items() if v != str(c[k])}
-        row_diff = {k: v for k, v in fio.items() if v != str(row[k])} if answer_id == "other" else {}
+        card_diff = {k: v for k, v in want.items() if _differs(k, v, c[k])}
+        row_diff = {k: v for k, v in fio.items() if _differs(k, v, row[k])} if answer_id == "other" else {}
         if not card_diff and not row_diff:
             raise ValueError("значения не изменились")
         if card_diff:
             a, conflict = _edit_card(conn, f, c, card_diff, user)
             if conflict:
-                return {"action_ids": [], "case": _case_after(conn, case), "conflict": conflict}
+                return {"action_ids": [], "case": _case_after(conn, case, extra_cards), "conflict": conflict}
             aid.append(a)
         if row_diff:
             aid.append(dq_actions.edit_record(conn, "results", row["id"], row_diff, user, f.key)[1])
@@ -570,7 +575,7 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user):
         aid.append(dq_actions.fix_fio(conn, row["id"], f.fix[0], f.fix[1], user, f.key)[1])
     elif answer_id == "manual":
         aid.append(dq_actions.fix_fio(conn, row["id"], fio.get("surname", ""), fio.get("name", ""), user, f.key)[1])
-    return {"action_ids": aid, "case": _case_after(conn, case, moved)}
+    return {"action_ids": aid, "case": _case_after(conn, case, [*moved, *extra_cards])}
 
 
 def postpone_case(conn, case_key, reason, user):

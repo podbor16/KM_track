@@ -506,3 +506,23 @@ def test_rows_result_before_lead_in_one_event_and_category_options_with_sex():
              if q["code"] == "R-CAT")
     opts = next(a for a in q["answers"] if a["id"] == "category")["inputs"][0]["options"]
     assert opts and all(set(o) == {"label", "sex"} for o in opts)
+
+
+def test_other_compares_fio_case_insensitively(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    fake.answer("R-CARD:r6:11", "other", {"surname": "ветрова", "name": "ЕЛИЗАВЕТА", "birthday": "2014-06-06"})
+    assert [(n, a[:3]) for n, a, _ in fake.calls] == [("edit_record", ("clients", 11, {"birthday": "2014-06-06"})),
+                                                      ("edit_record", ("results", 6, {"birthday": "2014-06-06"}))]
+    with pytest.raises(ValueError, match="значения не изменились"):
+        fake.answer("R-CARD:r6:11", "other", {"surname": "ветрова", "name": "елизавета"})
+
+
+def test_extra_cards_are_kept_in_case_after_answer(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    seen = []
+    real = dq_cases.run_checks
+    monkeypatch.setattr(dq_cases, "run_checks", lambda d, **kw: seen.append(kw.get("card_ids")) or real(d, **kw))
+    case = next(c for c in group_cases(run_checks(fake.d), fake.d) if any(f.key == "R-CARD:r6:11" for f in c["findings"]))
+    assert 3 not in case["cards"]
+    dq_cases.apply_answer(None, case["key"], "R-CARD:r6:11", "card_from_row", {}, U, extra_cards=[3])
+    assert 3 in seen[-1]

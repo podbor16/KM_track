@@ -71,6 +71,7 @@ class AnswerBody(BaseModel):
     question_id: str
     answer_id: str
     inputs: dict[str, str] = {}
+    extra_cards: list[int] = []
 
 
 class PostponeBody(BaseModel):
@@ -118,7 +119,7 @@ async def get_case(key: str, user: str = Depends(api_require_auth)) -> dict:
 async def answer(key: str, body: AnswerBody, user: str = Depends(api_require_auth)) -> dict:
     try:
         return await run_in_threadpool(_with_conn, dq_cases.apply_answer, key, body.question_id, body.answer_id,
-                                       body.inputs, user)
+                                       body.inputs, user, body.extra_cards)
     except dq_cases.StaleQuestion as e:
         raise HTTPException(status_code=409, detail=str(e))
 

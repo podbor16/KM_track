@@ -38,7 +38,7 @@ def test_answer_passes_user_and_stale_is_409(conn):
         r = client.post("/api/admin/data-quality/cases/c1/answer",
                         json={"question_id": "R-FOREIGN:r1:1-2", "answer_id": "to:2", "inputs": {}})
     assert r.json() == {"action_ids": [7], "case": None}
-    assert m.call_args.args == (conn, "c1", "R-FOREIGN:r1:1-2", "to:2", {}, "testuser")
+    assert m.call_args.args == (conn, "c1", "R-FOREIGN:r1:1-2", "to:2", {}, "testuser", [])
     from src.analytics.dq_cases import StaleQuestion
     with patch(f"{R}.dq_cases.apply_answer", side_effect=StaleQuestion("Дело изменилось — обновите")):
         r = client.post("/api/admin/data-quality/cases/c1/answer", json={"question_id": "x", "answer_id": "keep"})
@@ -68,3 +68,10 @@ def test_postpone_and_person(conn):
 def test_cases_require_auth():
     app.dependency_overrides.pop(api_require_auth, None)
     assert client.get("/api/admin/data-quality/cases").status_code == 401
+
+
+def test_answer_passes_extra_cards(conn):
+    with patch(f"{R}.dq_cases.apply_answer", return_value={"action_ids": [], "case": None}) as m:
+        client.post("/api/admin/data-quality/cases/c1/answer",
+                    json={"question_id": "x", "answer_id": "keep", "extra_cards": [9]})
+    assert m.call_args.args[-1] == [9]
