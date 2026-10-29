@@ -483,7 +483,8 @@ def _full(conn):
 
 
 def _open(findings, decided):
-    return [f for f in findings if decided.get(f.key) in (None, "postponed")]
+    """Нерешённые и отложенные находки; коды без вопроса (STAGES) — не в делах."""
+    return [f for f in findings if f.code in STAGES and decided.get(f.key) in (None, "postponed")]
 
 
 def _cases(data, findings, decided):

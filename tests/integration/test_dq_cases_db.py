@@ -34,6 +34,9 @@ def db():
             cur.execute(f"DELETE FROM leads WHERE event_id IN ({ph})")
             cur.execute(f"DELETE FROM events WHERE id IN ({ph})")
         cur.execute("DELETE FROM clients WHERE surname LIKE %s OR name = %s", (f"{SUR}%", SUR))   # и опечатка, и «Иван <SUR>»
+        cur.execute("SHOW TABLES LIKE 'ext_registrations'")
+        if cur.fetchall():
+            cur.execute("DELETE FROM ext_registrations WHERE source = %s", (USER,))
         cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (USER,))
         cur.execute("DELETE FROM dq_decisions WHERE decided_by = %s", (USER,))
         conn.commit()
@@ -270,3 +273,45 @@ def test_case_by_key_equals_case_of_full_run(db):
         assert {q["id"] for q in view["questions"]} == {f.key for f in case["findings"]}, case["key"]
         # и всё дело целиком: строки карточек, тексты, ответы, варианты категорий и дистанций
         assert view == dq_cases.case_view(case, data, decided, dq_cases._today()), case["key"]
+
+
+def lead(cur, ev, surname, name, bd, phone):
+    cur.execute("""INSERT INTO leads (surname, name, sex, city, birthday, phone, email, event_name, event_distance,
+                   event_year, products, amount, client_id, event_id, start_number, created_at)
+                   VALUES (%s, %s, 'Мужчина', '', %s, %s, '', %s, '5', 2099, '', 0, 0, %s, NULL, '2026-01-01 10:00:00')""",
+                (surname, name, bd, phone, f"{EV} Телефон", ev))
+    cur.execute("SELECT id, client_id FROM leads WHERE id = %s", (cur.lastrowid,))
+    row = cur.fetchone()
+    return row["id"], row["client_id"]
+
+
+def test_scoped_load_finds_registration_findings(db):
+    """X-BD (заглушка, ДР в регистрации с её телефоном), X-PHONE (общий телефон: ребёнок и карточка с
+    переставленными ФИ — без результатов), X-BDDIFF (регистрации многочисленнее и не старше)."""
+    conn, cur = db
+    cur.execute("SHOW TABLES LIKE 'ext_registrations'")
+    if not cur.fetchall():
+        pytest.skip("Нет ext_registrations")
+    ev = event(cur, "Телефон", 5.0)
+    _, ivan = result(cur, ev, 1, "1900-01-01", name="Иван", cat="")
+    lead(cur, ev, SUR, "Иван", "1900-01-01", "+7 (900) 000-00-01")
+    _, oleg = result(cur, ev, 2, "1980-03-09", name="Олег", cat="")
+    lead(cur, ev, SUR, "Олег", "1980-03-09", "+7 (900) 000-00-02")
+    _, kid = lead(cur, ev, SUR, "Олег", "2010-06-01", "8 900 000 00 02")
+    _, swapped = lead(cur, ev, "Олег", SUR, "1975-05-05", "89000000002")
+    _, boris = result(cur, ev, 3, "1986-07-04", name="Борис", cat="")
+    lid, _ = lead(cur, ev, SUR, "Борис", "1998-07-04", "+79000000003")
+    cur.execute("UPDATE leads SET client_id = %s WHERE id = %s", (boris, lid))
+    for n, (name, bd, phone) in enumerate([("Иван", "1985-07-14", "9000000001"), ("Борис", "1998-07-04", "9000000003"),
+                                           ("Борис", "1998-07-04", "")]):
+        cur.execute("""INSERT INTO ext_registrations (source, source_row, surname, name, birthday, sex, phone, email,
+                       product, event_year) VALUES (%s, %s, %s, %s, %s, 'М', %s, '', 'Тест 2099', 2099)""",
+                    (USER, n + 1, SUR, name, bd, phone))
+    conn.commit()
+    _, every = _full_run(conn)
+    mine = {(f.code, f.client_ids) for f in every if f.code.startswith("X-") and set(f.client_ids) & {ivan, oleg, boris}}
+    assert mine == {("X-BD", (ivan,)), ("X-PHONE", tuple(sorted((oleg, kid)))), ("X-PHONE", tuple(sorted((oleg, swapped)))),
+                    ("X-BDDIFF", (boris,))}
+    for S in ({ivan}, {oleg}, {kid}, {swapped}, {boris}, {ivan, kid, boris}):
+        want = {f.key for f in every if set(f.client_ids) & S}
+        assert {f.key for f in dq_checks.run_checks(dq_checks.load_scoped(conn, S), card_ids=S)} == want, S

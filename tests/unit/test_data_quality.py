@@ -305,16 +305,24 @@ def test_load_without_ext_table_gives_empty_registrations():
     assert d.ext == [] and not any("FROM ext_registrations" in q for q in sql)
 
 
+def test_registration_without_birthday_is_empty_string():
+    from unittest.mock import MagicMock
+    from src.analytics.dq_checks import _ext
+    cur = MagicMock()
+    cur.fetchall.side_effect = [[("ext_registrations",)], [{"id": 1, "birthday": None}, {"id": 2, "birthday": "1985-07-14"}]]
+    assert [x["birthday"] for x in _ext(cur)] == ["", "1985-07-14"]
+
+
 def test_contacts_of_cards_and_registration_indexes():
     leads = [{**L(1, 1, "Иванов", "Иван", "1985-07-14", 2), "phone": "+7 (923) 123-45-67", "email": " Ivan@Mail.RU "},
              {**L(2, 2, "Иванов", "Иван", "1900-01-01", 4), "phone": "89231234567", "email": "example@mail.ru"},
              {**L(3, 2, "Иванов", "Иван", "1900-01-01", 1), "phone": "12-34", "email": "нет"}]
-    ext = [{"id": 5, "surname": "Иванов", "name": "Иван", "birthday": "None", "sex": "М", "phone": "9231234567",
+    ext = [{"id": 5, "surname": "Иванов", "name": "Иван", "birthday": "", "sex": "М", "phone": "9231234567",
             "email": "", "product": "Жара 2019", "event_year": 2019}]
     d = Data([C(1, "Иванов", "Иван", "1985-07-14"), C(2, "Иванов", "Иван", "1900-01-01")], leads, [], EVENTS, ext=ext)
     assert d.card_phones == {1: {"9231234567"}, 2: {"9231234567"}} and d.phone_cards["9231234567"] == {1, 2}
     assert d.card_emails == {1: {"ivan@mail.ru"}} and dict(d.email_cards) == {"ivan@mail.ru": {1}}
-    assert d.ext[0]["birthday"] == "" and d.ext_by_fio[("иванов", "иван")] == d.ext_by_phone["9231234567"] == d.ext
+    assert d.ext_by_fio[("иванов", "иван")] == d.ext_by_phone["9231234567"] == d.ext
     assert not d.ext_by_email
 
 
@@ -419,3 +427,112 @@ def test_neighbor_rank_empty_group_is_first():
 def test_neighbor_rank_ignores_null_places():
     assert _nr((1320, 0), ((1260, 0), 1), ((1380, 0), None), ((1440, 0), 2)) == 2
     assert _nr((1320, 0), ((1260, 0), 1), ((1380, 0), None)) == 2
+
+
+# ---------------------------------------------------------------- проверки по регистрациям
+
+def E(i, s, n, bd, phone="", email="", year=None):
+    return {"id": i, "surname": s, "name": n, "birthday": bd, "sex": "", "phone": phone, "email": email,
+            "product": f"Жара {year}" if year else "", "event_year": year}
+
+
+def LP(i, cid, s, n, bd, eid, phone="", email=""):
+    return {**L(i, cid, s, n, bd, eid), "phone": phone, "email": email}
+
+
+PHONE, EMAIL = "+7 (923) 123-45-67", "ivan@mail.ru"
+
+
+def ext_data(clients, leads=(), results=(), ext=()):
+    d = Data(list(clients), list(leads), list(results), EVENTS, ext=list(ext))
+    d.names = NAMES
+    return d
+
+
+def codes(d, code):
+    return [f for f in run_checks(d) if f.code == code]
+
+
+def test_ext_birthday_strong_candidate_is_high():
+    d = ext_data([C(1, "Иванов", "Иван", "1900-01-01")], leads=[LP(1, 1, "Иванов", "Иван", "1900-01-01", 2, PHONE)],
+                 results=[R(1, 1, "Иванов", "Иван", "1900-01-01", 2, 5)],
+                 ext=[E(1, "Иванов", "Иван", "1985-07-14", "9231234567", year=2019),
+                      E(2, "Иванов", "Иван", "1990-03-03", year=2021), E(3, "Иванов", "Иван", "", "9231234567")])
+    [f] = codes(d, "X-BD")
+    assert (f.severity, f.client_ids, f.fix, f.key) == ("high", (1,), ("1985-07-14",), "X-BD::1")
+    assert "1985-07-14" in f.message and "телефон" in f.message
+
+
+def test_ext_birthday_only_fio_is_medium_with_all_dates():
+    d = ext_data([C(1, "Иванов", "Иван", "1900-01-01"), C(2, "Петров", "Петр", "1900-01-01")],
+                 results=[R(1, 1, "Иванов", "Иван", "1900-01-01", 2, 5)],      # у Петрова результатов нет
+                 ext=[E(1, "Иванов", "Иван", "1990-03-03"), E(2, "Иван", "Иванов", "1985-07-14"),
+                      E(3, "Иванов", "Иван", "1985-01-01"), E(4, "Петров", "Петр", "1970-02-02")])
+    [f] = codes(d, "X-BD")
+    assert (f.severity, f.client_ids, f.fix) == ("medium", (1,), ("1985-07-14", "1990-03-03"))
+
+
+def test_ext_birthday_year_only_keeps_candidates_of_that_year():
+    d = ext_data([C(1, "Иванов", "Иван", "1985-01-01")], results=[R(1, 1, "Иванов", "Иван", "1985-01-01", 2, 5)],
+                 ext=[E(1, "Иванов", "Иван", "1985-07-14"), E(2, "Иванов", "Иван", "1986-02-02")])
+    [f] = codes(d, "X-BD")
+    assert (f.severity, f.fix) == ("medium", ("1985-07-14",))
+
+
+def test_shared_phone_same_birthday_is_high():
+    # «Саша» и «Александр», обе ДР — заглушки: C-TWIN их не связывает, общая почта — да
+    d = ext_data([C(1, "Сидоров", "Саша", "1900-01-01"), C(2, "Сидоров", "Александр", "1900-01-01")],
+                 leads=[LP(1, 1, "Сидоров", "Саша", "1900-01-01", 2, email=EMAIL),
+                        LP(2, 2, "Сидоров", "Александр", "1900-01-01", 4, email=" IVAN@mail.ru")],
+                 results=[R(1, 1, "Сидоров", "Саша", "1900-01-01", 2, 5)])
+    assert not codes(d, "C-TWIN")
+    [f] = codes(d, "X-PHONE")
+    assert (f.severity, f.client_ids, f.key) == ("high", (1, 2), "X-PHONE::1-2") and "почта" in f.message
+
+
+def test_shared_phone_parent_and_child_is_low_swapped_fio_counts():
+    d = ext_data([C(1, "Сидоров", "Александр", "1980-03-09"), C(2, "Сидоров", "Александр", "2010-06-01"),
+                  C(3, "Александр", "Сидоров", "1975-05-05"), C(4, "Сидоров", "Иван", "1980-03-09")],
+                 leads=[LP(i, i, "Сидоров", "Александр", "1980-03-09", 2, PHONE) for i in (1, 2, 3, 4)],
+                 results=[R(1, 1, "Сидоров", "Александр", "1980-03-09", 2, 5)])
+    found = {f.client_ids: f.severity for f in codes(d, "X-PHONE")}
+    # переставленные ФИ — тоже пара (с похожей ДР её дал бы C-TWIN); Иван — другой человек; 2–3 — без результатов
+    assert found == {(1, 2): "low", (1, 3): "low"}
+    assert not codes(d, "C-TWIN")
+
+
+def test_shared_phone_twin_pair_is_not_repeated():
+    d = ext_data([C(1, "Сидоров", "Дмитрий", "1980-05-05"), C(2, "Сидоров", "Дима", "1980-05-05")],
+                 leads=[LP(1, 1, "Сидоров", "Дмитрий", "1980-05-05", 2, PHONE), LP(2, 2, "Сидоров", "Дима", "1980-05-05", 4, PHONE)],
+                 results=[R(1, 1, "Сидоров", "Дмитрий", "1980-05-05", 2, 5)])
+    assert [f.client_ids for f in codes(d, "C-TWIN")] == [(1, 2)] and not codes(d, "X-PHONE")
+
+
+def bddiff(results, ext, lead_bd="1986-07-04"):
+    return ext_data([C(1, "Козлов", "Олег", "1986-07-04")],
+                    leads=[LP(1, 1, "Козлов", "Олег", lead_bd, 1, PHONE)], results=results, ext=ext)
+
+
+def test_ext_birthday_diff_our_majority_wins():
+    d = bddiff([R(i, 1, "Козлов", "Олег", "1986-07-04", i, i) for i in (2, 3)],
+               [E(1, "Козлов", "Олег", "1998-07-04", "9231234567", year=2027)])
+    assert not codes(d, "X-BDDIFF")                        # 3 строки (заявка 2025, результаты) против 1 регистрации
+
+
+def test_ext_birthday_diff_fresher_registrations_win():
+    d = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)],
+               [E(1, "Козлов", "Олег", "1998-07-04", "9231234567", year=2023), E(2, "Козлов", "Олег", "1998-07-04", year=2025),
+                E(3, "Козлов", "Олег", "1987-01-02", "9231234567", year=2030)],                      # меньше года — не расхождение
+               lead_bd="1998-07-04")
+    [f] = codes(d, "X-BDDIFF")
+    assert (f.severity, f.client_ids, f.fix) == ("medium", (1,), ("1998-07-04",))
+    assert "1 строк" in f.message and "2024" in f.message and "2 раз" in f.message and "2025" in f.message
+
+
+def test_ext_birthday_diff_tie_is_question_and_needs_contact():
+    tie = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)],
+                 [E(1, "Козлов", "Олег", "1998-07-04", "9231234567", year=2024)], lead_bd="")
+    assert [f.fix for f in codes(tie, "X-BDDIFF")] == [("1998-07-04",)]
+    other = bddiff([R(1, 1, "Козлов", "Олег", "1986-07-04", 3, 1)],
+                   [E(1, "Козлов", "Олег", "1998-07-04", "9001112233", year=2024)], lead_bd="")
+    assert not codes(other, "X-BDDIFF")                    # телефон чужой — не тот человек

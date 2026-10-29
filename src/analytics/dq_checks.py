@@ -54,9 +54,12 @@ class Finding:
 
 # ---------------------------------------------------------------- данные
 
+_NOT_DIGIT = re.compile(r"\D")
+
+
 def norm_phone(raw):
     """Телефон -> последние 10 цифр ('' — короче 10)."""
-    digits = re.sub(r"\D", "", str(raw or ""))
+    digits = _NOT_DIGIT.sub("", str(raw or ""))
     return digits[-10:] if len(digits) >= 10 else ""
 
 
@@ -98,14 +101,15 @@ class Data:
         self.card_phones, self.card_emails = collections.defaultdict(set), collections.defaultdict(set)
         self.phone_cards, self.email_cards = collections.defaultdict(set), collections.defaultdict(set)
         for l in leads:
+            if not l["client_id"]:
+                continue
             if p := norm_phone(l.get("phone")):
                 self.card_phones[l["client_id"]].add(p)
                 self.phone_cards[p].add(l["client_id"])
             if e := norm_email(l.get("email")):
                 self.card_emails[l["client_id"]].add(e)
                 self.email_cards[e].add(l["client_id"])
-        # в базе телефон и почта уже нормализованы (scripts/import_ext_registrations.py), ДР NULL -> ''
-        self.ext = [{**x, "birthday": "" if x["birthday"] in (None, "None") else x["birthday"]} for x in ext]
+        self.ext = list(ext)                # телефон и почта — уже нормализованы (scripts/import_ext_registrations.py)
         self.ext_by_fio = collections.defaultdict(list)
         self.ext_by_phone, self.ext_by_email = collections.defaultdict(list), collections.defaultdict(list)
         for x in self.ext:
@@ -172,9 +176,13 @@ def _events(cur):
 
 
 def _ext(cur, conds=None):
-    """Строки ext_registrations (_select); таблицы нет (старая база) — пусто."""
+    """Строки ext_registrations (_select, ДР NULL -> ''); таблицы нет (старая база) — пусто."""
     cur.execute("SHOW TABLES LIKE 'ext_registrations'")
-    return _select(cur, "ext_registrations", conds) if cur.fetchall() else []
+    rows = _select(cur, "ext_registrations", conds) if cur.fetchall() else []
+    for x in rows:
+        if x["birthday"] == "None":
+            x["birthday"] = ""
+    return rows
 
 
 def load(conn):
@@ -738,6 +746,99 @@ def _rows_touching(data, results, leads, card_ids):
     return results, [l for l in leads if l["client_id"] in near]
 
 
+def real(bd):
+    """Надёжная ДР: не заглушка и не «ГГГГ-01-01»."""
+    return real_bd(bd) and not jan1(bd)
+
+
+def _same_contact(data, cid, x):
+    """Регистрация x с телефоном или почтой из заявок карточки cid."""
+    return x["phone"] in data.card_phones.get(cid, ()) or x["email"] in data.card_emails.get(cid, ())
+
+
+def check_ext_birthday(data, cards):
+    """X-BD: у карточки с результатами ДР-заглушка или «ГГГГ-01-01» — надёжные ДР регистраций с теми же (или
+    переставленными) ФИ, для «ГГГГ-01-01» — того же года; есть совпавшие по телефону/почте — только их ДР."""
+    out = []
+    for cid in cards:
+        c = data.clients.get(cid)
+        if not c or not data.res_by_card[cid] or real(c["birthday"]):
+            continue
+        year = c["birthday"][:4] if real_bd(c["birthday"]) else None
+        key = fio_key(c)
+        rows = data.ext_by_fio.get(key, []) + (data.ext_by_fio.get(key[::-1], []) if key != key[::-1] else [])
+        found = [x for x in rows if real(x["birthday"]) and (not year or x["birthday"][:4] == year)]
+        strong = [x for x in found if _same_contact(data, cid, x)]
+        bds = sorted({x["birthday"] for x in strong or found})
+        if bds:
+            how = "совпал телефон/почта" if strong else "совпали только фамилия и имя"
+            out.append(Finding("X-BD", "high" if strong and len(bds) == 1 else "medium",
+                               f'{data.card_label(cid)}: ДР в регистрациях: {", ".join(bds)} ({how})', (cid,),
+                               fix=tuple(bds)))
+    return out
+
+
+def check_shared_contact(data, start, cards, skip):
+    """X-PHONE: две карточки одного человека по общему телефону/почте заявок — та же фамилия и совместимое имя
+    или переставленные ФИ. Ищем от start, пары — хотя бы с одной карточкой из cards, кроме пар skip (C-TWIN)."""
+    out, seen = [], set(skip)
+    for a in start:
+        c = data.clients.get(a)
+        if not c:
+            continue
+        phones, emails = data.card_phones.get(a, set()), data.card_emails.get(a, set())
+        others = {b for p in phones for b in data.phone_cards[p]} | {b for e in emails for b in data.email_cards[e]}
+        for b in sorted(others - {a}):
+            k, d = (min(a, b), max(a, b)), data.clients.get(b)
+            if k in seen or not d or not set(k) & cards:
+                continue
+            if not (norm(c["surname"]) == norm(d["surname"]) and names_compatible(c["name"], d["name"], data.names)
+                    or fio_key(c) == fio_key(d)[::-1]):
+                continue
+            seen.add(k)
+            what = [w for w, ok in (("телефон", phones & data.card_phones.get(b, set())),
+                                    ("почта", emails & data.card_emails.get(b, set()))) if ok]
+            out.append(Finding("X-PHONE", "high" if compatible_bd(c["birthday"], d["birthday"]) else "low",
+                               f'{data.card_label(k[0])} ↔ {data.card_label(k[1])}: общие {" и ".join(what)} в заявках',
+                               k))
+    return out
+
+
+def _far(x, y):
+    """ДР отличаются больше чем на год."""
+    return abs((datetime.fromisoformat(x) - datetime.fromisoformat(y)).days) > 366
+
+
+def check_ext_birthday_diff(data, cards):
+    """X-BDDIFF: надёжная ДР карточки расходится (больше чем на год) с надёжной ДР регистраций с теми же ФИ и её
+    телефоном/почтой. Наша ДР — истина, если строк карточки с ней больше, чем регистраций с другой, или наша
+    последняя строка свежее; иначе (в том числе при равенстве) — находка (решение пользователя 2026-10-29)."""
+    out = []
+    for cid in cards:
+        c = data.clients.get(cid)
+        if not c or not real(c["birthday"]):
+            continue
+        bd, rows = c["birthday"], data.ext_by_fio.get(fio_key(c), [])
+        other = {x["birthday"] for x in rows if real(x["birthday"]) and _same_contact(data, cid, x)
+                 and _far(x["birthday"], bd)}
+        if not other:
+            continue
+        mine = [r for r in data.leads_by_card[cid] + data.res_by_card[cid] if r["birthday"] == bd]
+        ours, ours_last = len(mine), max((data.year(r["event_id"]) for r in mine), default=0)
+        best = None
+        for o in sorted(other):
+            theirs_rows = [x for x in rows if x["birthday"] == o]
+            theirs, theirs_last = len(theirs_rows), max((x["event_year"] or 0 for x in theirs_rows), default=0)
+            if not (ours > theirs or ours_last > theirs_last) and (not best or (theirs, theirs_last) > best[1:]):
+                best = (o, theirs, theirs_last)
+        if best:
+            o, theirs, theirs_last = best
+            out.append(Finding("X-BDDIFF", "medium", f'{data.card_label(cid)}: ДР в карточке {bd} ({ours} строк, '
+                               f'последняя — {ours_last or "?"}), в регистрациях — {o} ({theirs} раз, последняя — '
+                               f'{theirs_last or "?"})', (cid,), fix=(o,)))
+    return out
+
+
 def run_checks(data, event_ids=None, card_ids=None):
     """Без event_ids — вся база (двойники — для карточек с результатами); с event_ids —
     результаты этих забегов, двойники — и для карточек их заявок (проверка после импорта).
@@ -752,12 +853,17 @@ def run_checks(data, event_ids=None, card_ids=None):
         card_ids = set(card_ids)
         results, leads = _rows_touching(data, results, leads, card_ids)
         # пара двойников находится с любой из двух карточек — ищем от card_ids, оставляем пары полного прогона
-        twins = [f for f in check_twins(data, sorted(card_ids)) if set(f.client_ids) & cards]
+        start = sorted(card_ids)
+        twins = [f for f in check_twins(data, start) if set(f.client_ids) & cards]
     else:
-        twins = check_twins(data, sorted(cards))
+        start = sorted(cards)
+        twins = check_twins(data, start)
+    own = [i for i in start if i in cards]     # находки одной карточки — только у карточек полного прогона
     found = (check_lead_on_other_card(data, results) + check_duplicates(data, results) + check_result_vs_card(data, results)
              + check_category(data, results) + twins + check_hygiene(data, results)
-             + check_kids_leads(data, event_ids, from_year=datetime.now().year) + check_foreign(data, results, leads))
+             + check_kids_leads(data, event_ids, from_year=datetime.now().year) + check_foreign(data, results, leads)
+             + check_ext_birthday(data, own) + check_shared_contact(data, start, cards, {f.client_ids for f in twins})
+             + check_ext_birthday_diff(data, own))
     if card_ids:
         found = [f for f in found if set(f.client_ids) & card_ids]
     return found

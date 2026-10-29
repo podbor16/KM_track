@@ -278,7 +278,35 @@ def leads_only():
     return data(clients, leads=leads, results=results)
 
 
-@pytest.mark.parametrize("make", [pcarev, everything, leads_only])
+def contacts():
+    """Регистрации и телефоны заявок: X-BD (заглушка), X-PHONE (родитель/ребёнок, переставленные ФИ — карточки без
+    результатов), C-TWIN с общим телефоном (без X-PHONE), X-BDDIFF."""
+    def LP(i, cid, s, n, bd, phone):
+        return {**L(i, cid, s, n, bd, 11), "phone": phone, "email": ""}
+
+    def E(i, s, n, bd, phone, year):
+        return {"id": i, "surname": s, "name": n, "birthday": bd, "sex": "", "phone": phone, "email": "",
+                "product": "", "event_year": year}
+
+    clients = [C(1, "Иванов", "Иван", "1900-01-01"), C(3, "Сидоров", "Александр", "1980-03-09"),
+               C(4, "Сидоров", "Александр", "2010-06-01"), C(5, "Александр", "Сидоров", "1975-05-05"),
+               C(6, "Козлов", "Олег", "1986-07-04"), C(7, "Петров", "Дмитрий", "1980-05-05"),
+               C(8, "Петров", "Дима", "1980-05-05")]
+    leads = [LP(1, 1, "Иванов", "Иван", "1900-01-01", "+79230000001"),
+             *[LP(i, i, "Сидоров", "Александр", "1980-03-09", "+79230000002") for i in (3, 4, 5)],
+             LP(6, 6, "Козлов", "Олег", "1998-07-04", "+79230000003"),
+             LP(7, 7, "Петров", "Дмитрий", "1980-05-05", "+79230000004"), LP(8, 8, "Петров", "Дима", "1980-05-05", "+79230000004")]
+    results = [R(1, 1, "Иванов", "Иван", "1900-01-01", 11, 1), R(3, 3, "Сидоров", "Александр", "1980-03-09", 11, 3),
+               R(6, 6, "Козлов", "Олег", "1986-07-04", 11, 6), R(7, 7, "Петров", "Дмитрий", "1980-05-05", 11, 7)]
+    ext = [E(1, "Иванов", "Иван", "1985-07-14", "9230000001", 2019), E(2, "Иван", "Иванов", "1990-01-02", "", 2018),
+           E(3, "Козлов", "Олег", "1998-07-04", "9230000003", 2019), E(4, "Козлов", "Олег", "1998-07-04", "", 2021),
+           E(5, "Сидоров", "Александр", "1980-03-09", "9230000002", 2019)]
+    d = Data(clients, leads, results, EVENTS, ext=ext)
+    d.names = Names([("Пцарев", "Александр", "Мужчина"), ("Петров", "Дмитрий", "Мужчина")] * 5)
+    return d
+
+
+@pytest.mark.parametrize("make", [pcarev, everything, leads_only, contacts])
 def test_card_scope_equals_full_run_restricted_to_cards(make):
     d = make()
     full = run_checks(d)
@@ -286,6 +314,14 @@ def test_card_scope_equals_full_run_restricted_to_cards(make):
     for S in [{i} for i in ids_] + [set(p) for p in itertools.combinations(ids_, 2)]:
         want = {f.key for f in full if set(f.client_ids) & S}
         assert {f.key for f in run_checks(d, card_ids=S)} == want, S
+        assert {f.key for f in run_checks(scoped_subset(d, S), card_ids=S)} == want, S
+
+
+def test_contacts_fixture_has_every_registration_code():
+    found = {(f.code, f.client_ids, f.severity) for f in run_checks(contacts()) if f.code.startswith("X-")}
+    assert found == {("X-BD", (1,), "high"), ("X-PHONE", (3, 4), "low"), ("X-PHONE", (3, 5), "low"),
+                     ("X-BDDIFF", (6,), "medium")}
+    assert {f.client_ids for f in run_checks(contacts()) if f.code == "C-TWIN"} == {(7, 8)}
 
 
 # ---------------------------------------------------------------- ответы (БД заменена данными в памяти)
