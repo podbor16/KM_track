@@ -13,6 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from src.analytics import data_quality as dq
+from src.analytics import dq_cases
 from src.analytics.db_connection_optimized import get_pooled_connection
 from src.core.auth import api_require_auth
 
@@ -66,6 +67,16 @@ class DismissBody(BaseModel):
     note: str = ""
 
 
+class AnswerBody(BaseModel):
+    question_id: str
+    answer_id: str
+    inputs: dict[str, str] = {}
+
+
+class PostponeBody(BaseModel):
+    reason: str = ""
+
+
 def _with_conn(fn, *args):
     conn = get_pooled_connection()
     if not conn:
@@ -87,6 +98,46 @@ def _list(conn, event_id):
 @router.get("/api/admin/data-quality")
 async def list_findings(event_id: Optional[int] = None, user: str = Depends(api_require_auth)) -> dict:
     return await run_in_threadpool(_with_conn, _list, event_id)
+
+
+@router.get("/api/admin/data-quality/cases")
+async def list_cases(status: Literal["open", "postponed"] = "open", event_id: Optional[int] = None,
+                     user: str = Depends(api_require_auth)) -> dict:
+    return {"cases": await run_in_threadpool(_with_conn, dq_cases.list_cases, status, event_id)}
+
+
+@router.get("/api/admin/data-quality/cases/{key}")
+async def get_case(key: str, user: str = Depends(api_require_auth)) -> dict:
+    case = await run_in_threadpool(_with_conn, dq_cases.get_case, key)
+    if not case:
+        raise HTTPException(status_code=404, detail="Дело закрыто или изменилось — обновите список")
+    return case
+
+
+@router.post("/api/admin/data-quality/cases/{key}/answer")
+async def answer(key: str, body: AnswerBody, user: str = Depends(api_require_auth)) -> dict:
+    try:
+        return await run_in_threadpool(_with_conn, dq_cases.apply_answer, key, body.question_id, body.answer_id,
+                                       body.inputs, user)
+    except dq_cases.StaleQuestion as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/api/admin/data-quality/cases/{key}/postpone")
+async def postpone(key: str, body: PostponeBody, user: str = Depends(api_require_auth)) -> dict:
+    try:
+        ids = await run_in_threadpool(_with_conn, dq_cases.postpone_case, key, body.reason, user)
+    except dq_cases.StaleQuestion as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True, "action_ids": ids}
+
+
+@router.get("/api/admin/data-quality/person/{client_id}")
+async def person(client_id: int, user: str = Depends(api_require_auth)) -> dict:
+    case = await run_in_threadpool(_with_conn, dq_cases.case_for_card, client_id)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Нет карточки #{client_id}")
+    return case
 
 
 @router.post("/api/admin/data-quality/merge")
