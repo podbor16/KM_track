@@ -285,13 +285,37 @@ def test_checks_use_only_columns_that_load_selects():
             for name in ("leads", "results", "clients", "events") for q in sql if re.search(rf"FROM {name}\b", q)}
     only = lambda row, table: {k: row[k] for k in cols[table]}
     kid = {"id": 1, "client_id": 1, "surname": "Сидоров", "name": "Ваня", "birthday": "2027-01-01", "sex": "",
-           "event_id": 9, "event_distance": "1 км", "start_number": None}
+           "event_id": 9, "event_distance": "1 км", "start_number": None, "phone": "", "email": ""}
     d = Data([only({"id": 1, "surname": "Сидоров", "name": "Ваня", "birthday": "2027-01-01"}, "clients")],
              [only(kid, "leads")], [],
              [only({"id": 9, "event_name": "Детский забег", "event_distance": 1.0, "event_year": 2030, "event_date": None}, "events")])
     d.names = NAMES
     # 3 года на 1 км — проверка обязана прочитать дистанцию заявки
     assert [(f.code, f.severity) for f in run_checks(d, {9})] == [("L-KID", "low")]
+
+
+def test_load_without_ext_table_gives_empty_registrations():
+    """Старые базы без ext_registrations: справочник пуст, запроса к таблице нет."""
+    from unittest.mock import MagicMock
+    from src.analytics.data_quality import load
+    conn = MagicMock()
+    conn.cursor.return_value.fetchall.return_value = []
+    d = load(conn)
+    sql = [c.args[0] for c in conn.cursor.return_value.execute.call_args_list]
+    assert d.ext == [] and not any("FROM ext_registrations" in q for q in sql)
+
+
+def test_contacts_of_cards_and_registration_indexes():
+    leads = [{**L(1, 1, "Иванов", "Иван", "1985-07-14", 2), "phone": "+7 (923) 123-45-67", "email": " Ivan@Mail.RU "},
+             {**L(2, 2, "Иванов", "Иван", "1900-01-01", 4), "phone": "89231234567", "email": "example@mail.ru"},
+             {**L(3, 2, "Иванов", "Иван", "1900-01-01", 1), "phone": "12-34", "email": "нет"}]
+    ext = [{"id": 5, "surname": "Иванов", "name": "Иван", "birthday": "None", "sex": "М", "phone": "9231234567",
+            "email": "", "product": "Жара 2019", "event_year": 2019}]
+    d = Data([C(1, "Иванов", "Иван", "1985-07-14"), C(2, "Иванов", "Иван", "1900-01-01")], leads, [], EVENTS, ext=ext)
+    assert d.card_phones == {1: {"9231234567"}, 2: {"9231234567"}} and d.phone_cards["9231234567"] == {1, 2}
+    assert d.card_emails == {1: {"ivan@mail.ru"}} and dict(d.email_cards) == {"ivan@mail.ru": {1}}
+    assert d.ext[0]["birthday"] == "" and d.ext_by_fio[("иванов", "иван")] == d.ext_by_phone["9231234567"] == d.ext
+    assert not d.ext_by_email
 
 
 # ---------------------------------------------------------------- форма «Исправить…»

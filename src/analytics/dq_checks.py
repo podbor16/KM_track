@@ -54,10 +54,22 @@ class Finding:
 
 # ---------------------------------------------------------------- данные
 
-class Data:
-    """Строки clients/leads/results/events (dict) + индексы."""
+def norm_phone(raw):
+    """Телефон -> последние 10 цифр ('' — короче 10)."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    return digits[-10:] if len(digits) >= 10 else ""
 
-    def __init__(self, clients, leads, results, events, names=None, scope=None):
+
+def norm_email(raw):
+    """Почта -> strip().lower(); без «@» и «example@…» — ''."""
+    s = str(raw or "").strip().lower()
+    return "" if "@" not in s or s.startswith("example@") else s
+
+
+class Data:
+    """Строки clients/leads/results/events (dict) + индексы; ext — внешние регистрации (ext_registrations)."""
+
+    def __init__(self, clients, leads, results, events, names=None, scope=None, ext=()):
         self.scope = scope                  # None — вся база; иначе что загрузила load_scoped (см. covers)
         self.clients = {int(c["id"]): c for c in clients}
         self.events = {int(e["id"]): e for e in events}
@@ -82,6 +94,26 @@ class Data:
         for i, c in self.clients.items():
             self.cards_by_surname[norm(c["surname"])].append(i)
         self.names = names if names is not None else Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
+        # контакты карточек — из заявок
+        self.card_phones, self.card_emails = collections.defaultdict(set), collections.defaultdict(set)
+        self.phone_cards, self.email_cards = collections.defaultdict(set), collections.defaultdict(set)
+        for l in leads:
+            if p := norm_phone(l.get("phone")):
+                self.card_phones[l["client_id"]].add(p)
+                self.phone_cards[p].add(l["client_id"])
+            if e := norm_email(l.get("email")):
+                self.card_emails[l["client_id"]].add(e)
+                self.email_cards[e].add(l["client_id"])
+        # в базе телефон и почта уже нормализованы (scripts/import_ext_registrations.py), ДР NULL -> ''
+        self.ext = [{**x, "birthday": "" if x["birthday"] in (None, "None") else x["birthday"]} for x in ext]
+        self.ext_by_fio = collections.defaultdict(list)
+        self.ext_by_phone, self.ext_by_email = collections.defaultdict(list), collections.defaultdict(list)
+        for x in self.ext:
+            self.ext_by_fio[fio_key(x)].append(x)
+            if x["phone"]:
+                self.ext_by_phone[x["phone"]].append(x)
+            if x["email"]:
+                self.ext_by_email[x["email"]].append(x)
 
     def year(self, event_id):
         return int(self.events.get(event_id, {}).get("event_year") or 0)
@@ -113,9 +145,10 @@ def fio_key(row):
 
 
 COLUMNS = {"clients": "id, surname, name, birthday",
-           "leads": "id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number",
+           "leads": "id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number, phone, email",
            "results": "id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status, "
-                      "time_clear_finish"}
+                      "time_clear_finish",
+           "ext_registrations": "id, surname, name, birthday, sex, phone, email, product, event_year"}
 
 
 def _select(cur, table, conds=None):
@@ -138,12 +171,19 @@ def _events(cur):
     return cur.fetchall()
 
 
+def _ext(cur, conds=None):
+    """Строки ext_registrations (_select); таблицы нет (старая база) — пусто."""
+    cur.execute("SHOW TABLES LIKE 'ext_registrations'")
+    return _select(cur, "ext_registrations", conds) if cur.fetchall() else []
+
+
 def load(conn):
     cur = conn.cursor(dictionary=True)
     clients = [c for c in _select(cur, "clients") if c["id"] != 0]
     leads, results, events = _select(cur, "leads"), _select(cur, "results"), _events(cur)
+    ext = _ext(cur)
     cur.close()
-    return Data(clients, leads, results, events)
+    return Data(clients, leads, results, events, ext=ext)
 
 
 NAMES_TTL = 600                       # с: справочник имён по всей базе для load_scoped
@@ -209,7 +249,9 @@ def load_scoped(conn, card_ids, event_ids=()):
     """Data только для проверок карточек card_ids — run_checks(card_ids=...) находит то же, что на всей базе:
     карточки и их тёзки, все их строки; карточки и строки с их фамилиями и именами (в том числе имя на месте
     фамилии), карточки с их ДР (похожие ФИ), строки тех же забегов с теми же номерами (опечатка в фамилии);
-    у каждой загруженной карточки — все её строки. event_ids — забеги, чьи строки нужны целиком (варианты
+    у каждой загруженной карточки — все её строки; регистрации (ext) с этими фамилиями и именами. Карточки с общим
+    телефоном/почтой отдельно не ищутся: пару X-PHONE дают только та же фамилия или переставленные ФИ — такие
+    карточки со всеми заявками уже загружены. event_ids — забеги, чьи строки нужны целиком (варианты
     категорий и дистанций в вопросах). События — все, справочник имён — по всей базе (cached_names).
     Ключи фамилий — после norm, сравнивает их колляция БД (регистр, ё/е); строки с пробелами по краям или
     двойными пробелами в фамилии (NO PAD) тёзками не находятся — в базе таких 0 (2026-10-29), допустимо."""
@@ -237,6 +279,7 @@ def load_scoped(conn, card_ids, event_ids=()):
     rows["leads"] |= {r["id"]: r for r in _select(cur, "leads", [_in(
         "event_id", {e["id"] for e in events if (e["event_name"], e["event_year"]) in same})])}   # дистанции события
     rows["results"] |= {r["id"]: r for r in _select(cur, "results", [_in("event_id", event_ids)])}
+    ext = _ext(cur, [_in("surname", keys)])     # регистрации с ФИ карточек (и переставленными)
     cur.close()
     clients.pop(0, None)                # как в load: карточки #0 нет
 
@@ -244,7 +287,8 @@ def load_scoped(conn, card_ids, event_ids=()):
         return [d[k] for k in sorted(d)]
 
     return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
-                scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids})
+                scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids},
+                ext=sorted(ext, key=lambda x: x["id"]))
 
 
 def load_row_scoped(conn, table, row_id):
