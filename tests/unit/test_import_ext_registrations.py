@@ -11,6 +11,8 @@ _spec.loader.exec_module(m)
 def test_birthday():
     assert m.parse_birthday(datetime.datetime(1985, 7, 14)) == datetime.date(1985, 7, 14)
     assert m.parse_birthday("14.07.1985") == datetime.date(1985, 7, 14)
+    assert m.parse_birthday("1985-07-14") == datetime.date(1985, 7, 14)
+    assert m.parse_birthday("1985-07-14 00:00:00") == datetime.date(1985, 7, 14)
     assert m.parse_birthday("мусор") is None
     assert m.parse_birthday("31.02.1985") is None
     assert m.parse_birthday(datetime.datetime(1905, 1, 1)) is None

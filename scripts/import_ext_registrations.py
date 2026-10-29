@@ -4,7 +4,7 @@
   python scripts/import_ext_registrations.py --file "<xlsx>" --source boom          # dry-run
   python scripts/import_ext_registrations.py --file "<xlsx>" --source boom --apply
 
-Настройки БД — из окружения/.env (локально: load_dotenv('.env.local', override=True)
+Настройки БД (DB_*) — из окружения/.env через src.config (локально: load_dotenv('.env.local', override=True)
 выставляется переменной окружения, на проде — .env сервера). Файл с ПДн в репозиторий не кладётся.
 """
 import argparse
@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 _YEAR_RE = re.compile(r"(19|20)\d{2}")
 _DMY_RE = re.compile(r"^(\d{1,2})[.\-/\s](\d{1,2})[.\-/\s](\d{4})$")
+_YMD_RE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?$")
 BATCH = 1000
 
 
@@ -31,10 +32,15 @@ def parse_birthday(raw):
     elif isinstance(raw, datetime.date):
         d = raw
     elif isinstance(raw, str):
-        m = _DMY_RE.match(raw.strip())
-        if m:
+        s = raw.strip()
+        m = _DMY_RE.match(s)
+        parts = (m.group(3), m.group(2), m.group(1)) if m else None
+        if parts is None:
+            m = _YMD_RE.match(s)
+            parts = m.groups() if m else None
+        if parts:
             try:
-                d = datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                d = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
             except ValueError:
                 d = None
     if d is None or not 1920 <= d.year <= 2025:
@@ -108,12 +114,14 @@ SQL = ("INSERT INTO ext_registrations (source, source_row, surname, name, birthd
 
 
 def apply(rows, source):
-    from src.analytics.db_pool import get_pooled_connection
-    conn = get_pooled_connection()
-    if conn is None:
-        raise SystemExit("Нет соединения с БД")
+    import mysql.connector
+    from src.config import settings
+    # Одно прямое соединение, не пул: на проде пул (10 соединений) упирается в max_connections.
+    conn = mysql.connector.connect(
+        host=settings.DB_HOST, port=settings.DB_PORT, database=settings.DB_NAME,
+        user=settings.DB_USER, password=settings.DB_PASSWORD,
+        charset="utf8mb4", autocommit=False)
     try:
-        conn.autocommit = False
         cur = conn.cursor()
         cur.execute("DELETE FROM ext_registrations WHERE source = %s", (source,))
         data = [(source, r["source_row"], r["surname"], r["name"], r["birthday"], r["sex"],
