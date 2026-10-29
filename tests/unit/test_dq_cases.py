@@ -291,19 +291,26 @@ def test_card_scope_equals_full_run_restricted_to_cards(make):
 # ---------------------------------------------------------------- ответы (БД заменена данными в памяти)
 
 class Fake:
-    """dq_cases.load и dq_actions.load_decisions — из памяти; действия dq_actions — записывающие заглушки."""
+    """dq_cases.load/load_scoped и dq_actions.load_decisions — из памяти; действия dq_actions — записывающие заглушки.
+    loads — вызовы load_scoped, full_loads — полной load."""
     ACTIONS = {"merge_cards": (0, 1), "move_row": (0, 1), "edit_record": (0, 1), "dismiss": 1, "delete_result": 1,
                "fix_fio": (0, 1)}
 
     def __init__(self, monkeypatch, d):
-        self.d, self.decided, self.calls, self.loads, self.fail = d, {}, [], 0, None
+        self.d, self.decided, self.calls, self.loads, self.full_loads, self.fail = d, {}, [], 0, 0, None
         monkeypatch.setattr(dq_cases, "load", self._load)
+        monkeypatch.setattr(dq_cases, "load_scoped", self._load_scoped)
+        dq_cases.invalidate()
         monkeypatch.setattr(dq_actions, "load_decisions", lambda conn: dict(self.decided))
         monkeypatch.setattr(dq_cases, "_today", lambda: datetime.date(2026, 10, 28))
         for name, ret in self.ACTIONS.items():
             monkeypatch.setattr(dq_actions, name, self._stub(name, ret))
 
     def _load(self, conn):
+        self.full_loads += 1
+        return self.d
+
+    def _load_scoped(self, conn, card_ids, event_ids=()):
         self.loads += 1
         return self.d
 
@@ -319,7 +326,7 @@ class Fake:
         """Ответ на вопрос key; only — прочие вопросы дела отложены (вопрос не закрыт ступенью)."""
         case = next(c for c in group_cases(run_checks(self.d), self.d) if any(f.key == key for f in c["findings"]))
         self.decided = {f.key: "postponed" for f in case["findings"] if f.key != key} if only else {}
-        self.calls, self.loads = [], 0
+        self.calls, self.loads, self.full_loads = [], 0, 0
         return dq_cases.apply_answer(None, case["key"], key, answer_id, inputs or {}, "u")
 
 
@@ -397,7 +404,7 @@ def test_answer_runs_its_chain(monkeypatch, make, key, answer_id, inputs, calls)
     fake = Fake(monkeypatch, make())
     fake.answer(key, answer_id, inputs)
     assert fake.calls == _with_key(calls, key)
-    assert fake.loads == 2
+    assert (fake.loads, fake.full_loads) == (2, 0)
 
 
 def test_fix_takes_canonical_fio(monkeypatch):
@@ -465,11 +472,24 @@ def test_unknown_answer_and_stale_question(monkeypatch):
 
 def test_loads_once_per_read(monkeypatch):
     fake = Fake(monkeypatch, everything())
-    for call in (lambda: dq_cases.get_case(None, "c1"), lambda: dq_cases.list_cases(None, "open"),
-                 lambda: dq_cases.case_for_card(None, 1), lambda: dq_cases.postpone_case(None, "c1", "", U)):
+    for call in (lambda: dq_cases.get_case(None, "c1"), lambda: dq_cases.case_for_card(None, 1),
+                 lambda: dq_cases.postpone_case(None, "c1", "", U)):
         fake.loads = 0
         call()
-        assert fake.loads == 1
+        assert (fake.loads, fake.full_loads) == (1, 0)
+
+
+def test_queue_is_cached_until_an_action(monkeypatch):
+    fake = Fake(monkeypatch, everything())
+    dq_cases.list_cases(None, "open")
+    dq_cases.list_cases(None, "postponed")
+    assert (fake.loads, fake.full_loads) == (0, 1)
+    fake.answer("HYG:r7:12", "keep")
+    dq_cases.list_cases(None, "open")
+    assert fake.full_loads == 1
+    dq_cases.postpone_case(None, "c1", "", U)
+    dq_cases.list_cases(None, "open")
+    assert fake.full_loads == 2
 
 
 def test_case_for_card_joins_namesake_case_else_unknown_key(monkeypatch):

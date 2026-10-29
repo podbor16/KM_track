@@ -6,13 +6,17 @@
 """
 
 import datetime
+import random
 
 import pytest
 
 from src.analytics import data_quality as dq
 from src.analytics.db_pool import get_pooled_connection
 
-EV, SUR, USER = "Тест отмены", "Тестотменов", "test-undo"
+# суффикс прогона: параллельные прогоны не убирают данные друг друга
+RUN = "".join(random.choice("бвгджзклмнпрстф") for _ in range(4))
+EV, SUR, USER = f"Тест отмены {RUN}", f"Тестотменов{RUN}", f"test-undo-{RUN}"
+KEY = f"TEST-UNDO-{RUN}"
 
 
 @pytest.fixture
@@ -34,7 +38,7 @@ def db():
             cur.execute(f"DELETE FROM results WHERE event_id IN ({ph})")
             cur.execute(f"DELETE FROM leads WHERE event_id IN ({ph})")
             cur.execute(f"DELETE FROM events WHERE id IN ({ph})")
-        cur.execute("DELETE FROM clients WHERE surname = %s", (SUR,))
+        cur.execute("DELETE FROM clients WHERE surname = %s OR name = %s", (SUR, SUR))     # и «Иван <SUR>»
         cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (USER,))
         cur.execute("DELETE FROM dq_decisions WHERE decided_by = %s", (USER,))
         conn.commit()
@@ -90,7 +94,7 @@ def test_merge_undo_restores_cards_leads_and_results(db):
     assert a == a2 and a != b
     before = {i: card(cur, i) for i in (a, b)}
 
-    surv, aid = dq.merge_cards(conn, [a, b], SUR, "Иван", "1980-03-09", USER, "TEST-UNDO::merge")
+    surv, aid = dq.merge_cards(conn, [a, b], SUR, "Иван", "1980-03-09", USER, f"{KEY}::merge")
     assert surv == a and card(cur, b) is None and owner(cur, "results", r2)["client_id"] == a
 
     dq.undo_action(conn, aid, USER)
@@ -130,7 +134,7 @@ def test_delete_result_undo_returns_row_with_same_id_and_card(db):
     r_dns, a2 = result(cur, e1, 11, "1985-02-02", status="Not started")
     conn.commit()
     assert a == a2
-    aid = dq.delete_result(conn, r_dns, USER, "TEST-UNDO::dup")
+    aid = dq.delete_result(conn, r_dns, USER, f"{KEY}::dup")
     assert owner(cur, "results", r_dns) is None
 
     dq.undo_action(conn, aid, USER)
@@ -146,17 +150,17 @@ def test_fix_fio_result_only_and_dismiss_undo(db):
     lead(cur, e1, "1985-02-02", bib=77)
     rid, cid = result(cur, e1, 77, "1985-02-02", surname="Иван", name=SUR)    # имя и фамилия переставлены
     conn.commit()
-    _, aid = dq.fix_fio(conn, rid, SUR, "Иван", USER, "TEST-UNDO::hyg")
+    _, aid = dq.fix_fio(conn, rid, SUR, "Иван", USER, f"{KEY}::hyg")
     cur.execute("SELECT surname, name FROM results WHERE id = %s", (rid,))
     assert cur.fetchone() == {"surname": SUR, "name": "Иван"}
     dq.undo_action(conn, aid, USER)
     cur.execute("SELECT surname, name FROM results WHERE id = %s", (rid,))
     assert cur.fetchone() == {"surname": "Иван", "name": SUR}
 
-    did = dq.dismiss(conn, "TEST-UNDO::keep", "keep", "", USER)
-    assert "TEST-UNDO::keep" in dq.load_decisions(conn)
+    did = dq.dismiss(conn, f"{KEY}::keep", "keep", "", USER)
+    assert f"{KEY}::keep" in dq.load_decisions(conn)
     dq.undo_action(conn, did, USER)
-    assert "TEST-UNDO::keep" not in dq.load_decisions(conn)
+    assert f"{KEY}::keep" not in dq.load_decisions(conn)
 
 
 def test_edit_result_and_card_then_undo(db):
@@ -170,7 +174,7 @@ def test_edit_result_and_card_then_undo(db):
     cur.execute("SELECT category FROM results WHERE id = %s", (rid,))
     category = cur.fetchone()["category"]
     # R-CARD «в результат — как в карточке»: правится только строка результата
-    _, aid = dq.edit_record(conn, "results", rid, {"birthday": "2014-12-12", "category": "Д7"}, USER, "TEST-UNDO::card")
+    _, aid = dq.edit_record(conn, "results", rid, {"birthday": "2014-12-12", "category": "Д7"}, USER, f"{KEY}::card")
     cur.execute("SELECT birthday, category, client_id FROM results WHERE id = %s", (rid,))
     assert cur.fetchone() == {"birthday": datetime.date(2014, 12, 12), "category": "Д7", "client_id": cid2}
     with pytest.raises(ValueError, match="не изменились"):
@@ -233,7 +237,7 @@ def test_move_result_to_existing_card_deletes_empty_source_and_undo(db):
     assert girl != wrong
     wrong_before = card(cur, wrong)
 
-    to, aid = dq.move_row(conn, "results", r_moved, USER, "TEST-UNDO::move", to_client_id=girl)
+    to, aid = dq.move_row(conn, "results", r_moved, USER, f"{KEY}::move", to_client_id=girl)
     assert to == girl and owner(cur, "results", r_moved) == {"client_id": girl, "birthday": datetime.date(1900, 1, 1)}
     assert card(cur, wrong) is None                                          # опустела — удалена
     assert card(cur, girl)["last_result_id"] == max(r_own, r_moved)
@@ -284,7 +288,7 @@ def test_move_lead_restores_contacts_on_undo(db):
     cur.execute("UPDATE clients SET phone = '+70000000001', email = 'kid@test.ru' WHERE id = %s", (kid,))
     conn.commit()
     before = {i: card(cur, i) for i in (kid, parent)}
-    to, aid = dq.move_row(conn, "leads", lid, USER, "TEST-UNDO::lead", to_client_id=kid)
+    to, aid = dq.move_row(conn, "leads", lid, USER, f"{KEY}::lead", to_client_id=kid)
     assert to == kid and owner(cur, "leads", lid)["client_id"] == kid
     assert card(cur, parent) is None                                       # у родителя больше ничего — удалена
     assert card(cur, kid)["count_leads"] == 1 and card(cur, kid)["phone"] == "+70000000009"   # триггер заявок
@@ -334,12 +338,12 @@ def test_category_change_sets_neighbor_rank_and_undo(db):
 
 def test_postponed_decision_and_undo(db):
     conn, cur = db
-    did = dq.dismiss(conn, "TEST-UNDO::postpone", "postponed", "не знаю ДР", USER)
-    assert dq.load_decisions(conn)["TEST-UNDO::postpone"] == "postponed"
+    did = dq.dismiss(conn, f"{KEY}::postpone", "postponed", "не знаю ДР", USER)
+    assert dq.load_decisions(conn)[f"{KEY}::postpone"] == "postponed"
     journal = {x["id"]: x for x in dq.recent_actions(conn, 10)}
     assert journal[did]["text"] == "Решение: отложено (не знаю ДР)"
     dq.undo_action(conn, did, USER)
-    assert "TEST-UNDO::postpone" not in dq.load_decisions(conn)
+    assert f"{KEY}::postpone" not in dq.load_decisions(conn)
 
 
 def _runners(cur, ev, spec):
@@ -398,7 +402,7 @@ def test_empty_category_with_places_in_race_is_first(db):
 
 def test_undo_decision_restores_previous(db):
     conn, cur = db
-    key = "TEST-UNDO::prev"
+    key = f"{KEY}::prev"
     dq.dismiss(conn, key, "postponed", "не знаю ДР", USER)
     did = dq.dismiss(conn, key, "keep", "", USER)
     assert dq.load_decisions(conn)[key] == "keep"
@@ -410,7 +414,7 @@ def test_undo_decision_restores_previous(db):
 
 def test_undo_earlier_decision_blocked_by_later(db):
     conn, cur = db
-    key = "TEST-UNDO::order"
+    key = f"{KEY}::order"
     d1 = dq.dismiss(conn, key, "postponed", "", USER)
     d2 = dq.dismiss(conn, key, "keep", "", USER)
     with pytest.raises(ValueError, match=f"#{d2}"):

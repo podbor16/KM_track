@@ -1,14 +1,17 @@
 """Ответы на вопросы дел на локальной БД (.env.local): цепочки, отложить, устаревший вопрос, «живой» забег.
-Тестовые данные — события 2099 года, фамилия «Тестделов», убираются после теста."""
+Тестовые данные — события 2099 года, фамилия «Тестделов<суффикс прогона>», убираются после теста."""
 import datetime
+import random
 
 import pytest
 
-from src.analytics import dq_cases
+from src.analytics import dq_cases, dq_checks
 from src.analytics import data_quality as dq
 from src.analytics.db_pool import get_pooled_connection
 
-EV, SUR, USER = "Тест дел", "Тестделов", "test-cases"
+# суффикс прогона: параллельные прогоны не убирают данные друг друга
+RUN = "".join(random.choice("бвгджзклмнпрстф") for _ in range(4))
+EV, SUR, USER = f"Тест дел {RUN}", f"Тестделов{RUN}", f"test-cases-{RUN}"
 
 
 @pytest.fixture
@@ -19,16 +22,17 @@ def db():
     cur = conn.cursor(dictionary=True)
 
     def cleanup():
-        # тестовые события: «Тест дел …» и переименованные в «Детский забег» — только 2099 года
-        cur.execute("SELECT id FROM events WHERE event_year = 2099 AND (event_name LIKE %s OR event_name = 'Детский забег')",
-                    (f"{EV}%",))
+        # тестовые события: «Тест дел <суффикс> …» и переименованные в «Детский забег» (со строками этого прогона)
+        cur.execute("""SELECT id FROM events WHERE event_year = 2099 AND (event_name LIKE %s OR id IN
+                       (SELECT event_id FROM results WHERE surname = %s UNION SELECT event_id FROM leads WHERE surname = %s))""",
+                    (f"{EV}%", SUR, SUR))
         evs = [r["id"] for r in cur.fetchall()]
         if evs:
             ph = ",".join(map(str, evs))
             cur.execute(f"DELETE FROM results WHERE event_id IN ({ph})")
             cur.execute(f"DELETE FROM leads WHERE event_id IN ({ph})")
             cur.execute(f"DELETE FROM events WHERE id IN ({ph})")
-        cur.execute("DELETE FROM clients WHERE surname = %s", (SUR,))
+        cur.execute("DELETE FROM clients WHERE surname LIKE %s OR name = %s", (f"{SUR}%", SUR))   # и опечатка, и «Иван <SUR>»
         cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (USER,))
         cur.execute("DELETE FROM dq_decisions WHERE decided_by = %s", (USER,))
         conn.commit()
@@ -196,3 +200,71 @@ def test_moved_lead_visible_in_admin_leads_and_duplicates(db):
     dq_cases.apply_answer(conn, case["key"], q["id"], f"to:{kid}", {}, USER)
     leads = db_results.get_leads_admin(event_id=ev, limit=10)
     assert [(l["id"], l["client_id"], l["is_duplicate"]) for l in leads] == [(lid, kid, 0)]
+
+
+# ---------------------------------------------------------------- загрузка по фамилиям = полный прогон (данные базы)
+
+def _full_run(conn):
+    dq_checks._names_cache.clear()                  # справочник имён — по текущей базе, как у load
+    data = dq_checks.load(conn)
+    return data, dq_checks.run_checks(data)
+
+
+def test_scoped_load_finds_what_full_run_finds(db):
+    conn, _ = db
+    data, every = _full_run(conn)
+    cards = sorted({i for f in every for i in f.client_ids if i})[:10]
+    bib = next((f for f in every if f.code == "R-LEAD" and "(тот же номер)" in f.message), None)
+    if bib:
+        cards.append(min(bib.client_ids))
+    if not cards:
+        pytest.skip("В локальной базе нет находок")
+    for S in [{i} for i in cards] + [set(cards)]:
+        got = {f.key for f in dq_checks.run_checks(dq_checks.load_scoped(conn, S), card_ids=S)}
+        assert got == {f.key for f in dq_checks.run_checks(data, card_ids=S)}, S
+
+
+def test_scoped_load_finds_bib_with_typo_and_swapped_fio(db):
+    """Строки, которые не найти по фамилии карточки: результат с её номером и опечаткой в фамилии (R-LEAD
+    «тот же номер») и карточка «Иван <фамилия>» с ДР-заглушкой (C-TWIN «имя и фамилия переставлены»)."""
+    conn, cur = db
+    ev = event(cur, "Номер", 5.0)
+    cur.execute("""INSERT INTO leads (surname, name, sex, city, birthday, phone, email, event_name, event_distance,
+                   event_year, products, amount, client_id, event_id, start_number, created_at)
+                   VALUES (%s, 'Иван', 'Мужчина', '', '1980-03-09', '+70000000003', 'n@test.ru', %s, '5', 2099, '', 0, 0,
+                           %s, 5, '2026-01-01 10:00:00')""", (SUR, f"{EV} Номер", ev))
+    cur.execute("SELECT client_id FROM leads WHERE id = %s", (cur.lastrowid,))
+    card = cur.fetchone()["client_id"]
+    typo = SUR + "о"
+    cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
+                   race_status) VALUES (%s, 'Иван', '1981-01-01', 0, %s, 'Мужчина', 9, '', 'Finished')""",
+                (typo, event(cur, "Номер 2", 5.0)))
+    cur.execute("SELECT client_id FROM results WHERE id = %s", (cur.lastrowid,))
+    other = cur.fetchone()["client_id"]
+    cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
+                   race_status) VALUES (%s, 'Иван', '1981-01-01', 0, %s, 'Мужчина', 5, '', 'Finished')""", (typo, ev))
+    cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (other, cur.lastrowid))
+    cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
+                   race_status) VALUES ('Иван', %s, '1900-01-01', 0, %s, 'Мужчина', 7, '', 'Finished')""",
+                (SUR, event(cur, "Номер 3", 5.0)))
+    conn.commit()
+    _, every = _full_run(conn)
+    want = {f.key: f for f in every if card in f.client_ids}
+    assert {f.code for f in want.values()} >= {"R-LEAD", "C-TWIN"}
+    assert {f.key for f in dq_checks.run_checks(dq_checks.load_scoped(conn, {card}), card_ids={card})} == set(want)
+
+
+def test_case_by_key_equals_case_of_full_run(db):
+    conn, _ = db
+    data, every = _full_run(conn)
+    decided = dq.load_decisions(conn)
+    cases = dq_cases._cases(data, every, decided)
+    if not cases:
+        pytest.skip("В локальной базе нет дел")
+    for case in cases:
+        view = dq_cases.get_case(conn, case["key"])
+        assert view, case["key"]
+        assert [c["id"] for c in view["cards"]] == [i for i in case["cards"] if i in data.clients], case["key"]
+        assert {q["id"] for q in view["questions"]} == {f.key for f in case["findings"]}, case["key"]
+        # и всё дело целиком: строки карточек, тексты, ответы, варианты категорий и дистанций
+        assert view == dq_cases.case_view(case, data, decided, dq_cases._today()), case["key"]

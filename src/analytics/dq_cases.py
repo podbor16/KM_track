@@ -9,11 +9,12 @@
 import collections
 import datetime as _dt
 import re
+import time
 
 from src.analytics import dq_actions
 from src.analytics.dq_actions import edit_record_view, propose_final
-from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, merge_blockers,
-                                     names_compatible, real_bd, run_checks)
+from src.analytics.dq_checks import (NOT_STARTED, card_fits_category, is_kid, jan1, load, load_scoped, merge_blockers,
+                                     names_compatible, real_bd, run_checks, with_namesakes)
 from src.common.names import norm
 from src.config.settings import KRASNOYARSK_TZ
 
@@ -424,14 +425,80 @@ class StaleQuestion(Exception):
     """Вопроса больше нет (дело изменилось в другой вкладке) — 409 «обновите дело»."""
 
 
-def _state(conn, card_ids=None):
-    data = load(conn)
-    return data, run_checks(data, card_ids=card_ids), dq_actions.load_decisions(conn)
+QUEUE_TTL = 60                      # с: полный прогон для очереди дел (другие процессы сервера — не позже)
+EXPAND = 4                          # итераций расширения дела карточками его находок
+OPTION_CODES = ("R-CAT", "L-KID")   # вопросы с выбором категории/дистанции — нужны строки забега целиком
+_queue = {}
+
+
+def invalidate():
+    """Сбросить кеш очереди этого процесса — после любого действия «Качества данных»."""
+    _queue.clear()
+
+
+def _full(conn):
+    """Полный прогон (данные, находки) — кеш процесса на QUEUE_TTL с."""
+    if not _queue or time.monotonic() - _queue["at"] > QUEUE_TTL:
+        data = load(conn)
+        _queue.update(at=time.monotonic(), data=data, findings=run_checks(data))
+    return _queue["data"], _queue["findings"]
+
+
+def _open(findings, decided):
+    return [f for f in findings if decided.get(f.key) in (None, "postponed")]
 
 
 def _cases(data, findings, decided):
     """Дела из нерешённых и отложенных находок; «разные люди»/«оставить» — решены."""
-    return group_cases([f for f in findings if decided.get(f.key) in (None, "postponed")], data)
+    return group_cases(_open(findings, decided), data)
+
+
+def _key_cards(key):
+    """Карточки из ключа дела «c<id>»/«p<id>» или из ключа находки (после последнего «:» — id через «-»)."""
+    if re.fullmatch(r"[cp]\d+", key):
+        return {int(key[1:])}
+    return {int(x) for x in key.rsplit(":", 1)[-1].split("-") if x.isdigit()} if ":" in key else set()
+
+
+def _scoped(conn, cards, events=(), view=False):
+    """Дела вокруг карточек cards без полной загрузки -> (data, дела, решения): набор карточек расширяется
+    карточками находок и тёзками до неподвижной точки (не больше EXPAND итераций); view — и забегами вопросов
+    с вариантами категорий/дистанций. load_scoped — только когда загруженного не хватает."""
+    decided = dq_actions.load_decisions(conn)
+    cards, events, data = set(cards), set(events), None
+    for _ in range(EXPAND):
+        if data is None or not data.covers(cards, events):
+            data = load_scoped(conn, cards, events)
+        found = _open(run_checks(data, card_ids=cards), decided)
+        more = with_namesakes(data, cards | {i for f in found for i in f.client_ids if i})
+        more_events = events | ({f.event_id for f in found if f.code in OPTION_CODES and f.event_id} if view else set())
+        if more <= cards and more_events <= events:
+            break
+        cards, events = cards | more, more_events
+    return data, group_cases(found, data), decided
+
+
+def _row_case(conn, key):
+    """Дело «r<id>»/«l<id>» — находка строки без карточки -> (data, дела, решения)."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(f"SELECT client_id FROM {'results' if key[0] == 'r' else 'leads'} WHERE id = %s", (int(key[1:]),))
+    row = cur.fetchone()
+    cur.close()
+    decided = dq_actions.load_decisions(conn)
+    if not row:
+        return None, [], decided
+    data = load_scoped(conn, {row["client_id"] or 0})
+    return data, _cases(data, [f for f in run_checks(data) if not any(f.client_ids)], decided), decided
+
+
+def _case_by_key(conn, key, more_cards=(), events=(), view=False, cards=()):
+    """-> (data, дело или None, решения) по ключу дела; more_cards — тоже загрузить (карточки вопроса и ответа),
+    cards — для _find_case, если ключ сменился."""
+    if re.fullmatch(r"[rl]\d+", key):
+        data, cases, decided = _row_case(conn, key)
+    else:
+        data, cases, decided = _scoped(conn, _key_cards(key) | set(more_cards), events, view)
+    return data, _find_case(cases, key, set(cards) & set(data.clients) if data else ()), decided
 
 
 def _find_case(cases, key, cards=()):
@@ -446,12 +513,10 @@ def _find_case(cases, key, cards=()):
 
 def _case_after(conn, case, extra_cards=()):
     """Дело после ответа: проверки только по карточкам дела, его тёзкам и карточкам, куда ушли строки."""
-    data = load(conn)
-    cards = {i for i in (*case["cards"], *extra_cards) if i in data.clients}
-    cards |= {j for i in cards for j in _namesakes_of(data, i)}
-    findings = run_checks(data, card_ids=cards)
-    decided = dq_actions.load_decisions(conn)
-    found = _find_case(_cases(data, findings, decided), case["key"], cards)
+    invalidate()
+    cards = {*case["cards"], *extra_cards}
+    events = {f.event_id for f in case["findings"] if f.code in OPTION_CODES and f.event_id}
+    data, found, decided = _case_by_key(conn, case["key"], cards, events, view=True, cards=cards)
     return case_view(found, data, decided, _today()) if found else None
 
 
@@ -513,8 +578,9 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
     правка карточки упёрлась в чужие ФИ+ДР -> ничего не записано, ещё
     "conflict": {message, merge_with, surname, name, birthday}."""
     inputs = {k: str(v if v is not None else "").strip() for k, v in (inputs or {}).items()}
-    data, findings, decided = _state(conn)
-    case = _find_case(_cases(data, findings, decided), case_key)
+    # карточки вопроса и цели ответа (to:<id>, merge_with:<id> — у неё может быть другая фамилия)
+    more = _key_cards(question_id) | (_key_cards(answer_id) if ":" in answer_id else set())
+    data, case, decided = _case_by_key(conn, case_key, more)
     f = next((x for x in (case or {}).get("findings", ()) if x.key == question_id), None)
     if f is None:
         raise StaleQuestion("Дело изменилось — обновите")
@@ -580,16 +646,18 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
 
 def postpone_case(conn, case_key, reason, user):
     """Отложить все вопросы дела (решение «postponed» с причиной, по умолчанию «не знаю ДР») -> id записей журнала."""
-    data, findings, decided = _state(conn)
-    case = _find_case(_cases(data, findings, decided), case_key)
+    _, case, decided = _case_by_key(conn, case_key)
     if not case:
         raise StaleQuestion("Дело изменилось — обновите")
-    return _postpone(conn, case, decided, reason, user)
+    ids = _postpone(conn, case, decided, reason, user)
+    invalidate()
+    return ids
 
 
 def list_cases(conn, status="open", event_id=None):
     """Очередь дел: open — есть нерешённые неотложенные вопросы; postponed — все вопросы отложены."""
-    data, findings, decided = _state(conn)
+    data, findings = _full(conn)
+    decided = dq_actions.load_decisions(conn)
     out = []
     for c in _cases(data, findings, decided):
         open_ = {f.key for f in c["findings"] if f.key not in decided}
@@ -606,18 +674,16 @@ def list_cases(conn, status="open", event_id=None):
 
 def get_case(conn, case_key):
     """Дело по ключу (None — дела больше нет: все вопросы решены)."""
-    data, findings, decided = _state(conn)
-    case = _find_case(_cases(data, findings, decided), case_key)
+    data, case, decided = _case_by_key(conn, case_key, view=True)
     return case_view(case, data, decided, _today()) if case else None
 
 
 def case_for_card(conn, client_id):
     """Дело человека по карточке — для поиска по ФИО: дело, где есть карточка или её тёзка (карточка добавляется
     к делу); нет такого — карточка и тёзки без вопросов (ключ «p<карточка>» — отвечать в нём не на что)."""
-    data, findings, decided = _state(conn)
+    data, cases, decided = _scoped(conn, {client_id}, view=True)
     if client_id not in data.clients:
         return None
-    cases = _cases(data, findings, decided)
     mine = {client_id, *_namesakes_of(data, client_id)}
     case = (next((c for c in cases if client_id in c["cards"]), None)
             or next((c for c in cases if mine & set(c["cards"])), None))

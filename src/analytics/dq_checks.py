@@ -14,6 +14,7 @@ import dataclasses
 from datetime import datetime
 import itertools
 import re
+import time
 
 from src.common.names import SENTINELS, Names, _near_bd, canonical_fio, lev, norm
 
@@ -55,7 +56,8 @@ class Finding:
 class Data:
     """Строки clients/leads/results/events (dict) + индексы."""
 
-    def __init__(self, clients, leads, results, events):
+    def __init__(self, clients, leads, results, events, names=None, scope=None):
+        self.scope = scope                  # None — вся база; иначе что загрузила load_scoped (см. covers)
         self.clients = {int(c["id"]): c for c in clients}
         self.events = {int(e["id"]): e for e in events}
         self.leads, self.results = leads, results
@@ -78,7 +80,7 @@ class Data:
         self.cards_by_surname = collections.defaultdict(list)
         for i, c in self.clients.items():
             self.cards_by_surname[norm(c["surname"])].append(i)
-        self.names = Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
+        self.names = names or Names([(r["surname"], r["name"], r.get("sex", "")) for r in leads + results])
 
     def year(self, event_id):
         return int(self.events.get(event_id, {}).get("event_year") or 0)
@@ -91,26 +93,139 @@ class Data:
         c = self.clients.get(i, {})
         return f'#{i} {c.get("surname", "")} {c.get("name", "")} {c.get("birthday", "")}'
 
+    def covers(self, card_ids, event_ids=()):
+        """Загруженного хватает для run_checks(card_ids=...) и вопросов с забегами event_ids:
+        load_scoped(card_ids, event_ids) не добавила бы ни одной строки."""
+        s = self.scope
+        if s is None:
+            return True
+        ids = set(card_ids) - s["cards"]
+        if not set(event_ids) <= s["events"] or any(
+                i not in self.clients or norm(self.clients[i]["surname"]) not in s["keys"] for i in ids):
+            return False
+        keys, bds, bibs = _needs(self, with_namesakes(self, ids))
+        return keys <= s["keys"] and bds <= s["bds"] and bibs <= s["bibs"]
+
 
 def fio_key(row):
     return norm(row["surname"]), norm(row["name"])
 
 
+COLUMNS = {"clients": "id, surname, name, birthday",
+           "leads": "id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number",
+           "results": "id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status, "
+                      "time_clear_finish"}
+
+
+def _select(cur, table, conds=None):
+    """Строки table; conds — [(условие, параметры)], условия без параметров пропускаются, остальные — через OR
+    (None — вся таблица, пустой список условий — ничего)."""
+    if conds is not None:
+        conds = [(w, a) for w, a in conds if a]
+        if not conds:
+            return []
+    where = " WHERE " + " OR ".join(w for w, _ in conds) if conds else ""
+    cur.execute(f"SELECT {COLUMNS[table]} FROM {table}{where}", tuple(x for _, a in conds or () for x in a))
+    rows = cur.fetchall()
+    for r in rows:
+        r["birthday"] = str(r["birthday"])
+    return rows
+
+
+def _events(cur):
+    cur.execute("SELECT id, event_name, event_distance, event_year, event_date FROM events")
+    return cur.fetchall()
+
+
 def load(conn):
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, surname, name, birthday FROM clients WHERE id <> 0")
-    clients = cur.fetchall()
-    cur.execute("SELECT id, client_id, surname, name, birthday, sex, event_id, event_distance, start_number FROM leads")
-    leads = cur.fetchall()
-    cur.execute("""SELECT id, client_id, surname, name, birthday, sex, event_id, start_number, category, race_status,
-                          time_clear_finish FROM results""")
-    results = cur.fetchall()
-    cur.execute("SELECT id, event_name, event_distance, event_year, event_date FROM events")
-    events = cur.fetchall()
+    clients = [c for c in _select(cur, "clients") if c["id"] != 0]
+    leads, results, events = _select(cur, "leads"), _select(cur, "results"), _events(cur)
     cur.close()
-    for r in clients + leads + results:
-        r["birthday"] = str(r["birthday"])
     return Data(clients, leads, results, events)
+
+
+NAMES_TTL = 600                       # с: справочник имён по всей базе для load_scoped
+_names_cache = {}
+
+
+def cached_names(conn):
+    """Names по всем заявкам и результатам (как у load) — кеш процесса на NAMES_TTL с."""
+    if not _names_cache or time.monotonic() - _names_cache["at"] > NAMES_TTL:
+        cur = conn.cursor()
+        cur.execute("SELECT surname, name, sex FROM leads UNION ALL SELECT surname, name, sex FROM results")
+        names = Names(cur.fetchall())
+        cur.close()
+        _names_cache.update(at=time.monotonic(), names=names)
+    return _names_cache["names"]
+
+
+def with_namesakes(data, ids):
+    """Карточки ids и их тёзки (та же фамилия, совместимое имя: «Саша» — «Александр») — их находки в одном деле."""
+    out = set(ids)
+    for i in ids:
+        if c := data.clients.get(i):
+            out |= {j for j in data.cards_by_surname[norm(c["surname"])]
+                    if names_compatible(c["name"], data.clients[j]["name"], data.names)}
+    return out
+
+
+def _needs(data, ids):
+    """-> (фамилии и имена, ДР, (забег, номер)) карточек ids и их строк — по ним load_scoped ищет связанные строки."""
+    keys, bds, bibs = set(), set(), set()
+    for i in ids:
+        c = data.clients.get(i)
+        rows = data.leads_by_card[i] + data.res_by_card[i]
+        for x in ([c] if c else []) + rows:
+            keys |= {norm(x["surname"]), norm(x["name"])} - {""}
+        if c and real_bd(c["birthday"]):
+            bds.add(c["birthday"])
+        bibs |= {(r["event_id"], r["start_number"]) for r in rows if r["start_number"]}
+    return keys, bds, bibs
+
+
+def _in(column, values):
+    return f"{column} IN ({','.join(['%s'] * len(values))})", tuple(values)
+
+
+def load_scoped(conn, card_ids, event_ids=()):
+    """Data только для проверок карточек card_ids — run_checks(card_ids=...) находит то же, что на всей базе:
+    карточки и их тёзки, все их строки; карточки и строки с их фамилиями и именами (в том числе имя на месте
+    фамилии), карточки с их ДР (похожие ФИ), строки тех же забегов с теми же номерами (опечатка в фамилии);
+    у каждой загруженной карточки — все её строки. event_ids — забеги, чьи строки нужны целиком (варианты
+    категорий и дистанций в вопросах). События — все, справочник имён — по всей базе (cached_names)."""
+    cur = conn.cursor(dictionary=True)
+    names, events = cached_names(conn), _events(cur)
+    ids = {int(i) for i in card_ids}
+    clients = {c["id"]: c for c in _select(cur, "clients", [_in("id", ids)])}
+    clients |= {c["id"]: c for c in _select(cur, "clients", [_in("surname", {c["surname"] for c in clients.values()})])}
+    base = with_namesakes(Data(list(clients.values()), [], [], [], names), ids)
+    rows = {t: {r["id"]: r for r in _select(cur, t, [_in("client_id", base)])} for t in ("leads", "results")}
+    keys, bds, bibs = _needs(Data(list(clients.values()), list(rows["leads"].values()),
+                                  list(rows["results"].values()), [], names), base)
+    clients |= {c["id"]: c for c in _select(cur, "clients", [_in("surname", keys), _in("birthday", bds)])}
+    bib_in = ("(event_id, start_number) IN (" + ",".join(["(%s, %s)"] * len(bibs)) + ")", sum(sorted(bibs), ()))
+    for t in rows:
+        rows[t] |= {r["id"]: r for r in _select(cur, t, [_in("client_id", set(clients) | base), _in("surname", keys),
+                                                        bib_in])}
+    missing = {r["client_id"] for t in rows for r in rows[t].values()} - set(clients) - base
+    clients |= {c["id"]: c for c in _select(cur, "clients", [_in("id", missing)])}
+    for t in rows:
+        rows[t] |= {r["id"]: r for r in _select(cur, t, [_in("client_id", missing)])}
+    # строки забегов event_ids — только для вариантов в вопросах, их карточки не нужны
+    event_ids = set(event_ids)
+    same = {(e["event_name"], e["event_year"]) for e in events if e["id"] in event_ids}
+    rows["leads"] |= {r["id"]: r for r in _select(cur, "leads", [_in(
+        "event_id", {e["id"] for e in events if (e["event_name"], e["event_year"]) in same})])}   # дистанции события
+    rows["results"] |= {r["id"]: r for r in _select(cur, "results", [_in("event_id", event_ids)])}
+    cur.close()
+    clients.pop(0, None)                # как в load: карточки #0 нет
+
+    def by_id(d):                       # порядок — как у load (по id): от него зависят ключи находок
+        return [d[k] for k in sorted(d)]
+
+    return Data(by_id(clients), by_id(rows["leads"]), by_id(rows["results"]), events, names,
+                scope={"cards": base, "keys": keys, "bds": bds, "bibs": bibs, "events": event_ids})
 
 
 # ---------------------------------------------------------------- правила
