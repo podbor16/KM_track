@@ -15,14 +15,17 @@ from deploy._vps_config import VPS_HOST, VPS_USER, VPS_PASSWORD
 
 SIMULATOR_SCRIPT = r'''
 import mysql.connector
+import os
 import time
 import sys
+from dotenv import load_dotenv
 
+load_dotenv("/opt/km_track/.env")
 duration = int(sys.argv[1]) if len(sys.argv) > 1 else 480
 
 conn = mysql.connector.connect(
-    host="127.0.0.1", user="km_analytic",
-    password="CneZbvlOS2H-BLsQ", database="krasmarafon"
+    host="127.0.0.1", user=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"], database=os.environ.get("DB_NAME", "krasmarafon")
 )
 cur = conn.cursor()
 
