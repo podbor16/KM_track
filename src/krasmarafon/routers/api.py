@@ -27,7 +27,7 @@ from src.krasmarafon.services.notification_hub import tracker_hub, notification_
 
 from src.config import settings
 from src.config.event_loader import (
-    RouteConfig, load_events_cached, get_active_event, invalidate_events_cache,
+    RouteConfig, EventConfig, load_events_cached, get_active_event, invalidate_events_cache,
     get_history_enabled,
 )
 from src.core.state import AppState
@@ -53,15 +53,8 @@ router = APIRouter(tags=["API"])
 # СОБЫТИЯ (EVENTS)
 # ============================================================================
 
-@router.get("/api/current-event", response_model=CurrentEventResponse)
-async def get_current_event() -> CurrentEventResponse:
-    """Текущее активное событие. Перечитывает YAML с TTL-кешем 30 сек."""
-    events = load_events_cached()
-    active = get_active_event(events)
-    code = active.code if active else settings.CURRENT_EVENT
-    event = events.get(code)
-    if not event:
-        raise HTTPException(status_code=404, detail=f"Event {code} not configured")
+def build_current_event_response(event: EventConfig) -> CurrentEventResponse:
+    """Собирает ответ /api/current-event для конкретного события."""
     tracked = event.get_tracked()
     route_type = 'shuttle' if (tracked and tracked.route.laps > 1) else 'loop'
 
@@ -88,8 +81,8 @@ async def get_current_event() -> CurrentEventResponse:
     ]
 
     return CurrentEventResponse(
-        event=code,
-        storage_key=f"{code}_selected_runners",
+        event=event.code,
+        storage_key=f"{event.code}_selected_runners",
         name=event.name,
         display_name=event.display_name,
         title=event.title,
@@ -102,6 +95,18 @@ async def get_current_event() -> CurrentEventResponse:
         db_event_id=tracked.db_event_id if tracked else None,
         distances=distances_info,
     )
+
+
+@router.get("/api/current-event", response_model=CurrentEventResponse)
+async def get_current_event() -> CurrentEventResponse:
+    """Текущее активное событие. Перечитывает YAML с TTL-кешем 30 сек."""
+    events = load_events_cached()
+    active = get_active_event(events)
+    code = active.code if active else settings.CURRENT_EVENT
+    event = events.get(code)
+    if not event:
+        raise HTTPException(status_code=404, detail=f"Event {code} not configured")
+    return build_current_event_response(event)
 
 
 @router.post("/api/admin/reload-config")
