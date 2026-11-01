@@ -152,121 +152,17 @@ def _calc_lap_from_kts(runner: dict, num_laps: int) -> int:
     return 1
 
 
-def _do_build(
-    event_id: Optional[int],
-    event_name: Optional[str],
-    year: Optional[int],
-    events: dict,
-) -> "RaceResultsResponse":
-    """Выполняет сборку ответа: DB-запросы + Python-обработка участников. Без кеш-логики."""
-    import json as _json
+def load_hist_data(ev_name: str, ev_distance, ev_year: int) -> dict:
+    """{'personal', 'category_avg', 'prev_year'} по результатам прошлого года, с TTL-кешем."""
     from datetime import timedelta as _td
-    from src.analytics.db_connection_optimized import (
-        get_race_results_by_event_id,
-        get_race_results_by_event_id_and_year,
-        get_event_info_by_id,
-        get_event_info,
-        get_category_avg_paces,
-        get_prev_year_results,
-    )
-    from src.krasmarafon.services.runners_service import _resolve_speed, calculate_live_position
+    from src.analytics.db_connection_optimized import get_prev_year_results
     from src.krasmarafon.services.pace_calculator import parse_pace_to_kmh
-    from fastapi import HTTPException
 
-    _t0 = time.time()
-    server_time_unix = int(time.time() * 1000)
-    current_year = datetime.now().year
-
-    # --- Загрузка результатов из БД ---
-    _t_db = time.time()
-    if event_id:
-        results_data = get_race_results_by_event_id(event_id)
-    elif event_name and year:
-        results_data = get_race_results_by_event_id_and_year(event_name, year)
-    else:
-        raise HTTPException(status_code=400, detail="Укажите event_id или event_name + year")
-    _t_db_done = time.time() - _t_db
-
-    # --- Данные события для live-расчётов ---
-    _t_ev = time.time()
-    if event_id:
-        ev_info = get_event_info_by_id(event_id) or {}
-    else:
-        ev_info = get_event_info(event_name, year or current_year) or {}
-    _t_ev_done = time.time() - _t_ev
-
-    race_date = ev_info.get('event_date') or date.today()
-    ev_name = ev_info.get('event_name', event_name or '')
-    ev_distance = ev_info.get('event_distance')
-    ev_year = ev_info.get('event_year', current_year)
-
-    # --- gun_start_dt из gun_time_utc в БД (приоритет) или gun_time в YAML (fallback,
-    # напр. когда Copernico не отдаёт gunTime для wave-based расписаний) ---
-    gun_start_dt = None
-    race_gun_unix_ms = None
-    _gun_utc = ev_info.get('gun_time_utc')
-    if _gun_utc:
-        try:
-            _gun_aware = datetime.fromisoformat(_gun_utc.replace('Z', '+00:00'))
-            race_gun_unix_ms = int(_gun_aware.timestamp() * 1000)
-            gun_start_dt = _gun_aware.astimezone().replace(tzinfo=None)
-        except Exception as _ge:
-            logger.debug(f"gun_time_utc parse failed: {_ge}")
-
-    if gun_start_dt is None:
-        _event_cfg_for_gun = get_event_by_name(events, ev_name)
-        if _event_cfg_for_gun and _event_cfg_for_gun.gun_time and race_date:
-            try:
-                # gun_time в YAML указан в красноярском времени — привязываем пояс
-                # явно, чтобы не зависеть от пояса сервера.
-                _rd = race_date if isinstance(race_date, date) else date.today()
-                _gun_krat = datetime.combine(
-                    _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time(),
-                    tzinfo=KRASNOYARSK_TZ,
-                )
-                race_gun_unix_ms = int(_gun_krat.timestamp() * 1000)
-                gun_start_dt = _gun_krat.astimezone().replace(tzinfo=None)
-            except Exception as _ge:
-                logger.debug(f"gun_time YAML parse failed: {_ge}")
-
-    # Контрольные точки: из БД или расчётные
-    raw_cp = ev_info.get('checkpoint_distances')
-    if raw_cp:
-        checkpoint_distances = (
-            [float(x) for x in raw_cp]
-            if isinstance(raw_cp, list)
-            else [float(x) for x in _json.loads(raw_cp)]
-        )
-    else:
-        event_cfg_match = get_event_by_name(events, ev_name)
-        if event_cfg_match:
-            tracked = event_cfg_match.get_tracked()
-            if tracked and tracked.checkpoint_distances:
-                checkpoint_distances = tracked.checkpoint_distances
-            else:
-                total_km = float(ev_distance) if ev_distance else 5.0
-                checkpoint_distances = [0.0, total_km]
-        else:
-            total_km = float(ev_distance) if ev_distance else 5.0
-            checkpoint_distances = [0.0, total_km]
-
-    category_speeds = _get_cached_category_speeds(ev_name, ev_distance, ev_year)
-
-    # Количество кругов из YAML (для цветовой индикации круга на карте)
-    num_laps = 1
-    _ev_cfg = get_event_by_name(events, ev_name)
-    if _ev_cfg:
-        _tracked_d = _ev_cfg.get_tracked()
-        if _tracked_d:
-            num_laps = _tracked_d.route.laps or 1
-
-    # --- Исторический кеш (предыдущий год) ---
-    _t_hist = time.time()
     cache_key = f"{ev_name}|{ev_distance}|{ev_year}"
     _now_ts = time.time()
     _cache_stale = (_now_ts - _hist_cache_ts.get(cache_key, 0)) > HIST_CACHE_TTL
     if cache_key not in _hist_cache or not _hist_cache[cache_key].get('populated') or _cache_stale:
-        prev_year = (ev_year or current_year) - 1
+        prev_year = ev_year - 1
         prev_rows = get_prev_year_results(ev_name, str(ev_distance) if ev_distance is not None else '', prev_year) if ev_name else []
         personal: dict = {}
         cat_raw: dict = {}
@@ -297,11 +193,96 @@ def _do_build(
             f"Исторические данные загружены: {len(personal)} личных, "
             f"{len(cat_raw)} категорий за {prev_year} год"
         )
-    hist_data = _hist_cache[cache_key]
-    _t_hist_done = time.time() - _t_hist
+    return _hist_cache[cache_key]
+
+
+def assemble_event_results(
+    results_data: list,
+    ev_info: dict,
+    events: dict,
+    category_speeds: dict,
+    hist_data: dict,
+    event_id: Optional[int] = None,
+    event_name: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> RaceResultsResponse:
+    """Чистая сборка ответа трекера из строк results (без обращений к БД).
+    now — момент расчёта (naive local); None → текущее время (прод)."""
+    import json as _json
+    from datetime import timedelta as _td
+    from src.krasmarafon.services.runners_service import _resolve_speed, calculate_live_position
+
+    _now_dt = now or datetime.now()
+    server_time_unix = int(_now_dt.timestamp() * 1000)
+    current_year = _now_dt.year
+    race_date = ev_info.get('event_date') or _now_dt.date()
+    ev_name = ev_info.get('event_name', event_name or '')
+    ev_distance = ev_info.get('event_distance')
+    ev_year = ev_info.get('event_year', current_year)
+
+    # --- gun_start_dt из gun_time_utc в БД (приоритет) или gun_time в YAML (fallback,
+    # напр. когда Copernico не отдаёт gunTime для wave-based расписаний) ---
+    gun_start_dt = None
+    race_gun_unix_ms = None
+    _gun_utc = ev_info.get('gun_time_utc')
+    if _gun_utc:
+        try:
+            _gun_aware = datetime.fromisoformat(_gun_utc.replace('Z', '+00:00'))
+            race_gun_unix_ms = int(_gun_aware.timestamp() * 1000)
+            gun_start_dt = _gun_aware.astimezone().replace(tzinfo=None)
+        except Exception as _ge:
+            logger.debug(f"gun_time_utc parse failed: {_ge}")
+
+    if gun_start_dt is None:
+        _event_cfg_for_gun = get_event_by_name(events, ev_name)
+        if _event_cfg_for_gun and _event_cfg_for_gun.gun_time and race_date:
+            try:
+                # gun_time в YAML указан в красноярском времени — привязываем пояс
+                # явно, чтобы не зависеть от пояса сервера.
+                _rd = race_date if isinstance(race_date, date) else _now_dt.date()
+                _gun_krat = datetime.combine(
+                    _rd, datetime.strptime(_event_cfg_for_gun.gun_time, '%H:%M:%S').time(),
+                    tzinfo=KRASNOYARSK_TZ,
+                )
+                race_gun_unix_ms = int(_gun_krat.timestamp() * 1000)
+                gun_start_dt = _gun_krat.astimezone().replace(tzinfo=None)
+            except Exception as _ge:
+                logger.debug(f"gun_time YAML parse failed: {_ge}")
+
+    # Контрольные точки: из БД или расчётные
+    raw_cp = ev_info.get('checkpoint_distances')
+    if raw_cp:
+        checkpoint_distances = (
+            [float(x) for x in raw_cp]
+            if isinstance(raw_cp, list)
+            else [float(x) for x in _json.loads(raw_cp)]
+        )
+    else:
+        event_cfg_match = get_event_by_name(events, ev_name)
+        if event_cfg_match:
+            tracked = event_cfg_match.get_tracked()
+            if tracked and tracked.checkpoint_distances:
+                checkpoint_distances = tracked.checkpoint_distances
+            else:
+                total_km = float(ev_distance) if ev_distance else 5.0
+                checkpoint_distances = [0.0, total_km]
+        else:
+            total_km = float(ev_distance) if ev_distance else 5.0
+            checkpoint_distances = [0.0, total_km]
+
+
+    # Количество кругов из YAML (для цветовой индикации круга на карте)
+    num_laps = 1
+    _ev_cfg = get_event_by_name(events, ev_name)
+    if _ev_cfg:
+        _tracked_d = _ev_cfg.get_tracked()
+        if _tracked_d:
+            num_laps = _tracked_d.route.laps or 1
+
 
     # --- Формирование результатов ---
-    _t_loop = time.time()
+    results = []
+    # --- Формирование результатов ---
     results = []
     for runner in results_data:
         bday = runner.get('birthday')
@@ -326,6 +307,7 @@ def _do_build(
                 runner, checkpoint_distances, race_date, category_speeds,
                 hist_speed=r_hist_speed,
                 gun_start_dt=gun_start_dt,
+                now=now,
             )
         except Exception as _e:
             logger.warning(f"calculate_live_position error for runner {runner.get('id')}: {_e}")
@@ -387,24 +369,54 @@ def _do_build(
             ),
             'last_kt_unix_ms': _calc_last_kt_unix_ms(runner, gun_start_dt),
         })
-    _t_loop_done = time.time() - _t_loop
-
-    _total = time.time() - _t0
-    logger.info(
-        f"build_event_results: db={_t_db_done:.2f}s ev={_t_ev_done:.2f}s "
-        f"hist={_t_hist_done:.2f}s loop={_t_loop_done:.2f}s total={_total:.2f}s "
-        f"runners={len(results)}"
-    )
 
     return RaceResultsResponse(
         event=ev_name or f"event_{event_id}",
         total_results=len(results_data),
         results=results,
-        timestamp=datetime.now().isoformat(),
+        timestamp=_now_dt.isoformat(),
         server_time_unix=server_time_unix,
         race_gun_unix_ms=race_gun_unix_ms,
         total_distance_km=float(checkpoint_distances[-1]) if checkpoint_distances else None,
     )
+
+
+def _do_build(
+    event_id: Optional[int],
+    event_name: Optional[str],
+    year: Optional[int],
+    events: dict,
+) -> "RaceResultsResponse":
+    """Загрузка данных из БД + assemble_event_results. Без кеш-логики."""
+    from src.analytics.db_connection_optimized import (
+        get_race_results_by_event_id,
+        get_race_results_by_event_id_and_year,
+        get_event_info_by_id,
+        get_event_info,
+    )
+    from fastapi import HTTPException
+
+    _t0 = time.time()
+    current_year = datetime.now().year
+    if event_id:
+        results_data = get_race_results_by_event_id(event_id)
+        ev_info = get_event_info_by_id(event_id) or {}
+    elif event_name and year:
+        results_data = get_race_results_by_event_id_and_year(event_name, year)
+        ev_info = get_event_info(event_name, year or current_year) or {}
+    else:
+        raise HTTPException(status_code=400, detail="Укажите event_id или event_name + year")
+
+    ev_name = ev_info.get('event_name', event_name or '')
+    ev_distance = ev_info.get('event_distance')
+    ev_year = ev_info.get('event_year', current_year)
+    category_speeds = _get_cached_category_speeds(ev_name, ev_distance, ev_year)
+    hist_data = load_hist_data(ev_name, ev_distance, ev_year)
+    result = assemble_event_results(results_data, ev_info, events, category_speeds, hist_data,
+                                    event_id=event_id, event_name=event_name)
+    logger.info(f"build_event_results: total={time.time() - _t0:.2f}s runners={len(results_data)}")
+    return result
+
 
 
 def _background_rebuild(resp_key: str, event_id, event_name, year, events):
