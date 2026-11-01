@@ -49,3 +49,16 @@ def test_dnf_visible_only_at_end():
     assert by_id(rows_at(ROWS, 95 * 60, END))[2]['race_status'] == 'Running'
     assert by_id(rows_at(ROWS, END, END))[2]['race_status'] == 'DNF'
     assert by_id(rows_at(ROWS, END, END))[3]['race_status'] == 'Not started'
+
+
+def test_no_start_time_runs_from_gun():
+    rows = [{'id': 5, 'sex': 'Мужчина', 'category': 'М', 'race_status': 'Finished',
+             'time_clear_kt1': td(minutes=22), 'time_gun_finish': td(minutes=88),
+             'time_clear_finish': td(minutes=88)}]
+    end = 100 * 60
+    assert rows_at(rows, -10, end)[0]['race_status'] == 'Not started'
+    r = rows_at(rows, 60, end)[0]
+    assert r['race_status'] == 'Running' and r['time_clear_kt1'] is None
+    r = rows_at(rows, 23 * 60, end)[0]
+    assert r['race_status'] == 'Running' and r['time_clear_kt1'] == td(minutes=22)
+    assert rows_at(rows, 89 * 60, end)[0]['race_status'] == 'Finished'

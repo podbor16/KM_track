@@ -25,6 +25,8 @@ def _start_field(k: str) -> bool:
 def _row_at(r: dict, t: float, end_s: float) -> dict:
     start = _s(r.get('time_gun_start'))
     finish = _s(r.get('time_gun_finish'))
+    eff_start = start if start is not None else (
+        0.0 if r.get('race_status') != 'Not started' else None)
     a = dict(r)
     for k in r:
         m = _KT_RE.match(k)
@@ -43,7 +45,7 @@ def _row_at(r: dict, t: float, end_s: float) -> dict:
         a['race_status'] = final
     elif a.get('time_gun_finish') is not None and final == 'Finished':
         a['race_status'] = 'Finished'
-    elif a.get('time_gun_start') is not None:
+    elif eff_start is not None and eff_start <= t:
         a['race_status'] = 'Running'
     else:
         a['race_status'] = 'Not started'
