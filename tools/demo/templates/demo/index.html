@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Демо: трекер забегов</title>
+  <style>
+    body { margin: 0; font: 16px/1.4 system-ui, sans-serif; background: #f4f5f7; color: #14181f; }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 16px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .card h2 { margin: 0 0 6px; font-size: 20px; }
+    .card p { margin: 4px 0; color: #555; }
+    .card a { display: inline-block; margin-top: 12px; padding: 8px 16px; background: #f57c00; color: #fff;
+              border-radius: 8px; text-decoration: none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Трекер забегов — демо</h1>
+  <p>Записи реальных гонок, воспроизводятся так, будто идут прямо сейчас. Можно перематывать и ускорять.</p>
+  <div class="cards">
+    {% for r in races %}
+    <div class="card">
+      <h2>{{ r.title }}</h2>
+      <p>{{ r.kind }} · {{ r.event_date }}</p>
+      <p>Участников: {{ r.participants }}</p>
+      <a href="{{ base }}{{ r.slug }}/">Открыть</a>
+    </div>
+    {% endfor %}
+  </div>
+</main>
+</body>
+</html>
