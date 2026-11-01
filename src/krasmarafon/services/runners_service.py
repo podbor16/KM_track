@@ -80,6 +80,7 @@ def calculate_live_position(
     category_speeds: Dict[str, float],
     hist_speed: Optional[float] = None,
     gun_start_dt: Optional[datetime] = None,
+    now: Optional[datetime] = None,
 ) -> Tuple[float, float, str]:
     """
     Рассчитывает текущую скорость, дистанцию и темп участника в live-режиме.
@@ -99,6 +100,7 @@ def calculate_live_position(
         checkpoint_distances: [0.0, kt1_km, kt2_km, ..., finish_km]
         race_date:            дата проведения забега (datetime.date)
         category_speeds:      {category: avg_speed_kmh}
+        now:                  момент расчёта (по умолчанию datetime.now(); демо-сборка передаёт время гонки)
 
     Returns:
         Кортеж (speed_kmh, current_distance_km, pace_str)
@@ -106,7 +108,7 @@ def calculate_live_position(
     DEFAULT_SPEED = 10.0
     DEFAULT_PACE = "6:00"
 
-    now = datetime.now()
+    now = now or datetime.now()
     total_distance = checkpoint_distances[-1] if checkpoint_distances else 5.0
 
     # --- Финишировал ---

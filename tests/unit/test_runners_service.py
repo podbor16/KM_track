@@ -303,3 +303,16 @@ def test_resolve_speed_maps_2026_xtrail_categories_to_2025_names():
     assert _resolve_speed("Ж 12-49", hist, 0.0) == 7.8
     assert _resolve_speed("М 50-59", hist, 0.0) == 9.5
     assert _resolve_speed("Ж 65-69", hist, 0.0) == 0.0          # в 2025 такой категории нет
+
+
+def test_calculate_live_position_uses_explicit_now():
+    from datetime import datetime, date, timedelta
+    from src.krasmarafon.services.runners_service import calculate_live_position
+    gun = datetime(2026, 8, 23, 9, 0, 0)
+    runner = {'time_gun_start': timedelta(0), 'category': ''}
+    speed, dist, _ = calculate_live_position(
+        runner, [0.0, 5.0, 21.1], date(2026, 8, 23), {},
+        hist_speed=12.0, gun_start_dt=gun, now=gun + timedelta(minutes=30),
+    )
+    assert speed == 12.0
+    assert abs(dist - 6.0) < 1e-9
