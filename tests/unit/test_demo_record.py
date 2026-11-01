@@ -48,3 +48,17 @@ def test_meta_fields():
     assert rec['meta']['step_s'] == 5
     assert rec['meta']['gun_unix_ms'] > 0
     assert rec['meta']['t_from'] == -300 and rec['meta']['t_to'] == 120 * 60
+
+
+def test_pick_preselect():
+    from tools.demo.source import pick_preselect
+    rows = [{'race_status': 'Finished', 'rank_absolute': 20 - i} for i in range(20)]
+    rows.insert(0, {'race_status': 'DNF', 'rank_absolute': 1})
+    rows.insert(1, {'race_status': 'Finished', 'rank_absolute': None})
+    ids = pick_preselect(rows)
+    assert len(ids) == 5 and len(set(ids)) == 5
+    byid = {i + 1: r for i, r in enumerate(rows)}
+    assert [byid[i]['rank_absolute'] for i in ids] == [1, 2, 6, 11, 16]
+    assert all(byid[i]['race_status'] == 'Finished' for i in ids)
+    assert pick_preselect(rows[:3]) == [3]
+    assert pick_preselect([]) == []

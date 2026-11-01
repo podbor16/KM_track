@@ -22,3 +22,6 @@
   .demo-panel--open { left: 16px; background: rgba(20, 24, 31, .92); padding: 10px 14px; border-radius: 12px; }
   .demo-panel--open .demo-panel__body { display: block; }
 }
+
+html body { padding-top: 0 !important; padding-bottom: 150px; }
+@media (max-width: 600px) { html body { padding-bottom: 80px; } }

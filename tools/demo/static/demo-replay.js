@@ -29,8 +29,17 @@
     const recReady = realFetch(`${BASE}data/${RACE}.json.gz`)
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; })
         .then(r => new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).json())
-        .then(j => { rec = j; start(); return j; });
+        .then(j => { rec = j; preselect(j.meta); start(); return j; });
     recReady.catch(showError);
+
+    function preselect(meta) {
+        try {
+            const key = meta.current_event.storage_key;
+            if (key && !localStorage.getItem(key) && meta.preselect) {
+                localStorage.setItem(key, JSON.stringify(meta.preselect));
+            }
+        } catch (e) { /* localStorage недоступен */ }
+    }
 
     const tRace = () => (vnow() - rec.meta.gun_unix_ms) / 1000;
     const st = { byId: new Map(), cursor: 0, lastStep: null, sentDist: new Map() };
@@ -143,8 +152,8 @@
     }
     function parseT(v) {
         if (!v) return null;
-        const m = /^(\d+)(m?)$/.exec(v);
-        return m ? Number(m[1]) * (m[2] ? 60 : 1) : null;
+        const m = /^(\d+)(s|m)?$/.exec(v);
+        return m ? Number(m[1]) * (m[2] === 'm' ? 60 : 1) : null;
     }
     function start() {
         const q = new URLSearchParams(location.search);

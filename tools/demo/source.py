@@ -32,6 +32,18 @@ def _load_finish_ms(event_id: int) -> dict:
         conn.close()
 
 
+def pick_preselect(rows: list[dict]) -> list[int]:
+    """id записи (индекс строки + 1) пяти «интересных» финишировавших: 1-е, 2-е место, 25/50/75% по месту."""
+    fin = sorted((r['rank_absolute'], i + 1) for i, r in enumerate(rows)
+                 if r.get('race_status') == 'Finished' and r.get('rank_absolute') is not None)
+    n = len(fin)
+    out: list[int] = []
+    for idx in (0, 1, int(n * 0.25), int(n * 0.5), int(n * 0.75)):
+        if idx < n and fin[idx][1] not in out:
+            out.append(fin[idx][1])
+    return out
+
+
 def build_race(key: str) -> tuple[dict, list[dict]]:
     race = RACES[key]
     events = load_all_events(ROOT / "config" / "events")
@@ -59,10 +71,14 @@ def build_race(key: str) -> tuple[dict, list[dict]]:
     payload['distances'] = [d for d in payload['distances'] if d['db_event_id'] == race["db_event_id"]]
     d = payload['distances'][0]
     payload.update(db_event_id=race["db_event_id"], gpx_file=d['gpx_file'],
-                   display_name=race["title"], title=race["title"])
+                   display_name=race["title"], title=race["title"],
+                   storage_key=f"demo_{key}_selected_runners")
+    loop_start = race.get('loop_start_s', LOOP_START_S)
+    if loop_start >= finishes[0]:
+        print(f"ПРЕДУПРЕЖДЕНИЕ {key}: loop_start_s={loop_start} >= первого финиша {int(finishes[0])}")
     rec['meta'].update(
         race=key, title=race["title"], caption=race["caption"], current_event=payload,
-        gpx=d['gpx_file'], loop_start_s=LOOP_START_S, loop_end_s=int(mass) + TAIL_S,
+        gpx=d['gpx_file'], loop_start_s=loop_start, preselect=pick_preselect(rows), loop_end_s=int(mass) + TAIL_S,
         marks=[{'label': 'Старт', 't_s': 0},
                {'label': 'Первый финиш', 't_s': int(finishes[0])},
                {'label': 'Массовый финиш', 't_s': int(mass)}],
