@@ -1,9 +1,16 @@
 """Проигрывание гонки серверным кодом → запись {meta, initial, changes, distance} (спека, п. 5)."""
 import json
 from datetime import datetime, timedelta
+from functools import lru_cache
 
+from src.common.categories import canonical_category
+from src.krasmarafon.services import runners_service
 from src.krasmarafon.services.results_service import assemble_event_results
 from tools.demo.timeline import rows_at
+
+# Офлайн-сборка: canonical_category — чистая функция строки, а _resolve_speed зовёт её
+# ~800 тыс. раз. Мемоизируем только в этом процессе — прод-код не затронут.
+runners_service.canonical_category = lru_cache(maxsize=None)(canonical_category)
 
 _TOL_KM = 0.0015   # шум округления current_distance до 0.001 км
 

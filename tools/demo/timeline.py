@@ -1,5 +1,6 @@
 """Строки results «как в момент T» (секунды от выстрела) — спека, п. 5."""
 import re
+from functools import lru_cache
 from datetime import timedelta
 
 from load_race_results import RaceLoader
@@ -22,6 +23,19 @@ def _start_field(k: str) -> bool:
     return k.startswith(('time_gun_start', 'time_clear_start'))
 
 
+@lru_cache(maxsize=None)
+def _classify(k: str):
+    """Имя поля → ('kt', N) | ('finish',) | ('start',) | None; имён мало — кеш."""
+    m = _KT_RE.match(k)
+    if m:
+        return ('kt', m.group(1))
+    if _finish_field(k):
+        return ('finish',)
+    if _start_field(k):
+        return ('start',)
+    return None
+
+
 def _row_at(r: dict, t: float, end_s: float) -> dict:
     start = _s(r.get('time_gun_start'))
     finish = _s(r.get('time_gun_finish'))
@@ -29,14 +43,17 @@ def _row_at(r: dict, t: float, end_s: float) -> dict:
         0.0 if r.get('race_status') != 'Not started' else None)
     a = dict(r)
     for k in r:
-        m = _KT_RE.match(k)
-        if m:
-            kt = _s(r.get(f'time_clear_kt{m.group(1)}'))   # official: от выстрела
+        c = _classify(k)
+        if c is None:
+            continue
+        if c[0] == 'kt':
+            kt = _s(r.get(f'time_clear_kt{c[1]}'))   # official: от выстрела
             if kt is None or kt > t:
                 a[k] = None
-        elif _finish_field(k) and (finish is None or finish > t):
-            a[k] = None
-        elif _start_field(k) and (start is None or start > t):
+        elif c[0] == 'finish':
+            if finish is None or finish > t:
+                a[k] = None
+        elif start is None or start > t:
             a[k] = None
     for k in _RANK_FIELDS:
         a[k] = None
