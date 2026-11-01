@@ -218,7 +218,7 @@ def assemble_event_results(
     race_date = ev_info.get('event_date') or _now_dt.date()
     ev_name = ev_info.get('event_name', event_name or '')
     ev_distance = ev_info.get('event_distance')
-    ev_year = ev_info.get('event_year', current_year)
+    ev_year = ev_info.get('event_year') or current_year
 
     # --- gun_start_dt из gun_time_utc в БД (приоритет) или gun_time в YAML (fallback,
     # напр. когда Copernico не отдаёт gunTime для wave-based расписаний) ---
@@ -270,7 +270,6 @@ def assemble_event_results(
             total_km = float(ev_distance) if ev_distance else 5.0
             checkpoint_distances = [0.0, total_km]
 
-
     # Количество кругов из YAML (для цветовой индикации круга на карте)
     num_laps = 1
     _ev_cfg = get_event_by_name(events, ev_name)
@@ -279,9 +278,6 @@ def assemble_event_results(
         if _tracked_d:
             num_laps = _tracked_d.route.laps or 1
 
-
-    # --- Формирование результатов ---
-    results = []
     # --- Формирование результатов ---
     results = []
     for runner in results_data:
@@ -406,17 +402,25 @@ def _do_build(
         ev_info = get_event_info(event_name, year or current_year) or {}
     else:
         raise HTTPException(status_code=400, detail="Укажите event_id или event_name + year")
+    _t_db = time.time() - _t0
 
+    _t1 = time.time()
     ev_name = ev_info.get('event_name', event_name or '')
     ev_distance = ev_info.get('event_distance')
-    ev_year = ev_info.get('event_year', current_year)
+    ev_year = ev_info.get('event_year') or current_year
     category_speeds = _get_cached_category_speeds(ev_name, ev_distance, ev_year)
     hist_data = load_hist_data(ev_name, ev_distance, ev_year)
+    _t_hist = time.time() - _t1
+
+    _t2 = time.time()
     result = assemble_event_results(results_data, ev_info, events, category_speeds, hist_data,
                                     event_id=event_id, event_name=event_name)
-    logger.info(f"build_event_results: total={time.time() - _t0:.2f}s runners={len(results_data)}")
+    _t_loop = time.time() - _t2
+    logger.info(
+        f"build_event_results: db={_t_db:.2f}s hist={_t_hist:.2f}s loop={_t_loop:.2f}s "
+        f"total={time.time() - _t0:.2f}s runners={len(results_data)}"
+    )
     return result
-
 
 
 def _background_rebuild(resp_key: str, event_id, event_name, year, events):
