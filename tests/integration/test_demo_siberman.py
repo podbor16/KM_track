@@ -64,3 +64,36 @@ def test_sandbox_anonymized():
     assert checked > 0
     src.close()
     dst.close()
+
+
+def test_windows_2026():
+    from tools.demo.siberman.timeline import abs_ms, abs_to_compact, day_windows, stage_day, total_compact_s
+    c = sandbox.connect('siberman')
+    cur = c.cursor()
+    cur.execute("SELECT race_start, bike2_start, run_start FROM race_config WHERE race_year=2026")
+    rs, b2, run = cur.fetchone()
+    midnight = b2.replace(hour=0, minute=0, second=0, microsecond=0)
+    cur.execute("""SELECT cp.stage, t.cumulative_s, p.bike_day2_handicap_s
+                   FROM checkpoint_times t JOIN checkpoints cp ON cp.id=t.checkpoint_id
+                   JOIN participants p ON p.id=t.participant_id
+                   WHERE cp.race_year=2026 AND p.race_year=2026 AND t.cumulative_s IS NOT NULL""")
+    marks = []
+    for stage, cum, h in cur.fetchall():
+        if stage == 'bike_day2' and h is None:
+            continue
+        m = abs_ms(stage, cum, race_start=rs, bike2_day_midnight=midnight, handicap_s=h, run_start=run)
+        marks.append((stage_day(stage), m))
+    cur.execute("SELECT MIN(bike_day2_handicap_s) FROM participants WHERE race_year=2026")
+    first = abs_ms('bike_day2', 0, race_start=rs, bike2_day_midnight=midnight,
+                   handicap_s=cur.fetchone()[0], run_start=run)
+    w = day_windows(marks, dict(race_start=rs, bike2_start=b2, run_start=run, bike2_first_start=first))
+    print("окна (дни, часы):", [(x['day'], round((x['end_ms'] - x['start_ms']) / 3600000, 2)) for x in w],
+          "всего ч:", round(total_compact_s(w) / 3600, 2),
+          "отметок:", {d: sum(1 for k, _ in marks if k == d) for d in (1, 2, 3)})
+    assert [x['day'] for x in w] == [1, 2, 3]
+    for a, b in zip(w, w[1:]):
+        assert a['end_ms'] < b['start_ms']
+    by_day = {x['day']: x for x in w}
+    for d, m in marks:
+        assert by_day[d]['start_ms'] <= m <= by_day[d]['end_ms']
+        assert abs_to_compact(m, w) >= 0
