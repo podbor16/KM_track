@@ -1,6 +1,6 @@
 from tools.demo.sandbox import recreate, use_sandbox
 from tools.demo.siberman.anonymize import build_person_map, remap_bibs
-from tools.demo.triatleta.anonymize import guess_sex, split_members, team_labels
+from tools.demo.triatleta.anonymize import group_bib_map, guess_sex, split_members, team_labels
 
 import pytest
 
@@ -46,3 +46,14 @@ def test_use_sandbox_restores_and_rejects():
         with use_sandbox(mod, 'conn', 'prod_db'):
             pass
     assert mod.conn() == 'orig'
+
+
+def test_group_bib_map_keeps_relay_range():
+    parts = [{'event_id': 1, 'start_number': b, 'gender': g}
+             for b, g in [(1, 'Мужчина'), (3, 'Женщина'), (9, 'Мужчина'), (12, 'Мужчина'),
+                          (1001, 'mixed'), (1002, 'mixed'), (1003, 'mixed')]]
+    m = group_bib_map(parts, 7)
+    assert m == group_bib_map(parts, 7)
+    assert sorted(m) == sorted((1, b) for b in (1, 3, 9, 12, 1001, 1002, 1003))
+    assert sorted(m.values()) == [1, 3, 9, 12, 1001, 1002, 1003]
+    assert all((old >= 1001) == (new >= 1001) for (_, old), new in m.items())

@@ -28,6 +28,17 @@ def team_labels(team_ids, seed: int) -> dict:
     return {i: f"Команда {n}" for n, i in enumerate(ids, 1)}
 
 
+def group_bib_map(parts, seed: int) -> dict:
+    """{(event_id, старый номер): новый} - перестановка внутри (событие, команда/личник),
+    чтобы номера эстафет (1001+) остались в своём диапазоне."""
+    out = {}
+    groups = sorted({(r['event_id'], r['gender'] == MIXED) for r in parts})
+    for ev, mixed in groups:
+        bibs = [r['start_number'] for r in parts if r['event_id'] == ev and (r['gender'] == MIXED) == mixed]
+        out.update({(ev, int(o)): int(n) for o, n in remap_bibs(bibs, seed).items()})
+    return out
+
+
 def anonymize_sandbox(conn, seed: int) -> dict:
     conn.autocommit = False
     cur = conn.cursor(dictionary=True)
@@ -69,11 +80,9 @@ def anonymize_sandbox(conn, seed: int) -> dict:
                     (surname, name, r['id']))
 
     # номера: двухфазно из-за UNIQUE(event_id, start_number)
-    for ev in sorted({r['event_id'] for r in parts}):
-        bmap = remap_bibs([r['start_number'] for r in parts if r['event_id'] == ev], seed)
-        for old, new in bmap.items():
-            cur.execute("UPDATE participants SET start_number=%s WHERE event_id=%s AND start_number=%s",
-                        (-int(new), ev, int(old)))
-        cur.execute("UPDATE participants SET start_number=-start_number WHERE event_id=%s AND start_number<0", (ev,))
+    for (ev, old), new in group_bib_map(parts, seed).items():
+        cur.execute("UPDATE participants SET start_number=%s WHERE event_id=%s AND start_number=%s",
+                    (-new, ev, old))
+    cur.execute("UPDATE participants SET start_number=-start_number WHERE start_number<0")
     conn.commit()
     return real
