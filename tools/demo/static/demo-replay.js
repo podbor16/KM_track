@@ -1,19 +1,25 @@
-// Демо «Повтор гонки»: виртуальные часы + подмена fetch/EventSource поверх tracker-*.js.
-// Подключается в <head> ДО скриптов трекера (через демо-версию krasmarafon/analytics.html).
+// Демо «Повтор гонки»: виртуальные часы + подмена сетевых запросов страницы.
+// Подключается в <head> ДО скриптов страницы. Режимы (data-mode):
+//   tracker (по умолчанию) — трекер Жары: fetch /api/event-results + EventSource /api/sse/tracker;
+//   poll — live-результаты Siberman: fetch /api/siberman/results, часы по «времени без ночей».
 (function () {
     'use strict';
     const me = document.currentScript;
     const BASE = me.dataset.base;        // '/race-tracker-demo/'
-    const RACE = me.dataset.race;        // 'zhara_21'
+    const RACE = me.dataset.race;        // 'zhara_21' | 'siberman_2026'
+    const MODE = me.dataset.mode || 'tracker';
     const RealDate = Date;
     const realFetch = window.fetch.bind(window);
-    const RealES = window.EventSource;
     const whenBody = () => document.body ? Promise.resolve()
         : new Promise(r => document.addEventListener('DOMContentLoaded', r));
 
     // ---------- виртуальные часы ----------
+    // clock.v — момент на шкале режима (мс): tracker — unix ms, poll — «время без ночей».
+    // Date.now() = toAbs(шкала): tracker — тождественно, poll — compactToAbs.
     const clock = { v: RealDate.now(), r: performance.now(), speed: 1 };
-    const vnow = () => clock.v + (performance.now() - clock.r) * clock.speed;
+    const vline = () => clock.v + (performance.now() - clock.r) * clock.speed;
+    let toAbs = v => v;
+    const vnow = () => toAbs(vline());
     function setClock(v, speed) {
         clock.v = v; clock.r = performance.now();
         if (speed !== undefined) clock.speed = speed;
@@ -29,100 +35,303 @@
         const m = /^(\d+)(s|m)?$/.exec(v);
         return m ? Number(m[1]) * (m[2] === 'm' ? 60 : 1) : null;
     }
-    // Часы выставляются синхронно, до любого кода трекера (иначе его метки времени окажутся «в будущем»).
-    const GUN_MS = Number(me.dataset.gunMs);
+    const SPEEDS = [1, 2, 5, 10];
+    const parseSpeed = v => SPEEDS.includes(Number(v)) ? Number(v) : null;
     const q0 = new URLSearchParams(location.search);
-    const T0 = parseT(q0.get('t')) ?? Number(me.dataset.startS);
-    const SPEED0 = [1, 2, 5, 10].includes(Number(q0.get('speed'))) ? Number(q0.get('speed')) : 1;
-    setClock(GUN_MS + T0 * 1000, SPEED0);
+
+    const json = obj => new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json' } });
+    let rec = null;
+    const el = {};
+    const curSpeed = () => clock.speed > 0 ? clock.speed : (el.lastSpeed || 1);
+    // Перезагрузка на момент t (назад/круг): параметры страницы сохраняются, t/speed — наши.
+    function reloadAt(t) {
+        const q = new URLSearchParams(location.search);
+        q.set('t', Math.round(t)); q.set('speed', curSpeed());
+        location.replace(`${location.pathname}?${q}`);
+    }
+    const fmt = s => {
+        const sign = s < 0 ? '−' : ''; s = Math.abs(Math.floor(s));
+        return `${sign}${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    };
+
+    // ---------- режимы ----------
+    // Интерфейс: tNow() — секунды на шкале; ready() — запись загружена; fetch(u) — ответ или null;
+    // seekForward(t); step(t) — раз в 250 мс; panel() — {min, max, marks:[{t,label}]}; fmt(t); loop() — {start, end}.
+    function trackerMode() {
+        const RealES = window.EventSource;
+        // Часы выставляются синхронно, до любого кода трекера (иначе его метки времени окажутся «в будущем»).
+        const GUN_MS = Number(me.dataset.gunMs);
+        const T0 = parseT(q0.get('t')) ?? Number(me.dataset.startS);
+        setClock(GUN_MS + T0 * 1000, parseSpeed(q0.get('speed')) ?? 1);
+
+        const tRace = () => (vnow() - rec.meta.gun_unix_ms) / 1000;
+        const st = { byId: new Map(), cursor: 0, lastStep: null, sentDist: new Map() };
+
+        function preselect(meta) {
+            try {
+                const key = meta.current_event.storage_key;
+                if (key && !localStorage.getItem(key) && meta.preselect) {
+                    localStorage.setItem(key, JSON.stringify(meta.preselect));
+                }
+            } catch (e) { /* localStorage недоступен */ }
+        }
+        function distAt(id, t) {
+            const s = rec.distance[id];
+            if (!s) return st.byId.get(id).current_distance || 0;
+            if (t <= s[0][0]) return s[0][1];
+            for (let i = 1; i < s.length; i++) {
+                if (t <= s[i][0]) {
+                    const [t0, d0] = s[i - 1], [t1, d1] = s[i];
+                    return d0 + (d1 - d0) * (t - t0) / (t1 - t0);
+                }
+            }
+            return s[s.length - 1][1];
+        }
+        function advanceTo(t) {
+            const changed = new Set();
+            const ch = rec.changes;
+            while (st.cursor < ch.length && ch[st.cursor].t_s <= t) {
+                for (const r of ch[st.cursor].results) {
+                    const id = String(r.id);
+                    st.byId.set(id, Object.assign({}, st.byId.get(id), r));
+                    changed.add(id);
+                }
+                st.cursor++;
+            }
+            return changed;
+        }
+        function resetTo(t) {
+            st.byId = new Map(rec.initial.results.map(r => [String(r.id), Object.assign({}, r)]));
+            st.cursor = 0;
+            st.sentDist = new Map();
+            advanceTo(t);
+        }
+        function withDist(id, t) {
+            const d = Math.round(distAt(id, t) * 1000) / 1000;
+            st.sentDist.set(id, d);
+            return Object.assign({}, st.byId.get(id), { current_distance: d });
+        }
+        function payload(results, initial) {
+            const p = {
+                server_time_unix: Math.round(vnow()),
+                race_gun_unix_ms: initial === false ? null : rec.meta.gun_unix_ms,
+                total_distance_km: initial === false ? null : rec.initial.total_distance_km,
+                total_results: rec.initial.total_results,
+                results,
+            };
+            if (initial !== undefined) p.initial = initial;
+            return p;
+        }
+        function snapshot(initial) {
+            const t = tRace();
+            return payload([...st.byId.keys()].map(id => withDist(id, t)), initial);
+        }
+        function delta(t) {
+            const ids = advanceTo(t);
+            for (const id of st.byId.keys()) {
+                const d = Math.round(distAt(id, t) * 1000) / 1000;
+                if (st.sentDist.get(id) !== d) ids.add(id);
+            }
+            return payload([...ids].map(id => withDist(id, t)), false);
+        }
+
+        // ---------- подмена EventSource ----------
+        const sources = new Set();
+        class FakeEventSource {
+            constructor(url) {
+                this.url = url; this.readyState = 0; this.onmessage = null; this.onerror = null; this.onopen = null;
+                this._listeners = [];
+                sources.add(this);
+                recReady.then(() => { this.readyState = 1; if (this.onopen) this.onopen(); this._send(snapshot(true)); });
+            }
+            addEventListener(type, fn) { if (type === 'message') this._listeners.push(fn); }
+            removeEventListener(type, fn) { this._listeners = this._listeners.filter(f => f !== fn); }
+            close() { this.readyState = 2; sources.delete(this); }
+            _send(obj) {
+                const ev = { data: JSON.stringify(obj) };
+                if (this.onmessage) this.onmessage(ev);
+                this._listeners.forEach(fn => fn(ev));
+            }
+        }
+        window.EventSource = function (url, opts) {
+            return String(url).includes('/api/sse/tracker') ? new FakeEventSource(url) : new RealES(url, opts);
+        };
+
+        return {
+            tNow: tRace,
+            ready() {
+                preselect(rec.meta);
+                const t0 = tRace();
+                resetTo(t0);
+                st.lastStep = Math.floor(t0 / rec.meta.step_s);
+            },
+            fetch(u) {
+                if (u.pathname === '/api/current-event') return recReady.then(r => json(r.meta.current_event));
+                if (u.pathname === '/api/event-results') return recReady.then(() => json(snapshot(undefined)));
+                return null;
+            },
+            seekForward(t) {
+                setClock(rec.meta.gun_unix_ms + t * 1000);
+                resetTo(t);
+                st.lastStep = Math.floor(t / rec.meta.step_s);
+                sources.forEach(s => s._send(snapshot(true)));
+            },
+            step(t) {
+                const step = Math.floor(t / rec.meta.step_s);
+                if (step !== st.lastStep) {
+                    st.lastStep = step;
+                    const d = delta(t);
+                    if (d.results.length) sources.forEach(s => s._send(d));
+                }
+            },
+            panel: () => ({ min: rec.meta.t_from, max: rec.meta.t_to,
+                            marks: rec.meta.marks.map(k => ({ t: k.t_s, label: k.label })) }),
+            fmt,
+            loop: () => ({ start: rec.meta.loop_start_s, end: rec.meta.loop_end_s }),
+        };
+    }
+
+    function pollMode() {
+        const SLUG = me.dataset.slug;           // 'siberman-2026'
+        const DAYS = JSON.parse(me.dataset.days || '[]');
+        if (!DAYS.length) throw new Error('[demo] нет data-days');
+        const KRSK_MS = 7 * 3600 * 1000;
+        const HOLD_S = 600;                     // сколько держать итоговый протокол до нового круга
+        const LISTS = ['individual', 'relay'];
+        const offs = [];
+        let total = 0;
+        for (const d of DAYS) { offs.push(total); total += (d.end_ms - d.start_ms) / 1000; }
+        const pyRound = x => {                  // round() Python: половины — к чётному
+            const f = Math.floor(x), r = x - f;
+            return r > 0.5 ? f + 1 : r < 0.5 ? f : (f % 2 === 0 ? f : f + 1);
+        };
+        const dayIndex = t => { let i = 0; while (i + 1 < offs.length && offs[i + 1] <= t) i++; return i; };
+        // 1-в-1 tools/demo/siberman/timeline.py: compact_to_abs
+        function compactToAbs(t) {
+            if (t <= 0) return DAYS[0].start_ms;
+            if (t >= total) return DAYS[DAYS.length - 1].end_ms;
+            const i = dayIndex(t);
+            return DAYS[i].start_ms + pyRound((t - offs[i]) * 1000);
+        }
+        toAbs = v => compactToAbs(v / 1000);
+
+        // t: ?t= → сохранённый в sessionStorage момент этой вкладки → data-start-s.
+        // ?t= страница затирает (syncUrlFromState собирает query с нуля), поэтому URL-параметр —
+        // разовая команда: читаем, убираем из URL, текущий момент кладём в sessionStorage при уходе.
+        const KEY = `demo_t:${location.pathname}`;
+        let saved = null;
+        try { saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { /* нет sessionStorage */ }
+        const urlT = parseT(q0.get('t'));
+        const T0 = urlT ?? (saved && Number.isFinite(saved.t) ? saved.t : Number(me.dataset.startS));
+        const SPEED0 = (urlT !== null ? parseSpeed(q0.get('speed')) : saved && parseSpeed(saved.speed)) ?? 1;
+        setClock(T0 * 1000, SPEED0);
+        if (q0.has('t') || q0.has('speed')) {
+            const q = new URLSearchParams(location.search);
+            q.delete('t'); q.delete('speed');
+            const qs = q.toString();
+            history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+        }
+        window.addEventListener('pagehide', () => {
+            try { sessionStorage.setItem(KEY, JSON.stringify({ t: Math.round(vline() / 1000), speed: curSpeed() })); }
+            catch (e) { /* нет sessionStorage */ }
+        });
+
+        // ---------- состояние ответа: 1-в-1 tools/demo/siberman/record.py: apply_change/state_at ----------
+        function applyChange(state, ch) {
+            const out = Object.assign({}, state);
+            for (const key of LISTS) {
+                const byBib = new Map((state[key] || []).map(r => [r.bib, r]));
+                for (const b of (ch.removed && ch.removed[key]) || []) byBib.delete(b);
+                for (const r of ch[key] || []) byBib.set(r.bib, r);
+                const o = ch.order && ch.order[key];
+                const order = o && o.length ? o : (state[key] || []).map(r => r.bib).filter(b => byBib.has(b));
+                out[key] = order.map(b => byBib.get(b));
+            }
+            Object.assign(out, ch.top || {});
+            for (const k of ch.top_removed || []) delete out[k];
+            return out;
+        }
+        const st = { state: null, cursor: 0 };
+        function stateAt(t) {
+            const ch = rec.changes;
+            if (!st.state || (st.cursor > 0 && ch[st.cursor - 1].t_s > t)) {
+                st.state = JSON.parse(JSON.stringify(rec.initial)); st.cursor = 0;
+            }
+            while (st.cursor < ch.length && ch[st.cursor].t_s <= t) st.state = applyChange(st.state, ch[st.cursor++]);
+            return st.state;
+        }
+        const tNow = () => vline() / 1000;
+
+        // ---------- переходы к карточке участника и обратно — с текущим моментом ----------
+        const SITE = `${BASE}${SLUG}/`;
+        function demoUrl(href) {
+            let u;
+            try { u = new URL(href, location.href); } catch (e) { return null; }
+            if (u.origin !== location.origin) return null;
+            const p = u.pathname;
+            const m = /^\/participant\/([^/]+)\/?$/.exec(p)
+                || (p.startsWith(`${SITE}participant/`) && /^([^/]+)\/?$/.exec(p.slice(SITE.length + 12)));
+            let path;
+            if (m) path = `${SITE}participant/${encodeURIComponent(decodeURIComponent(m[1]))}/`;
+            else if (p === '/' || p === SITE || p === `${SITE}index.html`) path = SITE;
+            else return null;
+            return `${path}?t=${Math.round(tNow())}&speed=${curSpeed()}`;
+        }
+        const realOpen = window.open.bind(window);
+        window.open = function (url, ...rest) {
+            const d = url == null ? null : demoUrl(String(url));
+            return realOpen(d || url, ...rest);
+        };
+        const fixLink = e => {
+            const a = e.target.closest && e.target.closest('a[href]');
+            if (!a) return;
+            const d = demoUrl(a.getAttribute('href'));
+            if (d) a.href = d;
+        };
+        ['pointerdown', 'click', 'auxclick', 'contextmenu'].forEach(type => document.addEventListener(type, fixLink, true));
+
+        return {
+            tNow,
+            ready() { stateAt(tNow()); },
+            fetch(u) {
+                if (u.pathname === '/api/siberman/results') return recReady.then(() => json(stateAt(tNow())));
+                return null;
+            },
+            seekForward(t) {
+                // Страница результатов сама опрашивает API — дёргаем её опрос сразу; иначе (карточка
+                // участника грузит данные один раз) — перезагрузка на новый момент.
+                if (typeof window.refreshData !== 'function') { reloadAt(t); return; }
+                setClock(t * 1000);
+                window.refreshData();
+            },
+            step() {},
+            panel: () => ({ min: 0, max: rec.meta.total_s,
+                            marks: rec.meta.days.map(d => ({ t: d.start_s + 300, label: d.label }))
+                                .concat([{ t: rec.meta.total_s, label: 'Финиш' }]) }),
+            fmt(t) {
+                const day = rec.meta.days[dayIndex(t)].label.split(' · ')[0];
+                return `${day}, ${new RealDate(compactToAbs(t) + KRSK_MS).toISOString().slice(11, 16)}`;
+            },
+            loop: () => ({ start: rec.meta.loop_start_s ?? Number(me.dataset.startS),
+                           end: rec.meta.loop_end_s ?? rec.meta.total_s + HOLD_S }),
+        };
+    }
+
+    const M = MODE === 'poll' ? pollMode() : trackerMode();
 
     // ---------- запись ----------
-    let rec = null;
     const recReady = realFetch(`${BASE}data/${RACE}.json.gz`)
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; })
         .then(r => new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).json())
-        .then(j => { rec = j; preselect(j.meta); start(); return j; });
+        .then(j => { rec = j; M.ready(); start(); return j; });
     recReady.catch(showError);
 
-    function preselect(meta) {
-        try {
-            const key = meta.current_event.storage_key;
-            if (key && !localStorage.getItem(key) && meta.preselect) {
-                localStorage.setItem(key, JSON.stringify(meta.preselect));
-            }
-        } catch (e) { /* localStorage недоступен */ }
-    }
-
-    const tRace = () => (vnow() - rec.meta.gun_unix_ms) / 1000;
-    const st = { byId: new Map(), cursor: 0, lastStep: null, sentDist: new Map() };
-
-    function distAt(id, t) {
-        const s = rec.distance[id];
-        if (!s) return st.byId.get(id).current_distance || 0;
-        if (t <= s[0][0]) return s[0][1];
-        for (let i = 1; i < s.length; i++) {
-            if (t <= s[i][0]) {
-                const [t0, d0] = s[i - 1], [t1, d1] = s[i];
-                return d0 + (d1 - d0) * (t - t0) / (t1 - t0);
-            }
-        }
-        return s[s.length - 1][1];
-    }
-    function advanceTo(t) {
-        const changed = new Set();
-        const ch = rec.changes;
-        while (st.cursor < ch.length && ch[st.cursor].t_s <= t) {
-            for (const r of ch[st.cursor].results) {
-                const id = String(r.id);
-                st.byId.set(id, Object.assign({}, st.byId.get(id), r));
-                changed.add(id);
-            }
-            st.cursor++;
-        }
-        return changed;
-    }
-    function resetTo(t) {
-        st.byId = new Map(rec.initial.results.map(r => [String(r.id), Object.assign({}, r)]));
-        st.cursor = 0;
-        st.sentDist = new Map();
-        advanceTo(t);
-    }
-    function withDist(id, t) {
-        const d = Math.round(distAt(id, t) * 1000) / 1000;
-        st.sentDist.set(id, d);
-        return Object.assign({}, st.byId.get(id), { current_distance: d });
-    }
-    function payload(results, initial) {
-        const p = {
-            server_time_unix: Math.round(vnow()),
-            race_gun_unix_ms: initial === false ? null : rec.meta.gun_unix_ms,
-            total_distance_km: initial === false ? null : rec.initial.total_distance_km,
-            total_results: rec.initial.total_results,
-            results,
-        };
-        if (initial !== undefined) p.initial = initial;
-        return p;
-    }
-    function snapshot(initial) {
-        const t = tRace();
-        return payload([...st.byId.keys()].map(id => withDist(id, t)), initial);
-    }
-    function delta(t) {
-        const ids = advanceTo(t);
-        for (const id of st.byId.keys()) {
-            const d = Math.round(distAt(id, t) * 1000) / 1000;
-            if (st.sentDist.get(id) !== d) ids.add(id);
-        }
-        return payload([...ids].map(id => withDist(id, t)), false);
-    }
-
     // ---------- подмена fetch ----------
-    const json = obj => new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json' } });
     window.fetch = function (input, init) {
         const u = new URL(typeof input === 'string' ? input : input.url, location.href);
         if (u.origin === location.origin) {
-            if (u.pathname === '/api/current-event') return recReady.then(r => json(r.meta.current_event));
-            if (u.pathname === '/api/event-results') return recReady.then(() => json(snapshot(undefined)));
+            const res = M.fetch(u);
+            if (res) return res;
             if (u.pathname.startsWith('/static/')) return realFetch(BASE + u.pathname.slice(1) + u.search, init);
             if (u.pathname.startsWith('/api/')) {
                 console.warn('[demo] неперехваченный запрос', u.pathname);
@@ -132,82 +341,42 @@
         return realFetch(input, init);
     };
 
-    // ---------- подмена EventSource ----------
-    const sources = new Set();
-    class FakeEventSource {
-        constructor(url) {
-            this.url = url; this.readyState = 0; this.onmessage = null; this.onerror = null; this.onopen = null;
-            this._listeners = [];
-            sources.add(this);
-            recReady.then(() => { this.readyState = 1; if (this.onopen) this.onopen(); this._send(snapshot(true)); });
-        }
-        addEventListener(type, fn) { if (type === 'message') this._listeners.push(fn); }
-        removeEventListener(type, fn) { this._listeners = this._listeners.filter(f => f !== fn); }
-        close() { this.readyState = 2; sources.delete(this); }
-        _send(obj) {
-            const ev = { data: JSON.stringify(obj) };
-            if (this.onmessage) this.onmessage(ev);
-            this._listeners.forEach(fn => fn(ev));
-        }
-    }
-    window.EventSource = function (url, opts) {
-        return String(url).includes('/api/sse/tracker') ? new FakeEventSource(url) : new RealES(url, opts);
-    };
-
     // ---------- управление ----------
     function seek(t) {
-        if (t < tRace()) {
-            // Назад: кеши трекера (метки времени) остались бы «в будущем» — перезагружаем страницу.
-            const sp = clock.speed > 0 ? clock.speed : (el.lastSpeed || 1);
-            location.replace(`${location.pathname}?t=${Math.round(t)}&speed=${sp}`);
-            return;
-        }
-        setClock(rec.meta.gun_unix_ms + t * 1000);
-        resetTo(t);
-        st.lastStep = Math.floor(t / rec.meta.step_s);
-        sources.forEach(s => s._send(snapshot(true)));
+        // Назад: кеши страницы (метки времени) остались бы «в будущем» — перезагружаем страницу.
+        if (t < M.tNow()) { reloadAt(t); return; }
+        M.seekForward(t);
         renderPanel();
     }
     function start() {
-        const t0 = tRace();
-        resetTo(t0);
-        st.lastStep = Math.floor(t0 / rec.meta.step_s);
         whenBody().then(buildPanel);
         setInterval(tick, 250);
     }
     function tick() {
-        const t = tRace();
-        if (clock.speed > 0 && t >= rec.meta.loop_end_s) { seek(rec.meta.loop_start_s); return; }
-        const step = Math.floor(t / rec.meta.step_s);
-        if (step !== st.lastStep) {
-            st.lastStep = step;
-            const d = delta(t);
-            if (d.results.length) sources.forEach(s => s._send(d));
-        }
+        const t = M.tNow();
+        const loop = M.loop();
+        if (clock.speed > 0 && t >= loop.end) { seek(loop.start); return; }
+        M.step(t);
         renderPanel();
     }
 
     // ---------- панель ----------
-    const el = {};
-    const fmt = s => {
-        const sign = s < 0 ? '−' : ''; s = Math.abs(Math.floor(s));
-        return `${sign}${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-    };
     function buildPanel() {
         const m = rec.meta;
+        const pn = M.panel();
         const p = document.createElement('div');
         p.className = 'demo-panel';
         p.innerHTML = `
             <button class="demo-panel__toggle" type="button"></button>
             <div class="demo-panel__body">
-              <div class="demo-panel__caption">${m.caption}</div>
+              <div class="demo-panel__caption">${m.caption || ''}</div>
               <div class="demo-panel__row">
                 <button class="demo-panel__play" type="button"></button>
                 <span class="demo-panel__time"></span>
-                <div class="demo-panel__speeds">${[1, 2, 5, 10].map(s => `<button type="button" data-speed="${s}">${s}×</button>`).join('')}</div>
+                <div class="demo-panel__speeds">${SPEEDS.map(s => `<button type="button" data-speed="${s}">${s}×</button>`).join('')}</div>
               </div>
-              <input class="demo-panel__range" type="range" min="${m.t_from}" max="${m.t_to}" step="1">
-              <div class="demo-panel__marks">${m.marks.map(k => `<button type="button" data-t="${k.t_s}">${k.label}</button>`).join('')}</div>
+              <input class="demo-panel__range" type="range" min="${pn.min}" max="${pn.max}" step="1">
+              <div class="demo-panel__marks">${pn.marks.map(k => `<button type="button" data-t="${k.t}">${k.label}</button>`).join('')}</div>
             </div>`;
         document.body.appendChild(p);
         el.panel = p;
@@ -232,22 +401,22 @@
             applyCollapsed();
         };
         el.play.onclick = () => {
-            if (clock.speed > 0) { el.lastSpeed = clock.speed; setClock(vnow(), 0); }
-            else setClock(vnow(), el.lastSpeed);
+            if (clock.speed > 0) { el.lastSpeed = clock.speed; setClock(vline(), 0); }
+            else setClock(vline(), el.lastSpeed);
             renderPanel();
         };
-        el.speeds.forEach(b => b.onclick = () => { setClock(vnow(), Number(b.dataset.speed)); renderPanel(); });
-        el.range.oninput = () => { el.dragging = true; el.time.textContent = fmt(Number(el.range.value)); };
+        el.speeds.forEach(b => b.onclick = () => { setClock(vline(), Number(b.dataset.speed)); renderPanel(); });
+        el.range.oninput = () => { el.dragging = true; el.time.textContent = M.fmt(Number(el.range.value)); };
         el.range.onchange = () => { el.dragging = false; seek(Number(el.range.value)); };
         p.querySelectorAll('[data-t]').forEach(b => b.onclick = () => seek(Number(b.dataset.t)));
         renderPanel();
     }
     function renderPanel() {
         if (!el.panel) return;
-        const t = tRace();
+        const t = M.tNow();
         el.play.textContent = clock.speed > 0 ? '⏸' : '▶';
         el.speeds.forEach(b => b.classList.toggle('active', Number(b.dataset.speed) === clock.speed));
-        if (!el.dragging) { el.range.value = Math.round(t); el.time.textContent = fmt(t); }
+        if (!el.dragging) { el.range.value = Math.round(t); el.time.textContent = M.fmt(t); }
     }
     function showError() {
         const box = document.createElement('div');
