@@ -1,7 +1,8 @@
 // Демо «Повтор гонки»: виртуальные часы + подмена сетевых запросов страницы.
 // Подключается в <head> ДО скриптов страницы. Режимы (data-mode):
 //   tracker (по умолчанию) — трекер Жары: fetch /api/event-results + EventSource /api/sse/tracker;
-//   poll — live-результаты Siberman: fetch /api/siberman/results, часы по «времени без ночей».
+//   poll — live-результаты Siberman: fetch /api/siberman/results, часы по «времени без ночей»;
+//   poll + data-format="ep" — Триатлет/Дуатлон: эндпоинты из data-endpoints, часы от выстрела.
 (function () {
     'use strict';
     const me = document.currentScript;
@@ -204,12 +205,96 @@
         };
     }
 
+    // ---------- общее для poll ----------
+    const KRSK_MS = 7 * 3600 * 1000;
+    const HOLD_S = 600;                         // сколько держать итоговый протокол до нового круга
+    const hhmm = ms => new RealDate(ms + KRSK_MS).toISOString().slice(11, 16);
+
+    // Момент вкладки t (сек на шкале режима): ?t= → сохранённый в sessionStorage → defT.
+    // ?t= страница затирает (syncUrlFromState собирает query с нуля), поэтому URL-параметр —
+    // разовая команда: читаем, убираем из URL, текущий момент кладём в sessionStorage при уходе.
+    // Часы: clock.v = t·1000.
+    function restoreMoment(defT, clamp = t => t) {
+        const KEY = `demo_t:${location.pathname}`;
+        let saved = null;
+        try { saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { /* нет sessionStorage */ }
+        const urlT = parseT(q0.get('t'));
+        const T0 = urlT ?? (saved && Number.isFinite(saved.t) ? saved.t : defT);
+        const SPEED0 = (urlT !== null ? parseSpeed(q0.get('speed')) : saved && parseSpeed(saved.speed)) ?? 1;
+        setClock(clamp(T0) * 1000, SPEED0);
+        if (q0.has('t') || q0.has('speed')) {
+            const q = new URLSearchParams(location.search);
+            q.delete('t'); q.delete('speed');
+            const qs = q.toString();
+            history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+        }
+        window.addEventListener('pagehide', () => {
+            try { sessionStorage.setItem(KEY, JSON.stringify({ t: Math.round(vline() / 1000), speed: curSpeed() })); }
+            catch (e) { /* нет sessionStorage */ }
+        });
+    }
+
+    // Состояние ответа на момент t: initial + changes с t_s ≤ t; курсор идёт вперёд, назад — пересборка.
+    function cursorState(init, apply) {
+        const st = { state: null, cursor: 0 };
+        return function stateAt(t) {
+            const ch = rec.changes;
+            if (!st.state || (st.cursor > 0 && ch[st.cursor - 1].t_s > t)) { st.state = init(); st.cursor = 0; }
+            while (st.cursor < ch.length && ch[st.cursor].t_s <= t) st.state = apply(st.state, ch[st.cursor++]);
+            return st.state;
+        };
+    }
+
+    // Перемотка вперёд: страница сама опрашивает API — дёргаем её функции обновления (data-refresh);
+    // их нет (карточка грузит данные один раз) — перезагрузка на новый момент.
+    function refreshAt(t) {
+        const fns = (me.dataset.refresh || 'refreshData').split(',')
+            .map(n => window[n.trim()]).filter(f => typeof f === 'function');
+        if (!fns.length) { reloadAt(t); return; }
+        setClock(t * 1000);
+        fns.forEach(f => f());
+    }
+
+    // Переходы к карточке участника и обратно к результатам — с текущим моментом.
+    // Прод-пути: data-participant-path (шаблон с {n}), data-results-path; демо: SITE и SITE/participant/<n>/.
+    function linkAdapter(tNow) {
+        const SITE = `${BASE}${me.dataset.slug}/`;
+        const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const reCard = new RegExp(`^${esc(me.dataset.participantPath || '/participant/{n}').replace('\\{n\\}', '([^/]+)')}/?$`);
+        const res = (me.dataset.resultsPath || '/').replace(/\/$/, '');
+        const roots = new Set([res || '/', `${res}/`, SITE, `${SITE}index.html`]);
+        function demoUrl(href) {
+            let u;
+            try { u = new URL(href, location.href); } catch (e) { return null; }
+            if (u.origin !== location.origin) return null;
+            const p = u.pathname;
+            const m = reCard.exec(p)
+                || (p.startsWith(`${SITE}participant/`) && /^([^/]+)\/?$/.exec(p.slice(SITE.length + 12)));
+            let path;
+            if (m) path = `${SITE}participant/${encodeURIComponent(decodeURIComponent(m[1]))}/`;
+            else if (roots.has(p)) path = SITE;
+            else return null;
+            return `${path}?t=${Math.round(tNow())}&speed=${curSpeed()}`;
+        }
+        const realOpen = window.open.bind(window);
+        window.open = function (url, ...rest) {
+            const d = url == null ? null : demoUrl(String(url));
+            return realOpen(d || url, ...rest);
+        };
+        const fixLink = e => {
+            const a = e.target.closest && e.target.closest('a[href]');
+            if (!a) return;
+            const d = demoUrl(a.getAttribute('href'));
+            if (d) a.href = d;
+        };
+        ['pointerdown', 'click', 'auxclick', 'contextmenu'].forEach(type => document.addEventListener(type, fixLink, true));
+        return demoUrl;
+    }
+
+    // poll, формат Siberman (tools/demo/siberman/record.py): fetch /api/siberman/results, «время без ночей».
     function pollMode() {
-        const SLUG = me.dataset.slug;           // 'siberman-2026'
         const DAYS = JSON.parse(me.dataset.days || '[]');
         if (!DAYS.length) throw new Error('[demo] нет data-days');
-        const KRSK_MS = 7 * 3600 * 1000;
-        const HOLD_S = 600;                     // сколько держать итоговый протокол до нового круга
         const LISTS = ['individual', 'relay'];
         const offs = [];
         let total = 0;
@@ -227,29 +312,9 @@
             return DAYS[i].start_ms + pyRound((t - offs[i]) * 1000);
         }
         toAbs = v => compactToAbs(v / 1000);
+        restoreMoment(Number(me.dataset.startS));
 
-        // t: ?t= → сохранённый в sessionStorage момент этой вкладки → data-start-s.
-        // ?t= страница затирает (syncUrlFromState собирает query с нуля), поэтому URL-параметр —
-        // разовая команда: читаем, убираем из URL, текущий момент кладём в sessionStorage при уходе.
-        const KEY = `demo_t:${location.pathname}`;
-        let saved = null;
-        try { saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { /* нет sessionStorage */ }
-        const urlT = parseT(q0.get('t'));
-        const T0 = urlT ?? (saved && Number.isFinite(saved.t) ? saved.t : Number(me.dataset.startS));
-        const SPEED0 = (urlT !== null ? parseSpeed(q0.get('speed')) : saved && parseSpeed(saved.speed)) ?? 1;
-        setClock(T0 * 1000, SPEED0);
-        if (q0.has('t') || q0.has('speed')) {
-            const q = new URLSearchParams(location.search);
-            q.delete('t'); q.delete('speed');
-            const qs = q.toString();
-            history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
-        }
-        window.addEventListener('pagehide', () => {
-            try { sessionStorage.setItem(KEY, JSON.stringify({ t: Math.round(vline() / 1000), speed: curSpeed() })); }
-            catch (e) { /* нет sessionStorage */ }
-        });
-
-        // ---------- состояние ответа: 1-в-1 tools/demo/siberman/record.py: apply_change/state_at ----------
+        // 1-в-1 tools/demo/siberman/record.py: apply_change/state_at
         function applyChange(state, ch) {
             const out = Object.assign({}, state);
             for (const key of LISTS) {
@@ -264,44 +329,9 @@
             for (const k of ch.top_removed || []) delete out[k];
             return out;
         }
-        const st = { state: null, cursor: 0 };
-        function stateAt(t) {
-            const ch = rec.changes;
-            if (!st.state || (st.cursor > 0 && ch[st.cursor - 1].t_s > t)) {
-                st.state = JSON.parse(JSON.stringify(rec.initial)); st.cursor = 0;
-            }
-            while (st.cursor < ch.length && ch[st.cursor].t_s <= t) st.state = applyChange(st.state, ch[st.cursor++]);
-            return st.state;
-        }
+        const stateAt = cursorState(() => JSON.parse(JSON.stringify(rec.initial)), applyChange);
         const tNow = () => vline() / 1000;
-
-        // ---------- переходы к карточке участника и обратно — с текущим моментом ----------
-        const SITE = `${BASE}${SLUG}/`;
-        function demoUrl(href) {
-            let u;
-            try { u = new URL(href, location.href); } catch (e) { return null; }
-            if (u.origin !== location.origin) return null;
-            const p = u.pathname;
-            const m = /^\/participant\/([^/]+)\/?$/.exec(p)
-                || (p.startsWith(`${SITE}participant/`) && /^([^/]+)\/?$/.exec(p.slice(SITE.length + 12)));
-            let path;
-            if (m) path = `${SITE}participant/${encodeURIComponent(decodeURIComponent(m[1]))}/`;
-            else if (p === '/' || p === SITE || p === `${SITE}index.html`) path = SITE;
-            else return null;
-            return `${path}?t=${Math.round(tNow())}&speed=${curSpeed()}`;
-        }
-        const realOpen = window.open.bind(window);
-        window.open = function (url, ...rest) {
-            const d = url == null ? null : demoUrl(String(url));
-            return realOpen(d || url, ...rest);
-        };
-        const fixLink = e => {
-            const a = e.target.closest && e.target.closest('a[href]');
-            if (!a) return;
-            const d = demoUrl(a.getAttribute('href'));
-            if (d) a.href = d;
-        };
-        ['pointerdown', 'click', 'auxclick', 'contextmenu'].forEach(type => document.addEventListener(type, fixLink, true));
+        const demoUrl = linkAdapter(tNow);
 
         return {
             tNow,
@@ -310,27 +340,95 @@
                 if (u.pathname === '/api/siberman/results') return recReady.then(() => json(stateAt(tNow())));
                 return null;
             },
-            seekForward(t) {
-                // Страница результатов сама опрашивает API — дёргаем её опрос сразу; иначе (карточка
-                // участника грузит данные один раз) — перезагрузка на новый момент.
-                if (typeof window.refreshData !== 'function') { reloadAt(t); return; }
-                setClock(t * 1000);
-                window.refreshData();
-            },
+            seekForward: refreshAt,
             step() {},
             panel: () => ({ min: 0, max: rec.meta.total_s,
                             marks: rec.meta.days.map(d => ({ t: d.start_s + 600, label: d.label }))
                                 .concat([{ t: rec.meta.total_s, label: 'Финиш' }]) }),
             fmt(t) {
                 const day = rec.meta.days[dayIndex(t)].label.split(' · ')[0];
-                return `${day}, ${new RealDate(compactToAbs(t) + KRSK_MS).toISOString().slice(11, 16)}`;
+                return `${day}, ${hhmm(compactToAbs(t))}`;
             },
             loop: () => ({ start: rec.meta.loop_start_s ?? Number(me.dataset.startS),
                            end: rec.meta.loop_end_s ?? rec.meta.total_s + HOLD_S }),
         };
     }
 
-    const M = MODE === 'poll' ? pollMode() : trackerMode();
+    // poll, формат tools/demo/replay_poll.py (data-format="ep"): несколько эндпоинтов, одно окно,
+    // шкала — секунды от выстрела: Date.now() = gun_ms + t·1000.
+    function epMode() {
+        const GUN_MS = Number(me.dataset.gunMs);
+        const T_FROM = Number(me.dataset.tFrom), T_TO = Number(me.dataset.tTo);
+        // [{re, ep, q?}]: путь ~ re → ключ записи ep ($1… из re); q — параметры query, дописываемые к ключу.
+        const RULES = JSON.parse(me.dataset.endpoints || '[]').map(r => Object.assign({}, r, { rx: new RegExp(r.re) }));
+        toAbs = v => GUN_MS + v;
+        restoreMoment(Number(me.dataset.startS), t => Math.min(Math.max(t, T_FROM), T_TO + HOLD_S));
+
+        // 1-в-1 tools/demo/replay_poll.py: item_key/apply_change/state_at
+        const itemKey = (r, fields) => fields.map(f => String(r[f])).join(':');
+        function applyNode(value, node, spec) {
+            if ('=' in node) return node['='];
+            if ('key' in spec) {
+                const fields = spec.key, itemSpec = spec.item;
+                const byKey = new Map(value.map(r => [itemKey(r, fields), r]));
+                for (const k of node.x || []) byKey.delete(k);
+                for (const [k, sub] of Object.entries(node.u || {})) byKey.set(k, applyNode(byKey.get(k), sub, itemSpec));
+                const order = value.map(r => itemKey(r, fields)).filter(k => byKey.has(k));
+                for (const r of node.a || []) { const k = itemKey(r, fields); byKey.set(k, r); order.push(k); }
+                return (node.o && node.o.length ? node.o : order).map(k => byKey.get(k));
+            }
+            const sub = spec.fields;
+            const out = Object.assign({}, value);
+            for (const k of node.x || []) delete out[k];
+            for (const [k, ch] of Object.entries(node.f || {})) out[k] = applyNode(out[k], ch, sub[k]);
+            return out;
+        }
+        const stateAt = cursorState(() => Object.assign({}, rec.initial), (state, ch) => {
+            const out = Object.assign({}, state);
+            for (const [ep, node] of Object.entries(ch.ep)) out[ep] = applyNode(state[ep], node, rec.meta.spec[ep]);
+            return out;
+        });
+        const tNow = () => vline() / 1000;
+        const demoUrl = linkAdapter(tNow);
+        function epOf(u) {
+            for (const r of RULES) {
+                if (!r.rx.test(u.pathname)) continue;
+                const q = new URLSearchParams();
+                for (const n of r.q || []) if (u.searchParams.get(n)) q.set(n, u.searchParams.get(n));
+                const qs = q.toString();
+                return u.pathname.replace(r.rx, r.ep) + (qs ? `?${qs}` : '');
+            }
+            return null;
+        }
+
+        return {
+            tNow,
+            ready() { stateAt(tNow()); },
+            fetch(u) {
+                const ep = epOf(u);
+                if (ep === null) return null;
+                return recReady.then(() => {
+                    const s = stateAt(tNow());
+                    if (ep in s) return json(s[ep]);
+                    console.warn('[demo] нет в записи', ep);
+                    return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+                });
+            },
+            seekForward: refreshAt,
+            step() {},
+            panel: () => ({ min: rec.meta.t_from, max: rec.meta.t_to,
+                            marks: rec.meta.marks.filter(k => k.t_s != null).map(k => ({ t: k.t_s, label: k.label })) }),
+            fmt(t) {
+                const m = Math.floor(Math.abs(t) / 60);
+                const rel = t < 0 ? `до старта ${Math.ceil(-t / 60)} мин`
+                    : `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} мин от старта`;
+                return `${hhmm(GUN_MS + t * 1000)} · ${rel}`;
+            },
+            loop: () => ({ start: rec.meta.loop_start_s, end: rec.meta.t_to + HOLD_S }),
+        };
+    }
+
+    const M = MODE !== 'poll' ? trackerMode() : me.dataset.format === 'ep' ? epMode() : pollMode();
 
     // ---------- запись ----------
     const recReady = realFetch(`${BASE}data/${RACE}.json.gz`)
