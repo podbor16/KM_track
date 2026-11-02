@@ -133,7 +133,24 @@ def test_replay_matches_final():
         day1_end = rec['meta']['days'][0]['end_s']
         mid = record.state_at(rec, day1_end - 1)
         assert all(r['bike2_start_s'] is None for r in mid['individual'])
-        assert all(r['status'] == 'active' for r in record.state_at(rec, end - 1)['individual'])
+        # статусы сошедших — по дню схода: dns с начала, dnf — в конце окна своего дня, прочее — в конце
+        from tools.demo.siberman.timeline import stage_day
+        bib_status = {p['bib']: (p['status'], p['dnf_stage']) for p in final['participants']
+                      if p['format'] == 'individual'}
+        init_st = {r['bib']: r['status'] for r in rec['initial']['individual']}
+        assert all(init_st[b] == 'dns' for b, (st, _) in bib_status.items() if st == 'dns')
+        assert all(r['status'] in ('active', 'dns') for r in rec['initial']['individual'])
+        assert not any(r['status'] == 'dnf' and r['dnf_stage'] and stage_day(r['dnf_stage']) > 1
+                       for r in mid['individual'])
+        late = record.state_at(rec, end - 1)['individual']
+        assert all(r['status'] != 'dsq' for r in late)
+        marks, windows, _ = record.schedule(final)
+        day_by_end = {w['end_ms']: w['day'] for w in windows}
+        by_day = {}
+        for at, p in record.status_reveals(final, marks, windows):
+            key = (p['status'], day_by_end.get(at, 0))
+            by_day[key] = by_day.get(key, 0) + 1
+        print(f"\nстатусы (статус, день показа; 0 — старт): {by_day}")
 
         raw = json.dumps(rec, ensure_ascii=False, separators=(',', ':')).encode()
         print(f"\nшагов: {rec['meta']['steps']}, с изменениями: {rec['meta']['steps_changed']}, "

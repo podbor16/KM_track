@@ -170,6 +170,30 @@ def state_at(rec: dict, t: float) -> dict:
     return state
 
 
+def status_reveals(final: dict, marks: list[dict], windows: list[dict]) -> list[tuple[int, dict]]:
+    """[(abs_ms, участник)] по возрастанию: когда показать итоговый статус. dns — с начала;
+    dnf — в конце окна дня схода (dnf_stage → день; пусто — день последней отметки; нет отметок — день 1);
+    dsq и прочее — в конце гонки."""
+    end_by_day = {w['day']: w['end_ms'] for w in windows}
+    last_day: dict = {}
+    for m in marks:
+        last_day[m['pid']] = max(last_day.get(m['pid'], 0), m['day'])
+    out = []
+    for p in final['participants']:
+        if p['status'] == 'active' and p['dnf_stage'] is None:
+            continue
+        if p['status'] == 'dns':
+            at = windows[0]['start_ms']
+        elif p['status'] == 'dnf':
+            day = stage_day(p['dnf_stage']) if p['dnf_stage'] else last_day.get(p['id'], 1)
+            at = end_by_day.get(day, windows[-1]['end_ms'])
+        else:
+            at = windows[-1]['end_ms']
+        out.append((at, p))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
 def _set_handicaps(conn, final) -> None:
     cur = conn.cursor()
     for p in final['participants']:
@@ -203,8 +227,9 @@ def replay(conn, race_year: int, final: dict, windows: list[dict] | None = None,
     try:
         total = math.ceil(total_compact_s(windows))
         ts = list(range(0, total, step_s)) + [total]
-        day1_end, last_end = windows[0]['end_ms'], windows[-1]['end_ms']
-        i, hcap_done, status_done = 0, False, False
+        day1_end = windows[0]['end_ms']
+        i, hcap_done = 0, False
+        pending = status_reveals(final, marks, windows)
         initial, prev, changes, steps_changed = None, None, [], 0
         for t in ts:
             now = compact_to_abs(t, windows)
@@ -217,11 +242,10 @@ def replay(conn, race_year: int, final: dict, windows: list[dict] | None = None,
             if not hcap_done and now >= day1_end:
                 _set_handicaps(conn, final)
                 hcap_done = dirty = True
-            if not status_done and now >= last_end:
-                for p in final['participants']:
-                    if p['status'] != 'active' or p['dnf_stage'] is not None:
-                        sdb.update_participant_status(conn, p['id'], p['status'], p['dnf_stage'])
-                status_done = dirty = True
+            while pending and pending[0][0] <= now:
+                _, p = pending.pop(0)
+                sdb.update_participant_status(conn, p['id'], p['status'], p['dnf_stage'])
+                dirty = True
             if not dirty:
                 continue
             _recompute(conn, race_year)
