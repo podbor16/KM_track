@@ -97,3 +97,48 @@ def test_windows_2026():
     for d, m in marks:
         assert by_day[d]['start_ms'] <= m <= by_day[d]['end_ms']
         assert abs_to_compact(m, w) >= 0
+
+
+def test_replay_matches_final():
+    import gzip
+    import json
+    import time
+
+    import src.siberman.persons.service as persons_service
+    from tools.demo.siberman import record
+    from tools.demo.siberman.anonymize import anonymize_sandbox
+
+    sandbox.recreate()
+    conn = sandbox.connect('siberman_demo')
+    try:
+        anonymize_sandbox(conn, seed=42, race_year=2026)
+        final = record.load_final(conn, 2026)
+        expected = record.serialize(conn, 2026)
+        record.clear_results(conn, 2026)
+        cleared = record.serialize(conn, 2026)
+        assert all(not r['cp'] and r['overall_s'] is None for r in cleared['individual'])
+
+        sync = persons_service.sync_safe
+        t0 = time.time()
+        rec = record.replay(conn, 2026, final, step_s=20)
+        dt = time.time() - t0
+        assert persons_service.sync_safe is sync
+
+        end = rec['meta']['total_s']
+        got = record.state_at(rec, end)
+        assert got == expected
+        assert record.serialize(conn, 2026) == expected
+        assert not any(r['cp'] for r in rec['initial']['individual'])
+        # гандикап вело-2 не виден до конца окна дня 1, статусы — до конца гонки
+        day1_end = rec['meta']['days'][0]['end_s']
+        mid = record.state_at(rec, day1_end - 1)
+        assert all(r['bike2_start_s'] is None for r in mid['individual'])
+        assert all(r['status'] == 'active' for r in record.state_at(rec, end - 1)['individual'])
+
+        raw = json.dumps(rec, ensure_ascii=False, separators=(',', ':')).encode()
+        print(f"\nшагов: {rec['meta']['steps']}, с изменениями: {rec['meta']['steps_changed']}, "
+              f"прогон: {dt:.1f} с, запись: {len(raw) / 1e6:.2f} МБ, gzip: {len(gzip.compress(raw)) / 1e6:.2f} МБ, "
+              f"без гандикапа (вело-2 от базы): {rec['meta']['bike2_handicap_fallback_count']}, "
+              f"пустых строк отметок пропущено: {rec['meta']['skipped_null_rows']}")
+    finally:
+        conn.close()
