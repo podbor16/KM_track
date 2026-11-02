@@ -12,7 +12,7 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from src.duathlon222 import service
-from tools.demo.replay_poll import record_steps, time_grid
+from tools.demo.replay_poll import record_steps, snap_marks, time_grid
 from tools.demo.sandbox import use_sandbox
 
 EVENT_ID = 1
@@ -173,8 +173,9 @@ def replay(conn, final: dict, step_s: int = 30, on_step=None) -> dict:
         'gun': GUN.isoformat(timespec='milliseconds'), 'gun_ms': int(GUN.timestamp() * 1000),
         'step_s': step_s, 't_from': t_from, 't_to': t_to,
         'steps': len(ts), 'steps_changed': len(changes),
-        'marks': [{'label': 'Старт', 't_s': 0}, {'label': 'Вело', 't_s': bike0},
-                  {'label': 'Бег 42 км', 't_s': run20}, {'label': 'Финиш', 't_s': fin}],
+        'marks': snap_marks([{'label': 'Старт', 't_s': 0}, {'label': 'Вело', 't_s': bike0},
+                             {'label': 'Бег 42 км', 't_s': run20}, {'label': 'Финиш', 't_s': fin}],
+                            t_from, t_to, step_s),
         'loop_start_s': (bike0 + run20) // 2 if bike0 is not None and run20 is not None else 0,
         'bibs': bibs,
         'spec': spec,

@@ -16,6 +16,7 @@
 """
 import copy
 import json
+import math
 
 from fastapi.encoders import jsonable_encoder
 
@@ -145,3 +146,12 @@ def record_steps(ts, advance, snapshot, spec: dict, on_step=None) -> tuple[dict,
 def time_grid(t_from: int, t_to: int, step_s: int) -> list[int]:
     """Шаги t_from, t_from+step, …, и последним — ровно t_to."""
     return list(range(t_from, t_to, step_s)) + [t_to]
+
+
+def snap_marks(marks: list[dict], t_from: int, t_to: int, step_s: int) -> list[dict]:
+    """Отметку на момент события сдвинуть вверх на ближайший шаг записи: состояние
+    меняется только на шагах, и отметка между шагами показывала бы предыдущий шаг
+    (без этого события — «Финиш» без последнего финишёра)."""
+    def snap(t):
+        return t if t is None else min(t_from + step_s * math.ceil((t - t_from) / step_s), t_to)
+    return [{**m, 't_s': snap(m['t_s'])} for m in marks]

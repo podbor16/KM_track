@@ -7,7 +7,7 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from src.race_triatleta import service
-from tools.demo.replay_poll import record_steps, time_grid
+from tools.demo.replay_poll import record_steps, snap_marks, time_grid
 from tools.demo.sandbox import use_sandbox
 
 EVENT_ID = 1
@@ -107,8 +107,9 @@ def replay(conn, final: dict, step_s: int = 30, on_step=None) -> dict:
         'gun': GUN.isoformat(), 'gun_ms': int(GUN.timestamp() * 1000),
         'step_s': step_s, 't_from': t_from, 't_to': t_to,
         'steps': len(ts), 'steps_changed': len(changes),
-        'marks': [{'label': 'Старт', 't_s': 0}, {'label': '6 ч', 't_s': 21600}, {'label': '12 ч', 't_s': 43200},
-                  {'label': '18 ч', 't_s': 64800}, {'label': 'Финиш', 't_s': last_s}],
+        'marks': snap_marks([{'label': 'Старт', 't_s': 0}, {'label': '6 ч', 't_s': 21600},
+                             {'label': '12 ч', 't_s': 43200}, {'label': '18 ч', 't_s': 64800},
+                             {'label': 'Финиш', 't_s': last_s}], t_from, t_to, step_s),
         'loop_start_s': 7200,
         'spec': SPEC,
     }

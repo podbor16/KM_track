@@ -119,6 +119,8 @@ def test_triatleta_replay_matches_final():
             row = next(r for r in state_at(rec, t_s - 60)['standings']['standings']
                        if r['start_number'] == p['start_number'])
             assert row['status'] == record.RUNNING
+    # «Финиш» показывает итог: последний круг уже учтён
+    assert state_at(rec, meta['marks'][-1]['t_s']) == expected
     raw, gz = _sizes(rec)
     print(f"\nТриатлет: шагов {meta['steps']}, с изменениями {meta['steps_changed']}, {dt:.1f} с, "
           f"json {raw / 1e6:.2f} МБ, gzip {gz / 1e6:.2f} МБ")
@@ -158,6 +160,8 @@ def test_duathlon_replay_matches_final():
     assert not any(r['status'] in ('finished', 'dnf', 'dsq') for r in mid)
     assert [m['label'] for m in meta['marks']] == ['Старт', 'Вело', 'Бег 42 км', 'Финиш']
     assert meta['marks'][1]['t_s'] < meta['loop_start_s'] < meta['marks'][2]['t_s']
+    # «Финиш» показывает итог: все финишёры уже учтены
+    assert state_at(rec, meta['marks'][-1]['t_s'])['standings'] == expected['standings']
     raw, gz = _sizes(rec)
     print(f"\nДуатлон: шагов {meta['steps']}, с изменениями {meta['steps_changed']}, {dt:.1f} с, "
           f"json {raw / 1e6:.2f} МБ, gzip {gz / 1e6:.2f} МБ")

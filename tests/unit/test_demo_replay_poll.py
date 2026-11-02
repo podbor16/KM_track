@@ -85,3 +85,12 @@ def test_normalize_like_fastapi():
 def test_time_grid():
     assert time_grid(-60, 45, 30) == [-60, -30, 0, 30, 45]
     assert time_grid(-60, 30, 30) == [-60, -30, 0, 30]
+
+
+def test_snap_marks_rounds_up_to_record_step():
+    from tools.demo.replay_poll import snap_marks
+    marks = [{'label': 'Старт', 't_s': 0}, {'label': 'Финиш', 't_s': 86247.996},
+             {'label': 'Нет', 't_s': None}, {'label': 'Хвост', 't_s': 86540}]
+    got = snap_marks(marks, -300, 86548, 30)
+    assert [m['t_s'] for m in got] == [0, 86250, None, 86548]
+    assert got[1]['label'] == 'Финиш' and marks[1]['t_s'] == 86247.996
