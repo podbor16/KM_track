@@ -55,3 +55,14 @@ GitHub Pages обновляется за 1–2 мин).
 Страницы — прод-шаблоны `siberman/results.html` и `siberman/participant.html` (`/siberman-2026/` и
 `/siberman-2026/participant/<bib>/`); `demo-replay.js` подключается в `<head>` с `data-mode="poll"`.
 ПДн-проверка: фамилии, полные имена, города и команды проверяются только в файлах Siberman.
+
+## Триатлет и Дуатлон
+
+`python tools/demo/build.py triatleta_24h duathlon222_2026` (Триатлет <1 мин, Дуатлон ~4 мин). Источники — песочницы
+`triatleta_24h_demo` и `duathlon_222_demo` (копии локальных `triatleta_24h` / `duathlon_222`, обезличивание,
+проигрывание прод-сервисов — `tools/demo/triatleta/`, `tools/demo/duathlon/`; для Дуатлона до загрузки итога
+вызывается `prepare`). Формат записи `ep` (`replay_poll.py`): несколько эндпоинтов в одном окне времени от выстрела.
+Страницы — прод-шаблоны: `/triatleta-24h/` (`tri_results.html`), `/duathlon222-2026/` (`duathlon_results.html`) и
+`/duathlon222-2026/participant/<n>/` для каждого номера из `meta.bibs`. Эндпоинты, `data-refresh` и пути карточки
+задаются в `site.EP_PRODUCTS`; метрика Дуатлона — пустой шаблон `templates/race_triatleta/duathlon222_analytics.html`.
+ПДн-проверка (фамилии, полные имена, команды, города) — только в файлах этих продуктов.

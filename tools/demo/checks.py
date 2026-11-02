@@ -6,7 +6,8 @@ from pathlib import Path
 from tools.demo.anonymize import _FEMALE, _MALE, _SURNAMES
 
 _TEXT = {'.html', '.js', '.css', '.json'}
-_ALLOWED_API = ('/api/current-event', '/api/event-results', '/api/sse/tracker', '/api/siberman/results')
+_ALLOWED_API = ('/api/current-event', '/api/event-results', '/api/sse/tracker', '/api/siberman/results',
+                '/api/tri/', '/api/duathlon222_')   # страницы Дуатлона строят URL из ${YEAR}; демо перехватывает только 2026
 _UESC = re.compile(r'\\u([0-9a-fA-F]{4})')
 
 
@@ -30,11 +31,12 @@ def pii_words(surnames: set[str]) -> set[str]:
 
 
 def check_pii(root: Path, surnames: set[str], phrases: set[str] | None = None,
-              scope: tuple[str, ...] = ()) -> list[str]:
+              scope: tuple[str, ...] = (), phrases_skip_html: bool = False) -> list[str]:
     """Реальные фамилии (≥ 4 букв) целым словом в данных и страницах сайта. Слова из словарей
     генератора (фамилии, их женские формы, имена) пропускаются: фейковая «Соколова» или «Роман»
     в демо ничего не раскрывает, а реальные фамилии пересекаются со словарями (ложные срабатывания).
     phrases - полные имена, города, команды: целиком, без учёта регистра, не внутри слова.
+    phrases_skip_html - фразы не ищутся в .html (страницы без данных: «Красноярск», «Россия» - текст шаблона).
     scope - если задан, проверяются только файлы с этими префиксами пути.
     Статика трекера (static/**) не проверяется: это исходники репозитория без данных участников.
     JSON проверяется и с раскрытыми \\u-последовательностями, независимо от ensure_ascii."""
@@ -49,7 +51,8 @@ def check_pii(root: Path, surnames: set[str], phrases: set[str] | None = None,
         plain = _unescape(text) if '\\u' in text else text
         tokens = set(re.findall(r'[\w-]+', text)) | set(re.findall(r'[\w-]+', plain))
         found.extend(f"{rel}: {s}" for s in sorted(words & tokens))
-        found.extend(f"{rel}: {ph}" for ph, rx in pats if rx.search(plain))
+        if not (phrases_skip_html and p.suffix == '.html'):
+            found.extend(f"{rel}: {ph}" for ph, rx in pats if rx.search(plain))
     return found
 
 

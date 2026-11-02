@@ -45,8 +45,8 @@ def _copy(src: Path, dst: Path, base: str) -> None:
         shutil.copyfile(src, dst)
 
 
-def copy_static(out: Path, base: str, gpx_files: list[str], siberman: bool = False) -> None:
-    names = STATIC_FILES + (SIBERMAN_STATIC_FILES if siberman else [])
+def copy_static(out: Path, base: str, gpx_files: list[str], siberman: bool = False, ep: bool = False) -> None:
+    names = STATIC_FILES + (SIBERMAN_STATIC_FILES if siberman else []) + (EP_STATIC_FILES if ep else [])
     items = [ROOT / "static" / s for s in names] + [ROOT / g for g in gpx_files]
     for src in items:
         files = [p for p in src.rglob("*") if p.is_file()] if src.is_dir() else [src]
@@ -118,7 +118,7 @@ def _scrub(text: str, real_surnames: set[str]) -> str:
     from tools.demo.checks import pii_words
     hits = pii_words(real_surnames) & set(re.findall(r"[\w-]+", text))
     for w in sorted(hits):
-        print(f"  scrub: «{w[:1]}…» в шаблоне Siberman заменено")
+        print(f"  scrub: «{w[:1]}…» в шаблоне заменено")
         text = re.sub(rf"(?<!\w){re.escape(w)}(?!\w)", "…", text)
     return text
 
@@ -143,3 +143,58 @@ def render_siberman(out: Path, base: str, key: str, slug: str, rec: dict, real_s
     bibs = {str(r["bib"]) for lst in ("individual", "relay") for r in rec["initial"][lst]}
     for bib in sorted(bibs):
         page(out / slug / "participant" / bib / "index.html", "siberman/participant.html", bib=bib)
+
+
+EP_STATIC_FILES = [
+    "lib/chart4", "css/tri_results.css", "images/favicon_tri_dark.ico", "images/favicon_tri_light.ico",
+    "js/duathlon222-chart.js",
+]
+
+# Триатлет и Дуатлон: формат записи 'ep' - несколько эндпоинтов, страницы опрашивают API сами.
+EP_PRODUCTS = {
+    "triatleta_24h": {
+        "endpoints": [{"re": r"^/api/tri/standings$", "ep": "standings"}, {"re": r"^/api/tri/laps$", "ep": "laps"}],
+        "refresh": "loadStandings,loadLaps",
+    },
+    "duathlon222_2026": {
+        "endpoints": [{"re": r"^/api/duathlon222_2026/standings$", "ep": "standings", "q": ["gender"]},
+                      {"re": r"^/api/duathlon222_2026/participant/(\d+)$", "ep": "participant/$1"}],
+        "participant_path": "/duathlon222_2026/participant/{n}",
+        "results_path": "/duathlon222_2026",
+        "refresh": "loadStandings",
+        "card_refresh": "load",
+    },
+}
+
+
+def _ep_head_tag(base: str, key: str, slug: str, rec: dict, refresh: str) -> str:
+    m, prod = rec["meta"], EP_PRODUCTS[key]
+    a = lambda v: html.escape(str(v), quote=True)  # noqa: E731
+    eps = json.dumps(prod["endpoints"], ensure_ascii=False, separators=(",", ":"))
+    extra = "".join(f' data-{k}="{a(prod[p])}"' for k, p in (("participant-path", "participant_path"),
+                                                             ("results-path", "results_path")) if p in prod)
+    return (f'<meta name="robots" content="noindex">\n<link rel="stylesheet" href="/static/demo/demo-replay.css">\n'
+            f'<script src="/static/demo/demo-replay.js" data-mode="poll" data-format="ep" data-base="{a(base)}" '
+            f'data-race="{a(key)}" data-slug="{a(slug)}" data-gun-ms="{m["gun_ms"]}" data-start-s="{m["loop_start_s"]}" '
+            f'data-t-from="{m["t_from"]}" data-t-to="{m["t_to"]}" data-endpoints="{a(eps)}" '
+            f'data-refresh="{a(refresh)}"{extra}></script>\n')
+
+
+def render_ep(out: Path, base: str, key: str, slug: str, rec: dict, real_surnames: set[str] = frozenset()) -> None:
+    """Страницы Триатлета (одна) или Дуатлона (результаты + карточка каждого номера из meta.bibs)."""
+    m, prod, env = rec["meta"], EP_PRODUCTS[key], _env()
+    strip = _strip(base, m["caption"])
+
+    def page(path: Path, tpl: str, refresh: str, **ctx) -> None:
+        text = _scrub(env.get_template(tpl).render(v="demo", request=None, **ctx), real_surnames)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        head = _ep_head_tag(base, key, slug, rec, refresh)
+        path.write_text(rewrite_static(inject_demo(text, head, strip), base), encoding="utf-8")
+
+    if key == "triatleta_24h":
+        page(out / slug / "index.html", "race_triatleta/tri_results.html", prod["refresh"], event_id=1)
+    else:
+        page(out / slug / "index.html", "race_triatleta/duathlon_results.html", prod["refresh"], year=2026)
+        for n in sorted(m["bibs"]):
+            page(out / slug / "participant" / str(n) / "index.html", "race_triatleta/duathlon_participant.html",
+                 prod["card_refresh"], year=2026, start_number=int(n))
