@@ -30,6 +30,19 @@
     }
     window.Date = VDate;
 
+    // Аниматор Chart.js считает прогресс по Date.now(); на паузе виртуальное время стоит —
+    // анимация замирает на первом кадре. Отключаем анимации при определении window.Chart.
+    (function patchChart() {
+        let impl = window.Chart;
+        const off = C => { if (C && C.defaults) { C.defaults.animation = false; C.defaults.transitions = {}; } };
+        off(impl);
+        Object.defineProperty(window, 'Chart', {
+            configurable: true, enumerable: true,
+            get: () => impl,
+            set: v => { impl = v; off(v); },
+        });
+    })();
+
     function parseT(v) {
         if (!v) return null;
         const m = /^(\d+)(s|m)?$/.exec(v);
@@ -306,7 +319,7 @@
             },
             step() {},
             panel: () => ({ min: 0, max: rec.meta.total_s,
-                            marks: rec.meta.days.map(d => ({ t: d.start_s + 300, label: d.label }))
+                            marks: rec.meta.days.map(d => ({ t: d.start_s + 600, label: d.label }))
                                 .concat([{ t: rec.meta.total_s, label: 'Финиш' }]) }),
             fmt(t) {
                 const day = rec.meta.days[dayIndex(t)].label.split(' · ')[0];
