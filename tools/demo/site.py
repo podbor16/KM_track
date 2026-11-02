@@ -57,13 +57,14 @@ def write_record(out: Path, key: str, rec: dict) -> None:
 def render_tracker(out: Path, base: str, key: str, slug: str, rec: dict) -> None:
     m = rec["meta"]
     ce = m["current_event"]
-    event_config = {"id": ce["db_event_id"], "code": ce["event"], "name": m["title"],
+    event_config = {"id": ce["db_event_id"], "code": ce["event"], "name": ce.get("display_name") or ce["name"],
                     "year": ce["year"], "distance": ce["distances"][0]["distance"],
                     "title": m["title"], "description": m["caption"],
                     "coordinates": [56.0075, 92.7246]}
     html = _env().get_template("krasmarafon/tracker.html").render(
         event_title=f"{m['title']} — демо трекера", event_config=event_config, events=[],
-        v="demo", base=base, race_key=key, race_title=m["title"])
+        v="demo", base=base, race_key=key, race_title=m["title"],
+        gun_ms=m["gun_unix_ms"], loop_start_s=m["loop_start_s"])
     page = out / slug / "index.html"
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_text(rewrite_static(html, base), encoding="utf-8")

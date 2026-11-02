@@ -71,7 +71,6 @@ def build_race(key: str) -> tuple[dict, list[dict]]:
     payload['distances'] = [d for d in payload['distances'] if d['db_event_id'] == race["db_event_id"]]
     d = payload['distances'][0]
     payload.update(db_event_id=race["db_event_id"], gpx_file=d['gpx_file'],
-                   display_name=race["title"], title=race["title"],
                    storage_key=f"demo_{key}_selected_runners")
     loop_start = race.get('loop_start_s', LOOP_START_S)
     if loop_start >= finishes[0]:

@@ -24,6 +24,18 @@
     }
     window.Date = VDate;
 
+    function parseT(v) {
+        if (!v) return null;
+        const m = /^(\d+)(s|m)?$/.exec(v);
+        return m ? Number(m[1]) * (m[2] === 'm' ? 60 : 1) : null;
+    }
+    // Часы выставляются синхронно, до любого кода трекера (иначе его метки времени окажутся «в будущем»).
+    const GUN_MS = Number(me.dataset.gunMs);
+    const q0 = new URLSearchParams(location.search);
+    const T0 = parseT(q0.get('t')) ?? Number(me.dataset.startS);
+    const SPEED0 = [1, 2, 5, 10].includes(Number(q0.get('speed'))) ? Number(q0.get('speed')) : 1;
+    setClock(GUN_MS + T0 * 1000, SPEED0);
+
     // ---------- запись ----------
     let rec = null;
     const recReady = realFetch(`${BASE}data/${RACE}.json.gz`)
@@ -144,22 +156,20 @@
 
     // ---------- управление ----------
     function seek(t) {
+        if (t < tRace()) {
+            // Назад: кеши трекера (метки времени) остались бы «в будущем» — перезагружаем страницу.
+            const sp = clock.speed > 0 ? clock.speed : (el.lastSpeed || 1);
+            location.replace(`${location.pathname}?t=${Math.round(t)}&speed=${sp}`);
+            return;
+        }
         setClock(rec.meta.gun_unix_ms + t * 1000);
         resetTo(t);
         st.lastStep = Math.floor(t / rec.meta.step_s);
         sources.forEach(s => s._send(snapshot(true)));
         renderPanel();
     }
-    function parseT(v) {
-        if (!v) return null;
-        const m = /^(\d+)(s|m)?$/.exec(v);
-        return m ? Number(m[1]) * (m[2] === 'm' ? 60 : 1) : null;
-    }
     function start() {
-        const q = new URLSearchParams(location.search);
-        const t0 = parseT(q.get('t')) ?? rec.meta.loop_start_s;
-        const speed = [1, 2, 5, 10].includes(Number(q.get('speed'))) ? Number(q.get('speed')) : 1;
-        setClock(rec.meta.gun_unix_ms + t0 * 1000, speed);
+        const t0 = tRace();
         resetTo(t0);
         st.lastStep = Math.floor(t0 / rec.meta.step_s);
         whenBody().then(buildPanel);
@@ -188,7 +198,7 @@
         const p = document.createElement('div');
         p.className = 'demo-panel';
         p.innerHTML = `
-            <button class="demo-panel__toggle" type="button" aria-label="Панель повтора">⏱</button>
+            <button class="demo-panel__toggle" type="button"></button>
             <div class="demo-panel__body">
               <div class="demo-panel__caption">${m.caption}</div>
               <div class="demo-panel__row">
@@ -206,7 +216,21 @@
         el.range = p.querySelector('.demo-panel__range');
         el.speeds = [...p.querySelectorAll('[data-speed]')];
         el.lastSpeed = clock.speed || 1;
-        p.querySelector('.demo-panel__toggle').onclick = () => p.classList.toggle('demo-panel--open');
+        const toggle = p.querySelector('.demo-panel__toggle');
+        const KEY = 'demo_panel_collapsed';
+        let collapsed = window.matchMedia('(max-width: 600px)').matches;
+        try { const s = localStorage.getItem(KEY); if (s === '1' || s === '0') collapsed = s === '1'; } catch (e) { /* нет localStorage */ }
+        const applyCollapsed = () => {
+            p.classList.toggle('demo-panel--collapsed', collapsed);
+            toggle.textContent = collapsed ? '⏱' : '—';
+            toggle.setAttribute('aria-label', collapsed ? 'Развернуть панель повтора' : 'Свернуть панель');
+        };
+        applyCollapsed();
+        toggle.onclick = () => {
+            collapsed = !collapsed;
+            try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) { /* нет localStorage */ }
+            applyCollapsed();
+        };
         el.play.onclick = () => {
             if (clock.speed > 0) { el.lastSpeed = clock.speed; setClock(vnow(), 0); }
             else setClock(vnow(), el.lastSpeed);
