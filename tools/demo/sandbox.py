@@ -2,10 +2,14 @@
 import os
 from contextlib import contextmanager
 
+import itertools
+
 import mysql.connector
+from mysql.connector import pooling
 
 LOCAL_HOSTS = ('127.0.0.1', 'localhost')
 LOCAL_PORT = 3308
+_pool_ids = itertools.count(1)
 
 
 def _env_params() -> dict:
@@ -68,9 +72,14 @@ def use_sandbox(service_module, attr: str, dbname: str):
         raise RuntimeError("Подмена разрешена только на БД *_demo")
     p = _env_params()
     assert_local(p['host'], p['port'])
+    # пул: close() прод-кода возвращает соединение (со сбросом сессии — новая транзакция, как у
+    # свежего соединения), без TCP/auth-рукопожатия на каждый вызов
+    pool = pooling.MySQLConnectionPool(pool_name=f"demo_{next(_pool_ids)}", pool_size=4,
+                                       charset='utf8mb4', use_unicode=True, database=dbname, **p)
     original = getattr(service_module, attr)
-    setattr(service_module, attr, lambda: connect(dbname))
+    setattr(service_module, attr, pool.get_connection)
     try:
         yield
     finally:
         setattr(service_module, attr, original)
+        pool._remove_connections()
