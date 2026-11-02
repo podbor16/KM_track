@@ -47,3 +47,11 @@ GitHub Pages обновляется за 1–2 мин).
   в странице до кода трекера), `fetch` и `EventSource`, рисует панель
   повтора. Перемотка назад и новый круг — перезагрузкой страницы с `?t=`.
 - Ссылка на момент: `…/zhara-21/?t=45m&speed=5`.
+
+## Siberman 2026 (режим poll)
+
+`python tools/demo/build.py zhara_21 zhara_5 siberman_2026` (Siberman ~3 мин). Результаты берутся из
+песочницы `siberman_demo` (копия локальной `siberman`, обезличивание, проигрывание — `tools/demo/siberman/`).
+Страницы — прод-шаблоны `siberman/results.html` и `siberman/participant.html` (`/siberman-2026/` и
+`/siberman-2026/participant/<bib>/`); `demo-replay.js` подключается в `<head>` с `data-mode="poll"`.
+ПДн-проверка: фамилии, полные имена, города и команды проверяются только в файлах Siberman.

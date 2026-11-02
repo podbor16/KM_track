@@ -6,7 +6,7 @@ from pathlib import Path
 from tools.demo.anonymize import _FEMALE, _MALE, _SURNAMES
 
 _TEXT = {'.html', '.js', '.css', '.json'}
-_ALLOWED_API = ('/api/current-event', '/api/event-results', '/api/sse/tracker')
+_ALLOWED_API = ('/api/current-event', '/api/event-results', '/api/sse/tracker', '/api/siberman/results')
 _UESC = re.compile(r'\\u([0-9a-fA-F]{4})')
 
 
@@ -22,23 +22,34 @@ def _unescape(text: str) -> str:
     return _UESC.sub(lambda m: chr(int(m.group(1), 16)), text)
 
 
-def check_pii(root: Path, surnames: set[str]) -> list[str]:
+def pii_words(surnames: set[str]) -> set[str]:
+    """Реальные фамилии для проверки: >= 4 букв, без слов из словарей генераторов (Жара и Siberman)."""
+    from tools.demo.siberman.anonymize import GENERATOR_SURNAMES
+    fake = set(_SURNAMES) | {s + 'а' for s in _SURNAMES} | set(_MALE) | set(_FEMALE)
+    return {s for s in surnames if s and len(s) >= 4 and s not in fake and s.lower() not in GENERATOR_SURNAMES}
+
+
+def check_pii(root: Path, surnames: set[str], phrases: set[str] | None = None,
+              scope: tuple[str, ...] = ()) -> list[str]:
     """Реальные фамилии (≥ 4 букв) целым словом в данных и страницах сайта. Слова из словарей
     генератора (фамилии, их женские формы, имена) пропускаются: фейковая «Соколова» или «Роман»
     в демо ничего не раскрывает, а реальные фамилии пересекаются со словарями (ложные срабатывания).
+    phrases - полные имена, города, команды: целиком, без учёта регистра, не внутри слова.
+    scope - если задан, проверяются только файлы с этими префиксами пути.
     Статика трекера (static/**) не проверяется: это исходники репозитория без данных участников.
     JSON проверяется и с раскрытыми \\u-последовательностями, независимо от ensure_ascii."""
     found = []
-    fake = set(_SURNAMES) | {s + 'а' for s in _SURNAMES} | set(_MALE) | set(_FEMALE)
-    words = {s for s in surnames if s and len(s) >= 4 and s not in fake}
+    phr = {x.strip() for x in (phrases or ()) if x and len(x.strip()) >= 4}
+    words = pii_words(surnames)
+    pats = [(ph, re.compile(r'(?<!\w)' + re.escape(ph) + r'(?!\w)', re.I)) for ph in sorted(phr)]
     for p, text in _texts(root):
         rel = p.relative_to(root).as_posix()
-        if rel.startswith('static/'):
+        if rel.startswith('static/') or (scope and not rel.startswith(scope)):
             continue
-        tokens = set(re.findall(r'[\w-]+', text))
-        if '\\u' in text:
-            tokens |= set(re.findall(r'[\w-]+', _unescape(text)))
+        plain = _unescape(text) if '\\u' in text else text
+        tokens = set(re.findall(r'[\w-]+', text)) | set(re.findall(r'[\w-]+', plain))
         found.extend(f"{rel}: {s}" for s in sorted(words & tokens))
+        found.extend(f"{rel}: {ph}" for ph, rx in pats if rx.search(plain))
     return found
 
 

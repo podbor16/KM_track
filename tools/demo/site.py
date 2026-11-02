@@ -1,6 +1,8 @@
 """Рендер страниц демо и копирование статики (спека, пп. 6–7)."""
 import gzip
+import html
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -16,6 +18,14 @@ STATIC_FILES = [
     "fonts/HouschkaRoundedAlt-Bold.woff", "fonts/HouschkaRoundedAlt-Medium.woff",
     "fonts/HouschkaPro-DemiBold.otf", "images/krasmarafon",
 ]
+
+SIBERMAN_STATIC_FILES = [
+    "lib/chart4", "js/siberman-common.js", "fonts/siberman/Onest-Light.ttf", "fonts/siberman/Onest-ExtraBold.ttf",
+    "images/siberman/apple-touch-icon.png", "images/siberman/favicon-32.png", "images/siberman/favicon.ico",
+    "images/siberman/favicon-512.png", "images/siberman/logo-dark.png", "images/siberman/logo-light.png",
+    "images/siberman/star.png",
+]
+PUBLIC_URL = "https://podbor16.github.io"
 
 
 def rewrite_static(text: str, base: str) -> str:
@@ -35,8 +45,9 @@ def _copy(src: Path, dst: Path, base: str) -> None:
         shutil.copyfile(src, dst)
 
 
-def copy_static(out: Path, base: str, gpx_files: list[str]) -> None:
-    items = [ROOT / "static" / s for s in STATIC_FILES] + [ROOT / g for g in gpx_files]
+def copy_static(out: Path, base: str, gpx_files: list[str], siberman: bool = False) -> None:
+    names = STATIC_FILES + (SIBERMAN_STATIC_FILES if siberman else [])
+    items = [ROOT / "static" / s for s in names] + [ROOT / g for g in gpx_files]
     for src in items:
         files = [p for p in src.rglob("*") if p.is_file()] if src.is_dir() else [src]
         for f in files:
@@ -75,3 +86,60 @@ def render_index(out: Path, base: str, races: list[dict]) -> None:
     (out / "index.html").write_text(env.get_template("demo/index.html").render(base=base, races=races), encoding="utf-8")
     (out / "404.html").write_text(env.get_template("demo/404.html").render(base=base), encoding="utf-8")
     (out / ".nojekyll").write_text("")
+
+
+def inject_demo(html_text: str, head_tag: str, strip: str) -> str:
+    """Теги демо - сразу после <head> (до скриптов страницы), полоса - в начало <body>."""
+    out, n = re.subn(r"<head>", lambda m: "<head>\n" + head_tag, html_text, count=1)
+    out, m = re.subn(r"<body[^>]*>", lambda mt: mt.group(0) + "\n" + strip, out, count=1)
+    if not (n and m):
+        raise RuntimeError("в странице нет <head>/<body>")
+    return out
+
+
+def _poll_head_tag(base: str, key: str, slug: str, rec: dict) -> str:
+    m = rec["meta"]
+    days = [{k: d[k] for k in ("label", "start_s", "end_s", "start_ms", "end_ms")} for d in m["days"]]
+    days_attr = html.escape(json.dumps(days, ensure_ascii=False, separators=(",", ":")), quote=True)
+    return (f'<meta name="robots" content="noindex">\n<link rel="stylesheet" href="/static/demo/demo-replay.css">\n'
+            f'<script src="/static/demo/demo-replay.js" data-mode="poll" data-base="{base}" data-race="{key}" '
+            f'data-slug="{slug}" data-start-s="{m["loop_start_s"]}" data-days="{days_attr}"></script>\n')
+
+
+def _strip(base: str, caption: str) -> str:
+    return ('<div class="demo-strip" style="display:flex;align-items:center;gap:16px;padding:12px 16px;'
+            'background:#14181f;color:#fff;font:15px system-ui,sans-serif">'
+            f'<a href="{base}" style="color:#fff;text-decoration:none;opacity:.85">← Все демо</a>'
+            f'<span>{html.escape(caption)}</span></div>')
+
+
+def _scrub(text: str, real_surnames: set[str]) -> str:
+    """В прод-шаблонах бывают реальные фамилии в комментариях кода - заменяем на «…»."""
+    from tools.demo.checks import pii_words
+    hits = pii_words(real_surnames) & set(re.findall(r"[\w-]+", text))
+    for w in sorted(hits):
+        print(f"  scrub: «{w[:1]}…» в шаблоне Siberman заменено")
+        text = re.sub(rf"(?<!\w){re.escape(w)}(?!\w)", "…", text)
+    return text
+
+
+def render_siberman(out: Path, base: str, key: str, slug: str, rec: dict, real_surnames: set[str] = frozenset()) -> None:
+    m = rec["meta"]
+    env = _env()
+    head, strip = _poll_head_tag(base, key, slug, rec), _strip(base, m["caption"])
+    url = f"{PUBLIC_URL}{base}{slug}/"
+
+    def page(path: Path, tpl: str, **ctx) -> None:
+        text = env.get_template(tpl).render(v="demo", year=m["race_year"], **ctx)
+        text = _scrub(text, real_surnames)
+        text = re.sub(r'(property="og:url" content=")[^"]*', lambda x: x.group(1) + url, text)
+        text = re.sub(r'(property="og:image" content=")[^"]*',
+                      lambda x: f"{x.group(1)}{PUBLIC_URL}{base}static/images/siberman/favicon-512.png", text)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rewrite_static(inject_demo(text, head, strip), base), encoding="utf-8")
+
+    page(out / slug / "index.html", "siberman/results.html")
+    # bib как в API (в БД и ответе - строка), прод-роут тоже отдаёт строку из пути
+    bibs = {str(r["bib"]) for lst in ("individual", "relay") for r in rec["initial"][lst]}
+    for bib in sorted(bibs):
+        page(out / slug / "participant" / bib / "index.html", "siberman/participant.html", bib=bib)

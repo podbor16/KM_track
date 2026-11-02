@@ -1,7 +1,11 @@
 import gzip
 import json
 
+from tools.demo import checks
 from tools.demo.checks import check_pii, check_links, check_api
+import pytest
+
+from tools.demo import site
 from tools.demo.site import rewrite_static
 
 
@@ -39,3 +43,54 @@ def test_check_pii_scope_and_fake_names(tmp_path):
     assert check_pii(tmp_path, {"Петров"}) == ["data/r.json: Петров"]
     (tmp_path / "data" / "r.json").write_text('{"name": "Роман"}', encoding="utf-8")
     assert check_pii(tmp_path, {"Роман"}) == []
+
+
+def test_check_pii_phrases(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "x.json").write_text('{"team":"Быстрые \u041b\u043e\u0441\u0438","c":"Ok"}', encoding="utf-8")
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "a.js").write_text("Быстрые Лоси", encoding="utf-8")
+    assert checks.check_pii(tmp_path, set(), {"быстрые лоси", "Ok"}) == ["data/x.json: быстрые лоси"]
+    assert checks.check_pii(tmp_path, set()) == []
+
+
+def test_inject_demo():
+    src = '<html><head>\n<meta charset="utf-8"><script src="/a.js"></script></head><body class="x"><p>hi</p></body></html>'
+    out = site.inject_demo(src, '<script id="demo"></script>\n', '<div id="strip"></div>')
+    assert out.index('id="demo"') < out.index('/a.js')
+    assert out.index('<body class="x">') < out.index('id="strip"') < out.index('<p>')
+    with pytest.raises(RuntimeError):
+        site.inject_demo('<p>no head</p>', 'a', 'b')
+
+
+def test_check_pii_phrases(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "x.json").write_text('{"team":"\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u041b\u043e\u0441\u0438","c":"Ok"}', encoding="utf-8")
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "a.js").write_text("Быстрые Лоси", encoding="utf-8")
+    assert checks.check_pii(tmp_path, set(), {"быстрые лоси", "Ok"}) == ["data/x.json: быстрые лоси"]
+    assert checks.check_pii(tmp_path, set()) == []
+
+
+def test_inject_demo():
+    src = '<html><head>\n<meta charset="utf-8"><script src="/a.js"></script></head><body class="x"><p>hi</p></body></html>'
+    out = site.inject_demo(src, '<script id="demo"></script>\n', '<div id="strip"></div>')
+    assert out.index('id="demo"') < out.index('/a.js')
+    assert out.index('<body class="x">') < out.index('id="strip"') < out.index('<p>')
+    with pytest.raises(RuntimeError):
+        site.inject_demo('<p>no head</p>', 'a', 'b')
+
+
+def test_check_pii_phrases_word_boundary_and_scope(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "x.html").write_text("заблокирован, Киров", encoding="utf-8")
+    (tmp_path / "b" / "y.html").write_text("Киров", encoding="utf-8")
+    assert checks.check_pii(tmp_path, set(), {"Киров"}, scope=("a/",)) == ["a/x.html: Киров"]
+    assert checks.check_pii(tmp_path, set(), {"Киров"}) == ["a/x.html: Киров", "b/y.html: Киров"]
+
+
+def test_scrub_real_surname():
+    out = site._scrub("// Дащенко с DNF; Юров и Север", {"Дащенко", "Юров"})
+    assert "Дащенко" not in out and "Юров" in out
+

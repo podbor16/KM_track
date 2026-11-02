@@ -15,6 +15,7 @@ load_dotenv(ROOT / ".env.local", override=True)   # только локальн�
 
 from tools.demo import checks, site  # noqa: E402
 from tools.demo.races import BASE, RACES  # noqa: E402
+from tools.demo.siberman.source import build_siberman  # noqa: E402
 from tools.demo.source import build_race  # noqa: E402
 
 
@@ -29,22 +30,32 @@ def main() -> int:
     out = ROOT / "dist" / BASE.strip("/")
     shutil.rmtree(out, ignore_errors=True)
 
-    cards, surnames, gpx = [], set(), []
+    cards, surnames, sib_surnames, phrases, gpx = [], set(), set(), set(), []
     for key in args.races:
         print(f"[{key}] проигрываю гонку…", flush=True)
-        rec, rows = build_race(key)
-        surnames |= {(r.get("surname") or "").strip() for r in rows}
-        site.write_record(out, key, rec)
-        site.render_tracker(out, BASE, key, RACES[key]["slug"], rec)
-        gpx.append(rec["meta"]["gpx"])
+        if RACES[key].get("mode") == "poll":
+            rec, pii = build_siberman(key)
+            sib_surnames |= pii["real_surnames"]
+            phrases |= pii["real_full_names"] | pii["real_teams"] | pii["real_cities"]
+            site.write_record(out, key, rec)
+            site.render_siberman(out, BASE, key, RACES[key]["slug"], rec, pii["real_surnames"])
+        else:
+            rec, rows = build_race(key)
+            surnames |= {(r.get("surname") or "").strip() for r in rows}
+            site.write_record(out, key, rec)
+            site.render_tracker(out, BASE, key, RACES[key]["slug"], rec)
+            gpx.append(rec["meta"]["gpx"])
         cards.append({**RACES[key], "participants": rec["meta"]["participants"],
                       "event_date": rec["meta"]["event_date"]})
         size = (out / "data" / f"{key}.json.gz").stat().st_size
         print(f"[{key}] шагов с изменениями: {len(rec['changes'])}, запись {size / 1e6:.2f} МБ")
-    site.copy_static(out, BASE, gpx)
+    site.copy_static(out, BASE, gpx, siberman=any(RACES[k].get('mode') == 'poll' for k in args.races))
     site.render_index(out, BASE, cards)
 
-    problems = (checks.check_pii(out, surnames) + checks.check_links(out, BASE) + checks.check_api(out))
+    problems = checks.check_pii(out, surnames) + checks.check_links(out, BASE) + checks.check_api(out)
+    if sib_surnames:
+        problems += checks.check_pii(out, sib_surnames, phrases, scope=tuple(sc for k in args.races if RACES[k].get("mode") == "poll"
+                                                                      for sc in (RACES[k]["slug"] + "/", f"data/{k}.")))
     for p in problems:
         print("✗", p)
     if problems:
