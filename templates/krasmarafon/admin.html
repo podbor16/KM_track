@@ -1549,7 +1549,9 @@
             const dq = summary.data_quality;
             const dqText = dq && dq.findings
                 ? `\n\nПроверка карточек: ${dq.findings} находок (важных ${dq.high}) — вкладка «Качество данных».` : '';
-            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}${dqText}`);
+            const relinkText = summary.relinked
+                ? `\n\nПеренесено на другую карточку: ${summary.relinked} (заказы: ${summary.relinked_orders.join(', ')}) — исправлены ФИ/ДР.` : '';
+            alert(`Готово. Обновлено заявок: ${summary.updated}. Создано новых: ${summary.created}.${summary.deleted ? ` Удалено: ${summary.deleted}.` : ''}${relinkText}${dqText}`);
             previewEl.style.display = 'none';
             loadLeads(true, _leadsData.length);
         } catch(e) {

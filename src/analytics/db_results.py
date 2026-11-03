@@ -2198,7 +2198,7 @@ def _find_lead_matches(cur, row) -> list:
 
     if row_order_id:
         cur.execute(
-            "SELECT id, client_id FROM leads WHERE order_id=%s "
+            "SELECT id, client_id, surname, name, birthday FROM leads WHERE order_id=%s "
             "AND event_name=%s AND event_year=%s AND event_distance=%s",
             (row_order_id, row.event_name, row.event_year, row.event_distance),
         )
@@ -2212,7 +2212,7 @@ def _find_lead_matches(cur, row) -> list:
     # (дата рождения необязательна при импорте с 2026-08-18).
     row_birthday = row.birthday or '1900-01-01'
     cur.execute(
-        "SELECT id, client_id FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
+        "SELECT id, client_id, surname, name, birthday FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
         "AND event_name=%s AND event_year=%s AND event_distance=%s",
         (row.surname, row.name, row_birthday, row.event_name, row.event_year, row.event_distance),
     )
@@ -2264,7 +2264,12 @@ def _find_leads_to_delete(cur, event_pairs: set, present_ids: set, protected_nam
     return to_delete
 
 
-def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None) -> Dict[str, Any]:
+def _fio_changed(old: dict, new: dict) -> bool:
+    """Изменились ли ФИ/ДР заявки: old — строка БД из _find_lead_matches, new — значения из файла."""
+    return any(k in old and str(old[k]) != str(new[k]) for k in ('surname', 'name', 'birthday'))
+
+
+def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None, user: str = "import") -> Dict[str, Any]:
     """Сопоставляет rows (list[ImportRow] из tilda_import_parser) с leads.
 
     Сопоставление — см. _find_lead_matches() (двухуровневое: order_id, затем
@@ -2298,15 +2303,23 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
     _leads_to_delete_context()/_find_leads_to_delete()) — organizer убрал
     человека из файла, значит его больше не должно быть в БД. Безвозвратное
     удаление — сознательный выбор пользователя (не soft-delete): при ошибке
-    можно повторно экспортировать из Tilda и переимпортировать."""
+    можно повторно экспортировать из Tilda и переимпортировать. Каждая удалённая заявка — снимком в журнал
+    dq_actions (как delete_lead()).
+
+    Исправленные ФИ/ДР совпавшей строки (организатор правил заявку в Tilda) — relink_row(..., 'import'): заявка
+    уезжает на верную карточку (журнал «relink:import», user — кто применил импорт); в ответе relinked/
+    relinked_orders. Соединение пула — autocommit: правки и перепривязки фиксируются сразу, по одной."""
     conn = get_pooled_connection()
     if not conn:
-        return {"updated": 0, "created": 0, "deleted": 0, "errors": ["Нет соединения с БД"]}
+        return {"updated": 0, "created": 0, "deleted": 0, "relinked": 0, "relinked_orders": [],
+                "errors": ["Нет соединения с БД"]}
     updated = created = deleted = 0
+    relinked_orders: list = []
     errors: list = []
     present_ids: set = set()
     touched_clients: set = set()        # их основная заявка могла смениться (возврат, новая заявка)
     from src.krasmarafon.services.tilda_import_parser import parse_tilda_datetime
+    from src.analytics.dq_actions import relink_row
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         for row in rows:
@@ -2381,6 +2394,16 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
                     if _import_is_pacer(row.start_number):
                         cur.execute("UPDATE leads SET is_pacer = 1 WHERE id = %s", [m['id']])
                     updated += 1
+                    if _fio_changed(m, values):
+                        try:
+                            plan = relink_row(conn, 'leads', m['id'], user, 'import')
+                        except Exception as e:
+                            logger.error(f"bulk_import_leads: перепривязка заявки #{m['id']}: {e}")
+                            errors.append(f"перепривязка заявки #{m['id']}: {e}")
+                            continue
+                        if plan['action'] not in ('none', 'skip'):
+                            relinked_orders.append(str((row.order_id or '').strip() or f"lead:{m['id']}"))
+                            touched_clients.update((plan['from_card'], plan['to_card']))
             else:
                 def _float_or_zero(v):
                     try:
@@ -2445,10 +2468,15 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
         event_pairs, protected_names = _leads_to_delete_context(rows, failed_rows, scope)
         to_delete = _find_leads_to_delete(cur, event_pairs, present_ids, protected_names)
         if to_delete:
-            cur.execute(
-                f"DELETE FROM leads WHERE id IN ({','.join(['%s'] * len(to_delete))})",
-                [lead['id'] for lead in to_delete],
-            )
+            ids = [lead['id'] for lead in to_delete]
+            ph = ','.join(['%s'] * len(ids))
+            cur.execute(f"SELECT * FROM leads WHERE id IN ({ph})", ids)
+            for snap in cur.fetchall():
+                cur.execute(
+                    "INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
+                    ("delete_lead", f"lead:{snap['id']}", json.dumps(snap, default=str, ensure_ascii=False), user or ""),
+                )
+            cur.execute(f"DELETE FROM leads WHERE id IN ({ph})", ids)
             deleted = len(to_delete)
         # возврат/снятие возврата меняет основную заявку человека — пересчёт по затронутым
         recompute_duplicates(cur, touched_clients)
@@ -2456,14 +2484,16 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None)
         conn.commit()
         cur.close()
         invalidate_start_list_cache()
-        return {"updated": updated, "created": created, "deleted": deleted, "errors": errors}
+        return {"updated": updated, "created": created, "deleted": deleted, "errors": errors,
+                "relinked": len(relinked_orders), "relinked_orders": relinked_orders}
     except Exception as e:
         logger.error(f"bulk_import_leads error: {e}")
         try:
             conn.rollback()
         except Exception:
             pass
-        return {"updated": updated, "created": created, "deleted": 0, "errors": [str(e)]}
+        return {"updated": updated, "created": created, "deleted": 0, "errors": [str(e)],
+                "relinked": len(relinked_orders), "relinked_orders": relinked_orders}
     finally:
         try:
             conn.close()

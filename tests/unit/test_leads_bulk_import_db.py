@@ -55,7 +55,7 @@ def test_matches_by_order_id_even_when_surname_name_changed(mock_get_conn):
 
     assert summary["updated"] == 1
     assert summary["created"] == 0
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id" in c.args[0]]
     assert len(select_calls) == 1  # совпало по order_id — фоллбэк на surname+name не понадобился
     assert "order_id" in select_calls[0].args[0]
     assert 1644133682 in select_calls[0].args[1]
@@ -71,7 +71,7 @@ def test_falls_back_to_name_match_when_order_id_not_found(mock_get_conn):
     summary = bulk_import_leads([_row(order_id="999999")])
 
     assert summary["updated"] == 1
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id" in c.args[0]]
     assert len(select_calls) == 2
     assert "surname" in select_calls[1].args[0]
 
@@ -90,7 +90,7 @@ def test_order_id_zero_treated_as_no_order_id(mock_get_conn, mock_recompute):
 
     bulk_import_leads([_row(order_id="0")])
 
-    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id FROM leads" in c.args[0]]
+    select_calls = [c for c in cur.execute.call_args_list if "SELECT id, client_id" in c.args[0]]
     assert len(select_calls) == 1  # order_id=0 пропущен — сразу фоллбэк на surname+name
     assert "surname" in select_calls[0].args[0]
 
@@ -529,7 +529,8 @@ def test_matched_row_update_does_not_touch_created_at_without_date(mock_get_conn
 def test_no_connection_returns_zero_summary_with_error(mock_get_conn):
     mock_get_conn.return_value = None
     summary = bulk_import_leads([_row()])
-    assert summary == {"updated": 0, "created": 0, "deleted": 0, "errors": ["Нет соединения с БД"]}
+    assert summary == {"updated": 0, "created": 0, "deleted": 0, "relinked": 0, "relinked_orders": [],
+                       "errors": ["Нет соединения с БД"]}
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
@@ -613,13 +614,16 @@ def test_deletes_leads_missing_from_import_file(mock_get_conn):
         [{"id": 101}],  # _find_lead_matches для единственной строки файла
         [{"id": 101, "surname": "Иванов", "name": "Иван", "event_distance": "5 км", "start_number": None},
          {"id": 202, "surname": "Петров", "name": "Пётр", "event_distance": "5 км", "start_number": None}],
+        [{"id": 202, "surname": "Петров", "name": "Пётр"}],  # снимок удаляемой строки для журнала
     ]
 
-    summary = bulk_import_leads([_row()])
+    summary = bulk_import_leads([_row()], user="boss")
 
     assert summary["deleted"] == 1
     delete_call = next(c for c in cur.execute.call_args_list if "DELETE FROM leads" in c.args[0])
     assert delete_call.args[1] == [202]
+    log_call = next(c for c in cur.execute.call_args_list if "INSERT INTO dq_actions" in c.args[0])
+    assert log_call.args[1][:2] == ("delete_lead", "lead:202") and log_call.args[1][3] == "boss"
 
 
 @patch("src.analytics.db_results.get_pooled_connection")

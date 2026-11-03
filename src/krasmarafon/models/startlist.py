@@ -162,4 +162,6 @@ class LeadImportApplyResponse(BaseModel):
     updated: int
     created: int
     deleted: int = 0
+    relinked: int = 0                 # заявок перенесено на другую карточку (исправлены ФИ/ДР)
+    relinked_orders: List[str] = []   # их order_id
     errors: List[str]

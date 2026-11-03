@@ -851,7 +851,7 @@ async def apply_leads_import(
         parsed = pickle.load(f)
 
     summary = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows, getattr(parsed, "delete_scope", None))
+        None, lambda: bulk_import_leads(parsed.rows, parsed.failed_rows, getattr(parsed, "delete_scope", None), user)
     )
     path.unlink(missing_ok=True)
     await _notify_startlist_updated()
