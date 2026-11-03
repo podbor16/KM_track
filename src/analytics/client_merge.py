@@ -7,12 +7,57 @@ import collections
 import json
 from pathlib import Path
 
+from mysql.connector.errors import ProgrammingError
+
 from src.analytics.db_results import recompute_duplicates
 
 
-def apply(conn, cards, final, merged_into, backup, drop_leads=()):
+def log_action(cur, action, key, details, user):
+    """Запись журнала dq_actions -> её id (по нему действие отменяется)."""
+    cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
+                (action, key or "", json.dumps(details, ensure_ascii=False, default=str), user or ""))
+    return cur.lastrowid
+
+
+def move_athlete_claims(cur, merged_into, user):
+    """Привязки кабинета (athlete_claims) удаляемых карточек -> на итоговую, если её никто не заявил; иначе
+    привязка удаляемой снимается (журнал athlete_unclaim). Совпадение ДР проверит claimed_cards().
+    Таблицы ещё нет (миграция не применена) — ничего не делаем.
+    -> [{client_id, email, moved_to | dropped[, stale]}]; stale — у снятой привязки ДР уже не совпадала с карточкой
+    (при отмене не возвращается: подтверждённой ДР, которую можно восстановить, нет)."""
+    if not merged_into:
+        return []
+    ids = sorted(set(merged_into) | set(merged_into.values()))
+    try:
+        cur.execute("SELECT a.id, a.email, a.client_id, a.birthday = c.birthday FROM athlete_claims a "
+                    f"LEFT JOIN clients c ON c.id = a.client_id WHERE a.client_id IN ({','.join(['%s'] * len(ids))}) "
+                    "ORDER BY a.created_at, a.id", ids)
+        claims = cur.fetchall()
+    except ProgrammingError as e:
+        if e.errno != 1146:
+            raise
+        return []
+    taken = {cid for _, _, cid, _ in claims if cid not in merged_into}
+    moved = []
+    for claim_id, email, cid, valid in claims:
+        if cid not in merged_into:
+            continue
+        target = merged_into[cid]
+        if target in taken:
+            cur.execute("DELETE FROM athlete_claims WHERE id = %s", (claim_id,))
+            log_action(cur, "athlete_unclaim", f"client:{cid}", {"email": email, "reason": "merged"}, user)
+            moved.append({"client_id": cid, "email": email, "dropped": True, **({} if valid else {"stale": True})})
+        else:
+            cur.execute("UPDATE athlete_claims SET client_id = %s WHERE id = %s", (target, claim_id))
+            taken.add(target)
+            moved.append({"client_id": cid, "email": email, "moved_to": target})
+    return moved
+
+
+def apply(conn, cards, final, merged_into, backup, drop_leads=(), user="script", claims_out=None):
     """drop_leads — карточки, чьи заявки удаляются (решение пользователя); карточка
-    удаляется, если у неё не осталось ни заявок, ни результатов."""
+    удаляется, если у неё не осталось ни заявок, ни результатов. Привязки кабинета склеенных карточек
+    переносятся в той же транзакции (user — для журнала; claims_out — список, куда кладётся перенос)."""
     cur = conn.cursor(dictionary=True)
     touched = sorted(set(final) | set(merged_into))
     ph = lambda ids: ",".join(str(int(i)) for i in ids)
@@ -34,7 +79,15 @@ def apply(conn, cards, final, merged_into, backup, drop_leads=()):
     by_survivor = collections.defaultdict(list)
     for i, s in merged_into.items():
         by_survivor[s].append(i)
+    # пул — autocommit: без явной транзакции откат при ошибке был бы пустым
+    if not conn.in_transaction:
+        conn.start_transaction()
     try:
+        plain = conn.cursor()
+        moved_claims = move_athlete_claims(plain, merged_into, user)
+        plain.close()
+        if claims_out is not None:
+            claims_out.extend(moved_claims)
         for s, others in by_survivor.items():
             cur.execute(f"UPDATE leads SET client_id = %s WHERE client_id IN ({ph(others)})", (s,))
             cur.execute(f"UPDATE results SET client_id = %s WHERE client_id IN ({ph(others)})", (s,))

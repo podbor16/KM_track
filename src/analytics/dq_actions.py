@@ -13,7 +13,7 @@ import tempfile
 
 from mysql.connector.errors import ProgrammingError
 
-from src.analytics.client_merge import apply as apply_merge, recompute_aggregates
+from src.analytics.client_merge import apply as apply_merge, log_action as _log_action, recompute_aggregates
 from src.analytics.db_results import recompute_duplicates
 from src.analytics.dq_checks import (NOT_STARTED, SHORT_NAMES, cat_rule, load, merge_blockers, swapped_fio,
                                      propose_birthday, real_bd, run_checks)
@@ -122,13 +122,6 @@ def category_options(results):
     return [{"label": c, "sex": category_sex(c, sx)} for c, sx in sorted(sexes.items(), key=lambda x: _natural(x[0]))]
 
 
-def _log_action(cur, action, key, details, user):
-    """-> id записи журнала (по нему действие отменяется)."""
-    cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
-                (action, key or "", json.dumps(details, ensure_ascii=False, default=str), user or ""))
-    return cur.lastrowid
-
-
 def _save_decision(cur, key, decision, note, user):
     cur.execute("""INSERT INTO dq_decisions (finding_key, decision, note, decided_by) VALUES (%s, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE decision = VALUES(decision), note = VALUES(note),
@@ -148,36 +141,6 @@ def dismiss(conn, key, decision, note, user):
     conn.commit()
     cur.close()
     return action_id
-
-
-def _move_athlete_claims(cur, merged_into, user):
-    """Привязки кабинета (athlete_claims) удаляемых карточек -> на итоговую, если её никто не заявил; иначе
-    привязка удаляемой снимается (журнал athlete_unclaim). Совпадение ДР проверит claimed_cards().
-    Таблицы ещё нет (миграция не применена) — ничего не делаем. -> [{client_id, email, moved_to | dropped}]."""
-    ids = sorted(set(merged_into) | set(merged_into.values()))
-    try:
-        cur.execute(f"SELECT id, email, client_id FROM athlete_claims WHERE client_id IN ({','.join(['%s'] * len(ids))}) "
-                    "ORDER BY created_at, id", ids)
-        claims = cur.fetchall()
-    except ProgrammingError as e:
-        if e.errno != 1146:
-            raise
-        return []
-    taken = {cid for _, _, cid in claims if cid not in merged_into}
-    moved = []
-    for claim_id, email, cid in claims:
-        if cid not in merged_into:
-            continue
-        target = merged_into[cid]
-        if target in taken:
-            cur.execute("DELETE FROM athlete_claims WHERE id = %s", (claim_id,))
-            _log_action(cur, "athlete_unclaim", f"client:{cid}", {"email": email, "reason": "merged"}, user)
-            moved.append({"client_id": cid, "email": email, "dropped": True})
-        else:
-            cur.execute("UPDATE athlete_claims SET client_id = %s WHERE id = %s", (target, claim_id))
-            taken.add(target)
-            moved.append({"client_id": cid, "email": email, "moved_to": target})
-    return moved
 
 
 def merge_cards(conn, ids, surname, name, birthday, user, key=""):
@@ -209,7 +172,8 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     try:
-        moved_claims = _merge_with_claims(conn, {surv: (surname, name, birthday)}, merged_into, path, user)
+        moved_claims = []
+        apply_merge(conn, None, {surv: (surname, name, birthday)}, merged_into, path, user=user, claims_out=moved_claims)
         with open(path, encoding="utf-8") as fh:
             snapshot = json.load(fh)
     finally:
@@ -221,22 +185,6 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     conn.commit()
     cur.close()
     return surv, action_id
-
-
-def _merge_with_claims(conn, final, merged_into, path, user):
-    """apply_merge + перенос привязок личного кабинета — одна транзакция: apply_merge коммитит сам, при его
-    ошибке откатывается всё (пул — autocommit, без start_transaction откат был бы пустым). -> перенос привязок."""
-    if not conn.in_transaction:
-        conn.start_transaction()
-    try:
-        cur = conn.cursor()
-        moved_claims = _move_athlete_claims(cur, merged_into, user)
-        cur.close()
-    except Exception:
-        conn.rollback()
-        raise
-    apply_merge(conn, None, final, merged_into, path)
-    return moved_claims
 
 
 def fix_fio(conn, result_id, surname, name, user, key=""):
@@ -266,7 +214,9 @@ def fix_fio(conn, result_id, surname, name, user, key=""):
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
-            moved = _merge_with_claims(conn, {cid: (surname, name, bd)}, {o: cid for o in others}, path, user)
+            moved = []
+            apply_merge(conn, None, {cid: (surname, name, bd)}, {o: cid for o in others}, path, user=user,
+                        claims_out=moved)
             with open(path, encoding="utf-8") as fh:
                 details["card_before"] = json.load(fh)
             if moved:
@@ -585,6 +535,24 @@ def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None
         cur.close()
 
 
+def _claimed_birthdays(conn, ids):
+    """{карточка: подтверждённая ДР 'ГГГГ-ММ-ДД'} для действующих привязок кабинета (ДР привязки = ДР карточки).
+    Таблицы нет (миграция не применена) — привязок нет."""
+    if not ids:
+        return {}
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT a.client_id, a.birthday FROM athlete_claims a JOIN clients c ON c.id = a.client_id "
+                    f"AND c.birthday = a.birthday WHERE a.client_id IN ({','.join(['%s'] * len(ids))})", sorted(ids))
+        return {cid: str(bd) for cid, bd in cur.fetchall()}
+    except ProgrammingError as e:
+        if e.errno != 1146:
+            raise
+        return {}
+    finally:
+        cur.close()
+
+
 def apply_auto(conn, user):
     """Очевидное без ревью: «Not started» со старым номером; двойники и R-LEAD уровня high,
     если склейке не мешает ни один предохранитель и ДР определяется."""
@@ -613,11 +581,14 @@ def apply_auto(conn, user):
     comps = collections.defaultdict(set)
     for i in list(parent):
         comps[find(i)].add(i)
+    claimed = _claimed_birthdays(conn, set(parent))
     for ids in comps.values():
         ids = sorted(ids)
         label = " + ".join(data.card_label(i) for i in ids)
         blockers = merge_blockers(ids, data)
         _, s, n, bd = propose_final(ids, data)
+        if bd and not blockers and any(claimed.get(i) not in (None, bd) for i in ids):
+            blockers = ["привязана к кабинету, ДР изменится"]
         if blockers or not bd:
             done["skipped"].append(f'{label}: {"; ".join(blockers) or "ДР не определить"}')
             continue
@@ -758,6 +729,30 @@ def _restore_cards(cur, snap):
     recompute_duplicates(cur, ids)
 
 
+def _restore_claims(cur, d, snap):
+    """Привязки кабинета, перенесённые склейкой, — обратно (в транзакции отмены), по d["athlete_claims"]:
+    moved_to -> на прежнюю карточку, если привязка ещё на итоговой; dropped -> вернуть с ДР карточки из снимка
+    snap, если карточка свободна (stale и записи без ДР — не возвращаем: человек подтвердит заново).
+    -> [{client_id, email, moved_back | restored}]."""
+    snap_bd = {c["id"]: c.get("birthday") for c in snap.get("clients", [])}
+    back = []
+    for e in d.get("athlete_claims") or []:
+        cid, email = e["client_id"], e["email"]
+        cur.execute("SELECT id FROM athlete_claims WHERE client_id = %s", (cid,))
+        if cur.fetchone():
+            continue
+        if "moved_to" in e:
+            cur.execute("UPDATE athlete_claims SET client_id = %s WHERE client_id = %s AND email = %s",
+                        (cid, e["moved_to"], email))
+            if cur.rowcount:
+                back.append({"client_id": cid, "email": email, "moved_back": True})
+        elif e.get("dropped") and not e.get("stale") and snap_bd.get(cid):
+            cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)",
+                        (email, cid, snap_bd[cid]))
+            back.append({"client_id": cid, "email": email, "restored": True})
+    return back
+
+
 def _restore_result(cur, row):
     """Удалённый результат — обратно с прежним id и карточкой (триггер вставки сам выбирает карточку)."""
     cur.execute("SELECT id FROM clients WHERE id = %s", (row["client_id"],))
@@ -848,11 +843,14 @@ def undo_action(conn, action_id, user):
         if conn.in_transaction:
             conn.commit()
         conn.start_transaction()
+        claims_back = []
         if row["action"] == "merge":
             _restore_cards(cur, d["before"])
+            claims_back = _restore_claims(cur, d, d["before"])
         elif row["action"] == "fix_fio":
             if "card_before" in d:
                 _restore_cards(cur, d["card_before"])
+                claims_back = _restore_claims(cur, d, d["card_before"])
             else:
                 cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (*d["before"], d["result_id"]))
         elif row["action"] == "delete_result":
@@ -866,7 +864,10 @@ def undo_action(conn, action_id, user):
         else:
             cur.execute("DELETE FROM dq_decisions WHERE finding_key = %s AND decision = %s",
                         (row["finding_key"], d["decision"]))
-        undo_id = _log_action(cur, "undo", row["finding_key"], {"undo_of": row["id"], "action": row["action"]}, user)
+        undo_details = {"undo_of": row["id"], "action": row["action"]}
+        if claims_back:
+            undo_details["athlete_claims"] = claims_back
+        undo_id = _log_action(cur, "undo", row["finding_key"], undo_details, user)
         conn.commit()
         return undo_id
     except Exception:
