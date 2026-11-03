@@ -209,18 +209,7 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     try:
-        # Склейка и перенос привязок кабинета — одна транзакция: apply_merge коммитит сам, при его ошибке
-        # откатывается всё (пул — autocommit, без start_transaction откат был бы пустым).
-        if not conn.in_transaction:
-            conn.start_transaction()
-        try:
-            cur = conn.cursor()
-            moved_claims = _move_athlete_claims(cur, merged_into, user)
-            cur.close()
-        except Exception:
-            conn.rollback()
-            raise
-        apply_merge(conn, None, {surv: (surname, name, birthday)}, merged_into, path)
+        moved_claims = _merge_with_claims(conn, {surv: (surname, name, birthday)}, merged_into, path, user)
         with open(path, encoding="utf-8") as fh:
             snapshot = json.load(fh)
     finally:
@@ -232,6 +221,22 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     conn.commit()
     cur.close()
     return surv, action_id
+
+
+def _merge_with_claims(conn, final, merged_into, path, user):
+    """apply_merge + перенос привязок личного кабинета — одна транзакция: apply_merge коммитит сам, при его
+    ошибке откатывается всё (пул — autocommit, без start_transaction откат был бы пустым). -> перенос привязок."""
+    if not conn.in_transaction:
+        conn.start_transaction()
+    try:
+        cur = conn.cursor()
+        moved_claims = _move_athlete_claims(cur, merged_into, user)
+        cur.close()
+    except Exception:
+        conn.rollback()
+        raise
+    apply_merge(conn, None, final, merged_into, path)
+    return moved_claims
 
 
 def fix_fio(conn, result_id, surname, name, user, key=""):
@@ -261,9 +266,11 @@ def fix_fio(conn, result_id, surname, name, user, key=""):
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
-            apply_merge(conn, None, {cid: (surname, name, bd)}, {o: cid for o in others}, path)
+            moved = _merge_with_claims(conn, {cid: (surname, name, bd)}, {o: cid for o in others}, path, user)
             with open(path, encoding="utf-8") as fh:
                 details["card_before"] = json.load(fh)
+            if moved:
+                details["athlete_claims"] = moved
         finally:
             os.remove(path)
         details["merged"] = others

@@ -675,3 +675,36 @@ def test_claim_journal_rows_do_not_break_or_enter_undo_list(db, cards, mail):
     assert journal(cur, "athlete_claim", cards["c1"]) and journal(cur, "athlete_unclaim", cards["c1"])
     acts = dq_actions.recent_actions(conn)
     assert not [a for a in acts if a["action"] in ("athlete_claim", "athlete_unclaim")]
+
+
+def test_fix_fio_merge_moves_claim_like_merge(merge_env):
+    """«Исправить ФИО» тоже склеивает карточки (такие ФИ и ДР уже у другой) — привязка переходит так же."""
+    conn, cur, dq, c = merge_env
+    assert ac.claim(ME, c["vanya"], BD1) == ClaimResult.OK
+    cur.execute("SELECT id FROM results WHERE client_id = %s LIMIT 1", (c["c1"],))
+    result_id = cur.fetchone()["id"]
+
+    cid, action_id = dq.fix_fio(conn, result_id, SURNAME, "Ваня", MERGER)
+
+    assert cid == c["c1"]
+    assert ac.claimed_cards(ME) == ([c["c1"]], [])
+    assert merge_details(cur, action_id)["athlete_claims"] == [
+        {"client_id": c["vanya"], "email": ME, "moved_to": c["c1"]}]
+
+
+def test_history_redirect_carries_dropped_cards_to_explanation(web, cards, db):
+    conn, cur = db
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    cur.execute("UPDATE clients SET birthday = '1986-05-02' WHERE id = %s", (cards["c1"],))
+    conn.commit()
+    r = client.get("/me/history", follow_redirects=False)
+    assert r.headers["location"] == f"/me?changed={cards['c1']}"
+    assert "Данные карточки изменились — подтвердите, что это вы" in client.get(r.headers["location"]).text
+
+
+def test_me_ignores_absurdly_long_claim_param(web, cards):
+    client, _ = web
+    login(client)
+    assert client.get("/me?claim=" + "9" * 5000 + "&r=mismatch&changed=" + "9" * 5000).status_code == 200

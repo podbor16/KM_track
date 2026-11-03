@@ -164,17 +164,21 @@ def _login_redirect() -> RedirectResponse:
 
 
 @router.get("/me", response_class=HTMLResponse)
-async def me_page(request: Request, claim: str = "", r: str = "", km_athlete: str | None = Cookie(default=None)):
+async def me_page(request: Request, claim: str = "", r: str = "", changed: str = "",
+                  km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
         return _login_redirect()
     claimed, dropped = await run_in_threadpool(acl.claimed_cards, email)
+    # привязки, снятые при открытии истории (/me/history → сюда), — для пояснения «Данные карточки изменились»
+    dropped = list(dropped) + [int(x) for x in changed.split(",") if x.isascii() and x.isdigit() and len(x) <= 10]
     people = await run_in_threadpool(cabinet, email)
     return templates.TemplateResponse("krasmarafon/me.html", {
         "request": request, "email": email, "people": people,
         "diploma_event_ids": set(_diploma_event_ids()),
         "claimed": set(claimed), "dropped": set(dropped),
-        "claim_id": int(claim) if claim.isascii() and claim.isdigit() else None, "claim_error": CLAIM_ERRORS.get(r),
+        "claim_id": int(claim) if claim.isascii() and claim.isdigit() and len(claim) <= 10 else None,
+        "claim_error": CLAIM_ERRORS.get(r),
     })
 
 
@@ -217,9 +221,10 @@ async def history_page(request: Request, km_athlete: str | None = Cookie(default
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
         return _login_redirect()
-    claimed, _ = await run_in_threadpool(acl.claimed_cards, email)
+    claimed, dropped = await run_in_threadpool(acl.claimed_cards, email)
     if not claimed:
-        return RedirectResponse("/me", status_code=303)
+        changed = f"?changed={','.join(map(str, dropped))}" if dropped else ""
+        return RedirectResponse(f"/me{changed}", status_code=303)
     results, leads = await run_in_threadpool(acl.history_rows, claimed)
     title = await run_in_threadpool(acl.history_title, claimed)
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
