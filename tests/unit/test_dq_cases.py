@@ -93,6 +93,21 @@ def ids(q):
     return [a["id"] for a in q["answers"]]
 
 
+def _leadfix_data(result_bd):
+    return data([C(1, "Иванова", "Анна", "1986-05-01"), C(2, "Иванова", "Мария", "2015-04-05")],
+                leads=[L(1, 1, "Иванова", "Анна", "1986-05-01", 10, bib=77)],
+                results=[R(5, 2, "Иванова", "Мария", result_bd, 10, 77, sex="Женщина")])
+
+
+def test_leadfix_offers_fixlead_when_protocol_has_real_birthday():
+    assert ids(_q(_leadfix_data("2015-04-05"), "R-LEADFIX")) == ["fixlead", "to:1", "keep", "postpone"]
+
+
+def test_leadfix_without_fixlead_when_protocol_birthday_is_placeholder():
+    """Заявку нельзя «исправить по протоколу» заглушкой ДР — остальные ответы остаются."""
+    assert ids(_q(_leadfix_data("1900-01-01"), "R-LEADFIX")) == ["to:1", "keep", "postpone"]
+
+
 def test_foreign_question_suggests_namesake_first():
     q = _q(pcarev(), "R-FOREIGN", result_id=101)
     assert q["stage"] == 1 and "Чей это результат" in q["text"] and "36 лет" in q["text"]

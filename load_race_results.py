@@ -353,6 +353,10 @@ class RaceLoader:
         self.cursor = None
         self.existing_results: Dict[str, Dict] = {}
         self.existing_results_by_name: Dict[Tuple[str, str], Dict] = {}
+        # Последние ФИ/ДР из ответа Copernico по номеру: (surname, name, birthdate). Перепривязка — только если
+        # правку заметили МЕЖДУ двумя ответами Copernico. Сравнение со строкой БД/кэшем не годится: кэш
+        # перезагружается из БД, а строки, исправленные в «Качестве данных», от Copernico отличаются.
+        self._cp_fio: Dict[str, Tuple[str, str, str]] = {}
         self.inserted_count = 0
         self.updated_results_count = 0
         self.updated_segments_count = 0
@@ -1074,6 +1078,14 @@ class RaceLoader:
             if birthday_changed:
                 changed_fields.append(f'birthday: {existing.get("birthday")} → {birthdate}')
             fio_changed = (surname != existing.get('surname') or name != existing.get('name') or birthday_changed)
+            # Правка ФИ/ДР в протоколе: ответ Copernico отличается от ПРЕДЫДУЩЕГО ответа (в первом ответе
+            # сравнивать не с чем — отличие от БД может быть решением сотрудника из «Качества данных»)
+            prev_cp = self._cp_fio.get(dorsal)
+            protocol_fio_changed = prev_cp is not None and (
+                surname != prev_cp[0] or name != prev_cp[1]
+                or (birthdate != '1900-01-01' and birthdate != prev_cp[2]))
+            self._cp_fio[dorsal] = (surname, name, birthdate if birthdate != '1900-01-01'
+                                    else (prev_cp[2] if prev_cp else birthdate))
             if race_status != existing.get('race_status'):
                 changed_fields.append(f'race_status: "{existing.get("race_status")}" → "{race_status}"')
             if time_gun_finish != existing.get('time_gun_finish'):
@@ -1109,7 +1121,7 @@ class RaceLoader:
 
             if changed_fields:
                 updated_dorsals.append(dorsal)
-                if fio_changed:
+                if fio_changed and protocol_fio_changed:
                     relink_rows.append((result_id, dorsal))
                 if len(updated_dorsals) <= 5:
                     self.logger.debug(f"📝 Dorsal #{dorsal} ({surname} {name}): {', '.join(changed_fields)}")

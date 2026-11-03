@@ -30,6 +30,7 @@ def make_loader():
     loader.cursor = MagicMock()
     loader.connection = MagicMock()
     loader.existing_results = {}
+    loader._cp_fio = {}
     loader.inserted_count = 0
     loader.updated_results_count = 0
     loader.updated_segments_count = 0

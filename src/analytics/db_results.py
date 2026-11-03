@@ -1900,7 +1900,8 @@ def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
 def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Optional[Dict[str, Any]]:
     """Partial UPDATE leads по leads.id. Поля — только из whitelist. Смена дистанции пересчитывает event_id и
     дубли (как dq_actions.edit_record); смена ФИ/ДР — relink_row: заявка уезжает на верную карточку (журнал
-    «relink:admin», user — кто правил). -> строка заявки + 'relink' (итог перепривязки или None);
+    «relink:admin», user — кто правил). -> строка заявки + 'relink' (итог перепривязки, None или {action: 'error', reason} — правка сохранена,
+    карточку подобрать не удалось);
     None — заявки нет. ValueError — у забега нет такой дистанции."""
     # is_duplicate не правится руками — его считает recompute_duplicates() (основная заявка
     # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu
@@ -1931,9 +1932,15 @@ def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Op
         if 'event_id' in safe:
             recompute_duplicates(cur, [old['client_id']])
         conn.commit()
-        fio_changed = any(k in safe and str(safe[k]) != str(old[k]) for k in ('surname', 'name', 'birthday'))
-        relink = relink_row(conn, 'leads', lead_id, user, 'admin') if fio_changed else None
         invalidate_start_list_cache()
+        fio_changed = any(k in safe and str(safe[k]) != str(old[k]) for k in ('surname', 'name', 'birthday'))
+        relink = None
+        if fio_changed:
+            try:
+                relink = relink_row(conn, 'leads', lead_id, user, 'admin')
+            except Exception as e:      # правка уже сохранена: сбой подбора карточки — в ответ, а не ошибкой запроса
+                logger.error(f"update_lead relink error (lead {lead_id}): {e}")
+                relink = {"action": "error", "reason": str(e)}
         cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
         cur.close()

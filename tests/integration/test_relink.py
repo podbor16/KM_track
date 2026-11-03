@@ -352,6 +352,25 @@ def test_patch_without_fio_change_does_not_relink(client, as_admin, db, world):
     assert journal(cur) == []
 
 
+def test_patch_relink_failure_keeps_edit_and_reports_error(client, as_admin, db, world, monkeypatch):
+    """Правка заявки уже закоммичена — сбой подбора карточки не превращается в 4xx/5xx: PATCH 200, relink.error."""
+    import src.analytics.dq_actions as dq_actions
+
+    def boom(*a, **k):
+        raise RuntimeError("boom-relink")
+
+    conn, cur = db
+    row = add_lead(cur, "Дочь", BD_MAMA, 9500)
+    conn.commit()
+    monkeypatch.setattr(dq_actions, "relink_row", boom)
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"birthday": str(BD_DAUGHTER)})
+    assert r.status_code == 200, r.text
+    assert r.json()["relink"] == {"action": "error", "reason": "boom-relink"}
+    conn.commit()
+    state = row_state(cur, "leads", row["id"])
+    assert str(state["birthday"]) == str(BD_DAUGHTER) and state["client_id"] == row["client_id"]
+
+
 def test_patch_distance_change_recomputes_event_id(client, as_admin, db, world):
     conn, cur = db
     row = add_lead(cur, "Мама", BD_MAMA, 9500)

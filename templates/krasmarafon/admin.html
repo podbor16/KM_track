@@ -1337,6 +1337,10 @@
             }
             Object.assign(lead, data);
             cancelLeadEdit(tr, lead);
+            if (data.relink && data.relink.action === 'error') {
+                alert('Правка сохранена, но карточку подобрать не удалось: ' + (data.relink.reason || '') +
+                      ' — проверьте в «Качестве данных»');
+            }
         } catch(e) {
             alert('Ошибка сети: ' + e.message);
             saveBtn.disabled = false;
