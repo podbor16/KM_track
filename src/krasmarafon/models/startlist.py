@@ -63,6 +63,7 @@ class LeadAdminItem(BaseModel):
     refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»)
     is_elite: Optional[int] = None     # «Элита» — на сайте вместо номера
     is_pacer: Optional[int] = None     # «Пейсер» — на сайте вместо номера
+    pd_refused: Optional[int] = None   # «Не согласен на ПД» — на сайте вместо ФИ «Спортсмен»
 
     @model_validator(mode='before')
     @classmethod

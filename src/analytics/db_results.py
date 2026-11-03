@@ -2038,6 +2038,28 @@ def set_lead_elite(lead_id: int, elite: bool) -> bool:
         conn.close()
 
 
+def set_lead_pd_refused(lead_id: int, refused: bool, user: str) -> bool:
+    """Кнопка «Не согласен на ПД» / «Снять» (leads.pd_refused): на публичных страницах этого события
+    вместо ФИ — «Спортсмен». Изменение — в журнал dq_actions. Кеши результатов истекают сами (5–30 с)."""
+    conn = get_pooled_connection()
+    if not conn:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM leads WHERE id = %s", (lead_id,))
+        if cur.fetchone() is None:
+            return False
+        cur.execute("UPDATE leads SET pd_refused = %s WHERE id = %s", (int(refused), lead_id))
+        cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
+                    ("pd_refused", f"lead:{lead_id}", json.dumps({"pd_refused": int(refused)}), user or ""))
+        conn.commit()
+        cur.close()
+        invalidate_start_list_cache()
+        return True
+    finally:
+        conn.close()
+
+
 def _import_bib(raw: str):
     """Колонка «Номер» файла импорта: число — номер; «Элита» — отметка элиты (номера нет)."""
     raw = (raw or "").strip()

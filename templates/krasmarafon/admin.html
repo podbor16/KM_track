@@ -1139,6 +1139,12 @@
         actions.appendChild(lead.is_elite
             ? _leadActionBtn('Снять элиту', `/api/admin/leads/${lead.id}/elite?elite=false`)
             : _leadActionBtn('Элита', `/api/admin/leads/${lead.id}/elite?elite=true`));
+        // Согласие на ПД — на бумаге при получении номера; без согласия на сайте вместо ФИ «Спортсмен»
+        actions.appendChild(lead.pd_refused
+            ? _leadActionBtn('Снять «без ПД»', `/api/admin/leads/${lead.id}/pd-refused?refused=false`)
+            : _leadActionBtn('Не согласен на ПД', `/api/admin/leads/${lead.id}/pd-refused?refused=true`,
+                             `Отметить: ${lead.surname} ${lead.name} не согласен на публикацию ПД?
+На сайте вместо ФИ будет «Спортсмен».`));
         actions.appendChild(_leadActionBtn('Удалить', `/api/admin/leads/${lead.id}`,
             `Удалить заявку ${lead.surname} ${lead.name}, ${lead.event_distance || ''}, от ${_fmtCreated(lead.created_at)}?\nКопия сохранится в журнале действий.`, 'DELETE'));
         return tr;
@@ -1158,6 +1164,14 @@
             if (lead.dup_main) badge.title = 'Выбрана основной вручную';
         }
         cell.appendChild(badge);
+        if (lead.pd_refused) {
+            const pd = document.createElement('span');
+            pd.className = 'admin-badge admin-badge--inactive';
+            pd.style.marginLeft = '4px';
+            pd.textContent = 'Без ПД';
+            pd.title = 'Не согласен на публикацию ПД — на сайте «Спортсмен»';
+            cell.appendChild(pd);
+        }
     }
 
     function _fmtCreated(v) {

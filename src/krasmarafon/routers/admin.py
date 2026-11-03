@@ -478,6 +478,16 @@ async def mark_lead_elite(lead_id: int, elite: bool = True, user: str = Depends(
     return {"status": "ok"}
 
 
+@router.post("/api/admin/leads/{lead_id}/pd-refused")
+async def mark_lead_pd_refused(lead_id: int, refused: bool = True, user: str = Depends(api_require_auth)) -> dict:
+    """«Не согласен на ПД» / «Снять» (leads.pd_refused): на сайте вместо ФИ — «Спортсмен»."""
+    from src.analytics.db_results import set_lead_pd_refused
+
+    if not await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_pd_refused(lead_id, refused, user)):
+        raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    return {"status": "ok"}
+
+
 @router.delete("/api/admin/leads/{lead_id}")
 async def remove_lead(lead_id: int, user: str = Depends(api_require_auth)) -> dict:
     """«Удалить заявку»: копия строки — в журнале dq_actions."""
