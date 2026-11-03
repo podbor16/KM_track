@@ -12,6 +12,7 @@
             margin-bottom: 16px; }
 .me-btn { width: 100%; padding: 12px; border: 0; border-radius: var(--km-radius-btn); background: var(--km-primary);
           color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+.me-btn:disabled { opacity: .5; cursor: default; }
 .me-link { display: block; width: 100%; background: none; border: 0; color: var(--km-primary); font-size: 14px;
            text-align: center; margin-top: 12px; cursor: pointer; text-decoration: none; font-family: inherit; }
 .me-link:disabled { color: var(--km-text-muted); cursor: default; }

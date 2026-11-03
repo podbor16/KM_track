@@ -22,7 +22,14 @@ SHARED_SESSION_HOURS = 24
 
 
 class TooManyRequests(Exception):
-    """Превышен лимит запросов кода — код не создан, письмо не отправлено."""
+    """Превышен лимит запросов кода — код не создан, письмо не отправлено.
+    retry_after — секунд до следующей попытки; recent — этой почте код ушёл меньше минуты назад
+    и ещё действует (для человека не ошибка: повторная отправка формы)."""
+
+    def __init__(self, retry_after: int, recent: bool = False):
+        super().__init__(retry_after)
+        self.retry_after = max(int(retry_after), 1)
+        self.recent = recent
 
 
 def normalize_email(email: str) -> str:
@@ -79,22 +86,29 @@ def request_code(email: str, ip: str) -> None:
         cur = conn.cursor()
         cur.execute("SELECT GET_LOCK('athlete_login_code', 5)")
         if cur.fetchone()[0] != 1:
-            raise TooManyRequests()
+            raise TooManyRequests(5)
         try:
             cur.execute("DELETE FROM athlete_login_codes WHERE expires_at < NOW() - INTERVAL 1 DAY")
+            # Секунды до снятия лимита: минутного — от последнего кода, часового — от самого старого в окне
             cur.execute(
-                "SELECT COALESCE(SUM(created_at > NOW() - INTERVAL 1 MINUTE), 0), COUNT(*) "
+                "SELECT TIMESTAMPDIFF(SECOND, NOW(), MAX(created_at) + INTERVAL 1 MINUTE), COUNT(*), "
+                "TIMESTAMPDIFF(SECOND, NOW(), MIN(created_at) + INTERVAL 1 HOUR) "
                 "FROM athlete_login_codes WHERE email = %s AND created_at > NOW() - INTERVAL 1 HOUR",
                 (email,),
             )
-            last_minute, last_hour = cur.fetchone()
+            minute_left, email_hour, email_hour_left = cur.fetchone()
             cur.execute(
-                "SELECT COUNT(*) FROM athlete_login_codes WHERE ip = %s AND created_at > NOW() - INTERVAL 1 HOUR",
+                "SELECT COUNT(*), TIMESTAMPDIFF(SECOND, NOW(), MIN(created_at) + INTERVAL 1 HOUR) "
+                "FROM athlete_login_codes WHERE ip = %s AND created_at > NOW() - INTERVAL 1 HOUR",
                 (ip,),
             )
-            (ip_hour,) = cur.fetchone()
-            if last_minute or last_hour >= EMAIL_PER_HOUR or ip_hour >= IP_PER_HOUR:
-                raise TooManyRequests()
+            ip_hour, ip_hour_left = cur.fetchone()
+            hour_left = max(email_hour_left if email_hour >= EMAIL_PER_HOUR else 0,
+                            ip_hour_left if ip_hour >= IP_PER_HOUR else 0)
+            if hour_left > 0:
+                raise TooManyRequests(hour_left)
+            if minute_left is not None and minute_left > 0:
+                raise TooManyRequests(minute_left, recent=True)
             code = f"{secrets.randbelow(10 ** 6):06d}"
             token = secrets.token_urlsafe(32)
             cur.execute(

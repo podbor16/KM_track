@@ -105,11 +105,26 @@ def test_link_shows_button_then_logs_in(db, client):
     assert "Ссылка устарела" in client.get(f"/me/link?t={token}").text
 
 
-def test_rate_limit_message(db, client):
+def test_repeat_within_minute_shows_code_screen(db, client):
     request_code(client, f"rl@{DOMAIN}")
     with patch.object(aa, "send_mail") as mail:
         r = client.post("/me/login", data={"email": f"rl@{DOMAIN}"})
-    assert "Слишком много попыток" in r.text
+    assert "Код уже отправлен" in r.text and "Слишком много" not in r.text
+    assert re.search(r'data-wait="([5-6]\d)"', r.text)
+    mail.assert_not_called()
+
+
+def test_hour_limit_message_with_countdown(db, client):
+    conn, cur = db
+    for _ in range(aa.EMAIL_PER_HOUR):
+        cur.execute("INSERT INTO athlete_login_codes (email, code_hash, link_hash, ip, expires_at, created_at) "
+                    "VALUES (%s, REPEAT('0', 64), SHA2(RAND(), 256), '203.0.113.200', NOW(), "
+                    "NOW() - INTERVAL 10 MINUTE)", (f"hr@{DOMAIN}",))
+    conn.commit()
+    with patch.object(aa, "send_mail") as mail:
+        r = client.post("/me/login", data={"email": f"hr@{DOMAIN}"})
+    assert "Слишком много попыток. Попробуйте через 50 мин." in r.text
+    assert re.search(r'data-wait="(29\d\d|30\d\d)"', r.text)
     mail.assert_not_called()
 
 

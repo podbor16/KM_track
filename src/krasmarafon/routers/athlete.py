@@ -19,7 +19,7 @@ router = APIRouter()
 _EMAIL_RE = re.compile(r"[^@\s,;<>()\"']+@[^@\s,;<>()\"']+\.[^@\s,;<>()\"']+")
 ERR_CODE = "Код неверный или устарел"
 ERR_LINK = "Ссылка устарела — запросите новый код"
-ERR_LIMIT = "Слишком много попыток, попробуйте позже"
+ERR_LIMIT = "Слишком много попыток. Попробуйте через {minutes} мин."
 ERR_MAIL = "Не удалось отправить код, попробуйте через минуту"
 
 
@@ -71,8 +71,12 @@ async def login_send_code(request: Request, email: str = Form(...), shared: str 
         return _login_page(request, "email", error="Проверьте почту", email=email, shared=bool(shared))
     try:
         await run_in_threadpool(aa.request_code, email, _client_ip(request))
-    except aa.TooManyRequests:
-        return _login_page(request, "email", error=ERR_LIMIT, email=email, shared=bool(shared))
+    except aa.TooManyRequests as e:
+        if e.recent:  # повторная отправка формы: прежний код ещё действует
+            return _login_page(request, "code", email=email, shared=bool(shared), resend_in=e.retry_after,
+                               already_sent=True)
+        return _login_page(request, "email", error=ERR_LIMIT.format(minutes=-(-e.retry_after // 60)),
+                           email=email, shared=bool(shared), retry_in=e.retry_after)
     except Exception:
         logger.exception("Письмо с кодом входа не отправлено")
         return _login_page(request, "email", error=ERR_MAIL, email=email, shared=bool(shared))

@@ -112,9 +112,10 @@ def test_link_shows_email_then_consumed_once(db):
 
 def test_limit_one_per_minute_per_email(db):
     send(f"m@{DOMAIN}")
-    with patch.object(aa, "send_mail") as mail, pytest.raises(aa.TooManyRequests):
+    with patch.object(aa, "send_mail") as mail, pytest.raises(aa.TooManyRequests) as exc:
         aa.request_code(f"m@{DOMAIN}", "203.0.113.2")
     mail.assert_not_called()
+    assert exc.value.recent and 50 <= exc.value.retry_after <= 60
 
 
 def test_limit_five_per_hour_per_email(db):
@@ -124,15 +125,18 @@ def test_limit_five_per_hour_per_email(db):
         cur.execute("UPDATE athlete_login_codes SET created_at = NOW() - INTERVAL 2 MINUTE WHERE email = %s",
                     (f"hr@{DOMAIN}",))
         conn.commit()
-    with pytest.raises(aa.TooManyRequests):
+    with pytest.raises(aa.TooManyRequests) as exc:
         aa.request_code(f"hr@{DOMAIN}", "203.0.113.99")
+    # самый старый код в окне — 2 минуты назад → до снятия лимита ~58 минут
+    assert not exc.value.recent and 57 * 60 <= exc.value.retry_after <= 58 * 60
 
 
 def test_limit_ten_per_hour_per_ip(db):
     for i in range(aa.IP_PER_HOUR):
         send(f"ip{i}@{DOMAIN}", ip="203.0.113.50")
-    with pytest.raises(aa.TooManyRequests):
+    with pytest.raises(aa.TooManyRequests) as exc:
         aa.request_code(f"ipx@{DOMAIN}", "203.0.113.50")
+    assert not exc.value.recent and exc.value.retry_after > 59 * 60
 
 
 def test_late_wrong_attempt_keeps_used_at(db):
