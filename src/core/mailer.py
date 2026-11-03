@@ -11,10 +11,16 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
+def mask_email(email: str) -> str:
+    """petr@mail.ru -> p***@mail.ru"""
+    local, at, domain = (email or "").partition("@")
+    return f"{local[:1]}***{at}{domain}"
+
+
 def send_mail(to: str, subject: str, text: str, html: str) -> None:
     """Блокирующая отправка; ошибки поставщика пробрасываются вызывающему."""
     if settings.MAIL_BACKEND != "smtp":
-        logger.info("MAIL (log) to=%s subject=%s\n%s", to, subject, text)
+        logger.info("MAIL (log) to=%s subject=%s\n%s", mask_email(to), subject, text)
         return
     msg = EmailMessage()
     msg["From"] = settings.MAIL_FROM

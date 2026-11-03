@@ -119,6 +119,22 @@ def test_lead_with_result_is_one_row():
     assert len(items) == 1 and items[0]["time"] == "1:45:00"
 
 
+def test_lead_without_number_hidden_by_result_of_same_event():
+    rows = [res(1, event_id=77, start_number=5, time=td(1, 45))]
+    leads = [lead(1, event_id=77, start_number=None, date=dt.date(2025, 7, 12), year=2025),
+             lead(2, event_id=78, start_number=None, date=dt.date(2025, 9, 1), year=2025)]
+    items = [i for y in build(rows, leads)["years"] for i in y["items"]]
+    assert len(items) == 2
+    assert [i["time"] for i in items if i.get("time")] == ["1:45:00"]
+
+
+def test_result_of_one_card_does_not_hide_lead_of_another_card_in_same_event():
+    rows = [res(1, event_id=77, start_number=5, time=td(1, 45))]
+    leads = [lead(1, event_id=77, start_number=None, date=dt.date(2025, 7, 12), year=2025) | {"client_id": 2}]
+    items = [i for y in build(rows, leads)["years"] for i in y["items"]]
+    assert len(items) == 2
+
+
 def test_upcoming_lead_is_ticket():
     h = build(leads=[lead(1, date=dt.date(2026, 12, 6)), lead(2, date=None, year=2026)])
     items = h["years"][0]["items"]

@@ -3,7 +3,9 @@
 
 Привязка действует, пока карточка существует и её ДР совпадает с подтверждённой: проверка — лениво,
 в claimed_cards(). Заявление/снятие пишутся в журнал dq_actions. Пул — autocommit: атомарность
-нескольких запросов — через start_transaction(); гонку двух аккаунтов решает UNIQUE (client_id)."""
+нескольких запросов — через start_transaction(). claim() сериализует запросы по карточке блокировкой
+строки clients (FOR UPDATE); UNIQUE (client_id) — страховка. Письма claim() не шлёт: роутер ставит
+notify_claimed() в BackgroundTasks."""
 
 import html
 import json
@@ -11,9 +13,10 @@ import logging
 from datetime import date
 from enum import Enum
 
+from mysql.connector import errorcode
 from mysql.connector.errors import IntegrityError
 
-from src.core.mailer import send_mail
+from src.core.mailer import mask_email, send_mail
 from src.krasmarafon.services.athlete_auth import _conn, normalize_email
 
 logger = logging.getLogger(__name__)
@@ -38,25 +41,30 @@ def _log(cur, action: str, client_id: int, details: dict, user: str) -> None:
                 (action, f"client:{client_id}", json.dumps(details, ensure_ascii=False), user))
 
 
-def _unclaim_row(conn, claim_id: int, email: str, client_id: int, reason: str, user: str) -> bool:
-    """Удаляет привязку и пишет журнал одной транзакцией. False — привязку уже сняли (параллельный запрос)."""
+def _unclaim_row(conn, claim_id: int, email: str, client_id: int, reason: str, user: str,
+                 in_tx: bool = False) -> bool:
+    """Удаляет привязку и пишет журнал одной транзакцией (in_tx — внутри уже открытой транзакции
+    вызывающего, commit/rollback за ним). False — привязку уже сняли (параллельный запрос)."""
     cur = conn.cursor()
-    conn.start_transaction()
+    if not in_tx:
+        conn.start_transaction()
     try:
         cur.execute("DELETE FROM athlete_claims WHERE id = %s", (claim_id,))
         removed = cur.rowcount == 1
         if removed:
             _log(cur, "athlete_unclaim", client_id, {"email": email, "reason": reason}, user)
-        conn.commit()
+        if not in_tx:
+            conn.commit()
         return removed
     except Exception:
-        conn.rollback()
+        if not in_tx:
+            conn.rollback()
         raise
     finally:
         cur.close()
 
 
-def _sweep(conn, where: str, params: tuple) -> tuple[list[int], list[int]]:
+def _sweep(conn, where: str, params: tuple, in_tx: bool = False) -> tuple[list[int], list[int]]:
     """Проверяет привязки по условию `where` (по алиасу ac): недействительные снимает.
     -> (client_id действующих, client_id снятых) в порядке заявления."""
     cur = conn.cursor(dictionary=True)
@@ -74,7 +82,7 @@ def _sweep(conn, where: str, params: tuple) -> tuple[list[int], list[int]]:
         else:
             valid.append(r["client_id"])
             continue
-        if _unclaim_row(conn, r["id"], r["email"], r["client_id"], reason, "system"):
+        if _unclaim_row(conn, r["id"], r["email"], r["client_id"], reason, "system", in_tx):
             dropped.append(r["client_id"])
     return valid, dropped
 
@@ -92,63 +100,68 @@ def claimed_cards(email: str) -> tuple[list[int], list[int]]:
 
 def claim(email: str, client_id: int, birthday: date) -> ClaimResult:
     """Заявить карточку: проверки — спецификация «Заявление карточки», п. 1–6. Карточки нет среди заявок
-    почты — ValueError. Попытка пишется только при MISMATCH. При OK — журнал и уведомление адресатам
-    карточки (ошибки отправки не мешают)."""
+    почты — ValueError. Всё — в одной транзакции под блокировкой строки карточки (параллельные запросы по
+    ней идут по очереди, лимит попыток не обойти); устаревшая привязка снимается в ней же. Попытка пишется
+    только при MISMATCH. Писем не шлёт: при OK вызывающий ставит notify_claimed() в фон."""
     email = normalize_email(email)
     conn = _conn()
     try:
-        result, card = _claim(conn, email, client_id, birthday)
+        conn.start_transaction()
+        try:
+            result = _claim(conn, email, client_id, birthday)
+            conn.commit()
+            return result
+        except BaseException:
+            conn.rollback()
+            raise
     finally:
         conn.close()
-    if result == ClaimResult.OK:
-        _notify(card, client_id, email)
-    return result
 
 
-def _claim(conn, email: str, client_id: int, birthday: date) -> tuple[ClaimResult, dict]:
+def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("""SELECT c.surname, c.name, c.birthday FROM clients c WHERE c.id = %s AND EXISTS (
+        cur.execute("SELECT id FROM clients WHERE id = %s FOR UPDATE", (client_id,))
+        if cur.fetchone() is None:
+            raise ValueError(f"карточки {client_id} нет")
+        cur.execute("""SELECT c.birthday FROM clients c WHERE c.id = %s AND EXISTS (
                          SELECT 1 FROM leads WHERE client_id = c.id AND (LOWER(email) = %s OR LOWER(ma_email) = %s))""",
                     (client_id, email, email))
         card = cur.fetchone()
         if card is None:
             raise ValueError(f"карточки {client_id} нет среди заявок почты аккаунта")
 
-        _sweep(conn, "ac.client_id = %s", (client_id,))   # устаревшая чужая привязка не должна мешать
+        _sweep(conn, "ac.client_id = %s", (client_id,), in_tx=True)   # устаревшая чужая привязка не должна мешать
         cur.execute("SELECT email FROM athlete_claims WHERE client_id = %s", (client_id,))
         owner = cur.fetchone()
         if owner is not None:
-            return (ClaimResult.ALREADY_MINE if owner["email"] == email else ClaimResult.TAKEN), card
+            return ClaimResult.ALREADY_MINE if owner["email"] == email else ClaimResult.TAKEN
 
         if card["birthday"] in NO_BIRTHDAY:
-            return ClaimResult.NO_BIRTHDAY, card
+            return ClaimResult.NO_BIRTHDAY
 
         cur.execute("""SELECT COUNT(*) AS n FROM athlete_claim_attempts
                        WHERE email = %s AND client_id = %s AND created_at > NOW() - INTERVAL 1 DAY""",
                     (email, client_id))
         if cur.fetchone()["n"] >= CLAIM_ATTEMPTS_PER_DAY:
-            return ClaimResult.LIMIT, card
+            return ClaimResult.LIMIT
 
         if card["birthday"] != birthday:
+            cur.execute("DELETE FROM athlete_claim_attempts WHERE created_at < NOW() - INTERVAL 1 DAY")
             cur.execute("INSERT INTO athlete_claim_attempts (email, client_id) VALUES (%s, %s)", (email, client_id))
-            return ClaimResult.MISMATCH, card
+            return ClaimResult.MISMATCH
 
-        conn.start_transaction()
         try:
             cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)",
                         (email, client_id, birthday))
-            _log(cur, "athlete_claim", client_id, {"email": email}, email)
-            conn.commit()
-        except IntegrityError:        # параллельно карточку заявил другой аккаунт (или эта же почта из второй вкладки)
-            conn.rollback()
+        except IntegrityError as e:   # страховка UNIQUE; под блокировкой карточки сюда попадать не должны
+            if e.errno != errorcode.ER_DUP_ENTRY:
+                raise
             cur.execute("SELECT email FROM athlete_claims WHERE client_id = %s", (client_id,))
             owner = cur.fetchone()
-            return (ClaimResult.ALREADY_MINE if owner and owner["email"] == email else ClaimResult.TAKEN), card
-        except Exception:
-            conn.rollback()
-            raise
-        return ClaimResult.OK, card
+            return ClaimResult.ALREADY_MINE if owner and owner["email"] == email else ClaimResult.TAKEN
+        _log(cur, "athlete_claim", client_id, {"email": email}, email)
+        return ClaimResult.OK
     finally:
         cur.close()
 
@@ -183,24 +196,31 @@ def notify_recipients(client_id: int, account_email: str) -> list[str]:
     return sorted(found - {account_email})[:NOTIFY_MAX]
 
 
-def mask_email(email: str) -> str:
-    """petr@mail.ru -> p***@mail.ru"""
-    local, at, domain = (email or "").partition("@")
-    return f"{local[:1]}***{at}{domain}"
-
-
-def _notify(card: dict, client_id: int, account_email: str) -> None:
+def notify_claimed(client_id: int, account_email: str) -> None:
+    """Письмо остальным адресам карточки о привязке. Отправка синхронная — вызывать из BackgroundTasks.
+    Ничего не бросает: ошибки БД и SMTP только в лог."""
+    account_email = normalize_email(account_email)
+    try:
+        conn = _conn()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT surname, name FROM clients WHERE id = %s", (client_id,))
+            card = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
+        if card is None:
+            return
+        recipients = notify_recipients(client_id, account_email)
+    except Exception:
+        logger.exception("Уведомление о привязке карточки %s: не удалось получить адресатов", client_id)
+        return
     fio = f"{card['surname']} {card['name']}".strip()
     subject = "Вашу историю забегов привязали к личному кабинету"
     text = (f"Историю забегов {fio} на сайте результатов Красмарафона привязали к почте "
             f"{mask_email(account_email)}. Если это не вы — напишите нам на {SUPPORT_EMAIL}\n")
     body = html.escape(text.strip())
     page = f'<div style="font-family:Arial,sans-serif;font-size:15px;color:#333;max-width:480px"><p>{body}</p></div>'
-    try:
-        recipients = notify_recipients(client_id, account_email)
-    except Exception:
-        logger.exception("Уведомление о привязке карточки %s: не удалось получить адресатов", client_id)
-        return
     for to in recipients:
         try:
             send_mail(to, subject, text, page)

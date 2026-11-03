@@ -7,7 +7,14 @@ from src.core import mailer
 def test_log_backend_writes_letter_to_log(caplog):
     with patch.object(mailer.settings, "MAIL_BACKEND", "log"), caplog.at_level("INFO"):
         mailer.send_mail("a@b.ru", "Тема", "Текст 123", "<b>123</b>")
-    assert "a@b.ru" in caplog.text and "Текст 123" in caplog.text
+    assert "a***@b.ru" in caplog.text and "a@b.ru" not in caplog.text
+    assert "Тема" in caplog.text and "Текст 123" in caplog.text and "<b>" not in caplog.text
+
+
+def test_mask_email():
+    assert mailer.mask_email("petr@mail.ru") == "p***@mail.ru"
+    assert mailer.mask_email("P@x.ru") == "P***@x.ru"
+    assert mailer.mask_email("broken") == "b***"
 
 
 def test_smtp_backend_sends_multipart_letter():

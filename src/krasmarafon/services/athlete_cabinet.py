@@ -11,17 +11,23 @@ from src.config import settings
 _SQL = """
     SELECT l.id, l.client_id, l.surname, l.name, l.event_id, l.start_number, l.refund,
            l.event_name, l.event_distance, l.event_year, e.event_date,
-           r.race_status, r.time_clear_finish, r.time_gun_finish, r.rank_category, r.rank_category_clean
+           COALESCE(r1.race_status, r2.race_status) AS race_status,
+           COALESCE(r1.time_clear_finish, r2.time_clear_finish) AS time_clear_finish,
+           COALESCE(r1.time_gun_finish, r2.time_gun_finish) AS time_gun_finish,
+           COALESCE(r1.rank_category, r2.rank_category) AS rank_category,
+           COALESCE(r1.rank_category_clean, r2.rank_category_clean) AS rank_category_clean
     FROM leads l
     LEFT JOIN events e ON e.id = l.event_id
-    LEFT JOIN results r ON r.event_id = l.event_id AND r.start_number = l.start_number
+    LEFT JOIN results r1 ON r1.event_id = l.event_id AND r1.start_number = l.start_number
+    LEFT JOIN results r2 ON l.start_number IS NULL AND r2.event_id = l.event_id AND r2.client_id = l.client_id
     WHERE (LOWER(l.email) = %s OR LOWER(l.ma_email) = %s) AND l.is_duplicate = 0
     ORDER BY l.id
 """
 
 
 def fetch_leads(email: str) -> list[dict]:
-    """Заявки почты; при двух результатах с одним номером — одна строка на заявку."""
+    """Заявки почты. Результат — по номеру заявки; у заявки без номера (присваивается позже) — результат
+    той же карточки в том же событии. При нескольких совпадениях — одна строка на заявку."""
     conn = get_pooled_connection()
     try:
         cur = conn.cursor(dictionary=True)

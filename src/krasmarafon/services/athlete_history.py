@@ -119,8 +119,8 @@ def _dynamics(finishes: list[dict]) -> dict:
 
 def build_history(results: list[dict], leads: list[dict], today: dt.date, codes: dict, diploma_ids: set) -> dict:
     """-> {"since", "tiles": {starts, finishes, km, pace}, "records", "dynamics", "years": [{year, items}]}."""
-    done = {(r["event_id"], r["start_number"]) for r in results if r["start_number"] is not None}
-    open_leads = [ld for ld in leads if ld["start_number"] is None or (ld["event_id"], ld["start_number"]) not in done]
+    done = {(r["client_id"], r["event_id"]) for r in results}   # результат той же карточки в том же событии; номер заявки не нужен
+    open_leads = [ld for ld in leads if (ld["client_id"], ld["event_id"]) not in done]
 
     entries = [_result_entry(r, codes, diploma_ids) for r in results] + [_lead_entry(ld, today) for ld in open_leads]
 

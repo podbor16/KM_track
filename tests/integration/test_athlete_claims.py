@@ -1,6 +1,7 @@
 """Привязка карточки к кабинету («Это я») на локальной БД. Тестовые данные — почты *@athlete-test.local,
 событие «Тест кабинет Б1» 2099 года, карточки «Тестклейм …»; фикстура убирает их до и после."""
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import patch
 
@@ -101,13 +102,17 @@ def claim_rows(cur, email=ME):
     return cur.fetchall()
 
 
-def test_claim_ok_writes_row_journal_and_notifies_other_addresses(db, cards, mail):
+def test_claim_ok_writes_row_and_journal_without_sending_mail(db, cards, mail):
     conn, cur = db
     assert ac.claim(ME, cards["c1"], BD1) == ClaimResult.OK
     assert claim_rows(cur) == [{"client_id": cards["c1"], "birthday": BD1}]
     assert ac.claimed_cards(ME) == ([cards["c1"]], [])
     assert journal(cur, "athlete_claim", cards["c1"]) == [({"email": ME}, ME)]
+    assert not mail.called                      # письма — отдельно, в фоне (notify_claimed)
 
+
+def test_notify_claimed_sends_to_other_addresses(db, cards, mail):
+    ac.notify_claimed(cards["c1"], ME)
     assert {c.args[0] for c in mail.call_args_list} == {OTHER, KAB}
     _, subject, text, html = mail.call_args_list[0].args
     assert subject == "Вашу историю забегов привязали к личному кабинету"
@@ -115,10 +120,30 @@ def test_claim_ok_writes_row_journal_and_notifies_other_addresses(db, cards, mai
     assert ME not in text and "Тестклейм Иван" in html
 
 
-def test_mail_failure_does_not_break_claim(db, cards, mail):
+def test_notify_claimed_mail_failure_does_not_raise(db, cards, mail):
     mail.side_effect = RuntimeError("smtp")
-    assert ac.claim(ME, cards["c1"], BD1) == ClaimResult.OK
-    assert ac.claimed_cards(ME) == ([cards["c1"]], [])
+    ac.notify_claimed(cards["c1"], ME)
+    assert mail.call_count == 2                 # сбой первого письма не мешает второму
+    ac.notify_claimed(10 ** 9, ME)              # нет карточки — тихо ничего
+
+
+def test_parallel_wrong_claims_respect_attempt_limit(db, cards, mail):
+    conn, cur = db
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(lambda _: ac.claim(ME, cards["c1"], date(1990, 1, 1)), range(8)))
+    assert sorted(r.value for r in results) == ["limit"] * 3 + ["mismatch"] * 5
+    cur.execute("SELECT COUNT(*) n FROM athlete_claim_attempts WHERE email = %s", (ME,))
+    assert cur.fetchone()["n"] == 5
+
+
+def test_mismatch_cleans_attempts_older_than_a_day(db, cards, mail):
+    conn, cur = db
+    cur.execute("INSERT INTO athlete_claim_attempts (email, client_id, created_at) "
+                "VALUES (%s, %s, NOW() - INTERVAL 2 DAY)", (OTHER, cards["c1"]))
+    conn.commit()
+    assert ac.claim(ME, cards["c1"], date(1990, 1, 1)) == ClaimResult.MISMATCH
+    cur.execute("SELECT email FROM athlete_claim_attempts WHERE email LIKE %s", (f"%@{DOMAIN}",))
+    assert [r["email"] for r in cur.fetchall()] == [ME]
 
 
 def test_wrong_birthday_is_mismatch_and_logs_attempt(db, cards, mail):
@@ -259,8 +284,27 @@ def test_history_rows_cover_all_claimed_cards(db, cards, mail):
     hist = build_history(results, leads, date(2026, 11, 3), {EV: "kt"}, set())
     assert hist["tiles"]["finishes"] == 1
     assert [y["year"] for y in hist["years"]] == [2099]
-    assert len(hist["years"][0]["items"]) == 3          # заявка 9001 слилась с результатом
+    assert len(hist["years"][0]["items"]) == 2          # заявки 9001 и 9003 карточки c1 слились с её результатом
     assert ac.history_rows([]) == ([], [])
+
+
+def test_lead_without_number_is_hidden_by_result_of_same_card_and_event(db, cards, mail):
+    """Заявка без стартового номера не дублирует результат той же карточки в том же событии."""
+    conn, cur = db
+    from src.krasmarafon.services import athlete_cabinet
+
+    add_lead(cur, "Иван", BD1, ME, None)
+    conn.commit()
+    results, leads = ac.history_rows([cards["c1"]])
+    assert len(leads) == 3 and len(results) == 1
+    hist = build_history(results, leads, date(2026, 11, 3), {EV: "kt"}, set())
+    assert len(hist["years"][0]["items"]) == 1
+
+    rows = [r for r in athlete_cabinet.fetch_leads(ME) if r["client_id"] == cards["c1"]]
+    assert len(rows) == 2 and all(r["time_gun_finish"] is not None for r in rows)   # и с номером, и без
+    past = athlete_cabinet.cabinet(ME, date(2100, 1, 1))
+    c1_group = next(g for g in past if g["title"].startswith("Тестклейм Иван"))
+    assert [e["time"] for e in c1_group["past"]] == ["0:25:00", "0:25:00"]
 
 
 def test_history_rows_skip_duplicate_leads(db, cards, mail):
@@ -309,12 +353,6 @@ def test_notify_recipients_capped(db, cards):
     conn.commit()
     got = ac.notify_recipients(cards["c1"], ME)
     assert len(got) == ac.NOTIFY_MAX and got == sorted(got)
-
-
-def test_mask_email():
-    assert ac.mask_email("petr@mail.ru") == "p***@mail.ru"
-    assert ac.mask_email("P@x.ru") == "P***@x.ru"
-    assert ac.mask_email("broken") == "b***"
 
 
 # ---------------------------------------------------------------- склейка карточек («Качество данных»)
