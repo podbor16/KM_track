@@ -58,7 +58,7 @@ def test_pick_preselect():
     ids = pick_preselect(rows)
     assert len(ids) == 5 and len(set(ids)) == 5
     byid = {i + 1: r for i, r in enumerate(rows)}
-    assert [byid[i]['rank_absolute'] for i in ids] == [1, 2, 6, 11, 16]
+    assert [byid[i]['rank_absolute'] for i in ids] == [1, 6, 11, 16, 20]
     assert all(byid[i]['race_status'] == 'Finished' for i in ids)
     assert pick_preselect(rows[:3]) == [3]
     assert pick_preselect([]) == []

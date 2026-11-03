@@ -21,3 +21,6 @@
 
 html body { padding-top: 0 !important; padding-bottom: 150px; }
 @media (max-width: 600px) { html body { padding-bottom: 80px; } }
+
+/* Демо: плашка прод-трекера «Результаты предварительные…» занимает треть экрана телефона */
+.km-notice-preliminary { display: none !important; }

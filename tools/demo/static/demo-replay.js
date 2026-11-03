@@ -171,10 +171,30 @@
             return String(url).includes('/api/sse/tracker') ? new FakeEventSource(url) : new RealES(url, opts);
         };
 
+        // Трекер вписывает трассу (fitBounds) сразу после GPX, а контейнер карты (особенно на
+        // телефоне) получает окончательный размер позже → видна часть трассы и серая подложка.
+        // Пока зритель не трогал карту — пересчитываем размер и вписываем трассу заново.
+        function fitRouteWhileUntouched() {
+            let touched = false;
+            const fit = () => {
+                if (touched || typeof map === 'undefined' || !map || !routeLayer) return;
+                map.invalidateSize();
+                centerMap();
+            };
+            whenBody().then(() => {
+                const el = document.getElementById('map');
+                if (el) ['pointerdown', 'wheel', 'touchstart'].forEach(e =>
+                    el.addEventListener(e, () => { touched = true; }, { once: true, passive: true }));
+            });
+            [300, 1000, 2500, 5000].forEach(ms => setTimeout(fit, ms));
+            window.addEventListener('load', fit);
+        }
+
         return {
             tNow: tRace,
             ready() {
                 preselect(rec.meta);
+                fitRouteWhileUntouched();
                 const t0 = tRace();
                 resetTo(t0);
                 st.lastStep = Math.floor(t0 / rec.meta.step_s);

@@ -33,13 +33,14 @@ def _load_finish_ms(event_id: int) -> dict:
 
 
 def pick_preselect(rows: list[dict]) -> list[int]:
-    """id записи (индекс строки + 1) пяти «интересных» финишировавших: 1-е, 2-е место, 25/50/75% по месту."""
+    """id записи (индекс строки + 1) пяти финишировавших с разным темпом — растянуты по трассе:
+    лидер, 25/50/75% по месту и последний финишёр."""
     fin = sorted((r['rank_absolute'], i + 1) for i, r in enumerate(rows)
                  if r.get('race_status') == 'Finished' and r.get('rank_absolute') is not None)
     n = len(fin)
     out: list[int] = []
-    for idx in (0, 1, int(n * 0.25), int(n * 0.5), int(n * 0.75)):
-        if idx < n and fin[idx][1] not in out:
+    for idx in (0, int(n * 0.25), int(n * 0.5), int(n * 0.75), n - 1):
+        if 0 <= idx < n and fin[idx][1] not in out:
             out.append(fin[idx][1])
     return out
 
