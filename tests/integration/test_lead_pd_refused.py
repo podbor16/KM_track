@@ -4,11 +4,14 @@ import json
 from unittest.mock import patch
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app import app
 from src.analytics import db_results
 from src.analytics.db_athletes import get_athlete_by_client, search_clients_optimized
 from src.analytics.db_pool import get_pooled_connection
 from src.analytics.db_results import set_lead_pd_refused
+from src.core.auth import api_require_auth
 from src.config.event_loader import EventConfig, DistanceConfig, DiplomaConfig, DiplomaBoxConfig
 from src.krasmarafon.services import results_service
 from src.krasmarafon.services.diploma_service import get_diploma_data
@@ -87,6 +90,14 @@ def test_set_and_clear_pd_refused_with_journal(db):
     assert [r["action"] for r in log] == ["pd_refused", "pd_refused"]
     assert [json.loads(r["details"])["pd_refused"] for r in log] == [1, 0]
     assert {r["done_by"] for r in log} == {"tester"}
+
+
+def test_endpoint_requires_auth():
+    app.dependency_overrides.pop(api_require_auth, None)
+    with patch("src.analytics.db_results.set_lead_pd_refused") as setter:
+        r = TestClient(app).post("/api/admin/leads/1/pd-refused")
+    assert r.status_code == 401
+    setter.assert_not_called()
 
 
 def test_unknown_lead_returns_false(db):
