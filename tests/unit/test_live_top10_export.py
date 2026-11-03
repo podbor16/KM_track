@@ -211,3 +211,14 @@ def test_generate_top10_json_label_format_matches_broadcast_director_request(tmp
     assert captured_labels["kt1"] == "Отметка 5 км"
     assert captured_labels["kt3"] == "Отметка 10.55 км"
     assert captured_labels["finish"] == "Финиш"
+
+
+def test_build_checkpoint_masks_refused():
+    cur = MagicMock()
+    cur.fetchall.return_value = [{"surname": "Иванов", "name": "Иван", "time_clear": timedelta(minutes=30),
+                                  "pd_refused": 1}]
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    cp = _build_checkpoint(conn, 1, code="finish", label="Финиш", time_col="time_clear_finish")
+    assert cp["top3_male"][0]["full_name"] == "Спортсмен"
+    assert "pd_refused" in cur.execute.call_args[0][0]

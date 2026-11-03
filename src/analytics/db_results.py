@@ -20,7 +20,7 @@ from .db_pool import (
 )
 from src.common.cache import prune
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious
-from src.krasmarafon.services.public_pd import mask_runner
+from src.krasmarafon.services.public_pd import mask_runner, PD_REFUSED_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,6 @@ logger = logging.getLogger(__name__)
 _results_cache: dict = {}
 _results_cache_ts: dict = {}
 RESULTS_CACHE_TTL = 5  # секунд — короткий TTL для live-данных КТ
-
-# Отказ от публикации ПД (leads.pd_refused) для строки results r — по заявке того же события и номера
-PD_REFUSED_SQL = ("EXISTS (SELECT 1 FROM leads pl WHERE pl.event_id = r.event_id "
-                  "AND pl.start_number = r.start_number AND pl.pd_refused = 1)")
 
 _segments_cache: dict[int, list] = {}
 _segments_cache_ts: dict[int, float] = {}

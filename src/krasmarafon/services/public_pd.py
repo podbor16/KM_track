@@ -3,6 +3,10 @@
 остаются. Вызывается в каждой публичной выдаче до кешей — настоящие ФИ не попадают в ответ."""
 
 PLACEHOLDER = "Спортсмен"
+
+# Отказ от публикации ПД (leads.pd_refused) для строки results с алиасом r — по заявке того же события и номера
+PD_REFUSED_SQL = ("EXISTS (SELECT 1 FROM leads pl WHERE pl.event_id = r.event_id "
+                  "AND pl.start_number = r.start_number AND pl.pd_refused = 1)")
 _FULL_NAME_KEYS = ("full_name", "fullName")
 _HIDDEN_KEYS = ("birthday", "birth_year", "client_id")
 

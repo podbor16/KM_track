@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.krasmarafon.services.public_pd import PD_REFUSED_SQL, mask_runner
+
 _TOP_N = 3
 
 
@@ -59,10 +61,10 @@ def _query_top3(connection, event_id: int, time_col: str, sex: str) -> List[Dict
     cur = connection.cursor(dictionary=True)
     try:
         cur.execute(
-            f"SELECT surname, name, {time_col} AS time_clear "
-            f"FROM results "
-            f"WHERE event_id = %s AND sex = %s AND {time_col} IS NOT NULL "
-            f"ORDER BY {time_col} ASC "
+            f"SELECT r.surname, r.name, r.{time_col} AS time_clear, {PD_REFUSED_SQL} AS pd_refused "
+            f"FROM results r "
+            f"WHERE r.event_id = %s AND r.sex = %s AND r.{time_col} IS NOT NULL "
+            f"ORDER BY r.{time_col} ASC "
             f"LIMIT {_TOP_N}",
             (event_id, sex),
         )
@@ -76,10 +78,10 @@ def _build_checkpoint(connection, event_id: int, code: str, label: str, time_col
     def build_list(sex: str) -> List[Dict[str, Any]]:
         rows = _query_top3(connection, event_id, time_col, sex)
         return [
-            {
+            mask_runner({
                 "full_name": f"{rec['surname']} {rec['name']}".strip(),
                 "time": _seconds_to_time_str(_td_to_seconds(rec["time_clear"])),
-            }
+            }, rec.get("pd_refused"))
             for rec in rows
         ]
 
