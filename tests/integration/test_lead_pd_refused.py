@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from src.analytics import db_results
-from src.analytics.db_athletes import get_athlete_by_client
+from src.analytics.db_athletes import get_athlete_by_client, search_clients_optimized
 from src.analytics.db_pool import get_pooled_connection
 from src.analytics.db_results import set_lead_pd_refused
 from src.config.event_loader import EventConfig, DistanceConfig, DiplomaConfig, DiplomaBoxConfig
@@ -155,6 +155,7 @@ def test_refused_hidden_everywhere(db, client):
         assert get_diploma_data(ev, "9901")["surname"] == "Тестпд"
         assert "Тестпд" in client.get(f"/diploma/{ev}/9901").text
         assert any(r["event_id"] == ev for r in get_athlete_by_client(card)[1])
+        assert any(c["client_id"] == card for c in search_clients_optimized("Тестпд"))
 
         set_lead_pd_refused(lead, True, "tester")
 
@@ -176,4 +177,6 @@ def test_refused_hidden_everywhere(db, client):
     reset_caches()
     assert db_results.get_race_results_by_event_id(ev)[0]["pd_refused"] == 1
     assert all(r["event_id"] != ev for r in get_athlete_by_client(card)[1])
+    # Поиск не раскрывает участие: карточка без публичных результатов не находится
+    assert all(c["client_id"] != card for c in search_clients_optimized("Тестпд"))
     reset_caches()

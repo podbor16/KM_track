@@ -28,11 +28,11 @@ def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[st
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
-            """SELECT c.id AS client_id, c.surname, c.name, c.birthday,
-                      (SELECT COUNT(*) FROM results r WHERE r.client_id = c.id) AS events_count
+            f"""SELECT c.id AS client_id, c.surname, c.name, c.birthday,
+                      (SELECT COUNT(*) FROM results r WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL}) AS events_count
                FROM clients c
                WHERE c.id <> 0 AND (c.surname LIKE %s OR c.name LIKE %s)
-                 AND EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id)
+                 AND EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL})
                ORDER BY c.surname, c.name, c.birthday
                LIMIT %s""",
             (term, term, int(limit)),
