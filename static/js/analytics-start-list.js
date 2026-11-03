@@ -710,7 +710,7 @@ function renderStartList(runners) {
         let rowHTML = `
             <td class="km-td km-td--c ${rowBg}">${index + 1}</td>
             <td class="km-td km-td--c ${rowBg}">${KMUtils.bibLabel(runner.start_number, runner.is_elite, runner.is_pacer)}</td>
-            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div>${hasParticipantDiploma(runner)
+            <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${lastName}</div>${runner.pd_refused ? '<span class="km-pd-badge" title="Не согласен на публикацию ПД — на сайте «Спортсмен»">Без ПД</span>' : ''}${hasParticipantDiploma(runner)
                 ? `<a href="/diploma/lead/${runner.lead_id}" class="km-btn-profile km-btn-profile--under-name" target="_blank" onclick="event.stopPropagation()">🏅 Диплом</a>`
                 : ''}</td>
             <td class="km-td km-td--l ${rowBg}"><div class="km-name-main">${firstName}</div></td>

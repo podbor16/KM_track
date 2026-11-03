@@ -376,6 +376,7 @@ async def get_registered_runners(
                 event_id=r.get('event_id'),
                 is_elite=r.get('is_elite'),
                 is_pacer=r.get('is_pacer'),
+                pd_refused=r.get('pd_refused'),
             ))
 
         return RegisteredRunnersListResponse(total=len(runners), runners=runners)

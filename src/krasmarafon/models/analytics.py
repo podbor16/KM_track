@@ -25,6 +25,7 @@ class RegisteredRunnerInfo(BaseModel):
     event_id: Optional[int] = Field(None, description="id события-дистанции (events.id)")
     is_elite: Optional[int] = Field(None, description="«Элита» — на сайте вместо номера")
     is_pacer: Optional[int] = Field(None, description="«Пейсер» — на сайте вместо номера")
+    pd_refused: Optional[int] = Field(None, description="Не согласен на публикацию ПД — на публичных страницах «Спортсмен»")
 
 
 class RegisteredRunnersListResponse(BaseModel):
