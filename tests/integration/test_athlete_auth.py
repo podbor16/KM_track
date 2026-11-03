@@ -132,3 +132,46 @@ def test_limit_ten_per_hour_per_ip(db):
         send(f"ip{i}@{DOMAIN}", ip="203.0.113.50")
     with pytest.raises(aa.TooManyRequests):
         aa.request_code(f"ipx@{DOMAIN}", "203.0.113.50")
+
+
+def test_session_roundtrip_and_logout(db):
+    conn, cur = db
+    token = aa.create_session(f"s@{DOMAIN}", shared=False, user_agent="pytest")
+    assert aa.session_email(token) == f"s@{DOMAIN}"
+    cur.execute("SELECT token_hash, TIMESTAMPDIFF(DAY, NOW(), expires_at) AS d FROM athlete_sessions "
+                "WHERE email = %s", (f"s@{DOMAIN}",))
+    row = cur.fetchone()
+    assert row["token_hash"] != token and row["d"] >= aa.SESSION_DAYS - 1
+    aa.delete_session(token)
+    assert aa.session_email(token) is None
+
+
+def test_shared_session_lives_one_day(db):
+    conn, cur = db
+    aa.create_session(f"sh@{DOMAIN}", shared=True, user_agent=None)
+    cur.execute("SELECT TIMESTAMPDIFF(HOUR, NOW(), expires_at) AS h FROM athlete_sessions WHERE email = %s",
+                (f"sh@{DOMAIN}",))
+    assert cur.fetchone()["h"] <= aa.SHARED_SESSION_HOURS
+
+
+def test_expired_session_rejected(db):
+    conn, cur = db
+    token = aa.create_session(f"x@{DOMAIN}", shared=False, user_agent=None)
+    cur.execute("UPDATE athlete_sessions SET expires_at = NOW() - INTERVAL 1 SECOND WHERE email = %s",
+                (f"x@{DOMAIN}",))
+    conn.commit()
+    assert aa.session_email(token) is None
+
+
+def test_logout_everywhere(db):
+    a = aa.create_session(f"all@{DOMAIN}", shared=False, user_agent=None)
+    b = aa.create_session(f"all@{DOMAIN}", shared=True, user_agent=None)
+    other = aa.create_session(f"other@{DOMAIN}", shared=False, user_agent=None)
+    aa.delete_all_sessions(f"all@{DOMAIN}")
+    assert aa.session_email(a) is None and aa.session_email(b) is None
+    assert aa.session_email(other) == f"other@{DOMAIN}"
+
+
+def test_garbage_session_token(db):
+    assert aa.session_email("") is None
+    assert aa.session_email("nope") is None

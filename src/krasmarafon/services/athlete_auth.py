@@ -172,3 +172,69 @@ def consume_link(token: str) -> Optional[str]:
         return email
     finally:
         conn.close()
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256((token or "").encode()).hexdigest()
+
+
+def create_session(email: str, shared: bool, user_agent: Optional[str]) -> str:
+    """Новая сессия; возвращает токен для cookie (в БД — его SHA-256).
+    shared («Чужой компьютер») — сутки, иначе SESSION_DAYS."""
+    token = secrets.token_urlsafe(32)
+    ttl = f"INTERVAL {SHARED_SESSION_HOURS} HOUR" if shared else f"INTERVAL {SESSION_DAYS} DAY"
+    conn = get_pooled_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM athlete_sessions WHERE expires_at < NOW()")
+        cur.execute(
+            f"INSERT INTO athlete_sessions (email, token_hash, expires_at, user_agent) VALUES (%s, %s, NOW() + {ttl}, %s)",
+            (normalize_email(email), _token_hash(token), (user_agent or "")[:255] or None),
+        )
+        conn.commit()
+        cur.close()
+        return token
+    finally:
+        conn.close()
+
+
+def session_email(token: Optional[str]) -> Optional[str]:
+    """Почта действующей сессии или None."""
+    if not token:
+        return None
+    h = _token_hash(token)
+    conn = get_pooled_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT email FROM athlete_sessions WHERE token_hash = %s AND expires_at > NOW()", (h,))
+        row = cur.fetchone()
+        if row:
+            cur.execute("UPDATE athlete_sessions SET last_seen_at = NOW() WHERE token_hash = %s", (h,))
+            conn.commit()
+        cur.close()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def delete_session(token: Optional[str]) -> None:
+    conn = get_pooled_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM athlete_sessions WHERE token_hash = %s", (_token_hash(token),))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def delete_all_sessions(email: str) -> None:
+    """«Выйти на всех устройствах»."""
+    conn = get_pooled_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM athlete_sessions WHERE email = %s", (normalize_email(email),))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
