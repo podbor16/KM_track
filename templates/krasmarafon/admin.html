@@ -1143,8 +1143,7 @@
         actions.appendChild(lead.pd_refused
             ? _leadActionBtn('Снять «без ПД»', `/api/admin/leads/${lead.id}/pd-refused?refused=false`)
             : _leadActionBtn('Не согласен на ПД', `/api/admin/leads/${lead.id}/pd-refused?refused=true`,
-                             `Отметить: ${lead.surname} ${lead.name} не согласен на публикацию ПД?
-На сайте вместо ФИ будет «Спортсмен».`));
+                             `Отметить: ${lead.surname} ${lead.name} не согласен на публикацию ПД?\nНа сайте вместо ФИ будет «Спортсмен».`));
         actions.appendChild(_leadActionBtn('Удалить', `/api/admin/leads/${lead.id}`,
             `Удалить заявку ${lead.surname} ${lead.name}, ${lead.event_distance || ''}, от ${_fmtCreated(lead.created_at)}?\nКопия сохранится в журнале действий.`, 'DELETE'));
         return tr;
