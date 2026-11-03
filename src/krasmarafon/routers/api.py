@@ -38,7 +38,7 @@ from src.krasmarafon.models import (
     RunnerSelectionRequest, SelectedRunnersResponse,
     RaceConfig,
     CurrentEventResponse, DistanceInfo, CheckpointInfo, EventsListResponse,
-    Analytics, AnalyticsResponse, RegisteredRunnersListResponse, RaceResultsResponse,
+    RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
 from src.krasmarafon.services import get_formatted_analytics
@@ -329,29 +329,6 @@ async def get_runner_latest_segment(
 # АНАЛИТИКА (ANALYTICS)
 # ============================================================================
 
-@router.get("/api/analytics", response_model=AnalyticsResponse)
-async def get_analytics(event: str = Query(settings.CURRENT_EVENT)) -> AnalyticsResponse:
-    """Полная аналитика гонки (статы, топ финишёров)."""
-    try:
-        data = get_formatted_analytics()
-        analytics = Analytics(
-            event=event,
-            timestamp=datetime.now().isoformat(),
-            general_stats=data['general_stats'],
-            gender_stats={
-                'male_count': data['gender_stats']['male_count'],
-                'female_count': data['gender_stats']['female_count'],
-                'male_avg_time': data['gender_stats'].get('male_avg_time', 'Н/Д'),
-                'female_avg_time': data['gender_stats'].get('female_avg_time', 'Н/Д'),
-            },
-            top_finishers=data['top_finishers'],
-        )
-        return AnalyticsResponse(success=True, data=analytics)
-    except Exception as e:
-        logger.error(f"get_analytics error: {e}")
-        return AnalyticsResponse(success=False, message=str(e))
-
-
 @router.post("/api/analytics/refresh")
 async def refresh_analytics(event: str = Query(settings.CURRENT_EVENT)):
     """Принудительный пересчёт аналитики."""
@@ -606,7 +583,6 @@ async def get_race_stats(event_name: str = Query(None)):
                 if t and isinstance(t, (int, float)):
                     ts = t / 1000
                     best_runner = {
-                        'full_name': r.get('fullName', ''),
                         'time': f"{int(ts//60)}:{int(ts%60):02d}",
                         'pace': r.get('intervalaverages_:::full-1:::'),
                     }
