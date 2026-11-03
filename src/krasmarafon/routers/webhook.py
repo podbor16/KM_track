@@ -319,7 +319,7 @@ def _insert_lead(data: dict):
             """
             INSERT INTO leads (
                 surname, name, sex, city, club, birthday,
-                email, phone,
+                email, phone, ma_id, ma_email,
                 event_name, event_distance, event_year,
                 products, payment_system, transaction_id, order_id,
                 promocode, discount, amount,
@@ -327,7 +327,7 @@ def _insert_lead(data: dict):
                 is_duplicate, status, is_new, is_new_event, created_at
             ) VALUES (
                 %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
-                %(email)s, %(phone)s,
+                %(email)s, %(phone)s, %(ma_id)s, %(ma_email)s,
                 %(event_name)s, %(event_distance)s, %(event_year)s,
                 %(products)s, %(payment_system)s, %(transaction_id)s, %(order_id)s,
                 %(promocode)s, %(discount)s, %(amount)s,

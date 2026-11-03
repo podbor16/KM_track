@@ -295,6 +295,9 @@ def transform_tilda_payload(body: dict, first_race_date=None, purchased_on=None)
         "birthday": birthday,
         "email": body.get("email", ""),
         "phone": body.get("phone", ""),
+        # кабинет Tilda покупателя — email формы может быть другим (задача «вход спортсмена»)
+        "ma_id": str(body.get("ma_id") or "").strip() or None,
+        "ma_email": str(body.get("ma_email") or "").strip().lower() or None,
         "event_name": event_info["event_name"],
         "event_distance": event_info["event_distance"],
         "event_year": int(event_info["event_year"]) if event_info["event_year"] else None,

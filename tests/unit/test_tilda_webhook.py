@@ -162,6 +162,16 @@ def test_transform_full_payload():
     assert result["is_name_suspicious"] == 0
     assert result["client_id"] == 0
     assert result["event_id"] == 0
+    assert (result["ma_id"], result["ma_email"]) == (None, None)
+
+
+def test_transform_keeps_tilda_account_fields():
+    """ma_id/ma_email — кабинет Tilda покупателя (может отличаться от email формы)."""
+    body = {"surname": "Иванов", "name": "Иван", "email": "form@test.ru",
+            "ma_id": " 123456 ", "ma_email": " Account@Test.ru ",
+            "payment": '{"products":["5 км Весна 2027 (test)=490"]}'}
+    result = transform_tilda_payload(body)
+    assert (result["ma_id"], result["ma_email"], result["email"]) == ("123456", "account@test.ru", "form@test.ru")
 
 
 @pytest.mark.parametrize("product, expected_distance", [
