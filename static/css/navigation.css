@@ -58,14 +58,21 @@ body {
   white-space: nowrap;
 }
 .navbar-link:hover { color: #fff; }
-/* «Войти» / «Кабинет» — личный кабинет спортсмена (/me) */
-.navbar-link.navbar-link--account {
-  height: auto;
-  line-height: 1.4;
-  padding: 4px 14px;
-  border: 1px solid var(--km-primary, #EE2D62);
-  border-radius: 50px;
+/* Иконка личного кабинета спортсмена (/me): серая — не вошёл, розовая — вошёл */
+.navbar-account {
+  order: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--km-text-muted);
+  transition: color 0.2s, background-color 0.2s;
 }
+.navbar-account:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.navbar-account--in { color: var(--km-primary); }
+.navbar-account.active { color: #fff; background: var(--km-primary); }
 .navbar-link.active {
   color: var(--km-primary);
   border-bottom-color: var(--km-primary);
@@ -106,11 +113,8 @@ body {
     line-height: 1.4;
     border-bottom: 1px solid #333;
   }
-  .navbar-link.navbar-link--account {
-    padding: 12px 20px;
-    border: 0;
-    border-bottom: 1px solid #333;
-    border-radius: 0;
-  }
+  /* логотип слева; справа — иконка кабинета, за ней бургер */
+  .navbar-account { margin-left: auto; }
+  .navbar-toggle { order: 3; }
   .navbar-link.active { border-bottom: 1px solid var(--km-primary); }
 }

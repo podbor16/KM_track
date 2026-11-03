@@ -21,14 +21,18 @@
                 <a href="/history" class="navbar-link">ИСТОРИЯ</a>
             </li>
             {% endif %}
-            <li class="navbar-item">
-                {% if request and request.cookies.get('km_athlete') %}
-                <a href="/me" class="navbar-link navbar-link--account">КАБИНЕТ</a>
-                {% else %}
-                <a href="/me/login" class="navbar-link navbar-link--account">ВОЙТИ</a>
-                {% endif %}
-            </li>
         </ul>
+        {# Личный кабинет (/me) — иконкой вне меню: на телефоне видна рядом с бургером #}
+        {% set has_account = request and request.cookies.get('km_athlete') %}
+        <a href="{{ '/me' if has_account else '/me/login' }}"
+           class="navbar-account{% if has_account %} navbar-account--in{% endif %}"
+           title="{{ 'Личный кабинет' if has_account else 'Войти' }}"
+           aria-label="{{ 'Личный кабинет' if has_account else 'Войти' }}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+        </a>
     </div>
 </nav>
 
@@ -66,9 +70,8 @@
             navbarLinks[1]?.classList.add('active'); // Результаты
         } else if (currentPath === '/history') {
             navbarLinks[2]?.classList.add('active'); // История
-        } else if (currentPath.startsWith('/me')) {
-            document.querySelector('.navbar-link--account')?.classList.add('active');
         }
+        document.querySelector('.navbar-account')?.classList.toggle('active', currentPath.startsWith('/me'));
     }
     
     // Вызываем при загрузке страницы

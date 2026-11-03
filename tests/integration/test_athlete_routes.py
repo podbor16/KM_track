@@ -168,10 +168,10 @@ def test_cabinet_groups_upcoming_and_results(db, client):
 
 
 def test_header_shows_login_or_cabinet(db, client):
-    assert "ВОЙТИ" in client.get("/results").text
+    assert 'aria-label="Войти"' in client.get("/results").text
     _, code, _ = request_code(client, f"hdr@{DOMAIN}")
     client.post("/me/verify", data={"email": f"hdr@{DOMAIN}", "code": code})
-    assert "КАБИНЕТ" in client.get("/results").text
+    assert 'aria-label="Личный кабинет"' in client.get("/results").text
 
 
 @pytest.mark.parametrize("bad", ["a@x.ru,b@y.ru", "X <v@y.ru>"])
