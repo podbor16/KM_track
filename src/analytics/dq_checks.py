@@ -516,7 +516,16 @@ def check_lead_on_other_card(data, results):
             if l["client_id"] == r["client_id"] or any(x["event_id"] == r["event_id"] for x in data.res_by_card[l["client_id"]]):
                 continue                # у владельца заявки свой результат в этом забеге — тёзки
             same_bib = r["start_number"] and l["start_number"] == r["start_number"]
-            if same_bib and fio_close(key, fio_key(l)):
+            if same_bib and not (fio_close(key, fio_key(l)) and compatible_bd(r["birthday"], l["birthday"])):
+                # тот же номер, но ФИ или ДР — не опечатка: заявка заполнена чужими данными (или исправлен только
+                # протокол). Это не один человек — склейка не предлагается, заявку исправляют по протоколу
+                out.append(Finding("R-LEADFIX", "medium", f'{data.event_label(r["event_id"])} №{r["start_number"]}: '
+                                   f'заявка ({l["surname"]} {l["name"]} {l["birthday"]}, {data.card_label(l["client_id"])}) '
+                                   f'и результат ({r["surname"]} {r["name"]} {r["birthday"]}, '
+                                   f'{data.card_label(r["client_id"])}) расходятся',
+                                   (r["client_id"], l["client_id"]), r["id"], r["event_id"], lead_id=l["id"]))
+                continue
+            if same_bib:
                 sev, why = "high", "тот же номер"
             elif fio_key(l) in (key, key[::-1]):
                 sev, why = "medium", "те же ФИ"

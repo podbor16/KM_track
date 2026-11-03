@@ -54,6 +54,12 @@ class MoveBody(BaseModel):
     key: str = ""
 
 
+class FixLeadBody(BaseModel):
+    lead_id: int
+    result_id: int
+    key: str = ""
+
+
 class UndoBody(BaseModel):
     action_id: int
 
@@ -173,6 +179,12 @@ async def move(body: MoveBody, user: str = Depends(api_require_auth)) -> dict:
     cid, action_id = await run_in_threadpool(
         _change, lambda conn: dq.move_row(conn, body.table, body.row_id, user, body.key, body.to_client_id, body.new_card))
     return {"ok": True, "client_id": cid, "action_id": action_id}
+
+
+@router.post("/api/admin/data-quality/fix-lead")
+async def fix_lead(body: FixLeadBody, user: str = Depends(api_require_auth)) -> dict:
+    cid, action_ids = await run_in_threadpool(_change, dq.fix_lead_by_protocol, body.lead_id, body.result_id, user, body.key)
+    return {"ok": True, "client_id": cid, "action_ids": action_ids}
 
 
 @router.post("/api/admin/data-quality/dismiss")

@@ -243,12 +243,12 @@ def test_scoped_load_finds_bib_with_typo_and_swapped_fio(db):
     card = cur.fetchone()["client_id"]
     typo = SUR + "о"
     cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
-                   race_status) VALUES (%s, 'Иван', '1981-01-01', 0, %s, 'Мужчина', 9, '', 'Finished')""",
+                   race_status) VALUES (%s, 'Иван', '1980-01-01', 0, %s, 'Мужчина', 9, '', 'Finished')""",
                 (typo, event(cur, "Номер 2", 5.0)))
     cur.execute("SELECT client_id FROM results WHERE id = %s", (cur.lastrowid,))
     other = cur.fetchone()["client_id"]
     cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
-                   race_status) VALUES (%s, 'Иван', '1981-01-01', 0, %s, 'Мужчина', 5, '', 'Finished')""", (typo, ev))
+                   race_status) VALUES (%s, 'Иван', '1980-01-01', 0, %s, 'Мужчина', 5, '', 'Finished')""", (typo, ev))
     cur.execute("UPDATE results SET client_id = %s WHERE id = %s", (other, cur.lastrowid))
     cur.execute("""INSERT INTO results (surname, name, birthday, client_id, event_id, sex, start_number, category,
                    race_status) VALUES ('Иван', %s, '1900-01-01', 0, %s, 'Мужчина', 7, '', 'Finished')""",

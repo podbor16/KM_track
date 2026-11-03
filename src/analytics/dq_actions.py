@@ -631,6 +631,39 @@ def relink_row(conn, table, row_id, user, source):
     return {**plan, "action_id": action_id}
 
 
+def fix_lead_by_protocol(conn, lead_id, result_id, user, key=""):
+    """«Заявка и результат №N расходятся» -> заявка получает ФИ и ДР из результата (edit_record) и уезжает за ним
+    (relink_row, источник «dq»). Заявка и результат — одного забега и номера, на разных карточках; у результата
+    настоящая ДР. Два действия журнала, отменять в обратном порядке. -> (карточка заявки, [id действий])."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT client_id, surname, name, birthday, event_id, start_number FROM leads WHERE id = %s", (int(lead_id),))
+        lead = cur.fetchone()
+        cur.execute("SELECT client_id, surname, name, birthday, event_id, start_number FROM results WHERE id = %s", (int(result_id),))
+        res = cur.fetchone()
+    finally:
+        cur.close()
+    if not lead or not res:
+        raise ValueError("нет заявки или результата — обновите дело")
+    if (lead["event_id"], lead["start_number"]) != (res["event_id"], res["start_number"]) or not res["start_number"]:
+        raise ValueError("заявка и результат не одного забега и номера")
+    if lead["client_id"] == res["client_id"]:
+        raise ValueError("заявка и результат уже на одной карточке")
+    if not real_bd(str(res["birthday"])):
+        raise ValueError("в результате нет настоящей ДР — исправьте заявку вручную")
+    fields = {k: str(res[k]) for k in ("surname", "name", "birthday") if str(lead[k]) != str(res[k])}
+    plan = plan_relink(conn, "leads", lead_id, new=fields)
+    if plan["action"] in ("none", "skip"):
+        raise ValueError(plan["reason"])
+    ids = []
+    if fields:
+        ids.append(edit_record(conn, "leads", lead_id, fields, user, key)[1])
+    moved = relink_row(conn, "leads", lead_id, user, "dq")
+    if moved["action_id"]:
+        ids.append(moved["action_id"])
+    return moved["to_card"], ids
+
+
 def _claimed_birthdays(conn, ids):
     """{карточка: подтверждённая ДР 'ГГГГ-ММ-ДД'} для действующих привязок кабинета (ДР привязки = ДР карточки).
     Таблицы нет (миграция не применена) — привязок нет."""

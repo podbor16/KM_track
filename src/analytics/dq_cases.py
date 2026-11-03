@@ -25,7 +25,7 @@ from src.config.settings import KRASNOYARSK_TZ
 
 logger = logging.getLogger(__name__)
 
-STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-FOREIGN": 1, "X-PHONE": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3,
+STAGES = {"C-TWIN": 1, "R-LEAD": 1, "R-LEADFIX": 1, "R-FOREIGN": 1, "X-PHONE": 1, "R-DUP": 2, "R-CARD": 3, "R-CAT": 3, "HYG": 3,
           "L-KID": 3, "X-BD": 3, "X-BDDIFF": 3}
 STAGE_TITLES = {1: "Кто есть кто", 2: "Лишние строки", 3: "Поля"}
 
@@ -195,6 +195,18 @@ def _q_lead(f, data):
         _a("merge", "Да — одна карточка", same_bib and not blockers, _fio_inputs(s, n, bd)),
         _a(f"to:{lead_card}", f"Нет — результат принадлежит {_card(data, lead_card)}"),
         _a("keep", "Нет, всё верно — разные люди")]
+
+
+def _q_leadfix(f, data):
+    res_card, lead_card = f.client_ids
+    row, lead = data.result_by_id[f.result_id], data.lead_by_id[f.lead_id]
+    who = lambda r: f'{r["surname"]} {r["name"]} ({_bd(r["birthday"])})'
+    text = (f"{_ev(data, f)}{_bib(row)}: в протоколе {who(row)}, а в заявке с этим номером — {who(lead)} "
+            f"(карточка {_card(data, lead_card)}). Чьи данные верны?")
+    return text, "Номер совпадает, а ФИ или ДР разные — заявка могла быть заполнена чужими данными", [
+        _a("fixlead", f"Исправить заявку по протоколу — заявка станет {who(row)}", True),
+        _a(f"to:{lead_card}", f"Нет — результат принадлежит {_card(data, lead_card)}"),
+        _a("keep", "Нет, всё верно — оставить как есть")]
 
 
 def _q_foreign(f, data):
@@ -427,7 +439,7 @@ def _q_ext_bddiff(f, data):
                                                          _a("keep", f'Как в карточке: {c["birthday"]}')]
 
 
-BUILDERS = {"C-TWIN": _q_twin, "R-LEAD": _q_lead, "R-FOREIGN": _q_foreign, "R-DUP": _q_dup, "R-CARD": _q_card,
+BUILDERS = {"C-TWIN": _q_twin, "R-LEAD": _q_lead, "R-LEADFIX": _q_leadfix, "R-FOREIGN": _q_foreign, "R-DUP": _q_dup, "R-CARD": _q_card,
             "R-CAT": _q_cat, "HYG": _q_hyg, "L-KID": _q_kid, "X-BD": _q_ext_bd, "X-PHONE": _q_ext_phone,
             "X-BDDIFF": _q_ext_bddiff}
 
@@ -477,7 +489,7 @@ def _live(f, data, today):
 
 def _live_ok(answer_id):
     """В «живом» забеге — только перенос строки (загрузчик не трогает client_id) и «отложить»."""
-    return answer_id.startswith("to:") or answer_id in ("new", "postpone")
+    return answer_id.startswith("to:") or answer_id in ("new", "fixlead", "postpone")
 
 
 def _rows(data, cid, problems):
@@ -746,6 +758,10 @@ def apply_answer(conn, case_key, question_id, answer_id, inputs, user, extra_car
         to = {"new_card": fio} if answer_id == "new" else {"to_client_id": int(answer_id[3:])}
         target, a = dq_actions.move_row(conn, table, row["id"], user, f.key, align=True, **to)
         aid.append(a)
+        moved.append(target)
+    elif answer_id == "fixlead":
+        target, ids = dq_actions.fix_lead_by_protocol(conn, f.lead_id, f.result_id, user, f.key)
+        aid.extend(ids)
         moved.append(target)
     elif answer_id == "delete":
         aid.append(dq_actions.delete_result(conn, row["id"], user, f.key))

@@ -45,4 +45,12 @@ assert.strictEqual(menu.open, true);
 T.outsideClick({target: {isConnected: true, closest: () => null}});
 assert.strictEqual(menu.open, false);
 
+// «Исправить заявку по протоколу»: ответ без правки результата, но с предупреждением о повторном импорте заявок
+const fixQ = {id: 'R-LEADFIX:r5:1-2', code: 'R-LEADFIX', stage: 1, state: 'current', text: 'Чьи данные верны?', hint: '',
+    result_id: 5, lead_id: 9, answers: [{id: 'fixlead', label: 'Исправить заявку по протоколу', recommended: true, inputs: []},
+    {id: 'keep', label: 'Нет, всё верно', inputs: []}]};
+const fixHtml = T.questionHtml(fixQ, 0);
+assert.ok(fixHtml.includes('Исправить заявку по протоколу') && fixHtml.includes('id="dqc-lead-0"') && !fixHtml.includes('id="dqc-lead-0" hidden'));
+assert.ok(!T.questionHtml({...fixQ, answers: [fixQ.answers[1]]}, 0).includes('dqc-lead-0'));
+
 console.log('ALL PASSED');

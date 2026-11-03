@@ -134,13 +134,48 @@ def test_no_blockers_for_same_person():
 
 # ---------------------------------------------------------------- проверки
 
-def test_lead_on_other_card_same_bib_is_high():
-    # Подборский: результат пришёл с другой ДР и создал карточку, заявка с тем же номером — на настоящей
+def test_lead_on_other_card_same_bib_with_typo_in_birthday_is_high():
+    # результат пришёл с опечаткой в ДР (одна цифра) и создал карточку, заявка с тем же номером — на настоящей
+    d = data([C(1, "Подборский", "Матвей", "2001-05-02"), C(2, "Подборский", "Матвей", "2001-05-03")],
+             leads=[L(1, 1, "Подборский", "Матвей", "2001-05-02", 1, 626)],
+             results=[R(1, 2, "Подборский", "Матвей", "2001-05-03", 1, 626)])
+    [f] = check_lead_on_other_card(d, d.results)
+    assert (f.code, f.severity, f.client_ids) == ("R-LEAD", "high", (2, 1))
+
+
+def test_same_bib_other_fio_is_lead_vs_protocol():
+    # результат исправлен до «Мария 2015», заявка с тем же номером осталась на карточке мамы
+    d = data([C(1, "Иванова", "Анна", "1986-05-01"), C(2, "Иванова", "Мария", "2015-04-05")],
+             leads=[L(1, 1, "Иванова", "Анна", "1986-05-01", 2, 77)],
+             results=[R(5, 2, "Иванова", "Мария", "2015-04-05", 2, 77, sex="Женщина")])
+    [f] = check_lead_on_other_card(d, d.results)
+    assert (f.code, f.client_ids, f.result_id, f.lead_id, f.event_id) == ("R-LEADFIX", (2, 1), 5, 1, 2)
+    assert f.key == "R-LEADFIX:r5:1-2"
+    assert "№77" in f.message and "расходятся" in f.message
+
+
+def test_same_bib_same_fio_but_other_birthday_is_lead_vs_protocol():
+    # ФИ те же, ДР не опечатка (другой год и день): не склейка — решает человек
     d = data([C(1, "Подборский", "Матвей", "2001-05-02"), C(2, "Подборский", "Матвей", "2000-08-11")],
              leads=[L(1, 1, "Подборский", "Матвей", "2001-05-02", 1, 626)],
              results=[R(1, 2, "Подборский", "Матвей", "2000-08-11", 1, 626)])
-    [f] = check_lead_on_other_card(d, d.results)
-    assert (f.code, f.severity, f.client_ids) == ("R-LEAD", "high", (2, 1))
+    assert [f.code for f in check_lead_on_other_card(d, d.results)] == ["R-LEADFIX"]
+
+
+def test_lead_vs_protocol_skipped_when_result_owner_has_own_lead_or_lead_owner_has_own_result():
+    cl = [C(1, "Иванова", "Анна", "1986-05-01"), C(2, "Иванова", "Мария", "2015-04-05")]
+    res = [R(5, 2, "Иванова", "Мария", "2015-04-05", 2, 77, sex="Женщина")]
+    own_lead = data(cl, leads=[L(1, 1, "Иванова", "Анна", "1986-05-01", 2, 77),
+                               L(2, 2, "Иванова", "Мария", "2015-04-05", 2, 78)], results=res)
+    assert check_lead_on_other_card(own_lead, own_lead.results) == []
+    own_result = data(cl, leads=[L(1, 1, "Иванова", "Анна", "1986-05-01", 2, 77)],
+                      results=res + [R(6, 1, "Иванова", "Анна", "1986-05-01", 2, 80, sex="Женщина")])
+    assert check_lead_on_other_card(own_result, res) == []
+
+
+def test_fixlead_answer_allowed_on_live_event():
+    from src.analytics.dq_cases import _live_ok
+    assert _live_ok("fixlead") and _live_ok("to:5") and not _live_ok("merge")
 
 
 def test_lead_on_other_card_same_fio_without_bib_is_medium():
@@ -151,11 +186,12 @@ def test_lead_on_other_card_same_fio_without_bib_is_medium():
     assert f.severity == "medium"
 
 
-def test_lead_with_same_bib_but_other_person_is_ignored():
+def test_lead_with_same_bib_but_other_person_is_lead_vs_protocol_not_lead_on_other_card():
+    # раньше игнорировалось; теперь это «заявка и результат расходятся» — ни склейки, ни автоматики
     d = data([C(1, "Петров", "Иван", "1980-01-05"), C(2, "Сидоров", "Олег", "1990-02-02")],
              leads=[L(1, 1, "Петров", "Иван", "1980-01-05", 2, 15)],
              results=[R(1, 2, "Сидоров", "Олег", "1990-02-02", 2, 15)])
-    assert check_lead_on_other_card(d, d.results) == []
+    assert [f.code for f in check_lead_on_other_card(d, d.results)] == ["R-LEADFIX"]
 
 
 def test_lead_owner_with_own_result_is_namesake():

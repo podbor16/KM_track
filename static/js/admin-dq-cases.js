@@ -95,7 +95,7 @@ function inputHtml(qi, ai, inp, sexValue) {
 }
 
 function isLeadEdit(q, answerId) {
-    return !!q.lead_id && !q.result_id && (answerId === 'birthday' || answerId === 'distance');
+    return answerId === 'fixlead' || (!!q.lead_id && !q.result_id && (answerId === 'birthday' || answerId === 'distance'));
 }
 
 function questionHtml(q, qi, opts) {
@@ -120,7 +120,7 @@ function questionHtml(q, qi, opts) {
             onchange="dqcPick(${qi})"> ${dqEsc(a.label)}${star}</label>${inputs}`;
     }).join('');
     const postponed = q.state === 'postponed' ? '<div class="dqc-hint">Отложено</div>' : '';
-    const lead = q.lead_id && !q.result_id && q.answers.some(a => isLeadEdit(q, a.id))
+    const lead = q.answers.some(a => isLeadEdit(q, a.id))
         ? `<div class="dqc-hint" id="dqc-lead-${qi}"${isLeadEdit(q, picked) ? '' : ' hidden'}>${DQC_LEAD_NOTE}</div>` : '';
     const apply = answers.length
         ? `<div class="dq-actions"><button class="km-btn km-btn--primary" onclick="dqcApply(${qi}, this)">Применить</button>
