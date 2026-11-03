@@ -2045,7 +2045,7 @@ def set_lead_elite(lead_id: int, elite: bool) -> bool:
 
 def set_lead_pd_refused(lead_id: int, refused: bool, user: str) -> bool:
     """Кнопка «Не согласен на ПД» / «Снять» (leads.pd_refused): на публичных страницах этого события
-    вместо ФИ — «Спортсмен». Изменение — в журнал dq_actions. Кеши результатов истекают сами (5–30 с)."""
+    вместо ФИ — «Спортсмен». Изменение — в журнал dq_actions. Кеши результатов истекают сами (до минуты)."""
     conn = get_pooled_connection()
     if not conn:
         return False
