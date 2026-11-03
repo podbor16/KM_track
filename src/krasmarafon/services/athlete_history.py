@@ -1,4 +1,4 @@
-"""История спортсмена (личный кабинет, Б1): итоги и лента по строкам результатов и заявок — без БД.
+"""История спортсмена (личный кабинет, Б1): итоги, лента результатов и лента заявок — без БД.
 Правила — спецификация 2026-11-03-athlete-cards-history-design, «Страница истории»."""
 
 import datetime as dt
@@ -47,17 +47,23 @@ def _money(value) -> Optional[str]:
     return text.replace(",", "\u00a0").replace(".", ",") + " ₽"
 
 
-def _places(r: dict, place: Optional[int]) -> Optional[str]:
-    """«{абс} абс. · {место} в {категория}»: при чистом времени — чистые места; пустые части не выводятся."""
+def _places(r: dict, place: Optional[int]) -> list[str]:
+    """Строки мест: «N/M абс.» и «N/M {категория}» (M — финишировавшие в событии / в категории); при чистом времени —
+    чистые места. Нет N — строки нет; нет M — «N абс.» / «N в {категория}»."""
     clean = r["time_clear_finish"] is not None
     absolute = (r["rank_absolute_clean"] or r["rank_absolute"]) if clean else r["rank_absolute"]
     category = (r["category"] or "").strip()
-    parts = []
+    lines = []
     if absolute:
-        parts.append(f"{absolute} абс.")
+        total = r["finishers_total"]
+        lines.append(f"{absolute}/{total} абс." if total else f"{absolute} абс.")
     if place:
-        parts.append(f"{place} в {category}" if category else f"{place} место в категории")
-    return " · ".join(parts) or None
+        count = r["finishers_category"]
+        if count:
+            lines.append(f"{place}/{count} {category or 'в категории'}")
+        else:
+            lines.append(f"{place} в {category}" if category else f"{place} место в категории")
+    return lines
 
 
 def _order(lead: dict, account_email: Optional[str]) -> dict:
@@ -78,45 +84,57 @@ def _result_entry(r: dict, codes: dict, diploma_ids: set) -> dict:
     finished, td, place = finish_info(r)
     dist = _dist(r["event_distance"])
     year = _year(r["event_year"], r["event_date"])
-    if finished:
-        status = None
-    else:
-        status = _STATUS_TEXT.get(r["race_status"], "нет результата")
     return {
-        "kind": "result", "date": r["event_date"], "year": year, "event_name": r["event_name"],
+        "date": r["event_date"], "year": year, "event_name": r["event_name"],
         "distance": _dist_label(dist), "start_number": r["start_number"],
         "time": fmt_time(td) if finished else None, "place": place,
-        "places": _places(r, place) if finished else None,
+        "places": _places(r, place) if finished else [],
         "pace": _pace(td.total_seconds(), dist) if finished and dist else None,
-        "status": status, "refund": False, "order": None,  # подробности заказа — только у заявок
+        "status": None if finished else _STATUS_TEXT.get(r["race_status"], "нет результата"),
         "protocol_url": protocol_url(r["event_name"], year, r.get("surname"), codes) if finished else None,
         "diploma_url": (f"/diploma/{r['event_id']}/{r['start_number']}"
                         if finished and r["event_id"] in diploma_ids and r["start_number"] is not None else None),
     }
 
 
-def _lead_entry(lead: dict, today: dt.date, account_email: Optional[str]) -> dict:
+def _lead_entry(lead: dict, today: dt.date, account_email: Optional[str], outcome: Optional[dict]) -> dict:
+    """outcome — результат той же карточки в том же событии (или None): у прошедшей заявки он даёт итог."""
     year = _year(lead["event_year"], lead["event_date"])
     upcoming = is_upcoming(lead["event_date"], lead["event_year"], today)
     refund = bool(lead["refund"])
-    if upcoming:
-        status = None
-    else:
-        status = "возврат" if refund else "не стартовал"
+    result_time = status = None
+    if not upcoming:
+        if outcome is None:
+            status = "возврат" if refund else "не стартовал"
+        elif outcome["time"]:
+            result_time = outcome["time"]
+        else:
+            status = outcome["status"]
     return {
-        "kind": "ticket" if upcoming else "result", "date": lead["event_date"], "year": year,
+        "kind": "ticket" if upcoming else "past", "date": lead["event_date"], "year": year,
         "event_name": lead["event_name"], "distance": _dist_label(_dist(lead["event_distance"])),
-        "start_number": lead["start_number"], "time": None, "place": None, "places": None, "pace": None,
-        "status": status, "refund": refund, "protocol_url": None, "diploma_url": None,
+        "start_number": lead["start_number"], "refund": refund, "result_time": result_time, "status": status,
         "order": _order(lead, account_email),
     }
 
 
-def _item_order(e: dict):
+def _past_key(e: dict) -> int:
+    return -(e["date"] or dt.date(e["year"] or 1, 1, 1)).toordinal()
+
+
+def _lead_order(e: dict):
     """Предстоящие (билеты) ближайшие сверху, затем прошедшие от новых к старым."""
     if e["kind"] == "ticket":
         return (0, (e["date"] or dt.date.max).toordinal())
-    return (1, -(e["date"] or dt.date(e["year"] or 1, 1, 1)).toordinal())
+    return (1, _past_key(e))
+
+
+def _by_year(entries: list[dict], key) -> list[dict]:
+    groups: dict = {}
+    for e in entries:
+        groups.setdefault(e["year"], []).append(e)
+    return [{"year": y, "items": sorted(groups[y], key=key)}
+            for y in sorted(groups, key=lambda y: (y is None, -(y or 0)))]
 
 
 def _tiles(finishes: list[dict]) -> dict:
@@ -158,15 +176,21 @@ def _dynamics(finishes: list[dict]) -> dict:
 
 def build_history(results: list[dict], leads: list[dict], today: dt.date, codes: dict, diploma_ids: set,
                   account_email: Optional[str] = None) -> dict:
-    """-> {"since", "tiles": {starts, finishes, km, pace}, "records", "dynamics", "years": [{year, items}]}.
-    account_email — почта аккаунта: в подробностях заявки она показывается полностью, остальные — маской."""
-    done = {(r["client_id"], r["event_id"]) for r in results}   # результат той же карточки в том же событии; номер заявки не нужен
-    active = done | {(ld["client_id"], ld["event_id"]) for ld in leads if not ld["refund"]}
-    open_leads = [ld for ld in leads if (ld["client_id"], ld["event_id"]) not in done
-                  and not (ld["refund"] and ld["event_id"] is not None and (ld["client_id"], ld["event_id"]) in active)]
-
-    entries = ([_result_entry(r, codes, diploma_ids) for r in results]
-               + [_lead_entry(ld, today, account_email) for ld in open_leads])
+    """-> {"since", "tiles": {starts, finishes, km, pace}, "records", "dynamics",
+    "results_years": [{year, items}], "leads_years": [{year, items}]}.
+    results_years — только строки results; leads_years — только заявки (у прошедших итог берётся из результата той же
+    карточки в том же событии). account_email — почта аккаунта: в подробностях заявки она полностью, остальные — маской."""
+    result_entries = [_result_entry(r, codes, diploma_ids) for r in results]
+    outcomes: dict = {}   # (карточка, событие) -> строка результата; финиш предпочтительнее
+    for r, e in zip(results, result_entries):
+        key = (r["client_id"], r["event_id"])
+        if key not in outcomes or (e["time"] and not outcomes[key]["time"]):
+            outcomes[key] = e
+    active = set(outcomes) | {(ld["client_id"], ld["event_id"]) for ld in leads if not ld["refund"]}
+    shown = [ld for ld in leads
+             if not (ld["refund"] and ld["event_id"] is not None and (ld["client_id"], ld["event_id"]) in active)]
+    lead_entries = [_lead_entry(ld, today, account_email, outcomes.get((ld["client_id"], ld["event_id"])))
+                    for ld in shown]
 
     finishes = []
     for r in results:
@@ -180,16 +204,11 @@ def build_history(results: list[dict], leads: list[dict], today: dt.date, codes:
     lead_years = [y for y in (_year(ld["event_year"], ld["event_date"]) for ld in leads) if y]
     since = min(start_years or lead_years, default=None)
 
-    by_year: dict = {}
-    for e in entries:
-        by_year.setdefault(e["year"], []).append(e)
-    years = [{"year": y, "items": sorted(by_year[y], key=_item_order)}
-             for y in sorted(by_year, key=lambda y: (y is None, -(y or 0)))]
-
     return {
         "since": since,
         "tiles": {"starts": len(starts), "finishes": len(finishes), **_tiles(finishes)},
         "records": _records(finishes),
         "dynamics": _dynamics(finishes),
-        "years": years,
+        "results_years": _by_year(result_entries, _past_key),
+        "leads_years": _by_year(lead_entries, _lead_order),
     }

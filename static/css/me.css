@@ -86,6 +86,14 @@
 .me-chip.on { background: var(--km-primary); color: #fff; }
 .me-chart { position: relative; height: 220px; background: var(--km-bg-card); border-radius: var(--km-radius-card);
             box-shadow: var(--km-shadow); padding: 10px; }
+/* Вкладки «Результаты» / «Заявки»: без JS видны обе подряд, переключатель и скрытие включает класс .js-tabs */
+.me-tabs { display: none; margin: 4px 0 14px; }
+.me-tabs .me-chip { font-size: 15px; padding: 8px 20px; }
+.js-tabs .me-tabs { display: flex; }
+.js-tabs .me-tab:not(.on), .js-tabs .me-tab-title { display: none; }
+.me-outcome { font-size: 14px; color: var(--km-text-secondary); text-align: right; }
+.me-outcome b { color: var(--km-dark); font-size: 16px; }
+.me-result--none .me-outcome { color: var(--km-text-muted); font-size: 13px; }
 .me-year { font-weight: 700; font-size: 17px; color: var(--km-dark); margin: 16px 0 6px; }
 .me-time .me-pace { color: var(--km-text-secondary); }
 .me-time small { white-space: normal; }

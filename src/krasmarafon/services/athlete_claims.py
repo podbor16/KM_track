@@ -257,10 +257,18 @@ def notify_claimed(client_id: int, account_email: str) -> None:
             logger.exception("Уведомление о привязке карточки %s: письмо не отправлено", client_id)
 
 
+# M в «N/M»: финишировавшие (Finished и есть время) в событии и в той же категории (пустая = «без категории»);
+# подзапросы идут по индексу results.event_id (EXPLAIN: ref idx_event/uq_results_event_start, ~10^3 строк на событие)
 _RESULTS_SQL = """
     SELECT r.id, r.client_id, r.surname, r.name, r.birthday, r.event_id, r.start_number, e.event_name, e.event_year,
            e.event_date, e.event_distance, r.race_status, r.time_clear_finish, r.time_gun_finish,
-           r.category, r.rank_absolute, r.rank_absolute_clean, r.rank_category, r.rank_category_clean
+           r.category, r.rank_absolute, r.rank_absolute_clean, r.rank_category, r.rank_category_clean,
+           (SELECT COUNT(*) FROM results f WHERE f.event_id = r.event_id AND f.race_status = 'Finished'
+               AND COALESCE(f.time_clear_finish, f.time_gun_finish) IS NOT NULL) AS finishers_total,
+           (SELECT COUNT(*) FROM results f WHERE f.event_id = r.event_id AND f.race_status = 'Finished'
+               AND COALESCE(f.time_clear_finish, f.time_gun_finish) IS NOT NULL
+               AND COALESCE(NULLIF(TRIM(f.category), ''), '') = COALESCE(NULLIF(TRIM(r.category), ''), '')
+           ) AS finishers_category
     FROM results r LEFT JOIN events e ON e.id = r.event_id
     WHERE r.client_id IN ({ph}) ORDER BY r.id"""
 

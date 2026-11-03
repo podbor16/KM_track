@@ -285,13 +285,14 @@ def test_history_rows_cover_all_claimed_cards(db, cards, mail):
 
     hist = build_history(results, leads, date(2026, 11, 3), {EV: "kt"}, set())
     assert hist["tiles"]["finishes"] == 1
-    assert [y["year"] for y in hist["years"]] == [2099]
-    assert len(hist["years"][0]["items"]) == 2          # заявки 9001 и 9003 карточки c1 слились с её результатом
+    assert [y["year"] for y in hist["results_years"]] == [2099] and [y["year"] for y in hist["leads_years"]] == [2099]
+    assert len(hist["results_years"][0]["items"]) == 1   # только результат
+    assert len(hist["leads_years"][0]["items"]) == 3     # все заявки: 9001 и 9003 карточки c1 и 9002 карточки c2
     assert ac.history_rows([]) == ([], [])
 
 
-def test_lead_without_number_is_hidden_by_result_of_same_card_and_event(db, cards, mail):
-    """Заявка без стартового номера не дублирует результат той же карточки в том же событии."""
+def test_lead_without_number_stays_in_leads_and_does_not_duplicate_result(db, cards, mail):
+    """Заявка без стартового номера — только в заявках; результат той же карточки в том же событии не размножается."""
     conn, cur = db
     from src.krasmarafon.services import athlete_cabinet
 
@@ -300,7 +301,7 @@ def test_lead_without_number_is_hidden_by_result_of_same_card_and_event(db, card
     results, leads = ac.history_rows([cards["c1"]])
     assert len(leads) == 3 and len(results) == 1
     hist = build_history(results, leads, date(2026, 11, 3), {EV: "kt"}, set())
-    assert len(hist["years"][0]["items"]) == 1
+    assert len(hist["results_years"][0]["items"]) == 1 and len(hist["leads_years"][0]["items"]) == 3
 
     rows = [r for r in athlete_cabinet.fetch_leads(ME) if r["client_id"] == cards["c1"]]
     assert len(rows) == 2 and all(r["time_gun_finish"] is not None for r in rows)   # и с номером, и без
@@ -585,7 +586,7 @@ def test_history_page_for_claimed_card(web, cards):
     assert r.status_code == 200
     page = r.text
     assert "Тестклейм Иван" in page and "Бегает с 2099" in page
-    assert "Личные рекорды" in page and "Забеги и заявки" in page
+    assert "Личные рекорды" in page and 'data-tab="results"' in page and 'data-tab="leads"' in page
     assert "0:25:00" in page and "5 км" in page and "5:00" in page          # время результата и темп
     assert "стартов" in page and "финишей" in page and "ср. темп" in page
     assert 'id="dyn"' not in page                                         # один год — динамики нет
@@ -887,11 +888,68 @@ def test_group_with_one_matching_lead_keeps_card_title_and_claim_button(web, car
     assert f'name="client_id" value="{slot["igor"]}"' in client.get("/me").text
 
 
+def add_finishers(cur, event_id):
+    """Остальные результаты события «Тест кабинет Б1»: у результата c1 (9001, М35-39) финишировавших в событии 4
+    (9001, 9101, 9102, 9103), в категории М35-39 — 2 (9001, 9101); не считаются DNF и «Finished» без времени."""
+    rows = [(9101, "Finished", "00:26:00", "М35-39"), (9102, "Finished", "00:27:00", "М40-44"),
+            (9103, "Finished", "00:28:00", ""), (9104, "DNF", None, "М35-39"), (9105, "Finished", None, "М35-39")]
+    for n, status, t, cat in rows:
+        cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                       time_gun_finish, category) VALUES ('Тестклейм', %s, '1970-01-01', 'Мужчина', %s, %s, %s, %s, %s)""",
+                    (f"Бегун{n}", event_id, n, status, t, cat))
+
+
+def test_history_rows_count_finishers_in_event_and_category(db, cards, mail):
+    conn, cur = db
+    cur.execute("UPDATE results SET category = 'М35-39' WHERE start_number = 9001 AND event_id = %s", (cards["event_id"],))
+    add_finishers(cur, cards["event_id"])
+    conn.commit()
+    r = ac.history_rows([cards["c1"]])[0][0]
+    assert (r["finishers_total"], r["finishers_category"]) == (4, 2)
+    cur.execute("UPDATE results SET category = '' WHERE start_number = 9001 AND event_id = %s", (cards["event_id"],))
+    conn.commit()
+    r = ac.history_rows([cards["c1"]])[0][0]
+    assert (r["finishers_total"], r["finishers_category"]) == (4, 2)    # без категории: с 9001 вместе только 9103 ('')
+
+
+def test_web_history_tabs_split_results_and_leads(web, cards, db):
+    conn, cur = db
+    cur.execute("UPDATE events SET event_date = '2020-05-01' WHERE id = %s", (cards["event_id"],))   # событие прошло
+    conn.commit()
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    page = client.get("/me/history").text
+    assert 'data-tab="results"' in page and 'data-tab="leads"' in page
+    results_html = page.split('id="tab-results"')[1].split('id="tab-leads"')[0]
+    leads_html, foot = page.split('id="tab-leads"')[1].split('class="me-foot"')
+    assert "0:25:00" in results_html and "Подробнее" not in results_html and "результат" not in results_html
+    assert "Подробнее" in leads_html and "результат <b>0:25:00</b>" in leads_html
+    assert "mailto:1@krasmarafon.ru" in foot and "/me/unclaim" in foot            # ссылки — внизу, вне вкладок
+    assert "mailto:" not in results_html + leads_html and "/me/unclaim" not in results_html + leads_html
+
+
+def test_web_history_empty_tabs(web, cards, db):
+    conn, cur = db
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    cur.execute("UPDATE leads SET is_duplicate = 1 WHERE client_id = %s", (cards["c1"],))
+    conn.commit()
+    page = client.get("/me/history").text
+    assert "Заявок пока нет" in page and "Результатов пока нет" not in page
+    cur.execute("DELETE FROM results WHERE event_id = %s", (cards["event_id"],))
+    conn.commit()
+    page = client.get("/me/history").text
+    assert "Результатов пока нет" in page
+
+
 def test_web_history_details_and_places(web, cards, db):
     conn, cur = db
     cur.execute("""UPDATE leads SET order_id = 5550 WHERE event_name = %s AND start_number = 9001""", (EV,))
-    cur.execute("""UPDATE results SET category = 'М35-39', rank_absolute = 4, rank_category = 3
+    cur.execute("""UPDATE results SET category = 'М35-39', rank_absolute = 2, rank_category = 1
                    WHERE start_number = 9001 AND event_id = %s""", (cards["event_id"],))
+    add_finishers(cur, cards["event_id"])
     add_lead(cur, "Иван", BD1, ME, 9051, year=2098)                     # будущая заявка с почты аккаунта
     cur.execute("""UPDATE leads SET order_id = 5551, amount = 1090, promocode = 'VIM99', discount = 109.5,
                    products = '5 км (kt) - 1x1090' WHERE event_name = %s AND start_number = 9051""", (EV,))
@@ -902,7 +960,7 @@ def test_web_history_details_and_places(web, cards, db):
     claim_via_web(client, cards["c1"], "1986-05-01")
     page = client.get("/me/history").text
     assert "Подробнее" in page and "<details" in page
-    assert "4 абс. · 3 в М35-39" in page
+    assert "<small>2/4 абс.</small>" in page and "<small>1/2 М35-39</small>" in page
     text = re.sub(r"<[^>]+>", "", page)
     assert "Номер заказа: 5551" in text and "Сумма: 1 090 ₽" in text
     assert "Промокод: VIM99 (скидка 109,5 ₽)" in text and "Состав заказа: 5 км (kt) - 1x1090" in text
@@ -910,4 +968,6 @@ def test_web_history_details_and_places(web, cards, db):
     assert f"Оформлено с почты: {ME}" in text                           # почта аккаунта — полностью
     assert f"Оформлено с почты: o***@{DOMAIN}" in text                  # чужая — маской
     assert OTHER not in page
-    assert "Номер заказа: 5550" not in text                           # у результата подробностей заказа нет
+    results_text = re.sub(r"<[^>]+>", "", page.split('id="tab-results"')[1].split('id="tab-leads"')[0])
+    assert "Номер заказа" not in results_text and "Подробнее" not in results_text   # у результата заказа нет
+    assert "Номер заказа: 5550" in text                               # заявка 9001 — во вкладке «Заявки»
