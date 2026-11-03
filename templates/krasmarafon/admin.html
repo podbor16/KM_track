@@ -1231,7 +1231,9 @@
         tr.querySelector('.leads-col-name').replaceChildren(mkInput(lead.name));
         tr.querySelector('.leads-col-distance').replaceChildren(mkInput(lead.event_distance, '70px'));
         tr.querySelector('.leads-col-status').replaceChildren(mkInput(lead.status, '70px'));
-
+        const bdInp = mkInput(lead.birthday ? String(lead.birthday).slice(0, 10) : '', '130px');
+        bdInp.type = 'date';
+        tr.querySelector('.leads-col-birthday').replaceChildren(bdInp);
 
         const saveBtn = document.createElement('button');
         saveBtn.className = 'km-btn km-btn--primary leads-btn-save';
@@ -1249,10 +1251,38 @@
         tr.querySelector('.leads-col-name').textContent = lead.name || '';
         tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
         tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
+        tr.querySelector('.leads-col-birthday').textContent = _fmtBirthday(lead.birthday);
         _renderDupBadge(tr, lead);
 
         const saveBtn = tr.querySelector('.leads-btn-save');
         if (saveBtn) saveBtn.remove();
+    }
+
+    // «5 заявок», «1 результат» — для текста предупреждения
+    function _plural(n, one, few, many) {
+        const m10 = n % 10, m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return `${n} ${one}`;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return `${n} ${few}`;
+        return `${n} ${many}`;
+    }
+
+    // Текст предупреждения перед сохранением правки ФИ/ДР (план relink-preview); null — предупреждать не о чем
+    function _relinkConfirmText(plan) {
+        const fio = (o) => `${o.surname} ${o.name}, ${_fmtBirthday(o.birthday)}`;
+        if (plan.action === 'move') {
+            const c = plan.card;
+            return `Заявка переедет на карточку №${c.id} — ${fio(c)}, ` +
+                `${_plural(c.leads, 'заявка', 'заявки', 'заявок')}, ${_plural(c.results, 'результат', 'результата', 'результатов')}. Сохранить?`;
+        }
+        if (plan.action === 'new_card') {
+            return `Будет создана новая карточка — ${fio(plan.new)}, заявка переедет на неё ` +
+                `(на прежней карточке №${plan.from_card} останутся её другие заявки и результаты). Сохранить?`;
+        }
+        if (plan.action === 'rename') {
+            return `Карточка №${plan.card.id} будет переименована: ${fio(plan.card)} → ${fio(plan.new)} ` +
+                `(других заявок и результатов у неё нет). Сохранить?`;
+        }
+        return null;
     }
 
     async function saveLeadEdit(tr, lead) {
@@ -1265,9 +1295,34 @@
             name:    tr.querySelector('.leads-col-name input').value.trim() || null,
             event_distance: tr.querySelector('.leads-col-distance input').value.trim() || null,
             status:  tr.querySelector('.leads-col-status input').value.trim() || null,
+            birthday: tr.querySelector('.leads-col-birthday input').value || null,
         };
+        const oldBd = lead.birthday ? String(lead.birthday).slice(0, 10) : null;
+        const fioChanged = (body.surname && body.surname !== (lead.surname || '')) ||
+            (body.name && body.name !== (lead.name || '')) || (body.birthday && body.birthday !== oldBd);
+        if (body.birthday === oldBd) body.birthday = null;
 
         try {
+            if (fioChanged) {
+                const pr = await fetch(`/api/admin/leads/${lead.id}/relink-preview`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({surname: body.surname, name: body.name, birthday: body.birthday}),
+                });
+                const plan = await pr.json().catch(() => ({}));
+                if (!pr.ok) {
+                    alert('Ошибка: ' + (plan.detail || pr.status));
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Сохранить';
+                    return;
+                }
+                const text = _relinkConfirmText(plan);
+                if (text && !confirm(text)) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Сохранить';
+                    return;
+                }
+            }
             const r = await fetch(`/api/admin/leads/${lead.id}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json'},

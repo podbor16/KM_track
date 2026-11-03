@@ -1897,25 +1897,42 @@ def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
             pass
 
 
-def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Partial UPDATE leads по leads.id. Поля — только из whitelist."""
+def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Optional[Dict[str, Any]]:
+    """Partial UPDATE leads по leads.id. Поля — только из whitelist. Смена дистанции пересчитывает event_id и
+    дубли (как dq_actions.edit_record); смена ФИ/ДР — relink_row: заявка уезжает на верную карточку (журнал
+    «relink:admin», user — кто правил). -> строка заявки + 'relink' (итог перепривязки или None);
+    None — заявки нет. ValueError — у забега нет такой дистанции."""
     # is_duplicate не правится руками — его считает recompute_duplicates() (основная заявка
     # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu
     ALLOWED = {'surname', 'name', 'event_distance', 'status', 'birthday'}
     safe = {k: v for k, v in fields.items() if k in ALLOWED}
     if not safe:
         return None
+    from src.analytics.dq_actions import _lead_event_id, relink_row
+
     conn = get_pooled_connection()
     if not conn:
         return None
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute("SELECT client_id, event_id, event_distance, surname, name, birthday FROM leads WHERE id = %s",
+                    (lead_id,))
+        old = cur.fetchone()
+        if not old:
+            cur.close()
+            return None
+        if 'event_distance' in safe and str(safe['event_distance']) != str(old['event_distance']):
+            safe['event_id'] = _lead_event_id(cur, old, safe['event_distance'])
         set_clause = ", ".join(f"{col} = %s" for col in safe)
         cur.execute(
             f"UPDATE leads SET {set_clause} WHERE id = %s",
             list(safe.values()) + [lead_id],
         )
+        if 'event_id' in safe:
+            recompute_duplicates(cur, [old['client_id']])
         conn.commit()
+        fio_changed = any(k in safe and str(safe[k]) != str(old[k]) for k in ('surname', 'name', 'birthday'))
+        relink = relink_row(conn, 'leads', lead_id, user, 'admin') if fio_changed else None
         invalidate_start_list_cache()
         cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
@@ -1925,7 +1942,10 @@ def update_lead(lead_id: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]
         d = dict(row)
         d['category'] = get_age_group_label(d.get('event_name'), d.get('event_distance'), d.get('birthday'), d.get('sex'),
                                             source=d.get('source'), event_year=d.get('event_year'), event_id=d.get('event_id'))
+        d['relink'] = relink
         return d
+    except ValueError:
+        raise
     except Exception as e:
         logger.error(f"update_lead error: {e}")
         return None

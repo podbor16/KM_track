@@ -283,3 +283,100 @@ def test_cabinet_claim_stays_valid_after_move_but_goes_stale_after_rename(db, wo
     fix(conn, cur, "leads", ph["id"], name="Сын", birthday=BD_SON)
     assert relink_row(conn, "leads", ph["id"], USER, "admin")["action"] == "rename"
     assert ac.claimed_cards(f"ph@{DOMAIN}") == ([], [ph["client_id"]])
+
+
+# ---- «Изменить» заявку в стартовом списке: PATCH и предпросмотр ----
+
+@pytest.fixture
+def as_admin():
+    from app import app
+    from src.core.auth import api_require_auth
+    app.dependency_overrides[api_require_auth] = lambda: USER
+    yield
+    app.dependency_overrides.pop(api_require_auth, None)
+
+
+def _snapshot(cur, row_id):
+    cur.execute("SELECT * FROM leads WHERE id = %s", (row_id,))
+    lead = cur.fetchone()
+    cur.execute("SELECT id, surname, name, birthday FROM clients WHERE surname LIKE %s ORDER BY id", (f"{SURNAME}%",))
+    return lead, cur.fetchall()
+
+
+def test_preview_endpoint_does_not_change_db(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    before = _snapshot(cur, row["id"])
+    r = client.post(f"/api/admin/leads/{row['id']}/relink-preview", json={"name": "Дочь", "birthday": str(BD_DAUGHTER)})
+    assert r.status_code == 200
+    plan = r.json()
+    assert plan["action"] == "move" and plan["to_card"] == world["cx"]
+    assert plan["card"]["id"] == world["cx"] and plan["card"]["leads"] == 1
+    r = client.post(f"/api/admin/leads/{row['id']}/relink-preview", json={"name": "Сын", "birthday": str(BD_SON)})
+    assert r.json()["action"] == "new_card"
+    conn.commit()
+    assert _snapshot(cur, row["id"]) == before and journal(cur) == []
+
+
+def test_preview_unknown_lead_is_404_and_bad_birthday_422(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    assert client.post("/api/admin/leads/999999999/relink-preview", json={"name": "Х"}).status_code == 404
+    assert client.post(f"/api/admin/leads/{row['id']}/relink-preview", json={"birthday": "31.12.1990"}).status_code == 422
+
+
+def test_patch_birthday_correction_moves_lead_to_right_card_and_logs(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Дочь", BD_MAMA, 9500)  # ошибочная ДР: попала на карточку Мамы
+    conn.commit()
+    assert row["client_id"] != world["cx"]
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"birthday": str(BD_DAUGHTER)})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["relink"]["action"] == "move" and body["relink"]["to_card"] == world["cx"]
+    assert body["client_id"] == world["cx"]
+    conn.commit()
+    assert row_state(cur, "leads", row["id"])["client_id"] == world["cx"]
+    log = [j for j in journal(cur) if j["finding_key"] == "relink:admin"]
+    assert len(log) == 1 and log[0]["done_by"] == USER
+
+
+def test_patch_without_fio_change_does_not_relink(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"surname": SURNAME, "name": "Мама", "status": 1})
+    assert r.status_code == 200 and r.json()["relink"] is None
+    assert journal(cur) == []
+
+
+def test_patch_distance_change_recomputes_event_id(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    cur.execute("INSERT INTO events (event_name, event_year, event_distance) "
+                "SELECT event_name, event_year, 10 FROM events WHERE id = %s", (row["event_id"],))
+    new_event = cur.lastrowid
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"event_distance": "10 км"})
+    assert r.status_code == 200, r.text
+    assert r.json()["event_id"] == new_event
+    cur.execute("SELECT event_id FROM leads WHERE id = %s", (row["id"],))
+    assert cur.fetchone()["event_id"] == new_event
+
+
+def test_patch_unknown_distance_is_422_and_not_saved(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"event_distance": "77 км"})
+    assert r.status_code == 422
+    cur.execute("SELECT event_distance, event_id FROM leads WHERE id = %s", (row["id"],))
+    assert cur.fetchone() == {"event_distance": "5 км", "event_id": row["event_id"]}
+
+
+def test_endpoints_require_login(client):
+    assert client.post("/api/admin/leads/1/relink-preview", json={"name": "Х"}).status_code == 401
+    assert client.patch("/api/admin/leads/1", json={"name": "Х"}).status_code == 401

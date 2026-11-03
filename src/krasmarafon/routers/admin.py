@@ -463,12 +463,41 @@ async def patch_lead(
     fields = body.non_null_fields()
     if not fields:
         raise HTTPException(status_code=422, detail="Нет полей для обновления")
-    updated = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: update_lead(lead_id, fields)
-    )
+    try:
+        updated = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: update_lead(lead_id, fields, user)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Лид {lead_id} не найден")
-    return LeadAdminItem.model_validate(updated).model_dump()
+    relink = updated.pop("relink", None)
+    return {**LeadAdminItem.model_validate(updated).model_dump(), "relink": relink}
+
+
+@router.post("/api/admin/leads/{lead_id}/relink-preview")
+async def relink_preview(
+    lead_id: int,
+    body: LeadPatch,
+    user: str = Depends(api_require_auth),
+) -> dict:
+    """Что сделает «Изменить» с карточкой заявки при новых ФИ/ДР (без записи): none | move | rename | new_card | skip."""
+    from src.analytics.db_pool import get_pooled_connection
+    from src.analytics.dq_actions import plan_relink
+
+    def run():
+        conn = get_pooled_connection()
+        if not conn:
+            raise RuntimeError("нет соединения с БД")
+        try:
+            return plan_relink(conn, "leads", lead_id, new=body.non_null_fields())
+        finally:
+            conn.close()
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, run)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "нет строки" in str(e) else 422, detail=str(e))
 
 
 @router.post("/api/admin/leads/{lead_id}/main")
