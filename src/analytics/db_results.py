@@ -20,6 +20,7 @@ from .db_pool import (
 )
 from src.common.cache import prune
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious
+from src.krasmarafon.services.public_pd import mask_runner
 
 logger = logging.getLogger(__name__)
 
@@ -553,11 +554,12 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
         cursor = connection.cursor(dictionary=True, buffered=True)
 
         cursor.execute(
-            """
+            f"""
             SELECT r.surname, r.name, r.sex,
                    r.time_clear_finish, r.time_gun_finish,
                    r.finish_pace_avg_clean, r.finish_pace_avg_gun,
-                   r.race_status, e.event_distance, e.event_year
+                   r.race_status, e.event_distance, e.event_year,
+                   {PD_REFUSED_SQL} AS pd_refused
             FROM results r
             INNER JOIN events e ON r.event_id = e.id
             WHERE e.event_name = %s
@@ -650,13 +652,13 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
                         if dist_best_raw is None or tc_sec < dist_best_raw:
                             dist_best_raw = tc_sec
                             pace_sec_best = _td_sec(r.get('finish_pace_avg_clean') or r.get('finish_pace_avg_gun'))
-                            dist_best = {
+                            dist_best = mask_runner({
                                 'surname': r.get('surname', ''),
                                 'name': r.get('name', ''),
                                 'time': _time_str(tc),
                                 'pace': _pace_str(pace_sec_best),
                                 'year': year,
-                            }
+                            }, r.get('pd_refused'))
 
                 combined = male_paces + female_paces
                 avg_all = sum(combined) / len(combined) if combined else None
@@ -812,7 +814,7 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
         return []
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
-        query = """
+        query = f"""
         SELECT
             rs.result_id,
             rs.segment_code,
@@ -820,7 +822,8 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
             rs.sg_pace_avg,   rs.sg_pace_avg_gun,
             rs.sg_rank_absolute,     rs.sg_rank_sex,     rs.sg_rank_category,
             rs.sg_rank_absolute_gun, rs.sg_rank_sex_gun, rs.sg_rank_category_gun,
-            r.surname, r.name, r.start_number, r.sex, r.category
+            r.surname, r.name, r.start_number, r.sex, r.category,
+            {PD_REFUSED_SQL} AS pd_refused
         FROM `result_segments` rs
         JOIN `results` r ON rs.result_id = r.id
         WHERE rs.event_id = %s AND rs.segment_code = %s
@@ -836,7 +839,7 @@ def get_event_segment_rankings(event_id: int, segment_code: str) -> List[Dict[st
             for f in time_fields:
                 if f in row:
                     row[f] = _td_to_str(row[f])
-            result.append(row)
+            result.append(mask_runner(row, row.pop('pd_refused', 0)))
         return result
     except Exception as e:
         logger.error(f"❌ Ошибка get_event_segment_rankings: {e}")
