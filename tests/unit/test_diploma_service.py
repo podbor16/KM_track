@@ -195,3 +195,27 @@ def test_participant_phrase_by_sex():
     assert participant_phrase(cfg, "Мужчина").startswith("Бегал ")
     assert participant_phrase(cfg, "").startswith("Бегал ")      # пол не указан — мужская форма
     assert participant_phrase(SimpleNamespace(participant_text_male=None, participant_text_female=None), "Женщина") is None
+
+
+def test_diploma_masks_refused():
+    from datetime import timedelta
+    from src.krasmarafon.services import diploma_service as ds
+    rows = [{"start_number": 5, "surname": "Иванов", "name": "Иван", "race_status": "Finished", "sex": "Мужчина",
+             "category": "М", "time_clear_finish": timedelta(minutes=25), "rank_absolute": 1, "rank_sex": 1,
+            "rank_category": 1, "event_name": "Весна", "pd_refused": 1}]
+    with patch.object(ds, "get_race_results_by_event_id", return_value=rows):
+        d = ds.get_diploma_data(1, "5")
+    assert (d["surname"], d["name"]) == ("Спортсмен", "")
+
+
+def test_participant_diploma_masks_refused():
+    from unittest.mock import MagicMock
+    from src.krasmarafon.services import diploma_service as ds
+    cur = MagicMock()
+    cur.fetchone.return_value = {"surname": "Иванов", "name": "Иван", "sex": "Мужчина", "event_id": 1, "pd_refused": 1}
+    conn = MagicMock()
+    conn.cursor.return_value = cur
+    with patch.object(ds, "get_pooled_connection", return_value=conn):
+        d = ds.get_participant_diploma_data(10)
+    assert (d["surname"], d["name"]) == ("Спортсмен", "")
+    assert "pd_refused" in cur.execute.call_args[0][0]

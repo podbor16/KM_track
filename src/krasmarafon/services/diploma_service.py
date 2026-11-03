@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from src.analytics.db_pool import get_pooled_connection
 from src.analytics.db_results import get_race_results_by_event_id
+from src.krasmarafon.services.public_pd import mask_runner
 
 # 'fifnished' — не опечатка в этом файле, а реальное значение в БД
 # (см. тот же список в templates/krasmarafon/athlete-profile.html:366).
@@ -72,12 +73,12 @@ def get_participant_diploma_data(lead_id: int) -> Optional[dict]:
         return None
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT surname, name, sex, event_id FROM leads WHERE id = %s", (lead_id,))
+        cur.execute("SELECT surname, name, sex, event_id, pd_refused FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
         cur.close()
     finally:
         conn.close()
-    return row
+    return mask_runner(row, row.get("pd_refused")) if row else row
 
 
 def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
@@ -117,7 +118,7 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
     rank_sex = target.get('rank_sex_clean') if is_zhara else target.get('rank_sex')
     rank_category = target.get('rank_category_clean') if is_zhara else target.get('rank_category')
 
-    return {
+    return mask_runner({
         'surname': target.get('surname'),
         'name': target.get('name'),
         'category': target.get('category'),
@@ -128,4 +129,4 @@ def get_diploma_data(event_id: int, bib: str) -> Optional[dict]:
         'sex_label': _gender_label(target.get('sex')),
         'show_sex_rank': len(sexes) > 1,
         'show_category_rank': show_category_rank,
-    }
+    }, target.get('pd_refused'))
