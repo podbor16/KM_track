@@ -889,10 +889,12 @@ def test_group_with_one_matching_lead_keeps_card_title_and_claim_button(web, car
 
 def test_web_history_details_and_places(web, cards, db):
     conn, cur = db
-    cur.execute("""UPDATE leads SET order_id = 5551, amount = 1090, promocode = 'VIM99', discount = 109.5,
-                   products = '5 км (kt) - 1x1090' WHERE event_name = %s AND start_number = 9001""", (EV,))
+    cur.execute("""UPDATE leads SET order_id = 5550 WHERE event_name = %s AND start_number = 9001""", (EV,))
     cur.execute("""UPDATE results SET category = 'М35-39', rank_absolute = 4, rank_category = 3
                    WHERE start_number = 9001 AND event_id = %s""", (cards["event_id"],))
+    add_lead(cur, "Иван", BD1, ME, 9051, year=2098)                     # будущая заявка с почты аккаунта
+    cur.execute("""UPDATE leads SET order_id = 5551, amount = 1090, promocode = 'VIM99', discount = 109.5,
+                   products = '5 км (kt) - 1x1090' WHERE event_name = %s AND start_number = 9051""", (EV,))
     add_lead(cur, "Иван", BD1, OTHER, 9050, year=2098)                  # будущая заявка с чужой почты
     conn.commit()
     client, _ = web
@@ -908,3 +910,4 @@ def test_web_history_details_and_places(web, cards, db):
     assert f"Оформлено с почты: {ME}" in text                           # почта аккаунта — полностью
     assert f"Оформлено с почты: o***@{DOMAIN}" in text                  # чужая — маской
     assert OTHER not in page
+    assert "Номер заказа: 5550" not in text                           # у результата подробностей заказа нет

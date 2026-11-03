@@ -309,17 +309,12 @@ def test_order_details_of_past_lead_without_result():
     assert e["status"] == "не стартовал" and e["order"]["order_id"] == 2062310870
 
 
-def test_result_entry_carries_order_of_merged_lead_by_number_then_latest_non_refund():
+def test_result_entry_has_no_order_even_with_merged_lead():
+    """Подробности заказа — только у заявок; у результата — места, протокол, диплом (решение пользователя)."""
     ev = dict(event_id=77, year=2025, date=dt.date(2025, 7, 12))
     r = res(1, event_id=77, start_number=5, time=td(1, 45))
-    leads = [lead(1, start_number=5, **dict(FULL, order_id=111), **ev),
-             lead(2, start_number=6, **dict(FULL, order_id=222), **ev)]
-    assert only_item(build([r], leads))["order"]["order_id"] == 111
-    leads = [lead(1, start_number=None, **dict(FULL, order_id=111), **ev),
-             lead(2, start_number=None, **dict(FULL, order_id=222), **ev),
-             lead(3, start_number=None, refund=1, **dict(FULL, order_id=333), **ev)]
-    assert only_item(build([r], leads))["order"]["order_id"] == 222
-    assert only_item(build([r]))["order"] is None
+    leads = [lead(1, start_number=5, **dict(FULL, order_id=111), **ev)]
+    assert only_item(build([r], leads))["order"] is None
 
 
 def test_result_without_lead_has_no_order():

@@ -74,16 +74,7 @@ def _order(lead: dict, account_email: Optional[str]) -> dict:
     }
 
 
-def _lead_of_result(r: dict, leads: list[dict]) -> Optional[dict]:
-    """Заявка, слитая с результатом: той же карточки в том же событии; с тем же номером, затем без возврата, затем новее."""
-    if r["event_id"] is None:
-        return None
-    same = [ld for ld in leads if (ld["client_id"], ld["event_id"]) == (r["client_id"], r["event_id"])]
-    return max(same, key=lambda ld: (ld["start_number"] is not None and ld["start_number"] == r["start_number"],
-                                     not ld["refund"], ld["id"]), default=None)
-
-
-def _result_entry(r: dict, codes: dict, diploma_ids: set, lead: Optional[dict], account_email: Optional[str]) -> dict:
+def _result_entry(r: dict, codes: dict, diploma_ids: set) -> dict:
     finished, td, place = finish_info(r)
     dist = _dist(r["event_distance"])
     year = _year(r["event_year"], r["event_date"])
@@ -97,7 +88,7 @@ def _result_entry(r: dict, codes: dict, diploma_ids: set, lead: Optional[dict], 
         "time": fmt_time(td) if finished else None, "place": place,
         "places": _places(r, place) if finished else None,
         "pace": _pace(td.total_seconds(), dist) if finished and dist else None,
-        "status": status, "refund": False, "order": _order(lead, account_email) if lead else None,
+        "status": status, "refund": False, "order": None,  # подробности заказа — только у заявок
         "protocol_url": protocol_url(r["event_name"], year, r.get("surname"), codes) if finished else None,
         "diploma_url": (f"/diploma/{r['event_id']}/{r['start_number']}"
                         if finished and r["event_id"] in diploma_ids and r["start_number"] is not None else None),
@@ -174,7 +165,7 @@ def build_history(results: list[dict], leads: list[dict], today: dt.date, codes:
     open_leads = [ld for ld in leads if (ld["client_id"], ld["event_id"]) not in done
                   and not (ld["refund"] and ld["event_id"] is not None and (ld["client_id"], ld["event_id"]) in active)]
 
-    entries = ([_result_entry(r, codes, diploma_ids, _lead_of_result(r, leads), account_email) for r in results]
+    entries = ([_result_entry(r, codes, diploma_ids) for r in results]
                + [_lead_entry(ld, today, account_email) for ld in open_leads])
 
     finishes = []
