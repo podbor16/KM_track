@@ -62,3 +62,17 @@ def test_protocol_url_known_and_unknown_event():
     url = protocol_url("Жара", 2026, "Иванов", {"Жара": "zhara"})
     assert url == "/results?event=zhara&year=2026&search=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2"
     assert protocol_url("Неизвестный", 2026, "Иванов", {"Жара": "zhara"}) is None
+
+
+def test_undated_old_lead_is_past_and_sorts():
+    rows = [lead(1, event_year=2023, date=None), lead(2, date=dt.date(2026, 7, 12)),
+            lead(3, surname="Петров", event_year=2022, date=None)]
+    people = group_by_person(rows, TODAY)
+    assert [e["lead_id"] for e in people[0]["past"]] == [2, 1]
+    assert people[0]["upcoming"] == []
+    assert [p["title"] for p in people] == ["Иванов Пётр", "Петров Пётр"]
+
+
+def test_undated_current_year_lead_is_upcoming():
+    p = group_by_person([lead(1, event_year=2026, date=None)], TODAY)[0]
+    assert [e["lead_id"] for e in p["upcoming"]] == [1] and p["past"] == []

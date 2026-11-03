@@ -2,6 +2,7 @@
 спецификация docs/superpowers/specs/2026-11-03-athlete-login-design.md)."""
 
 import logging
+import re
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Cookie, Form, Request
@@ -15,6 +16,7 @@ from src.krasmarafon.services.athlete_cabinet import cabinet
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+_EMAIL_RE = re.compile(r"[^@\s,;<>()\"']+@[^@\s,;<>()\"']+\.[^@\s,;<>()\"']+")
 ERR_CODE = "Код неверный или устарел"
 ERR_LINK = "Ссылка устарела — запросите новый код"
 ERR_LIMIT = "Слишком много попыток, попробуйте позже"
@@ -65,7 +67,7 @@ async def login_send_code(request: Request, email: str = Form(...), shared: str 
     if _foreign_origin(request):
         return _forbidden()
     email = aa.normalize_email(email)
-    if "@" not in email or len(email) > 255:
+    if len(email) > 255 or not _EMAIL_RE.fullmatch(email):
         return _login_page(request, "email", error="Проверьте почту", email=email, shared=bool(shared))
     try:
         await run_in_threadpool(aa.request_code, email, _client_ip(request))
@@ -134,7 +136,9 @@ async def logout_all(request: Request, km_athlete: str | None = Cookie(default=N
 async def me_page(request: Request, km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
-        return RedirectResponse("/me/login", status_code=302)
+        response = RedirectResponse("/me/login", status_code=302)
+        response.delete_cookie(aa.COOKIE_NAME)
+        return response
     people = await run_in_threadpool(cabinet, email)
     return templates.TemplateResponse("krasmarafon/me.html", {
         "request": request, "email": email, "people": people,

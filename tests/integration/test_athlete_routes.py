@@ -172,3 +172,18 @@ def test_header_shows_login_or_cabinet(db, client):
     _, code, _ = request_code(client, f"hdr@{DOMAIN}")
     client.post("/me/verify", data={"email": f"hdr@{DOMAIN}", "code": code})
     assert "КАБИНЕТ" in client.get("/results").text
+
+
+@pytest.mark.parametrize("bad", ["a@x.ru,b@y.ru", "X <v@y.ru>"])
+def test_multiple_or_decorated_email_rejected(db, client, bad):
+    with patch.object(aa, "send_mail") as mail:
+        r = client.post("/me/login", data={"email": bad})
+    assert "Проверьте почту" in r.text
+    mail.assert_not_called()
+
+
+def test_me_with_stale_cookie_clears_it(client):
+    client.cookies.set("km_athlete", "garbage")
+    r = client.get("/me", follow_redirects=False)
+    assert r.status_code == 302
+    assert 'km_athlete=""' in r.headers["set-cookie"] or "km_athlete=;" in r.headers["set-cookie"]

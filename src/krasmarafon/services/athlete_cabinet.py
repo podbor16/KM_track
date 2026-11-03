@@ -72,6 +72,10 @@ def _entry(r: dict, codes: dict) -> dict:
     }
 
 
+def _past_key(e: dict) -> dt.date:
+    return e["date"] or dt.date(e["year"] or 1, 1, 1)
+
+
 def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = None) -> list[dict]:
     """[{title, upcoming: [...], past: [...]}] в порядке показа."""
     codes = codes or {}
@@ -81,16 +85,20 @@ def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = No
         g = groups.setdefault(key, {"upcoming": [], "past": []})
         g["title"] = f"{r['surname'] or ''} {r['name'] or ''}".strip()  # перезаписывается — останется самая новая
         e = _entry(r, codes)
-        (g["upcoming"] if e["date"] is None or e["date"] >= today else g["past"]).append(e)
+        if e["date"] is None:
+            is_upcoming = not e["year"] or e["year"] >= today.year
+        else:
+            is_upcoming = e["date"] >= today
+        (g["upcoming"] if is_upcoming else g["past"]).append(e)
     far = dt.date.max
     for g in groups.values():
         g["upcoming"].sort(key=lambda e: e["date"] or far)
-        g["past"].sort(key=lambda e: e["date"], reverse=True)
+        g["past"].sort(key=_past_key, reverse=True)
 
     def order(g):
         if g["upcoming"]:
             return (0, (g["upcoming"][0]["date"] or far).toordinal())
-        return (1, -g["past"][0]["date"].toordinal())
+        return (1, -_past_key(g["past"][0]).toordinal())
 
     return sorted(groups.values(), key=order)
 

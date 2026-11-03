@@ -58,6 +58,14 @@ body {
   white-space: nowrap;
 }
 .navbar-link:hover { color: #fff; }
+/* «Войти» / «Кабинет» — личный кабинет спортсмена (/me) */
+.navbar-link.navbar-link--account {
+  height: auto;
+  line-height: 1.4;
+  padding: 4px 14px;
+  border: 1px solid var(--km-primary, #EE2D62);
+  border-radius: 50px;
+}
 .navbar-link.active {
   color: var(--km-primary);
   border-bottom-color: var(--km-primary);
@@ -97,6 +105,12 @@ body {
     height: auto;
     line-height: 1.4;
     border-bottom: 1px solid #333;
+  }
+  .navbar-link.navbar-link--account {
+    padding: 12px 20px;
+    border: 0;
+    border-bottom: 1px solid #333;
+    border-radius: 0;
   }
   .navbar-link.active { border-bottom: 1px solid var(--km-primary); }
 }
