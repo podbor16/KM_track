@@ -1,0 +1,285 @@
+"""Перепривязка заявки/результата к верной карточке после правки ФИ/ДР (dq_actions.plan_relink / relink_row)
+на локальной БД. Тестовые данные — событие «Тест перепривязка» 2099, почты *@relink-test.local, фамилии «Тестрелинк…»,
+журнал done_by='relink-test'; фикстура убирает их до и после. Любые UPDATE/DELETE — только по ним."""
+import json
+from datetime import date
+
+import pytest
+
+from src.analytics.db_pool import get_pooled_connection
+from src.analytics.dq_actions import plan_relink, relink_row, undo_action
+from src.krasmarafon.services import athlete_claims as ac
+
+DOMAIN = "relink-test.local"
+EV = "Тест перепривязка"
+SURNAME = "Тестрелинк"
+USER = "relink-test"
+BD_MAMA, BD_DAUGHTER, BD_SON, BD_PHANTOM = date(1986, 5, 1), date(2015, 4, 5), date(2017, 7, 9), date(1990, 2, 3)
+TABLES = ("leads", "results")
+
+
+@pytest.fixture
+def db():
+    conn = get_pooled_connection()
+    if not conn:
+        pytest.skip("Нет локальной БД")
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT COUNT(*) n FROM leads WHERE surname LIKE %s AND event_name <> %s", (f"{SURNAME}%", EV))
+    if cur.fetchone()["n"]:
+        conn.close()
+        pytest.skip("Фамилии «Тестрелинк…» заняты не тестовыми данными")
+
+    def cleanup():
+        # Порядок из-за внешних ключей: результаты -> заявки -> события -> карточки
+        cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (USER,))
+        cur.execute("SHOW TABLES LIKE 'athlete_claims'")
+        if cur.fetchone():
+            cur.execute("DELETE FROM athlete_claims WHERE email LIKE %s", (f"%@{DOMAIN}",))
+            cur.execute("DELETE FROM dq_actions WHERE action IN ('athlete_claim', 'athlete_unclaim') "
+                        "AND JSON_UNQUOTE(JSON_EXTRACT(details, '$.email')) LIKE %s", (f"%@{DOMAIN}",))
+        cur.execute("SELECT id FROM events WHERE event_name = %s", (EV,))
+        evs = [r["id"] for r in cur.fetchall()]
+        if evs:
+            ph = ",".join(map(str, evs))
+            cur.execute(f"DELETE FROM results WHERE event_id IN ({ph})")
+        cur.execute("DELETE FROM leads WHERE event_name = %s", (EV,))
+        if evs:
+            cur.execute(f"DELETE FROM events WHERE id IN ({ph})")
+        cur.execute("DELETE FROM clients WHERE surname LIKE %s", (f"{SURNAME}%",))
+        conn.commit()
+
+    cleanup()
+    yield conn, cur
+    cleanup()
+    cur.close()
+    conn.close()
+
+
+def add_lead(cur, name, birthday, num, surname=SURNAME):
+    """Карточку и событие заводят триггеры leads."""
+    cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, ma_email, phone, event_name,
+                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, status, is_new,
+                   is_new_event, is_name_suspicious, start_number, created_at)
+                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, NULL, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0, 0,
+                           %s, NOW())""", (surname, name, birthday, f"{num}@{DOMAIN}", EV, num))
+    cur.execute("SELECT id, client_id, event_id FROM leads WHERE id = %s", (cur.lastrowid,))
+    return cur.fetchone()
+
+
+def add_result(cur, name, birthday, event_id, num, surname=SURNAME):
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, rank_absolute) VALUES (%s, %s, %s, 'Мужчина', %s, %s, 'Finished', '00:25:00', 1)""",
+                (surname, name, birthday, event_id, num))
+    cur.execute("SELECT id, client_id, event_id FROM results WHERE id = %s", (cur.lastrowid,))
+    return cur.fetchone()
+
+
+def add_row(cur, table, name, birthday, num, event_id, surname=SURNAME):
+    return (add_lead(cur, name, birthday, num, surname) if table == "leads"
+            else add_result(cur, name, birthday, event_id, num, surname))
+
+
+@pytest.fixture
+def world(db):
+    """cm — карточка «Мама» (ДР 1986) с заявкой 9001; cx — карточка «Дочь» (ДР 2015) с заявкой 9002."""
+    conn, cur = db
+    cm = add_lead(cur, "Мама", BD_MAMA, 9001)
+    cx = add_lead(cur, "Дочь", BD_DAUGHTER, 9002)
+    conn.commit()
+    return {"cm": cm["client_id"], "cx": cx["client_id"], "event_id": cm["event_id"]}
+
+
+def fix(conn, cur, table, row_id, name=None, birthday=None):
+    """Исправление ФИ/ДР строки (как «Изменить»/импорт/загрузчик) — только по id своей тестовой строки."""
+    sets = {k: v for k, v in (("name", name), ("birthday", birthday)) if v is not None}
+    where = f"id = {int(row_id)} AND surname LIKE '{SURNAME}%'"
+    cur.execute(f"SELECT COUNT(*) n FROM {table} WHERE {where}")
+    assert cur.fetchone()["n"] == 1
+    cur.execute(f"UPDATE {table} SET {', '.join(f'{k} = %s' for k in sets)} WHERE {where}", list(sets.values()))
+    conn.commit()
+
+
+def row_state(cur, table, row_id):
+    cur.execute(f"SELECT client_id, surname, name, birthday FROM {table} WHERE id = %s", (row_id,))
+    return cur.fetchone()
+
+
+def card(cur, cid):
+    cur.execute("SELECT id, surname, name, birthday FROM clients WHERE id = %s", (cid,))
+    return cur.fetchone()
+
+
+def journal(cur):
+    cur.execute("SELECT id, action, finding_key, details, done_by FROM dq_actions WHERE done_by = %s ORDER BY id", (USER,))
+    return [{**r, "details": json.loads(r["details"])} for r in cur.fetchall()]
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_none_when_fio_and_bd_match_current_card(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Мама", BD_MAMA, 9500, world["event_id"])
+    assert row["client_id"] == world["cm"]
+    plan = plan_relink(conn, table, row["id"])
+    assert plan["action"] == "none" and plan["from_card"] == plan["to_card"] == world["cm"]
+    res = relink_row(conn, table, row["id"], USER, "admin")
+    assert res["action"] == "none" and res["action_id"] is None
+    assert journal(cur) == []
+
+
+def test_yo_ye_difference_is_still_a_match_like_uk_client(db, world):
+    conn, cur = db
+    row = add_lead(cur, "Алёна", BD_SON, 9501)
+    fix(conn, cur, "leads", row["id"], name="Алена")
+    plan = plan_relink(conn, "leads", row["id"])
+    assert plan["action"] == "none" and plan["to_card"] == row["client_id"]
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_move_to_existing_card_and_undo(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Мама", BD_MAMA, 9500, world["event_id"])       # ошибочно на карточке мамы
+    fix(conn, cur, table, row["id"], name="Дочь", birthday=BD_DAUGHTER)
+    plan = plan_relink(conn, table, row["id"])
+    assert plan["action"] == "move" and plan["from_card"] == world["cm"] and plan["to_card"] == world["cx"]
+    assert plan["card"]["id"] == world["cx"] and (plan["card"]["leads"], plan["card"]["results"]) == (1, 0)
+    assert plan["new"] == {"surname": SURNAME, "name": "Дочь", "birthday": str(BD_DAUGHTER)} and plan["reason"]
+    assert row_state(cur, table, row["id"])["client_id"] == world["cm"]         # план ничего не пишет
+    assert journal(cur) == []
+
+    res = relink_row(conn, table, row["id"], USER, "admin")
+    assert res["action"] == "move" and res["to_card"] == world["cx"] and res["action_id"]
+    assert row_state(cur, table, row["id"])["client_id"] == world["cx"]
+    assert card(cur, world["cm"])                                                # у мамы есть другая заявка
+    (entry,) = journal(cur)
+    assert (entry["id"], entry["action"], entry["finding_key"]) == (res["action_id"], "move_result", "relink:admin")
+
+    undo_action(conn, res["action_id"], USER)
+    assert row_state(cur, table, row["id"])["client_id"] == world["cm"]
+    assert card(cur, world["cx"])
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_move_that_empties_source_deletes_it_and_undo_restores_with_same_id(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Фантом", BD_PHANTOM, 9500, world["event_id"])    # фантомная карточка с единственной строкой
+    phantom = row["client_id"]
+    fix(conn, cur, table, row["id"], name="Дочь", birthday=BD_DAUGHTER)
+    res = relink_row(conn, table, row["id"], USER, "import")
+    assert res["action"] == "move" and res["from_card"] == phantom and res["to_card"] == world["cx"]
+    assert card(cur, phantom) is None
+    undo_action(conn, res["action_id"], USER)
+    restored = card(cur, phantom)
+    assert restored and restored["name"] == "Фантом" and str(restored["birthday"]) == str(BD_PHANTOM)
+    assert row_state(cur, table, row["id"])["client_id"] == phantom
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_rename_phantom_card_and_undo(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Фантом", BD_PHANTOM, 9500, world["event_id"])
+    phantom = row["client_id"]
+    fix(conn, cur, table, row["id"], name="Сын", birthday=BD_SON)               # такой карточки нет
+    plan = plan_relink(conn, table, row["id"])
+    assert plan["action"] == "rename" and plan["to_card"] == phantom
+    assert plan["card"]["id"] == phantom and plan["card"]["name"] == "Фантом"      # переименовывается эта карточка
+    res = relink_row(conn, table, row["id"], USER, "loader")
+    assert res["action"] == "rename" and res["to_card"] == phantom and res["action_id"]
+    renamed = card(cur, phantom)
+    assert (renamed["surname"], renamed["name"], str(renamed["birthday"])) == (SURNAME, "Сын", str(BD_SON))
+    assert row_state(cur, table, row["id"])["client_id"] == phantom
+    (entry,) = journal(cur)
+    assert (entry["action"], entry["finding_key"], entry["details"]["table"]) == ("edit", "relink:loader", "clients")
+
+    undo_action(conn, res["action_id"], USER)
+    back = card(cur, phantom)
+    assert (back["name"], str(back["birthday"])) == ("Фантом", str(BD_PHANTOM))
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_new_card_when_current_card_has_other_rows_and_undo(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Мама", BD_MAMA, 9500, world["event_id"])
+    fix(conn, cur, table, row["id"], name="Сын", birthday=BD_SON)               # карточки «Сын» нет, у мамы есть заявка 9001
+    plan = plan_relink(conn, table, row["id"])
+    assert plan["action"] == "new_card" and plan["from_card"] == world["cm"] and plan["to_card"] is None
+    assert plan["card"] is None
+    res = relink_row(conn, table, row["id"], USER, "admin")
+    new_id = res["to_card"]
+    assert res["action"] == "new_card" and new_id not in (None, world["cm"], world["cx"]) and res["action_id"]
+    created = card(cur, new_id)
+    assert (created["surname"], created["name"], str(created["birthday"])) == (SURNAME, "Сын", str(BD_SON))
+    assert row_state(cur, table, row["id"])["client_id"] == new_id and card(cur, world["cm"])
+
+    undo_action(conn, res["action_id"], USER)
+    assert row_state(cur, table, row["id"])["client_id"] == world["cm"]
+    assert card(cur, new_id) is None
+
+
+def test_result_with_own_lead_on_card_gets_new_card_not_rename(db, world):
+    """«Других строк нет» считает и заявки, и результаты: у карточки есть заявка — переименовывать нельзя."""
+    conn, cur = db
+    res_row = add_result(cur, "Мама", BD_MAMA, world["event_id"], 9001)         # триггер: заявка 9001 той же ФИ -> карточка мамы
+    assert res_row["client_id"] == world["cm"]
+    fix(conn, cur, "results", res_row["id"], name="Сын", birthday=BD_SON)
+    assert plan_relink(conn, "results", res_row["id"])["action"] == "new_card"
+
+
+@pytest.mark.parametrize("table", TABLES)
+@pytest.mark.parametrize("bd", ["1900-01-01", "1905-01-01"])
+def test_placeholder_birthday_is_skipped(db, world, table, bd):
+    conn, cur = db
+    row = add_row(cur, table, "Мама", BD_MAMA, 9500, world["event_id"])
+    fix(conn, cur, table, row["id"], name="Дочь", birthday=bd)
+    plan = plan_relink(conn, table, row["id"])
+    assert plan["action"] == "skip" and plan["reason"]
+    res = relink_row(conn, table, row["id"], USER, "admin")
+    assert res["action"] == "skip" and res["action_id"] is None
+    assert row_state(cur, table, row["id"])["client_id"] == world["cm"] and journal(cur) == []
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_preview_with_future_values_does_not_write(db, world, table):
+    conn, cur = db
+    row = add_row(cur, table, "Мама", BD_MAMA, 9500, world["event_id"])
+    before = row_state(cur, table, row["id"])
+    plan = plan_relink(conn, table, row["id"], new={"name": "Дочь", "birthday": str(BD_DAUGHTER)})
+    assert plan["action"] == "move" and plan["to_card"] == world["cx"]
+    assert plan["new"] == {"surname": SURNAME, "name": "Дочь", "birthday": str(BD_DAUGHTER)}
+    assert plan_relink(conn, table, row["id"], new={"name": "Сын", "birthday": BD_SON})["action"] == "new_card"
+    assert plan_relink(conn, table, row["id"], new={"birthday": "1900-01-01"})["action"] == "skip"
+    assert row_state(cur, table, row["id"]) == before and journal(cur) == []
+
+
+def test_arguments_are_validated(db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    with pytest.raises(ValueError):
+        plan_relink(conn, "clients", row["id"])
+    with pytest.raises(ValueError):
+        plan_relink(conn, "leads", 10 ** 9)
+    with pytest.raises(ValueError):
+        relink_row(conn, "leads", row["id"], USER, "bogus")
+
+
+def test_cabinet_claim_stays_valid_after_move_but_goes_stale_after_rename(db, world):
+    """Привязка кабинета — общее правило: действует, пока карточка есть и её ДР = ДР привязки."""
+    conn, cur = db
+    cur.execute("SHOW TABLES LIKE 'athlete_claims'")
+    if not cur.fetchone():
+        pytest.skip("Миграция athlete_claims не применена")
+    mail = f"me@{DOMAIN}"
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    fix(conn, cur, "leads", row["id"], name="Дочь", birthday=BD_DAUGHTER)
+    cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)",
+                (mail, world["cm"], BD_MAMA))
+    conn.commit()
+    assert relink_row(conn, "leads", row["id"], USER, "admin")["action"] == "move"
+    assert ac.claimed_cards(mail) == ([world["cm"]], [])
+
+    ph = add_lead(cur, "Фантом", BD_PHANTOM, 9510)
+    cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)",
+                (f"ph@{DOMAIN}", ph["client_id"], BD_PHANTOM))
+    conn.commit()
+    fix(conn, cur, "leads", ph["id"], name="Сын", birthday=BD_SON)
+    assert relink_row(conn, "leads", ph["id"], USER, "admin")["action"] == "rename"
+    assert ac.claimed_cards(f"ph@{DOMAIN}") == ([], [ph["client_id"]])

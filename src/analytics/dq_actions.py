@@ -535,6 +535,102 @@ def move_row(conn, table, row_id, user, key="", to_client_id=None, new_card=None
         cur.close()
 
 
+RELINK_SOURCES = ("admin", "import", "loader", "dq")
+_RELINK_REASONS = {
+    "none": "ФИ и ДР совпадают с текущей карточкой",
+    "move": "есть другая карточка с такими ФИ и ДР",
+    "rename": "такой карточки нет, у текущей нет других строк — она создана по ошибочным данным",
+    "new_card": "такой карточки нет, у текущей есть другие строки",
+}
+
+
+def _decide(row, card_id, other_rows, match):
+    """Действие перепривязки по правилу -> (action, reason). row — ФИ и ДР строки после правки (нормализованные);
+    card_id — текущая карточка строки; other_rows — сколько других заявок и результатов у этой карточки;
+    match — id карточки с такими ФИ+ДР (в том числе текущей) или None."""
+    if not card_id:
+        return "skip", "у строки нет карточки"
+    if not row.get("surname") or not row.get("name"):
+        return "skip", "фамилия или имя пусты"
+    if not real_bd(row.get("birthday")):
+        return "skip", "ДР пуста или заглушка — надёжно сопоставить нельзя"
+    if match == card_id:
+        action = "none"
+    elif match:
+        action = "move"
+    else:
+        action = "new_card" if other_rows else "rename"
+    return action, _RELINK_REASONS[action]
+
+
+def _card_info(cur, card_id):
+    cur.execute("""SELECT c.id, c.surname, c.name, c.birthday,
+                          (SELECT COUNT(*) FROM leads l WHERE l.client_id = c.id) leads,
+                          (SELECT COUNT(*) FROM results r WHERE r.client_id = c.id) results
+                   FROM clients c WHERE c.id = %s""", (card_id,))
+    info = cur.fetchone()
+    info["birthday"] = str(info["birthday"])
+    return info
+
+
+def plan_relink(conn, table, row_id, new=None):
+    """Что сделает relink_row — без записи. Карточка строки выбирается заново по её ФИ и ДР (new — будущие значения
+    для предпросмотра: {surname?, name?, birthday?}, недостающее берётся из строки). Сравнение ФИ+ДР — средствами БД,
+    как uk_client (регистр, ё=е). ->
+    {"action": "none"|"move"|"rename"|"new_card"|"skip", "from_card": id, "to_card": id|None,
+     "card": {"id","surname","name","birthday","leads","results"}|None, "new": {"surname","name","birthday"},
+     "reason": str}.
+    to_card: none — текущая, move — существующая, rename — текущая (переименовывается), new_card/skip — None.
+    card: move — карточка-цель, rename — переименовываемая (значения «до»), иначе None."""
+    if table not in MOVABLE:
+        raise ValueError(f"перепривязка {table} не поддерживается")
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(f"SELECT client_id, surname, name, birthday FROM {table} WHERE id = %s", (int(row_id),))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"нет строки #{row_id}")
+        values = {k: (new[k] if new and new.get(k) is not None else row[k]) for k in ("surname", "name", "birthday")}
+        final = {"surname": normalize_person_name(str(values["surname"] or "")),
+                 "name": normalize_person_name(str(values["name"] or "")),
+                 "birthday": str(values["birthday"] or "")[:10]}
+        if final["birthday"]:
+            try:
+                datetime.strptime(final["birthday"], "%Y-%m-%d")
+            except ValueError:
+                raise ValueError("ДР — в формате ГГГГ-ММ-ДД") from None
+        card_id, match, other_rows = row["client_id"], None, 0
+        if card_id and final["surname"] and final["name"] and real_bd(final["birthday"]):
+            match = _card_by_fio(cur, final["surname"], final["name"], final["birthday"])
+            cur.execute("SELECT (SELECT COUNT(*) FROM leads WHERE client_id = %s) "
+                        "+ (SELECT COUNT(*) FROM results WHERE client_id = %s) - 1 n", (card_id, card_id))
+            other_rows = max(cur.fetchone()["n"], 0)
+        action, reason = _decide(final, card_id, other_rows, match)
+        to_card = {"none": card_id, "move": match, "rename": card_id}.get(action)
+        info = _card_info(cur, match if action == "move" else card_id) if action in ("move", "rename") else None
+        return {"action": action, "from_card": card_id, "to_card": to_card, "card": info, "new": final, "reason": reason}
+    finally:
+        cur.close()
+
+
+def relink_row(conn, table, row_id, user, source):
+    """После правки ФИ/ДР строки (заявки или результата) — на верную карточку: переезд на существующую
+    (move_row), переименование карточки (edit_record) или новая карточка (move_row) — отменяемыми операциями
+    журнала с finding_key «relink:<source>». source: admin | import | loader | dq.
+    -> план plan_relink с action_id (None, если записи не было: none/skip) и итоговой to_card."""
+    if source not in RELINK_SOURCES:
+        raise ValueError(f"источник: {', '.join(RELINK_SOURCES)}")
+    plan = plan_relink(conn, table, row_id)
+    key, action_id = f"relink:{source}", None
+    if plan["action"] == "move":
+        _, action_id = move_row(conn, table, row_id, user, key, to_client_id=plan["to_card"])
+    elif plan["action"] == "rename":
+        _, action_id = edit_record(conn, "clients", plan["from_card"], plan["new"], user, key)
+    elif plan["action"] == "new_card":
+        plan["to_card"], action_id = move_row(conn, table, row_id, user, key, new_card=plan["new"])
+    return {**plan, "action_id": action_id}
+
+
 def _claimed_birthdays(conn, ids):
     """{карточка: подтверждённая ДР 'ГГГГ-ММ-ДД'} для действующих привязок кабинета (ДР привязки = ДР карточки).
     Таблицы нет (миграция не применена) — привязок нет."""
