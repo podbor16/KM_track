@@ -119,6 +119,13 @@ def test_mail_failure_message(db, client):
     assert "Не удалось отправить код" in r.text
 
 
+def test_too_long_email_rejected(db, client):
+    with patch.object(aa, "send_mail") as mail:
+        r = client.post("/me/login", data={"email": "a" * 295 + "@x.ru"})
+    assert "Проверьте почту" in r.text
+    mail.assert_not_called()
+
+
 def test_logout_everywhere(db, client):
     _, code, _ = request_code(client, f"out@{DOMAIN}")
     client.post("/me/verify", data={"email": f"out@{DOMAIN}", "code": code})

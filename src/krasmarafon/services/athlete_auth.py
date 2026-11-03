@@ -60,38 +60,54 @@ def _letter(code: str, token: str) -> tuple[str, str, str]:
     return subject, text, html
 
 
+def _conn():
+    conn = get_pooled_connection()
+    if conn is None:
+        raise RuntimeError("БД недоступна")
+    return conn
+
+
 def request_code(email: str, ip: str) -> None:
     """Создаёт код и ссылку, гасит прежние коды этой почты, отправляет письмо.
-    TooManyRequests — лимит; ошибка поставщика писем пробрасывается."""
+    TooManyRequests — лимит; ошибка поставщика писем пробрасывается.
+    Проверка лимитов и запись идут под именованной блокировкой MySQL — иначе параллельные
+    запросы проскакивают лимиты (autocommit, транзакций между SELECT и INSERT нет)."""
     email = normalize_email(email)
-    conn = get_pooled_connection()
+    ip = (ip or "")[:45]
+    conn = _conn()
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM athlete_login_codes WHERE expires_at < NOW() - INTERVAL 1 DAY")
-        cur.execute(
-            "SELECT COALESCE(SUM(created_at > NOW() - INTERVAL 1 MINUTE), 0), COUNT(*) "
-            "FROM athlete_login_codes WHERE email = %s AND created_at > NOW() - INTERVAL 1 HOUR",
-            (email,),
-        )
-        last_minute, last_hour = cur.fetchone()
-        cur.execute(
-            "SELECT COUNT(*) FROM athlete_login_codes WHERE ip = %s AND created_at > NOW() - INTERVAL 1 HOUR",
-            (ip,),
-        )
-        (ip_hour,) = cur.fetchone()
-        if last_minute or last_hour >= EMAIL_PER_HOUR or ip_hour >= IP_PER_HOUR:
-            conn.commit()
+        cur.execute("SELECT GET_LOCK('athlete_login_code', 5)")
+        if cur.fetchone()[0] != 1:
             raise TooManyRequests()
-        code = f"{secrets.randbelow(10 ** 6):06d}"
-        token = secrets.token_urlsafe(32)
-        cur.execute(
-            "UPDATE athlete_login_codes SET used_at = NOW() WHERE email = %s AND used_at IS NULL", (email,)
-        )
-        cur.execute(
-            "INSERT INTO athlete_login_codes (email, code_hash, link_hash, ip, expires_at) "
-            f"VALUES (%s, %s, %s, %s, NOW() + INTERVAL {CODE_TTL_MIN} MINUTE)",
-            (email, _code_hash(email, code), _link_hash(token), ip[:45]),
-        )
+        try:
+            cur.execute("DELETE FROM athlete_login_codes WHERE expires_at < NOW() - INTERVAL 1 DAY")
+            cur.execute(
+                "SELECT COALESCE(SUM(created_at > NOW() - INTERVAL 1 MINUTE), 0), COUNT(*) "
+                "FROM athlete_login_codes WHERE email = %s AND created_at > NOW() - INTERVAL 1 HOUR",
+                (email,),
+            )
+            last_minute, last_hour = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM athlete_login_codes WHERE ip = %s AND created_at > NOW() - INTERVAL 1 HOUR",
+                (ip,),
+            )
+            (ip_hour,) = cur.fetchone()
+            if last_minute or last_hour >= EMAIL_PER_HOUR or ip_hour >= IP_PER_HOUR:
+                raise TooManyRequests()
+            code = f"{secrets.randbelow(10 ** 6):06d}"
+            token = secrets.token_urlsafe(32)
+            cur.execute(
+                "UPDATE athlete_login_codes SET used_at = NOW() WHERE email = %s AND used_at IS NULL", (email,)
+            )
+            cur.execute(
+                "INSERT INTO athlete_login_codes (email, code_hash, link_hash, ip, expires_at) "
+                f"VALUES (%s, %s, %s, %s, NOW() + INTERVAL {CODE_TTL_MIN} MINUTE)",
+                (email, _code_hash(email, code), _link_hash(token), ip),
+            )
+        finally:
+            cur.execute("SELECT RELEASE_LOCK('athlete_login_code')")
+            cur.fetchone()
         conn.commit()
         cur.close()
     finally:
@@ -103,7 +119,7 @@ def verify_code(email: str, code: str) -> bool:
     """True — код верный (и теперь использован). MAX_ATTEMPTS неверных попыток гасят код."""
     email = normalize_email(email)
     code = (code or "").strip().replace(" ", "")
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -123,8 +139,8 @@ def verify_code(email: str, code: str) -> bool:
         else:
             cur.execute(
                 # used_at — до attempts: MySQL вычисляет SET слева направо
-                "UPDATE athlete_login_codes SET used_at = IF(attempts + 1 >= %s, NOW(), NULL), "
-                "attempts = attempts + 1 WHERE id = %s",
+                "UPDATE athlete_login_codes SET used_at = IF(attempts + 1 >= %s, NOW(), used_at), "
+                "attempts = attempts + 1 WHERE id = %s AND used_at IS NULL",
                 (MAX_ATTEMPTS, code_id),
             )
             ok = False
@@ -137,7 +153,7 @@ def verify_code(email: str, code: str) -> bool:
 
 def link_email(token: str) -> Optional[str]:
     """Почта действующей ссылки — для страницы «Войти как …?» (ссылку не тратит)."""
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -154,7 +170,7 @@ def link_email(token: str) -> Optional[str]:
 def consume_link(token: str) -> Optional[str]:
     """Тратит ссылку; почта — если ссылка была действующей."""
     h = _link_hash(token or "")
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -183,7 +199,7 @@ def create_session(email: str, shared: bool, user_agent: Optional[str]) -> str:
     shared («Чужой компьютер») — сутки, иначе SESSION_DAYS."""
     token = secrets.token_urlsafe(32)
     ttl = f"INTERVAL {SHARED_SESSION_HOURS} HOUR" if shared else f"INTERVAL {SESSION_DAYS} DAY"
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM athlete_sessions WHERE expires_at < NOW()")
@@ -203,7 +219,7 @@ def session_email(token: Optional[str]) -> Optional[str]:
     if not token:
         return None
     h = _token_hash(token)
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute("SELECT email FROM athlete_sessions WHERE token_hash = %s AND expires_at > NOW()", (h,))
@@ -218,7 +234,7 @@ def session_email(token: Optional[str]) -> Optional[str]:
 
 
 def delete_session(token: Optional[str]) -> None:
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM athlete_sessions WHERE token_hash = %s", (_token_hash(token),))
@@ -230,7 +246,7 @@ def delete_session(token: Optional[str]) -> None:
 
 def delete_all_sessions(email: str) -> None:
     """«Выйти на всех устройствах»."""
-    conn = get_pooled_connection()
+    conn = _conn()
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM athlete_sessions WHERE email = %s", (normalize_email(email),))

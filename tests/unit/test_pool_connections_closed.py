@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 # возвращают соединение вызывающему — закрывает он
-EXEMPT = {("src/analytics/db_results.py", "create_connection"), ("src/analytics/db_pool.py", "get_pooled_connection")}
+EXEMPT = {("src/analytics/db_results.py", "create_connection"), ("src/analytics/db_pool.py", "get_pooled_connection"),
+          ("src/krasmarafon/services/athlete_auth.py", "_conn")}
 
 
 def _calls_pool(node):

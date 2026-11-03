@@ -18,7 +18,7 @@ router = APIRouter()
 ERR_CODE = "Код неверный или устарел"
 ERR_LINK = "Ссылка устарела — запросите новый код"
 ERR_LIMIT = "Слишком много попыток, попробуйте позже"
-ERR_MAIL = "Не удалось отправить код, попробуйте позже"
+ERR_MAIL = "Не удалось отправить код, попробуйте через минуту"
 
 
 def _foreign_origin(request: Request) -> bool:
@@ -65,7 +65,7 @@ async def login_send_code(request: Request, email: str = Form(...), shared: str 
     if _foreign_origin(request):
         return _forbidden()
     email = aa.normalize_email(email)
-    if "@" not in email:
+    if "@" not in email or len(email) > 255:
         return _login_page(request, "email", error="Проверьте почту", email=email, shared=bool(shared))
     try:
         await run_in_threadpool(aa.request_code, email, _client_ip(request))

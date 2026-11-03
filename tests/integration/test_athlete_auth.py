@@ -1,5 +1,6 @@
 """Коды входа и сессии спортсмена на локальной БД. Тестовые почты — *@athlete-test.local."""
 import re
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -134,6 +135,38 @@ def test_limit_ten_per_hour_per_ip(db):
         aa.request_code(f"ipx@{DOMAIN}", "203.0.113.50")
 
 
+def test_late_wrong_attempt_keeps_used_at(db):
+    conn, cur = db
+    code, token = send(f"late@{DOMAIN}")
+    cur.execute("UPDATE athlete_login_codes SET used_at = NOW() WHERE email = %s", (f"late@{DOMAIN}",))
+    conn.commit()
+    wrong = "000000" if code != "000000" else "111111"
+    assert not aa.verify_code(f"late@{DOMAIN}", wrong)
+    cur.execute("SELECT used_at FROM athlete_login_codes WHERE email = %s", (f"late@{DOMAIN}",))
+    assert cur.fetchone()["used_at"] is not None
+    assert aa.link_email(token) is None
+
+
+def test_parallel_requests_respect_email_limit(db):
+    conn, cur = db
+    email = f"par@{DOMAIN}"
+
+    def call(i):
+        try:
+            aa.request_code(email, f"203.0.113.7{i}")
+            return True
+        except aa.TooManyRequests:
+            return False
+
+    with patch.object(aa, "send_mail") as mail:
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            results = list(ex.map(call, range(5)))
+    assert results.count(True) == 1 and results.count(False) == 4
+    assert mail.call_count == 1
+    cur.execute("SELECT COUNT(*) AS n FROM athlete_login_codes WHERE email = %s", (email,))
+    assert cur.fetchone()["n"] == 1
+
+
 def test_session_roundtrip_and_logout(db):
     conn, cur = db
     token = aa.create_session(f"s@{DOMAIN}", shared=False, user_agent="pytest")
@@ -141,7 +174,7 @@ def test_session_roundtrip_and_logout(db):
     cur.execute("SELECT token_hash, TIMESTAMPDIFF(DAY, NOW(), expires_at) AS d FROM athlete_sessions "
                 "WHERE email = %s", (f"s@{DOMAIN}",))
     row = cur.fetchone()
-    assert row["token_hash"] != token and row["d"] >= aa.SESSION_DAYS - 1
+    assert row["token_hash"] != token and aa.SESSION_DAYS - 1 <= row["d"] <= aa.SESSION_DAYS
     aa.delete_session(token)
     assert aa.session_email(token) is None
 
@@ -151,7 +184,8 @@ def test_shared_session_lives_one_day(db):
     aa.create_session(f"sh@{DOMAIN}", shared=True, user_agent=None)
     cur.execute("SELECT TIMESTAMPDIFF(HOUR, NOW(), expires_at) AS h FROM athlete_sessions WHERE email = %s",
                 (f"sh@{DOMAIN}",))
-    assert cur.fetchone()["h"] <= aa.SHARED_SESSION_HOURS
+    h = cur.fetchone()["h"]
+    assert aa.SHARED_SESSION_HOURS - 1 <= h <= aa.SHARED_SESSION_HOURS
 
 
 def test_expired_session_rejected(db):
