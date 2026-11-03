@@ -17,3 +17,20 @@ def test_runner_row_has_client_id():
         resp = rs._do_build(150, None, None, {})
     row = resp.results[0]
     assert row["client_id"] == 40803 and row["id"] == 7
+
+
+def test_refused_runner_is_masked():
+    from src.krasmarafon.services import results_service as rs
+    runner = {"id": 8, "client_id": 40803, "surname": "Пцарев", "name": "Александр", "start_number": 1013,
+              "birthday": date(2008, 5, 1), "race_status": "Finished", "time_gun_finish": timedelta(minutes=9),
+              "sex": "Мужчина", "category": "М", "pd_refused": 1}
+    ev = {"event_name": "Детский забег", "event_distance": 1.0, "event_year": 2016, "event_date": date(2016, 8, 28)}
+    with patch(f"{DB}.get_race_results_by_event_id", return_value=[runner]), \
+            patch(f"{DB}.get_event_info_by_id", return_value=ev), \
+            patch(f"{DB}.get_category_avg_paces", return_value={}), \
+            patch(f"{DB}.get_prev_year_results", return_value=[]):
+        resp = rs._do_build(151, None, None, {})
+    row = resp.results[0]
+    assert (row["surname"], row["name"], row["full_name"]) == ("Спортсмен", "", "Спортсмен")
+    assert row["birthday"] is None and row["client_id"] is None
+    assert row["start_number"] == 1013

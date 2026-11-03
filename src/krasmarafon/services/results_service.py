@@ -13,6 +13,7 @@ from src.common.cache import prune
 from src.config.event_loader import EventConfig, get_event_by_name
 from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.models.analytics import RaceResultsResponse
+from src.krasmarafon.services.public_pd import mask_runner
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +315,7 @@ def assemble_event_results(
         else:
             pace_source = r_hist_source or ''
 
-        results.append({
+        item = {
             'id': runner.get('id') or runner.get('client_id'),
             'client_id': runner.get('client_id'),
             'start_number': runner.get('start_number'),
@@ -364,7 +365,8 @@ def assemble_event_results(
                 if isinstance(runner.get('time_gun_start'), _td) else None
             ),
             'last_kt_unix_ms': _calc_last_kt_unix_ms(runner, gun_start_dt),
-        })
+        }
+        results.append(mask_runner(item, runner.get('pd_refused')))
 
     return RaceResultsResponse(
         event=ev_name or f"event_{event_id}",

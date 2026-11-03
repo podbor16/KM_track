@@ -32,6 +32,10 @@ _results_cache: dict = {}
 _results_cache_ts: dict = {}
 RESULTS_CACHE_TTL = 5  # секунд — короткий TTL для live-данных КТ
 
+# Отказ от публикации ПД (leads.pd_refused) для строки results r — по заявке того же события и номера
+PD_REFUSED_SQL = ("EXISTS (SELECT 1 FROM leads pl WHERE pl.event_id = r.event_id "
+                  "AND pl.start_number = r.start_number AND pl.pd_refused = 1)")
+
 _segments_cache: dict[int, list] = {}
 _segments_cache_ts: dict[int, float] = {}
 SEGMENTS_CACHE_TTL = 30  # секунд
@@ -115,6 +119,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
             r.rank_absolute_clean,
             r.rank_sex_clean,
             r.rank_category_clean,
+            {PD_REFUSED_SQL} AS pd_refused,
             e.event_name,
             e.event_distance,
             e.event_year
@@ -168,7 +173,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
     try:
         cursor = connection.cursor(dictionary=True, buffered=True)
 
-        query = """
+        query = f"""
         SELECT
             r.id,
             r.surname,
@@ -209,6 +214,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
             r.rank_absolute_clean,
             r.rank_sex_clean,
             r.rank_category_clean,
+            {PD_REFUSED_SQL} AS pd_refused,
             e.event_name,
             e.event_distance,
             e.event_year
