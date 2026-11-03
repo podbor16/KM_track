@@ -9,6 +9,8 @@
 import logging
 from typing import Any, Dict, List, Tuple
 
+from src.krasmarafon.services.public_pd import PD_REFUSED_SQL
+
 from .db_pool import get_pooled_connection
 
 logger = logging.getLogger(__name__)
@@ -64,10 +66,10 @@ def get_athlete_by_client(client_id: int) -> Tuple[Dict[str, Any], List[Dict[str
             cursor.close()
             return {}, []
         cursor.execute(
-            """SELECT r.*, e.event_name, e.event_distance, e.event_year, e.event_date
+            f"""SELECT r.*, e.event_name, e.event_distance, e.event_year, e.event_date
                FROM results r
                LEFT JOIN events e ON r.event_id = e.id
-               WHERE r.client_id = %s
+               WHERE r.client_id = %s AND NOT {PD_REFUSED_SQL}
                ORDER BY e.event_year DESC, e.event_date DESC, r.id DESC""",
             (card["id"],),
         )
