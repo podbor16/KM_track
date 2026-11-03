@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.clean_clients import Names, canonical_fio, find_groups, resolve_group, title, tokens, translit
+from scripts.clean_clients import Names, canonical_fio, find_groups, resolve_group, save_claims_log, title, tokens, translit
 
 _ROWS = (
     [("Иванов", n, "Мужчина") for n in ("Иван", "Андрей", "Александр", "Дмитрий", "Евгений", "Сергей", "Владимир",
@@ -149,3 +149,21 @@ def test_make_decisions(tmp_path):
     assert g[20]["surname"] == "Сальников"     # правка на листе «Латиница» важнее группы
     assert d["renames"] == {30: ("Вебер", "Александр")}
     assert d["exclude"] == [9, 31]
+
+
+def test_save_claims_log_writes_json_next_to_backup(tmp_path):
+    backup = tmp_path / "b.json"
+    moved = [{"client_id": 5, "email": "a@athlete-test.local", "moved_to": 3},
+             {"client_id": 6, "email": "b@athlete-test.local", "dropped": True}]
+
+    path = save_claims_log(moved, str(backup))
+
+    assert path == str(backup) + ".claims.json"
+    import json
+    from pathlib import Path
+    assert json.loads(Path(path).read_text(encoding="utf-8")) == moved
+
+
+def test_save_claims_log_without_moves_writes_nothing(tmp_path):
+    assert save_claims_log([], str(tmp_path / "b.json")) is None
+    assert list(tmp_path.iterdir()) == []

@@ -553,11 +553,14 @@ def test_wrong_claim_does_not_notify(web, cards, mail):
     assert not mail.called
 
 
-def test_claim_foreign_card_is_404(web, cards):
+def test_claim_foreign_or_missing_card_redirects_with_same_not_yours_error(web, cards):
+    """Чужая и несуществующая карточка неразличимы: тот же редирект с ошибкой, не 404 и не раскрытие существования."""
     client, _ = web
     login(client)
-    assert claim_via_web(client, cards["foreign"], "1990-01-01").status_code == 404
-    assert claim_via_web(client, 10 ** 9, "1990-01-01").status_code == 404
+    for card in (cards["foreign"], 10 ** 9):
+        r = claim_via_web(client, card, "1990-01-01")
+        assert r.status_code == 303 and r.headers["location"] == f"/me?claim={card}&r=not_yours"
+    assert "Эта карточка не совпадает с данными ваших заявок — напишите нам на 1@krasmarafon.ru" in         client.get(f"/me?claim={cards['foreign']}&r=not_yours").text
 
 
 def test_claim_requires_session_and_same_origin(web, cards):
@@ -841,13 +844,47 @@ def test_web_other_person_message_and_no_attempt(web, cards):
     assert claim_via_web(client, cards["vanya"], "1986-05-01").headers["location"] == "/me"
 
 
-def test_web_transferred_slot_claim_is_404(web, cards, slot, db):
+def test_web_transferred_slot_claim_redirects_with_not_yours_error(web, cards, slot, db):
     conn, cur = db
     cur.execute("UPDATE leads SET email = %s WHERE event_name = %s AND start_number = 9031", (ME, EV))
     conn.commit()
     client, _ = web
     login(client)
-    assert claim_via_web(client, slot["igor"], "1975-03-03").status_code == 404
+    r = claim_via_web(client, slot["igor"], "1975-03-03")
+    assert r.status_code == 303 and r.headers["location"] == f"/me?claim={slot['igor']}&r=not_yours"
+
+
+def test_transferred_slot_group_has_lead_name_title_and_no_claim_button(web, cards, slot, db):
+    """Заявка B лежит на карточке A (слот передали): B не видит имени чужого человека и кнопки «Это я»."""
+    conn, cur = db
+    from src.krasmarafon.services import athlete_cabinet
+
+    cur.execute("UPDATE leads SET email = %s WHERE event_name = %s AND start_number = 9031", (ME, EV))
+    conn.commit()
+    people = {p["client_id"]: p for p in athlete_cabinet.cabinet(ME, date(2100, 1, 1))}
+    assert people[slot["igor"]]["title"] == f"{SURNAME} Мария"           # ФИ заявки, не карточки Игоря
+    assert not people[slot["igor"]]["can_claim"] and people[cards["c1"]]["can_claim"]
+    client, _ = web
+    login(client)
+    page = client.get(f"/me?claim={slot['igor']}&r=not_yours").text
+    assert "Игорь" not in page
+    assert f'name="client_id" value="{slot["igor"]}"' not in page
+    assert f'name="client_id" value="{cards["c1"]}"' in page
+    assert "Эта карточка не совпадает с данными ваших заявок" in page      # ошибка видна и без формы
+
+
+def test_group_with_one_matching_lead_keeps_card_title_and_claim_button(web, cards, slot, db):
+    conn, cur = db
+    from src.krasmarafon.services import athlete_cabinet
+
+    cur.execute("UPDATE leads SET email = %s WHERE event_name = %s AND start_number = 9031", (ME, EV))
+    add_typo_lead(cur, slot["igor"], ME, 9032)                          # своя заявка с опечаткой в ФИ и ДР
+    conn.commit()
+    people = {p["client_id"]: p for p in athlete_cabinet.cabinet(ME, date(2100, 1, 1))}
+    assert people[slot["igor"]]["title"] == f"{SURNAME} Игорь" and people[slot["igor"]]["can_claim"]
+    client, _ = web
+    login(client)
+    assert f'name="client_id" value="{slot["igor"]}"' in client.get("/me").text
 
 
 def test_web_history_details_and_places(web, cards, db):

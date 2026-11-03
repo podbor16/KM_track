@@ -435,6 +435,15 @@ def write_report(path, cards, final, merged_into, group_info, clash):
     wb.save(path)
 
 
+def save_claims_log(moved, backup):
+    """Перенос привязок кабинета, сделанный склейкой, — рядом с бэкапом (<backup>.claims.json); без переноса — None."""
+    if not moved:
+        return None
+    path = str(backup) + ".claims.json"
+    Path(path).write_text(json.dumps(moved, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--report", help="xlsx было/станет (расчёт по правилам)")
@@ -488,9 +497,13 @@ def main():
             print("Нужен --backup." if not args.backup else "Совпадения ФИО+ДР после чистки — не применяю.")
             return 1
         drop = [i for i in (dec.get("drop_leads", []) if args.decisions else []) if i in cards]
-        nl, nr = apply(conn, cards, final, merged_into, args.backup, drop)
+        moved_claims = []
+        nl, nr = apply(conn, cards, final, merged_into, args.backup, drop, claims_out=moved_claims)
         print(f"Применено: склеено карточек {len(merged_into)}, изменено {len(final)}; заявок затронуто {nl}, "
               f"результатов {nr}. Бэкап: {args.backup}")
+        if moved_claims:
+            print(f"Привязки кабинета: перенесено {sum('moved_to' in m for m in moved_claims)}, "
+                  f"снято {sum('dropped' in m for m in moved_claims)}. Лог: {save_claims_log(moved_claims, args.backup)}")
     finally:
         conn.close()
     return 0

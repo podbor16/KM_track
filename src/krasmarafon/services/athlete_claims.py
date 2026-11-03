@@ -18,7 +18,7 @@ from enum import Enum
 from mysql.connector import errorcode
 from mysql.connector.errors import IntegrityError
 
-from src.analytics.dq_checks import compatible_bd, fio_close, fio_key
+from src.analytics.dq_checks import compatible_bd, fio_close, fio_key, real_bd
 from src.core.mailer import mask_email, send_mail
 from src.krasmarafon.services.athlete_auth import _conn, normalize_email
 
@@ -41,11 +41,16 @@ class ClaimResult(str, Enum):
 
 
 def same_person(card: dict, row: dict) -> bool:
-    """Строка (заявка/результат) принадлежит владельцу карточки: ФИ близки (dq_checks.fio_close) и ДР совместимы
-    (dq_checks.compatible_bd: заглушка, опечатка, день↔месяц). card/row — dict с surname, name, birthday (date|None)."""
+    """Строка (заявка/результат) принадлежит владельцу карточки: ДР совместимы (dq_checks.compatible_bd: заглушка,
+    опечатка, день↔месяц) и ФИ близки (dq_checks.fio_close). Если у одной из ДР нет настоящего значения (заглушка/пусто),
+    ДР человека не подтверждает — тогда ФИ должны совпасть точно или быть переставлены (без нечёткого fio_close:
+    «Иванов Евгений» и «Иванова Евгения» — разные люди). card/row — dict с surname, name, birthday (date|None)."""
     def iso(d):
         return d.isoformat() if d else ""
-    return fio_close(fio_key(card), fio_key(row)) and compatible_bd(iso(card["birthday"]), iso(row["birthday"]))
+    a, b = iso(card["birthday"]), iso(row["birthday"])
+    ka, kb = fio_key(card), fio_key(row)
+    close = fio_close(ka, kb) if real_bd(a) and real_bd(b) else ka in (kb, kb[::-1])
+    return close and compatible_bd(a, b)
 
 
 def _log(cur, action: str, client_id: int, details: dict, user: str) -> None:

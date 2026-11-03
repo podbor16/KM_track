@@ -31,3 +31,14 @@ def test_other_person_in_same_slot_is_not():
 
 def test_card_without_birthday_matches_any_birthday():
     assert same_person(dict(CARD, birthday=dt.date(1900, 1, 1)), row(birthday=dt.date(2018, 3, 2)))
+
+
+def test_without_real_birthday_fio_must_match_exactly_or_swapped():
+    """ДР-заглушка/пусто не подтверждает человека: «Иванов Евгений» и «Иванова Евгения» — разные люди."""
+    card = dict(CARD, surname="Иванов", name="Евгений")
+    assert not same_person(card, row("Иванова", "Евгения", None))
+    assert not same_person(card, row("Иванова", "Евгения", dt.date(1900, 1, 1)))
+    assert same_person(card, row("Иванов", "Евгений", None))                 # точные ФИ
+    assert same_person(card, row("ИВАНОВ", "евгений", dt.date(1900, 1, 1)))
+    assert same_person(card, row("Евгений", "Иванов", None))                 # переставленные
+    assert same_person(card, row("Иванова", "Евгения", dt.date(1986, 5, 1)))  # настоящая совместимая ДР — опечатка прощается

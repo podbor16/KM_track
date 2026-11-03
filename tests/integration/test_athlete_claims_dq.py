@@ -10,7 +10,7 @@ from src.krasmarafon.services import athlete_claims as ac
 from src.krasmarafon.services.athlete_claims import ClaimResult
 # фикстуры db / cards / mail / merge_env и хелперы — из соседнего файла; сам он не меняется
 from tests.integration.test_athlete_claims import (  # noqa: F401
-    BD1, ME, MERGER, OTHER, SURNAME, add_lead, cards, claim_rows, db, journal, mail, merge_env)
+    BD1, BD2, ME, MERGER, OTHER, SURNAME, add_lead, cards, claim_rows, db, journal, mail, merge_env)
 
 BD_TYPO = date(1986, 5, 3)
 
@@ -95,6 +95,21 @@ def test_undo_merge_skips_dropped_claim_with_unconfirmed_birthday(merge_env):
     dq.undo_action(conn, action_id, MERGER)
 
     assert claim_rows(cur) == []
+
+
+def test_undo_merge_does_not_return_dropped_claim_with_other_birthday_than_account_has(merge_env):
+    """Один человек — одна ДР: у почты уже есть действующая привязка с другой ДР — снятая при склейке не возвращается."""
+    conn, cur, dq, c = merge_env
+    ac.claim(OTHER, c["c1"], BD1)
+    ac.claim(ME, c["vanya"], BD1)
+    _, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+    assert claim_rows(cur) == []
+    assert ac.claim(ME, c["c2"], BD2) == ClaimResult.OK                 # привязок не осталось — вторая ДР допустима
+
+    undo_id = dq.undo_action(conn, action_id, MERGER)
+
+    assert claim_rows(cur) == [{"client_id": c["c2"], "birthday": BD2}]
+    assert undo_details(cur, undo_id).get("athlete_claims", []) == []
 
 
 def test_merge_marks_dropped_claim_with_changed_birthday_as_stale(merge_env):
@@ -214,3 +229,28 @@ def test_apply_auto_merges_unclaimed_cards_as_before(twins):
     conn, cur, dq, c = twins
     done = dq.apply_auto(conn, MERGER)
     assert len(done["merged"]) == 1 and done["skipped"] == []
+
+
+def test_apply_auto_skips_group_with_two_claimed_cards(db, cards, mail, monkeypatch):
+    """Две заявленные карточки в группе (разными почтами) с одной итоговой ДР: слить без потери одной привязки нельзя."""
+    from src.analytics import dq_actions
+    from src.analytics.dq_checks import Finding
+
+    conn, cur = db
+    assert ac.claim(OTHER, cards["c1"], BD1) == ClaimResult.OK
+    assert ac.claim(ME, cards["vanya"], BD1) == ClaimResult.OK
+    finding = Finding("C-TWIN", "high", "тест", (cards["c1"], cards["vanya"]))
+    real = dq_actions.pending_findings
+    monkeypatch.setattr(dq_actions, "pending_findings", lambda conn_, event_ids=None: ([finding], real(conn_, event_ids)[1]))
+    monkeypatch.setattr(dq_actions, "merge_blockers", lambda ids, data: [])     # «Иван»/«Ваня» иначе остановят раньше
+
+    done = dq_actions.apply_auto(conn, MERGER)
+
+    assert done["merged"] == []
+    assert len(done["skipped"]) == 1 and "несколько карточек привязаны к кабинету" in done["skipped"][0]
+    assert claim_rows(cur, OTHER) == [{"client_id": cards["c1"], "birthday": BD1}]
+    assert claim_rows(cur) == [{"client_id": cards["vanya"], "birthday": BD1}]
+    cur.execute("SELECT COUNT(*) n FROM clients WHERE id IN (%s, %s)", (cards["c1"], cards["vanya"]))
+    assert cur.fetchone()["n"] == 2
+    cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (MERGER,))
+    conn.commit()

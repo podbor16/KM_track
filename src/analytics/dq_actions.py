@@ -589,6 +589,8 @@ def apply_auto(conn, user):
         _, s, n, bd = propose_final(ids, data)
         if bd and not blockers and any(claimed.get(i) not in (None, bd) for i in ids):
             blockers = ["привязана к кабинету, ДР изменится"]
+        elif not blockers and sum(i in claimed for i in ids) > 1:
+            blockers = ["несколько карточек привязаны к кабинету"]
         if blockers or not bd:
             done["skipped"].append(f'{label}: {"; ".join(blockers) or "ДР не определить"}')
             continue
@@ -732,7 +734,8 @@ def _restore_cards(cur, snap):
 def _restore_claims(cur, d, snap):
     """Привязки кабинета, перенесённые склейкой, — обратно (в транзакции отмены), по d["athlete_claims"]:
     moved_to -> на прежнюю карточку, если привязка ещё на итоговой; dropped -> вернуть с ДР карточки из снимка
-    snap, если карточка свободна (stale и записи без ДР — не возвращаем: человек подтвердит заново).
+    snap, если карточка свободна и у почты нет действующей привязки с другой ДР (один человек — одна ДР);
+    stale и записи без ДР — не возвращаем: человек подтвердит заново.
     -> [{client_id, email, moved_back | restored}]."""
     snap_bd = {c["id"]: c.get("birthday") for c in snap.get("clients", [])}
     back = []
@@ -747,6 +750,10 @@ def _restore_claims(cur, d, snap):
             if cur.rowcount:
                 back.append({"client_id": cid, "email": email, "moved_back": True})
         elif e.get("dropped") and not e.get("stale") and snap_bd.get(cid):
+            cur.execute("SELECT 1 FROM athlete_claims a JOIN clients c ON c.id = a.client_id AND c.birthday = a.birthday "
+                        "WHERE a.email = %s AND a.birthday <> %s LIMIT 1", (email, snap_bd[cid]))
+            if cur.fetchone():
+                continue
             cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)",
                         (email, cid, snap_bd[cid]))
             back.append({"client_id": cid, "email": email, "restored": True})

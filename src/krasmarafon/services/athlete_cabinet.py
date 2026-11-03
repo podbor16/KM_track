@@ -7,9 +7,10 @@ from urllib.parse import quote
 
 from src.analytics.db_pool import get_pooled_connection
 from src.config import settings
+from src.krasmarafon.services.athlete_claims import same_person
 
 _SQL = """
-    SELECT l.id, l.client_id, l.surname, l.name, l.event_id, l.start_number, l.refund,
+    SELECT l.id, l.client_id, l.surname, l.name, l.birthday, l.event_id, l.start_number, l.refund,
            l.event_name, l.event_distance, l.event_year, e.event_date,
            COALESCE(r1.race_status, r2.race_status) AS race_status,
            COALESCE(r1.time_clear_finish, r2.time_clear_finish) AS time_clear_finish,
@@ -42,18 +43,18 @@ def fetch_leads(email: str) -> list[dict]:
 
 
 def card_titles(client_ids) -> dict:
-    """{clients.id: «Фамилия Имя»} — заголовок человека берётся из карточки, а не из последней заявки
-    (на карточке бывает заявка переданного слота другого человека)."""
+    """{clients.id: {"title": «Фамилия Имя», "surname", "name", "birthday"}} карточек — заголовок человека берётся
+    из карточки, а не из последней заявки (на карточке бывает заявка переданного слота другого человека)."""
     ids = sorted({int(i) for i in client_ids})
     if not ids:
         return {}
     conn = get_pooled_connection()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute(f"SELECT id, surname, name FROM clients WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
-        titles = {r["id"]: f"{r['surname'] or ''} {r['name'] or ''}".strip() for r in cur.fetchall()}
+        cur.execute(f"SELECT id, surname, name, birthday FROM clients WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
+        cards = {r["id"]: {**r, "title": f"{r['surname'] or ''} {r['name'] or ''}".strip()} for r in cur.fetchall()}
         cur.close()
-        return titles
+        return cards
     finally:
         conn.close()
 
@@ -117,13 +118,15 @@ def _past_key(e: dict) -> dt.date:
 def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = None,
                     titles: Optional[dict] = None) -> list[dict]:
     """[{title, client_id (None — группа по ФИ), upcoming: [...], past: [...]}] в порядке показа.
-    titles — {client_id: ФИ карточки}: заголовок группы с client_id; иначе ФИ последней заявки."""
+    titles — {client_id: ФИ карточки} только карточек, чьи заявки группы принадлежат владельцу карточки (same_person):
+    для них заголовок — ФИ карточки и can_claim=True («Это я»); иначе заголовок — ФИ последней заявки, can_claim=False."""
     codes = codes or {}
     titles = titles or {}
     groups: dict = {}
     for r in sorted(rows, key=lambda r: r["id"]):
         key = ("c", r["client_id"]) if r["client_id"] else ("n", _norm(r["surname"]), _norm(r["name"]))
-        g = groups.setdefault(key, {"upcoming": [], "past": [], "client_id": key[1] if key[0] == "c" else None})
+        g = groups.setdefault(key, {"upcoming": [], "past": [], "client_id": key[1] if key[0] == "c" else None,
+                                          "can_claim": r["client_id"] in titles})
         g["title"] = titles.get(r["client_id"]) or f"{r['surname'] or ''} {r['name'] or ''}".strip()  # без карточки — самая новая заявка
         e = _entry(r, codes)
         (g["upcoming"] if is_upcoming(e["date"], e["year"], today) else g["past"]).append(e)
@@ -143,5 +146,7 @@ def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = No
 def cabinet(email: str, today: Optional[dt.date] = None) -> list[dict]:
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
     rows = fetch_leads(email)
-    titles = card_titles(r["client_id"] for r in rows if r["client_id"])
+    cards = card_titles(r["client_id"] for r in rows if r["client_id"])
+    titles = {cid: c["title"] for cid, c in cards.items()
+              if any(r["client_id"] == cid and same_person(c, r) for r in rows)}
     return group_by_person(rows, today or dt.date.today(), codes, titles)

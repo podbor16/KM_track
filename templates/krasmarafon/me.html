@@ -23,6 +23,8 @@
         <form method="post" action="/me/logout-all"><button class="me-inline" type="submit">Выйти на всех устройствах</button></form>
     </div>
 
+    {% if claim_error_page %}<p class="me-error">{{ claim_error_page }}</p>{% endif %}
+
     {% if not people %}
     <p class="me-empty">Заявок с этой почты не найдено</p>
     {% endif %}
@@ -35,7 +37,7 @@
             {% if p.client_id in claimed %}<a class="me-badge" href="/me/history">Это вы · История →</a>{% endif %}
         </div>
 
-        {% if p.client_id and p.client_id not in claimed %}
+        {% if p.can_claim and p.client_id not in claimed %}
         {% if p.client_id in dropped %}<p class="me-note">Данные карточки изменились — подтвердите, что это вы</p>{% endif %}
         <details class="me-claim"{% if claim_id == p.client_id %} open{% endif %}>
             <summary>Это я</summary>

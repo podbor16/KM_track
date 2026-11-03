@@ -41,6 +41,7 @@ CLAIM_ERRORS = {
     "taken": "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru",
     "no_birthday": "Подтвердить не получится — напишите нам на 1@krasmarafon.ru",
     "date": "Проверьте дату",
+    "not_yours": "Эта карточка не совпадает с данными ваших заявок — напишите нам на 1@krasmarafon.ru",
     "other_person": "У вас уже есть своя карточка с другой датой рождения. Если это ваш ребёнок или близкий — "
                     "доступ к его истории появится позже",
 }
@@ -175,12 +176,16 @@ async def me_page(request: Request, claim: str = "", r: str = "", changed: str =
     # привязки, снятые при открытии истории (/me/history → сюда), — для пояснения «Данные карточки изменились»
     dropped = list(dropped) + [int(x) for x in changed.split(",") if x.isascii() and x.isdigit() and len(x) <= 10]
     people = await run_in_threadpool(cabinet, email)
+    claim_id = int(claim) if claim.isascii() and claim.isdigit() and len(claim) <= 10 else None
+    claim_error = CLAIM_ERRORS.get(r)
+    form_shown = any(p["can_claim"] and p["client_id"] == claim_id for p in people)
+    not_yours = None if form_shown or r != "not_yours" else claim_error
     return templates.TemplateResponse("krasmarafon/me.html", {
         "request": request, "email": email, "people": people,
         "diploma_event_ids": set(_diploma_event_ids()),
         "claimed": set(claimed), "dropped": set(dropped),
-        "claim_id": int(claim) if claim.isascii() and claim.isdigit() and len(claim) <= 10 else None,
-        "claim_error": CLAIM_ERRORS.get(r),
+        "claim_id": claim_id, "claim_error": claim_error,
+        "claim_error_page": not_yours,       # у «не ваша / нет такой» формы нет — ошибка над списком
     })
 
 
@@ -198,8 +203,8 @@ async def claim_card(request: Request, background_tasks: BackgroundTasks, client
         return RedirectResponse(f"/me?claim={client_id}&r=date", status_code=303)
     try:
         result = await run_in_threadpool(acl.claim, email, client_id, born)
-    except ValueError:
-        raise HTTPException(status_code=404)
+    except ValueError:      # чужая и несуществующая карточка неразличимы
+        return RedirectResponse(f"/me?claim={client_id}&r=not_yours", status_code=303)
     if result == ClaimResult.OK:
         background_tasks.add_task(acl.notify_claimed, client_id, email)
     if result in (ClaimResult.OK, ClaimResult.ALREADY_MINE):
