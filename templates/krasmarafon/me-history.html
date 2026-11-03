@@ -16,6 +16,21 @@
 {% include 'krasmarafon/header.html' %}
 {% set months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'] %}
 {% set ids = card_ids|join(', ') %}
+{% macro more(o) %}
+<details class="me-more">
+    <summary>Подробнее</summary>
+    <ul class="me-more-list">
+        <li><span>Участник</span>: {{ o.participant }}{% if o.birthday %}, {{ o.birthday.strftime('%d.%m.%Y') }}{% endif %}</li>
+        {% if o.created %}<li><span>Оформлено</span>: {{ o.created.strftime('%d.%m.%Y %H:%M') }}</li>{% endif %}
+        {% if o.order_id %}<li><span>Номер заказа</span>: {{ o.order_id }}</li>{% endif %}
+        {% if o.amount %}<li><span>Сумма</span>: {{ o.amount }}</li>{% endif %}
+        {% if o.promocode %}<li><span>Промокод</span>: {{ o.promocode }}{% if o.discount %} (скидка {{ o.discount }}){% endif %}</li>
+        {% elif o.discount %}<li><span>Скидка</span>: {{ o.discount }}</li>{% endif %}
+        {% if o.products %}<li><span>Состав заказа</span>: {{ o.products }}</li>{% endif %}
+        {% if o.email %}<li><span>Оформлено с почты</span>: {{ o.email }}</li>{% endif %}
+    </ul>
+</details>
+{% endmacro %}
 <main class="me-page">
     <a class="me-back" href="/me">← Личный кабинет</a>
     <h1>{{ title }}</h1>
@@ -116,6 +131,7 @@
                 {% if e.start_number %}№{{ e.start_number }}{% else %}номер ещё не присвоен{% endif %} ·
                 {% if e.refund %}<span class="me-tag me-tag--refund">возврат</span>{% else %}<span class="me-tag">оплачено</span>{% endif %}
             </div>
+            {% if e.order %}{{ more(e.order) }}{% endif %}
         </div>
     </div>
     {% else %}
@@ -129,9 +145,10 @@
             </div>
         </div>
         <div class="me-time">
-            {% if e.time %}{{ e.time }}{% if e.place %}<small>{{ e.place }} место в категории</small>{% endif %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
+            {% if e.time %}{{ e.time }}{% if e.places %}<small>{{ e.places }}</small>{% endif %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
             {% else %}{{ e.status }}{% endif %}
         </div>
+        {% if e.order %}{{ more(e.order) }}{% endif %}
     </div>
     {% endif %}
     {% endfor %}

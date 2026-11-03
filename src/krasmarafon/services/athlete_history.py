@@ -5,6 +5,7 @@ import datetime as dt
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
+from src.core.mailer import mask_email
 from src.krasmarafon.services.athlete_cabinet import finish_info, fmt_time, is_upcoming, protocol_url
 
 _STATUS_TEXT = {
@@ -37,7 +38,52 @@ def _year(year: Optional[int], date: Optional[dt.date]) -> Optional[int]:
     return year or (date.year if date else None)
 
 
-def _result_entry(r: dict, codes: dict, diploma_ids: set) -> dict:
+def _money(value) -> Optional[str]:
+    """1090.0 -> "1 090 ₽" (неразрывные пробелы), 109.5 -> "109,5 ₽"; None -> None."""
+    if value is None:
+        return None
+    d = Decimal(str(round(float(value), 2)))
+    text = format(d if d != d.to_integral_value() else d.quantize(Decimal(1)), ",f")
+    return text.replace(",", "\u00a0").replace(".", ",") + " ₽"
+
+
+def _places(r: dict, place: Optional[int]) -> Optional[str]:
+    """«{абс} абс. · {место} в {категория}»: при чистом времени — чистые места; пустые части не выводятся."""
+    clean = r["time_clear_finish"] is not None
+    absolute = (r["rank_absolute_clean"] or r["rank_absolute"]) if clean else r["rank_absolute"]
+    category = (r["category"] or "").strip()
+    parts = []
+    if absolute:
+        parts.append(f"{absolute} абс.")
+    if place:
+        parts.append(f"{place} в {category}" if category else f"{place} место в категории")
+    return " · ".join(parts) or None
+
+
+def _order(lead: dict, account_email: Optional[str]) -> dict:
+    """Подробности заявки (раскрывающийся блок). Почта оформления — полностью, если это почта аккаунта, иначе маской."""
+    mail = (lead["email"] or "").strip() or (lead["ma_email"] or "").strip()
+    if mail and mail.lower() != (account_email or "").strip().lower():
+        mail = mask_email(mail)
+    return {
+        "participant": f"{lead['surname'] or ''} {lead['name'] or ''}".strip(), "birthday": lead["birthday"],
+        "created": lead["created_at"], "order_id": lead["order_id"] or None,
+        "amount": _money(lead["amount"]), "promocode": (lead["promocode"] or "").strip() or None,
+        "discount": _money(lead["discount"]) if lead["discount"] else None,
+        "products": (lead["products"] or "").strip() or None, "email": mail or None,
+    }
+
+
+def _lead_of_result(r: dict, leads: list[dict]) -> Optional[dict]:
+    """Заявка, слитая с результатом: той же карточки в том же событии; с тем же номером, затем без возврата, затем новее."""
+    if r["event_id"] is None:
+        return None
+    same = [ld for ld in leads if (ld["client_id"], ld["event_id"]) == (r["client_id"], r["event_id"])]
+    return max(same, key=lambda ld: (ld["start_number"] is not None and ld["start_number"] == r["start_number"],
+                                     not ld["refund"], ld["id"]), default=None)
+
+
+def _result_entry(r: dict, codes: dict, diploma_ids: set, lead: Optional[dict], account_email: Optional[str]) -> dict:
     finished, td, place = finish_info(r)
     dist = _dist(r["event_distance"])
     year = _year(r["event_year"], r["event_date"])
@@ -49,15 +95,16 @@ def _result_entry(r: dict, codes: dict, diploma_ids: set) -> dict:
         "kind": "result", "date": r["event_date"], "year": year, "event_name": r["event_name"],
         "distance": _dist_label(dist), "start_number": r["start_number"],
         "time": fmt_time(td) if finished else None, "place": place,
+        "places": _places(r, place) if finished else None,
         "pace": _pace(td.total_seconds(), dist) if finished and dist else None,
-        "status": status, "refund": False,
+        "status": status, "refund": False, "order": _order(lead, account_email) if lead else None,
         "protocol_url": protocol_url(r["event_name"], year, r.get("surname"), codes) if finished else None,
         "diploma_url": (f"/diploma/{r['event_id']}/{r['start_number']}"
                         if finished and r["event_id"] in diploma_ids and r["start_number"] is not None else None),
     }
 
 
-def _lead_entry(lead: dict, today: dt.date) -> dict:
+def _lead_entry(lead: dict, today: dt.date, account_email: Optional[str]) -> dict:
     year = _year(lead["event_year"], lead["event_date"])
     upcoming = is_upcoming(lead["event_date"], lead["event_year"], today)
     refund = bool(lead["refund"])
@@ -68,8 +115,9 @@ def _lead_entry(lead: dict, today: dt.date) -> dict:
     return {
         "kind": "ticket" if upcoming else "result", "date": lead["event_date"], "year": year,
         "event_name": lead["event_name"], "distance": _dist_label(_dist(lead["event_distance"])),
-        "start_number": lead["start_number"], "time": None, "place": None, "pace": None,
+        "start_number": lead["start_number"], "time": None, "place": None, "places": None, "pace": None,
         "status": status, "refund": refund, "protocol_url": None, "diploma_url": None,
+        "order": _order(lead, account_email),
     }
 
 
@@ -117,12 +165,17 @@ def _dynamics(finishes: list[dict]) -> dict:
             "series": {_dist_key(d): series[d] for d in sorted(series)}}
 
 
-def build_history(results: list[dict], leads: list[dict], today: dt.date, codes: dict, diploma_ids: set) -> dict:
-    """-> {"since", "tiles": {starts, finishes, km, pace}, "records", "dynamics", "years": [{year, items}]}."""
+def build_history(results: list[dict], leads: list[dict], today: dt.date, codes: dict, diploma_ids: set,
+                  account_email: Optional[str] = None) -> dict:
+    """-> {"since", "tiles": {starts, finishes, km, pace}, "records", "dynamics", "years": [{year, items}]}.
+    account_email — почта аккаунта: в подробностях заявки она показывается полностью, остальные — маской."""
     done = {(r["client_id"], r["event_id"]) for r in results}   # результат той же карточки в том же событии; номер заявки не нужен
-    open_leads = [ld for ld in leads if (ld["client_id"], ld["event_id"]) not in done]
+    active = done | {(ld["client_id"], ld["event_id"]) for ld in leads if not ld["refund"]}
+    open_leads = [ld for ld in leads if (ld["client_id"], ld["event_id"]) not in done
+                  and not (ld["refund"] and ld["event_id"] is not None and (ld["client_id"], ld["event_id"]) in active)]
 
-    entries = [_result_entry(r, codes, diploma_ids) for r in results] + [_lead_entry(ld, today) for ld in open_leads]
+    entries = ([_result_entry(r, codes, diploma_ids, _lead_of_result(r, leads), account_email) for r in results]
+               + [_lead_entry(ld, today, account_email) for ld in open_leads])
 
     finishes = []
     for r in results:

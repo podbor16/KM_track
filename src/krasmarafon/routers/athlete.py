@@ -41,6 +41,8 @@ CLAIM_ERRORS = {
     "taken": "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru",
     "no_birthday": "Подтвердить не получится — напишите нам на 1@krasmarafon.ru",
     "date": "Проверьте дату",
+    "other_person": "У вас уже есть своя карточка с другой датой рождения. Если это ваш ребёнок или близкий — "
+                    "доступ к его истории появится позже",
 }
 
 
@@ -228,7 +230,7 @@ async def history_page(request: Request, km_athlete: str | None = Cookie(default
     results, leads = await run_in_threadpool(acl.history_rows, claimed)
     title = await run_in_threadpool(acl.history_title, claimed)
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
-    history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()))
+    history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
     return templates.TemplateResponse("krasmarafon/me-history.html", {
         "request": request, "title": title, "history": history, "card_ids": claimed,
     })

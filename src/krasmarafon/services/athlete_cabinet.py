@@ -41,6 +41,23 @@ def fetch_leads(email: str) -> list[dict]:
         conn.close()
 
 
+def card_titles(client_ids) -> dict:
+    """{clients.id: «Фамилия Имя»} — заголовок человека берётся из карточки, а не из последней заявки
+    (на карточке бывает заявка переданного слота другого человека)."""
+    ids = sorted({int(i) for i in client_ids})
+    if not ids:
+        return {}
+    conn = get_pooled_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(f"SELECT id, surname, name FROM clients WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
+        titles = {r["id"]: f"{r['surname'] or ''} {r['name'] or ''}".strip() for r in cur.fetchall()}
+        cur.close()
+        return titles
+    finally:
+        conn.close()
+
+
 def _norm(s: Optional[str]) -> str:
     return (s or "").strip().lower().replace("ё", "е")
 
@@ -97,14 +114,17 @@ def _past_key(e: dict) -> dt.date:
     return e["date"] or dt.date(e["year"] or 1, 1, 1)
 
 
-def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = None) -> list[dict]:
-    """[{title, client_id (None — группа по ФИ), upcoming: [...], past: [...]}] в порядке показа."""
+def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = None,
+                    titles: Optional[dict] = None) -> list[dict]:
+    """[{title, client_id (None — группа по ФИ), upcoming: [...], past: [...]}] в порядке показа.
+    titles — {client_id: ФИ карточки}: заголовок группы с client_id; иначе ФИ последней заявки."""
     codes = codes or {}
+    titles = titles or {}
     groups: dict = {}
     for r in sorted(rows, key=lambda r: r["id"]):
         key = ("c", r["client_id"]) if r["client_id"] else ("n", _norm(r["surname"]), _norm(r["name"]))
         g = groups.setdefault(key, {"upcoming": [], "past": [], "client_id": key[1] if key[0] == "c" else None})
-        g["title"] = f"{r['surname'] or ''} {r['name'] or ''}".strip()  # перезаписывается — останется самая новая
+        g["title"] = titles.get(r["client_id"]) or f"{r['surname'] or ''} {r['name'] or ''}".strip()  # без карточки — самая новая заявка
         e = _entry(r, codes)
         (g["upcoming"] if is_upcoming(e["date"], e["year"], today) else g["past"]).append(e)
     far = dt.date.max
@@ -122,4 +142,6 @@ def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = No
 
 def cabinet(email: str, today: Optional[dt.date] = None) -> list[dict]:
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
-    return group_by_person(fetch_leads(email), today or dt.date.today(), codes)
+    rows = fetch_leads(email)
+    titles = card_titles(r["client_id"] for r in rows if r["client_id"])
+    return group_by_person(rows, today or dt.date.today(), codes, titles)

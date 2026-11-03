@@ -69,19 +69,21 @@ def add_lead(cur, name, birthday, email, start_number, ma_email=None, year=2099)
 
 @pytest.fixture
 def cards(db):
-    """c1 (ДР 1986, заявки с me@, other@ и ma_email kab@, один результат), c2 (ДР 2018, заявка с me@),
-    nobd (без ДР, заявка с me@), foreign (заявка только с other@)."""
+    """c1 (ДР 1986, заявки с me@, other@ и ma_email kab@, один результат), vanya («Ваня», та же ДР 1986, заявка с me@ —
+    дубль карточки того же человека), c2 (ДР 2018, заявка с me@ — другой человек), nobd (без ДР, заявка с me@),
+    foreign (заявка только с other@)."""
     conn, cur = db
     c1 = add_lead(cur, "Иван", BD1, ME, 9001)
     add_lead(cur, "Иван", BD1, OTHER, 9003, ma_email=KAB)
     c2 = add_lead(cur, "Мария", BD2, ME, 9002)
+    vanya = add_lead(cur, "Ваня", BD1, ME, 9010)
     nobd = add_lead(cur, "Безбд", date(1900, 1, 1), ME, 9004)
     foreign = add_lead(cur, "Чужой", date(1990, 1, 1), OTHER, 9005)
     cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
                    time_gun_finish, rank_absolute) VALUES (%s, 'Иван', %s, 'Мужчина', %s, 9001, 'Finished',
                    '00:25:00', 1)""", (SURNAME, BD1, c1["event_id"]))
     conn.commit()
-    return {"c1": c1["client_id"], "c2": c2["client_id"], "nobd": nobd["client_id"],
+    return {"c1": c1["client_id"], "c2": c2["client_id"], "vanya": vanya["client_id"], "nobd": nobd["client_id"],
             "foreign": foreign["client_id"], "event_id": c1["event_id"]}
 
 
@@ -164,7 +166,7 @@ def test_five_wrong_attempts_then_limit_even_for_right_birthday(db, cards, mail)
     cur.execute("SELECT COUNT(*) n FROM athlete_claim_attempts WHERE email = %s", (ME,))
     assert cur.fetchone()["n"] == 5          # попытка сверх лимита не пишется
     # лимит — на пару (аккаунт, карточка): другую карточку можно заявить
-    assert ac.claim(ME, cards["c2"], BD2) == ClaimResult.OK
+    assert ac.claim(ME, cards["vanya"], BD1) == ClaimResult.OK
 
 
 def test_old_attempts_do_not_count(db, cards, mail):
@@ -221,10 +223,10 @@ def test_email_is_normalized(db, cards, mail):
     assert ac.claimed_cards(ME) == ([cards["c1"]], [])
 
 
-def test_two_cards_one_account(db, cards, mail):
+def test_two_cards_one_account_with_same_birthday(db, cards, mail):
     assert ac.claim(ME, cards["c1"], BD1) == ClaimResult.OK
-    assert ac.claim(ME, cards["c2"], BD2) == ClaimResult.OK
-    assert ac.claimed_cards(ME) == ([cards["c1"], cards["c2"]], [])
+    assert ac.claim(ME, cards["vanya"], BD1) == ClaimResult.OK
+    assert ac.claimed_cards(ME) == ([cards["c1"], cards["vanya"]], [])
 
 
 def test_unclaim_removes_own_claim_only_and_logs(db, cards, mail):
@@ -262,13 +264,13 @@ def test_changed_name_keeps_claim(db, cards, mail):
 
 def test_deleted_card_drops_claim(db, cards, mail):
     conn, cur = db
-    ac.claim(ME, cards["c2"], BD2)
+    ac.claim(ME, cards["vanya"], BD1)
     ac.claim(ME, cards["c1"], BD1)
-    cur.execute("DELETE FROM leads WHERE client_id = %s", (cards["c2"],))
-    cur.execute("DELETE FROM clients WHERE id = %s", (cards["c2"],))
+    cur.execute("DELETE FROM leads WHERE client_id = %s", (cards["vanya"],))
+    cur.execute("DELETE FROM clients WHERE id = %s", (cards["vanya"],))
     conn.commit()
-    assert ac.claimed_cards(ME) == ([cards["c1"]], [cards["c2"]])
-    assert journal(cur, "athlete_unclaim", cards["c2"]) == [({"email": ME, "reason": "card_deleted"}, "system")]
+    assert ac.claimed_cards(ME) == ([cards["c1"]], [cards["vanya"]])
+    assert journal(cur, "athlete_unclaim", cards["vanya"]) == [({"email": ME, "reason": "card_deleted"}, "system")]
 
 
 def test_history_rows_cover_all_claimed_cards(db, cards, mail):
@@ -318,10 +320,10 @@ def test_history_rows_skip_duplicate_leads(db, cards, mail):
 def test_history_title_is_newest_claimed_card(db, cards, mail):
     conn, cur = db
     ac.claim(ME, cards["c1"], BD1)
-    ac.claim(ME, cards["c2"], BD2)
-    cur.execute("UPDATE athlete_claims SET created_at = NOW() - INTERVAL 1 DAY WHERE client_id = %s", (cards["c2"],))
+    ac.claim(ME, cards["vanya"], BD1)
+    cur.execute("UPDATE athlete_claims SET created_at = NOW() - INTERVAL 1 DAY WHERE client_id = %s", (cards["vanya"],))
     conn.commit()
-    assert ac.history_title([cards["c1"], cards["c2"]]) == "Тестклейм Иван"
+    assert ac.history_title([cards["c1"], cards["vanya"]]) == "Тестклейм Иван"
     assert ac.history_title([]) == ""
 
 
@@ -329,13 +331,13 @@ def test_duplicate_accounts_lists_only_two_or_more_valid_cards(db, cards, mail):
     conn, cur = db
     ac.claim(ME, cards["c1"], BD1)
     assert [a for a in ac.duplicate_accounts() if a["email"] == ME] == []
-    ac.claim(ME, cards["c2"], BD2)
+    ac.claim(ME, cards["vanya"], BD1)
     mine = [a for a in ac.duplicate_accounts() if a["email"] == ME]
     assert len(mine) == 1
     assert mine[0]["cards"] == [
         {"id": cards["c1"], "surname": SURNAME, "name": "Иван", "birthday": BD1},
-        {"id": cards["c2"], "surname": SURNAME, "name": "Мария", "birthday": BD2}]
-    cur.execute("UPDATE clients SET birthday = '2018-03-03' WHERE id = %s", (cards["c2"],))   # недействительная — не в счёт
+        {"id": cards["vanya"], "surname": SURNAME, "name": "Ваня", "birthday": BD1}]
+    cur.execute("UPDATE clients SET birthday = '1986-05-03' WHERE id = %s", (cards["vanya"],))   # недействительная — не в счёт
     conn.commit()
     assert [a for a in ac.duplicate_accounts() if a["email"] == ME] == []
 
@@ -366,9 +368,7 @@ def merge_env(db, cards, mail):
     from src.analytics import dq_actions
 
     conn, cur = db
-    vanya = add_lead(cur, "Ваня", BD1, ME, 9010)["client_id"]
-    conn.commit()
-    yield conn, cur, dq_actions, {**cards, "vanya": vanya}
+    yield conn, cur, dq_actions, cards
     cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (MERGER,))
     conn.commit()
 
@@ -653,7 +653,7 @@ def test_admin_duplicates_endpoint_requires_login(client):
 
 def test_admin_duplicates_endpoint_lists_account_with_two_cards(db, cards, mail, client):
     ac.claim(ME, cards["c1"], BD1)
-    ac.claim(ME, cards["c2"], BD2)
+    ac.claim(ME, cards["vanya"], BD1)
     app.dependency_overrides[api_require_auth] = lambda: "testuser"
     try:
         r = client.get("/api/admin/athlete-cabinet-duplicates")
@@ -663,7 +663,7 @@ def test_admin_duplicates_endpoint_lists_account_with_two_cards(db, cards, mail,
     mine = [a for a in r.json()["accounts"] if a["email"] == ME]
     assert mine == [{"email": ME, "cards": [
         {"id": cards["c1"], "surname": SURNAME, "name": "Иван", "birthday": "1986-05-01"},
-        {"id": cards["c2"], "surname": SURNAME, "name": "Мария", "birthday": "2018-03-02"}]}]
+        {"id": cards["vanya"], "surname": SURNAME, "name": "Ваня", "birthday": "1986-05-01"}]}]
 
 
 def test_claim_journal_rows_do_not_break_or_enter_undo_list(db, cards, mail):
@@ -708,3 +708,166 @@ def test_me_ignores_absurdly_long_claim_param(web, cards):
     client, _ = web
     login(client)
     assert client.get("/me?claim=" + "9" * 5000 + "&r=mismatch&changed=" + "9" * 5000).status_code == 200
+
+
+# ---------------------------------------------------------------- доработки: один человек на аккаунте, чужие слоты
+
+SLOT = f"slot@{DOMAIN}"
+IGOR_BD = date(1975, 3, 3)
+
+
+def move_to(cur, client_id, where_sql, params):
+    cur.execute(f"UPDATE leads SET client_id = %s WHERE event_name = %s AND {where_sql}", (client_id, EV, *params))
+
+
+@pytest.fixture
+def slot(db, cards):
+    """Карточка Игоря (ДР 1975, заявка с other@), на которую «передан слот»: заявка и результат Марии (ДР 2018)
+    с почты slot@ записаны на карточку Игоря."""
+    conn, cur = db
+    igor = add_lead(cur, "Игорь", IGOR_BD, OTHER, 9030)
+    add_lead(cur, "Мария", BD2, SLOT, 9031)
+    move_to(cur, igor["client_id"], "start_number = 9031", ())
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, client_id) VALUES (%s, 'Мария', %s, 'Женщина', %s, 9031, 'Finished',
+                   '00:30:00', %s)""", (SURNAME, BD2, igor["event_id"], igor["client_id"]))
+    conn.commit()
+    return {"igor": igor["client_id"], "event_id": igor["event_id"]}
+
+
+def add_typo_lead(cur, card_id, email, start_number):
+    """Заявка «Игор» с ДР на день позже — опечатки в ФИ и ДР того же человека — записана на карточку card_id."""
+    add_lead(cur, "Игор", date(1975, 3, 4), email, start_number)
+    move_to(cur, card_id, "start_number = %s", (start_number,))
+
+
+def test_second_card_with_other_birthday_is_other_person_before_limit_and_attempt(db, cards, mail):
+    conn, cur = db
+    assert ac.claim(ME, cards["c1"], BD1) == ClaimResult.OK
+    for _ in range(ac.CLAIM_ATTEMPTS_PER_DAY):                         # лимит по c2 уже исчерпан
+        cur.execute("INSERT INTO athlete_claim_attempts (email, client_id) VALUES (%s, %s)", (ME, cards["c2"]))
+    conn.commit()
+    assert ac.claim(ME, cards["c2"], BD2) == ClaimResult.OTHER_PERSON      # и до лимита
+    assert ac.claim(ME, cards["c2"], date(1999, 9, 9)) == ClaimResult.OTHER_PERSON   # и до сверки ДР
+    cur.execute("SELECT COUNT(*) n FROM athlete_claim_attempts WHERE email = %s AND client_id = %s",
+                (ME, cards["c2"]))
+    assert cur.fetchone()["n"] == ac.CLAIM_ATTEMPTS_PER_DAY             # попытка не пишется
+    assert ac.claimed_cards(ME) == ([cards["c1"]], [])
+
+
+def test_other_person_check_uses_only_valid_claims(db, cards, mail):
+    conn, cur = db
+    assert ac.claim(ME, cards["c1"], BD1) == ClaimResult.OK
+    cur.execute("UPDATE clients SET birthday = '1986-05-02' WHERE id = %s", (cards["c1"],))
+    conn.commit()                                                       # привязка устарела — ограничения нет
+    assert ac.claim(ME, cards["c2"], BD2) == ClaimResult.OK
+    assert ac.claimed_cards(ME) == ([cards["c2"]], [cards["c1"]])
+
+
+def test_transferred_slot_gives_no_right_to_claim(db, cards, slot, mail):
+    conn, cur = db
+    cur.execute("UPDATE leads SET email = %s WHERE event_name = %s AND start_number = 9031", (ME, EV))
+    conn.commit()                                                       # заявка Марии на карточке Игоря — с почты me@
+    with pytest.raises(ValueError):
+        ac.claim(ME, slot["igor"], IGOR_BD)
+    cur.execute("SELECT COUNT(*) n FROM athlete_claim_attempts WHERE email = %s", (ME,))
+    assert cur.fetchone()["n"] == 0
+
+
+def test_typo_in_name_and_birthday_still_gives_right_to_claim(db, cards, slot, mail):
+    conn, cur = db
+    add_typo_lead(cur, slot["igor"], ME, 9032)
+    conn.commit()
+    assert ac.claim(ME, slot["igor"], IGOR_BD) == ClaimResult.OK
+
+
+def test_notify_recipients_skip_transferred_slot_mail(db, cards, slot, mail):
+    conn, cur = db
+    assert ac.notify_recipients(slot["igor"], ME) == [OTHER]            # slot@ — почта другого человека
+    add_typo_lead(cur, slot["igor"], KAB, 9032)
+    conn.commit()
+    assert ac.notify_recipients(slot["igor"], ME) == [KAB, OTHER]       # опечатка — тот же человек
+
+
+def test_history_rows_skip_transferred_slot_but_keep_typos(db, cards, slot, mail):
+    conn, cur = db
+    add_typo_lead(cur, slot["igor"], OTHER, 9033)
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, client_id) VALUES (%s, 'Игор', '1975-03-04', 'Мужчина', %s, 9033, 'Finished',
+                   '00:40:00', %s)""", (SURNAME, slot["event_id"], slot["igor"]))
+    conn.commit()
+    results, leads = ac.history_rows([slot["igor"]])
+    assert sorted(ld["start_number"] for ld in leads) == [9030, 9033]   # Мария (9031) не показывается
+    assert [r["start_number"] for r in results] == [9033]               # результат Марии (9031) тоже
+
+
+def test_history_rows_carry_order_and_place_fields(db, cards, mail):
+    conn, cur = db
+    cur.execute("""UPDATE leads SET order_id = 5551, amount = 1090, promocode = 'VIM99', discount = 109.5,
+                   products = '5 км (kt)' WHERE event_name = %s AND start_number = 9001""", (EV,))
+    cur.execute("""UPDATE results SET category = 'М35-39', rank_absolute = 4, rank_absolute_clean = 3
+                   WHERE start_number = 9001 AND event_id = %s""", (cards["event_id"],))
+    conn.commit()
+    results, leads = ac.history_rows([cards["c1"]])
+    r = results[0]
+    assert (r["category"], r["rank_absolute"], r["rank_absolute_clean"], r["birthday"]) == ("М35-39", 4, 3, BD1)
+    ld = next(x for x in leads if x["start_number"] == 9001)
+    assert (ld["order_id"], ld["amount"], ld["promocode"], ld["discount"], ld["products"]) == \
+        (5551, 1090, "VIM99", 109.5, "5 км (kt)")
+    assert ld["email"] == ME and ld["created_at"] is not None and ld["surname"] == SURNAME and ld["birthday"] == BD1
+
+
+def test_cabinet_group_title_comes_from_card_not_from_latest_lead(db, cards, mail):
+    conn, cur = db
+    from src.krasmarafon.services import athlete_cabinet
+
+    add_lead(cur, "Мария", BD2, ME, 9040)                               # последняя заявка карточки c1 — чужого слота
+    move_to(cur, cards["c1"], "start_number = 9040", ())
+    conn.commit()
+    people = athlete_cabinet.cabinet(ME, date(2100, 1, 1))
+    titles = {p["client_id"]: p["title"] for p in people}
+    assert titles[cards["c1"]] == "Тестклейм Иван" and titles[cards["c2"]] == "Тестклейм Мария"
+
+
+def test_web_other_person_message_and_no_attempt(web, cards):
+    client, _ = web
+    login(client)
+    assert claim_via_web(client, cards["c1"], "1986-05-01").headers["location"] == "/me"
+    r = claim_via_web(client, cards["c2"], "2018-03-02")
+    assert r.status_code == 303 and r.headers["location"] == f"/me?claim={cards['c2']}&r=other_person"
+    page = client.get(r.headers["location"]).text
+    assert ("У вас уже есть своя карточка с другой датой рождения. Если это ваш ребёнок или близкий — "
+            "доступ к его истории появится позже") in page
+    assert claim_via_web(client, cards["vanya"], "1986-05-01").headers["location"] == "/me"
+
+
+def test_web_transferred_slot_claim_is_404(web, cards, slot, db):
+    conn, cur = db
+    cur.execute("UPDATE leads SET email = %s WHERE event_name = %s AND start_number = 9031", (ME, EV))
+    conn.commit()
+    client, _ = web
+    login(client)
+    assert claim_via_web(client, slot["igor"], "1975-03-03").status_code == 404
+
+
+def test_web_history_details_and_places(web, cards, db):
+    conn, cur = db
+    cur.execute("""UPDATE leads SET order_id = 5551, amount = 1090, promocode = 'VIM99', discount = 109.5,
+                   products = '5 км (kt) - 1x1090' WHERE event_name = %s AND start_number = 9001""", (EV,))
+    cur.execute("""UPDATE results SET category = 'М35-39', rank_absolute = 4, rank_category = 3
+                   WHERE start_number = 9001 AND event_id = %s""", (cards["event_id"],))
+    add_lead(cur, "Иван", BD1, OTHER, 9050, year=2098)                  # будущая заявка с чужой почты
+    conn.commit()
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    page = client.get("/me/history").text
+    assert "Подробнее" in page and "<details" in page
+    assert "4 абс. · 3 в М35-39" in page
+    text = re.sub(r"<[^>]+>", "", page)
+    assert "Номер заказа: 5551" in text and "Сумма: 1 090 ₽" in text
+    assert "Промокод: VIM99 (скидка 109,5 ₽)" in text and "Состав заказа: 5 км (kt) - 1x1090" in text
+    assert f"Участник: {SURNAME} Иван, 01.05.1986" in text
+    assert f"Оформлено с почты: {ME}" in text                           # почта аккаунта — полностью
+    assert f"Оформлено с почты: o***@{DOMAIN}" in text                  # чужая — маской
+    assert OTHER not in page

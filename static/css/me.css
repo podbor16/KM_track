@@ -43,8 +43,8 @@
                   flex-direction: column; align-items: center; justify-content: center; font-weight: 700;
                   font-size: 20px; line-height: 1.1; }
 .me-ticket-date small { font-size: 12px; font-weight: 400; }
-.me-ticket-body { padding: 10px 12px; }
-.me-result { display: flex; align-items: center; gap: 10px; background: var(--km-bg-card);
+.me-ticket-body { padding: 10px 12px; flex: 1; min-width: 0; }
+.me-result { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; background: var(--km-bg-card);
              border-radius: var(--km-radius-card); box-shadow: var(--km-shadow); padding: 10px 12px; margin-bottom: 8px; }
 .me-result-body { flex: 1; min-width: 0; }
 .me-time { text-align: right; font-size: 20px; font-weight: 700; color: var(--km-dark); white-space: nowrap; }
@@ -88,6 +88,18 @@
             box-shadow: var(--km-shadow); padding: 10px; }
 .me-year { font-weight: 700; font-size: 17px; color: var(--km-dark); margin: 16px 0 6px; }
 .me-time .me-pace { color: var(--km-text-secondary); }
+.me-time small { white-space: normal; }
+
+/* «Подробнее» у заявки */
+.me-more { flex: 0 0 100%; margin-top: 6px; font-size: 13px; }
+.me-more summary { display: inline-block; cursor: pointer; color: var(--km-primary); list-style: none; padding: 2px 0; }
+.me-more summary::-webkit-details-marker { display: none; }
+.me-more summary::after { content: " ▾"; }
+.me-more[open] summary::after { content: " ▴"; }
+.me-more-list { list-style: none; margin: 4px 0 2px; padding: 8px 10px; background: #f7f7f8; border-radius: 8px;
+                color: var(--km-dark); line-height: 1.5; overflow-wrap: anywhere; }
+.me-more-list li + li { margin-top: 2px; }
+.me-more-list span { color: var(--km-text-muted); }
 .me-foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--km-border-light); display: flex;
            flex-direction: column; gap: 10px; align-items: flex-start; font-size: 14px; }
 .me-foot a { color: var(--km-text-secondary); }

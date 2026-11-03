@@ -17,19 +17,26 @@ def res(id, year=2025, dist="21.1", status="Finished", time=None, gun=None, date
                start_number=start_number if start_number is not None else id, event_name=name,
                event_year=year, event_date=date if date is not None else dt.date(year, 7, 12),
                event_distance=Decimal(dist) if dist is not None else None, race_status=status,
-               time_clear_finish=time, time_gun_finish=gun, rank_category=rank, rank_category_clean=rank_clean)
+               time_clear_finish=time, time_gun_finish=gun, rank_category=rank, rank_category_clean=rank_clean,
+               category=None, rank_absolute=None, rank_absolute_clean=None)
     row.update(kw)
     return row
 
 
-def lead(id, year=2026, dist="21.1", date=None, event_id=None, start_number=None, refund=0, name="Жара"):
-    return dict(id=id, client_id=1, event_id=event_id if event_id is not None else 2000 + id,
-                start_number=start_number, event_name=name, event_year=year, event_date=date,
-                event_distance=Decimal(dist) if dist is not None else None, refund=refund)
+def lead(id, year=2026, dist="21.1", date=None, event_id=None, start_number=None, refund=0, name="Жара",
+         first="Иван", **kw):
+    """name — название события, first — имя участника."""
+    row = dict(id=id, client_id=1, event_id=event_id if event_id is not None else 2000 + id,
+               start_number=start_number, event_name=name, event_year=year, event_date=date,
+               event_distance=Decimal(dist) if dist is not None else None, refund=refund,
+               surname="Иванов", name=first, birthday=dt.date(1986, 5, 1), created_at=None, order_id=None,
+               amount=None, promocode=None, discount=None, products=None, email=None, ma_email=None)
+    row.update(kw)
+    return row
 
 
-def build(results=(), leads=(), diplomas=()):
-    return build_history(list(results), list(leads), TODAY, CODES, set(diplomas))
+def build(results=(), leads=(), diplomas=(), account_email=None):
+    return build_history(list(results), list(leads), TODAY, CODES, set(diplomas), account_email)
 
 
 def test_empty_inputs():
@@ -204,3 +211,116 @@ def test_missing_distance_does_not_break():
     assert h["tiles"]["finishes"] == 1 and h["tiles"]["km"] == 0 and h["tiles"]["pace"] is None
     assert h["records"] == [] and h["dynamics"] == {}
     assert h["years"][0]["items"][0]["distance"] is None and h["years"][0]["items"][0]["pace"] is None
+
+
+# ---------------------------------------------------------------- доработки: места, возврат, подробности заявки
+
+def only_item(h):
+    items = [i for y in h["years"] for i in y["items"]]
+    assert len(items) == 1
+    return items[0]
+
+
+def test_places_absolute_and_category_clean_time():
+    r = res(1, time=td(1, 45), gun=td(1, 46), rank=4, rank_clean=3, category="М40-49", rank_absolute=12,
+            rank_absolute_clean=10)
+    assert only_item(build([r]))["places"] == "10 абс. · 3 в М40-49"
+
+
+def test_places_use_gun_ranks_without_clear_time():
+    r = res(1, gun=td(1, 46), rank=4, rank_clean=3, category="М40-49", rank_absolute=12, rank_absolute_clean=10)
+    assert only_item(build([r]))["places"] == "12 абс. · 4 в М40-49"
+
+
+def test_places_skip_empty_parts():
+    assert only_item(build([res(1, time=td(1), rank_absolute=7)]))["places"] == "7 абс."
+    assert only_item(build([res(1, time=td(1), rank=2, category="Ж30")]))["places"] == "2 в Ж30"
+    assert only_item(build([res(1, time=td(1), rank=2)]))["places"] == "2 место в категории"
+    assert only_item(build([res(1, time=td(1))]))["places"] is None
+    assert only_item(build([res(1, status="DNF", gun=td(1), rank=2, rank_absolute=3)]))["places"] is None
+
+
+def test_refund_hidden_when_event_has_active_lead_or_result():
+    ev = dict(event_id=77, year=2025, date=dt.date(2025, 7, 12))
+    h = build(leads=[lead(1, refund=1, **ev), lead(2, start_number=5, **ev)])
+    assert only_item(h)["refund"] is False
+    h = build([res(1, event_id=77, start_number=5, time=td(1, 45))], [lead(1, refund=1, start_number=5, **ev)])
+    assert only_item(h)["time"] == "1:45:00"
+
+
+def test_refund_shown_when_alone_or_other_card_or_other_event():
+    ev = dict(year=2025, date=dt.date(2025, 7, 12))
+    h = build(leads=[lead(1, refund=1, event_id=77, **ev)])
+    assert only_item(h)["status"] == "возврат"
+    other_card = lead(2, event_id=77, **ev) | {"client_id": 2}
+    other_event = lead(3, event_id=78, **ev)
+    items = [i for y in build(leads=[lead(1, refund=1, event_id=77, **ev), other_card, other_event])["years"]
+             for i in y["items"]]
+    assert sorted(i["refund"] for i in items) == [False, False, True]
+
+
+def test_two_refunds_same_event_both_stay():
+    ev = dict(event_id=77, year=2025, date=dt.date(2025, 7, 12))
+    items = [i for y in build(leads=[lead(1, refund=1, **ev), lead(2, refund=1, **ev)])["years"] for i in y["items"]]
+    assert len(items) == 2
+
+
+FULL = dict(surname="Иванов", first="Иван", birthday=dt.date(1986, 5, 1), created_at=dt.datetime(2026, 9, 20, 14, 5),
+            order_id=2062310870, amount=1090.0, promocode="VIM99", discount=109.5,
+            products="21.1 км Жара (zhara-2026) - 1x1090 = 1090", email="Me@Mail.ru", ma_email=None)
+NBSP = "\u00a0"
+
+
+def test_order_details_of_upcoming_lead():
+    e = only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **FULL)], account_email="me@mail.ru"))
+    assert e["kind"] == "ticket"
+    assert e["order"] == {
+        "participant": "Иванов Иван", "birthday": dt.date(1986, 5, 1), "created": dt.datetime(2026, 9, 20, 14, 5),
+        "order_id": 2062310870, "amount": f"1{NBSP}090 ₽", "promocode": "VIM99", "discount": "109,5 ₽",
+        "products": "21.1 км Жара (zhara-2026) - 1x1090 = 1090", "email": "Me@Mail.ru"}
+
+
+def test_order_email_masked_unless_account_email():
+    other = dict(FULL, email="petr@mail.ru")
+    assert only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **other)], account_email="me@mail.ru"))[
+        "order"]["email"] == "p***@mail.ru"
+    assert only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **other)]))["order"]["email"] == "p***@mail.ru"
+    via_ma = dict(FULL, email="  ", ma_email="ME@mail.ru")
+    assert only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **via_ma)], account_email="me@mail.ru"))[
+        "order"]["email"] == "ME@mail.ru"
+    nobody = dict(FULL, email=None, ma_email=None)
+    assert only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **nobody)]))["order"]["email"] is None
+
+
+def test_order_skips_empty_promocode_discount_and_formats_money():
+    bare = dict(FULL, promocode="", discount=0, amount=0.0, products="", order_id=None, created_at=None)
+    o = only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **bare)]))["order"]
+    assert (o["promocode"], o["discount"], o["products"], o["order_id"], o["created"]) == (None,) * 5
+    assert o["amount"] == "0 ₽"
+    odd = dict(FULL, amount=1234567.5, discount=None, promocode=None)
+    o = only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **odd)]))["order"]
+    assert o["amount"] == f"1{NBSP}234{NBSP}567,5 ₽" and o["discount"] is None
+    no_amount = dict(FULL, amount=None)
+    assert only_item(build(leads=[lead(1, date=dt.date(2026, 12, 6), **no_amount)]))["order"]["amount"] is None
+
+
+def test_order_details_of_past_lead_without_result():
+    e = only_item(build(leads=[lead(1, year=2025, date=dt.date(2025, 7, 12), **FULL)]))
+    assert e["status"] == "не стартовал" and e["order"]["order_id"] == 2062310870
+
+
+def test_result_entry_carries_order_of_merged_lead_by_number_then_latest_non_refund():
+    ev = dict(event_id=77, year=2025, date=dt.date(2025, 7, 12))
+    r = res(1, event_id=77, start_number=5, time=td(1, 45))
+    leads = [lead(1, start_number=5, **dict(FULL, order_id=111), **ev),
+             lead(2, start_number=6, **dict(FULL, order_id=222), **ev)]
+    assert only_item(build([r], leads))["order"]["order_id"] == 111
+    leads = [lead(1, start_number=None, **dict(FULL, order_id=111), **ev),
+             lead(2, start_number=None, **dict(FULL, order_id=222), **ev),
+             lead(3, start_number=None, refund=1, **dict(FULL, order_id=333), **ev)]
+    assert only_item(build([r], leads))["order"]["order_id"] == 222
+    assert only_item(build([r]))["order"] is None
+
+
+def test_result_without_lead_has_no_order():
+    assert only_item(build([res(1, time=td(1))]))["order"] is None

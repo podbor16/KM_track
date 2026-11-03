@@ -2,7 +2,9 @@
 (спецификация docs/superpowers/specs/2026-11-03-athlete-cards-history-design.md).
 
 Привязка действует, пока карточка существует и её ДР совпадает с подтверждённой: проверка — лениво,
-в claimed_cards(). Заявление/снятие пишутся в журнал dq_actions. Пул — autocommit: атомарность
+в claimed_cards(). Заявление/снятие пишутся в журнал dq_actions. Карточка и её история принадлежат человеку,
+чьи ФИ и ДР (с поправкой на опечатки) совпадают с карточкой — same_person(): строка «переданного слота»
+(другой человек на карточке) права заявить не даёт, в историю и в рассылку не попадает. Пул — autocommit: атомарность
 нескольких запросов — через start_transaction(). claim() сериализует запросы по карточке блокировкой
 строки clients (FOR UPDATE); UNIQUE (client_id) — страховка. Письма claim() не шлёт: роутер ставит
 notify_claimed() в BackgroundTasks."""
@@ -16,6 +18,7 @@ from enum import Enum
 from mysql.connector import errorcode
 from mysql.connector.errors import IntegrityError
 
+from src.analytics.dq_checks import compatible_bd, fio_close, fio_key
 from src.core.mailer import mask_email, send_mail
 from src.krasmarafon.services.athlete_auth import _conn, normalize_email
 
@@ -34,6 +37,15 @@ class ClaimResult(str, Enum):
     NO_BIRTHDAY = "no_birthday"
     LIMIT = "limit"
     MISMATCH = "mismatch"
+    OTHER_PERSON = "other_person"
+
+
+def same_person(card: dict, row: dict) -> bool:
+    """Строка (заявка/результат) принадлежит владельцу карточки: ФИ близки (dq_checks.fio_close) и ДР совместимы
+    (dq_checks.compatible_bd: заглушка, опечатка, день↔месяц). card/row — dict с surname, name, birthday (date|None)."""
+    def iso(d):
+        return d.isoformat() if d else ""
+    return fio_close(fio_key(card), fio_key(row)) and compatible_bd(iso(card["birthday"]), iso(row["birthday"]))
 
 
 def _log(cur, action: str, client_id: int, details: dict, user: str) -> None:
@@ -99,8 +111,8 @@ def claimed_cards(email: str) -> tuple[list[int], list[int]]:
 
 
 def claim(email: str, client_id: int, birthday: date) -> ClaimResult:
-    """Заявить карточку: проверки — спецификация «Заявление карточки», п. 1–6. Карточки нет среди заявок
-    почты — ValueError. Всё — в одной транзакции под блокировкой строки карточки (параллельные запросы по
+    """Заявить карточку: проверки — спецификация «Заявление карточки», п. 1–6 и «Доработки» (OTHER_PERSON:
+    вторая карточка аккаунта — только с той же ДР). Нет заявки этого человека (same_person) на почте — ValueError. Всё — в одной транзакции под блокировкой строки карточки (параллельные запросы по
     ней идут по очереди, лимит попыток не обойти); устаревшая привязка снимается в ней же. Попытка пишется
     только при MISMATCH. Писем не шлёт: при OK вызывающий ставит notify_claimed() в фон."""
     email = normalize_email(email)
@@ -121,14 +133,14 @@ def claim(email: str, client_id: int, birthday: date) -> ClaimResult:
 def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("SELECT id FROM clients WHERE id = %s FOR UPDATE", (client_id,))
-        if cur.fetchone() is None:
-            raise ValueError(f"карточки {client_id} нет")
-        cur.execute("""SELECT c.birthday FROM clients c WHERE c.id = %s AND EXISTS (
-                         SELECT 1 FROM leads WHERE client_id = c.id AND (LOWER(email) = %s OR LOWER(ma_email) = %s))""",
-                    (client_id, email, email))
+        cur.execute("SELECT surname, name, birthday FROM clients WHERE id = %s FOR UPDATE", (client_id,))
         card = cur.fetchone()
         if card is None:
+            raise ValueError(f"карточки {client_id} нет")
+        cur.execute("""SELECT surname, name, birthday FROM leads
+                       WHERE client_id = %s AND (LOWER(email) = %s OR LOWER(ma_email) = %s)""",
+                    (client_id, email, email))
+        if not any(same_person(card, lead) for lead in cur.fetchall()):
             raise ValueError(f"карточки {client_id} нет среди заявок почты аккаунта")
 
         _sweep(conn, "ac.client_id = %s", (client_id,), in_tx=True)   # устаревшая чужая привязка не должна мешать
@@ -139,6 +151,12 @@ def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
 
         if card["birthday"] in NO_BIRTHDAY:
             return ClaimResult.NO_BIRTHDAY
+
+        cur.execute("""SELECT DISTINCT ac.birthday FROM athlete_claims ac
+                       JOIN clients c ON c.id = ac.client_id AND c.birthday = ac.birthday WHERE ac.email = %s""", (email,))
+        mine = {r["birthday"] for r in cur.fetchall()}
+        if mine and card["birthday"] not in mine:    # один человек — одна ДР; до лимита и до сверки ДР
+            return ClaimResult.OTHER_PERSON
 
         cur.execute("""SELECT COUNT(*) AS n FROM athlete_claim_attempts
                        WHERE email = %s AND client_id = %s AND created_at > NOW() - INTERVAL 1 DAY""",
@@ -182,17 +200,23 @@ def unclaim(email: str, client_id: int) -> None:
 
 
 def notify_recipients(client_id: int, account_email: str) -> list[str]:
-    """Различные непустые leads.email/ma_email карточки (lower, strip), без почты аккаунта, не больше NOTIFY_MAX."""
+    """Различные непустые leads.email/ma_email заявок самого владельца карточки (same_person; заявки переданного
+    слота — не его) в lower/strip, без почты аккаунта, не больше NOTIFY_MAX."""
     account_email = normalize_email(account_email)
     conn = _conn()
     try:
-        cur = conn.cursor()
-        cur.execute("""SELECT LOWER(TRIM(email)) FROM leads WHERE client_id = %s
-                       UNION SELECT LOWER(TRIM(ma_email)) FROM leads WHERE client_id = %s""", (client_id, client_id))
-        found = {r[0] for r in cur.fetchall() if r[0]}
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT surname, name, birthday FROM clients WHERE id = %s", (client_id,))
+        card = cur.fetchone()
+        if card is None:
+            cur.close()
+            return []
+        cur.execute("SELECT surname, name, birthday, email, ma_email FROM leads WHERE client_id = %s", (client_id,))
+        rows = [r for r in cur.fetchall() if same_person(card, r)]
         cur.close()
     finally:
         conn.close()
+    found = {(m or "").strip().lower() for r in rows for m in (r["email"], r["ma_email"])} - {""}
     return sorted(found - {account_email})[:NOTIFY_MAX]
 
 
@@ -229,22 +253,24 @@ def notify_claimed(client_id: int, account_email: str) -> None:
 
 
 _RESULTS_SQL = """
-    SELECT r.id, r.client_id, r.surname, r.event_id, r.start_number, e.event_name, e.event_year, e.event_date,
-           e.event_distance, r.race_status, r.time_clear_finish, r.time_gun_finish,
-           r.rank_category, r.rank_category_clean
+    SELECT r.id, r.client_id, r.surname, r.name, r.birthday, r.event_id, r.start_number, e.event_name, e.event_year,
+           e.event_date, e.event_distance, r.race_status, r.time_clear_finish, r.time_gun_finish,
+           r.category, r.rank_absolute, r.rank_absolute_clean, r.rank_category, r.rank_category_clean
     FROM results r LEFT JOIN events e ON e.id = r.event_id
     WHERE r.client_id IN ({ph}) ORDER BY r.id"""
 
 _LEADS_SQL = """
-    SELECT l.id, l.client_id, l.event_id, l.start_number, l.refund, l.event_name, l.event_year,
-           e.event_date, e.event_distance
+    SELECT l.id, l.client_id, l.surname, l.name, l.birthday, l.event_id, l.start_number, l.refund, l.event_name,
+           l.event_year, e.event_date, e.event_distance, l.created_at, l.order_id, l.amount, l.promocode, l.discount,
+           l.products, l.email, l.ma_email
     FROM leads l LEFT JOIN events e ON e.id = l.event_id
     WHERE l.client_id IN ({ph}) AND l.is_duplicate = 0 ORDER BY l.id"""
 
 
 def history_rows(client_ids) -> tuple[list[dict], list[dict]]:
-    """(результаты, заявки) карточек для athlete_history.build_history. Заявки без дублей; события — LEFT JOIN;
-    флаг «Без ПД» не учитывается (человек смотрит свои данные)."""
+    """(результаты, заявки) карточек для athlete_history.build_history — только строки самого владельца карточки
+    (same_person: строка переданного слота, ФИ другого человека, не показывается; опечатки — показываются). Заявки
+    без дублей; события — LEFT JOIN; флаг «Без ПД» не учитывается (человек смотрит свои данные)."""
     ids = [int(i) for i in client_ids]
     if not ids:
         return [], []
@@ -252,10 +278,12 @@ def history_rows(client_ids) -> tuple[list[dict], list[dict]]:
     conn = _conn()
     try:
         cur = conn.cursor(dictionary=True)
+        cur.execute(f"SELECT id, surname, name, birthday FROM clients WHERE id IN ({ph})", ids)
+        cards = {c["id"]: c for c in cur.fetchall()}
         cur.execute(_RESULTS_SQL.format(ph=ph), ids)
-        results = cur.fetchall()
+        results = [r for r in cur.fetchall() if r["client_id"] in cards and same_person(cards[r["client_id"]], r)]
         cur.execute(_LEADS_SQL.format(ph=ph), ids)
-        leads = cur.fetchall()
+        leads = [r for r in cur.fetchall() if r["client_id"] in cards and same_person(cards[r["client_id"]], r)]
         cur.close()
         return results, leads
     finally:
