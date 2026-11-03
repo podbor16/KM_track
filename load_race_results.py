@@ -961,6 +961,7 @@ class RaceLoader:
         results_batch = []
         segments_batch = []
         updated_dorsals = []
+        relink_rows = []          # (result_id, dorsal): в протоколе исправлены ФИ/ДР — карточку перепроверить
         kt_reads_this_cycle = 0
 
         # Лениво строим маппинг КТ-полей при первом вызове
@@ -1068,6 +1069,11 @@ class RaceLoader:
                 changed_fields.append(f'surname: "{existing.get("surname")}" → "{surname}"')
             if name != existing.get('name'):
                 changed_fields.append(f'name: "{existing.get("name")}" → "{name}"')
+            # ДР: заглушка из Copernico (поле пустое) не считается правкой — настоящую ДР в БД не трогаем сравнением
+            birthday_changed = birthdate != '1900-01-01' and str(existing.get('birthday')) != birthdate
+            if birthday_changed:
+                changed_fields.append(f'birthday: {existing.get("birthday")} → {birthdate}')
+            fio_changed = (surname != existing.get('surname') or name != existing.get('name') or birthday_changed)
             if race_status != existing.get('race_status'):
                 changed_fields.append(f'race_status: "{existing.get("race_status")}" → "{race_status}"')
             if time_gun_finish != existing.get('time_gun_finish'):
@@ -1103,6 +1109,8 @@ class RaceLoader:
 
             if changed_fields:
                 updated_dorsals.append(dorsal)
+                if fio_changed:
+                    relink_rows.append((result_id, dorsal))
                 if len(updated_dorsals) <= 5:
                     self.logger.debug(f"📝 Dorsal #{dorsal} ({surname} {name}): {', '.join(changed_fields)}")
                 # Добавляем в батч для UPDATE только если есть изменения
@@ -1179,6 +1187,7 @@ class RaceLoader:
                     self.logger.debug(f"📝 Обновлены: {', '.join(updated_dorsals[:5])} (всего {len(updated_dorsals)})")
             except Exception as e:
                 self.logger.error(f"❌ UPDATE results: {e}")
+                relink_rows = []          # данные не записаны — перепривязывать нечего
                 if self.connection:
                     self.connection.rollback()
 
@@ -1204,7 +1213,28 @@ class RaceLoader:
                 if self.connection:
                     self.connection.rollback()
 
+        self._relink_corrected(relink_rows)
         return updated_results, updated_segments, kt_reads_this_cycle
+
+    def _relink_corrected(self, rows: List[Tuple[int, str]]) -> None:
+        """Результат с исправленными в протоколе ФИ/ДР — на верную карточку (dq_actions.relink_row, журнал
+        «relink:loader», отменяемо в «Качестве данных»). Вызывается ПОСЛЕ коммитов пачек UPDATE: relink_row
+        коммитит сам и открытой пачки не затронет. Соединение — из пула (autocommit). Сбой одной перепривязки
+        — в лог, загрузка протокола продолжается."""
+        if not rows or not self.connection:
+            return
+        from src.analytics.dq_actions import relink_row
+        for result_id, dorsal in rows:
+            try:
+                plan = relink_row(self.connection, 'results', result_id, 'loader', 'loader')
+            except Exception as e:
+                self.logger.error(f"❌ Перепривязка результата #{result_id} (№{dorsal}): {e}")
+                continue
+            if plan['action'] == 'rename':
+                self.logger.info(f"🔀 №{dorsal}: карточка №{plan['from_card']} переименована по протоколу (ФИ/ДР исправлены)")
+            elif plan['action'] not in ('none', 'skip'):
+                self.logger.info(f"🔀 №{dorsal}: результат #{result_id} перенесён с карточки №{plan['from_card']} "
+                                 f"на №{plan['to_card']} ({plan['action']}) — исправлены ФИ/ДР в протоколе")
 
     @staticmethod
     def _assign_ranks(runners: List[Dict], time_key: str) -> Dict[int, int]:
