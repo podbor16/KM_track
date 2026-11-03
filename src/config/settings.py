@@ -69,6 +69,17 @@ if not SECRET_KEY:
 TILDA_WEBHOOK_SECRET = os.getenv("TILDA_WEBHOOK_SECRET", "")
 SIBERMAN_WEBHOOK_SECRET = os.getenv("SIBERMAN_WEBHOOK_SECRET", "")
 
+# --- ПИСЬМА (код входа в личный кабинет) ---
+# log — письмо в лог (разработка, тесты); smtp — ящик домена в Яндексе (SMTP_SSL)
+MAIL_BACKEND = os.getenv("MAIL_BACKEND", "log")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.yandex.ru")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+MAIL_FROM = os.getenv("MAIL_FROM", "Красмарафон <noreply@krasmarafon.ru>")
+# Адрес сайта для ссылки «Войти» в письме — не из заголовка Host запроса
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://results.krasmarafon.ru").rstrip("/")
+
 # --- DataLens приватный embed ---
 DATALENS_KEY_SECRET = os.getenv("DATALENS_KEY_SECRET", "")
 
@@ -127,6 +138,13 @@ __all__ = [
     "SECRET_KEY",
     "TILDA_WEBHOOK_SECRET",
     "SIBERMAN_WEBHOOK_SECRET",
+    "MAIL_BACKEND",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "MAIL_FROM",
+    "PUBLIC_BASE_URL",
     "DATALENS_KEY_SECRET",
     "DATALENS_EMBEDS",
     "logger",
