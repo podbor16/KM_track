@@ -10,10 +10,6 @@ from .runners_service import (
     calculate_live_position,
 )
 
-from .analytics_service import (
-    get_formatted_analytics,
-)
-
 from .pace_calculator import (
     parse_distance,
     parse_pace_to_kmh,
@@ -27,9 +23,6 @@ __all__ = [
 
     # runners
     "calculate_live_position",
-
-    # analytics
-    "get_formatted_analytics",
 
     # pace_calculator
     "parse_distance",

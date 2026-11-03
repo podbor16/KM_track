@@ -41,7 +41,6 @@ from src.krasmarafon.models import (
     RegisteredRunnersListResponse, RaceResultsResponse,
     Segment, SegmentsListResponse,
 )
-from src.krasmarafon.services import get_formatted_analytics
 from src.krasmarafon import services as _svc
 
 logger = logging.getLogger(__name__)
@@ -323,21 +322,6 @@ async def get_runner_latest_segment(
     except Exception as e:
         logger.error(f"get_runner_latest_segment error: {e}")
         return _build_segments_response(runner_id, event, [], success=False, message=str(e))
-
-
-# ============================================================================
-# АНАЛИТИКА (ANALYTICS)
-# ============================================================================
-
-@router.post("/api/analytics/refresh")
-async def refresh_analytics(event: str = Query(settings.CURRENT_EVENT)):
-    """Принудительный пересчёт аналитики."""
-    try:
-        data = get_formatted_analytics()
-        return {'success': True, 'message': 'Analytics refreshed', 'timestamp': datetime.now().isoformat(), 'data': data}
-    except Exception as e:
-        logger.error(f"refresh_analytics error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/registered-runners", response_model=RegisteredRunnersListResponse)

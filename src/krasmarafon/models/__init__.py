@@ -33,11 +33,6 @@ from .segment import (
 )
 
 from .analytics import (
-    Analytics,
-    GeneralStats,
-    GenderStats,
-    TopFinishers,
-    AnalyticsResponse,
     RegisteredRunnerInfo,
     RegisteredRunnersListResponse,
     RaceResultsResponse,
@@ -81,11 +76,6 @@ __all__ = [
     "SegmentsListResponse",
     
     # Analytics models
-    "Analytics",
-    "GeneralStats",
-    "GenderStats",
-    "TopFinishers",
-    "AnalyticsResponse",
     "RegisteredRunnerInfo",
     "RegisteredRunnersListResponse",
     "RaceResultsResponse",
