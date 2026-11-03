@@ -140,3 +140,28 @@ def test_empty_cabinet_message(db, client):
     _, code, _ = request_code(client, f"empty@{DOMAIN}")
     client.post("/me/verify", data={"email": f"empty@{DOMAIN}", "code": code})
     assert "Заявок с этой почты не найдено" in client.get("/me").text
+
+def test_cabinet_groups_upcoming_and_results(db, client):
+    conn, cur = db
+    cur.execute("SELECT id FROM events WHERE event_date < CURDATE() AND event_name = 'Жара' "
+                "ORDER BY event_date DESC LIMIT 1")
+    past_ev = cur.fetchone()
+    add_lead(cur, "Будущий", email=f"cab@{DOMAIN}")  # event_id NULL → даты нет → «Заявки»
+    if past_ev:
+        add_lead(cur, "Прошлый", email=f"cab@{DOMAIN}")
+        cur.execute("UPDATE leads SET event_id = %s WHERE event_name = %s AND surname = 'Прошлый'",
+                    (past_ev["id"], EV))
+    conn.commit()
+    _, code, _ = request_code(client, f"cab@{DOMAIN}")
+    client.post("/me/verify", data={"email": f"cab@{DOMAIN}", "code": code})
+    page = client.get("/me").text
+    assert "🎟 Заявки" in page and "номер ещё не присвоен" in page
+    if past_ev:
+        assert "🏁 Результаты" in page and "нет результата" in page
+
+
+def test_header_shows_login_or_cabinet(db, client):
+    assert "ВОЙТИ" in client.get("/results").text
+    _, code, _ = request_code(client, f"hdr@{DOMAIN}")
+    client.post("/me/verify", data={"email": f"hdr@{DOMAIN}", "code": code})
+    assert "КАБИНЕТ" in client.get("/results").text

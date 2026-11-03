@@ -15,3 +15,39 @@
 .me-link { display: block; width: 100%; background: none; border: 0; color: var(--km-primary); font-size: 14px;
            text-align: center; margin-top: 12px; cursor: pointer; text-decoration: none; font-family: inherit; }
 .me-link:disabled { color: var(--km-text-muted); cursor: default; }
+.me-page { max-width: 640px; margin: 24px auto 40px; padding: 0 16px; }
+.me-page h1 { font-family: var(--km-font-brand); font-size: 26px; color: var(--km-dark); }
+.me-account { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; color: var(--km-text-secondary);
+              font-size: 14px; margin: 4px 0 8px; }
+.me-account form { display: inline; }
+.me-inline { background: none; border: 0; color: var(--km-primary); font-size: 14px; cursor: pointer; padding: 0;
+             font-family: inherit; }
+.me-empty { color: var(--km-text-secondary); margin-top: 24px; }
+.me-person { margin-top: 22px; }
+.me-person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.me-person-head h2 { font-size: 18px; color: var(--km-dark); }
+.me-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--km-primary); color: #fff;
+             display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.me-sub { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--km-text-muted);
+          margin: 12px 0 6px; }
+.me-title { font-weight: 700; font-size: 15px; }
+.me-meta { color: var(--km-text-secondary); font-size: 13px; margin-top: 2px; }
+.me-meta a { color: var(--km-primary); text-decoration: none; }
+.me-tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 20px; background: #e8f6ec;
+          color: #1d7a3a; }
+.me-tag--refund { background: #fdecea; color: #b3261e; }
+.me-ticket { display: flex; background: var(--km-bg-card); border: 1px solid #f3c2cf;
+             border-radius: var(--km-radius-card); overflow: hidden; margin-bottom: 8px; }
+.me-ticket-date { background: var(--km-primary); color: #fff; width: 58px; flex-shrink: 0; display: flex;
+                  flex-direction: column; align-items: center; justify-content: center; font-weight: 700;
+                  font-size: 20px; line-height: 1.1; }
+.me-ticket-date small { font-size: 12px; font-weight: 400; }
+.me-ticket-body { padding: 10px 12px; }
+.me-result { display: flex; align-items: center; gap: 10px; background: var(--km-bg-card);
+             border-radius: var(--km-radius-card); box-shadow: var(--km-shadow); padding: 10px 12px; margin-bottom: 8px; }
+.me-result-body { flex: 1; min-width: 0; }
+.me-time { text-align: right; font-size: 20px; font-weight: 700; color: var(--km-dark); white-space: nowrap; }
+.me-time small { display: block; font-size: 12px; color: var(--km-primary); }
+.me-result--none { box-shadow: none; border: 1px solid var(--km-border-light); }
+.me-result--none .me-title, .me-result--none .me-time { color: var(--km-text-muted); }
+.me-result--none .me-time { font-size: 13px; font-weight: 400; }
