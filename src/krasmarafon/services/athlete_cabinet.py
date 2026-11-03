@@ -39,7 +39,7 @@ def _norm(s: Optional[str]) -> str:
     return (s or "").strip().lower().replace("ё", "е")
 
 
-def _fmt(td: Optional[dt.timedelta]) -> Optional[str]:
+def fmt_time(td: Optional[dt.timedelta]) -> Optional[str]:
     if td is None:
         return None
     s = int(td.total_seconds())
@@ -53,9 +53,25 @@ def protocol_url(event_name: str, year: int, surname: str, codes: dict) -> Optio
     return f"/results?event={code}&year={year}&search={quote(surname or '')}"
 
 
-def _entry(r: dict, codes: dict) -> dict:
+def finish_info(r: dict) -> tuple[bool, Optional[dt.timedelta], Optional[int]]:
+    """(финиш?, время, место в категории) строки с полями результата. Время — чистое, иначе по выстрелу;
+    место — «чистое» только при чистом времени."""
     clean = r["time_clear_finish"] is not None
-    finished = r["race_status"] == "Finished" and (clean or r["time_gun_finish"] is not None)
+    td = r["time_clear_finish"] if clean else r["time_gun_finish"]
+    finished = r["race_status"] == "Finished" and td is not None
+    place = ((r["rank_category_clean"] or r["rank_category"]) if clean else r["rank_category"]) if finished else None
+    return finished, td, place
+
+
+def is_upcoming(date: Optional[dt.date], year: Optional[int], today: dt.date) -> bool:
+    """Предстоящая: дата ≥ сегодня, а если даты нет — год пустой или ≥ текущего."""
+    if date is None:
+        return not year or year >= today.year
+    return date >= today
+
+
+def _entry(r: dict, codes: dict) -> dict:
+    finished, td, place = finish_info(r)
     return {
         "lead_id": r["id"],
         "event_id": r["event_id"],
@@ -65,9 +81,8 @@ def _entry(r: dict, codes: dict) -> dict:
         "year": r["event_year"],
         "start_number": r["start_number"],
         "refund": bool(r["refund"]),
-        "time": _fmt(r["time_clear_finish"] if clean else r["time_gun_finish"]) if finished else None,
-        "place": ((r["rank_category_clean"] or r["rank_category"]) if clean else r["rank_category"])
-                 if finished else None,
+        "time": fmt_time(td) if finished else None,
+        "place": place,
         "protocol_url": protocol_url(r["event_name"], r["event_year"], r["surname"], codes) if finished else None,
     }
 
@@ -85,11 +100,7 @@ def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = No
         g = groups.setdefault(key, {"upcoming": [], "past": []})
         g["title"] = f"{r['surname'] or ''} {r['name'] or ''}".strip()  # перезаписывается — останется самая новая
         e = _entry(r, codes)
-        if e["date"] is None:
-            is_upcoming = not e["year"] or e["year"] >= today.year
-        else:
-            is_upcoming = e["date"] >= today
-        (g["upcoming"] if is_upcoming else g["past"]).append(e)
+        (g["upcoming"] if is_upcoming(e["date"], e["year"], today) else g["past"]).append(e)
     far = dt.date.max
     for g in groups.values():
         g["upcoming"].sort(key=lambda e: e["date"] or far)
