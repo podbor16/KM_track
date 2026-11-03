@@ -5,7 +5,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Cookie, Form, Request
+from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -14,7 +14,15 @@ from src.krasmarafon.services import athlete_auth as aa
 from src.krasmarafon.services.athlete_cabinet import cabinet
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+
+
+def _require_cabinet_open(request: Request) -> None:
+    """Пока кабинет не включён в /admin — для посетителей его нет (404), кроме вошедших в админку."""
+    if not aa.cabinet_open(request):
+        raise HTTPException(status_code=404)
+
+
+router = APIRouter(dependencies=[Depends(_require_cabinet_open)])
 
 _EMAIL_RE = re.compile(r"[^@\s,;<>()\"']+@[^@\s,;<>()\"']+\.[^@\s,;<>()\"']+")
 ERR_CODE = "Код неверный или устарел"

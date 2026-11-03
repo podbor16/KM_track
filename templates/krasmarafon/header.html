@@ -22,8 +22,10 @@
             </li>
             {% endif %}
         </ul>
-        {# Личный кабинет (/me) — иконкой вне меню: на телефоне видна рядом с бургером #}
-        {% set has_account = request and request.cookies.get('km_athlete') %}
+        {# Личный кабинет (/me) — иконкой вне меню: на телефоне видна рядом с бургером.
+           До включения в /admin — только вошедшим в админку #}
+        {% if request and athlete_cabinet_open(request) %}
+        {% set has_account = request.cookies.get('km_athlete') %}
         <a href="{{ '/me' if has_account else '/me/login' }}"
            class="navbar-account{% if has_account %} navbar-account--in{% endif %}"
            title="{{ 'Личный кабинет' if has_account else 'Войти' }}"
@@ -33,6 +35,7 @@
                 <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>
             </svg>
         </a>
+        {% endif %}
     </div>
 </nav>
 

@@ -215,6 +215,24 @@ def set_history_enabled(enabled: bool) -> None:
     _HISTORY_ENABLED_FILE.write_text("true" if enabled else "false", encoding="utf-8")
 
 
+_ATHLETE_CABINET_FILE = Path(__file__).parent.parent.parent / "config" / "athlete_cabinet_enabled.local"
+
+
+def get_athlete_cabinet_enabled() -> bool:
+    """Личный кабинет спортсмена (/me) для всех посетителей. Файл отсутствует -> выключено
+    (кабинет ещё не анонсирован; вошедшим в админку виден всегда — см.
+    athlete_auth.cabinet_open); содержимое "true" -> включено. Вне git, переживает деплой."""
+    try:
+        return _ATHLETE_CABINET_FILE.read_text(encoding="utf-8").strip().lower() == "true"
+    except FileNotFoundError:
+        return False
+
+
+def set_athlete_cabinet_enabled(enabled: bool) -> None:
+    """Переключается из /admin (POST /api/admin/athlete-cabinet-toggle)."""
+    _ATHLETE_CABINET_FILE.write_text("true" if enabled else "false", encoding="utf-8")
+
+
 _MAINTENANCE_MODE_FILE = Path(__file__).parent.parent.parent / "config" / "maintenance_mode.local"
 
 

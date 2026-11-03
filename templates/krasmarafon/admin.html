@@ -45,6 +45,15 @@
             </label>
         </div>
 
+        <!-- Личный кабинет спортсмена (/me, иконка в шапке) — до анонса выключен: виден
+             только вошедшим в админку. См. config/athlete_cabinet_enabled.local -->
+        <div class="admin-section-note">
+            <label class="admin-checkbox-label">
+                <input type="checkbox" id="athlete-cabinet-toggle" onchange="onAthleteCabinetToggle()">
+                Показывать «Личный кабинет» всем посетителям (иконка в шапке, /me). Выключено — виден только вам, вошедшим в админку
+            </label>
+        </div>
+
         <!-- Вкладки -->
         <div class="admin-tabs">
             <button class="admin-tab admin-tab--active" onclick="switchTab('events', this)">События</button>
@@ -2132,6 +2141,39 @@
     }
 
     // ========================================================================
+    // Переключатель «Личный кабинет» (config/athlete_cabinet_enabled.local)
+    // ========================================================================
+
+    async function loadAthleteCabinetToggle() {
+        try {
+            const r = await fetch('/api/admin/athlete-cabinet-status');
+            const data = await r.json();
+            document.getElementById('athlete-cabinet-toggle').checked = !!data.enabled;
+        } catch (e) {
+            console.error('loadAthleteCabinetToggle error:', e);
+        }
+    }
+
+    async function onAthleteCabinetToggle() {
+        const checkbox = document.getElementById('athlete-cabinet-toggle');
+        const enabled = checkbox.checked;
+        checkbox.disabled = true;
+        try {
+            const r = await fetch(`/api/admin/athlete-cabinet-toggle?enabled=${enabled}`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert('Ошибка: ' + (err.detail || r.status));
+                checkbox.checked = !enabled;
+            }
+        } catch (e) {
+            alert('Ошибка: ' + e.message);
+            checkbox.checked = !enabled;
+        } finally {
+            checkbox.disabled = false;
+        }
+    }
+
+    // ========================================================================
     // Инициализация — восстанавливаем последнюю активную вкладку
     // (localStorage), иначе открываем «События» по умолчанию
     // ========================================================================
@@ -2140,6 +2182,7 @@
     if (savedBtn) switchTab(savedTab, savedBtn);
     else switchTab('events', document.querySelector(`.admin-tab[onclick*="'events'"]`));
     loadHistoryToggle();
+    loadAthleteCabinetToggle();
     loadMaintenanceToggle();
     </script>
     <script src="/static/js/krasmarafon-broadcast-posts.js?v={{ v }}"></script>

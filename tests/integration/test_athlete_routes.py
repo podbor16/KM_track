@@ -37,6 +37,15 @@ def db():
     conn.close()
 
 
+@pytest.fixture(autouse=True)
+def cabinet_enabled(tmp_path, monkeypatch):
+    """Кабинет включён в /admin (файл-флаг подменён — настоящий config/ не трогаем)."""
+    f = tmp_path / "athlete_cabinet_enabled.local"
+    f.write_text("true", encoding="utf-8")
+    monkeypatch.setattr("src.config.event_loader._ATHLETE_CABINET_FILE", f)
+    return f
+
+
 @pytest.fixture
 def client():
     return TestClient(app, base_url="https://testserver")
@@ -202,3 +211,34 @@ def test_me_with_stale_cookie_clears_it(client):
     r = client.get("/me", follow_redirects=False)
     assert r.status_code == 302
     assert 'km_athlete=""' in r.headers["set-cookie"] or "km_athlete=;" in r.headers["set-cookie"]
+
+
+def test_cabinet_hidden_when_disabled(cabinet_enabled, client):
+    cabinet_enabled.unlink()  # файла нет → выключено
+    assert client.get("/me/login").status_code == 404
+    assert client.get("/me", follow_redirects=False).status_code == 404
+    assert client.post("/me/login", data={"email": f"x@{DOMAIN}"}).status_code == 404
+    assert "class=\"navbar-account" not in client.get("/results").text
+
+
+def test_cabinet_visible_to_admin_when_disabled(cabinet_enabled, client):
+    from src.core.auth import COOKIE_NAME, create_session_cookie
+    cabinet_enabled.write_text("false", encoding="utf-8")
+    client.cookies.set(COOKIE_NAME, create_session_cookie("admin"))
+    assert client.get("/me/login").status_code == 200
+    assert "class=\"navbar-account" in client.get("/results").text
+
+
+def test_admin_toggle_requires_auth_and_switches(cabinet_enabled, client):
+    from src.core.auth import api_require_auth
+    app.dependency_overrides.pop(api_require_auth, None)
+    assert client.post("/api/admin/athlete-cabinet-toggle?enabled=false").status_code == 401
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        assert client.post("/api/admin/athlete-cabinet-toggle?enabled=false").json() == {"enabled": False}
+        assert client.get("/api/admin/athlete-cabinet-status").json() == {"enabled": False}
+        assert client.get("/me/login").status_code == 404
+        client.post("/api/admin/athlete-cabinet-toggle?enabled=true")
+        assert client.get("/me/login").status_code == 200
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)

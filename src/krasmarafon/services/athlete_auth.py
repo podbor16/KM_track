@@ -8,8 +8,12 @@ import hmac
 import secrets
 from typing import Optional
 
+from fastapi import HTTPException
+
 from src.analytics.db_pool import get_pooled_connection
 from src.config import settings
+from src.config.event_loader import get_athlete_cabinet_enabled
+from src.core.auth import COOKIE_NAME as ADMIN_COOKIE, verify_session_cookie
 from src.core.mailer import send_mail
 
 COOKIE_NAME = "km_athlete"
@@ -30,6 +34,21 @@ class TooManyRequests(Exception):
         super().__init__(retry_after)
         self.retry_after = max(int(retry_after), 1)
         self.recent = recent
+
+
+def cabinet_open(request) -> bool:
+    """Кабинет (/me, иконка в шапке) доступен: всем — при включённом переключателе в /admin,
+    иначе только вошедшим в админку (проверка на проде до анонса)."""
+    if get_athlete_cabinet_enabled():
+        return True
+    token = request.cookies.get(ADMIN_COOKIE)
+    if not token:
+        return False
+    try:
+        verify_session_cookie(token)
+        return True
+    except HTTPException:
+        return False
 
 
 def normalize_email(email: str) -> str:

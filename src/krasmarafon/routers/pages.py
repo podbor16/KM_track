@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from src.config import settings
 from src.config.event_loader import get_event_by_name, get_event_by_db_id, get_history_enabled
 from src.krasmarafon.services.diploma_service import get_diploma_data, get_participant_diploma_data, participant_phrase
+from src.krasmarafon.services.athlete_auth import cabinet_open
 from src.core.auth import (
     COOKIE_NAME,
     EXPIRY_SECONDS,
@@ -51,6 +52,7 @@ def _get_deploy_version() -> str:
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["v"] = _get_deploy_version()
 templates.env.globals["history_enabled"] = get_history_enabled
+templates.env.globals["athlete_cabinet_open"] = cabinet_open
 
 
 # ============================================================================

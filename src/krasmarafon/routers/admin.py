@@ -29,11 +29,13 @@ from src.krasmarafon.models.participant_photos import DbEvent, ParticipantPhoto,
 from src.config import settings
 from src.config.event_loader import (
     get_active_event,
+    get_athlete_cabinet_enabled,
     get_history_enabled,
     get_maintenance_enabled,
     invalidate_events_cache,
     load_events_cached,
     set_active_event_override,
+    set_athlete_cabinet_enabled,
     set_history_enabled,
     set_maintenance_enabled,
 )
@@ -151,6 +153,22 @@ async def get_history_status(user: str = Depends(api_require_auth)) -> dict:
 @router.post("/api/admin/history-toggle")
 async def toggle_history(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
     set_history_enabled(enabled)
+    return {"enabled": enabled}
+
+
+# ---------------------------------------------------------------------------
+# Личный кабинет спортсмена (/me) — до анонса виден только вошедшим в админку
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/admin/athlete-cabinet-status")
+async def get_athlete_cabinet_status(user: str = Depends(api_require_auth)) -> dict:
+    return {"enabled": get_athlete_cabinet_enabled()}
+
+
+@router.post("/api/admin/athlete-cabinet-toggle")
+async def toggle_athlete_cabinet(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
+    set_athlete_cabinet_enabled(enabled)
     return {"enabled": enabled}
 
 
