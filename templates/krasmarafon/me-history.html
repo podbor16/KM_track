@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>История спортсмена — Красмарафон</title>
+    <link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/navigation.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/me.css?v={{ v }}">
+</head>
+<body>
+{% include 'krasmarafon/header.html' %}
+{% set months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'] %}
+{% set ids = card_ids|join(', ') %}
+<main class="me-page">
+    <a class="me-back" href="/me">← Личный кабинет</a>
+    <h1>{{ title }}</h1>
+    {% if history.since %}<p class="me-since">Бегает с {{ history.since }}</p>{% endif %}
+
+    {% if history.tiles.starts %}
+    <div class="me-tiles">
+        <div class="me-tile"><b>{{ history.tiles.starts }}</b><span>стартов</span></div>
+        <div class="me-tile"><b>{{ history.tiles.finishes }}</b><span>финишей</span></div>
+        <div class="me-tile"><b>{{ history.tiles.km }}</b><span>км</span></div>
+        <div class="me-tile"><b>{{ history.tiles.pace or '—' }}</b><span>ср. темп</span></div>
+    </div>
+
+    {% if history.records %}
+    <div class="me-sub">Личные рекорды</div>
+    {% for rec in history.records %}
+    <div class="me-record">
+        <span class="me-record-dist">{{ rec.distance }}</span>
+        <span class="me-record-time">{{ rec.time }}</span>
+        <span class="me-record-meta">{{ rec.pace }} /км<br>{{ rec.event_name }}{% if rec.year %} {{ rec.year }}{% endif %}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+    {% if history.dynamics %}
+    <div class="me-sub">Динамика</div>
+    <div class="me-chips" id="dyn-chips"></div>
+    <div class="me-chart"><canvas id="dyn-chart"></canvas></div>
+    <script type="application/json" id="dyn">{{ history.dynamics|tojson }}</script>
+    <script src="/static/lib/chart4/chart.umd.min.js"></script>
+    <script>
+    (function () {
+        var data = JSON.parse(document.getElementById('dyn').textContent);
+        var chipsBox = document.getElementById('dyn-chips');
+        var chart = null;
+        function hms(sec) {
+            var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
+            return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+        function show(key) {
+            var pts = data.series[key];
+            Array.prototype.forEach.call(chipsBox.children, function (b) {
+                b.classList.toggle('on', b.dataset.d === key);
+            });
+            if (chart) chart.destroy();
+            chart = new Chart(document.getElementById('dyn-chart'), {
+                type: 'line',
+                data: {
+                    labels: pts.map(function (p) { return p[0]; }),
+                    datasets: [{
+                        data: pts.map(function (p) { return p[1]; }),
+                        borderColor: '#EE2D62', backgroundColor: '#EE2D62', borderWidth: 2, tension: 0.2, pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function (c) { return hms(c.parsed.y); } } }
+                    },
+                    scales: {
+                        y: { reverse: true, ticks: { callback: function (v) { return hms(v); }, maxTicksLimit: 5 } }
+                    }
+                }
+            });
+        }
+        Object.keys(data.series).forEach(function (key) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'me-chip';
+            b.dataset.d = key;
+            b.textContent = key.replace('.', ',') + ' км';
+            b.addEventListener('click', function () { show(key); });
+            chipsBox.appendChild(b);
+        });
+        show(data.default);
+    })();
+    </script>
+    {% endif %}
+
+    <div class="me-sub">Забеги и заявки</div>
+    {% for y in history.years %}
+    <div class="me-year">{{ y.year or '' }}</div>
+    {% for e in y['items'] %}
+    {% if e.kind == 'ticket' %}
+    <div class="me-ticket">
+        <div class="me-ticket-date">
+            {% if e.date %}{{ e.date.day }}<small>{{ months[e.date.month - 1] }}</small>{% else %}—<small>{{ e.year }}</small>{% endif %}
+        </div>
+        <div class="me-ticket-body">
+            <div class="me-title">{{ e.event_name }}{% if e.distance %} · {{ e.distance }}{% endif %}</div>
+            <div class="me-meta">
+                {% if e.start_number %}№{{ e.start_number }}{% else %}номер ещё не присвоен{% endif %} ·
+                {% if e.refund %}<span class="me-tag me-tag--refund">возврат</span>{% else %}<span class="me-tag">оплачено</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="me-result{% if not e.time %} me-result--none{% endif %}">
+        <div class="me-result-body">
+            <div class="me-title">{{ e.event_name }}{% if e.distance %} · {{ e.distance }}{% endif %}</div>
+            <div class="me-meta">
+                {% if e.date %}{{ e.date.day }} {{ months[e.date.month - 1] }}{% else %}{{ e.year }}{% endif %}
+                {% if e.protocol_url %} · <a href="{{ e.protocol_url }}">протокол</a>{% endif %}
+                {% if e.diploma_url %} · <a href="{{ e.diploma_url }}" target="_blank">диплом</a>{% endif %}
+            </div>
+        </div>
+        <div class="me-time">
+            {% if e.time %}{{ e.time }}{% if e.place %}<small>{{ e.place }} место в категории</small>{% endif %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
+            {% else %}{{ e.status }}{% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
+
+    <div class="me-foot">
+        <a href="mailto:1@krasmarafon.ru?subject={{ ('Ошибка в истории, карточка №' ~ ids)|urlencode }}">Нашли чужой забег? Сообщить об ошибке</a>
+        {% for cid in card_ids %}
+        <form method="post" action="/me/unclaim" onsubmit="return confirm('Отвязать карточку №{{ cid }}? История пропадёт из кабинета.')">
+            <input type="hidden" name="client_id" value="{{ cid }}">
+            <button class="me-inline" type="submit">Это не моя карточка №{{ cid }} — отвязать</button>
+        </form>
+        {% endfor %}
+    </div>
+</main>
+{% include 'krasmarafon/krasmarafon_footer.html' %}
+</body>
+</html>

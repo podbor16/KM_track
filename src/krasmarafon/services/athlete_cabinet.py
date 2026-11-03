@@ -98,12 +98,12 @@ def _past_key(e: dict) -> dt.date:
 
 
 def group_by_person(rows: list[dict], today: dt.date, codes: Optional[dict] = None) -> list[dict]:
-    """[{title, upcoming: [...], past: [...]}] в порядке показа."""
+    """[{title, client_id (None — группа по ФИ), upcoming: [...], past: [...]}] в порядке показа."""
     codes = codes or {}
     groups: dict = {}
     for r in sorted(rows, key=lambda r: r["id"]):
         key = ("c", r["client_id"]) if r["client_id"] else ("n", _norm(r["surname"]), _norm(r["name"]))
-        g = groups.setdefault(key, {"upcoming": [], "past": []})
+        g = groups.setdefault(key, {"upcoming": [], "past": [], "client_id": key[1] if key[0] == "c" else None})
         g["title"] = f"{r['surname'] or ''} {r['name'] or ''}".strip()  # перезаписывается — останется самая новая
         e = _entry(r, codes)
         (g["upcoming"] if is_upcoming(e["date"], e["year"], today) else g["past"]).append(e)

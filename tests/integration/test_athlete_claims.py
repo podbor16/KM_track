@@ -56,13 +56,13 @@ def db():
     conn.close()
 
 
-def add_lead(cur, name, birthday, email, start_number, ma_email=None):
+def add_lead(cur, name, birthday, email, start_number, ma_email=None, year=2099):
     """Карточку и событие заводят триггеры leads (они же выставляют client_id/event_id)."""
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, ma_email, phone, event_name,
                    event_distance, event_year, products, amount, client_id, event_id, is_duplicate, status, is_new,
                    is_new_event, is_name_suspicious, start_number, created_at)
-                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, %s, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0, 0,
-                           %s, NOW())""", (SURNAME, name, birthday, email, ma_email, EV, start_number))
+                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, %s, '', %s, '5 км', %s, '', 0, 0, 0, 0, 0, 0, 0, 0,
+                           %s, NOW())""", (SURNAME, name, birthday, email, ma_email, EV, year, start_number))
     cur.execute("SELECT client_id, event_id FROM leads WHERE id = %s", (cur.lastrowid,))
     return cur.fetchone()
 
@@ -443,3 +443,204 @@ def test_failed_merge_leaves_claim_on_card(merge_env):
     cur.execute("SELECT COUNT(*) n FROM clients WHERE id IN (%s, %s)", (c["c1"], c["vanya"]))
     assert cur.fetchone()["n"] == 2
     assert ac.claimed_cards(ME) == ([c["vanya"]], [])
+
+
+# ---------------------------------------------------------------- интерфейс: /me, «Это я», /me/history
+
+import re  # noqa: E402
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app import app  # noqa: E402
+from src.krasmarafon.services import athlete_auth as aa  # noqa: E402
+
+
+@pytest.fixture
+def web(db, cards, mail, tmp_path, monkeypatch):
+    """Кабинет включён (файл-флаг подменён), клиент HTTPS, коды/сессии тестовых почт убираются до и после."""
+    conn, cur = db
+    flag = tmp_path / "athlete_cabinet_enabled.local"
+    flag.write_text("true", encoding="utf-8")
+    monkeypatch.setattr("src.config.event_loader._ATHLETE_CABINET_FILE", flag)
+
+    def wipe():
+        cur.execute("DELETE FROM athlete_login_codes WHERE email LIKE %s OR ip = 'testclient'", (f"%@{DOMAIN}",))
+        cur.execute("DELETE FROM athlete_sessions WHERE email LIKE %s", (f"%@{DOMAIN}",))
+        conn.commit()
+
+    wipe()
+    yield TestClient(app, base_url="https://testserver"), flag
+    wipe()
+
+
+def login(client, email=ME):
+    with patch.object(aa, "send_mail") as m:
+        client.post("/me/login", data={"email": email})
+    code = re.search(r"\b(\d{6})\b", m.call_args[0][2]).group(1)
+    r = client.post("/me/verify", data={"email": email, "code": code}, follow_redirects=False)
+    assert r.status_code == 303
+
+
+def claim_via_web(client, card, birthday):
+    return client.post("/me/claim", data={"client_id": card, "birthday": birthday}, follow_redirects=False)
+
+
+def test_me_shows_claim_button_with_form(web, cards):
+    client, _ = web
+    login(client)
+    page = client.get("/me").text
+    assert "Это я" in page and 'action="/me/claim"' in page and 'type="date"' in page
+    assert f'name="client_id" value="{cards["c1"]}"' in page
+    assert "Это вы" not in page and not re.search(r"<details[^>]* open", page)
+
+
+def test_wrong_birthday_shows_error_at_the_card_form(web, cards):
+    client, _ = web
+    login(client)
+    r = claim_via_web(client, cards["c1"], "1986-05-02")
+    assert r.status_code == 303 and r.headers["location"] == f"/me?claim={cards['c1']}&r=mismatch"
+    page = client.get(r.headers["location"]).text
+    assert "Дата не совпадает" in page and re.search(r"<details[^>]* open", page)
+
+
+@pytest.mark.parametrize("code, text", [
+    ("limit", "Слишком много попыток. Попробуйте завтра или напишите нам на 1@krasmarafon.ru"),
+    ("taken", "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru"),
+    ("no_birthday", "Подтвердить не получится — напишите нам на 1@krasmarafon.ru"),
+    ("date", "Проверьте дату"),
+])
+def test_claim_error_texts(web, cards, code, text):
+    client, _ = web
+    login(client)
+    assert text in client.get(f"/me?claim={cards['c1']}&r={code}").text
+
+
+def test_claim_error_for_unknown_code_or_card_is_not_shown(web, cards):
+    client, _ = web
+    login(client)
+    assert "Дата не совпадает" not in client.get(f"/me?claim={cards['c2']}&r=bogus").text
+    assert "Дата не совпадает" not in client.get("/me?claim=abc&r=mismatch").text
+
+
+def test_invalid_date_no_birthday_and_taken_redirects(web, cards):
+    client, _ = web
+    login(client)
+    assert claim_via_web(client, cards["c1"], "не дата").headers["location"] == f"/me?claim={cards['c1']}&r=date"
+    assert claim_via_web(client, cards["nobd"], "1986-05-01").headers["location"] == \
+        f"/me?claim={cards['nobd']}&r=no_birthday"
+    ac.claim(OTHER, cards["c1"], BD1)
+    assert claim_via_web(client, cards["c1"], "1986-05-01").headers["location"] == f"/me?claim={cards['c1']}&r=taken"
+
+
+def test_right_birthday_claims_and_shows_badge_and_notifies(web, cards, mail):
+    client, _ = web
+    login(client)
+    r = claim_via_web(client, cards["c1"], "1986-05-01")
+    assert r.status_code == 303 and r.headers["location"] == "/me"
+    assert {c.args[0] for c in mail.call_args_list} == {OTHER, KAB}      # фоновая задача выполнена после ответа
+    page = client.get("/me").text
+    assert "Это вы" in page and 'href="/me/history"' in page and "История" in page
+    mail.reset_mock()                                                   # повтор — идемпотентно, без рассылки
+    assert claim_via_web(client, cards["c1"], "1986-05-01").headers["location"] == "/me"
+    assert not mail.called
+
+
+def test_wrong_claim_does_not_notify(web, cards, mail):
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-02")
+    assert not mail.called
+
+
+def test_claim_foreign_card_is_404(web, cards):
+    client, _ = web
+    login(client)
+    assert claim_via_web(client, cards["foreign"], "1990-01-01").status_code == 404
+    assert claim_via_web(client, 10 ** 9, "1990-01-01").status_code == 404
+
+
+def test_claim_requires_session_and_same_origin(web, cards):
+    client, _ = web
+    r = claim_via_web(client, cards["c1"], "1986-05-01")
+    assert r.status_code == 303 and r.headers["location"] == "/me/login"
+    login(client)
+    evil = {"Origin": "https://evil.example"}
+    r = client.post("/me/claim", data={"client_id": cards["c1"], "birthday": "1986-05-01"}, headers=evil,
+                    follow_redirects=False)
+    assert r.status_code == 403
+    r = client.post("/me/unclaim", data={"client_id": cards["c1"]}, headers=evil, follow_redirects=False)
+    assert r.status_code == 403
+    assert ac.claimed_cards(ME) == ([], [])
+
+
+def test_history_page_for_claimed_card(web, cards):
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    r = client.get("/me/history")
+    assert r.status_code == 200
+    page = r.text
+    assert "Тестклейм Иван" in page and "Бегает с 2099" in page
+    assert "Личные рекорды" in page and "Забеги и заявки" in page
+    assert "0:25:00" in page and "5 км" in page and "5:00" in page          # время результата и темп
+    assert "стартов" in page and "финишей" in page and "ср. темп" in page
+    assert 'id="dyn"' not in page                                         # один год — динамики нет
+    assert "mailto:1@krasmarafon.ru?subject=" in page
+    assert "/me/unclaim" in page and f"Отвязать карточку №{cards['c1']}?" in page
+
+
+def test_history_dynamics_block_with_two_years(web, cards, db):
+    conn, cur = db
+    old = add_lead(cur, "Иван", BD1, ME, 9020, year=2098)
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, rank_absolute) VALUES (%s, 'Иван', %s, 'Мужчина', %s, 9020, 'Finished',
+                   '00:27:30', 1)""", (SURNAME, BD1, old["event_id"]))
+    conn.commit()
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    page = client.get("/me/history").text
+    m = re.search(r'<script type="application/json" id="dyn">(.*?)</script>', page, re.S)
+    assert m and json.loads(m.group(1)) == {"default": "5", "series": {"5": [[2098, 1650], [2099, 1500]]}}
+    assert "/static/lib/chart4/chart.umd.min.js" in page
+
+
+def test_history_redirects(web, cards):
+    client, flag = web
+    assert client.get("/me/history", follow_redirects=False).headers["location"] == "/me/login"
+    login(client)
+    r = client.get("/me/history", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/me"
+    flag.unlink()
+    assert client.get("/me/history", follow_redirects=False).status_code == 404
+    assert client.post("/me/claim", data={"client_id": 1, "birthday": "2000-01-01"}).status_code == 404
+
+
+def test_unclaim_via_web_removes_badge_and_history(web, cards):
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    r = client.post("/me/unclaim", data={"client_id": cards["c1"]}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/me"
+    assert "Это вы" not in client.get("/me").text
+    assert client.get("/me/history", follow_redirects=False).headers["location"] == "/me"
+
+
+def test_history_ignores_card_claimed_by_someone_else(web, cards):
+    client, _ = web
+    ac.claim(OTHER, cards["c1"], BD1)
+    login(client)
+    assert client.get("/me/history", follow_redirects=False).headers["location"] == "/me"
+
+
+def test_changed_birthday_shows_explanation_and_button(web, cards, db):
+    conn, cur = db
+    client, _ = web
+    login(client)
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    cur.execute("UPDATE clients SET birthday = '1986-05-02' WHERE id = %s", (cards["c1"],))
+    conn.commit()
+    page = client.get("/me").text
+    assert "Данные карточки изменились — подтвердите, что это вы" in page
+    assert "Это вы" not in page and 'action="/me/claim"' in page
+    assert claim_via_web(client, cards["c1"], "1986-05-02").headers["location"] == "/me"

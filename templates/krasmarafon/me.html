@@ -32,7 +32,24 @@
         <div class="me-person-head">
             <div class="me-avatar">{{ p.title.split()|map('first')|join('')|upper }}</div>
             <h2>{{ p.title }}</h2>
+            {% if p.client_id in claimed %}<a class="me-badge" href="/me/history">Это вы · История →</a>{% endif %}
         </div>
+
+        {% if p.client_id and p.client_id not in claimed %}
+        {% if p.client_id in dropped %}<p class="me-note">Данные карточки изменились — подтвердите, что это вы</p>{% endif %}
+        <details class="me-claim"{% if claim_id == p.client_id %} open{% endif %}>
+            <summary>Это я</summary>
+            <div class="me-claim-box">
+                {% if claim_id == p.client_id and claim_error %}<p class="me-error">{{ claim_error }}</p>{% endif %}
+                <form method="post" action="/me/claim">
+                    <input type="hidden" name="client_id" value="{{ p.client_id }}">
+                    <label class="me-label" for="bd{{ p.client_id }}">Ваша дата рождения</label>
+                    <input class="me-input" id="bd{{ p.client_id }}" type="date" name="birthday" required>
+                    <button class="me-btn" type="submit">Подтвердить</button>
+                </form>
+            </div>
+        </details>
+        {% endif %}
 
         {% if p.upcoming %}
         <div class="me-sub">🎟 Заявки</div>

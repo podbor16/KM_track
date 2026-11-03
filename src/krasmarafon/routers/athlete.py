@@ -1,17 +1,23 @@
-"""Личный кабинет спортсмена: вход по коду из почты и /me (этап А,
-спецификация docs/superpowers/specs/2026-11-03-athlete-login-design.md)."""
+"""Личный кабинет спортсмена: вход по коду из почты, /me (этап А,
+спецификация docs/superpowers/specs/2026-11-03-athlete-login-design.md), «Это я» и /me/history (этап Б1,
+спецификация docs/superpowers/specs/2026-11-03-athlete-cards-history-design.md)."""
 
+import datetime as dt
 import logging
 import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.krasmarafon.routers.pages import templates, _diploma_event_ids
+from src.config import settings
 from src.krasmarafon.services import athlete_auth as aa
+from src.krasmarafon.services import athlete_claims as acl
 from src.krasmarafon.services.athlete_cabinet import cabinet
+from src.krasmarafon.services.athlete_claims import ClaimResult
+from src.krasmarafon.services.athlete_history import build_history
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,13 @@ ERR_CODE = "Код неверный или устарел"
 ERR_LINK = "Ссылка устарела — запросите новый код"
 ERR_LIMIT = "Слишком много попыток. Попробуйте через {minutes} мин."
 ERR_MAIL = "Не удалось отправить код, попробуйте через минуту"
+CLAIM_ERRORS = {
+    "mismatch": "Дата не совпадает",
+    "limit": "Слишком много попыток. Попробуйте завтра или напишите нам на 1@krasmarafon.ru",
+    "taken": "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru",
+    "no_birthday": "Подтвердить не получится — напишите нам на 1@krasmarafon.ru",
+    "date": "Проверьте дату",
+}
 
 
 def _foreign_origin(request: Request) -> bool:
@@ -144,15 +157,73 @@ async def logout_all(request: Request, km_athlete: str | None = Cookie(default=N
     return _logged_out()
 
 
+def _login_redirect() -> RedirectResponse:
+    response = RedirectResponse("/me/login", status_code=302)
+    response.delete_cookie(aa.COOKIE_NAME)
+    return response
+
+
 @router.get("/me", response_class=HTMLResponse)
-async def me_page(request: Request, km_athlete: str | None = Cookie(default=None)):
+async def me_page(request: Request, claim: str = "", r: str = "", km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
-        response = RedirectResponse("/me/login", status_code=302)
-        response.delete_cookie(aa.COOKIE_NAME)
-        return response
+        return _login_redirect()
+    claimed, dropped = await run_in_threadpool(acl.claimed_cards, email)
     people = await run_in_threadpool(cabinet, email)
     return templates.TemplateResponse("krasmarafon/me.html", {
         "request": request, "email": email, "people": people,
         "diploma_event_ids": set(_diploma_event_ids()),
+        "claimed": set(claimed), "dropped": set(dropped),
+        "claim_id": int(claim) if claim.isascii() and claim.isdigit() else None, "claim_error": CLAIM_ERRORS.get(r),
+    })
+
+
+@router.post("/me/claim")
+async def claim_card(request: Request, background_tasks: BackgroundTasks, client_id: int = Form(...),
+                     birthday: str = Form(""), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    try:
+        born = dt.date.fromisoformat(birthday.strip())
+    except ValueError:
+        return RedirectResponse(f"/me?claim={client_id}&r=date", status_code=303)
+    try:
+        result = await run_in_threadpool(acl.claim, email, client_id, born)
+    except ValueError:
+        raise HTTPException(status_code=404)
+    if result == ClaimResult.OK:
+        background_tasks.add_task(acl.notify_claimed, client_id, email)
+    if result in (ClaimResult.OK, ClaimResult.ALREADY_MINE):
+        return RedirectResponse("/me", status_code=303)
+    return RedirectResponse(f"/me?claim={client_id}&r={result.value}", status_code=303)
+
+
+@router.post("/me/unclaim")
+async def unclaim_card(request: Request, client_id: int = Form(...), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    await run_in_threadpool(acl.unclaim, email, client_id)
+    return RedirectResponse("/me", status_code=303)
+
+
+@router.get("/me/history", response_class=HTMLResponse)
+async def history_page(request: Request, km_athlete: str | None = Cookie(default=None)):
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return _login_redirect()
+    claimed, _ = await run_in_threadpool(acl.claimed_cards, email)
+    if not claimed:
+        return RedirectResponse("/me", status_code=303)
+    results, leads = await run_in_threadpool(acl.history_rows, claimed)
+    title = await run_in_threadpool(acl.history_title, claimed)
+    codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
+    history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()))
+    return templates.TemplateResponse("krasmarafon/me-history.html", {
+        "request": request, "title": title, "history": history, "card_ids": claimed,
     })
