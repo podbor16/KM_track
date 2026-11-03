@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Вход в личный кабинет — Красмарафон</title>
+    <link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/me.css?v={{ v }}">
+</head>
+<body>
+{% include 'krasmarafon/header.html' %}
+<main class="me-auth">
+    {% if step == 'email' %}
+    <h1>Вход в личный кабинет</h1>
+    <p class="me-muted">Введите почту — пришлём код. Пароль не нужен.</p>
+    {% if error %}<p class="me-error">{{ error }}</p>{% endif %}
+    <form method="post" action="/me/login">
+        <input class="me-input" type="email" name="email" value="{{ email or '' }}" placeholder="почта@example.ru"
+               autocomplete="email" required autofocus>
+        <label class="me-check"><input type="checkbox" name="shared" value="1" {% if shared %}checked{% endif %}>
+            Чужой компьютер — не запоминать вход</label>
+        <button class="me-btn" type="submit">Получить код</button>
+    </form>
+    <p class="me-hint">Подойдёт почта, на которую оформляли заявку, или почта кабинета на сайте Красмарафона</p>
+
+    {% elif step == 'code' %}
+    <h1>Введите код</h1>
+    <p class="me-muted">Отправили 6 цифр на {{ email }}. Код действует 15 минут. Нет письма — проверьте «Спам».</p>
+    {% if error %}<p class="me-error">{{ error }}</p>{% endif %}
+    <form method="post" action="/me/verify">
+        <input type="hidden" name="email" value="{{ email }}">
+        {% if shared %}<input type="hidden" name="shared" value="1">{% endif %}
+        <input class="me-input me-code" name="code" inputmode="numeric" autocomplete="one-time-code"
+               pattern="[0-9 ]*" maxlength="7" placeholder="••••••" required autofocus>
+        <button class="me-btn" type="submit">Войти</button>
+    </form>
+    <form method="post" action="/me/login" class="me-resend">
+        <input type="hidden" name="email" value="{{ email }}">
+        {% if shared %}<input type="hidden" name="shared" value="1">{% endif %}
+        <button class="me-link" type="submit" id="resend" disabled>Отправить код ещё раз</button>
+    </form>
+    <a class="me-link" href="/me/login">Другая почта</a>
+    <script>
+        // «Отправить ещё раз» — не раньше чем через минуту (лимит на сервере тот же)
+        (function () {
+            const btn = document.getElementById('resend');
+            let left = 60;
+            const tick = () => {
+                if (left <= 0) { btn.disabled = false; btn.textContent = 'Отправить код ещё раз'; return; }
+                btn.textContent = `Отправить код ещё раз (через 0:${String(left).padStart(2, '0')})`;
+                left -= 1;
+                setTimeout(tick, 1000);
+            };
+            tick();
+        })();
+    </script>
+
+    {% elif step == 'link' %}
+    <h1>Вход в личный кабинет</h1>
+    <p class="me-muted">Войти как {{ email }}?</p>
+    <form method="post" action="/me/link">
+        <input type="hidden" name="t" value="{{ token }}">
+        <button class="me-btn" type="submit">Войти</button>
+    </form>
+    {% endif %}
+</main>
+{% include 'krasmarafon/krasmarafon_footer.html' %}
+</body>
+</html>

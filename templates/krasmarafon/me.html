@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Личный кабинет — Красмарафон</title>
+    <link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/me.css?v={{ v }}">
+</head>
+<body>
+{% include 'krasmarafon/header.html' %}
+{% set months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'] %}
+<main class="me-page">
+    <h1>Личный кабинет</h1>
+    <div class="me-account">
+        <span>{{ email }}</span>
+        <form method="post" action="/me/logout"><button class="me-inline" type="submit">Выйти</button></form>
+        <form method="post" action="/me/logout-all"><button class="me-inline" type="submit">Выйти на всех устройствах</button></form>
+    </div>
+
+    {% if not people %}
+    <p class="me-empty">Заявок с этой почты не найдено</p>
+    {% endif %}
+
+    {% for p in people %}
+    <section class="me-person">
+        <div class="me-person-head">
+            <div class="me-avatar">{{ p.title.split()|map('first')|join('')|upper }}</div>
+            <h2>{{ p.title }}</h2>
+        </div>
+
+        {% if p.upcoming %}
+        <div class="me-sub">🎟 Заявки</div>
+        {% for e in p.upcoming %}
+        <div class="me-ticket">
+            <div class="me-ticket-date">
+                {% if e.date %}{{ e.date.day }}<small>{{ months[e.date.month - 1] }}</small>{% else %}—<small>{{ e.year }}</small>{% endif %}
+            </div>
+            <div class="me-ticket-body">
+                <div class="me-title">{{ e.event_name }} · {{ e.distance }}</div>
+                <div class="me-meta">
+                    {% if e.start_number %}№{{ e.start_number }}{% else %}номер ещё не присвоен{% endif %} ·
+                    {% if e.refund %}<span class="me-tag me-tag--refund">возврат</span>{% else %}<span class="me-tag">оплачено</span>{% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if p.past %}
+        <div class="me-sub">🏁 Результаты</div>
+        {% for e in p.past %}
+        <div class="me-result{% if not e.time %} me-result--none{% endif %}">
+            <div class="me-result-body">
+                <div class="me-title">{{ e.event_name }} · {{ e.distance }}</div>
+                <div class="me-meta">
+                    {% if e.date %}{{ e.date.day }} {{ months[e.date.month - 1] }} {{ e.date.year }}{% else %}{{ e.year }}{% endif %}
+                    {% if e.refund %} · <span class="me-tag me-tag--refund">возврат</span>{% endif %}
+                    {% if e.protocol_url %} · <a href="{{ e.protocol_url }}">протокол</a>{% endif %}
+                    {% if e.time and e.event_id in diploma_event_ids and e.start_number %} · <a href="/diploma/{{ e.event_id }}/{{ e.start_number }}" target="_blank">диплом</a>{% endif %}
+                </div>
+            </div>
+            <div class="me-time">
+                {% if e.time %}{{ e.time }}{% if e.place %}<small>{{ e.place }} место в категории</small>{% endif %}
+                {% elif e.refund %}—{% else %}нет результата{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </section>
+    {% endfor %}
+</main>
+{% include 'krasmarafon/krasmarafon_footer.html' %}
+</body>
+</html>

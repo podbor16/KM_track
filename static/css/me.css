@@ -1,0 +1,17 @@
+/* Личный кабинет спортсмена (/me, /me/login) — токены km-design-tokens.css */
+.me-auth { max-width: 400px; margin: 40px auto; padding: 0 16px; }
+.me-auth h1 { font-family: var(--km-font-brand); font-size: 24px; margin-bottom: 8px; color: var(--km-dark); }
+.me-muted { color: var(--km-text-secondary); font-size: 14px; line-height: 1.45; margin-bottom: 16px; }
+.me-hint { color: var(--km-text-muted); font-size: 12px; text-align: center; margin-top: 14px; line-height: 1.4; }
+.me-error { background: #fdecea; color: #b3261e; border-radius: var(--km-radius-input); padding: 10px 12px;
+            font-size: 14px; margin-bottom: 12px; }
+.me-input { width: 100%; padding: 12px; font-size: 16px; border: 1px solid var(--km-border-light);
+            border-radius: var(--km-radius-input); background: var(--km-bg-card); margin-bottom: 12px; }
+.me-code { font-family: monospace; font-size: 26px; letter-spacing: 10px; text-align: center; }
+.me-check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--km-text-secondary);
+            margin-bottom: 16px; }
+.me-btn { width: 100%; padding: 12px; border: 0; border-radius: var(--km-radius-btn); background: var(--km-primary);
+          color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+.me-link { display: block; width: 100%; background: none; border: 0; color: var(--km-primary); font-size: 14px;
+           text-align: center; margin-top: 12px; cursor: pointer; text-decoration: none; font-family: inherit; }
+.me-link:disabled { color: var(--km-text-muted); cursor: default; }
