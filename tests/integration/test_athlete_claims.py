@@ -315,3 +315,93 @@ def test_mask_email():
     assert ac.mask_email("petr@mail.ru") == "p***@mail.ru"
     assert ac.mask_email("P@x.ru") == "P***@x.ru"
     assert ac.mask_email("broken") == "b***"
+
+
+# ---------------------------------------------------------------- склейка карточек («Качество данных»)
+
+MERGER = "test-claims-merge"
+
+
+@pytest.fixture
+def merge_env(db, cards, mail):
+    """c1 (основная: 2 заявки + результат) и карточка «Ваня» (1 заявка с me@) с той же ДР — один человек."""
+    from src.analytics import dq_actions
+
+    conn, cur = db
+    vanya = add_lead(cur, "Ваня", BD1, ME, 9010)["client_id"]
+    conn.commit()
+    yield conn, cur, dq_actions, {**cards, "vanya": vanya}
+    cur.execute("DELETE FROM dq_actions WHERE done_by = %s", (MERGER,))
+    conn.commit()
+
+
+def merge_details(cur, action_id):
+    cur.execute("SELECT details FROM dq_actions WHERE id = %s", (action_id,))
+    return json.loads(cur.fetchone()["details"])
+
+
+def test_merge_moves_claim_to_survivor_when_birthday_same(merge_env):
+    conn, cur, dq, c = merge_env
+    assert ac.claim(ME, c["vanya"], BD1) == ClaimResult.OK
+
+    surv, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+
+    assert surv == c["c1"]
+    assert claim_rows(cur) == [{"client_id": c["c1"], "birthday": BD1}]
+    assert ac.claimed_cards(ME) == ([c["c1"]], [])
+    assert merge_details(cur, action_id)["athlete_claims"] == [
+        {"client_id": c["vanya"], "email": ME, "moved_to": c["c1"]}]
+
+
+def test_merge_with_other_final_birthday_drops_moved_claim(merge_env):
+    conn, cur, dq, c = merge_env
+    ac.claim(ME, c["vanya"], BD1)
+
+    _, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", "1986-05-03", MERGER)
+
+    assert merge_details(cur, action_id)["athlete_claims"][0]["moved_to"] == c["c1"]
+    assert ac.claimed_cards(ME) == ([], [c["c1"]])
+    assert journal(cur, "athlete_unclaim", c["c1"]) == [({"email": ME, "reason": "birthday_changed"}, "system")]
+
+
+def test_merge_drops_claim_when_survivor_claimed_by_other_account(merge_env):
+    conn, cur, dq, c = merge_env
+    assert ac.claim(OTHER, c["c1"], BD1) == ClaimResult.OK
+    assert ac.claim(ME, c["vanya"], BD1) == ClaimResult.OK
+
+    _, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+
+    assert claim_rows(cur) == [] and claim_rows(cur, OTHER) == [{"client_id": c["c1"], "birthday": BD1}]
+    assert merge_details(cur, action_id)["athlete_claims"] == [{"client_id": c["vanya"], "email": ME, "dropped": True}]
+    assert journal(cur, "athlete_unclaim", c["vanya"]) == [({"email": ME, "reason": "merged"}, MERGER)]
+
+
+def test_merge_keeps_survivor_claim_and_drops_second_claim_of_same_person(merge_env):
+    conn, cur, dq, c = merge_env
+    ac.claim(ME, c["c1"], BD1)
+    ac.claim(ME, c["vanya"], BD1)
+
+    _, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+
+    assert claim_rows(cur) == [{"client_id": c["c1"], "birthday": BD1}]
+    assert ac.claimed_cards(ME) == ([c["c1"]], [])
+    assert merge_details(cur, action_id)["athlete_claims"] == [{"client_id": c["vanya"], "email": ME, "dropped": True}]
+
+
+def test_merge_without_claims_has_empty_list(merge_env):
+    conn, cur, dq, c = merge_env
+    _, action_id = dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+    assert merge_details(cur, action_id)["athlete_claims"] == []
+
+
+def test_failed_merge_leaves_claim_on_card(merge_env):
+    """Ошибка склейки откатывает и перенос привязки: привязки на удалённой карточке не остаётся."""
+    conn, cur, dq, c = merge_env
+    ac.claim(ME, c["vanya"], BD1)
+    with patch("src.analytics.client_merge.recompute_duplicates", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError):
+            dq.merge_cards(conn, [c["c1"], c["vanya"]], SURNAME, "Иван", BD1.isoformat(), MERGER)
+    assert claim_rows(cur) == [{"client_id": c["vanya"], "birthday": BD1}]
+    cur.execute("SELECT COUNT(*) n FROM clients WHERE id IN (%s, %s)", (c["c1"], c["vanya"]))
+    assert cur.fetchone()["n"] == 2
+    assert ac.claimed_cards(ME) == ([c["vanya"]], [])

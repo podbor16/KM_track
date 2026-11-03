@@ -11,6 +11,8 @@ import os
 import re
 import tempfile
 
+from mysql.connector.errors import ProgrammingError
+
 from src.analytics.client_merge import apply as apply_merge, recompute_aggregates
 from src.analytics.db_results import recompute_duplicates
 from src.analytics.dq_checks import (NOT_STARTED, SHORT_NAMES, cat_rule, load, merge_blockers, swapped_fio,
@@ -148,6 +150,36 @@ def dismiss(conn, key, decision, note, user):
     return action_id
 
 
+def _move_athlete_claims(cur, merged_into, user):
+    """Привязки кабинета (athlete_claims) удаляемых карточек -> на итоговую, если её никто не заявил; иначе
+    привязка удаляемой снимается (журнал athlete_unclaim). Совпадение ДР проверит claimed_cards().
+    Таблицы ещё нет (миграция не применена) — ничего не делаем. -> [{client_id, email, moved_to | dropped}]."""
+    ids = sorted(set(merged_into) | set(merged_into.values()))
+    try:
+        cur.execute(f"SELECT id, email, client_id FROM athlete_claims WHERE client_id IN ({','.join(['%s'] * len(ids))}) "
+                    "ORDER BY created_at, id", ids)
+        claims = cur.fetchall()
+    except ProgrammingError as e:
+        if e.errno != 1146:
+            raise
+        return []
+    taken = {cid for _, _, cid in claims if cid not in merged_into}
+    moved = []
+    for claim_id, email, cid in claims:
+        if cid not in merged_into:
+            continue
+        target = merged_into[cid]
+        if target in taken:
+            cur.execute("DELETE FROM athlete_claims WHERE id = %s", (claim_id,))
+            _log_action(cur, "athlete_unclaim", f"client:{cid}", {"email": email, "reason": "merged"}, user)
+            moved.append({"client_id": cid, "email": email, "dropped": True})
+        else:
+            cur.execute("UPDATE athlete_claims SET client_id = %s WHERE id = %s", (target, claim_id))
+            taken.add(target)
+            moved.append({"client_id": cid, "email": email, "moved_to": target})
+    return moved
+
+
 def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     """Склеить карточки в одну с итоговыми ФИ/ДР. Основная — с наибольшим числом заявок и результатов.
     Снимок «до» — в dq_actions. -> (основная карточка, id записи журнала)."""
@@ -177,6 +209,17 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     try:
+        # Склейка и перенос привязок кабинета — одна транзакция: apply_merge коммитит сам, при его ошибке
+        # откатывается всё (пул — autocommit, без start_transaction откат был бы пустым).
+        if not conn.in_transaction:
+            conn.start_transaction()
+        try:
+            cur = conn.cursor()
+            moved_claims = _move_athlete_claims(cur, merged_into, user)
+            cur.close()
+        except Exception:
+            conn.rollback()
+            raise
         apply_merge(conn, None, {surv: (surname, name, birthday)}, merged_into, path)
         with open(path, encoding="utf-8") as fh:
             snapshot = json.load(fh)
@@ -184,7 +227,8 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
         os.remove(path)
     cur = conn.cursor()
     action_id = _log_action(cur, "merge", key, {"survivor": surv, "merged": sorted(merged_into),
-                                                "final": [surname, name, birthday], "before": snapshot}, user)
+                                                "final": [surname, name, birthday], "before": snapshot,
+                                                "athlete_claims": moved_claims}, user)
     conn.commit()
     cur.close()
     return surv, action_id
