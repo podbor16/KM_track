@@ -54,6 +54,12 @@
             </label>
         </div>
 
+        <!-- Кабинет: аккаунты, к которым привязано ≥ 2 карточек (возможные дубли). Только просмотр -->
+        <div class="admin-section-note" id="athlete-duplicates">
+            <strong>Кабинет: возможные дубли</strong>
+            <div id="athlete-duplicates-body" class="admin-loading">Загрузка…</div>
+        </div>
+
         <!-- Вкладки -->
         <div class="admin-tabs">
             <button class="admin-tab admin-tab--active" onclick="switchTab('events', this)">События</button>
@@ -2173,6 +2179,48 @@
         }
     }
 
+    // Аккаунты кабинета с ≥ 2 привязанными карточками — только просмотр; данные вставляются через textContent
+    async function loadAthleteDuplicates() {
+        const box = document.getElementById('athlete-duplicates-body');
+        try {
+            const r = await fetch('/api/admin/athlete-cabinet-duplicates');
+            if (!r.ok) throw new Error(r.status);
+            const accounts = (await r.json()).accounts;
+            box.className = '';
+            box.replaceChildren();
+            if (!accounts.length) { box.textContent = 'Нет'; return; }
+            const table = document.createElement('table');
+            table.className = 'admin-loader-table';
+            const head = table.createTHead().insertRow();
+            ['Почта', 'Карточки (№, ФИ, ДР)'].forEach(t => { head.insertCell().textContent = t; });
+            const body = table.createTBody();
+            accounts.forEach(a => {
+                const row = body.insertRow();
+                row.insertCell().textContent = a.email;
+                const cell = row.insertCell();
+                a.cards.forEach((c, i) => {
+                    if (i) cell.appendChild(document.createElement('br'));
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.textContent = '№' + c.id;
+                    link.addEventListener('click', ev => { ev.preventDefault(); openAthleteDuplicateCard(c.id); });
+                    cell.append(link, ` ${c.surname} ${c.name}, ${c.birthday || '—'}`);
+                });
+            });
+            box.appendChild(table);
+        } catch (e) {
+            box.className = '';
+            box.textContent = 'Не удалось загрузить';
+            console.error('loadAthleteDuplicates error:', e);
+        }
+    }
+
+    // Карточка — в экран человека вкладки «Качество данных»
+    function openAthleteDuplicateCard(id) {
+        switchTab('data-quality', document.querySelector(`.admin-tab[onclick*="'data-quality'"]`));
+        dqcOpenPerson(id);
+    }
+
     // ========================================================================
     // Инициализация — восстанавливаем последнюю активную вкладку
     // (localStorage), иначе открываем «События» по умолчанию
@@ -2183,6 +2231,7 @@
     else switchTab('events', document.querySelector(`.admin-tab[onclick*="'events'"]`));
     loadHistoryToggle();
     loadAthleteCabinetToggle();
+    loadAthleteDuplicates();
     loadMaintenanceToggle();
     </script>
     <script src="/static/js/krasmarafon-broadcast-posts.js?v={{ v }}"></script>

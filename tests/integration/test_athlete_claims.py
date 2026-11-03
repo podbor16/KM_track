@@ -452,6 +452,7 @@ import re  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import app  # noqa: E402
+from src.core.auth import api_require_auth  # noqa: E402
 from src.krasmarafon.services import athlete_auth as aa  # noqa: E402
 
 
@@ -644,3 +645,33 @@ def test_changed_birthday_shows_explanation_and_button(web, cards, db):
     assert "Данные карточки изменились — подтвердите, что это вы" in page
     assert "Это вы" not in page and 'action="/me/claim"' in page
     assert claim_via_web(client, cards["c1"], "1986-05-02").headers["location"] == "/me"
+
+
+def test_admin_duplicates_endpoint_requires_login(client):
+    assert client.get("/api/admin/athlete-cabinet-duplicates").status_code == 401
+
+
+def test_admin_duplicates_endpoint_lists_account_with_two_cards(db, cards, mail, client):
+    ac.claim(ME, cards["c1"], BD1)
+    ac.claim(ME, cards["c2"], BD2)
+    app.dependency_overrides[api_require_auth] = lambda: "testuser"
+    try:
+        r = client.get("/api/admin/athlete-cabinet-duplicates")
+    finally:
+        app.dependency_overrides.pop(api_require_auth, None)
+    assert r.status_code == 200
+    mine = [a for a in r.json()["accounts"] if a["email"] == ME]
+    assert mine == [{"email": ME, "cards": [
+        {"id": cards["c1"], "surname": SURNAME, "name": "Иван", "birthday": "1986-05-01"},
+        {"id": cards["c2"], "surname": SURNAME, "name": "Мария", "birthday": "2018-03-02"}]}]
+
+
+def test_claim_journal_rows_do_not_break_or_enter_undo_list(db, cards, mail):
+    from src.analytics import dq_actions
+
+    conn, cur = db
+    ac.claim(ME, cards["c1"], BD1)
+    ac.unclaim(ME, cards["c1"])
+    assert journal(cur, "athlete_claim", cards["c1"]) and journal(cur, "athlete_unclaim", cards["c1"])
+    acts = dq_actions.recent_actions(conn)
+    assert not [a for a in acts if a["action"] in ("athlete_claim", "athlete_unclaim")]

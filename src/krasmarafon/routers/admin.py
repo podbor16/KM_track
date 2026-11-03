@@ -40,6 +40,7 @@ from src.config.event_loader import (
     set_maintenance_enabled,
 )
 from src.core.auth import api_require_auth
+from src.krasmarafon.services import athlete_claims
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,11 @@ async def get_athlete_cabinet_status(user: str = Depends(api_require_auth)) -> d
 async def toggle_athlete_cabinet(enabled: bool, user: str = Depends(api_require_auth)) -> dict:
     set_athlete_cabinet_enabled(enabled)
     return {"enabled": enabled}
+
+
+@router.get("/api/admin/athlete-cabinet-duplicates")
+async def get_athlete_cabinet_duplicates(user: str = Depends(api_require_auth)) -> dict:
+    return {"accounts": await run_in_threadpool(athlete_claims.duplicate_accounts)}
 
 
 # ---------------------------------------------------------------------------
