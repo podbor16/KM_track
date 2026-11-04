@@ -9,9 +9,11 @@
 строки clients (FOR UPDATE); UNIQUE (client_id) — страховка. Письма claim() не шлёт: роутер ставит
 notify_claimed() в BackgroundTasks."""
 
+import hashlib
 import html
 import json
 import logging
+from contextlib import contextmanager
 from datetime import date
 from enum import Enum
 
@@ -117,12 +119,14 @@ def claimed_cards(email: str) -> tuple[list[int], list[int]]:
         conn.close()
 
 
-def claim(email: str, client_id: int, birthday: date) -> ClaimResult:
+def claim(email: str, client_id: int, birthday: date, via_find: bool = False) -> ClaimResult:
     """Заявить карточку: проверки — спецификация «Заявление карточки», п. 1–6 и «Доработки» (OTHER_PERSON:
     вторая карточка аккаунта — только с той же ДР). Нет заявки этого человека (same_person) на почте — ValueError. Всё — в одной транзакции под блокировкой строки карточки (параллельные запросы по
     ней идут по очереди, лимит попыток не обойти); устаревшая привязка снимается в ней же. Попытка пишется
-    только при MISMATCH. Писем не шлёт: при OK вызывающий ставит notify_claimed() в фон."""
-    return in_transaction(_claim, normalize_email(email), client_id, birthday)
+    только при MISMATCH. Писем не шлёт: при OK вызывающий ставит notify_claimed() в фон.
+    via_find — карточку нашли поиском по ФИ+ДР+номеру (athlete_find): заявки на почте не требуется (п. 1 пропускается),
+    остальные проверки те же, в журнале — "via": "find"."""
+    return in_transaction(_claim, normalize_email(email), client_id, birthday, via_find)
 
 
 def in_transaction(fn, *args):
@@ -139,6 +143,21 @@ def in_transaction(fn, *args):
             raise
     finally:
         conn.close()
+
+
+@contextmanager
+def advisory_lock(cur, key: str, timeout: int = 5):
+    """Именованная блокировка MySQL на соединении dict-курсора cur (ключ хэшируется — имя ≤ 64 символов): параллельные
+    запросы с проверкой лимита идут по очереди. Не получили за timeout секунд — RuntimeError."""
+    name = "km:" + hashlib.sha256(key.encode()).hexdigest()[:40]
+    cur.execute("SELECT GET_LOCK(%s, %s) AS ok", (name, timeout))
+    if cur.fetchone()["ok"] != 1:
+        raise RuntimeError("не удалось получить блокировку")
+    try:
+        yield
+    finally:
+        cur.execute("SELECT RELEASE_LOCK(%s)", (name,))
+        cur.fetchone()
 
 
 def require_own_lead(cur, email: str, client_id: int, card: dict) -> None:
@@ -163,14 +182,15 @@ def record_attempt(cur, email: str, client_id: int) -> None:
     cur.execute("INSERT INTO athlete_claim_attempts (email, client_id) VALUES (%s, %s)", (email, client_id))
 
 
-def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
+def _claim(conn, email: str, client_id: int, birthday: date, via_find: bool = False) -> ClaimResult:
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("SELECT surname, name, birthday FROM clients WHERE id = %s FOR UPDATE", (client_id,))
         card = cur.fetchone()
         if card is None:
             raise ValueError(f"карточки {client_id} нет")
-        require_own_lead(cur, email, client_id, card)
+        if not via_find:
+            require_own_lead(cur, email, client_id, card)
 
         sweep(conn, "ac.client_id = %s", (client_id,), in_tx=True)   # устаревшая чужая привязка не должна мешать
         cur.execute("SELECT email FROM athlete_claims WHERE client_id = %s", (client_id,))
@@ -203,7 +223,7 @@ def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
             cur.execute("SELECT email FROM athlete_claims WHERE client_id = %s", (client_id,))
             owner = cur.fetchone()
             return ClaimResult.ALREADY_MINE if owner and owner["email"] == email else ClaimResult.TAKEN
-        log_action(cur, "athlete_claim", client_id, {"email": email}, email)
+        log_action(cur, "athlete_claim", client_id, {"email": email, **({"via": "find"} if via_find else {})}, email)
         # своя карточка — доступ представителя к ней больше не нужен (аккаунт не должен быть и тем и другим)
         cur.execute("SELECT id FROM athlete_reps WHERE email = %s AND client_id = %s", (email, client_id))
         rep = cur.fetchone()
