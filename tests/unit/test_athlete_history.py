@@ -98,14 +98,31 @@ def test_records_best_per_distance_sorted_desc():
     assert (rec[1]["time"], rec[1]["pace"], rec[1]["event_name"]) == ("0:25:00", "5:00", "Другой")
 
 
-def test_dynamics_needs_two_years():
-    one_year = [res(1, dist="21.1", time=td(1, 50), year=2025), res(2, dist="21.1", time=td(1, 45), year=2025)]
-    assert build(one_year)["dynamics"] == {}
-    rows = one_year + [res(3, dist="21.1", time=td(1, 55), year=2024), res(4, dist="5", time=td(0, 25), year=2025)]
+def ms(y, m, d):
+    return int(dt.datetime(y, m, d, tzinfo=dt.timezone.utc).timestamp() * 1000)
+
+
+def test_dynamics_needs_two_finishes():
+    assert build([res(1, dist="21.1", time=td(1, 50), year=2025)])["dynamics"] == {}
+    same_year = [res(1, dist="21.1", time=td(1, 50), year=2025), res(2, dist="21.1", time=td(1, 45), year=2025,
+                                                                      date=dt.date(2025, 9, 6))]
+    assert list(build(same_year)["dynamics"]["series"]) == ["21.1"]      # два финиша в один год — уже динамика
+    rows = same_year + [res(3, dist="21.1", time=td(1, 55), year=2024), res(4, dist="5", time=td(0, 25), year=2025)]
     d = build(rows)["dynamics"]
     assert d["default"] == "21.1"
-    assert list(d["series"]) == ["21.1"]                      # дистанция 5 км — один год
-    assert d["series"]["21.1"] == [[2024, 6900], [2025, 6300]]  # лучшее за год, по возрастанию года
+    assert list(d["series"]) == ["21.1"]                                   # дистанция 5 км — один финиш
+    assert d["series"]["21.1"] == [
+        {"t": ms(2024, 7, 12), "s": 6900, "label": "Жара 2024", "date": "12.07.2024"},
+        {"t": ms(2025, 7, 12), "s": 6600, "label": "Жара 2025", "date": "12.07.2025"},
+        {"t": ms(2025, 9, 6), "s": 6300, "label": "Жара 2025", "date": "06.09.2025"},
+    ]                                                                      # каждый финиш, по возрастанию даты
+
+
+def test_dynamics_point_without_date_is_july_first():
+    rows = [res(1, time=td(1, 50), year=2024, date=None), res(2, time=td(1, 45), year=2025)]
+    rows[0]["event_date"] = None
+    pts = build(rows)["dynamics"]["series"]["21.1"]
+    assert pts[0] == {"t": ms(2024, 7, 1), "s": 6600, "label": "Жара 2024", "date": "2024"}
 
 
 def test_dynamics_default_most_finishes_then_longer():

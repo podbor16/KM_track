@@ -80,6 +80,7 @@
             var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
             return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
         }
+        function yearStart(y) { return Date.UTC(y, 0, 1); }
         function show(key) {
             current = key;
             var pts = data.series[key];
@@ -92,7 +93,7 @@
                 type: 'line',
                 data: {
                     datasets: [{
-                        data: pts.map(function (p) { return { x: p[0], y: p[1] }; }),
+                        data: pts.map(function (p) { return { x: p.t, y: p.s }; }),
                         borderColor: '#EE2D62', backgroundColor: '#EE2D62', borderWidth: 2, tension: 0.2, pointRadius: 4
                     }]
                 },
@@ -100,13 +101,19 @@
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
-                        tooltip: { callbacks: { title: function (c) { return String(c[0].parsed.x); }, label: function (c) { return hms(c.parsed.y); } } }
+                        tooltip: { callbacks: { title: function () { return ''; }, label: function (c) { var p = pts[c.dataIndex]; return p.label + ', ' + p.date + ' — ' + hms(p.s); } } }
                     },
                     scales: {
                         x: {
-                            type: 'linear', min: pts[0][0] - 0.5, max: pts[pts.length - 1][0] + 0.5,
-                            afterBuildTicks: function (axis) { axis.ticks = pts.map(function (p) { return { value: p[0] }; }); },
-                            ticks: { callback: function (v) { return String(v); } }
+                            type: 'linear', min: yearStart(new Date(pts[0].t).getUTCFullYear()),
+                            max: yearStart(new Date(pts[pts.length - 1].t).getUTCFullYear() + 1),
+                            afterBuildTicks: function (axis) {
+                                var y0 = new Date(axis.min).getUTCFullYear(), y1 = new Date(axis.max).getUTCFullYear();
+                                var step = Math.max(1, Math.ceil((y1 - y0 + 1) / 8)), ticks = [];
+                                for (var y = y0; y <= y1; y += step) ticks.push({ value: yearStart(y) });
+                                axis.ticks = ticks;
+                            },
+                            ticks: { callback: function (v) { return String(new Date(v).getUTCFullYear()); } }
                         },
                         y: { reverse: true, ticks: { callback: function (v) { return hms(v); }, maxTicksLimit: 5 } }
                     }
