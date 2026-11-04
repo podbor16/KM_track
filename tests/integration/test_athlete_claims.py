@@ -2,7 +2,7 @@
 событие «Тест кабинет Б1» 2099 года, карточки «Тестклейм …»; фикстура убирает их до и после."""
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -594,6 +594,10 @@ def test_history_page_for_claimed_card(web, cards):
     assert "/me/unclaim" in page and f"Отвязать карточку №{cards['c1']}?" in page
 
 
+def _ms(year):
+    return int(datetime(year, 7, 1, tzinfo=timezone.utc).timestamp() * 1000)
+
+
 def test_history_dynamics_block_with_two_years(web, cards, db):
     conn, cur = db
     old = add_lead(cur, "Иван", BD1, ME, 9020, year=2098)
@@ -606,7 +610,9 @@ def test_history_dynamics_block_with_two_years(web, cards, db):
     claim_via_web(client, cards["c1"], "1986-05-01")
     page = client.get("/me/history").text
     m = re.search(r'<script type="application/json" id="dyn">(.*?)</script>', page, re.S)
-    assert m and json.loads(m.group(1)) == {"default": "5", "series": {"5": [[2098, 1650], [2099, 1500]]}}
+    assert m and json.loads(m.group(1)) == {"default": "5", "series": {"5": [
+        {"t": _ms(2098), "s": 1650, "label": f"{EV} 2098", "date": "2098"},
+        {"t": _ms(2099), "s": 1500, "label": f"{EV} 2099", "date": "2099"}]}}
     assert "/static/lib/chart4/chart.umd.min.js" in page
 
 

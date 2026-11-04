@@ -155,23 +155,26 @@ def _records(finishes: list[dict]) -> list[dict]:
             for d, f in sorted(best.items(), key=lambda kv: kv[0], reverse=True)]
 
 
+def _point(f: dict) -> dict:
+    """Точка динамики: t — полночь UTC даты события в мс (без даты — 1 июля года), s — секунды."""
+    day = f["date"] or dt.date(f["year"], 7, 1)
+    t = int(dt.datetime(day.year, day.month, day.day, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    return {"t": t, "s": f["sec"], "label": f"{f['event_name']} {f['year']}",
+            "date": f["date"].strftime("%d.%m.%Y") if f["date"] else str(f["year"])}
+
+
 def _dynamics(finishes: list[dict]) -> dict:
     by_dist: dict = {}
     for f in finishes:
         if f["dist"] and f["year"]:
             by_dist.setdefault(f["dist"], []).append(f)
-    series: dict = {}
-    for d, fs in by_dist.items():
-        best: dict = {}
-        for f in fs:
-            best[f["year"]] = min(best.get(f["year"], f["sec"]), f["sec"])
-        if len(best) >= 2:
-            series[d] = [[y, best[y]] for y in sorted(best)]
-    if not series:
+    by_dist = {d: fs for d, fs in by_dist.items() if len(fs) >= 2}
+    if not by_dist:
         return {}
-    default = max(series, key=lambda d: (len(by_dist[d]), d))
+    default = max(by_dist, key=lambda d: (len(by_dist[d]), d))
     return {"default": _dist_key(default),
-            "series": {_dist_key(d): series[d] for d in sorted(series)}}
+            "series": {_dist_key(d): sorted((_point(f) for f in by_dist[d]), key=lambda p: p["t"])
+                       for d in sorted(by_dist)}}
 
 
 def build_history(results: list[dict], leads: list[dict], today: dt.date, codes: dict, diploma_ids: set,
@@ -197,7 +200,8 @@ def build_history(results: list[dict], leads: list[dict], today: dt.date, codes:
         finished, td, _ = finish_info(r)
         if finished:
             finishes.append({"dist": _dist(r["event_distance"]), "sec": int(td.total_seconds()),
-                             "year": _year(r["event_year"], r["event_date"]), "event_name": r["event_name"]})
+                             "year": _year(r["event_year"], r["event_date"]), "event_name": r["event_name"],
+                             "date": r["event_date"]})
     starts = [r for r in results if r["race_status"] != "Not started"]
 
     start_years = [y for y in (_year(r["event_year"], r["event_date"]) for r in starts) if y]
