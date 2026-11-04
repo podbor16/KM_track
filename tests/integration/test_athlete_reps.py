@@ -618,4 +618,4 @@ def test_confirm_texts_are_js_safe_for_apostrophe_in_name(web, cards, db):
     page = client.get(f"/me/athlete/{cards['kid']}").text
     handler = _re.search(r'action="/me/unrep" onsubmit="([^"]*)"', page).group(1)
     assert "'" not in handler and "&#39;" not in handler
-    assert handler.startswith("return confirm(&quot;") and "\u0027" in handler
+    assert handler.startswith("return confirm(&#34;") and r"\u0027" in handler   # апостроф экранирован tojson
