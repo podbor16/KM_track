@@ -495,7 +495,7 @@ def test_own_card_via_web_is_own(web, cards):
     client, _ = web
     ac.claim(PARENT, cards["kid"], BD_KID)
     login(client)
-    assert rep_via_web(client, cards["kid"], "2015-04-05").headers["location"] == f"/me?rep={cards['kid']}&r=own"
+    assert rep_via_web(client, cards["kid"], "2015-04-05").headers["location"] == "/me/history"
 
 
 def test_rep_requires_session_and_same_origin(web, cards):
@@ -593,3 +593,29 @@ def test_owner_block_hidden_without_reps_and_foreign_rep_stays(web, cards):
     client.post("/me/unclaim", data={"client_id": cards["kid"]})             # привязки нет — убирать чужое нельзя
     client.post("/me/rep/remove", data={"rep_id": rep_id}, follow_redirects=False)
     assert ar.rep_cards(PARENT) == ([cards["kid"]], [])
+
+
+
+def test_claim_own_card_drops_own_rep_access(db, cards, mail):
+    """Заявил «Это я» карточку, к которой был представителем, — доступ представителя снимается (журнал claimed)."""
+    conn, cur = db
+    assert ar.become_rep(PARENT, cards["kid"], BD_KID) == ar.RepResult.OK
+    assert ac.claim(PARENT, cards["kid"], BD_KID).value == "ok"
+    assert all(r["client_id"] != cards["kid"] for r in rep_rows(cur))
+    assert ({"email": PARENT, "reason": "claimed"}, PARENT) in journal(cur, "athlete_unrep", cards["kid"])
+
+
+def test_confirm_texts_are_js_safe_for_apostrophe_in_name(web, cards, db):
+    """ФИ с апострофом не ломает onsubmit="confirm(...)" (ни сырого ', ни незаэкранированных кавычек)."""
+    import re as _re
+    conn, cur = db
+    client, _ = web
+    login(client)
+    rep_via_web(client, cards["kid"], "2015-04-05")
+    cur.execute("UPDATE clients SET surname = %s WHERE id = %s AND surname LIKE 'Тестпред%%'",
+                (f"Тестпред'О{cards['kid']}", cards["kid"]))        # уникально — uk_client(ФИ, ДР)
+    conn.commit()
+    page = client.get(f"/me/athlete/{cards['kid']}").text
+    handler = _re.search(r'action="/me/unrep" onsubmit="([^"]*)"', page).group(1)
+    assert "'" not in handler and "&#39;" not in handler
+    assert handler.startswith("return confirm(&quot;") and "\u0027" in handler

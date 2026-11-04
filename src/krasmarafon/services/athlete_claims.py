@@ -204,6 +204,12 @@ def _claim(conn, email: str, client_id: int, birthday: date) -> ClaimResult:
             owner = cur.fetchone()
             return ClaimResult.ALREADY_MINE if owner and owner["email"] == email else ClaimResult.TAKEN
         log_action(cur, "athlete_claim", client_id, {"email": email}, email)
+        # своя карточка — доступ представителя к ней больше не нужен (аккаунт не должен быть и тем и другим)
+        cur.execute("SELECT id FROM athlete_reps WHERE email = %s AND client_id = %s", (email, client_id))
+        rep = cur.fetchone()
+        if rep:
+            unclaim_row(conn, rep["id"], email, client_id, "claimed", email, in_tx=True,
+                        table="athlete_reps", action="athlete_unrep")
         return ClaimResult.OK
     finally:
         cur.close()

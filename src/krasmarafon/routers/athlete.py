@@ -269,6 +269,8 @@ async def become_rep(request: Request, background_tasks: BackgroundTasks, client
         background_tasks.add_task(arp.notify_rep, client_id, email)
     if result in (arp.RepResult.OK, arp.RepResult.ALREADY):
         return RedirectResponse("/me", status_code=303)
+    if result == arp.RepResult.OWN:      # своя заявленная карточка — сразу в свою историю
+        return RedirectResponse("/me/history", status_code=303)
     return RedirectResponse(f"/me?rep={client_id}&r={result.value}", status_code=303)
 
 

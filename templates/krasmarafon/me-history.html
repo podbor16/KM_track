@@ -111,7 +111,7 @@
                             afterBuildTicks: function (axis) {
                                 var y0 = new Date(axis.min).getUTCFullYear(), y1 = new Date(axis.max).getUTCFullYear();
                                 var step = Math.max(1, Math.ceil((y1 - y0 + 1) / 8)), ticks = [];
-                                for (var y = y0; y <= y1; y += step) ticks.push({ value: yearStart(y) });
+                                for (var y = y0; y < y1 || y === y0; y += step) ticks.push({ value: yearStart(y) });   // без подписи года после последнего старта
                                 axis.ticks = ticks;
                             },
                             ticks: { callback: function (v) { return String(new Date(v).getUTCFullYear()); } }
@@ -208,7 +208,7 @@
         {% for rp in reps %}
         <div class="me-rep">
             <span class="me-rep-who">{{ rp.email_masked }}<small>с {{ rp.created_at.strftime('%d.%m.%Y') }}{% if card_ids|length > 1 %} · карточка №{{ rp.client_id }}{% endif %}</small></span>
-            <form method="post" action="/me/rep/remove" onsubmit="return confirm('Убрать доступ {{ rp.email_masked }} к вашей истории?')">
+            <form method="post" action="/me/rep/remove" onsubmit="return confirm({{ ('Убрать доступ ' ~ rp.email_masked ~ ' к вашей истории?')|tojson|forceescape }})">
                 <input type="hidden" name="rep_id" value="{{ rp.id }}">
                 <button class="me-inline" type="submit">Убрать</button>
             </form>
@@ -220,7 +220,7 @@
     <div class="me-foot">
         <a href="mailto:1@krasmarafon.ru?subject={{ ('Ошибка в истории, карточка №' ~ ids)|urlencode }}">Нашли чужой забег? Сообщить об ошибке</a>
         {% if ward %}
-        <form method="post" action="/me/unrep" onsubmit="return confirm('Отказаться от доступа к истории {{ title }}?')">
+        <form method="post" action="/me/unrep" onsubmit="return confirm({{ ('Отказаться от доступа к истории ' ~ title ~ '?')|tojson|forceescape }})">
             <input type="hidden" name="client_id" value="{{ card_ids[0] }}">
             <button class="me-inline" type="submit">Отказаться от доступа</button>
         </form>
