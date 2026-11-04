@@ -53,4 +53,16 @@ const fixHtml = T.questionHtml(fixQ, 0);
 assert.ok(fixHtml.includes('Исправить заявку по протоколу') && fixHtml.includes('id="dqc-lead-0"') && !fixHtml.includes('id="dqc-lead-0" hidden'));
 assert.ok(!T.questionHtml({...fixQ, answers: [fixQ.answers[1]]}, 0).includes('dqc-lead-0'));
 
+// журнал: подпись источника перепривязки по finding_key; чужие ключи — без подписи
+assert.strictEqual(T.sourceLabel('relink:admin'), 'перепривязка: стартовый список');
+assert.strictEqual(T.sourceLabel('relink:import'), 'перепривязка: импорт');
+assert.strictEqual(T.sourceLabel('relink:loader'), 'перепривязка: протокол');
+assert.strictEqual(T.sourceLabel('relink:dq'), 'перепривязка: качество данных');
+assert.strictEqual(T.sourceLabel('relink:other'), 'перепривязка');
+assert.strictEqual(T.sourceLabel('lead:5'), '');
+assert.strictEqual(T.sourceLabel(''), '');
+const jrow = T.journalRowHtml({id: 1, key: 'relink:admin', done_at: '2026-11-04', done_by: 'a', text: 'Перенос <b>', undone: false, can_undo: true, why_not: ''});
+assert.ok(jrow.includes('перепривязка: стартовый список') && jrow.includes('Перенос &lt;b&gt;') && !jrow.includes('<b>'));
+assert.ok(!T.journalRowHtml({id: 2, key: 'lead:5', done_at: 'd', done_by: 'a', text: 't', undone: true}).includes('перепривязка'));
+
 console.log('ALL PASSED');

@@ -17,6 +17,7 @@ from src.analytics.client_merge import apply as apply_merge, log_action as _log_
 from src.analytics.db_results import recompute_duplicates
 from src.analytics.dq_checks import (NOT_STARTED, SHORT_NAMES, cat_rule, load, merge_blockers, swapped_fio,
                                      propose_birthday, real_bd, run_checks)
+from src.common.emails import is_valid_email
 from src.common.names import norm, normalize_person_name
 
 # ---------------------------------------------------------------- решения и действия (dq_decisions, dq_actions)
@@ -92,7 +93,7 @@ def edit_record_view(f, data):
                 if (e["event_name"], e["event_year"]) == (ev.get("event_name"), ev.get("event_year"))}
         options = sorted({x["event_distance"] for x in data.leads if x["event_id"] in same and x["event_distance"]},
                          key=lambda d: (distance_km(d) is None, distance_km(d) or 0, d))
-        return {"table": "leads", "id": l["id"], **{k: l[k] for k in EDITABLE["leads"]}, "distance_options": options}
+        return {"table": "leads", "id": l["id"], **{k: l[k] for k in EDITABLE["leads"] if k in l}, "distance_options": options}
     if f.result_id and f.result_id in data.result_by_id:
         r = data.result_by_id[f.result_id]
         return {"table": "results", "id": r["id"], **{k: r[k] for k in EDITABLE["results"]},
@@ -260,7 +261,7 @@ def delete_result(conn, result_id, user, key=""):
 
 EDITABLE = {
     "results": ("surname", "name", "birthday", "sex", "category"),
-    "leads": ("surname", "name", "birthday", "event_distance"),
+    "leads": ("surname", "name", "birthday", "event_distance", "email"),
     "clients": ("surname", "name", "birthday"),
 }
 SEXES = ("Мужчина", "Женщина")
@@ -287,6 +288,10 @@ def _clean_edit(table, fields):
                 raise ValueError("ДР — в формате ГГГГ-ММ-ДД") from None
         elif k == "sex" and v not in SEXES:
             raise ValueError(f"пол: {', '.join(SEXES)}")
+        elif k == "email":
+            v = v.lower()
+            if not is_valid_email(v):
+                raise ValueError("проверьте почту: один адрес, без пробелов, не длиннее 255 знаков")
         elif k in ("category", "event_distance") and not v:
             raise ValueError("категория и дистанция не могут быть пустыми")
         out[k] = v
@@ -910,7 +915,7 @@ def _restore_result(cur, row):
 
 
 EDIT_LABELS = {"surname": "фамилия", "name": "имя", "birthday": "ДР", "sex": "пол", "category": "категория",
-               "event_distance": "дистанция", "rank_category": "место в категории",
+               "event_distance": "дистанция", "email": "почта", "rank_category": "место в категории",
                "rank_category_clean": "место в категории (чистое)", "rank_sex": "место среди пола",
                "rank_sex_clean": "место среди пола (чистое)"}
 

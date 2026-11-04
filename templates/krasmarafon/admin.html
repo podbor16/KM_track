@@ -1231,6 +1231,14 @@
         tr.querySelector('.leads-col-name').replaceChildren(mkInput(lead.name));
         tr.querySelector('.leads-col-distance').replaceChildren(mkInput(lead.event_distance, '70px'));
         tr.querySelector('.leads-col-status').replaceChildren(mkInput(lead.status, '70px'));
+        const emailCell = tr.querySelector('.leads-col-email');
+        const emailInp = mkInput(lead.email, '200px');
+        emailInp.type = 'email';
+        const emailHint = document.createElement('div');
+        emailHint.className = 'leads-email-hint';
+        emailHint.style.cssText = 'font-size:11px;color:var(--km-text-muted);max-width:220px;margin-top:2px';
+        emailHint.textContent = 'Исправьте почту и в CRM Tilda, иначе повторный импорт вернёт старую';
+        emailCell.replaceChildren(emailInp, emailHint);
         const bdInp = mkInput(lead.birthday ? String(lead.birthday).slice(0, 10) : '', '130px');
         bdInp.type = 'date';
         tr.querySelector('.leads-col-birthday').replaceChildren(bdInp);
@@ -1252,6 +1260,7 @@
         tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
         tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
         tr.querySelector('.leads-col-birthday').textContent = _fmtBirthday(lead.birthday);
+        tr.querySelector('.leads-col-email').textContent = lead.email || '—';
         _renderDupBadge(tr, lead);
 
         const saveBtn = tr.querySelector('.leads-btn-save');
@@ -1297,6 +1306,9 @@
             status:  tr.querySelector('.leads-col-status input').value.trim() || null,
             birthday: tr.querySelector('.leads-col-birthday input').value || null,
         };
+        // Почта: нормализуем как на сервере; пустую шлём как есть — сервер ответит 422, а не молча оставит прежнюю
+        const newEmail = tr.querySelector('.leads-col-email input').value.trim().toLowerCase();
+        if (newEmail !== String(lead.email || '').trim().toLowerCase()) body.email = newEmail;
         const oldBd = lead.birthday ? String(lead.birthday).slice(0, 10) : null;
         const fioChanged = (body.surname && body.surname !== (lead.surname || '')) ||
             (body.name && body.name !== (lead.name || '')) || (body.birthday && body.birthday !== oldBd);
@@ -1340,6 +1352,9 @@
             if (data.relink && data.relink.action === 'error') {
                 alert('Правка сохранена, но карточку подобрать не удалось: ' + (data.relink.reason || '') +
                       ' — проверьте в «Качестве данных»');
+            } else if (data.relink && ['move', 'rename', 'new_card'].includes(data.relink.action)) {
+                // Заявка сменила карточку — колонка «Дубликат» у неё и у соседей могла измениться
+                loadLeads(true, _leadsData.length);
             }
         } catch(e) {
             alert('Ошибка сети: ' + e.message);

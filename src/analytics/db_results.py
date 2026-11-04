@@ -1898,49 +1898,50 @@ def get_start_list_events(today: datetime.date) -> List[Dict[str, Any]]:
 
 
 def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Optional[Dict[str, Any]]:
-    """Partial UPDATE leads по leads.id. Поля — только из whitelist. Смена дистанции пересчитывает event_id и
-    дубли (как dq_actions.edit_record); смена ФИ/ДР — relink_row: заявка уезжает на верную карточку (журнал
-    «relink:admin», user — кто правил). -> строка заявки + 'relink' (итог перепривязки, None или {action: 'error', reason} — правка сохранена,
-    карточку подобрать не удалось);
-    None — заявки нет. ValueError — у забега нет такой дистанции."""
+    """Partial UPDATE leads по leads.id. Поля — только из whitelist. ФИ, ДР, дистанция и почта формы правятся через
+    dq_actions.edit_record (запись «edit» в журнале, «lead:<id>», отменяется штатно; смена дистанции пересчитывает
+    event_id и дубли; почта — strip().lower() и проверка формата); статус — без журнала. Смена ФИ/ДР — relink_row:
+    заявка уезжает на верную карточку (журнал «relink:admin», user — кто правил); отменять в обратном порядке.
+    -> строка заявки + 'relink' (итог перепривязки, None или {action: 'error', reason} — правка сохранена,
+    карточку подобрать не удалось); None — заявки нет. ValueError — неверное значение (дистанция, почта, ДР)."""
     # is_duplicate не правится руками — его считает recompute_duplicates() (основная заявка
-    # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu
-    ALLOWED = {'surname', 'name', 'event_distance', 'status', 'birthday'}
+    # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu;
+    # ma_email (почта кабинета Tilda) не правится
+    ALLOWED = {'surname', 'name', 'event_distance', 'status', 'birthday', 'email'}
     safe = {k: v for k, v in fields.items() if k in ALLOWED}
     if not safe:
         return None
-    from src.analytics.dq_actions import _lead_event_id, relink_row
+    from src.analytics.dq_actions import EDITABLE, _clean_edit, edit_record, relink_row
 
     conn = get_pooled_connection()
     if not conn:
         return None
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
-        cur.execute("SELECT client_id, event_id, event_distance, surname, name, birthday FROM leads WHERE id = %s",
-                    (lead_id,))
+        cols = EDITABLE['leads']
+        cur.execute(f"SELECT {', '.join(cols)} FROM leads WHERE id = %s", (lead_id,))
         old = cur.fetchone()
         if not old:
             cur.close()
             return None
-        if 'event_distance' in safe and str(safe['event_distance']) != str(old['event_distance']):
-            safe['event_id'] = _lead_event_id(cur, old, safe['event_distance'])
-        set_clause = ", ".join(f"{col} = %s" for col in safe)
-        cur.execute(
-            f"UPDATE leads SET {set_clause} WHERE id = %s",
-            list(safe.values()) + [lead_id],
-        )
-        if 'event_id' in safe:
-            recompute_duplicates(cur, [old['client_id']])
-        conn.commit()
+        edits = {k: v for k, v in safe.items() if k in cols}
+        if edits:
+            edits = _clean_edit('leads', edits)
+        changed = {k: v for k, v in edits.items() if str(old[k]) != v}
+        if changed:
+            edit_record(conn, 'leads', lead_id, changed, user, f"lead:{lead_id}")
+        if 'status' in safe:
+            cur.execute("UPDATE leads SET status = %s WHERE id = %s", (safe['status'], lead_id))
+            conn.commit()
         invalidate_start_list_cache()
-        fio_changed = any(k in safe and str(safe[k]) != str(old[k]) for k in ('surname', 'name', 'birthday'))
         relink = None
-        if fio_changed:
+        if {'surname', 'name', 'birthday'} & set(changed):
             try:
                 relink = relink_row(conn, 'leads', lead_id, user, 'admin')
             except Exception as e:      # правка уже сохранена: сбой подбора карточки — в ответ, а не ошибкой запроса
                 logger.error(f"update_lead relink error (lead {lead_id}): {e}")
                 relink = {"action": "error", "reason": str(e)}
+            invalidate_start_list_cache()
         cur.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cur.fetchone()
         cur.close()

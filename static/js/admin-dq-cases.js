@@ -190,7 +190,25 @@ function caseHtml(c) {
         ${postpone}`;
 }
 
-globalThis.dqcTest = { esc: dqEsc, categoriesFor, answerBody, defaultAnswer, questionHtml, cardHtml, outsideClick: dqcOutsideClick };
+// Откуда пришла перепривязка (finding_key «relink:<источник>»); для остальных записей подписи нет
+const DQC_RELINK_SOURCES = {admin: 'стартовый список', import: 'импорт', loader: 'протокол', dq: 'качество данных'};
+function sourceLabel(key) {
+    if (!String(key || '').startsWith('relink:')) return '';
+    const src = DQC_RELINK_SOURCES[key.slice(7)];
+    return src ? `перепривязка: ${src}` : 'перепривязка';
+}
+
+function journalRowHtml(a) {
+    const state = a.undone ? '<span class="dq-muted">отменено</span>'
+        : a.can_undo ? `<button class="km-btn km-btn--secondary" data-ids="${Number(a.id)}" onclick="dqcUndo(this)">Отменить</button>`
+        : `<span class="dq-muted">нельзя отменить: ${dqEsc(a.why_not)}</span>`;
+    const src = sourceLabel(a.key);
+    return `<div class="dq-journal-row${a.undone ? ' dq-journal-row--undone' : ''}">
+        <span class="dq-muted">${dqEsc(a.done_at)} · ${dqEsc(a.done_by)}${src ? ` · ${dqEsc(src)}` : ''}</span>
+        <span class="dq-journal-text">${dqEsc(a.text)}</span>${state}</div>`;
+}
+
+globalThis.dqcTest = { sourceLabel, journalRowHtml, esc: dqEsc, categoriesFor, answerBody, defaultAnswer, questionHtml, cardHtml, outsideClick: dqcOutsideClick };
 
 // ---- Экран ----
 
@@ -563,14 +581,7 @@ async function dqcLoadJournal() {
     if (!box.innerHTML.trim()) box.innerHTML = '<div class="admin-loading">Загрузка…</div>';
     try {
         const { actions } = await dqcRequest(`${DQC_API}/actions?limit=50`);
-        box.innerHTML = actions.length ? actions.map(a => {
-            const state = a.undone ? '<span class="dq-muted">отменено</span>'
-                : a.can_undo ? `<button class="km-btn km-btn--secondary" data-ids="${Number(a.id)}" onclick="dqcUndo(this)">Отменить</button>`
-                : `<span class="dq-muted">нельзя отменить: ${dqEsc(a.why_not)}</span>`;
-            return `<div class="dq-journal-row${a.undone ? ' dq-journal-row--undone' : ''}">
-                <span class="dq-muted">${dqEsc(a.done_at)} · ${dqEsc(a.done_by)}</span>
-                <span class="dq-journal-text">${dqEsc(a.text)}</span>${state}</div>`;
-        }).join('') : '<div class="admin-loading">Действий пока нет</div>';
+        box.innerHTML = actions.length ? actions.map(journalRowHtml).join('') : '<div class="admin-loading">Действий пока нет</div>';
     } catch (e) {
         box.innerHTML = `<div class="admin-error">Ошибка: ${dqEsc(e.message)}</div>`;
     }

@@ -4,7 +4,6 @@
 
 import datetime as dt
 import logging
-import re
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, HTTPException, Request
@@ -12,6 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.krasmarafon.routers.pages import templates, _diploma_event_ids
+from src.common.emails import is_valid_email
 from src.config import settings
 from src.krasmarafon.services import athlete_auth as aa
 from src.krasmarafon.services import athlete_claims as acl
@@ -30,7 +30,6 @@ def _require_cabinet_open(request: Request) -> None:
 
 router = APIRouter(dependencies=[Depends(_require_cabinet_open)])
 
-_EMAIL_RE = re.compile(r"[^@\s,;<>()\"']+@[^@\s,;<>()\"']+\.[^@\s,;<>()\"']+")
 ERR_CODE = "Код неверный или устарел"
 ERR_LINK = "Ссылка устарела — запросите новый код"
 ERR_LIMIT = "Слишком много попыток. Попробуйте через {minutes} мин."
@@ -91,7 +90,7 @@ async def login_send_code(request: Request, email: str = Form(...), shared: str 
     if _foreign_origin(request):
         return _forbidden()
     email = aa.normalize_email(email)
-    if len(email) > 255 or not _EMAIL_RE.fullmatch(email):
+    if not is_valid_email(email):
         return _login_page(request, "email", error="Проверьте почту", email=email, shared=bool(shared))
     try:
         await run_in_threadpool(aa.request_code, email, _client_ip(request))

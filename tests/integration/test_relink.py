@@ -399,3 +399,103 @@ def test_patch_unknown_distance_is_422_and_not_saved(client, as_admin, db, world
 def test_endpoints_require_login(client):
     assert client.post("/api/admin/leads/1/relink-preview", json={"name": "Х"}).status_code == 401
     assert client.patch("/api/admin/leads/1", json={"name": "Х"}).status_code == 401
+
+
+# ---- «Изменить»: почта формы и журнал правок заявки ----
+
+def _lead_email(cur, row_id):
+    cur.execute("SELECT email, ma_email FROM leads WHERE id = %s", (row_id,))
+    return cur.fetchone()
+
+
+def test_patch_email_saves_normalized_and_logs_undoable_edit(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    cur.execute("UPDATE leads SET ma_email = %s WHERE id = %s AND surname LIKE %s", (f"ma@{DOMAIN}", row["id"], f"{SURNAME}%"))
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": f"  Новая@{DOMAIN.upper()} ", "ma_email": f"hack@{DOMAIN}"})
+    assert r.status_code == 200, r.text
+    assert r.json()["relink"] is None
+    conn.commit()
+    assert _lead_email(cur, row["id"]) == {"email": f"новая@{DOMAIN}", "ma_email": f"ma@{DOMAIN}"}   # ma_email не правится
+    [entry] = journal(cur)
+    assert (entry["action"], entry["finding_key"], entry["done_by"]) == ("edit", f"lead:{row['id']}", USER)
+    assert entry["details"]["table"] == "leads" and entry["details"]["id"] == row["id"]
+    assert entry["details"]["before"] == {"email": f"{9500}@{DOMAIN}"} and entry["details"]["after"] == {"email": f"новая@{DOMAIN}"}
+    undo_action(conn, entry["id"], USER)
+    assert _lead_email(cur, row["id"])["email"] == f"9500@{DOMAIN}"
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "без-собаки", "a b@x.ru", "a@b", "a@b.ru, c@d.ru", "a@" + "x" * 260 + ".ru"])
+def test_patch_bad_email_is_422_and_not_saved(client, as_admin, db, world, bad):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": bad, "status": 1})
+    assert r.status_code == 422
+    conn.commit()
+    assert _lead_email(cur, row["id"])["email"] == f"9500@{DOMAIN}"
+    cur.execute("SELECT status FROM leads WHERE id = %s", (row["id"],))
+    assert cur.fetchone()["status"] == 0 and journal(cur) == []
+
+
+def test_patch_same_email_writes_nothing(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": f"9500@{DOMAIN}".upper()})
+    assert r.status_code == 200 and r.json()["relink"] is None
+    assert journal(cur) == []
+
+
+def test_patch_email_does_not_relink(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": f"x@{DOMAIN}"})
+    assert r.status_code == 200 and r.json()["relink"] is None
+    conn.commit()
+    assert row_state(cur, "leads", row["id"])["client_id"] == world["cm"]
+    assert [j["action"] for j in journal(cur)] == ["edit"]
+
+
+def test_patch_fio_with_move_logs_edit_then_move_and_undoes_in_reverse(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"name": "Дочь", "birthday": str(BD_DAUGHTER)})
+    assert r.status_code == 200 and r.json()["relink"]["action"] == "move"
+    conn.commit()
+    edit, move = journal(cur)
+    assert (edit["action"], edit["finding_key"]) == ("edit", f"lead:{row['id']}")
+    assert edit["details"]["before"] == {"name": "Мама", "birthday": str(BD_MAMA)}
+    assert edit["details"]["after"] == {"name": "Дочь", "birthday": str(BD_DAUGHTER)}
+    assert (move["action"], move["finding_key"]) == ("move_result", "relink:admin")
+    with pytest.raises(ValueError):                      # правку заявки раньше переезда не отменить
+        undo_action(conn, edit["id"], USER)
+    undo_action(conn, move["id"], USER)
+    undo_action(conn, edit["id"], USER)
+    state = row_state(cur, "leads", row["id"])
+    assert (state["client_id"], state["name"], state["birthday"]) == (world["cm"], "Мама", BD_MAMA)
+
+
+def test_patch_distance_is_logged_with_event_id(client, as_admin, db, world):
+    conn, cur = db
+    row = add_lead(cur, "Мама", BD_MAMA, 9500)
+    conn.commit()
+    cur.execute("INSERT INTO events (event_name, event_year, event_distance) "
+                "SELECT event_name, event_year, 10 FROM events WHERE id = %s", (row["event_id"],))
+    new_event = cur.lastrowid
+    conn.commit()
+    assert client.patch(f"/api/admin/leads/{row['id']}", json={"event_distance": "10 км"}).status_code == 200
+    conn.commit()
+    [entry] = journal(cur)
+    assert entry["details"]["after"]["event_distance"] == "10 км" and entry["details"]["after"]["event_id"] == str(new_event)
+    undo_action(conn, entry["id"], USER)
+    cur.execute("SELECT event_id, event_distance FROM leads WHERE id = %s", (row["id"],))
+    assert cur.fetchone() == {"event_id": row["event_id"], "event_distance": "5 км"}
+
+
+def test_is_valid_email_shared_rule():
+    from src.common.emails import is_valid_email
+    assert is_valid_email("a@b.ru") and not is_valid_email("a@b") and not is_valid_email("a b@c.ru")
