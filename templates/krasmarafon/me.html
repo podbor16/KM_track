@@ -36,6 +36,9 @@
             <h2>{{ p.title }}</h2>
             {% if p.client_id in claimed %}<a class="me-badge" href="/me/history">Это вы · История →</a>{% endif %}
         </div>
+        {% if p.client_id in claimed and history_note %}
+        <p class="me-note">{{ history_note }} <a href="/me/history">→</a></p>
+        {% endif %}
 
         {% if p.can_claim and p.client_id not in claimed %}
         {% if p.client_id in dropped %}<p class="me-note">Данные карточки изменились — подтвердите, что это вы</p>{% endif %}

@@ -175,6 +175,7 @@ async def me_page(request: Request, claim: str = "", r: str = "", changed: str =
     # привязки, снятые при открытии истории (/me/history → сюда), — для пояснения «Данные карточки изменились»
     dropped = list(dropped) + [int(x) for x in changed.split(",") if x.isascii() and x.isdigit() and len(x) <= 10]
     people = await run_in_threadpool(cabinet, email)
+    history_note = await run_in_threadpool(_history_note, claimed, email) if claimed else None
     claim_id = int(claim) if claim.isascii() and claim.isdigit() and len(claim) <= 10 else None
     claim_error = CLAIM_ERRORS.get(r)
     form_shown = any(p["can_claim"] and p["client_id"] == claim_id for p in people)
@@ -185,7 +186,25 @@ async def me_page(request: Request, claim: str = "", r: str = "", changed: str =
         "claimed": set(claimed), "dropped": set(dropped),
         "claim_id": claim_id, "claim_error": claim_error,
         "claim_error_page": not_yours,       # у «не ваша / нет такой» формы нет — ошибка над списком
+        "history_note": history_note,
     })
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} {one}"
+    return f"{n} {few}" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else f"{n} {many}"
+
+
+def _history_note(claimed: list[int], email: str) -> str:
+    """Пояснение у заявленного человека на /me: здесь — только заказы с этой почты, вся история — по ссылке.
+    Счётчики — те же, что на /me/history."""
+    results, leads = acl.history_rows(claimed)
+    history = build_history(results, leads, dt.date.today(), {}, set(), email)
+    n_leads = sum(len(y["items"]) for y in history["leads_years"])
+    n_results = sum(len(y["items"]) for y in history["results_years"])
+    return (f"Здесь — заявки, оформленные с этой почты. Все {_plural(n_leads, 'заявка', 'заявки', 'заявок')} "
+            f"и {_plural(n_results, 'результат', 'результата', 'результатов')} — в истории")
 
 
 @router.post("/me/claim")

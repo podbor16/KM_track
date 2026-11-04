@@ -36,6 +36,13 @@
     <h1>{{ title }}</h1>
     {% if history.since %}<p class="me-since">Бегает с {{ history.since }}</p>{% endif %}
 
+    <div class="me-chips me-tabs" role="tablist">
+        <button type="button" class="me-chip on" role="tab" data-tab="results" aria-selected="true">Результаты</button>
+        <button type="button" class="me-chip" role="tab" data-tab="leads" aria-selected="false">Заявки</button>
+    </div>
+
+    <section class="me-tab on" id="tab-results" role="tabpanel">
+    <div class="me-sub me-tab-title">Результаты</div>
     {% if history.tiles.starts %}
     <div class="me-tiles">
         <div class="me-tile"><b>{{ history.tiles.starts }}</b><span>стартов</span></div>
@@ -67,16 +74,20 @@
         var data = JSON.parse(document.getElementById('dyn').textContent);
         var chipsBox = document.getElementById('dyn-chips');
         var chart = null;
+        var current = data.default;
+        var box = document.getElementById('dyn-chart').parentNode;
         function hms(sec) {
             var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
             return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
         }
         function show(key) {
+            current = key;
             var pts = data.series[key];
             Array.prototype.forEach.call(chipsBox.children, function (b) {
                 b.classList.toggle('on', b.dataset.d === key);
             });
-            if (chart) chart.destroy();
+            if (chart) { chart.destroy(); chart = null; }
+            if (!box.offsetWidth) return;   // вкладка скрыта — нарисуем при первом показе (me:tab)
             chart = new Chart(document.getElementById('dyn-chart'), {
                 type: 'line',
                 data: {
@@ -111,13 +122,41 @@
             b.addEventListener('click', function () { show(key); });
             chipsBox.appendChild(b);
         });
+        document.addEventListener('me:tab', function () {
+            if (!box.offsetWidth) return;
+            if (chart) chart.resize(); else show(current);
+        });
         show(data.default);
     })();
     </script>
     {% endif %}
 
-    <div class="me-sub">Забеги и заявки</div>
-    {% for y in history.years %}
+    {% for y in history.results_years %}
+    <div class="me-year">{{ y.year or '' }}</div>
+    {% for e in y['items'] %}
+    <div class="me-result{% if not e.time %} me-result--none{% endif %}">
+        <div class="me-result-body">
+            <div class="me-title">{{ e.event_name }}{% if e.distance %} · {{ e.distance }}{% endif %}</div>
+            <div class="me-meta">
+                {% if e.date %}{{ e.date.day }} {{ months[e.date.month - 1] }}{% else %}{{ e.year }}{% endif %}
+                {% if e.protocol_url %} · <a href="{{ e.protocol_url }}">протокол</a>{% endif %}
+                {% if e.diploma_url %} · <a href="{{ e.diploma_url }}" target="_blank">диплом</a>{% endif %}
+            </div>
+        </div>
+        <div class="me-time">
+            {% if e.time %}{{ e.time }}{% for line in e.places %}<small>{{ line }}</small>{% endfor %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
+            {% else %}{{ e.status }}{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="me-empty">Результатов пока нет</p>
+    {% endfor %}
+    </section>
+
+    <section class="me-tab on" id="tab-leads" role="tabpanel">
+    <div class="me-sub me-tab-title">Заявки</div>
+    {% for y in history.leads_years %}
     <div class="me-year">{{ y.year or '' }}</div>
     {% for e in y['items'] %}
     {% if e.kind == 'ticket' %}
@@ -131,28 +170,29 @@
                 {% if e.start_number %}№{{ e.start_number }}{% else %}номер ещё не присвоен{% endif %} ·
                 {% if e.refund %}<span class="me-tag me-tag--refund">возврат</span>{% else %}<span class="me-tag">оплачено</span>{% endif %}
             </div>
-            {% if e.order %}{{ more(e.order) }}{% endif %}
+            {{ more(e.order) }}
         </div>
     </div>
     {% else %}
-    <div class="me-result{% if not e.time %} me-result--none{% endif %}">
+    <div class="me-result{% if not e.result_time %} me-result--none{% endif %}">
         <div class="me-result-body">
             <div class="me-title">{{ e.event_name }}{% if e.distance %} · {{ e.distance }}{% endif %}</div>
             <div class="me-meta">
                 {% if e.date %}{{ e.date.day }} {{ months[e.date.month - 1] }}{% else %}{{ e.year }}{% endif %}
-                {% if e.protocol_url %} · <a href="{{ e.protocol_url }}">протокол</a>{% endif %}
-                {% if e.diploma_url %} · <a href="{{ e.diploma_url }}" target="_blank">диплом</a>{% endif %}
+                {% if e.start_number %} · №{{ e.start_number }}{% endif %}
             </div>
         </div>
-        <div class="me-time">
-            {% if e.time %}{{ e.time }}{% if e.places %}<small>{{ e.places }}</small>{% endif %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
-            {% else %}{{ e.status }}{% endif %}
+        <div class="me-outcome">
+            {% if e.result_time %}результат <b>{{ e.result_time }}</b>{% else %}{{ e.status }}{% endif %}
         </div>
-        {% if e.order %}{{ more(e.order) }}{% endif %}
+        {{ more(e.order) }}
     </div>
     {% endif %}
     {% endfor %}
+    {% else %}
+    <p class="me-empty">Заявок пока нет</p>
     {% endfor %}
+    </section>
 
     <div class="me-foot">
         <a href="mailto:1@krasmarafon.ru?subject={{ ('Ошибка в истории, карточка №' ~ ids)|urlencode }}">Нашли чужой забег? Сообщить об ошибке</a>
@@ -163,6 +203,29 @@
         </form>
         {% endfor %}
     </div>
+    <script>
+    (function () {
+        var page = document.querySelector('.me-page');
+        var buttons = page.querySelectorAll('.me-tabs [data-tab]');
+        var panels = { results: document.getElementById('tab-results'), leads: document.getElementById('tab-leads') };
+        function apply() {
+            var name = location.hash === '#leads' ? 'leads' : 'results';
+            Object.keys(panels).forEach(function (k) { panels[k].classList.toggle('on', k === name); });
+            Array.prototype.forEach.call(buttons, function (b) {
+                var on = b.dataset.tab === name;
+                b.classList.toggle('on', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            document.dispatchEvent(new Event('me:tab'));
+        }
+        Array.prototype.forEach.call(buttons, function (b) {
+            b.addEventListener('click', function () { location.hash = b.dataset.tab; });
+        });
+        window.addEventListener('hashchange', apply);
+        page.classList.add('js-tabs');   // без JS обе вкладки видны подряд
+        apply();
+    })();
+    </script>
 </main>
 {% include 'krasmarafon/krasmarafon_footer.html' %}
 </body>
