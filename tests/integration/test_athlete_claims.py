@@ -971,3 +971,20 @@ def test_web_history_details_and_places(web, cards, db):
     results_text = re.sub(r"<[^>]+>", "", page.split('id="tab-results"')[1].split('id="tab-leads"')[0])
     assert "Номер заказа" not in results_text and "Подробнее" not in results_text   # у результата заказа нет
     assert "Номер заказа: 5550" in text                               # заявка 9001 — во вкладке «Заявки»
+
+
+def test_me_explains_that_only_this_email_orders_are_listed(web, cards):
+    """У заявленного человека на /me — пояснение со счётчиками истории (заявки с других почт — только там)."""
+    client, _ = web
+    login(client)
+    assert "Здесь — заявки, оформленные с этой почты" not in client.get("/me").text
+    claim_via_web(client, cards["c1"], "1986-05-01")
+    page = client.get("/me").text
+    assert re.search(r"Здесь — заявки, оформленные с этой почты\. Все \d+ заяв\w+ и \d+ результат\w* — в истории", page)
+
+
+def test_plural_forms():
+    from src.krasmarafon.routers.athlete import _plural
+    forms = ("заявка", "заявки", "заявок")
+    assert [_plural(n, *forms) for n in (1, 2, 5, 11, 21, 22, 112)] == [
+        "1 заявка", "2 заявки", "5 заявок", "11 заявок", "21 заявка", "22 заявки", "112 заявок"]
