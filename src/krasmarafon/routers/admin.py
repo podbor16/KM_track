@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -40,7 +40,7 @@ from src.config.event_loader import (
     set_maintenance_enabled,
 )
 from src.core.auth import api_require_auth
-from src.krasmarafon.services import athlete_claims
+from src.krasmarafon.services import athlete_claims, athlete_requests
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +176,36 @@ async def toggle_athlete_cabinet(enabled: bool, user: str = Depends(api_require_
 @router.get("/api/admin/athlete-cabinet-duplicates")
 async def get_athlete_cabinet_duplicates(user: str = Depends(api_require_auth)) -> dict:
     return {"accounts": await run_in_threadpool(athlete_claims.duplicate_accounts)}
+
+
+class AthleteRequestResolve(BaseModel):
+    action: str
+    answer: str = ""
+    client_id: Optional[int] = None
+
+
+@router.get("/api/admin/athlete-requests")
+async def list_athlete_requests(status: str = "new", user: str = Depends(api_require_auth)) -> dict:
+    return {"requests": await run_in_threadpool(athlete_requests.list_requests, status)}
+
+
+@router.get("/api/admin/athlete-requests/count")
+async def count_athlete_requests(user: str = Depends(api_require_auth)) -> dict:
+    return {"count": await run_in_threadpool(athlete_requests.count_new)}
+
+
+@router.post("/api/admin/athlete-requests/{request_id}/resolve")
+async def resolve_athlete_request(
+    request_id: int, body: AthleteRequestResolve, background: BackgroundTasks,
+    user: str = Depends(api_require_auth),
+) -> dict:
+    try:
+        info = await run_in_threadpool(
+            athlete_requests.resolve, request_id, body.action, user, body.answer, body.client_id)
+    except athlete_requests.RequestError as e:
+        raise HTTPException(status_code=400, detail=e.code)
+    background.add_task(athlete_requests.notify_resolved, info)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

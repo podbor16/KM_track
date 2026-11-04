@@ -73,6 +73,7 @@
             <button class="admin-tab" onclick="switchTab('monitoring', this)">Мониторинг</button>
             <button class="admin-tab" onclick="switchTab('data-quality', this)">Качество данных</button>
             <button class="admin-tab" onclick="switchTab('medals', this)">Сертификаты</button>
+            <button class="admin-tab" onclick="switchTab('requests', this)">Обращения <span id="ar-count"></span></button>
         </div>
 
         <!-- ================================================================ -->
@@ -198,6 +199,18 @@
             </div>
             <div class="dqc-journal" id="dqc-journal" hidden></div>
         </div>
+        <div id="tab-requests" class="admin-tab-content" style="display:none">
+            <div class="admin-section-note">
+                Обращения из личного кабинета. Перенос строки или исправление данных делайте во вкладке «Качество данных»
+                (ссылка на карточку ведёт туда), затем нажмите «Закрыть». Заявитель получает письмо с решением и вашим ответом.
+            </div>
+            <div class="dqc-tabs" role="tablist">
+                <button class="dqc-tab dqc-tab--on" role="tab" aria-selected="true" data-status="new" onclick="arSetStatus('new')">Новые</button>
+                <button class="dqc-tab" role="tab" aria-selected="false" data-status="closed" onclick="arSetStatus('closed')">Закрытые</button>
+            </div>
+            <div id="ar-list" class="dqc-cards ar-list"></div>
+        </div>
+
         <div id="tab-medals" class="admin-tab-content" style="display:none">
             <div class="admin-section-note">
                 Статистика страницы сертификата «Забега Единства» (<a href="/medals/" target="_blank">/medals/</a>):
@@ -461,6 +474,7 @@
     <script src="/static/js/admin-state.js?v={{ v }}"></script>
     <script src="/static/js/admin-monitoring.js?v={{ v }}"></script>
     <script src="/static/js/admin-dq-cases.js?v={{ v }}"></script>
+    <script src="/static/js/admin-athlete-requests.js?v={{ v }}"></script>
     <script src="/static/js/admin-medals.js?v={{ v }}"></script>
     <script src="/static/js/admin-bibs.js?v={{ v }}"></script>
     <script>
@@ -487,6 +501,7 @@
             if (name === 'age-groups') loadAgeGroupsTab();
             if (name === 'photos') loadPhotosTab();
             if (name === 'analytics') { loadAnalyticsTab(); loadAnalyticsExport(); }
+            if (name === 'requests') arLoad();
             if (name === 'monitoring') loadMonitoringTab();
             if (name === 'data-quality') dqcInit();
             if (name === 'medals') loadMedalsTab();
@@ -2308,6 +2323,7 @@
     loadHistoryToggle();
     loadAthleteCabinetToggle();
     loadAthleteDuplicates();
+    arRefreshCount();
     loadMaintenanceToggle();
     </script>
     <script src="/static/js/krasmarafon-broadcast-posts.js?v={{ v }}"></script>

@@ -646,3 +646,9 @@
 
 /* Действия в строке заявки — в одну строку, таблица прокручивается по горизонтали */
 .leads-col-actions { white-space: nowrap; }
+
+/* Вкладка «Обращения» */
+.ar-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.ar-comment { overflow-wrap: anywhere; white-space: pre-wrap; margin: 4px 0; }
+.ar-answer { width: 100%; margin: 8px 0 4px; resize: vertical; }
+.ar-cardno { width: 120px; }
