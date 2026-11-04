@@ -4,6 +4,7 @@
 
 import datetime as dt
 import logging
+import re
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Form, HTTPException, Request
@@ -15,7 +16,9 @@ from src.common.emails import is_valid_email
 from src.config import settings
 from src.krasmarafon.services import athlete_auth as aa
 from src.krasmarafon.services import athlete_claims as acl
+from src.krasmarafon.services import athlete_find as afd
 from src.krasmarafon.services import athlete_reps as arp
+from src.krasmarafon.services import athlete_requests as arq
 from src.krasmarafon.services.athlete_cabinet import cabinet, card_titles
 from src.krasmarafon.services.athlete_claims import ClaimResult
 from src.krasmarafon.services.athlete_history import build_history
@@ -38,7 +41,7 @@ ERR_MAIL = "Не удалось отправить код, попробуйте 
 CLAIM_ERRORS = {
     "mismatch": "Дата не совпадает",
     "limit": "Слишком много попыток. Попробуйте завтра или напишите нам на 1@krasmarafon.ru",
-    "taken": "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru",
+    "taken": "Эту карточку уже заявили. Если это ваша карточка — отправьте обращение, мы разберёмся",
     "no_birthday": "Подтвердить не получится — напишите нам на 1@krasmarafon.ru",
     "date": "Проверьте дату",
     "not_yours": "Эта карточка не совпадает с данными ваших заявок — напишите нам на 1@krasmarafon.ru",
@@ -46,6 +49,17 @@ CLAIM_ERRORS = {
                     "нажмите «Я представитель»",
     "own": "Это ваша карточка — откройте свою историю",
 }
+ERR_FIND_LIMIT = "Слишком много попыток. Попробуйте завтра"
+ERR_FIND_TOKEN = "Ссылка устарела — найдите карточку заново"
+REQUEST_ERRORS = {
+    "limit": f"У вас уже {arq.MAX_OPEN} открытых обращения — дождитесь ответа организаторов",
+    "too_long": f"Комментарий слишком длинный — не больше {arq.MAX_TEXT} символов",
+    "forbidden": "Не удалось отправить обращение — напишите нам на 1@krasmarafon.ru",
+    "bad_kind": "Не удалось отправить обращение — напишите нам на 1@krasmarafon.ru",
+}
+_NEXT_PAGES = re.compile(r"/me(/history|/find|/athlete/\d+)?")
+_ROW_FIELD = re.compile(r"(results|leads):(\d{1,18})")
+MAX_FIELD = 100       # длина введённых в поиске ФИ и номера, сохраняемых в обращении
 
 
 def _foreign_origin(request: Request) -> bool:
@@ -169,7 +183,7 @@ def _login_redirect() -> RedirectResponse:
 
 @router.get("/me", response_class=HTMLResponse)
 async def me_page(request: Request, claim: str = "", rep: str = "", r: str = "", changed: str = "",
-                  km_athlete: str | None = Cookie(default=None)):
+                  sent: str = "", req_err: str = "", km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
         return _login_redirect()
@@ -190,7 +204,8 @@ async def me_page(request: Request, claim: str = "", rep: str = "", r: str = "",
         "claimed": set(claimed), "dropped": set(dropped), "reps": set(reps), "reps_dropped": set(reps_dropped),
         "claim_id": claim_id, "rep_id": rep_id, "claim_error": claim_error,
         "claim_error_page": not_yours,       # у «не ваша / нет такой» формы нет — ошибка над списком
-        "history_note": history_note,
+        "history_note": history_note, "sent": bool(sent), "req_error": REQUEST_ERRORS.get(req_err),
+        "claim_taken": r == "taken",
     })
 
 
@@ -297,7 +312,8 @@ async def remove_rep(request: Request, rep_id: int = Form(...), km_athlete: str 
 
 
 @router.get("/me/athlete/{client_id}", response_class=HTMLResponse)
-async def athlete_page(request: Request, client_id: int, km_athlete: str | None = Cookie(default=None)):
+async def athlete_page(request: Request, client_id: int, sent: str = "", req_err: str = "",
+                       km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
         return _login_redirect()
@@ -313,12 +329,12 @@ async def athlete_page(request: Request, client_id: int, km_athlete: str | None 
     history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
     return templates.TemplateResponse("krasmarafon/me-history.html", {
         "request": request, "title": titles[client_id]["title"], "history": history, "card_ids": [client_id],
-        "ward": True, "reps": [],
+        "ward": True, "reps": [], "email": email, "sent": bool(sent), "req_error": REQUEST_ERRORS.get(req_err),
     })
 
 
 @router.get("/me/history", response_class=HTMLResponse)
-async def history_page(request: Request, km_athlete: str | None = Cookie(default=None)):
+async def history_page(request: Request, sent: str = "", req_err: str = "", km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
         return _login_redirect()
@@ -332,5 +348,101 @@ async def history_page(request: Request, km_athlete: str | None = Cookie(default
     history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
     return templates.TemplateResponse("krasmarafon/me-history.html", {
         "request": request, "title": title, "history": history, "card_ids": claimed, "ward": False,
-        "reps": await run_in_threadpool(arp.reps_of, email),
+        "reps": await run_in_threadpool(arp.reps_of, email), "email": email, "sent": bool(sent),
+        "req_error": REQUEST_ERRORS.get(req_err),
     })
+
+
+def _find_page(request: Request, email: str, **ctx) -> HTMLResponse:
+    return templates.TemplateResponse("krasmarafon/me-find.html", {"request": request, "email": email, **ctx})
+
+
+@router.get("/me/find", response_class=HTMLResponse)
+async def find_page(request: Request, km_athlete: str | None = Cookie(default=None)):
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return _login_redirect()
+    return _find_page(request, email, state="form", form={})
+
+
+@router.post("/me/find", response_class=HTMLResponse)
+async def find_post(request: Request, surname: str = Form(""), name: str = Form(""), birthday: str = Form(""),
+                    bib: str = Form(""), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    form = {"surname": surname.strip()[:MAX_FIELD], "name": name.strip()[:MAX_FIELD], "birthday": birthday.strip(),
+            "bib": bib.strip()[:MAX_FIELD]}
+    try:
+        born = dt.date.fromisoformat(form["birthday"])
+    except ValueError:
+        return _find_page(request, email, state="form", form=form, error=CLAIM_ERRORS["date"])
+    try:
+        found = await run_in_threadpool(afd.find_card, email, form["surname"], form["name"], born, form["bib"])
+    except afd.FindLimit:
+        return _find_page(request, email, state="form", form=form, error=ERR_FIND_LIMIT)
+    if found is None:
+        return _find_page(request, email, state="not_found", form=form)
+    found["starts_text"] = _plural(found["starts"], "старт", "старта", "стартов")
+    return _find_page(request, email, state="found", form=form, found=found,
+                      token=afd.make_token(email, found["client_id"]))
+
+
+@router.post("/me/find/claim", response_class=HTMLResponse)
+async def find_claim(request: Request, background_tasks: BackgroundTasks, token: str = Form(""),
+                     birthday: str = Form(""), km_athlete: str | None = Cookie(default=None)):
+    """«Это я» после поиска: карточка - из подписанного токена находки, не из формы. ДР - та, что человек ввёл в поиске
+    (скрытое поле); сервер сверяет её с карточкой как обычно (неверная - в лимит попыток)."""
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    client_id = await run_in_threadpool(afd.read_token, email, token)
+    if client_id is None:
+        return _find_page(request, email, state="form", form={}, error=ERR_FIND_TOKEN)
+    try:
+        born = dt.date.fromisoformat(birthday.strip())
+        result = await run_in_threadpool(acl.claim, email, client_id, born, True)
+    except ValueError:
+        return _find_page(request, email, state="form", form={}, error=CLAIM_ERRORS["date"])
+    if result == ClaimResult.OK:
+        background_tasks.add_task(acl.notify_claimed, client_id, email)
+    if result in (ClaimResult.OK, ClaimResult.ALREADY_MINE):
+        return RedirectResponse("/me", status_code=303)
+    return _find_page(request, email, state="taken" if result == ClaimResult.TAKEN else "error",
+                      form={}, error=CLAIM_ERRORS[result.value], token=token, client_id=client_id)
+
+
+def _next_page(value: str) -> str:
+    return value if _NEXT_PAGES.fullmatch(value) else "/me"
+
+
+@router.post("/me/request")
+async def create_request(request: Request, kind: str = Form(""), client_id: str = Form(""), row: str = Form(""),
+                         comment: str = Form(""), find_token: str = Form(""), next: str = Form("/me"),
+                         surname: str = Form(""), name: str = Form(""), birthday: str = Form(""),
+                         bib: str = Form(""), km_athlete: str | None = Cookie(default=None)):
+    """Обращение: dispute (client_id [+ find_token]), wrong_row (row="results:ID"|"leads:ID"), not_found (введённые
+    в поиске ФИ/ДР/номер). Права проверяет сервис; ответ - возврат на страницу next (из белого списка) с баннером."""
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    back = _next_page(next)
+    row_match = _ROW_FIELD.fullmatch(row)
+    payload = None
+    if kind == "not_found":
+        payload = {"surname": surname.strip()[:MAX_FIELD], "name": name.strip()[:MAX_FIELD],
+                   "birthday": birthday.strip()[:10], "bib": bib.strip()[:MAX_FIELD]}
+    try:
+        await run_in_threadpool(
+            arq.create, email, kind, _id_param(client_id.strip()),
+            (row_match.group(1), int(row_match.group(2))) if row_match else None, payload, comment,
+            find_token or None)
+    except arq.RequestError as e:
+        return RedirectResponse(f"{back}?req_err={e.code}", status_code=303)
+    return RedirectResponse(f"{back}?sent=1", status_code=303)

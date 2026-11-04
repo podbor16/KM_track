@@ -85,7 +85,7 @@ def _result_entry(r: dict, codes: dict, diploma_ids: set) -> dict:
     dist = _dist(r["event_distance"])
     year = _year(r["event_year"], r["event_date"])
     return {
-        "date": r["event_date"], "year": year, "event_name": r["event_name"],
+        "id": r["id"], "date": r["event_date"], "year": year, "event_name": r["event_name"],
         "distance": _dist_label(dist), "start_number": r["start_number"],
         "time": fmt_time(td) if finished else None, "place": place,
         "places": _places(r, place) if finished else [],
@@ -111,7 +111,7 @@ def _lead_entry(lead: dict, today: dt.date, account_email: Optional[str], outcom
         else:
             status = outcome["status"]
     return {
-        "kind": "ticket" if upcoming else "past", "date": lead["event_date"], "year": year,
+        "id": lead["id"], "kind": "ticket" if upcoming else "past", "date": lead["event_date"], "year": year,
         "event_name": lead["event_name"], "distance": _dist_label(_dist(lead["event_distance"])),
         "start_number": lead["start_number"], "refund": refund, "result_time": result_time, "status": status,
         "order": _order(lead, account_email),

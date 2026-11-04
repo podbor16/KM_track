@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Найти себя — Красмарафон</title>
+    <link rel="icon" href="/static/images/krasmarafon/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/static/css/km-design-tokens.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-header.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/navigation.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/me.css?v={{ v }}">
+</head>
+<body>
+{% include 'krasmarafon/header.html' %}
+<main class="me-page me-find">
+    <a class="me-back" href="/me">← Личный кабинет</a>
+    <h1>Найти себя</h1>
+    <p class="me-muted">Если вас записывали с чужой почты, найдите свою карточку: укажите фамилию, имя, дату рождения и стартовый номер с любого вашего забега.</p>
+
+    {% if error %}<p class="me-error">{{ error }}</p>{% endif %}
+    {% if state == 'error' %}<p class="me-muted"><a href="/me/find">Искать снова</a></p>{% endif %}
+
+    {% if state == 'found' %}
+    <section class="me-found">
+        <div class="me-found-title">Это вы: {{ found.title }}, бегает с {{ found.since or '—' }}, {{ found.starts_text }}</div>
+        <form method="post" action="/me/find/claim">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="birthday" value="{{ form.birthday }}">
+            <button class="me-btn" type="submit">Это я</button>
+        </form>
+    </section>
+    {% elif state == 'taken' %}
+    <section class="me-found">
+        <p class="me-muted">Если это ваша карточка, отправьте обращение: организаторы проверят и ответят письмом на {{ email }}.</p>
+        <form method="post" action="/me/request">
+            <input type="hidden" name="kind" value="dispute">
+            <input type="hidden" name="client_id" value="{{ client_id }}">
+            <input type="hidden" name="find_token" value="{{ token }}">
+            <label class="me-label" for="dcomment">Комментарий (необязательно)</label>
+            <textarea class="me-input me-textarea" id="dcomment" name="comment" maxlength="1000" rows="3"></textarea>
+            <button class="me-btn" type="submit">Это моя карточка — отправить обращение</button>
+        </form>
+    </section>
+    {% endif %}
+
+    {% if state in ('form', 'not_found', 'found') %}
+    <form class="me-find-form" method="post" action="/me/find">
+        <label class="me-label" for="f-surname">Фамилия</label>
+        <input class="me-input" id="f-surname" name="surname" value="{{ form.surname }}" maxlength="100" required>
+        <label class="me-label" for="f-name">Имя</label>
+        <input class="me-input" id="f-name" name="name" value="{{ form.name }}" maxlength="100" required>
+        <label class="me-label" for="f-bd">Дата рождения</label>
+        <input class="me-input" id="f-bd" type="date" name="birthday" value="{{ form.birthday }}" required>
+        <label class="me-label" for="f-bib">Стартовый номер</label>
+        <input class="me-input" id="f-bib" name="bib" value="{{ form.bib }}" inputmode="numeric" maxlength="100" required>
+        <button class="me-btn" type="submit">Найти</button>
+    </form>
+    {% endif %}
+
+    {% if state == 'not_found' %}
+    <section class="me-found">
+        <p class="me-note">Не нашли — проверьте данные или отправьте обращение</p>
+        <details class="me-claim" open>
+            <summary>Не могу найти себя</summary>
+            <div class="me-claim-box">
+                <form method="post" action="/me/request">
+                    <input type="hidden" name="kind" value="not_found">
+                    <input type="hidden" name="surname" value="{{ form.surname }}">
+                    <input type="hidden" name="name" value="{{ form.name }}">
+                    <input type="hidden" name="birthday" value="{{ form.birthday }}">
+                    <input type="hidden" name="bib" value="{{ form.bib }}">
+                    <label class="me-label" for="ncomment">Комментарий (необязательно)</label>
+                    <textarea class="me-input me-textarea" id="ncomment" name="comment" maxlength="1000" rows="3"></textarea>
+                    <button class="me-btn" type="submit">Отправить обращение</button>
+                </form>
+            </div>
+        </details>
+    </section>
+    {% endif %}
+</main>
+{% include 'krasmarafon/krasmarafon_footer.html' %}
+</body>
+</html>

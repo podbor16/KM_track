@@ -23,11 +23,14 @@
         <form method="post" action="/me/logout-all"><button class="me-inline" type="submit">Выйти на всех устройствах</button></form>
     </div>
 
+    {% if sent %}<p class="me-ok">Обращение отправлено, ответим письмом на {{ email }}</p>{% endif %}
+    {% if req_error %}<p class="me-error">{{ req_error }}</p>{% endif %}
     {% if claim_error_page %}<p class="me-error">{{ claim_error_page }}</p>{% endif %}
 
     {% if not people %}
     <p class="me-empty">Заявок с этой почты не найдено</p>
     {% endif %}
+    <p class="me-find-link"><a href="/me/find">Не нашли себя? Найти по данным</a></p>
 
     {% for p in people %}
     <section class="me-person">
@@ -49,6 +52,15 @@
             <summary>Это я</summary>
             <div class="me-claim-box">
                 {% if claim_id == p.client_id and claim_error %}<p class="me-error">{{ claim_error }}</p>{% endif %}
+                {% if claim_id == p.client_id and claim_taken %}
+                <form class="me-dispute-form" method="post" action="/me/request">
+                    <input type="hidden" name="kind" value="dispute">
+                    <input type="hidden" name="client_id" value="{{ p.client_id }}">
+                    <label class="me-label" for="dc{{ p.client_id }}">Комментарий (необязательно)</label>
+                    <textarea class="me-input me-textarea" id="dc{{ p.client_id }}" name="comment" maxlength="1000" rows="3"></textarea>
+                    <button class="me-btn" type="submit">Это моя карточка — отправить обращение</button>
+                </form>
+                {% endif %}
                 <form method="post" action="/me/claim">
                     <input type="hidden" name="client_id" value="{{ p.client_id }}">
                     <label class="me-label" for="bd{{ p.client_id }}">Ваша дата рождения</label>

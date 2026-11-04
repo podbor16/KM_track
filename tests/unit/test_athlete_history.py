@@ -374,3 +374,9 @@ def test_result_entry_has_no_order_or_refund_even_with_lead():
 
 def test_result_without_lead_has_no_order():
     assert "order" not in only_item(build([res(1, time=td(1))]))
+
+
+def test_entries_carry_row_ids_for_requests():
+    h = build([res(7, time=td(0, 25))], [lead(11, year=2099)])
+    assert h["results_years"][0]["items"][0]["id"] == 7
+    assert h["leads_years"][0]["items"][0]["id"] == 11

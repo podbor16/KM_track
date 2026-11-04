@@ -517,7 +517,7 @@ def test_athlete_page_shows_history_of_ward(web, cards):
     assert r.status_code == 200
     page = r.text
     assert "Тестпред Маша" in page and 'data-tab="results"' in page and 'data-tab="leads"' in page
-    assert "mailto:1@krasmarafon.ru?subject=" in page
+    assert "mailto:" not in page.split("<main")[1].split("</main>")[0] and "Это не мой забег" in page
     assert "/me/unrep" in page and "Отказаться от доступа" in page and "confirm(" in page
     assert "/me/unclaim" not in page and "отвязать" not in page
     assert "Доступ к вашей истории" not in page

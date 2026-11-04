@@ -507,7 +507,7 @@ def test_wrong_birthday_shows_error_at_the_card_form(web, cards):
 
 @pytest.mark.parametrize("code, text", [
     ("limit", "Слишком много попыток. Попробуйте завтра или напишите нам на 1@krasmarafon.ru"),
-    ("taken", "Эту карточку уже заявили — напишите нам на 1@krasmarafon.ru"),
+    ("taken", "Эту карточку уже заявили. Если это ваша карточка — отправьте обращение, мы разберёмся"),
     ("no_birthday", "Подтвердить не получится — напишите нам на 1@krasmarafon.ru"),
     ("date", "Проверьте дату"),
 ])
@@ -590,7 +590,7 @@ def test_history_page_for_claimed_card(web, cards):
     assert "0:25:00" in page and "5 км" in page and "5:00" in page          # время результата и темп
     assert "стартов" in page and "финишей" in page and "ср. темп" in page
     assert 'id="dyn"' not in page                                         # один год — динамики нет
-    assert "mailto:1@krasmarafon.ru?subject=" in page
+    assert "mailto:" not in page.split("<main")[1].split("</main>")[0] and "Это не мой забег" in page
     assert "/me/unclaim" in page and f"Отвязать карточку №{cards['c1']}?" in page
 
 
@@ -931,7 +931,7 @@ def test_web_history_tabs_split_results_and_leads(web, cards, db):
     leads_html, foot = page.split('id="tab-leads"')[1].split('class="me-foot"')
     assert "0:25:00" in results_html and "Подробнее" not in results_html and "результат" not in results_html
     assert "Подробнее" in leads_html and "результат <b>0:25:00</b>" in leads_html
-    assert "mailto:1@krasmarafon.ru" in foot and "/me/unclaim" in foot            # ссылки — внизу, вне вкладок
+    assert "mailto:" not in foot.split("</main>")[0] and "/me/unclaim" in foot                        # отвязка — внизу, вне вкладок
     assert "mailto:" not in results_html + leads_html and "/me/unclaim" not in results_html + leads_html
 
 

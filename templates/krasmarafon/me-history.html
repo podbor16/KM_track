@@ -15,7 +15,19 @@
 <body>
 {% include 'krasmarafon/header.html' %}
 {% set months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'] %}
-{% set ids = card_ids|join(', ') %}
+{% set back = ('/me/athlete/' ~ card_ids[0]) if ward else '/me/history' %}
+{% macro wrong(table, id, back) %}
+<details class="me-more me-wrong">
+    <summary>Это не мой забег</summary>
+    <form method="post" action="/me/request">
+        <input type="hidden" name="kind" value="wrong_row">
+        <input type="hidden" name="row" value="{{ table }}:{{ id }}">
+        <input type="hidden" name="next" value="{{ back }}">
+        <textarea class="me-input me-textarea" name="comment" maxlength="1000" rows="2" placeholder="Комментарий (необязательно)" aria-label="Комментарий"></textarea>
+        <button class="me-btn" type="submit">Отправить обращение</button>
+    </form>
+</details>
+{% endmacro %}
 {% macro more(o) %}
 <details class="me-more">
     <summary>Подробнее</summary>
@@ -34,6 +46,8 @@
 <main class="me-page">
     <a class="me-back" href="/me">← Личный кабинет</a>
     <h1>{{ title }}</h1>
+    {% if sent %}<p class="me-ok">Обращение отправлено, ответим письмом на {{ email }}</p>{% endif %}
+    {% if req_error %}<p class="me-error">{{ req_error }}</p>{% endif %}
     {% if ward %}<p class="me-since">Вы смотрите историю как представитель</p>{% endif %}
     {% if history.since %}<p class="me-since">Бегает с {{ history.since }}</p>{% endif %}
 
@@ -155,6 +169,7 @@
             {% if e.time %}{{ e.time }}{% for line in e.places %}<small>{{ line }}</small>{% endfor %}{% if e.pace %}<small class="me-pace">{{ e.pace }}/км</small>{% endif %}
             {% else %}{{ e.status }}{% endif %}
         </div>
+        {{ wrong('results', e.id, back) }}
     </div>
     {% endfor %}
     {% else %}
@@ -179,6 +194,7 @@
                 {% if e.refund %}<span class="me-tag me-tag--refund">возврат</span>{% else %}<span class="me-tag">оплачено</span>{% endif %}
             </div>
             {{ more(e.order) }}
+            {{ wrong('leads', e.id, back) }}
         </div>
     </div>
     {% else %}
@@ -194,6 +210,7 @@
             {% if e.result_time %}результат <b>{{ e.result_time }}</b>{% else %}{{ e.status }}{% endif %}
         </div>
         {{ more(e.order) }}
+        {{ wrong('leads', e.id, back) }}
     </div>
     {% endif %}
     {% endfor %}
@@ -218,7 +235,6 @@
     {% endif %}
 
     <div class="me-foot">
-        <a href="mailto:1@krasmarafon.ru?subject={{ ('Ошибка в истории, карточка №' ~ ids)|urlencode }}">Нашли чужой забег? Сообщить об ошибке</a>
         {% if ward %}
         <form method="post" action="/me/unrep" onsubmit="return confirm({{ ('Отказаться от доступа к истории ' ~ title ~ '?')|tojson|forceescape }})">
             <input type="hidden" name="client_id" value="{{ card_ids[0] }}">
