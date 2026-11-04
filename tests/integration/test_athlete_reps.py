@@ -257,3 +257,143 @@ def test_notify_rep_mail_failure_does_not_raise(db, cards, mail):
     ar.notify_rep(cards["kid"], PARENT)
     assert mail.call_count == 4
     ar.notify_rep(10 ** 9, PARENT)
+
+
+# ---------------------------------------------------------------- склейка и отмена
+
+@pytest.fixture
+def dq(db, cards, mail):
+    from src.analytics import dq_actions
+    return dq_actions
+
+
+def merge(dq, conn, cards, name="Маша"):
+    """kid (4 заявки) и twin (1) -> kid; -> (survivor, action_id)."""
+    return dq.merge_cards(conn, [cards["kid"], cards["twin"]], SURNAME, name, BD_KID.isoformat(), MERGER)
+
+
+def action_details(cur, action_id):
+    cur.execute("SELECT details FROM dq_actions WHERE id = %s", (action_id,))
+    return json.loads(cur.fetchone()["details"])
+
+
+def test_merge_moves_rep_to_survivor(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    surv, action_id = merge(dq, conn, cards)
+    assert surv == cards["kid"]
+    assert rep_rows(cur) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+    assert ar.rep_cards(PARENT) == ([cards["kid"]], [])
+    assert action_details(cur, action_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "moved_to": cards["kid"]}]
+
+
+def test_merge_drops_duplicate_rep(db, cards, dq):
+    conn, cur = db
+    add_lead(cur, "Маруся", BD_KID, COACH, 9108)
+    conn.commit()
+    ar.become_rep(PARENT, cards["kid"], BD_KID)
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    ar.become_rep(COACH, cards["twin"], BD_KID)
+    _, action_id = merge(dq, conn, cards)
+    assert rep_rows(cur) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+    assert rep_rows(cur, COACH) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+    assert action_details(cur, action_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "dropped": True},
+        {"client_id": cards["twin"], "email": COACH, "moved_to": cards["kid"]}]
+    assert journal(cur, "athlete_unrep", cards["twin"]) == [({"email": PARENT, "reason": "merged"}, MERGER)]
+
+
+def test_merge_drops_rep_of_account_that_owns_the_survivor(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    assert ac.claim(PARENT, cards["kid"], BD_KID) == ClaimResult.OK
+    _, action_id = merge(dq, conn, cards)
+    assert rep_rows(cur) == []
+    assert action_details(cur, action_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "dropped": True}]
+
+
+def test_merge_marks_dropped_stale_rep(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["kid"], BD_KID)
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    cur.execute("UPDATE clients SET birthday = '2015-04-06' WHERE id = %s AND surname = %s", (cards["twin"], SURNAME))
+    conn.commit()
+    _, action_id = merge(dq, conn, cards)
+    assert action_details(cur, action_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "dropped": True, "stale": True}]
+
+
+def test_apply_directly_collects_reps_out(db, cards, tmp_path):
+    from src.analytics import client_merge
+    conn, cur = db
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    reps = []
+    client_merge.apply(conn, None, {cards["kid"]: (SURNAME, "Маша", BD_KID.isoformat())}, {cards["twin"]: cards["kid"]},
+                       str(tmp_path / "b.json"), reps_out=reps)
+    assert reps == [{"client_id": cards["twin"], "email": PARENT, "moved_to": cards["kid"]}]
+    assert rep_rows(cur) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+
+
+def test_undo_merge_moves_rep_back(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    _, action_id = merge(dq, conn, cards)
+    undo_id = dq.undo_action(conn, action_id, MERGER)
+    assert rep_rows(cur) == [{"client_id": cards["twin"], "birthday": BD_KID}]
+    assert ar.rep_cards(PARENT) == ([cards["twin"]], [])
+    assert action_details(cur, undo_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "moved_back": True}]
+
+
+def test_undo_merge_returns_dropped_rep_and_keeps_survivor_rep(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["kid"], BD_KID)
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    _, action_id = merge(dq, conn, cards)
+    undo_id = dq.undo_action(conn, action_id, MERGER)
+    assert sorted(r["client_id"] for r in rep_rows(cur)) == sorted([cards["kid"], cards["twin"]])
+    assert action_details(cur, undo_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "restored": True}]
+
+
+def test_undo_merge_skips_stale_dropped_rep(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["kid"], BD_KID)
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    cur.execute("UPDATE clients SET birthday = '2015-04-06' WHERE id = %s AND surname = %s", (cards["twin"], SURNAME))
+    conn.commit()
+    _, action_id = merge(dq, conn, cards)
+    dq.undo_action(conn, action_id, MERGER)
+    assert rep_rows(cur) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+
+
+def test_undo_merge_skips_rep_that_user_removed_meanwhile(db, cards, dq):
+    conn, cur = db
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+    _, action_id = merge(dq, conn, cards)
+    ar.remove_rep(PARENT, cards["kid"])
+    undo_id = dq.undo_action(conn, action_id, MERGER)
+    assert rep_rows(cur) == []
+    assert action_details(cur, undo_id).get("athlete_reps", []) == []
+
+
+def test_undo_fix_fio_merge_moves_rep_back(db, cards, dq):
+    conn, cur = db
+    cur.execute("SELECT event_id FROM leads WHERE client_id = %s AND event_name = %s LIMIT 1", (cards["kid"], EV))
+    event_id = cur.fetchone()["event_id"]
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, rank_absolute) VALUES (%s, 'Маша', %s, 'Женщина', %s, 9101, 'Finished',
+                   '00:25:00', 1)""", (SURNAME, BD_KID, event_id))
+    result_id = cur.lastrowid
+    conn.commit()
+    ar.become_rep(PARENT, cards["twin"], BD_KID)
+
+    _, action_id = dq.fix_fio(conn, result_id, SURNAME, "Маруся", MERGER)
+    assert rep_rows(cur) == [{"client_id": cards["kid"], "birthday": BD_KID}]
+
+    undo_id = dq.undo_action(conn, action_id, MERGER)
+    assert rep_rows(cur) == [{"client_id": cards["twin"], "birthday": BD_KID}]
+    assert action_details(cur, undo_id)["athlete_reps"] == [
+        {"client_id": cards["twin"], "email": PARENT, "moved_back": True}]

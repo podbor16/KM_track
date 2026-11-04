@@ -54,10 +54,59 @@ def move_athlete_claims(cur, merged_into, user):
     return moved
 
 
-def apply(conn, cards, final, merged_into, backup, drop_leads=(), user="script", claims_out=None):
+def move_athlete_reps(cur, merged_into, user):
+    """Доступы представителей (athlete_reps) удаляемых карточек -> на итоговую. Дубль (тот же аккаунт уже представитель
+    итоговой) или аккаунт, заявивший итоговую карточку (вызывать после move_athlete_claims), — доступ снимается
+    (журнал athlete_unrep, merged). Таблицы ещё нет (миграция не применена) — ничего не делаем.
+    -> [{client_id, email, moved_to | dropped[, stale]}]; stale — у снятого доступа ДР уже не совпадала с карточкой
+    (при отмене не возвращается)."""
+    if not merged_into:
+        return []
+    ids = sorted(set(merged_into) | set(merged_into.values()))
+    ph = ",".join(["%s"] * len(ids))
+    try:
+        cur.execute("SELECT r.id, r.email, r.client_id, r.birthday = c.birthday FROM athlete_reps r "
+                    f"LEFT JOIN clients c ON c.id = r.client_id WHERE r.client_id IN ({ph}) "
+                    "ORDER BY r.created_at, r.id", ids)
+        reps = cur.fetchall()
+    except ProgrammingError as e:
+        if e.errno != 1146:
+            raise
+        return []
+    cur.execute(f"SELECT email, client_id FROM athlete_claims WHERE client_id IN ({ph})", ids)
+    owned = set(cur.fetchall())
+    keep, out = set(), []
+
+    def drop(rep_id, email, cid, valid):
+        cur.execute("DELETE FROM athlete_reps WHERE id = %s", (rep_id,))
+        log_action(cur, "athlete_unrep", f"client:{cid}", {"email": email, "reason": "merged"}, user)
+        out.append({"client_id": cid, "email": email, "dropped": True, **({} if valid else {"stale": True})})
+
+    for rep_id, email, cid, valid in reps:
+        if cid in merged_into:
+            continue
+        if (email, cid) in owned:
+            drop(rep_id, email, cid, valid)
+        else:
+            keep.add((email, cid))
+    for rep_id, email, cid, valid in reps:
+        if cid not in merged_into:
+            continue
+        target = merged_into[cid]
+        if (email, target) in keep or (email, target) in owned:
+            drop(rep_id, email, cid, valid)
+        else:
+            cur.execute("UPDATE athlete_reps SET client_id = %s WHERE id = %s", (target, rep_id))
+            keep.add((email, target))
+            out.append({"client_id": cid, "email": email, "moved_to": target})
+    return out
+
+
+def apply(conn, cards, final, merged_into, backup, drop_leads=(), user="script", claims_out=None, reps_out=None):
     """drop_leads — карточки, чьи заявки удаляются (решение пользователя); карточка
     удаляется, если у неё не осталось ни заявок, ни результатов. Привязки кабинета склеенных карточек
-    переносятся в той же транзакции (user — для журнала; claims_out — список, куда кладётся перенос)."""
+    переносятся в той же транзакции (user — для журнала; claims_out — список, куда кладётся перенос), так же —
+    доступы представителей (reps_out)."""
     cur = conn.cursor(dictionary=True)
     touched = sorted(set(final) | set(merged_into))
     ph = lambda ids: ",".join(str(int(i)) for i in ids)
@@ -85,9 +134,12 @@ def apply(conn, cards, final, merged_into, backup, drop_leads=(), user="script",
     try:
         plain = conn.cursor()
         moved_claims = move_athlete_claims(plain, merged_into, user)
+        moved_reps = move_athlete_reps(plain, merged_into, user)
         plain.close()
         if claims_out is not None:
             claims_out.extend(moved_claims)
+        if reps_out is not None:
+            reps_out.extend(moved_reps)
         for s, others in by_survivor.items():
             cur.execute(f"UPDATE leads SET client_id = %s WHERE client_id IN ({ph(others)})", (s,))
             cur.execute(f"UPDATE results SET client_id = %s WHERE client_id IN ({ph(others)})", (s,))

@@ -173,8 +173,9 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)
     try:
-        moved_claims = []
-        apply_merge(conn, None, {surv: (surname, name, birthday)}, merged_into, path, user=user, claims_out=moved_claims)
+        moved_claims, moved_reps = [], []
+        apply_merge(conn, None, {surv: (surname, name, birthday)}, merged_into, path, user=user, claims_out=moved_claims,
+                    reps_out=moved_reps)
         with open(path, encoding="utf-8") as fh:
             snapshot = json.load(fh)
     finally:
@@ -182,7 +183,7 @@ def merge_cards(conn, ids, surname, name, birthday, user, key=""):
     cur = conn.cursor()
     action_id = _log_action(cur, "merge", key, {"survivor": surv, "merged": sorted(merged_into),
                                                 "final": [surname, name, birthday], "before": snapshot,
-                                                "athlete_claims": moved_claims}, user)
+                                                "athlete_claims": moved_claims, "athlete_reps": moved_reps}, user)
     conn.commit()
     cur.close()
     return surv, action_id
@@ -215,13 +216,15 @@ def fix_fio(conn, result_id, surname, name, user, key=""):
         fd, path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
-            moved = []
+            moved, moved_reps = [], []
             apply_merge(conn, None, {cid: (surname, name, bd)}, {o: cid for o in others}, path, user=user,
-                        claims_out=moved)
+                        claims_out=moved, reps_out=moved_reps)
             with open(path, encoding="utf-8") as fh:
                 details["card_before"] = json.load(fh)
             if moved:
                 details["athlete_claims"] = moved
+            if moved_reps:
+                details["athlete_reps"] = moved_reps
         finally:
             os.remove(path)
         details["merged"] = others
@@ -894,6 +897,33 @@ def _restore_claims(cur, d, snap):
     return back
 
 
+def _restore_reps(cur, d, snap):
+    """Доступы представителей, перенесённые склейкой, — обратно (в транзакции отмены), по d["athlete_reps"]:
+    moved_to -> на прежнюю карточку, если доступ ещё на итоговой; dropped -> вернуть с ДР карточки из снимка snap, если
+    такого доступа ещё нет и аккаунт не заявил эту карточку; stale и записи без ДР — не возвращаем. Уже существующий
+    такой же доступ не трогаем. -> [{client_id, email, moved_back | restored}]."""
+    snap_bd = {c["id"]: c.get("birthday") for c in snap.get("clients", [])}
+    back = []
+    for e in d.get("athlete_reps") or []:
+        cid, email = e["client_id"], e["email"]
+        cur.execute("SELECT id FROM athlete_reps WHERE client_id = %s AND email = %s", (cid, email))
+        if cur.fetchone():
+            continue
+        if "moved_to" in e:
+            cur.execute("UPDATE athlete_reps SET client_id = %s WHERE client_id = %s AND email = %s",
+                        (cid, e["moved_to"], email))
+            if cur.rowcount:
+                back.append({"client_id": cid, "email": email, "moved_back": True})
+        elif e.get("dropped") and not e.get("stale") and snap_bd.get(cid):
+            cur.execute("SELECT 1 FROM athlete_claims WHERE client_id = %s AND email = %s", (cid, email))
+            if cur.fetchone():
+                continue
+            cur.execute("INSERT INTO athlete_reps (email, client_id, birthday) VALUES (%s, %s, %s)",
+                        (email, cid, snap_bd[cid]))
+            back.append({"client_id": cid, "email": email, "restored": True})
+    return back
+
+
 def _restore_result(cur, row):
     """Удалённый результат — обратно с прежним id и карточкой (триггер вставки сам выбирает карточку)."""
     cur.execute("SELECT id FROM clients WHERE id = %s", (row["client_id"],))
@@ -984,14 +1014,16 @@ def undo_action(conn, action_id, user):
         if conn.in_transaction:
             conn.commit()
         conn.start_transaction()
-        claims_back = []
+        claims_back, reps_back = [], []
         if row["action"] == "merge":
             _restore_cards(cur, d["before"])
             claims_back = _restore_claims(cur, d, d["before"])
+            reps_back = _restore_reps(cur, d, d["before"])
         elif row["action"] == "fix_fio":
             if "card_before" in d:
                 _restore_cards(cur, d["card_before"])
                 claims_back = _restore_claims(cur, d, d["card_before"])
+                reps_back = _restore_reps(cur, d, d["card_before"])
             else:
                 cur.execute("UPDATE results SET surname = %s, name = %s WHERE id = %s", (*d["before"], d["result_id"]))
         elif row["action"] == "delete_result":
@@ -1008,6 +1040,8 @@ def undo_action(conn, action_id, user):
         undo_details = {"undo_of": row["id"], "action": row["action"]}
         if claims_back:
             undo_details["athlete_claims"] = claims_back
+        if reps_back:
+            undo_details["athlete_reps"] = reps_back
         undo_id = _log_action(cur, "undo", row["finding_key"], undo_details, user)
         conn.commit()
         return undo_id
