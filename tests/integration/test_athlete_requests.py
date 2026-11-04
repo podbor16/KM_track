@@ -378,3 +378,56 @@ def test_notify_resolved_mail_failure_does_not_raise(db, claimed, mail):
     rid = rq.create(ME, "dispute", client_id=claimed["a"])
     rq.notify_resolved(rq.resolve(rid, "transfer", OP))
     assert mail.call_count == 2                                  # сбой первого письма не мешает второму
+
+
+# --- гонки и одна ДР ---------------------------------------------------------------------------------------------
+
+def _parallel(n, fn):
+    from concurrent.futures import ThreadPoolExecutor
+    outcomes = []
+
+    def call(i):
+        try:
+            return ("ok", fn(i))
+        except RequestError as e:
+            return ("err", e.code)
+
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        outcomes = list(pool.map(call, range(n)))
+    return outcomes
+
+
+def test_parallel_identical_create_makes_one_row(db, claimed):
+    conn, cur = db
+    outcomes = _parallel(5, lambda i: rq.create(ME, "dispute", client_id=claimed["a"]))
+    assert {kind for kind, _ in outcomes} == {"ok"} and len({v for _, v in outcomes}) == 1
+    cur.execute("SELECT COUNT(*) n FROM athlete_requests WHERE email = %s", (ME,))
+    assert cur.fetchone()["n"] == 1
+
+
+def test_parallel_different_create_respects_limit(db, cards):
+    conn, cur = db
+    outcomes = _parallel(5, lambda i: rq.create(FINDER, "not_found", payload={"bib": i}))
+    assert sorted(v for k, v in outcomes if k == "err") == ["limit", "limit"]
+    cur.execute("SELECT COUNT(*) n FROM athlete_requests WHERE email = %s AND status = 'new'", (FINDER,))
+    assert cur.fetchone()["n"] == 3
+
+
+def test_transfer_and_attach_refuse_applicant_with_other_birthday(db, claimed):
+    conn, cur = db
+    rid = rq.create(ME, "dispute", client_id=claimed["a"])
+    cur.execute("INSERT INTO athlete_claims (email, client_id, birthday) VALUES (%s, %s, %s)", (ME, claimed["stub"], BD2))
+    cur.execute("UPDATE clients SET birthday = %s WHERE id = %s", (BD2, claimed["stub"]))   # своя карточка ДР 2018
+    conn.commit()
+    with pytest.raises(RequestError) as e:
+        rq.resolve(rid, "transfer", OP)
+    assert e.value.code == "other_person"
+    assert request_row(cur, rid)["status"] == "new"
+    cur.execute("SELECT email FROM athlete_claims WHERE client_id = %s", (claimed["a"],))
+    assert cur.fetchone()["email"] == OWNER                                           # прежний владелец на месте
+    nid = rq.create(ME, "not_found", payload={"bib": 1})
+    free = add_lead(cur, "Свободный", BD1, PARENT, 9208)["client_id"]
+    conn.commit()
+    with pytest.raises(RequestError) as e:
+        rq.resolve(nid, "attach", OP, client_id=free)
+    assert e.value.code == "other_person"

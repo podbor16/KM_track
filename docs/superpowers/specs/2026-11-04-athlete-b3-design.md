@@ -21,6 +21,8 @@
   обращения «Не могу найти себя»); какое поле не совпало — не раскрывается.
 - Лимит: **5 поисков в сутки** на аккаунт (своя таблица попыток или общая `athlete_claim_attempts` с отдельным
   видом — без смешения с лимитом ДР).
+- Общий лимит: **10 поисков в сутки по одной паре «фамилия + имя»** (strip, нижний регистр, ё→е) со всех аккаунтов —
+  в `athlete_find_attempts.fio`; превышение любого лимита — один `FindLimit` и один текст.
 - Заявление после поиска — те же проверки, что у «Это я» (п.2–6 Б1: уже ваша / заявлена другим → обращение-спор /
   без ДР / одна ДР у «это я» / лимит / сверка ДР), **кроме п.1** (заявка на почте): доказательство — номер.
   Токен находки — подписанный (HMAC `SECRET_KEY`) `client_id + email + срок 15 минут`, чтобы заявить можно было
@@ -86,8 +88,10 @@ CREATE TABLE IF NOT EXISTS athlete_requests (
 CREATE TABLE IF NOT EXISTS athlete_find_attempts (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   email VARCHAR(255) NOT NULL,
+  fio VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_afa (email, created_at)
+  KEY idx_afa (email, created_at),
+  KEY idx_afa_fio (fio, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 

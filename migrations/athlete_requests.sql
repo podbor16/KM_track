@@ -26,3 +26,18 @@ CREATE TABLE IF NOT EXISTS athlete_find_attempts (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_afa (email, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Общий лимит поисков на пару «фамилия + имя» (нормализованную): колонка fio и индекс, идемпотентно
+SET @has_col := (SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = 'athlete_find_attempts' AND column_name = 'fio');
+SET @ddl := IF(@has_col = 0, 'ALTER TABLE athlete_find_attempts ADD COLUMN fio VARCHAR(255) NULL', 'DO 0');
+PREPARE st FROM @ddl;
+EXECUTE st;
+DEALLOCATE PREPARE st;
+
+SET @has_idx := (SELECT COUNT(*) FROM information_schema.statistics
+                 WHERE table_schema = DATABASE() AND table_name = 'athlete_find_attempts' AND index_name = 'idx_afa_fio');
+SET @ddl := IF(@has_idx = 0, 'ALTER TABLE athlete_find_attempts ADD KEY idx_afa_fio (fio, created_at)', 'DO 0');
+PREPARE st FROM @ddl;
+EXECUTE st;
+DEALLOCATE PREPARE st;

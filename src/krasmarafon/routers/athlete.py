@@ -56,8 +56,9 @@ REQUEST_ERRORS = {
     "too_long": f"Комментарий слишком длинный — не больше {arq.MAX_TEXT} символов",
     "forbidden": "Не удалось отправить обращение — напишите нам на 1@krasmarafon.ru",
     "bad_kind": "Не удалось отправить обращение — напишите нам на 1@krasmarafon.ru",
+    "find_token": ERR_FIND_TOKEN,
 }
-_NEXT_PAGES = re.compile(r"/me(/history|/find|/athlete/\d+)?")
+_NEXT_PAGES = re.compile(r"/me(/history|/athlete/\d+)?")
 _ROW_FIELD = re.compile(r"(results|leads):(\d{1,18})")
 MAX_FIELD = 100       # длина введённых в поиске ФИ и номера, сохраняемых в обращении
 
@@ -444,5 +445,9 @@ async def create_request(request: Request, kind: str = Form(""), client_id: str 
             (row_match.group(1), int(row_match.group(2))) if row_match else None, payload, comment,
             find_token or None)
     except arq.RequestError as e:
-        return RedirectResponse(f"{back}?req_err={e.code}", status_code=303)
+        code = e.code
+        if code == "forbidden" and kind == "dispute" and find_token and (
+                await run_in_threadpool(afd.read_token, email, find_token) is None):
+            code = "find_token"     # спор после поиска: токен просрочен/чужой - это понятнее общего отказа
+        return RedirectResponse(f"{back}?req_err={code}", status_code=303)
     return RedirectResponse(f"{back}?sent=1", status_code=303)

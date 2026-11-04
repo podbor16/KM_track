@@ -5,49 +5,61 @@ via_find=True) по токену находки: подписанный (HMAC SE
 можно было только найденную этим аккаунтом карточку."""
 
 import hmac
+from contextlib import nullcontext
 import time
 from datetime import date
 from typing import Optional
 
 from src.krasmarafon.services.athlete_auth import _conn, _hmac, normalize_email
-from src.krasmarafon.services.athlete_claims import NO_BIRTHDAY, advisory_lock, history_rows
+from src.krasmarafon.services.athlete_claims import NO_BIRTHDAY, advisory_lock, history_rows, same_person
 
 FIND_PER_DAY = 5
+FIND_PER_FIO_DAY = 10      # общий лимит на пару «фамилия + имя» со всех аккаунтов
 TOKEN_TTL_SEC = 15 * 60
 
 
 class FindLimit(Exception):
-    """Больше FIND_PER_DAY поисков за сутки с этого аккаунта."""
+    """Больше FIND_PER_DAY поисков за сутки с этого аккаунта или FIND_PER_FIO_DAY по одной паре «фамилия + имя»."""
+
+
+def _fio_key(surname: str, name: str) -> Optional[str]:
+    """Пара «фамилия + имя» без регистра, ё и лишних пробелов; None, если одной из частей нет."""
+    parts = [" ".join(p.lower().replace("ё", "е").split()) for p in (surname, name)]
+    return " ".join(parts) if all(parts) else None
 
 
 def find_card(email: str, surname: str, name: str, birthday: date, bib) -> Optional[dict]:
     """Ровно одна карточка с такими ФИ (регистр и ё/е — по коллации БД) и ДР (не заглушка), у которой есть строка с этим
-    номером (results.start_number или leads.start_number): {"client_id", "title", "since", "starts"}; иначе None
+    номером (results.start_number или leads.start_number без дубля; только собственные строки владельца, как в истории): {"client_id", "title", "since", "starts"}; иначе None
     (не нашли / несколько — не различается). Каждый вызов — попытка; сверх лимита — FindLimit."""
     email = normalize_email(email)
     surname, name = (surname or "").strip(), (name or "").strip()
     conn = _conn()
     try:
         cur = conn.cursor(dictionary=True)
+        fio = _fio_key(surname, name)
         with advisory_lock(cur, f"find:{email}"):
             cur.execute("DELETE FROM athlete_find_attempts WHERE created_at < NOW() - INTERVAL 1 DAY")
             cur.execute("""SELECT COUNT(*) AS n FROM athlete_find_attempts
                            WHERE email = %s AND created_at > NOW() - INTERVAL 1 DAY""", (email,))
             if cur.fetchone()["n"] >= FIND_PER_DAY:
                 raise FindLimit()
-            cur.execute("INSERT INTO athlete_find_attempts (email) VALUES (%s)", (email,))
+            with advisory_lock(cur, f"find-fio:{fio}") if fio else nullcontext():
+                if fio:
+                    cur.execute("""SELECT COUNT(*) AS n FROM athlete_find_attempts
+                                   WHERE fio = %s AND created_at > NOW() - INTERVAL 1 DAY""", (fio,))
+                    if cur.fetchone()["n"] >= FIND_PER_FIO_DAY:
+                        raise FindLimit()
+                cur.execute("INSERT INTO athlete_find_attempts (email, fio) VALUES (%s, %s)", (email, fio))
         try:
             bib = int(str(bib).strip())
         except ValueError:
             return None
         if not surname or not name or not birthday or birthday in NO_BIRTHDAY or bib < 0:
             return None
-        cur.execute("""SELECT c.id, c.surname, c.name FROM clients c
-                       WHERE c.surname = %s AND c.name = %s AND c.birthday = %s
-                         AND (EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id AND r.start_number = %s)
-                              OR EXISTS (SELECT 1 FROM leads l WHERE l.client_id = c.id AND l.start_number = %s))
-                       LIMIT 2""", (surname, name, birthday, bib, bib))
-        rows = cur.fetchall()
+        cur.execute("""SELECT c.id, c.surname, c.name, c.birthday FROM clients c
+                       WHERE c.surname = %s AND c.name = %s AND c.birthday = %s LIMIT 10""", (surname, name, birthday))
+        rows = [c for c in cur.fetchall() if _has_own_bib(cur, c, bib)]
         cur.close()
     finally:
         conn.close()
@@ -58,6 +70,15 @@ def find_card(email: str, surname: str, name: str, birthday: date, bib) -> Optio
     years = [r["event_year"] for r in results + leads if r.get("event_year")]
     return {"client_id": card["id"], "title": f"{card['surname']} {card['name']}".strip(),
             "since": min(years) if years else None, "starts": len(results)}
+
+
+def _has_own_bib(cur, card: dict, bib: int) -> bool:
+    """Номер есть у собственной строки владельца карточки (same_person): результат или заявка без дубля (как в истории)."""
+    cur.execute("""SELECT surname, name, birthday FROM results WHERE client_id = %s AND start_number = %s
+                   UNION ALL
+                   SELECT surname, name, birthday FROM leads
+                   WHERE client_id = %s AND start_number = %s AND is_duplicate = 0""", (card["id"], bib, card["id"], bib))
+    return any(same_person(card, row) for row in cur.fetchall())
 
 
 def _sign(email: str, client_id: int, exp: int) -> str:

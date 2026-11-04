@@ -16,7 +16,8 @@ from src.core.mailer import send_mail
 from src.krasmarafon.services import athlete_find
 from src.krasmarafon.services.athlete_auth import _conn, normalize_email
 from src.krasmarafon.services.athlete_claims import (
-    NO_BIRTHDAY, SUPPORT_EMAIL, advisory_lock, in_transaction, log_action, same_person, sweep, unclaim_row)
+    NO_BIRTHDAY, SUPPORT_EMAIL, advisory_lock, in_transaction, log_action, run_in_transaction, same_person, sweep,
+    unclaim_row)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ DECISIONS = {
 
 class RequestError(ValueError):
     """Обращение или решение отклонено. code: bad_kind, too_long, forbidden, limit (create); bad_action, closed,
-    not_found, no_card, taken, no_birthday (resolve)."""
+    not_found, no_card, taken, no_birthday, other_person (resolve)."""
 
     def __init__(self, code: str, message: str = ""):
         super().__init__(message or code)
@@ -66,7 +67,17 @@ def create(email: str, kind: str, client_id: Optional[int] = None, row: Optional
     (find_token от athlete_find.make_token) на эту карточку; wrong_row(row=("results"|"leads", id)) — строка из
     истории своей или подопечной карточки; not_found(payload) — без проверок. RequestError: bad_kind, too_long,
     forbidden, limit (≥ MAX_OPEN открытых)."""
-    return in_transaction(_create, normalize_email(email), kind, client_id, row, payload, comment, find_token)
+    email = normalize_email(email)
+    conn = _conn()      # GET_LOCK переживает коммит: блокировка берётся до транзакции и снимается после неё
+    try:
+        cur = conn.cursor(dictionary=True)
+        try:
+            with advisory_lock(cur, f"request:{email}"):
+                return run_in_transaction(conn, _create, email, kind, client_id, row, payload, comment, find_token)
+        finally:
+            cur.close()
+    finally:
+        conn.close()
 
 
 def _owns_card(cur, email: str, client_id: int) -> bool:
@@ -121,38 +132,37 @@ def _create(conn, email: str, kind: str, client_id, row, payload, comment, find_
     comment = _text(comment)
     cur = conn.cursor(dictionary=True)
     try:
-        with advisory_lock(cur, f"request:{email}"):
-            row_table = row_id = None
-            data = dict(payload) if payload else None
-            if kind == "dispute":
-                client_id = _check_dispute(cur, email, client_id, find_token)
-                if athlete_find.read_token(email, find_token) == client_id:
-                    data = {**(data or {}), "via": "find"}
-            elif kind == "wrong_row":
-                row_table, row_id, client_id = _check_row(cur, email, row)
-            else:
-                client_id = None
-            payload_json = json.dumps(data, ensure_ascii=False, sort_keys=True) if data else None
+        row_table = row_id = None
+        data = dict(payload) if payload else None
+        if kind == "dispute":
+            client_id = _check_dispute(cur, email, client_id, find_token)
+            if athlete_find.read_token(email, find_token) == client_id:
+                data = {**(data or {}), "via": "find"}
+        elif kind == "wrong_row":
+            row_table, row_id, client_id = _check_row(cur, email, row)
+        else:
+            client_id = None
+        payload_json = json.dumps(data, ensure_ascii=False, sort_keys=True) if data else None
 
-            cur.execute("""SELECT id FROM athlete_requests
-                           WHERE email = %s AND kind = %s AND status = 'new' AND client_id <=> %s
-                             AND row_table <=> %s AND row_id <=> %s
-                             AND (kind <> 'not_found' OR payload <=> CAST(%s AS JSON)) LIMIT 1""",
-                        (email, kind, client_id, row_table, row_id, payload_json))
-            same = cur.fetchone()
-            if same:
-                return same["id"]
-            cur.execute("SELECT COUNT(*) AS n FROM athlete_requests WHERE email = %s AND status = 'new'", (email,))
-            if cur.fetchone()["n"] >= MAX_OPEN:
-                raise RequestError("limit", f"открытых обращений: {MAX_OPEN}")
-            cur.execute("""INSERT INTO athlete_requests (email, kind, client_id, row_table, row_id, payload, comment)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        (email, kind, client_id, row_table, row_id, payload_json, comment))
-            rid = cur.lastrowid
-            _log(cur, "athlete_request", rid, client_id,
-                 {"request_id": rid, "kind": kind, "email": email, "row": [row_table, row_id] if row_table else None},
-                 email)
-            return rid
+        cur.execute("""SELECT id FROM athlete_requests
+                       WHERE email = %s AND kind = %s AND status = 'new' AND client_id <=> %s
+                         AND row_table <=> %s AND row_id <=> %s
+                         AND (kind <> 'not_found' OR payload <=> CAST(%s AS JSON)) LIMIT 1""",
+                    (email, kind, client_id, row_table, row_id, payload_json))
+        same = cur.fetchone()
+        if same:
+            return same["id"]
+        cur.execute("SELECT COUNT(*) AS n FROM athlete_requests WHERE email = %s AND status = 'new'", (email,))
+        if cur.fetchone()["n"] >= MAX_OPEN:
+            raise RequestError("limit", f"открытых обращений: {MAX_OPEN}")
+        cur.execute("""INSERT INTO athlete_requests (email, kind, client_id, row_table, row_id, payload, comment)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (email, kind, client_id, row_table, row_id, payload_json, comment))
+        rid = cur.lastrowid
+        _log(cur, "athlete_request", rid, client_id,
+             {"request_id": rid, "kind": kind, "email": email, "row": [row_table, row_id] if row_table else None},
+             email)
+        return rid
     finally:
         cur.close()
 
@@ -198,7 +208,7 @@ def resolve(request_id: int, action: str, operator: str, answer: str = "", clien
     """Решить открытое обращение (одна транзакция). transfer — только dispute: привязка переходит заявителю (ДР привязки —
     ДР карточки), представители остаются; attach — только not_found: заявителю привязывается свободная карточка client_id,
     оператором выбранная; reject / close — любое. answer — ответ оператора (≤ MAX_TEXT). RequestError: bad_action,
-    too_long, not_found, closed, no_card, taken, no_birthday. -> данные для notify_resolved: {"id", "email", "kind",
+    too_long, not_found, closed, no_card, taken, no_birthday, other_person. -> данные для notify_resolved: {"id", "email", "kind",
     "action", "answer", "client_id", "fio", "former_owner"}."""
     if action not in ACTIONS:
         raise RequestError("bad_action", action)
@@ -246,6 +256,12 @@ def _resolve(conn, request_id: int, action: str, operator: str, answer, client_i
                 raise RequestError("no_card", "карточки нет")
             if card["birthday"] in NO_BIRTHDAY:
                 raise RequestError("no_birthday", "у карточки нет ДР")
+            cur.execute("""SELECT DISTINCT ac.birthday FROM athlete_claims ac
+                           JOIN clients c ON c.id = ac.client_id AND c.birthday = ac.birthday
+                           WHERE ac.email = %s""", (req["email"],))
+            mine = {r["birthday"] for r in cur.fetchall()}
+            if mine and card["birthday"] not in mine:       # один человек — одна ДР (как в claim)
+                raise RequestError("other_person", "у заявителя уже есть своя карточка с другой ДР")
             sweep(conn, "ac.client_id = %s", (card_id,), in_tx=True)     # устаревшая привязка не считается владельцем
             cur.execute("SELECT id, email FROM athlete_claims WHERE client_id = %s", (card_id,))
             owner = cur.fetchone()

@@ -289,3 +289,14 @@ def test_confirm_texts_stay_js_safe(web, cards):
     ac.claim(ME, cards["a"], BD1)
     page = client.get("/me/history").text
     assert "confirm(" in page          # отвязка по-прежнему спрашивает подтверждение
+
+
+def test_dispute_with_expired_find_token_shows_find_token_text(web, claimed):
+    client, _ = web
+    login(client, FINDER)
+    token = af.make_token(FINDER, claimed["a"])
+    with patch("time.time", return_value=__import__("time").time() + 3600):
+        r = client.post("/me/request", data={"kind": "dispute", "client_id": claimed["a"], "find_token": token},
+                        follow_redirects=False)
+    assert r.headers["location"] == "/me?req_err=find_token"
+    assert "Ссылка устарела — найдите карточку заново" in client.get(r.headers["location"]).text

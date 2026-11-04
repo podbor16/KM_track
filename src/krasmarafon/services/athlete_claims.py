@@ -133,16 +133,21 @@ def in_transaction(fn, *args):
     """fn(conn, *args) в одной транзакции отдельного соединения пула (autocommit там выключается start_transaction)."""
     conn = _conn()
     try:
-        conn.start_transaction()
-        try:
-            result = fn(conn, *args)
-            conn.commit()
-            return result
-        except BaseException:
-            conn.rollback()
-            raise
+        return run_in_transaction(conn, fn, *args)
     finally:
         conn.close()
+
+
+def run_in_transaction(conn, fn, *args):
+    """То же на уже взятом соединении (например, с именованной блокировкой, которая переживает коммит)."""
+    conn.start_transaction()
+    try:
+        result = fn(conn, *args)
+        conn.commit()
+        return result
+    except BaseException:
+        conn.rollback()
+        raise
 
 
 @contextmanager

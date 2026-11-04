@@ -205,3 +205,34 @@ def test_claim_via_find_birthday_attempt_limit(db, cards):
     wrong = date(1990, 1, 1)
     results = [ac.claim(ME, cards["a"], wrong, via_find=True).value for _ in range(6)]
     assert results == ["mismatch"] * 5 + ["limit"]
+
+
+def test_find_counts_only_own_non_duplicate_rows(db, cards):
+    conn, cur = db
+    stranger = add_lead(cur, "Петр", BD1, OTHER, 9150)               # строка другого человека на карточке a
+    dup = add_lead(cur, "Иван", BD1, OTHER, 9151)
+    cur.execute("UPDATE leads SET client_id = %s WHERE event_name = %s AND start_number IN (9150, 9151)",
+                (cards["a"], EV))
+    cur.execute("UPDATE leads SET is_duplicate = 1 WHERE event_name = %s AND start_number = 9151", (EV,))
+    cur.execute("""INSERT INTO results (surname, name, birthday, sex, event_id, start_number, race_status,
+                   time_gun_finish, rank_absolute, client_id) VALUES (%s, 'Петр', %s, 'Мужчина', %s, 9152, 'Finished',
+                   '00:25:00', 2, %s)""", (SURNAME, BD1, cards_event(cur), cards["a"]))
+    conn.commit()
+    for bib in (9150, 9151, 9152):
+        assert af.find_card(OTHER, SURNAME, "Иван", BD1, bib) is None
+    cur.execute("DELETE FROM athlete_find_attempts WHERE email = %s", (OTHER,))
+    conn.commit()
+    assert af.find_card(OTHER, SURNAME, "Иван", BD1, 9101)["client_id"] == cards["a"]
+
+
+def cards_event(cur):
+    cur.execute("SELECT id FROM events WHERE event_name = %s LIMIT 1", (EV,))
+    return cur.fetchone()["id"]
+
+
+def test_find_shared_limit_per_fio(db, cards):
+    for i in range(10):
+        assert af.find_card(f"u{i}@{DOMAIN}", f" {SURNAME.upper()} ", "ИВАН", BD1, 9999) is None
+    with pytest.raises(FindLimit):
+        af.find_card(f"u10@{DOMAIN}", SURNAME, "иван", BD1, 9101)         # 11-й с другой почты
+    assert af.find_card(f"u10@{DOMAIN}", SURNAME, "Мария", BD2, 9103) is not None   # другая пара проходит
