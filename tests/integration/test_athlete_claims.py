@@ -841,7 +841,7 @@ def test_web_other_person_message_and_no_attempt(web, cards):
     assert r.status_code == 303 and r.headers["location"] == f"/me?claim={cards['c2']}&r=other_person"
     page = client.get(r.headers["location"]).text
     assert ("У вас уже есть своя карточка с другой датой рождения. Если это ваш ребёнок или близкий — "
-            "доступ к его истории появится позже") in page
+            "нажмите «Я представитель»") in page
     assert claim_via_web(client, cards["vanya"], "1986-05-01").headers["location"] == "/me"
 
 

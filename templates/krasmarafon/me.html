@@ -34,15 +34,18 @@
         <div class="me-person-head">
             <div class="me-avatar">{{ p.title.split()|map('first')|join('')|upper }}</div>
             <h2>{{ p.title }}</h2>
-            {% if p.client_id in claimed %}<a class="me-badge" href="/me/history">Это вы · История →</a>{% endif %}
+            {% if p.client_id in claimed %}<a class="me-badge" href="/me/history">Это вы · История →</a>
+            {% elif p.client_id in reps %}<a class="me-badge" href="/me/athlete/{{ p.client_id }}">Вы представитель · История →</a>{% endif %}
         </div>
         {% if p.client_id in claimed and history_note %}
         <p class="me-note">{{ history_note }} <a href="/me/history">→</a></p>
         {% endif %}
 
-        {% if p.can_claim and p.client_id not in claimed %}
+        {% if p.can_claim and p.client_id not in claimed and p.client_id not in reps %}
         {% if p.client_id in dropped %}<p class="me-note">Данные карточки изменились — подтвердите, что это вы</p>{% endif %}
-        <details class="me-claim"{% if claim_id == p.client_id %} open{% endif %}>
+        {% if p.client_id in reps_dropped %}<p class="me-note">Доступ к истории снят: данные карточки изменились — подтвердите заново</p>{% endif %}
+        <div class="me-claims">
+        <details class="me-claim" name="claim{{ p.client_id }}"{% if claim_id == p.client_id %} open{% endif %}>
             <summary>Это я</summary>
             <div class="me-claim-box">
                 {% if claim_id == p.client_id and claim_error %}<p class="me-error">{{ claim_error }}</p>{% endif %}
@@ -54,6 +57,19 @@
                 </form>
             </div>
         </details>
+        <details class="me-claim" name="claim{{ p.client_id }}"{% if rep_id == p.client_id %} open{% endif %}>
+            <summary>Я представитель</summary>
+            <div class="me-claim-box">
+                {% if rep_id == p.client_id and claim_error %}<p class="me-error">{{ claim_error }}</p>{% endif %}
+                <form method="post" action="/me/rep">
+                    <input type="hidden" name="client_id" value="{{ p.client_id }}">
+                    <label class="me-label" for="rbd{{ p.client_id }}">Дата рождения этого человека</label>
+                    <input class="me-input" id="rbd{{ p.client_id }}" type="date" name="birthday" required>
+                    <button class="me-btn" type="submit">Подтвердить</button>
+                </form>
+            </div>
+        </details>
+        </div>
         {% endif %}
 
         {% if p.upcoming %}

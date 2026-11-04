@@ -34,6 +34,7 @@
 <main class="me-page">
     <a class="me-back" href="/me">← Личный кабинет</a>
     <h1>{{ title }}</h1>
+    {% if ward %}<p class="me-since">Вы смотрите историю как представитель</p>{% endif %}
     {% if history.since %}<p class="me-since">Бегает с {{ history.since }}</p>{% endif %}
 
     <div class="me-chips me-tabs" role="tablist">
@@ -194,14 +195,36 @@
     {% endfor %}
     </section>
 
+    {% if reps %}
+    <section class="me-reps">
+        <div class="me-sub">Доступ к вашей истории</div>
+        {% for rp in reps %}
+        <div class="me-rep">
+            <span class="me-rep-who">{{ rp.email_masked }}<small>с {{ rp.created_at.strftime('%d.%m.%Y') }}{% if card_ids|length > 1 %} · карточка №{{ rp.client_id }}{% endif %}</small></span>
+            <form method="post" action="/me/rep/remove" onsubmit="return confirm('Убрать доступ {{ rp.email_masked }} к вашей истории?')">
+                <input type="hidden" name="rep_id" value="{{ rp.id }}">
+                <button class="me-inline" type="submit">Убрать</button>
+            </form>
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
     <div class="me-foot">
         <a href="mailto:1@krasmarafon.ru?subject={{ ('Ошибка в истории, карточка №' ~ ids)|urlencode }}">Нашли чужой забег? Сообщить об ошибке</a>
+        {% if ward %}
+        <form method="post" action="/me/unrep" onsubmit="return confirm('Отказаться от доступа к истории {{ title }}?')">
+            <input type="hidden" name="client_id" value="{{ card_ids[0] }}">
+            <button class="me-inline" type="submit">Отказаться от доступа</button>
+        </form>
+        {% else %}
         {% for cid in card_ids %}
         <form method="post" action="/me/unclaim" onsubmit="return confirm('Отвязать карточку №{{ cid }}? История пропадёт из кабинета.')">
             <input type="hidden" name="client_id" value="{{ cid }}">
             <button class="me-inline" type="submit">Это не моя карточка №{{ cid }} — отвязать</button>
         </form>
         {% endfor %}
+        {% endif %}
     </div>
     <script>
     (function () {

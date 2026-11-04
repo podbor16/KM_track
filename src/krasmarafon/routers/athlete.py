@@ -15,7 +15,8 @@ from src.common.emails import is_valid_email
 from src.config import settings
 from src.krasmarafon.services import athlete_auth as aa
 from src.krasmarafon.services import athlete_claims as acl
-from src.krasmarafon.services.athlete_cabinet import cabinet
+from src.krasmarafon.services import athlete_reps as arp
+from src.krasmarafon.services.athlete_cabinet import cabinet, card_titles
 from src.krasmarafon.services.athlete_claims import ClaimResult
 from src.krasmarafon.services.athlete_history import build_history
 
@@ -42,7 +43,8 @@ CLAIM_ERRORS = {
     "date": "Проверьте дату",
     "not_yours": "Эта карточка не совпадает с данными ваших заявок — напишите нам на 1@krasmarafon.ru",
     "other_person": "У вас уже есть своя карточка с другой датой рождения. Если это ваш ребёнок или близкий — "
-                    "доступ к его истории появится позже",
+                    "нажмите «Я представитель»",
+    "own": "Это ваша карточка — откройте свою историю",
 }
 
 
@@ -166,7 +168,7 @@ def _login_redirect() -> RedirectResponse:
 
 
 @router.get("/me", response_class=HTMLResponse)
-async def me_page(request: Request, claim: str = "", r: str = "", changed: str = "",
+async def me_page(request: Request, claim: str = "", rep: str = "", r: str = "", changed: str = "",
                   km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
     if not email:
@@ -174,20 +176,26 @@ async def me_page(request: Request, claim: str = "", r: str = "", changed: str =
     claimed, dropped = await run_in_threadpool(acl.claimed_cards, email)
     # привязки, снятые при открытии истории (/me/history → сюда), — для пояснения «Данные карточки изменились»
     dropped = list(dropped) + [int(x) for x in changed.split(",") if x.isascii() and x.isdigit() and len(x) <= 10]
+    reps, reps_dropped = await run_in_threadpool(arp.rep_cards, email)
     people = await run_in_threadpool(cabinet, email)
     history_note = await run_in_threadpool(_history_note, claimed, email) if claimed else None
-    claim_id = int(claim) if claim.isascii() and claim.isdigit() and len(claim) <= 10 else None
+    claim_id = _id_param(claim)
+    rep_id = _id_param(rep)
     claim_error = CLAIM_ERRORS.get(r)
-    form_shown = any(p["can_claim"] and p["client_id"] == claim_id for p in people)
-    not_yours = None if form_shown or r != "not_yours" else claim_error
+    shown = {p["client_id"] for p in people if p["can_claim"]}
+    not_yours = None if {claim_id, rep_id} & shown or r != "not_yours" else claim_error
     return templates.TemplateResponse("krasmarafon/me.html", {
         "request": request, "email": email, "people": people,
         "diploma_event_ids": set(_diploma_event_ids()),
-        "claimed": set(claimed), "dropped": set(dropped),
-        "claim_id": claim_id, "claim_error": claim_error,
+        "claimed": set(claimed), "dropped": set(dropped), "reps": set(reps), "reps_dropped": set(reps_dropped),
+        "claim_id": claim_id, "rep_id": rep_id, "claim_error": claim_error,
         "claim_error_page": not_yours,       # у «не ваша / нет такой» формы нет — ошибка над списком
         "history_note": history_note,
     })
+
+
+def _id_param(value: str) -> int | None:
+    return int(value) if value.isascii() and value.isdigit() and len(value) <= 10 else None
 
 
 def _plural(n: int, one: str, few: str, many: str) -> str:
@@ -241,6 +249,72 @@ async def unclaim_card(request: Request, client_id: int = Form(...), km_athlete:
     return RedirectResponse("/me", status_code=303)
 
 
+@router.post("/me/rep")
+async def become_rep(request: Request, background_tasks: BackgroundTasks, client_id: int = Form(...),
+                     birthday: str = Form(""), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    try:
+        born = dt.date.fromisoformat(birthday.strip())
+    except ValueError:
+        return RedirectResponse(f"/me?rep={client_id}&r=date", status_code=303)
+    try:
+        result = await run_in_threadpool(arp.become_rep, email, client_id, born)
+    except ValueError:      # чужая и несуществующая карточка неразличимы
+        return RedirectResponse(f"/me?rep={client_id}&r=not_yours", status_code=303)
+    if result == arp.RepResult.OK:
+        background_tasks.add_task(arp.notify_rep, client_id, email)
+    if result in (arp.RepResult.OK, arp.RepResult.ALREADY):
+        return RedirectResponse("/me", status_code=303)
+    return RedirectResponse(f"/me?rep={client_id}&r={result.value}", status_code=303)
+
+
+@router.post("/me/unrep")
+async def unrep(request: Request, client_id: int = Form(...), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    await run_in_threadpool(arp.remove_rep, email, client_id)
+    return RedirectResponse("/me", status_code=303)
+
+
+@router.post("/me/rep/remove")
+async def remove_rep(request: Request, rep_id: int = Form(...), km_athlete: str | None = Cookie(default=None)):
+    if _foreign_origin(request):
+        return _forbidden()
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return RedirectResponse("/me/login", status_code=303)
+    await run_in_threadpool(arp.remove_rep_by_owner, email, rep_id)
+    return RedirectResponse("/me/history", status_code=303)
+
+
+@router.get("/me/athlete/{client_id}", response_class=HTMLResponse)
+async def athlete_page(request: Request, client_id: int, km_athlete: str | None = Cookie(default=None)):
+    email = await run_in_threadpool(aa.session_email, km_athlete)
+    if not email:
+        return _login_redirect()
+    claimed, _ = await run_in_threadpool(acl.claimed_cards, email)
+    if client_id in claimed:
+        return RedirectResponse("/me/history", status_code=302)
+    reps, _ = await run_in_threadpool(arp.rep_cards, email)
+    if client_id not in reps:
+        raise HTTPException(status_code=404)
+    results, leads = await run_in_threadpool(acl.history_rows, [client_id])
+    titles = await run_in_threadpool(card_titles, [client_id])
+    codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
+    history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
+    return templates.TemplateResponse("krasmarafon/me-history.html", {
+        "request": request, "title": titles[client_id]["title"], "history": history, "card_ids": [client_id],
+        "ward": True, "reps": [],
+    })
+
+
 @router.get("/me/history", response_class=HTMLResponse)
 async def history_page(request: Request, km_athlete: str | None = Cookie(default=None)):
     email = await run_in_threadpool(aa.session_email, km_athlete)
@@ -255,5 +329,6 @@ async def history_page(request: Request, km_athlete: str | None = Cookie(default
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
     history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
     return templates.TemplateResponse("krasmarafon/me-history.html", {
-        "request": request, "title": title, "history": history, "card_ids": claimed,
+        "request": request, "title": title, "history": history, "card_ids": claimed, "ward": False,
+        "reps": await run_in_threadpool(arp.reps_of, email),
     })

@@ -397,3 +397,199 @@ def test_undo_fix_fio_merge_moves_rep_back(db, cards, dq):
     assert rep_rows(cur) == [{"client_id": cards["twin"], "birthday": BD_KID}]
     assert action_details(cur, undo_id)["athlete_reps"] == [
         {"client_id": cards["twin"], "email": PARENT, "moved_back": True}]
+
+
+# ---------------------------------------------------------------- интерфейс: /me, «Я представитель», история подопечного
+
+import re  # noqa: E402
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app import app  # noqa: E402
+from src.krasmarafon.services import athlete_auth as aa  # noqa: E402
+
+
+@pytest.fixture
+def web(db, cards, mail, tmp_path, monkeypatch):
+    """Кабинет включён (файл-флаг подменён), клиент HTTPS, коды/сессии тестовых почт убираются до и после."""
+    conn, cur = db
+    flag = tmp_path / "athlete_cabinet_enabled.local"
+    flag.write_text("true", encoding="utf-8")
+    monkeypatch.setattr("src.config.event_loader._ATHLETE_CABINET_FILE", flag)
+
+    def wipe():
+        cur.execute("DELETE FROM athlete_login_codes WHERE email LIKE %s OR ip = 'testclient'", (f"%@{DOMAIN}",))
+        cur.execute("DELETE FROM athlete_sessions WHERE email LIKE %s", (f"%@{DOMAIN}",))
+        conn.commit()
+
+    wipe()
+    yield TestClient(app, base_url="https://testserver"), flag
+    wipe()
+
+
+def login(client, email=PARENT):
+    with patch.object(aa, "send_mail") as m:
+        client.post("/me/login", data={"email": email})
+    code = re.search(r"\b(\d{6})\b", m.call_args[0][2]).group(1)
+    assert client.post("/me/verify", data={"email": email, "code": code}, follow_redirects=False).status_code == 303
+
+
+def rep_via_web(client, card, birthday):
+    return client.post("/me/rep", data={"client_id": card, "birthday": birthday}, follow_redirects=False)
+
+
+def test_me_shows_both_buttons_with_forms(web, cards):
+    client, _ = web
+    login(client)
+    page = client.get("/me").text
+    assert "Это я" in page and "Я представитель" in page
+    assert 'action="/me/claim"' in page and 'action="/me/rep"' in page
+    assert "Дата рождения этого человека" in page
+    assert f'name="client_id" value="{cards["kid"]}"' in page
+    assert "Вы представитель" not in page and not re.search(r"<details[^>]* open", page)
+
+
+def test_becoming_rep_shows_badge_instead_of_buttons_and_notifies(web, cards, mail):
+    client, _ = web
+    login(client)
+    r = rep_via_web(client, cards["kid"], "2015-04-05")
+    assert r.status_code == 303 and r.headers["location"] == "/me"
+    page = client.get("/me").text
+    assert "Вы представитель · История →" in page and f'href="/me/athlete/{cards["kid"]}"' in page
+    assert f'name="client_id" value="{cards["kid"]}"' not in page
+    assert {c.args[0] for c in mail.call_args_list} == {COACH, KID, GRAN, GRAN_MA}
+    assert rep_via_web(client, cards["kid"], "2015-04-05").headers["location"] == "/me"     # повтор — без писем
+    assert mail.call_count == 4
+
+
+@pytest.mark.parametrize("code, text", [
+    ("mismatch", "Дата не совпадает"),
+    ("limit", "Слишком много попыток. Попробуйте завтра или напишите нам на 1@krasmarafon.ru"),
+    ("no_birthday", "Подтвердить не получится — напишите нам на 1@krasmarafon.ru"),
+    ("date", "Проверьте дату"),
+    ("own", "Это ваша карточка — откройте свою историю"),
+])
+def test_rep_error_is_shown_at_the_rep_form_only(web, cards, code, text):
+    client, _ = web
+    login(client)
+    page = client.get(f"/me?rep={cards['kid']}&r={code}").text
+    box = re.search(r"<details[^>]* open[^>]*>.*?</details>", page, re.S).group(0)
+    assert text in box and 'action="/me/rep"' in box and 'action="/me/claim"' not in box
+    assert "Дата не совпадает" not in client.get(f"/me?rep={cards['twin']}&r=bogus").text
+    assert "Дата не совпадает" not in client.get("/me?rep=abc&r=mismatch").text
+
+
+def test_rep_redirects_for_wrong_date_invalid_date_and_foreign_card(web, cards):
+    client, _ = web
+    login(client)
+    assert rep_via_web(client, cards["kid"], "2015-04-06").headers["location"] == f"/me?rep={cards['kid']}&r=mismatch"
+    assert rep_via_web(client, cards["kid"], "не дата").headers["location"] == f"/me?rep={cards['kid']}&r=date"
+    assert rep_via_web(client, cards["nobd"], "2015-04-05").headers["location"] == \
+        f"/me?rep={cards['nobd']}&r=no_birthday"
+    r = rep_via_web(client, cards["foreign"], "1985-02-03")
+    assert r.headers["location"] == f"/me?rep={cards['foreign']}&r=not_yours"
+    assert "Эта карточка не совпадает с данными ваших заявок" in client.get(r.headers["location"]).text
+
+
+def test_own_card_via_web_is_own(web, cards):
+    client, _ = web
+    ac.claim(PARENT, cards["kid"], BD_KID)
+    login(client)
+    assert rep_via_web(client, cards["kid"], "2015-04-05").headers["location"] == f"/me?rep={cards['kid']}&r=own"
+
+
+def test_rep_requires_session_and_same_origin(web, cards):
+    client, _ = web
+    assert rep_via_web(client, cards["kid"], "2015-04-05").headers["location"] == "/me/login"
+    login(client)
+    evil = {"origin": "https://evil.example"}
+    for url, data in (("/me/rep", {"client_id": cards["kid"], "birthday": "2015-04-05"}),
+                      ("/me/unrep", {"client_id": cards["kid"]}), ("/me/rep/remove", {"rep_id": 1})):
+        assert client.post(url, data=data, headers=evil, follow_redirects=False).status_code == 403
+    assert ar.rep_cards(PARENT) == ([], [])
+
+
+def test_athlete_page_shows_history_of_ward(web, cards):
+    client, _ = web
+    login(client)
+    rep_via_web(client, cards["kid"], "2015-04-05")
+    r = client.get(f"/me/athlete/{cards['kid']}")
+    assert r.status_code == 200
+    page = r.text
+    assert "Тестпред Маша" in page and 'data-tab="results"' in page and 'data-tab="leads"' in page
+    assert "mailto:1@krasmarafon.ru?subject=" in page
+    assert "/me/unrep" in page and "Отказаться от доступа" in page and "confirm(" in page
+    assert "/me/unclaim" not in page and "отвязать" not in page
+    assert "Доступ к вашей истории" not in page
+
+
+def test_athlete_page_access_rules(web, cards):
+    client, flag = web
+    assert client.get(f"/me/athlete/{cards['kid']}", follow_redirects=False).headers["location"] == "/me/login"
+    login(client)
+    assert client.get(f"/me/athlete/{cards['kid']}").status_code == 404           # доступа нет
+    assert client.get(f"/me/athlete/{cards['foreign']}").status_code == 404
+    rep_via_web(client, cards["kid"], "2015-04-05")
+    assert client.get(f"/me/athlete/{cards['kid']}").status_code == 200
+    ac.claim(PARENT, cards["kid"], BD_KID)                                          # потом заявил сам -> своя история
+    r = client.get(f"/me/athlete/{cards['kid']}", follow_redirects=False)
+    assert r.status_code in (302, 303) and r.headers["location"] == "/me/history"
+    flag.unlink()
+    assert client.get(f"/me/athlete/{cards['kid']}", follow_redirects=False).status_code == 404
+    assert client.post("/me/rep", data={"client_id": 1, "birthday": "2000-01-01"}).status_code == 404
+    assert client.post("/me/unrep", data={"client_id": 1}).status_code == 404
+    assert client.post("/me/rep/remove", data={"rep_id": 1}).status_code == 404
+
+
+def test_unrep_via_web_removes_badge_and_access(web, cards):
+    client, _ = web
+    login(client)
+    rep_via_web(client, cards["kid"], "2015-04-05")
+    r = client.post("/me/unrep", data={"client_id": cards["kid"]}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/me"
+    assert "Вы представитель" not in client.get("/me").text
+    assert client.get(f"/me/athlete/{cards['kid']}").status_code == 404
+
+
+def test_changed_birthday_drops_access_and_explains(web, cards, db):
+    conn, cur = db
+    client, _ = web
+    login(client)
+    rep_via_web(client, cards["kid"], "2015-04-05")
+    cur.execute("UPDATE clients SET birthday = '2015-04-06' WHERE id = %s AND surname = %s", (cards["kid"], SURNAME))
+    conn.commit()
+    page = client.get("/me").text
+    assert "Доступ к истории снят: данные карточки изменились — подтвердите заново" in page
+    assert "Вы представитель" not in page and 'action="/me/rep"' in page
+    assert client.get(f"/me/athlete/{cards['kid']}").status_code == 404
+
+
+def test_owner_sees_reps_and_removes_them(web, cards):
+    client, _ = web
+    assert ac.claim(KID, cards["kid"], BD_KID) == ClaimResult.OK
+    assert ar.become_rep(PARENT, cards["kid"], BD_KID) == RepResult.OK
+    assert ar.become_rep(COACH, cards["kid"], BD_KID) == RepResult.OK
+    login(client, KID)
+    page = client.get("/me/history").text
+    assert "Доступ к вашей истории" in page
+    block = page.split('class="me-reps"')[1].split('class="me-foot"')[0]       # в «Подробнее» те же маски — смотрим блок
+    assert "p***@reps-test.local" in block and "c***@reps-test.local" in block and PARENT not in page
+    parent_rep = next(r for r in ar.reps_of(KID) if r["email_masked"].startswith("p"))
+    assert f'name="rep_id" value="{parent_rep["id"]}"' in page and "/me/rep/remove" in page
+    r = client.post("/me/rep/remove", data={"rep_id": parent_rep["id"]}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/me/history"
+    assert ar.rep_cards(PARENT) == ([], []) and ar.rep_cards(COACH) == ([cards["kid"]], [])
+    block = client.get("/me/history").text.split('class="me-reps"')[1].split('class="me-foot"')[0]
+    assert "p***@reps-test.local" not in block and "c***@reps-test.local" in block
+
+
+def test_owner_block_hidden_without_reps_and_foreign_rep_stays(web, cards):
+    client, _ = web
+    ac.claim(KID, cards["kid"], BD_KID)
+    login(client, KID)
+    assert "Доступ к вашей истории" not in client.get("/me/history").text
+    ar.become_rep(PARENT, cards["kid"], BD_KID)
+    rep_id = ar.reps_of(KID)[0]["id"]
+    client.post("/me/unclaim", data={"client_id": cards["kid"]})             # привязки нет — убирать чужое нельзя
+    client.post("/me/rep/remove", data={"rep_id": rep_id}, follow_redirects=False)
+    assert ar.rep_cards(PARENT) == ([cards["kid"]], [])

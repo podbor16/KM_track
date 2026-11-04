@@ -65,6 +65,9 @@
 .me-claim[open] summary { background: var(--km-primary); color: #fff; }
 .me-claim-box { background: var(--km-bg-card); border-radius: var(--km-radius-card); box-shadow: var(--km-shadow);
                 padding: 12px; margin-top: 8px; max-width: 360px; }
+.me-claims { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin: 4px 0 8px; }
+.me-claims .me-claim { margin: 0; }
+.me-claims .me-claim[open] { flex: 1 0 100%; }
 .me-label { display: block; font-size: 13px; color: var(--km-text-secondary); margin-bottom: 4px; }
 
 /* История спортсмена /me/history */
@@ -113,3 +116,10 @@
 .me-foot a { color: var(--km-text-secondary); }
 .me-foot form { display: block; }
 .me-foot .me-inline { color: var(--km-text-secondary); text-decoration: underline; text-align: left; }
+
+/* Блок «Доступ к вашей истории» (представители) */
+.me-reps { margin-top: 28px; }
+.me-rep { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--km-bg-card);
+          border-radius: var(--km-radius-card); box-shadow: var(--km-shadow); padding: 10px 12px; margin-bottom: 6px; }
+.me-rep-who small { display: block; font-size: 12px; color: var(--km-text-muted); }
+.me-rep form { display: block; flex-shrink: 0; }
