@@ -10,8 +10,11 @@ glibc раздаёт потокам отдельные арены и почти 
 
 import ctypes
 import ctypes.util
+import os
 
 _libc = None
+_STATM = "/proc/self/statm"
+_PAGE_MB = (os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096) / 1048576
 
 
 def _load_libc():
@@ -33,3 +36,12 @@ def trim() -> bool:
     if not lib:
         return False
     return bool(lib.malloc_trim(0))
+
+
+def rss_mb() -> float | None:
+    """RSS текущего процесса в МБ из /proc/self/statm (дешёвое чтение файла). Не Linux — None."""
+    try:
+        with open(_STATM) as f:
+            return round(int(f.read().split()[1]) * _PAGE_MB, 1)
+    except (OSError, IndexError, ValueError):
+        return None

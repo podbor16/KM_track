@@ -20,3 +20,17 @@ def test_trim_is_noop_without_glibc():
 def test_trim_does_not_fail_on_this_platform():
     memory._libc = None
     assert memory.trim() in (True, False)
+
+
+def test_rss_mb_reads_resident_pages_from_statm(tmp_path, monkeypatch):
+    """/proc/self/statm: второе число — резидентные страницы; страница 4 КБ → 25600 стр. = 100 МБ."""
+    statm = tmp_path / "statm"
+    statm.write_text("90000 25600 3000 100 0 20000 0\n")
+    monkeypatch.setattr(memory, "_STATM", str(statm))
+    monkeypatch.setattr(memory, "_PAGE_MB", 4096 / 1048576)
+    assert memory.rss_mb() == 100.0
+
+
+def test_rss_mb_is_none_without_proc(monkeypatch, tmp_path):
+    monkeypatch.setattr(memory, "_STATM", str(tmp_path / "missing"))
+    assert memory.rss_mb() is None

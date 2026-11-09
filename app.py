@@ -608,7 +608,10 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+from src.common.memory import rss_mb
+
 _perf_logger = logging.getLogger("km_track.perf")
+_MEM_GROWTH_LOG_MB = 20
 _WEBHOOK_SECRET_RE = re.compile(r"^(/webhook/(?:siberman|tilda)/)[^/]+")
 
 
@@ -622,8 +625,15 @@ async def log_request_duration(request: Request, call_next):
     if request.url.path.startswith("/api/sse") or request.url.path == "/api/admin/metrics/live":
         return await call_next(request)
     start = _time.time()
+    rss_before = rss_mb()
     response = await call_next(request)
     duration = _time.time() - start
+    rss_after = rss_mb()
+    # Какие запросы раздувают воркер (2026-11-09). Параллельные запросы того же воркера
+    # тоже входят в прирост — смотреть на повторяющиеся пути, а не на единичную строку.
+    if rss_before is not None and rss_after is not None and rss_after - rss_before >= _MEM_GROWTH_LOG_MB:
+        _perf_logger.warning(f"MEM +{rss_after - rss_before:.0f}MB (rss {rss_after:.0f}MB) "
+                             f"{request.method} {_log_path(request.url.path)} {duration:.3f}s")
     response.headers["X-Process-Time"] = f"{duration:.3f}"
     if duration > 0.5:
         _perf_logger.warning(f"SLOW {request.method} {_log_path(request.url.path)} {duration:.3f}s")
