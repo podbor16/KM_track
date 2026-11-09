@@ -60,7 +60,7 @@ class LeadAdminItem(BaseModel):
     created_at: Optional[str] = None   # дата заявки — видно, какая основная (самая поздняя)
     dup_main: Optional[int] = None     # «Сделать основной» — ручной выбор
     name_ok: Optional[int] = None      # «Имя в порядке»
-    refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»)
+    refund: Optional[int] = None       # 0 — нет, 1 — возврат вручную, 2 — из Тильды («Архивные»/«Завершенные»)
     is_elite: Optional[int] = None     # «Элита» — на сайте вместо номера
     is_pacer: Optional[int] = None     # «Пейсер» — на сайте вместо номера
     pd_refused: Optional[int] = None   # «Не согласен на ПД» — на сайте вместо ФИ «Спортсмен»
@@ -149,7 +149,8 @@ class LeadImportPreviewResponse(BaseModel):
     to_update: int
     to_create: int
     to_delete: int
-    to_refund: int = 0     # строки из листа «Архивные» (Stage) — будут помечены «Возврат»
+    to_refund: int = 0     # строки из листа «Архивные»/«Завершенные» (Stage) — будут помечены «Возврат»
+    to_elite: int = 0      # строки из листа «Элита» (Stage) — будут помечены «Элита»
     parse_errors: List[str]
     sample: List[LeadImportPreviewRow]
     unknown_headers: List[str] = []

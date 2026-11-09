@@ -936,3 +936,17 @@ def test_stage_archived_marks_refund():
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert [r.refund for r in result.rows] == [False, True]
     assert result.unknown_headers == []
+
+
+def test_stage_completed_marks_refund_and_elite_sheet_marks_elite():
+    """Лист «Архивные» в Тильде переименован в «Завершенные» — тоже возвраты/отмены;
+    лист «Элита» (Жара) — элитный кластер (решение пользователя 2026-11-09)."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,Stage\r\n"
+        "Иванов,Иван,01.05.1990,Жара,21.1 км,2027,Входящие\r\n"
+        "Петров,Пётр,01.05.1991,Жара,21.1 км,2027,Завершенные\r\n"
+        "Сидоров,Сидор,01.05.1992,Жара,21.1 км,2027,Элита\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert [r.refund for r in result.rows] == [False, True, False]
+    assert [r.elite for r in result.rows] == [False, False, True]

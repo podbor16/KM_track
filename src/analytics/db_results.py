@@ -2397,7 +2397,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         )
                     cur.execute("UPDATE leads SET refund = %s WHERE id = %s AND refund <> 1",
                                 [2 if row.refund else 0, m['id']])
-                    if _import_is_elite(row.start_number):
+                    if _import_is_elite(row.start_number) or getattr(row, 'elite', False):
                         cur.execute("UPDATE leads SET is_elite = 1 WHERE id = %s", [m['id']])
                     if _import_is_pacer(row.start_number):
                         cur.execute("UPDATE leads SET is_pacer = 1 WHERE id = %s", [m['id']])
@@ -2461,7 +2461,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         'is_name_suspicious': int(row.is_name_suspicious),
                         'start_number': _import_bib(row.start_number),
                         'refund': 2 if getattr(row, 'refund', False) else 0,
-                        'is_elite': int(_import_is_elite(row.start_number)),
+                        'is_elite': int(_import_is_elite(row.start_number) or getattr(row, 'elite', False)),
                         'is_pacer': int(_import_is_pacer(row.start_number)),
                     },
                 )

@@ -69,7 +69,8 @@ class ImportRow:
                                  # см. migrations/add_leads_start_number.sql).
                                  # Сырая строка, int-конвертация в bulk_import_leads()
     registered_at: str = ""     # момент регистрации по красноярскому времени
-    refund: bool = False        # Stage «Архивные» — возврат (выгрузка всех листов CRM Тильды)
+    refund: bool = False        # Stage «Архивные»/«Завершенные» — возврат (выгрузка всех листов CRM Тильды)
+    elite: bool = False         # Stage «Элита» — элитный кластер (Жара)
                                  # ("Дата оплаты", запасной вариант — "Date"),
                                  # см. tilda_registered_at(). Пишется в
                                  # leads.created_at (INSERT) / LEAST(created_at, ...)
@@ -144,8 +145,8 @@ _HEADER_ALIASES = {
     # организатором файла (номера расставлены вручную поверх экспорта), см.
     # migrations/add_leads_start_number.sql. Опциональная колонка.
     "номер": "start_number",
-    # Лист CRM-воронки Тильды: «Входящие» / «Архивные» — туда переносят возвраты
-    # (решение пользователя 2026-10-06). Колонка есть в выгрузке всех листов.
+    # Лист CRM-воронки Тильды: «Входящие» / «Архивные» (с 2026-11 — «Завершенные») —
+    # туда переносят возвраты/отмены; «Элита» — элитный кластер. Колонка есть в выгрузке всех листов.
     "stage": "stage",
 }
 
@@ -473,7 +474,8 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 is_name_suspicious=is_name_suspicious(surname, name),
                 start_number=str(get("start_number") or "").strip(),
                 registered_at=tilda_registered_at(get("registered_at"), get("registered_at_fallback")),
-                refund="архив" in str(get("stage") or "").lower(),
+                refund=any(s in str(get("stage") or "").lower() for s in ("архив", "заверш")),
+                elite="элит" in str(get("stage") or "").lower(),
                 year_candidates=year_candidates([str(get("products") or "")]) if "products" in col_map else [],
             ))
         except Exception as e:

@@ -1186,7 +1186,7 @@
         if (lead.refund) {
             badge.className = 'admin-badge admin-badge--refund';
             badge.textContent = 'Возврат';
-            badge.title = lead.refund === 2 ? 'Из Тильды: лист «Архивные»' : 'Помечено вручную';
+            badge.title = lead.refund === 2 ? 'Из Тильды: лист «Архивные»/«Завершенные»' : 'Помечено вручную';
         } else {
             badge.className = `admin-badge ${lead.is_duplicate ? 'admin-badge--inactive' : 'admin-badge--active'}`;
             badge.textContent = lead.is_duplicate ? 'Дубль' : (lead.dup_main ? 'Основная' : 'Ок');
@@ -1540,8 +1540,8 @@
 
         el.style.display = '';
         el.innerHTML = `
-            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${preview.to_delete ? `, удалится: ${preview.to_delete}` : ''}${preview.to_refund ? `, возвратов (лист «Архивные»): ${preview.to_refund}` : ''}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
-            <div class="dq-muted">Возвраты: выгружайте из Тильды все листы CRM — заявки из «Архивных» станут «Возврат». Заявки, которых нет в файле, удаляются.</div>
+            <div><b>Файл разобран:</b> ${preview.total_rows} строк — обновится: ${preview.to_update}, создастся: ${preview.to_create}${preview.to_delete ? `, удалится: ${preview.to_delete}` : ''}${preview.to_refund ? `, возвратов (листы «Архивные»/«Завершенные»): ${preview.to_refund}` : ''}${preview.to_elite ? `, элита (лист «Элита»): ${preview.to_elite}` : ''}${failedRows.length ? `, ошибок: ${failedRows.length}` : ''}.</div>
+            <div class="dq-muted">Возвраты: выгружайте из Тильды все листы CRM — заявки из «Архивных»/«Завершенных» станут «Возврат», из «Элиты» — «Элита». Заявки, которых нет в файле, удаляются.</div>
             ${errorsHtml}
             ${unknownHeadersHtml}
             ${deleteHtml}

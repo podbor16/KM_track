@@ -833,6 +833,7 @@ async def upload_leads_import(
         to_create=sum(1 for r in preview_rows if r["will"] == "create"),
         to_delete=len(to_delete),
         to_refund=sum(1 for r in parsed.rows if getattr(r, "refund", False)),
+        to_elite=sum(1 for r in parsed.rows if getattr(r, "elite", False)),
         parse_errors=parsed.errors,
         sample=[LeadImportPreviewRow(**r) for r in preview_rows[:50]],
         unknown_headers=parsed.unknown_headers,
