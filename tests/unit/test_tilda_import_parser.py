@@ -950,3 +950,16 @@ def test_stage_completed_marks_refund_and_elite_sheet_marks_elite():
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert [r.refund for r in result.rows] == [False, True, False]
     assert [r.elite for r in result.rows] == [False, False, True]
+
+
+def test_absurd_amount_is_zeroed_with_warning():
+    """В сумму заказа исторического файла попал номер (1 879 325 220 ₽, заявка 58805, 2026-11-09):
+    участник импортируется, сумма — 0, в превью предупреждение."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,Сумма заказа\r\n"
+        "Иванов,Иван,01.05.1990,Х Трейл,10 км,2020,1879325220\r\n"
+        "Петров,Пётр,01.05.1991,Х Трейл,10 км,2020,1 490\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert [r.amount for r in result.rows] == ["0", "1 490"]
+    assert any("1879325220" in e and "строка 2" in e for e in result.errors)

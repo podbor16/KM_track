@@ -352,6 +352,18 @@ def _extract_event_info(get, col_map: dict, birthday: str,
     return "", None, ""
 
 
+# Самая дорогая реальная заявка — 6 890 ₽ (2026-11-09). Больше — мусор в колонке суммы
+# (в историческом файле туда попал номер: 1 879 325 220 ₽, заявка 58805).
+MAX_LEAD_AMOUNT = 100_000
+
+
+def _amount_value(raw: str) -> float:
+    try:
+        return float(raw.replace(" ", "").replace("\xa0", "").replace(",", "."))
+    except ValueError:
+        return 0.0
+
+
 _DISTANCE_RE = re.compile(r"^\d+(?:[.,]\d+)?\s*(км|м)$", re.IGNORECASE)
 
 
@@ -461,13 +473,19 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 })
                 continue
 
+            amount = str(get("amount") or "").strip()
+            if _amount_value(amount) > MAX_LEAD_AMOUNT:
+                result.errors.append(f"строка {idx}: сумма заказа {amount} — нереальная (больше {MAX_LEAD_AMOUNT:_} ₽), "
+                                     f"записана как 0")
+                amount = "0"
+
             result.rows.append(ImportRow(
                 row_number=idx, surname=surname, name=name, birthday=birthday,
                 event_name=event_name, event_year=event_year, event_distance=event_distance,
                 sex=normalize_sex(get("sex")), city=str(get("city") or "").strip(),
                 club=str(get("club") or "").strip(),
                 email=str(get("email") or "").strip(), phone=str(get("phone") or "").strip(),
-                amount=str(get("amount") or "").strip(), promocode=str(get("promocode") or "").strip(),
+                amount=amount, promocode=str(get("promocode") or "").strip(),
                 discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),
                 transaction_id=str(get("transaction_id") or "").strip(),
                 payment_system=str(get("payment_system") or "").strip(),
