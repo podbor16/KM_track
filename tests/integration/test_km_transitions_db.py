@@ -1,5 +1,6 @@
 """km_transitions (migrations/km_transitions.sql) на локальной БД (.env.local): пары «тот же забег» и «любой забег».
-Тестовые данные — события 2097–2099 «Тест переходов <суффикс> …», фамилия «Тестпереходов<суффикс>», убираются после теста."""
+Тестовые данные — события 2097–2099 «Тест переходов <суффикс> …», фамилия «Тестпереходов<суффикс>», убираются после теста.
+Тест 3 создаёт события с реальным именем «Детский забег» 2097–2098 (убираются фикстурой по заявкам прогона)."""
 import uuid
 
 import pytest
@@ -21,7 +22,8 @@ def db():
         pytest.fail("Нет процедуры refresh_km_transitions — примените migrations/km_transitions.sql к локальной БД")
 
     def cleanup():
-        cur.execute("SELECT id FROM events WHERE event_name LIKE %s", (f"{EV}%",))
+        cur.execute("SELECT id FROM events WHERE event_name LIKE %s OR id IN (SELECT event_id FROM leads WHERE surname = %s)",
+                    (f"{EV}%", SUR))
         evs = [r["id"] for r in cur.fetchall()]
         if evs:
             ph = ",".join(map(str, evs))
@@ -32,9 +34,9 @@ def db():
 
     cleanup()
     yield cur
-    cleanup()
-    cur.execute("CALL refresh_km_transitions()")   # убрать тестовые строки из km_transitions
+    cur.execute("DELETE t FROM km_transitions t JOIN clients c ON c.id = t.client_id WHERE c.surname = %s", (SUR,))
     conn.commit()
+    cleanup()
     conn.close()
 
 
@@ -76,7 +78,7 @@ def test_same_event_pairs_take_longest_distance_and_skip_refunds(db):
     assert second["same_direction"] == "Сократили"
 
 
-def test_any_event_pair_and_kids_race(db):
+def test_any_event_pair_crosses_events(db):
     kids, b = f"{EV} Детский забег", f"{EV} B"
     k = _event(db, kids, "1", 2097, "2097-06-01")
     b1 = _event(db, b, "2", 2097, "2097-08-01")
@@ -95,12 +97,9 @@ def test_kids_race_has_no_same_event_pair(db):
     # реальное название забега: правило «Детский забег → пары тот же забег нет» привязано к нему
     k1 = _event(db, kids, "0.5", 2097, "2097-06-01")
     k2 = _event(db, kids, "1", 2098, "2098-06-01")
-    try:
-        _lead(db, k1, kids, "500 м", 2097)
-        _lead(db, k2, kids, "1 км", 2098)
-        rows = [r for r in _rows(db) if r["event_name"] == kids]
-        assert [r["same_direction"] for r in rows] == [None, None]
-        assert rows[1]["any_prev_event"] == kids          # пара «любой забег» есть
-    finally:
-        db.execute("DELETE FROM leads WHERE event_id IN (%s, %s)", (k1, k2))
-        db.execute("DELETE FROM events WHERE id IN (%s, %s)", (k1, k2))
+    _lead(db, k1, kids, "500 м", 2097)
+    _lead(db, k2, kids, "1 км", 2098)
+    rows = [r for r in _rows(db) if r["event_name"] == kids]
+    assert [r["same_direction"] for r in rows] == [None, None]
+    assert all(r["same_prev_year"] is None and r["same_prev_dist"] is None for r in rows)
+    assert rows[1]["any_prev_event"] == kids          # пара «любой забег» есть

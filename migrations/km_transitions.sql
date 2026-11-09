@@ -1,6 +1,7 @@
 -- Переходы дистанций для DataLens (2026-11-09, spec docs/superpowers/specs/2026-11-09-datalens-distance-transitions-design.md).
 -- Одна строка на участие человека в забеге в году; пары «тот же забег» и «любой забег» — оконными LAG.
--- Считается ~3 с, поэтому таблица материализуется и пересчитывается событием раз в час (event_scheduler = ON).
+-- Считается ~3 с, поэтому таблица материализуется и пересчитывается событием раз в час (требуется event_scheduler = ON, проверить `SELECT @@event_scheduler`).
+-- Таблица целиком производная: при смене схемы — DROP TABLE IF EXISTS km_transitions перед CREATE, без ALTER.
 -- Применять от root: mysql -u root krasmarafon < migrations/km_transitions.sql
 
 CREATE TABLE IF NOT EXISTS km_transitions (
@@ -24,6 +25,11 @@ DROP PROCEDURE IF EXISTS refresh_km_transitions;
 DELIMITER //
 CREATE DEFINER = `root`@`localhost` PROCEDURE refresh_km_transitions()
 BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN DO RELEASE_LOCK('refresh_km_transitions'); RESIGNAL; END;
+    IF GET_LOCK('refresh_km_transitions', 60) = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refresh_km_transitions уже выполняется';
+    END IF;
+    SET SESSION lock_wait_timeout = 30;
     DROP TABLE IF EXISTS km_transitions_new;
     CREATE TABLE km_transitions_new LIKE km_transitions;
     INSERT INTO km_transitions_new
@@ -59,7 +65,8 @@ BEGIN
     FROM w;
     DROP TABLE IF EXISTS km_transitions_old;
     RENAME TABLE km_transitions TO km_transitions_old, km_transitions_new TO km_transitions;
-    DROP TABLE km_transitions_old;
+    DROP TABLE IF EXISTS km_transitions_old;
+    DO RELEASE_LOCK('refresh_km_transitions');
 END //
 DELIMITER ;
 
