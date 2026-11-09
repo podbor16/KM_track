@@ -1,6 +1,6 @@
 # DataLens «Переходы дистанций» Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Заменить некорректный чарт «Переходы дистанций» набором виджетов на материализованной таблице `km_transitions`, которую раз в час пересчитывает событие MySQL.
 
@@ -35,7 +35,7 @@
 - Create: `tests/integration/test_km_transitions_db.py`
 - Create: `migrations/km_transitions.sql`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 ```python
 """km_transitions (migrations/km_transitions.sql) на локальной БД (.env.local): пары «тот же забег» и «любой забег».
@@ -146,12 +146,12 @@ def test_kids_race_has_no_same_event_pair(db):
         db.execute("DELETE FROM events WHERE id IN (%s, %s)", (k1, k2))
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `conda run -n base python -m pytest tests/integration/test_km_transitions_db.py -v`
 Expected: 3 FAILED с «Нет процедуры refresh_km_transitions».
 
-- [ ] **Step 3: Написать миграцию `migrations/km_transitions.sql`**
+- [x] **Step 3: Написать миграцию `migrations/km_transitions.sql`**
 
 ```sql
 -- Переходы дистанций для DataLens (2026-11-09, spec docs/superpowers/specs/2026-11-09-datalens-distance-transitions-design.md).
@@ -227,7 +227,7 @@ CREATE DEFINER = `root`@`localhost` EVENT ev_refresh_km_transitions
     DO CALL refresh_km_transitions();
 ```
 
-- [ ] **Step 4: Применить к локальной БД**
+- [x] **Step 4: Применить к локальной БД**
 
 Run (Git Bash, пароль из `.env.local`):
 ```bash
@@ -238,12 +238,12 @@ PW=$(grep '^DB_PASSWORD=' .env.local | cut -d= -f2-)
 ```
 Expected: `COUNT(*)` ≈ 50–55 тыс. (людей-участий меньше заявок), событие `ENABLED`.
 
-- [ ] **Step 5: Запустить тесты — проходят**
+- [x] **Step 5: Запустить тесты — проходят**
 
 Run: `conda run -n base python -m pytest tests/integration/test_km_transitions_db.py -v`
 Expected: 3 passed. Если упало на `event_distance + 0` для «0.5»/«21.1» — проверить тип `events.event_distance` (`SHOW COLUMNS FROM events LIKE 'event_distance'`) и поправить приведение.
 
-- [ ] **Step 6: Сверка с контрольными цифрами (локальная БД — снимок от 2026-10-06, цифры будут меньше прода)**
+- [x] **Step 6: Сверка с контрольными цифрами (локальная БД — снимок от 2026-10-06, цифры будут меньше прода)**
 
 Run:
 ```bash
@@ -251,7 +251,7 @@ Run:
 ```
 Expected: 4 группы (`Впервые на забеге`, `Та же дистанция`, `Выросли`, `Сократили`), числа того же порядка, что в спеке.
 
-- [ ] **Step 7: Полный прогон unit-тестов и коммит**
+- [x] **Step 7: Полный прогон unit-тестов и коммит**
 
 Run: `conda run -n base python -m pytest tests/unit/ -q`
 Expected: all passed.
@@ -266,7 +266,7 @@ git commit -m "feat(analytics): km_transitions — переходы дистан
 
 **Files:** — (только прод)
 
-- [ ] **Step 1: Применить миграцию от root через plink**
+- [x] **Step 1: Применить миграцию от root через plink**
 
 ```bash
 cd "C:/Users/podbo/Работа/КРАСМАРАФОН/KM_track"
@@ -282,7 +282,7 @@ EOF
 ```
 Expected: `0`, без ошибок.
 
-- [ ] **Step 2: Проверить таблицу, событие и права DataLens**
+- [x] **Step 2: Проверить таблицу, событие и права DataLens**
 
 ```bash
 python - <<'EOF'
@@ -300,7 +300,7 @@ EOF
 ```
 Expected: строк ≈ 55 тыс.; по Снежной 2026 — `Впервые на забеге` ≈ 230, `Та же дистанция` ≈ 188, `Выросли` ≈ 9, `Сократили` ≈ 6 (по людям может быть чуть меньше); событие `ENABLED`, `EVERY 1 HOUR`; у `datalens_ro` есть `SELECT ON krasmarafon.*`.
 
-- [ ] **Step 3: Через ~6 минут убедиться, что событие сработало**
+- [x] **Step 3: Через ~6 минут убедиться, что событие сработало**
 
 Повторить запрос `SELECT MAX(refreshed_at) FROM krasmarafon.km_transitions` — время обновилось (событие стартует через 5 мин после создания).
 
@@ -310,15 +310,15 @@ Expected: строк ≈ 55 тыс.; по Снежной 2026 — `Впервы�
 
 **Files:** `scratchpad/w/create_ds.json` (рабочий)
 
-- [ ] **Step 1: Узнать схему `createDataset`**
+- [x] **Step 1: Узнать схему `createDataset`**
 
 MCP `describe_commands(["createDataset"])` — результат большой, читать из файла `tool-results`, нужны поля `data.dataset.sources[]` (`source_type: MYSQL_TABLE`, `parameters: {db_name, table_name}`, `connection_id`), `source_avatars[]`, `result_schema[]` и `workbook_id`/`name`.
 
-- [ ] **Step 2: Собрать тело по образцу существующего табличного датасета**
+- [x] **Step 2: Собрать тело по образцу существующего табличного датасета**
 
 Образец — `km_clients` (источник `MYSQL_TABLE clients` на подключении `qke7wvinjzs0a`): взять из `scratchpad/dl/dataset_v7jgd1n51f6mf.json` блоки `sources[0]` и `source_avatars[0]`, заменить `table_name` на `km_transitions`, `title` на `km_transitions`, новые `id` (uuid4) для source и avatar, `result_schema: []` (DataLens заполнит поля сам при валидации). Имя датасета — `km_transitions`, воркбук `tnh9eu5ziv8md`.
 
-- [ ] **Step 3: Валидировать и создать**
+- [x] **Step 3: Валидировать и создать**
 
 ```bash
 cd "C:/Users/podbo/AppData/Local/Temp/claude/f8d68d3f8dfa3109/fae156e1-906c-4972-a489-50fc0bbfd9ff/scratchpad"
@@ -326,7 +326,7 @@ DLV=2 python -I dl_api.py validateDataset w/val_new_ds.json w/val_new_ds_res.jso
 ```
 Expected: `code: OK`, в `result_schema` 12 полей таблицы. Затем `createDataset` (через MCP `invoke_write_command`) с телом из валидации; запомнить `datasetId`.
 
-- [ ] **Step 4: Проверить**
+- [x] **Step 4: Проверить**
 
 `getDataset` нового id: 12 полей, `component_errors` пусто; `getDatasetData` (MCP read) по полям `event_name`, `same_direction` — данные есть.
 
@@ -340,7 +340,7 @@ Expected: `code: OK`, в `result_schema` 12 полей таблицы. Зате�
 - индикатор — `widget_kw9h2xt2wojg4.json` («Ф3 - Количество заявок», metric_wizard_node);
 - таблица — `widget_eq3e9ve9c1xky.json` («Ф7 - Эффективность промокодов», table_wizard_node).
 
-- [ ] **Step 1: Индикаторы (4 шт.)**
+- [x] **Step 1: Индикаторы (4 шт.)**
 
 Для каждого `createWizardChart` (имя, фильтр чарта, показатель `COUNT([client_id])` — строка таблицы = одно участие человека):
 | Имя | Фильтр чарта |
@@ -352,7 +352,7 @@ Expected: `code: OK`, в `result_schema` 12 полей таблицы. Зате�
 
 Индикатор показывает одно число, поэтому доли — отдельной таблицей в одну строку (Step 1a).
 
-- [ ] **Step 1a: Таблица долей `П7 - Доли повторных участников`**
+- [x] **Step 1a: Таблица долей `П7 - Доли повторных участников`**
 
 `createWizardChart` табличный, без измерений, три локальных показателя (условные агрегаты одного уровня — без FIXED/AMONG; строка таблицы = одно участие человека, поэтому COUNT по строкам = люди):
 ```
@@ -362,19 +362,19 @@ Expected: `code: OK`, в `result_schema` 12 полей таблицы. Зате�
 ```
 Формат — 1 знак после запятой, постфикс «%».
 
-- [ ] **Step 2: Матрица «было → стало»**
+- [x] **Step 2: Матрица «было → стало»**
 
 `createWizardChart`, тип визуализации — сводная таблица (`pivotTable`; если API не принимает — обычная таблица с колонками `same_prev_dist`, `dist`, `Люди`). Строки — `same_prev_dist`, столбцы — `dist`, показатель — `COUNT([client_id])`, фильтр чарта — `same_prev_dist` не пусто, итоги по строкам и столбцам включены. Имя `П5 - Было → стало (тот же забег)`.
 
-- [ ] **Step 3: Таблица потоков**
+- [x] **Step 3: Таблица потоков**
 
 `createWizardChart` табличный: колонки `any_prev_event`, `any_prev_dist`, `dist`, `Люди` = `COUNT([client_id])`; фильтр чарта — локальное поле `Другой забег` = `[any_prev_event] != [event_name]` равно `true`; сортировка по `Люди` убыв. Имя `П6 - Пришли с других забегов`.
 
-- [ ] **Step 4: Fallback, если `createWizardChart` (experimental) не принимает тело**
+- [x] **Step 4: Fallback, если `createWizardChart` (experimental) не принимает тело**
 
 Остановиться и дать пользователю пошаговую инструкцию по сборке П1–П7 в мастере чартов DataLens с теми же полями/фильтрами (≈15 мин), затем продолжить с Task 5.
 
-- [ ] **Step 5: Проверить каждый чарт**
+- [x] **Step 5: Проверить каждый чарт**
 
 `getWizardChart` каждого id — `valid` у всех полей; данные — через Task 6 (embed run).
 
@@ -384,7 +384,7 @@ Expected: `code: OK`, в `result_schema` 12 полей таблицы. Зате�
 
 **Files:** `scratchpad/w/upd_dash_tr.json` (рабочий), бэкап `Claude outputs/datalens_backup_2026-11-09/dashboard_before_transitions.json`
 
-- [ ] **Step 1: Бэкап и свежий дашборд**
+- [x] **Step 1: Бэкап и свежий дашборд**
 
 ```bash
 cd "C:/Users/podbo/AppData/Local/Temp/claude/f8d68d3f8dfa3109/fae156e1-906c-4972-a489-50fc0bbfd9ff/scratchpad"
@@ -392,7 +392,7 @@ DLV=2 python -I dl_api.py getDashboard w/get_dash.json w/dash_tr_before.json > /
 cp w/dash_tr_before.json "C:/Users/podbo/Работа/КРАСМАРАФОН/KM_track/Claude outputs/datalens_backup_2026-11-09/dashboard_before_transitions.json"
 ```
 
-- [ ] **Step 2: Собрать изменения скриптом**
+- [x] **Step 2: Собрать изменения скриптом**
 
 На вкладке `title == "Мероприятия"`:
 - заменить виджет `jVW` (чарт `1dptx5bwmbxil`) виджетами П1–П7: новые item-id из `data.counter` (+1 на каждый, обновить `counter`), элементы `{"type": "widget", "namespace": "default", "data": {"hideTitle": false, "tabs": [{"id": <новый>, "title": <имя>, "chartId": <id>, "isDefault": true, "params": {}, "autoHeight": true, "description": "", "enableDescription": false, "hint": "", "enableHint": false}]}}`;
@@ -401,7 +401,7 @@ cp w/dash_tr_before.json "C:/Users/podbo/Работа/КРАСМАРАФОН/KM_
 - `connections`: удалить элементы с `kind: "ignore"` между `XXA` и `271`.
 Тело: `{"entry": {"entryId", "data", "meta"}, "mode": "publish"}` — **без revId**.
 
-- [ ] **Step 3: Отправить и проверить**
+- [x] **Step 3: Отправить и проверить**
 
 ```bash
 DLV=2 python -I dl_api.py updateDashboard w/upd_dash_tr.json w/dash_tr_res.json > /dev/null
@@ -413,18 +413,18 @@ DLV=2 python -I dl_api.py getDashboard w/get_dash.json w/dash_tr_after.json > /d
 
 ### Task 6: Проверка
 
-- [ ] **Step 1: Все виджеты строятся**
+- [x] **Step 1: Все виджеты строятся**
 
 ```bash
 "C:/Users/podbo/miniconda3/python.exe" "C:/Users/podbo/AppData/Local/Temp/claude/f8d68d3f8dfa3109/fae156e1-906c-4972-a489-50fc0bbfd9ff/scratchpad/run_all_charts.py" | tail -3
 ```
 Expected: `ИТОГО ok 62 bad 0` (56 − 1 старый + 7 новых; старый снят с дашборда и не прогоняется).
 
-- [ ] **Step 2: Селекторы фильтруют новые виджеты**
+- [x] **Step 2: Селекторы фильтруют новые виджеты**
 
 Через `dash_export.run_chart(<id П4>, {"event_name_2iel": ["Снежная семерка"], "event_year_jr76": ["2026"]}, <tab_id Мероприятий>)` — значение «Впервые на забеге» совпадает с SQL Task 2 Step 2 (≈230); без параметров — больше (все забеги).
 
-- [ ] **Step 3: Нагрузка**
+- [x] **Step 3: Нагрузка**
 
 `SHOW GLOBAL STATUS LIKE 'Max_execution_time_exceeded'` на проде — не вырос относительно значения до Task 5.
 
@@ -432,17 +432,34 @@ Expected: `ИТОГО ok 62 bad 0` (56 − 1 старый + 7 новых; ста
 
 ### Task 7: Уборка и документация
 
-- [ ] **Step 1: Удалить старый чарт и датасет (после Task 6)**
+- [x] **Step 1: Удалить старый чарт и датасет (после Task 6)**
 
 Бэкапы уже лежат в `scratchpad/dl/widget_1dptx5bwmbxil.json`, `dataset_mx42k9w98oi06.json` — скопировать в `Claude outputs/datalens_backup_2026-11-09/`. Проверить `getEntriesRelations` — связей с дашбордом нет. MCP `invoke_privileged_command`: `deleteWizardChart {"chartId": "1dptx5bwmbxil"}`, `deleteDataset {"datasetId": "mx42k9w98oi06"}`.
 
-- [ ] **Step 2: Obsidian**
+- [x] **Step 2: Obsidian**
 
 `knowledge/integrations/datalens-inspekciya-2026-11-09.md` — п.6 выполнен (ссылка на spec/план); `knowledge/integrations/datalens-obzor-dashborda.md` — вкладка «Мероприятия»: новые виджеты, датасет `km_transitions`, пересчёт раз в час; `00-home/текущие приоритеты.md` — отметить.
 
-- [ ] **Step 3: Коммит плана/отметок**
+- [x] **Step 3: Коммит плана/отметок**
 
 ```bash
 git add docs/superpowers/plans/2026-11-09-datalens-distance-transitions.md .taskmaster/tasks/todo.md
 git commit -m "docs(plan): DataLens — переходы дистанций выполнены"
 ```
+
+---
+
+## Выполнение (2026-11-09)
+
+- Task 1: `d442c15`, правки по ревью `93b35bf` (GET_LOCK, уборка тестов); спек- и качество-ревью ✅.
+- Task 2: прод — 59 332 строки, событие ENABLED, пересчёт по расписанию подтверждён (refreshed_at 15:18:47).
+- Task 3: датасет `km_transitions` = `iu7lffwhvk161`. Отклонение от плана: вычисляемые поля **в датасете**
+  («Люди» = COUNT, три доли = `SUM(IF(...)) * 100.0 / SUM(IF(ISNULL([same_prev_dist]), 0, 1))`, «Другой забег»),
+  а не локальные поля чартов: локальные агрегаты через API не применялись, `COUNT_IF` в DataLens одноаргументный.
+- Task 4: чарты П1 `lxaowi1wbo1s4`, П2 `amzed9xd6quit`, П3 `kw9onwn9ta723`, П4 `w8lz308ja6zmf`,
+  П5 `1dq55gcrvfd8k` («Было и стало» — «→» недопустим в имени), П6 `fr4jhdkkqn48y`, П7 `9lydanglrwuks`.
+- Task 5: дашборд ревизия `8kxcg4qdulvur`; дополнительно — обновлены зависимости встраивания `5jdlhdvggdsqp`
+  (без этого embed отдаёт 409 OUTDATED_DEPENDENCIES).
+- Task 6: 62/62 виджета строятся; по guid km_transitions фильтр Снежная 2026 → впервые 218, выросли 10 (= SQL);
+  связь селекторов через алиасы вкладки — проверить в интерфейсе.
+- Task 7: удалены чарт `1dptx5bwmbxil` и датасет `mx42k9w98oi06` (бэкап в `Claude outputs/datalens_backup_2026-11-09/`).
