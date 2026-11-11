@@ -71,6 +71,8 @@ class ImportRow:
     registered_at: str = ""     # момент регистрации по красноярскому времени
     refund: bool = False        # Stage «Архивные»/«Завершенные» — возврат (выгрузка всех листов CRM Тильды)
     elite: bool = False         # Stage «Элита» — элитный кластер (Жара)
+    products: str = ""          # состав заказа (колонка product) — для DataLens: доп. товары,
+                                 # льготная категория, северная ходьба (2026-11-11)
                                  # ("Дата оплаты", запасной вариант — "Date"),
                                  # см. tilda_registered_at(). Пишется в
                                  # leads.created_at (INSERT) / LEAST(created_at, ...)
@@ -494,6 +496,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 registered_at=tilda_registered_at(get("registered_at"), get("registered_at_fallback")),
                 refund=any(s in str(get("stage") or "").lower() for s in ("архив", "заверш")),
                 elite="элит" in str(get("stage") or "").lower(),
+                products=str(get("products") or "").strip() if "products" in col_map else "",
                 year_candidates=year_candidates([str(get("products") or "")]) if "products" in col_map else [],
             ))
         except Exception as e:

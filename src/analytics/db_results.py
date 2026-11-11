@@ -2397,6 +2397,11 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         )
                     cur.execute("UPDATE leads SET refund = %s WHERE id = %s AND refund <> 1",
                                 [2 if row.refund else 0, m['id']])
+                    # Состав заказа — только если в БД пусто: у вебхук-заявки он полный, а в файле
+                    # организатор мог его укоротить (2026-11-11: импорт products не писал вовсе).
+                    if getattr(row, 'products', ''):
+                        cur.execute("UPDATE leads SET products = %s WHERE id = %s AND (products = '' OR products IS NULL)",
+                                    [row.products, m['id']])
                     if _import_is_elite(row.start_number) or getattr(row, 'elite', False):
                         cur.execute("UPDATE leads SET is_elite = 1 WHERE id = %s", [m['id']])
                     if _import_is_pacer(row.start_number):
@@ -2431,7 +2436,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
-                        %(event_year)s, '',
+                        %(event_year)s, %(products)s,
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
                         %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s,
                         %(refund)s, %(is_elite)s, %(is_pacer)s
@@ -2461,6 +2466,7 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         'is_name_suspicious': int(row.is_name_suspicious),
                         'start_number': _import_bib(row.start_number),
                         'refund': 2 if getattr(row, 'refund', False) else 0,
+                        'products': getattr(row, 'products', '') or '',
                         'is_elite': int(_import_is_elite(row.start_number) or getattr(row, 'elite', False)),
                         'is_pacer': int(_import_is_pacer(row.start_number)),
                     },

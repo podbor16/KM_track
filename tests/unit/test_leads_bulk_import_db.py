@@ -681,3 +681,50 @@ def test_deletion_scoped_to_event_name_and_year_only(mock_get_conn):
     select_calls = [c for c in cur.execute.call_args_list if "FROM leads" in c.args[0] and "WHERE event_name" in c.args[0]]
     assert len(select_calls) == 1
     assert select_calls[0].args[1] == ("Весна", 2027)
+
+
+# --- products (состав заказа) — 2026-11-11 ------------------------------
+# Импорт не сохранял products: у всех импортированных событий 2024–2026 он пуст,
+# из-за чего в DataLens слепы доп. товары, льготные категории и признак ходьбы.
+
+@patch("src.analytics.db_results.recompute_duplicate_flag")
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_new_lead_insert_saves_products(mock_get_conn, mock_recompute):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.return_value = []
+    cur.lastrowid = 999
+    cur.fetchone.return_value = {"client_id": 55, "event_id": 3}
+
+    bulk_import_leads([_row(products="7 км Снежная семерка 2026 (snow7-2026, Баф + 670 р: Добавить)")])
+
+    insert_call = next(c for c in cur.execute.call_args_list if "INSERT INTO leads" in c.args[0])
+    assert insert_call.args[1]["products"] == "7 км Снежная семерка 2026 (snow7-2026, Баф + 670 р: Добавить)"
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_fills_products_only_when_empty(mock_get_conn):
+    """Пустой products в БД заполняется из файла; заполненный (из вебхука) не перетирается —
+    организатор мог укоротить текст продукта в файле."""
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row(products="2 км Снежная семерка северная ходьба 2026 (snow2w-2026)")])
+
+    calls = [c for c in cur.execute.call_args_list if "SET products" in c.args[0]]
+    assert len(calls) == 1
+    sql, params = calls[0].args
+    assert "products = ''" in sql or "products IS NULL" in sql
+    assert params == ["2 км Снежная семерка северная ходьба 2026 (snow2w-2026)", 101]
+
+
+@patch("src.analytics.db_results.get_pooled_connection")
+def test_matched_row_update_skips_products_when_file_has_none(mock_get_conn):
+    conn, cur = _mock_conn()
+    mock_get_conn.return_value = conn
+    cur.fetchall.side_effect = [[{"id": 101}], []]
+
+    bulk_import_leads([_row()])
+
+    assert [c for c in cur.execute.call_args_list if "SET products" in c.args[0]] == []

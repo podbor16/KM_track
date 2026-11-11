@@ -963,3 +963,15 @@ def test_absurd_amount_is_zeroed_with_warning():
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert [r.amount for r in result.rows] == ["0", "1 490"]
     assert any("1879325220" in e and "строка 2" in e for e in result.errors)
+
+
+def test_products_blob_is_kept_on_import_row():
+    """Состав заказа нужен DataLens (доп. товары, льготные категории, ходьба) — 2026-11-11."""
+    csv_text = (
+        "surname;Name;birthday;product\r\n"
+        'Иванов;Иван;01.05.1990;"7 км Снежная семерка 2026 (snow7-2026, Выберите категорию: Основная категория, '
+        'Баф + 670 р: Добавить) x 1 ≡ 2160"\r\n'
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert result.rows[0].products.startswith("7 км Снежная семерка 2026 (snow7-2026")
+    assert "Баф + 670 р: Добавить" in result.rows[0].products
