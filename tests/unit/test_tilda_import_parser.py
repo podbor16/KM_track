@@ -965,6 +965,19 @@ def test_absurd_amount_is_zeroed_with_warning():
     assert any("1879325220" in e and "строка 2" in e for e in result.errors)
 
 
+def test_unrealistic_discount_is_zeroed_with_warning():
+    """Сдвиг полей в историческом файле: в скидку попал номер (15 629 439 934 ₽, заявка 11937, 2026-11-11):
+    участник импортируется, скидка — 0, в превью предупреждение."""
+    csv_text = (
+        "Фамилия,Имя,Дата рождения,Событие,Дистанция,Год,Сумма скидки\r\n"
+        "Иванов,Иван,01.05.1990,Х Трейл,10 км,2020,15629439934\r\n"
+        "Петров,Пётр,01.05.1991,Х Трейл,10 км,2020,298\r\n"
+    )
+    result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
+    assert [r.discount for r in result.rows] == ["0", "298"]
+    assert any("15629439934" in e and "строка 2" in e and "скидк" in e for e in result.errors)
+
+
 def test_products_blob_is_kept_on_import_row():
     """Состав заказа нужен DataLens (доп. товары, льготные категории, ходьба) — 2026-11-11."""
     csv_text = (

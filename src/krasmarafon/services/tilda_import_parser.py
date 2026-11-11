@@ -480,6 +480,11 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 result.errors.append(f"строка {idx}: сумма заказа {amount} — нереальная (больше {MAX_LEAD_AMOUNT:_} ₽), "
                                      f"записана как 0")
                 amount = "0"
+            discount = str(get("discount") or "").strip()
+            if _amount_value(discount) > MAX_LEAD_AMOUNT:  # сдвиг полей: заявки 11937/37837 (2026-11-11)
+                result.errors.append(f"строка {idx}: сумма скидки {discount} — нереальная (больше {MAX_LEAD_AMOUNT:_} ₽), "
+                                     f"записана как 0")
+                discount = "0"
 
             result.rows.append(ImportRow(
                 row_number=idx, surname=surname, name=name, birthday=birthday,
@@ -488,7 +493,7 @@ def parse_tilda_export(file_bytes: bytes, filename: str,
                 club=str(get("club") or "").strip(),
                 email=str(get("email") or "").strip(), phone=str(get("phone") or "").strip(),
                 amount=amount, promocode=str(get("promocode") or "").strip(),
-                discount=str(get("discount") or "").strip(), order_id=str(get("order_id") or "").strip(),
+                discount=discount, order_id=str(get("order_id") or "").strip(),
                 transaction_id=str(get("transaction_id") or "").strip(),
                 payment_system=str(get("payment_system") or "").strip(),
                 is_name_suspicious=is_name_suspicious(surname, name),
