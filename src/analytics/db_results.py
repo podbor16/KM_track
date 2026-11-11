@@ -2192,6 +2192,12 @@ _IMPORT_UPDATABLE = ('surname', 'name', 'sex', 'city', 'club', 'email', 'phone',
 _IMPORT_NULLABLE_ON_EMPTY = {'club', 'phone'}
 
 
+def _row_order_id(row):
+    """Номер заказа строки импорта; 0/пусто — заглушка Tilda, не номер."""
+    raw = (row.order_id or '').strip()
+    return int(raw) if raw.isdigit() and raw != '0' else None
+
+
 def _find_lead_matches(cur, row) -> list:
     """Список совпавших leads (dict-строк, курсор должен быть
     dictionary=True) для row — двухуровневый поиск, общий для
@@ -2201,8 +2207,7 @@ def _find_lead_matches(cur, row) -> list:
        бесплатных/незавершённых заявок, а не настоящий номер заказа.
     2. Фоллбэк — surname+name+birthday+event_name+event_year+event_distance
        (для заявок без order_id: бесплатные события, старые данные)."""
-    order_id_raw = (row.order_id or '').strip()
-    row_order_id = int(order_id_raw) if order_id_raw.isdigit() and order_id_raw != '0' else None
+    row_order_id = _row_order_id(row)
 
     if row_order_id:
         cur.execute(
@@ -2219,9 +2224,12 @@ def _find_lead_matches(cur, row) -> list:
     # в bulk_import_leads(), иначе сравнение в WHERE падает при пустой дате
     # (дата рождения необязательна при импорте с 2026-08-18).
     row_birthday = row.birthday or '1900-01-01'
+    # У строки с номером заказа фоллбэк — только на заявки без номера: заявка с другим номером — отдельный заказ
+    # того же человека (возврат + новый заказ, Снежная 2026), а не та же заявка.
+    no_order_only = " AND (order_id IS NULL OR order_id = 0)" if row_order_id else ""
     cur.execute(
         "SELECT id, client_id, surname, name, birthday FROM leads WHERE surname=%s AND name=%s AND birthday=%s "
-        "AND event_name=%s AND event_year=%s AND event_distance=%s",
+        "AND event_name=%s AND event_year=%s AND event_distance=%s" + no_order_only,
         (row.surname, row.name, row_birthday, row.event_name, row.event_year, row.event_distance),
     )
     return cur.fetchall()
@@ -2397,6 +2405,9 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         )
                     cur.execute("UPDATE leads SET refund = %s WHERE id = %s AND refund <> 1",
                                 [2 if row.refund else 0, m['id']])
+                    if _row_order_id(row):  # найдена по ФИ+ДР заявка без номера — теперь это заявка этого заказа
+                        cur.execute("UPDATE leads SET order_id = %s WHERE id = %s AND (order_id IS NULL OR order_id = 0)",
+                                    [_row_order_id(row), m['id']])
                     # Состав заказа — только если в БД пусто: у вебхук-заявки он полный, а в файле
                     # организатор мог его укоротить (2026-11-11: импорт products не писал вовсе).
                     if getattr(row, 'products', ''):

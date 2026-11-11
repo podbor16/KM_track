@@ -91,3 +91,33 @@ def test_import_deletions_are_written_to_journal_with_row_snapshot(db, world):
     assert set(acts) == {f"lead:{i}" for i in [gone["id"], *others]}
     snap = acts[f"lead:{gone['id']}"]["details"]
     assert snap["surname"] == SURNAME and snap["name"] == "Пропал" and snap["order_id"] == ORDER_B
+
+
+def test_new_order_of_same_person_is_separate_lead_from_refunded_one(db, world):
+    """Снежная 2026: старый заказ ушёл в «Завершенные», человек оформил новый на ту же дистанцию —
+    новый заказ не должен «прилипать» к заявке старого по ФИ+ДР (заказы считаем как Tilda)."""
+    conn, cur = db
+    old = add_lead(cur, "Двазаказа", BD_PHANTOM, 9007)
+    conn.commit()
+    set_order(conn, cur, old["id"], ORDER_A)
+    refunded = import_row(ORDER_A, "Двазаказа", BD_PHANTOM, num=9007)
+    refunded.refund = True
+
+    res = bulk_import_leads([refunded, import_row(ORDER_B, "Двазаказа", BD_PHANTOM, num=9007)], scope=(EV, 2098), user=USER)
+
+    assert res["errors"] == [] and res["updated"] == 1 and res["created"] == 1
+    cur.execute("SELECT order_id, refund FROM leads WHERE event_name = %s AND name = 'Двазаказа' ORDER BY order_id", (EV,))
+    assert [(r["order_id"], r["refund"]) for r in cur.fetchall()] == [(ORDER_A, 2), (ORDER_B, 0)]
+
+
+def test_order_falls_back_to_name_match_only_for_lead_without_order(db, world):
+    """Фоллбэк по ФИ+ДР — для старых заявок без номера заказа: такая заявка обновляется, а не дублируется."""
+    conn, cur = db
+    lead = add_lead(cur, "Двазаказа", BD_PHANTOM, 9007)
+    conn.commit()
+
+    res = bulk_import_leads([import_row(ORDER_B, "Двазаказа", BD_PHANTOM, num=9007)], scope=(EV, 2098), user=USER)
+
+    assert res["updated"] == 1 and res["created"] == 0
+    cur.execute("SELECT id, order_id FROM leads WHERE event_name = %s AND name = 'Двазаказа'", (EV,))
+    assert [(r["id"], r["order_id"]) for r in cur.fetchall()] == [(lead["id"], ORDER_B)]
