@@ -71,8 +71,27 @@ def test_tshirt_size_counts_as_chosen_and_discount_kept(db):
                        "Баф + 470 рублей: Не нужен, Благотворительный взнос в фонд «Счастливые дети»: Не нужно) - 1x3780 ≡ 3780",
                378, 3402)
     p = _parts(cur, lid)
-    assert (float(p["gross"]), float(p["addons"]), float(p["charity"]), float(p["slot"])) == (3780, 1490, 0, 2290)
-    assert float(p["discount"]) == 3402 and float(p["paid"]) == 378
+    assert float(p["gross"]) == 3780 and float(p["discount"]) == 3402 and float(p["paid"]) == 378
+    assert (float(p["addons"]), float(p["charity"]), float(p["slot"])) == (149, 0, 229)
+
+
+def test_promo_discount_spread_over_slot_addons_and_charity(db):
+    cur, lead = db
+    lid = lead("Семен", "7 км Снежная семерка 2099 (snow7-2099, Выберите категорию: Основная категория, "
+                        "Гравировка на медали + 670 р.: Добавить, "
+                        "Благотворительный взнос в фонд «Счастливые дети»: 500 рублей) x 1 ≡ 2860", 1430, 1430)
+    p = _parts(cur, lid)
+    assert (float(p["addons"]), float(p["charity"]), float(p["slot"])) == (335, 250, 845)
+
+
+def test_parts_sum_to_paid_when_price_differs_from_amount(db):
+    cur, lead = db
+    lid = lead("Глеб", "10 км (xtrail2099-10, Футболка + 470 рублей: 50, "
+                       "Благотворительный взнос в фонд «Счастливые дети»: 500 рублей) x 1 ≡ 3260", 500)
+    p = _parts(cur, lid)
+    assert float(p["gross"]) == 3260
+    assert (float(p["addons"]), float(p["charity"])) == (72.09, 76.69)
+    assert p["slot"] + p["addons"] + p["charity"] == 500
 
 
 def test_truncated_products_go_to_slot_and_flagged(db):

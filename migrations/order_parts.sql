@@ -1,10 +1,11 @@
 -- Разбор заказа на слот / допы / взнос для DataLens «Финансы» (2026-11-11, решение пользователя: полная разбивка с оговоркой).
 -- km_order_parts: одна строка на заявку (без возвратов).
---   gross   — цена до скидки: число после «≡» в составе заказа, если он полный, иначе оплачено + скидка
---             (у 1 457 вебхук-заявок 2025 года сумма в leads = 0, а цена в составе есть);
---   charity — взнос «Счастливые дети» (число после «дети»:»);
---   addons  — сумма цен выбранных позиций «…+ 670 р: Добавить|Да|<размер>» (не «Не …»/«Нет»);
---   slot    — gross − addons − charity;
+--   gross   — цена до скидки: число после «≡» в составе заказа, если он полный, иначе оплачено + скидка;
+--   paid    — «Сумма заказа» (leads.amount, после скидки). Разбивка делит paid: промокод действует на весь товар
+--             со всеми опциями (решение пользователя 2026-11-11), поэтому доли — по прайсу, суммы — от paid;
+--   charity — взнос «Счастливые дети» (число после «дети»:») × paid / gross;
+--   addons  — цены выбранных позиций «…+ 670 р: Добавить|Да|<размер>» (не «Не …»/«Нет») × paid / gross;
+--   slot    — paid − addons − charity (slot + addons + charity = paid);
 --   complete = 1, если состав заказа полный (есть «≡»). Обрезанный/пустой состав → допы и взнос не видны, всё в слот.
 -- Ограничение: состав заказа пуст у прошедших импортированных событий 2024–2026 и обрезан у части вебхук-заказов.
 -- Пересчёт — событие раз в час (требуется event_scheduler = ON). Таблица производная: при смене схемы —
@@ -54,17 +55,22 @@ BEGIN
         FROM base b JOIN n ON b.complete
         WHERE REGEXP_SUBSTR(b.p, '[0-9]+ *р[^:,)]*\\)?: *(?! )(?!Не|Нет)[^,)]+', 1, n.k) IS NOT NULL
         GROUP BY b.id
+    ), priced AS (
+        SELECT b.id, b.paid, b.discount, b.complete,
+               IF(b.complete, COALESCE(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(b.p, '≡ *[0-9]+'), '[0-9]+$') AS UNSIGNED),
+                                       b.paid + b.discount),
+                  b.paid + b.discount) AS gross,
+               IF(b.complete, COALESCE(a.addons, 0), 0) AS addons_price,
+               IF(b.complete, COALESCE(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(b.p, 'дети»: *[0-9]+'), '[0-9]+$') AS UNSIGNED), 0), 0)
+                   AS charity_price
+        FROM base b LEFT JOIN adds a ON a.id = b.id
     )
-    SELECT b.id,
-           IF(b.complete, COALESCE(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(b.p, '≡ *[0-9]+'), '[0-9]+$') AS UNSIGNED), b.paid + b.discount),
-              b.paid + b.discount),
-           b.discount,
-           b.paid,
-           IF(b.complete, COALESCE(a.addons, 0), 0),
-           IF(b.complete, COALESCE(CAST(REGEXP_SUBSTR(REGEXP_SUBSTR(b.p, 'дети»: *[0-9]+'), '[0-9]+$') AS UNSIGNED), 0), 0),
-           0, b.complete, NOW()
-    FROM base b LEFT JOIN adds a ON a.id = b.id;
-    UPDATE km_order_parts_new SET slot = gross - addons - charity;
+    SELECT id, gross, discount, paid,
+           IF(gross > 0, ROUND(addons_price * paid / gross, 2), 0),
+           IF(gross > 0, ROUND(charity_price * paid / gross, 2), 0),
+           0, complete, NOW()
+    FROM priced;
+    UPDATE km_order_parts_new SET slot = paid - addons - charity;
     DROP TABLE IF EXISTS km_order_parts_old;
     RENAME TABLE km_order_parts TO km_order_parts_old, km_order_parts_new TO km_order_parts;
     DROP TABLE IF EXISTS km_order_parts_old;
