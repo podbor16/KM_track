@@ -103,3 +103,16 @@ def test_kids_race_has_no_same_event_pair(db):
     assert [r["same_direction"] for r in rows] == [None, None]
     assert all(r["same_prev_year"] is None and r["same_prev_dist"] is None for r in rows)
     assert rows[1]["any_prev_event"] == kids          # пара «любой забег» есть
+
+
+def test_multi_distance_count_and_list_per_year(db):
+    """Мультидистанции (2026-11-11): сколько разных дистанций человек бежал на забеге в году и какие — по возрастанию."""
+    c = f"{EV} C"
+    c2, c10, c5 = _event(db, c, "2", 2097, "2097-12-06"), _event(db, c, "10", 2097, "2097-12-06"), _event(db, c, "5", 2097, "2097-12-06")
+    c98 = _event(db, c, "5", 2098, "2098-12-06")
+    _lead(db, c10, c, "10 км", 2097)
+    _lead(db, c2, c, "2 км", 2097)
+    _lead(db, c5, c, "5 км", 2097, refund=1)     # возврат — не считается
+    _lead(db, c98, c, "5 км", 2098)
+    rows = _rows(db)
+    assert [(r["event_year"], r["n_dist"], r["distances"]) for r in rows] == [(2097, 2, "2 км + 10 км"), (2098, 1, "5 км")]

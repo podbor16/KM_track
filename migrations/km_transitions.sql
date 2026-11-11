@@ -3,6 +3,9 @@
 -- Считается ~3 с, поэтому таблица материализуется и пересчитывается событием раз в час (требуется event_scheduler = ON, проверить `SELECT @@event_scheduler`).
 -- Таблица целиком производная: при смене схемы — DROP TABLE IF EXISTS km_transitions перед CREATE, без ALTER.
 -- Применять от root: mysql -u root krasmarafon < migrations/km_transitions.sql
+-- 2026-11-11: + n_dist/distances (мультидистанции: сколько и какие дистанции человек бежал на забеге в году).
+
+DROP TABLE IF EXISTS km_transitions;
 
 CREATE TABLE IF NOT EXISTS km_transitions (
     client_id       INT UNSIGNED  NOT NULL,
@@ -16,6 +19,8 @@ CREATE TABLE IF NOT EXISTS km_transitions (
     any_prev_event  VARCHAR(255)  NULL,
     any_prev_year   INT           NULL,
     any_prev_dist   DECIMAL(5,1)  NULL,
+    n_dist          INT           NOT NULL DEFAULT 1,
+    distances       VARCHAR(255)  NULL,
     refreshed_at    DATETIME      NOT NULL,
     PRIMARY KEY (client_id, event_name, event_year),
     KEY idx_event (event_name, event_year)
@@ -34,13 +39,15 @@ BEGIN
     CREATE TABLE km_transitions_new LIKE km_transitions;
     INSERT INTO km_transitions_new
         (client_id, event_name, event_year, event_distance, dist, same_prev_year, same_prev_dist,
-         same_direction, any_prev_event, any_prev_year, any_prev_dist, refreshed_at)
+         same_direction, any_prev_event, any_prev_year, any_prev_dist, n_dist, distances, refreshed_at)
     WITH occ AS (
         SELECT l.client_id, l.event_name, CAST(l.event_year AS UNSIGNED) AS event_year,
                MIN(COALESCE(e.event_date, MAKEDATE(CAST(l.event_year AS UNSIGNED), 183))) AS ev_date,
                MAX(e.event_distance + 0) AS dist,
                SUBSTRING_INDEX(GROUP_CONCAT(l.event_distance ORDER BY e.event_distance + 0 DESC SEPARATOR '|'), '|', 1)
-                   AS event_distance
+                   AS event_distance,
+               COUNT(DISTINCT l.event_distance) AS n_dist,
+               GROUP_CONCAT(DISTINCT l.event_distance ORDER BY e.event_distance + 0 SEPARATOR ' + ') AS distances
         FROM leads l JOIN events e ON l.event_id = e.id
         WHERE l.refund = 0 AND l.client_id > 0
         GROUP BY l.client_id, l.event_name, l.event_year
@@ -61,7 +68,7 @@ BEGIN
                 WHEN dist > same_prev_dist THEN 'Выросли'
                 WHEN dist < same_prev_dist THEN 'Сократили'
                 ELSE 'Та же дистанция' END,
-           any_prev_event, any_prev_year, any_prev_dist, NOW()
+           any_prev_event, any_prev_year, any_prev_dist, n_dist, distances, NOW()
     FROM w;
     DROP TABLE IF EXISTS km_transitions_old;
     RENAME TABLE km_transitions TO km_transitions_old, km_transitions_new TO km_transitions;
