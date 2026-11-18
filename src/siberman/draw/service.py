@@ -545,51 +545,6 @@ def _candidate_person(entry: dict, persons: list, aliases: dict) -> tuple[int | 
     return (next(iter(matches)) if len(matches) == 1 else None), sorted(same_name)
 
 
-def _relay_team_starts(entry: dict, persons: list, aliases: dict, archive_names: dict,
-                       archive: list, through_year: int) -> tuple[int | None, int | None, str, list[str]]:
-    """Sum unique archived start years for each identifiable relay team member."""
-    member_keys = {plain_key("", entry.get(f"relay_{stage}") or "")
-                   for stage in ("swim", "bike", "run")}
-    member_keys.discard("")
-    if not member_keys:
-        return None, None, "в заявке не указаны участники этапов", ["в эстафетной заявке не указаны участники этапов"]
-
-    person_by_id = {p.id: p for p in persons}
-    starts_by_person = defaultdict(lambda: defaultdict(set))
-    for race in archive:
-        if race.year <= through_year and race.person_id is not None and hall_data.is_start(race):
-            starts_by_person[race.person_id][race.year].add(race.format)
-
-    issues, identified = [], set()
-    for key in member_keys:
-        candidates = {pid for pid, keys in aliases.items() if key in keys}
-        if len(candidates) == 1:
-            identified.add(next(iter(candidates)))
-        elif len(candidates) > 1:
-            issues.append(f"участник эстафеты «{key}» имеет несколько совпадений в реестре")
-        elif key in archive_names:
-            issues.append(f"участник эстафеты «{key}» есть в архиве, но не связан с карточкой человека")
-        else:
-            # A name absent from both the registry and Siberman archive has no historical starts.
-            continue
-
-    if issues:
-        return None, None, "участники команды сопоставлены не полностью", issues
-    if not identified:
-        return 0, 0, "в архиве Siberman нет стартов участников команды", []
-
-    counts = {"individual": 0, "relay": 0}
-    for pid in identified:
-        for formats in starts_by_person[pid].values():
-            # One bonus per person and race year, even if the archive contains more than one format.
-            counts["relay" if "relay" in formats else "individual"] += 1
-    names = ", ".join(
-        f"{person_by_id[pid].surname} {person_by_id[pid].name}".strip()
-        for pid in sorted(identified) if pid in person_by_id
-    )
-    return counts["individual"], counts["relay"], f"архив Siberman; уникальные годы по членам команды: {names}", []
-
-
 def _accumulated_for(entry: dict, year: int, current: list[dict], history: dict,
                      identities: list[dict], persons: list, aliases: dict, started: set[tuple],
                      archive_years: set[int]) -> tuple[int | None, str, list[str]]:
@@ -700,27 +655,35 @@ def chance_draft(year: int) -> bytes:
             for race in archive:
                 if race.year <= year and race.person_id == person_id and hall_data.is_start(race):
                     own_starts[race.format].add(race.year)
-            ind_value = len(own_starts["individual"])
-            relay_value = len(own_starts["relay"])
-            sources["starts_individual"] = "архив Siberman; уникальные годы личного старта"
-            sources["starts_relay"] = "архив Siberman; уникальные годы старта в эстафете"
-        elif key not in archive_names and entry.get("birthdate") is not None:
-            ind_value = relay_value = 0
-            sources["starts_individual"] = sources["starts_relay"] = "архив Siberman: совпадений по ФИО + ДР нет"
-        else:
-            ind_value = relay_value = None
-            sources["starts_individual"] = sources["starts_relay"] = "нужна проверка личности"
-        if entry["format"] == "relay":
-            ind_value, relay_value, relay_source, relay_issues = _relay_team_starts(
-                entry, persons, aliases, archive_names, archive, year)
-            sources["starts_individual"] = sources["starts_relay"] = relay_source
-            issues.extend(relay_issues)
-        for field, value in (("starts_individual", ind_value), ("starts_relay", relay_value)):
-            reported[field] = _chance_count(raw, "siberman_" + field)
+        # Count a year once even when both formats appear in the archive.
+        own_starts["relay"].difference_update(own_starts["individual"])
+        counts = {}
+        for fmt, field, form_key in (
+            ("individual", "starts_individual", "siberman_individual_starts"),
+            ("relay", "starts_relay", "siberman_relay_starts"),
+        ):
+            if person_id is not None:
+                value = len(own_starts[fmt])
+                sources[field] = "архив Siberman; старты участника, на которого оформлена заявка"
+            elif key not in archive_names and entry.get("birthdate") is not None:
+                value = 0
+                sources[field] = "архив Siberman: нет записей с таким ФИО"
+            else:
+                value = None
+                possible_years = sorted({
+                    race.year for race in archive
+                    if race.year <= year and race.format == fmt and hall_data.is_start(race)
+                    and plain_key(race.surname, race.name) == key
+                })
+                sources[field] = "нужна проверка личности по ФИО и дате рождения"
+                if possible_years:
+                    sources[field] += "; возможные годы по ФИО: " + ", ".join(map(str, possible_years))
+            counts[field] = value
+            reported[field] = _chance_count(raw, form_key)
             if value is None:
-                issues.append("не удалось подтвердить историю стартов Siberman")
+                issues.append(f"не удалось подтвердить историю стартов Siberman ({fmt})")
             elif reported[field] is not None and reported[field] != value:
-                issues.append(f"самоотчёт по {field} не совпал с архивом")
+                issues.append(f"ответ формы по {field} не совпал с архивом")
 
         current_matches = [a for a in current if a["format"] == entry["format"]
                            and plain_key(a["surname"], a["name"]) == key]
@@ -733,7 +696,9 @@ def chance_draft(year: int) -> bytes:
                 entry, year, current, history, identities, persons, aliases, started, archive_years)
             sources["draw_accumulated"] = source
             issues.extend(acc_issues)
-        reported["draw_accumulated"] = _chance_count(raw, "draw_accumulated")
+        past_draws = _chance_count(raw, "siberman_draw")
+        if past_draws is not None:
+            sources["draw_accumulated"] += f"; число участий в жеребьёвках по анкете: {past_draws}"
 
         local, local_source = local_value(entry.get("city") or "", regions)
         sources["is_local"] = local_source
@@ -782,7 +747,7 @@ def chance_draft(year: int) -> bytes:
             "fio": fio, "format": entry["format"], "gender": entry.get("gender"), "city": entry.get("city"),
             "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
             "relay_run": entry.get("relay_run"),
-            "extras": {"starts_individual": ind_value, "starts_relay": relay_value,
+            "extras": {**counts,
                        "draw_accumulated": acc_value, "is_local": local, "duathlon_222": duathlon,
                        "race_24h": race24, "tattoo": tattoo},
             "sources": sources, "reported": reported, "issues": issues,
