@@ -583,7 +583,10 @@ def _relay_team_starts(entry: dict, persons: list, aliases: dict, archive_names:
         for formats in starts_by_person[pid].values():
             # One bonus per person and race year, even if the archive contains more than one format.
             counts["relay" if "relay" in formats else "individual"] += 1
-    names = ", ".join(person_by_id[pid].fio for pid in sorted(identified) if pid in person_by_id)
+    names = ", ".join(
+        f"{person_by_id[pid].surname} {person_by_id[pid].name}".strip()
+        for pid in sorted(identified) if pid in person_by_id
+    )
     return counts["individual"], counts["relay"], f"архив Siberman; уникальные годы по членам команды: {names}", []
 
 

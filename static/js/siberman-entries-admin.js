@@ -33,6 +33,8 @@ async function entriesLoad() {
     entEl('ent-year').innerHTML = ENT.years.map(y => `<option${y === entYear ? ' selected' : ''}>${y}</option>`).join('');
     entEl('ent-export').href = `${entApi()}/export.xlsx`;
     entEl('ent-chances-export').href = `/api/siberman/admin/draw/${entYear - 1}/chances.xlsx`;
+    entEl('ent-chances-export').textContent = `Черновик шансов на гонку ${entYear}`;
+    entEl('ent-chances-year-note').textContent = `Для гонки ${entYear} используется жеребьёвка ${entYear - 1}; этот год указан в адресе выгрузки.`;
     entEl('ent-webhook').textContent = ENT.webhook_path ? location.origin + ENT.webhook_path : 'не настроен (нет SIBERMAN_WEBHOOK_SECRET)';
     entRender();
   } catch (e) { entMsg(e.message, 'err'); }
