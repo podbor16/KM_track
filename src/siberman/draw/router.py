@@ -242,6 +242,18 @@ def draw_export(year: int, user: str = Depends(api_require_auth)):
                     headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
 
 
+@router.get(ADMIN + "/chances.xlsx", dependencies=_YEAR_OK)
+def draw_chances_export(year: int, user: str = Depends(api_require_auth)):
+    """Черновик шансов по допущенным заявкам на гонку следующего года."""
+    try:
+        data = service.chance_draft(year)
+    except DrawError as e:
+        return _error(e)
+    name = f"siberman_{year + 1}_draft_chances_{datetime.date.today():%Y%m%d}.xlsx"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', **NO_STORE})
+
+
 @router.get(ADMIN + "/backup.xlsx", dependencies=_YEAR_OK)
 def draw_backup(year: int, user: str = Depends(api_require_auth)):
     """Бэкап всей жеребьёвки: ход по порядку (с исправленными и отменёнными), итог, журнал действий."""

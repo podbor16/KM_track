@@ -63,6 +63,32 @@ def load_applicants(conn, year: int) -> list[dict]:
     return rows
 
 
+def load_chance_history(conn, before_year: int) -> dict:
+    """Past draw snapshots needed for the accumulated-chance draft (read-only)."""
+    cur = conn.cursor(dictionary=True, buffered=True)
+    cur.execute("SELECT * FROM draw_applicants WHERE draw_year < %s ORDER BY draw_year, id", (before_year,))
+    applicants = cur.fetchall()
+    cur.execute("SELECT * FROM draw_picks WHERE draw_year < %s ORDER BY draw_year, position_key, id", (before_year,))
+    picks = cur.fetchall()
+    cur.execute("SELECT draw_year, capacity_men, capacity_women, capacity_relay FROM draw_config "
+                "WHERE draw_year < %s ORDER BY draw_year", (before_year,))
+    configs = {r["draw_year"]: r for r in cur.fetchall()}
+    cur.execute("SELECT draw_year, applicant_id FROM draw_audit WHERE draw_year < %s AND action='auto_invite'",
+                (before_year,))
+    offered = {(r["draw_year"], r["applicant_id"]) for r in cur.fetchall()}
+    by_year = {}
+    for row in applicants:
+        by_year.setdefault(int(row["draw_year"]), {"applicants": [], "picks": [], "config": {}, "offered": set()})
+        by_year[int(row["draw_year"])]["applicants"].append(row)
+    for row in picks:
+        by_year.setdefault(int(row["draw_year"]), {"applicants": [], "picks": [], "config": {}, "offered": set()})
+        by_year[int(row["draw_year"])]["picks"].append(row)
+    for year, value in by_year.items():
+        value["config"] = configs.get(year) or {}
+        value["offered"] = {aid for y, aid in offered if y == year}
+    return by_year
+
+
 def load_picks(conn, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM draw_picks WHERE draw_year=%s ORDER BY id", (year,))

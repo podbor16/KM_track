@@ -32,6 +32,7 @@ async function entriesLoad() {
     ENT = await entFetch('');
     entEl('ent-year').innerHTML = ENT.years.map(y => `<option${y === entYear ? ' selected' : ''}>${y}</option>`).join('');
     entEl('ent-export').href = `${entApi()}/export.xlsx`;
+    entEl('ent-chances-export').href = `/api/siberman/admin/draw/${entYear - 1}/chances.xlsx`;
     entEl('ent-webhook').textContent = ENT.webhook_path ? location.origin + ENT.webhook_path : 'не настроен (нет SIBERMAN_WEBHOOK_SECRET)';
     entRender();
   } catch (e) { entMsg(e.message, 'err'); }

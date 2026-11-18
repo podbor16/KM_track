@@ -12,8 +12,10 @@ import hashlib
 import hmac
 import io
 import logging
+import re
 import threading
 import time
+from collections import Counter, defaultdict
 
 import mysql.connector
 from openpyxl import Workbook
@@ -21,8 +23,13 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from src.config import settings
+from src.duathlon222.db import get_duathlon_connection
+from src.race_triatleta.db import get_tri_connection
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
+from src.siberman.draw.chances import (
+    build_workbook as build_chances_workbook, form_reported, load_localities, local_value, next_accumulated,
+)
 from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
 from src.siberman.draw.logic import (
     CATEGORIES, CATEGORY_LABELS, ROUND_LABELS, build_lists, category_of, check_pick,
@@ -30,6 +37,8 @@ from src.siberman.draw.logic import (
 )
 from src.siberman.draw.payments import PAYMENT_ICONS, auto_invite_allowed, next_invitee
 from src.siberman.draw.simulation import win_probabilities
+from src.siberman.entries import db as edb
+from src.siberman.hall import data as hall_data
 from src.siberman.hall import service as hall_service
 from src.siberman.hall.service import HallUnavailable
 from src.siberman.persons.linking import plain_key
@@ -453,6 +462,289 @@ def payment_export(year: int) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def _chance_count(raw: dict, key: str) -> int | None:
+    return form_reported(raw, key)
+
+
+def _yes_no(raw: dict, key: str) -> int | None:
+    value = raw.get(key)
+    if isinstance(value, bool):
+        return int(value)
+    value = str(value or "").strip().lower()
+    if value in {"да", "yes", "true", "1", "есть"}:
+        return 1
+    if value in {"нет", "no", "false", "0", "не было"}:
+        return 0
+    return None
+
+
+def _known_duathlon_starts() -> list[dict] | None:
+    """Started 222 records in the connected DB; this table has no birth date, so matches need review."""
+    conn = get_duathlon_connection()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute("""
+            SELECT YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.gender, p.status,
+                   p.run1_s, p.bike_s, p.run2_s, COUNT(c.id) AS checkpoints
+            FROM events e JOIN participants p ON p.event_id=e.id
+            LEFT JOIN checkpoints c ON c.participant_id=p.id
+            GROUP BY p.id, e.gun_datetime, p.surname, p.name, p.gender, p.status,
+                     p.run1_s, p.bike_s, p.run2_s
+        """)
+        rows = cur.fetchall()
+        return [r for r in rows if r["status"] in ("finished", "dnf", "dsq")
+                or any(r.get(k) is not None for k in ("run1_s", "bike_s", "run2_s"))
+                or int(r.get("checkpoints") or 0) > 0]
+    except mysql.connector.Error as e:
+        log.warning("[siberman/draw] 222 database unavailable for chance draft: %s", e)
+        return None
+    finally:
+        conn.close()
+
+
+def _known_24h_starts() -> list[dict] | None:
+    """Started 24h DB records; rows with six-hour event duration are excluded."""
+    conn = get_tri_connection()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor(dictionary=True, buffered=True)
+        cur.execute("""
+            SELECT YEAR(e.gun_datetime) AS race_year, e.duration_hours,
+                   p.surname, p.name, p.birthdate, p.status, p.category, COUNT(l.id) AS laps
+            FROM events e JOIN participants p ON p.event_id=e.id
+            LEFT JOIN laps l ON l.participant_id=p.id AND l.event_id=e.id
+            GROUP BY p.id, e.gun_datetime, e.duration_hours, p.surname, p.name, p.birthdate, p.status, p.category
+        """)
+        rows = cur.fetchall()
+        def six_hour(r):
+            category = str(r.get("category") or "").lower()
+            return int(r.get("duration_hours") or 0) == 6 or bool(
+                re.search(r"(?:^|\D)6\s*(?:-?\s*(?:час(?:а|ов)?|h))", category))
+        return [r for r in rows if not six_hour(r)
+                and (int(r.get("laps") or 0) > 0 or r["status"] in ("finished", "dnf", "dsq"))]
+    except mysql.connector.Error as e:
+        log.warning("[siberman/draw] 24h database unavailable for chance draft: %s", e)
+        return None
+    finally:
+        conn.close()
+
+
+def _candidate_person(entry: dict, persons: list, aliases: dict) -> tuple[int | None, list[int]]:
+    """Resolve registry identity by exact normalized FIO + birth date; never name-only auto-link."""
+    key = plain_key(entry["surname"], entry["name"])
+    dob = entry.get("birthdate")
+    same_name = {p.id for p in persons if key in aliases.get(p.id, set())}
+    if dob is None:
+        return None, sorted(same_name)
+    matches = {pid for pid in same_name if next((p.birthdate for p in persons if p.id == pid), None) == dob}
+    return (next(iter(matches)) if len(matches) == 1 else None), sorted(same_name)
+
+
+def _accumulated_for(entry: dict, year: int, current: list[dict], history: dict,
+                     identities: list[dict], persons: list, aliases: dict, started: set[tuple],
+                     archive_years: set[int]) -> tuple[int | None, str, list[str]]:
+    key = plain_key(entry["surname"], entry["name"])
+    same_name = [a for a in current if a["format"] == entry["format"]
+                 and plain_key(a["surname"], a["name"]) == key]
+    issues = []
+    if len(same_name) == 1:
+        return int(same_name[0]["draw_accumulated"]), "загруженная таблица текущей жеребьёвки (базовое значение)", issues
+    if len(same_name) > 1:
+        return None, "неоднозначная строка в текущей таблице", ["в текущей таблице найдено несколько совпадений ФИО/формата"]
+
+    previous = []
+    for draw_year, batch in history.items():
+        found = [a for a in batch["applicants"] if plain_key(a["surname"], a["name"]) == key]
+        if len(found) > 1:
+            return None, "история жеребьёвок: несколько совпадений ФИО", ["совпадение ФИО в истории жеребьёвок требует проверки"]
+        if not found:
+            continue
+        applicant = found[0]
+        dob_matches = [r for r in identities if int(r["race_year"]) == int(draw_year) + 1
+                       and plain_key(r["surname"], r["name"]) == key
+                       and r.get("birthdate") == entry.get("birthdate")]
+        if len(dob_matches) != 1:
+            return None, "история жеребьёвок: личность не подтверждена", [
+                "для исторического совпадения не найдено ровно одной записи с теми же ФИО и датой рождения"]
+        previous.append((int(draw_year), applicant, batch))
+    if not previous:
+        return None, "нет исходного значения накопленных шансов", [
+            "нет загруженной базовой таблицы и подтверждённой истории предыдущей жеребьёвки"]
+
+    draw_year, applicant, batch = max(previous, key=lambda row: row[0])
+    current_value = int(applicant["draw_accumulated"])
+    by_id = {a["id"]: a for a in batch["applicants"]}
+    lists = build_lists(by_id, batch["picks"], batch["config"])
+    placed = placement(lists, applicant["id"])
+    section = None
+    if placed:
+        row = next(r for r in lists[placed[0]] if r["applicant_id"] == applicant["id"])
+        section = row["section"]
+        if section is None:
+            return None, "не заданы ёмкости прошлой жеребьёвки", ["нельзя определить победителя без ёмкости зачёта"]
+    invited = applicant["id"] in batch["offered"] or (
+        section == "waitlist" and applicant["payment_status"] in ("pending", "unpaid", "paid"))
+    paid_started = None
+    if (section == "winner" or invited) and applicant["payment_status"] == "paid":
+        person_id, _ = _candidate_person(entry, persons, aliases)
+        event_year = draw_year + 1
+        if event_year not in archive_years or person_id is None:
+            return None, "старт после оплаты не подтверждён", [
+                f"нет достоверных данных о старте Siberman {event_year} после оплаты"]
+        paid_started = (person_id, event_year) in started
+    value, reason = next_accumulated(current_value, section, invited, applicant["payment_status"], paid_started)
+    if value is None:
+        issues.append(reason)
+    return value, f"жеребьёвка {draw_year}: {reason}", issues
+
+
+def chance_draft(year: int) -> bytes:
+    """Excel-черновик для допущенных заявок race year N+1; ничего не записывает в draw_* таблицы."""
+    conn = _connect()
+    try:
+        applicants = edb.admitted_for_draw(conn, year + 1)
+        current = ddb.load_applicants(conn, year)
+        history = ddb.load_chance_history(conn, year)
+        identities = edb.identity_rows(conn, [y + 1 for y in history])
+        archive = hall_data.load_entries(conn)
+        persons, _ = hall_data.load_people(conn)
+    finally:
+        conn.close()
+    if not applicants:
+        raise DrawError(f"нет допущенных заявок на Siberman {year + 1}")
+    duathlon_rows = _known_duathlon_starts()
+    race24_rows = _known_24h_starts()
+
+    aliases: dict[int, set[str]] = defaultdict(set)
+    for person in persons:
+        aliases[person.id].add(plain_key(person.surname, person.name))
+    started: set[tuple] = set()
+    archive_names: dict[str, set[int]] = defaultdict(set)
+    for race in archive:
+        archive_names[plain_key(race.surname, race.name)].add(race.person_id or 0)
+        if race.person_id is not None:
+            aliases[race.person_id].add(plain_key(race.surname, race.name))
+        if hall_data.is_start(race) and race.person_id is not None:
+            started.add((race.person_id, race.year))
+    archive_years = {race.year for race in archive if race.year <= year}
+    regions = load_localities()
+    admission_keys = Counter((e["format"], plain_key(e["surname"], e["name"])) for e in applicants)
+    rows, global_issues = [], [
+        "Исторические протоколы 222 Дуатлона и суточной велогонки ещё не получены; значения формы не сверены с архивом."
+    ]
+    for entry in applicants:
+        fio = f"{entry['surname']} {entry['name']}".strip()
+        key = plain_key(entry["surname"], entry["name"])
+        raw = entry.get("raw") or {}
+        issues, sources, reported = [], {}, {}
+        if admission_keys[(entry["format"], key)] > 1:
+            issues.append("несколько допущенных заявок с одинаковыми ФИО и форматом")
+        person_id, same_name_ids = _candidate_person(entry, persons, aliases)
+        if len(same_name_ids) > 1:
+            issues.append("совпадающее ФИО в реестре: сопоставление проверено по дате рождения, требуется просмотр")
+        if person_id is None and key in archive_names:
+            issues.append("ФИО есть в архиве, но нет однозначной связки по ФИО + дате рождения")
+
+        own_starts = defaultdict(set)
+        if person_id is not None:
+            for race in archive:
+                if race.year <= year and race.person_id == person_id and hall_data.is_start(race):
+                    own_starts[race.format].add(race.year)
+            ind_value = len(own_starts["individual"])
+            relay_value = len(own_starts["relay"])
+            sources["starts_individual"] = "архив Siberman; уникальные годы личного старта"
+            sources["starts_relay"] = "архив Siberman; уникальные годы старта в эстафете"
+        elif key not in archive_names and entry.get("birthdate") is not None:
+            ind_value = relay_value = 0
+            sources["starts_individual"] = sources["starts_relay"] = "архив Siberman: совпадений по ФИО + ДР нет"
+        else:
+            ind_value = relay_value = None
+            sources["starts_individual"] = sources["starts_relay"] = "нужна проверка личности"
+        if entry["format"] == "relay":
+            # One draw row represents a team; stage members do not have DOB fields in this intake schema.
+            ind_value = relay_value = None
+            sources["starts_individual"] = sources["starts_relay"] = (
+                "эстафетная заявка: бонусы участников этапов не сведены без подтверждённой личности"
+            )
+            issues.append("для эстафетной заявки нужно определить сложение личных стартов членов команды")
+        for field, value in (("starts_individual", ind_value), ("starts_relay", relay_value)):
+            reported[field] = _chance_count(raw, "siberman_" + field)
+            if value is None:
+                issues.append("не удалось подтвердить историю стартов Siberman")
+            elif reported[field] is not None and reported[field] != value:
+                issues.append(f"самоотчёт по {field} не совпал с архивом")
+
+        current_matches = [a for a in current if a["format"] == entry["format"]
+                           and plain_key(a["surname"], a["name"]) == key]
+        current_row = current_matches[0] if len(current_matches) == 1 else None
+        if current_row:
+            acc_value = int(current_row["draw_accumulated"])
+            sources["draw_accumulated"] = "загруженная таблица текущей жеребьёвки (начальное значение)"
+        else:
+            acc_value, source, acc_issues = _accumulated_for(
+                entry, year, current, history, identities, persons, aliases, started, archive_years)
+            sources["draw_accumulated"] = source
+            issues.extend(acc_issues)
+        reported["draw_accumulated"] = _chance_count(raw, "draw_accumulated")
+
+        local, local_source = local_value(entry.get("city") or "", regions)
+        sources["is_local"] = local_source
+        reported["is_local"] = _chance_count(raw, "is_local")
+        if local is None:
+            issues.append(f"город «{entry.get('city') or '—'}» требует классификации")
+
+        duathlon_report = _chance_count(raw, "222_starts")
+        race24_report = _chance_count(raw, "24h_starts")
+        duathlon = race24 = None
+        duathlon_matches = [r for r in duathlon_rows or []
+                            if plain_key(r["surname"], r["name"]) == key]
+        race24_matches = [r for r in race24_rows or [] if r.get("birthdate") == entry.get("birthdate")
+                          and plain_key(r["surname"], r["name"]) == key]
+        duathlon_known = len({int(r["race_year"]) for r in duathlon_matches})
+        race24_known = len({int(r["race_year"]) for r in race24_matches})
+        duathlon_years = sorted({int(r["race_year"]) for r in duathlon_rows or []})
+        race24_years = sorted({int(r["race_year"]) for r in race24_rows or []})
+        sources["duathlon_222"] = (
+            f"БД 222: {duathlon_known} возможных стартовых годов по ФИО, без ДР ({duathlon_years}); "
+            "автосопоставление запрещено, архивы ожидаются"
+            if duathlon_rows is not None else "БД 222 недоступна; архивные протоколы ожидаются"
+        )
+        sources["race_24h"] = (
+            f"БД 24ч: {race24_known} подтверждённых годов по ФИО + ДР ({race24_years}), 6ч исключены; "
+            "архивы ранних лет ожидаются"
+            if race24_rows is not None else "БД 24ч недоступна; архивные протоколы ожидаются"
+        )
+        reported["duathlon_222"], reported["race_24h"] = duathlon_report, race24_report
+        issues.append("старты 222 Дуатлона не рассчитаны: записи БД не содержат ДР, архивные протоколы ещё не получены")
+        issues.append("старты суточной гонки не рассчитаны полностью: архивные протоколы ранних лет ещё не получены")
+        if race24_known and race24_report is not None and race24_known != race24_report:
+            issues.append("число известных стартовых годов 24ч расходится с самоотчётом (архив неполный)")
+
+        tattoo = _yes_no(raw, "tattoo")
+        if tattoo is None and current_row:
+            tattoo = int(current_row["tattoo"])
+            sources["tattoo"] = "загруженная таблица организаторов"
+        else:
+            sources["tattoo"] = "ответ формы tattoo" if tattoo is not None else "ответ о тату не указан"
+        reported["tattoo"] = tattoo
+        if tattoo is None:
+            issues.append("нет подтверждённого ответа о тату Siberman")
+
+        rows.append({
+            "fio": fio, "format": entry["format"], "gender": entry.get("gender"), "city": entry.get("city"),
+            "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
+            "relay_run": entry.get("relay_run"),
+            "extras": {"starts_individual": ind_value, "starts_relay": relay_value,
+                       "draw_accumulated": acc_value, "is_local": local, "duathlon_222": duathlon,
+                       "race_24h": race24, "tattoo": tattoo},
+            "sources": sources, "reported": reported, "issues": issues,
+        })
+    return build_chances_workbook(rows, global_issues)
 
 
 # ── Бэкап всей жеребьёвки в Excel ───────────────────────────────────────────

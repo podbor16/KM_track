@@ -30,6 +30,8 @@ EXTRA_COLS = {
 }
 REQUIRED = (COL_FORMAT, COL_NAME, COL_SEX, COL_CITY, COL_WILDCARD, COL_TOTAL, COL_EXTRA, *EXTRA_COLS.values(),
             *RELAY_COLS.values())
+CALCULATION_CHECK = "Проверка расчёта"
+CALCULATION_APPROVED = "ПРОВЕРЕНО"
 # Тексты заявки Тильды: поле заявки → поле draw_applicants
 TILDA_TEXTS = {"wildcard_reason": "wildcard_reason", "results_text": "Расскажите_о_ваших_результатах"}
 # Что сравнивать между версиями таблицы (тексты «причина wild card» и «о результатах» — нет)
@@ -102,6 +104,9 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if not full:
             continue
         where = f"строка {n} «{full}»"
+        if CALCULATION_CHECK in idx and _norm(get(CALCULATION_CHECK)).upper() != CALCULATION_APPROVED:
+            errors.append(f"{where}: черновик расчёта не проверен организатором")
+            continue
         fmt_raw = _norm(get(COL_FORMAT))
         fmt = _format_of(fmt_raw)
         if fmt is None:

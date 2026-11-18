@@ -40,6 +40,39 @@ def list_year(conn, year: int) -> list[dict]:
     return cur.fetchall()
 
 
+def admitted_for_draw(conn, race_year: int) -> list[dict]:
+    """Минимальные поля одобренных заявок для чернового расчёта жеребьёвки."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, race_year, format, surname, name, gender, birthdate, city, team_name, "
+        "relay_swim, relay_bike, relay_run, raw FROM siberman_entries "
+        "WHERE race_year=%s AND status='admitted' ORDER BY submitted_at, id",
+        (race_year,),
+    )
+    rows = cur.fetchall()
+    for row in rows:
+        raw = row.get("raw")
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (ValueError, TypeError):
+                raw = {}
+        row["raw"] = raw if isinstance(raw, dict) else {}
+    return rows
+
+
+def identity_rows(conn, race_years: list[int]) -> list[dict]:
+    """Names, birth dates and entry status used only to disambiguate historical draw identities."""
+    years = sorted({int(y) for y in race_years})
+    if not years:
+        return []
+    marks = ", ".join(["%s"] * len(years))
+    cur = conn.cursor(dictionary=True, buffered=True)
+    cur.execute(f"SELECT race_year, format, surname, name, birthdate, status "
+                f"FROM siberman_entries WHERE race_year IN ({marks})", years)
+    return cur.fetchall()
+
+
 def get(conn, entry_id: int) -> Optional[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute(f"SELECT {', '.join(LIST_FIELDS)} FROM siberman_entries WHERE id=%s", (entry_id,))
