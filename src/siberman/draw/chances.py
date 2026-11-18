@@ -126,16 +126,17 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
     warn_fill = PatternFill("solid", fgColor="FFF2CC")
     bad_fill = PatternFill("solid", fgColor="FCE4D6")
     ready_fill = PatternFill("solid", fgColor="E2F0D9")
+    bonus_columns = [get_column_letter(MAIN_COLUMNS.index(label) + 1) for label in EXTRA_COLS.values()]
+    extra_col = MAIN_COLUMNS.index(COL_EXTRA) + 1
+    total_col = MAIN_COLUMNS.index(COL_TOTAL) + 1
     for item in rows:
         checks = list(global_issues) + list(item.get("issues", []))
         extras = item["extras"]
         complete = not checks and all(as_count(extras.get(k)) is not None for k in EXTRA_COLS)
-        total_extra = sum(as_count(extras[k]) for k in EXTRA_COLS) if complete else None
         values = {
             COL_FORMAT: "Эстафетная команда" if item["format"] == "relay" else "Индивидуальное участие",
             COL_NAME: item["fio"], COL_SEX: {"M": "Мужской", "F": "Женский"}.get(item.get("gender"), ""),
             COL_CITY: item.get("city") or "", COL_WILDCARD: "",
-            COL_EXTRA: total_extra, COL_TOTAL: total_extra + 1 if total_extra is not None else None,
             READY_COLUMN: READY_VALUE if complete else NOT_READY_VALUE,
         }
         values.update({EXTRA_COLS[k]: as_count(extras.get(k)) for k in EXTRA_COLS})
@@ -144,7 +145,14 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
         for cell in ws[ws.max_row]:
             if cell.data_type == "f":
                 cell.data_type = "s"
-        ready_cell = ws.cell(row=ws.max_row, column=MAIN_COLUMNS.index(READY_COLUMN) + 1)
+        row_no = ws.max_row
+        bonus_range = f"{bonus_columns[0]}{row_no}:{bonus_columns[-1]}{row_no}"
+        extra_cell = ws.cell(row=row_no, column=extra_col)
+        extra_cell.value = f'=IF(COUNT({bonus_range})={len(bonus_columns)},SUM({bonus_range}),"")'
+        ws.cell(row=row_no, column=total_col).value = (
+            f'=IF(ISNUMBER({extra_cell.coordinate}),{extra_cell.coordinate}+1,"")'
+        )
+        ready_cell = ws.cell(row=row_no, column=MAIN_COLUMNS.index(READY_COLUMN) + 1)
         ready_cell.fill = ready_fill if complete else bad_fill
 
         for key, label in EXTRA_LABELS.items():

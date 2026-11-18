@@ -107,6 +107,13 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if CALCULATION_CHECK in idx and _norm(get(CALCULATION_CHECK)).upper() != CALCULATION_APPROVED:
             errors.append(f"{where}: черновик расчёта не проверен организатором")
             continue
+        if CALCULATION_CHECK in idx:
+            if any(not _norm(get(col)) for col in EXTRA_COLS.values()):
+                errors.append(f"{where}: заполните все дополнительные шансы, укажите 0 при отсутствии бонуса")
+                continue
+            if not _norm(get(COL_EXTRA)) or not _norm(get(COL_TOTAL)):
+                errors.append(f"{where}: пересчитайте итоги и сохраните файл в Excel")
+                continue
         fmt_raw = _norm(get(COL_FORMAT))
         fmt = _format_of(fmt_raw)
         if fmt is None:
