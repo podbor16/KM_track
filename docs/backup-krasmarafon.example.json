@@ -1,0 +1,74 @@
+{
+  "storage": "D:/KM-Backup/archives",
+  "runner": {
+    "mirror": "E:/KM-Backup/archives",
+    "pickup_destinations": ["F:/KM-Выдача"]
+  },
+  "mysql": {
+    "client": "C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe",
+    "dump": "C:/Program Files/MySQL/MySQL Server 8.0/bin/mysqldump.exe",
+    "source": {
+      "host": "127.0.0.1",
+      "port": 13306,
+      "user": "km_backup",
+      "defaults_file": "D:/KM-Backup/private/source.cnf",
+      "server_uuid": "<UUID production>"
+    },
+    "dev": {
+      "port": 3309,
+      "user": "km_restore",
+      "defaults_file": "D:/KM-Backup/private/dev.cnf",
+      "server_uuid": "<UUID отдельного dev>"
+    },
+    "recovery": {
+      "port": 3310,
+      "user": "km_restore",
+      "defaults_file": "D:/KM-Backup/private/recovery.cnf",
+      "server_uuid": "<UUID отдельного recovery>"
+    }
+  },
+  "tilda": {
+    "login_url": "https://crm.tilda.cc/",
+    "storage_state": "D:/KM-Backup/private/tilda-state.json",
+    "timeout_seconds": 90,
+    "exports": [
+      {
+        "name": "pilot",
+        "url": "https://crm.tilda.cc/<адрес-листа>",
+        "ready_selector": "<локатор загруженного листа>",
+        "steps": [
+          {"action": "click", "selector": "<локатор расширенного экспорта>"}
+        ],
+        "download_selector": "<локатор скачивания CSV>",
+        "required_headers": ["tranid", "surname", "name", "Stage", "<статус оплаты>"],
+        "delimiter": ";",
+        "allow_empty": false
+      }
+    ]
+  },
+  "pickup": {
+    "events": [
+      {
+        "key": "pilot-2026",
+        "name": "<точное название старта в MySQL>",
+        "year": 2026,
+        "crm_exports": ["pilot"],
+        "no_bib_distances": []
+      }
+    ],
+    "crm_columns": {
+      "transaction_id": "tranid",
+      "surname": "surname",
+      "name": "name",
+      "stage": "Stage",
+      "payment": "<статус оплаты>"
+    },
+    "status_rules": {
+      "mysql_allow": ["<статус MySQL допускает выдачу>"],
+      "crm_stage_allow": ["<стадия CRM допускает выдачу>"],
+      "crm_stage_block": ["<стадия отмены или возврата>"],
+      "crm_payment_allow": ["<подтверждённая оплата>"],
+      "crm_payment_block": ["<отмена, возврат или неоплата>"]
+    }
+  }
+}
