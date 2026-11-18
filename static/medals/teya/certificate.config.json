@@ -1,0 +1,83 @@
+{
+  "width": 1080,
+  "height": 1920,
+  "overlay": "./template/frame-1.svg",
+  "quality": 0.94,
+  "filename": "teya-certificate",
+  "maxFileBytes": 31457280,
+  "maxImageSide": 4096,
+  "minZoom": 1,
+  "maxZoom": 4,
+  "templates": [
+    {
+      "id": "frame-1",
+      "label": "Кубок Хакасии",
+      "src": "./template/frame-1.svg",
+      "thumbnail": "./template/frame-1.svg",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.1,
+        "y": 0.1,
+        "width": 0.8,
+        "height": 0.55
+      }
+    },
+    {
+      "id": "frame-2",
+      "label": "Тёя — девушка",
+      "src": "./template/frame-2.svg",
+      "thumbnail": "./template/frame-2.svg",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.1,
+        "y": 0.1,
+        "width": 0.8,
+        "height": 0.55
+      }
+    },
+    {
+      "id": "frame-3",
+      "label": "Кубок России",
+      "src": "./template/frame-3.svg",
+      "thumbnail": "./template/frame-3.svg",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.1,
+        "y": 0.1,
+        "width": 0.8,
+        "height": 0.55
+      }
+    },
+    {
+      "id": "frame-4",
+      "label": "Тёя — медвежонок",
+      "src": "./template/frame-4.svg",
+      "thumbnail": "./template/frame-4.svg",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.1,
+        "y": 0.1,
+        "width": 0.8,
+        "height": 0.55
+      }
+    },
+    {
+      "id": "frame-5",
+      "label": "Тёя — вместе",
+      "src": "./template/frame-5.svg",
+      "thumbnail": "./template/frame-5.svg",
+      "width": 1080,
+      "height": 1920,
+      "placeholder": {
+        "x": 0.1,
+        "y": 0.1,
+        "width": 0.8,
+        "height": 0.55
+      }
+    }
+  ]
+}
