@@ -52,12 +52,12 @@ def absolute_path(value):
     return original.resolve()
 
 
-def read_config(path):
+def read_config(path, section="mysql"):
     config = json.loads(path.read_text(encoding="utf-8-sig"))
     storage = absolute_path(config["storage"])
     if storage.is_relative_to(ROOT):
         raise BackupError("Каталог копий должен быть вне репозитория.")
-    return storage, config["mysql"]
+    return storage, config[section]
 
 
 def connection(settings, *, local=False):
@@ -177,7 +177,10 @@ def verify_dump(bundle):
 
 def capture(storage, config):
     options, expected_uuid = connection(config["source"])
-    target = storage / "mysql"
+    return capture_bundle(storage / "mysql", config, options, expected_uuid)
+
+
+def capture_bundle(target, config, options, expected_uuid):
     target.mkdir(parents=True, exist_ok=True)
     inventory = source_inventory(config, options, expected_uuid)
     started = utc_now()
@@ -211,7 +214,49 @@ def capture(storage, config):
         }
         write_json(staging / "manifest.json", manifest)
         verify_dump(staging)
-        staging.rename(target / started.strftime(DATE_KEY))
+        bundle = target / started.strftime(DATE_KEY)
+        staging.rename(bundle)
+        return bundle
+
+
+def capture_local(storage, config):
+    from dotenv import dotenv_values
+
+    root = storage / "mysql-dev"
+    if root.resolve() != root:
+        raise BackupError("Каталог mysql-dev должен находиться внутри storage.")
+    env_file = absolute_path(config["env_file"])
+    if env_file.name != ".env.local" or not env_file.is_file():
+        raise BackupError("Укажите существующий .env.local.")
+    settings = dotenv_values(env_file, encoding="utf-8-sig", interpolate=False)
+    if (settings.get("DB_HOST"), settings.get("DB_PORT"), settings.get("DB_NAME")) != (
+        "127.0.0.1", "3308", DATABASE,
+    ):
+        raise BackupError("Разрешён только локальный dev MySQL 127.0.0.1:3308, база krasmarafon.")
+    user, password = settings.get("DB_USER"), settings.get("DB_PASSWORD")
+    if not user or not password or any(char in password for char in "\r\n\0"):
+        raise BackupError("Проверьте учётные данные локального MySQL в .env.local.")
+    root.mkdir(parents=True, exist_ok=True)
+    # Windows MySQL clients may fail to open an option file on a Unicode path.
+    # Put the short-lived password file in the account's temporary directory.
+    with tempfile.TemporaryDirectory(prefix="km-dev-mysql-") as temporary:
+        defaults = Path(temporary) / "client.cnf"
+        quoted = password.replace("\\", "\\\\").replace('"', '\\"')
+        defaults.write_text(f'[client]\npassword="{quoted}"\n', encoding="utf-8")
+        options, expected_uuid = connection({
+            "port": 3308, "user": user, "defaults_file": defaults,
+            "server_uuid": config["server_uuid"],
+        }, local=True)
+        bundle = capture_bundle(root, config, options, expected_uuid)
+    prune_dev(storage, bundle.name)
+    return bundle
+
+
+def log_local(storage, message):
+    root = storage / "mysql-dev"
+    if root.is_dir() and root.resolve() == root:
+        with (root / "local-backup.log").open("a", encoding="utf-8") as log:
+            log.write(f"{utc_now().isoformat()} {message}\n")
 
 
 def pickup_rows(storage, config, output):
@@ -329,7 +374,7 @@ def restore(storage, config, source, manifest, slot):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("capture", "pickup-rows", "dev", "recover"):
+    for command in ("capture", "capture-local", "pickup-rows", "dev", "recover"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("--config", required=True, type=Path)
         if command == "pickup-rows":
@@ -340,10 +385,16 @@ def main(argv=None):
             subparser.add_argument("--restore", action="store_true", required=(command == "recover"),
                                    help="Восстановить в заранее выделенный пустой локальный экземпляр.")
     args = parser.parse_args(argv)
+    storage = None
     try:
-        storage, config = read_config(args.config)
+        section = "local_backup" if args.command == "capture-local" else "mysql"
+        storage, config = read_config(args.config, section)
         if args.command == "capture":
             capture(storage, config)
+        elif args.command == "capture-local":
+            bundle = capture_local(storage, config)
+            log_local(storage, f"OK {bundle.name}")
+            print(f"Снимок локальной базы сохранён: {bundle.name}")
         elif args.command == "pickup-rows":
             pickup_rows(storage, config, args.output)
         elif args.command == "dev":
@@ -356,9 +407,19 @@ def main(argv=None):
             source = args.bundle.resolve()
             restore(storage, config, source, verify_dump(source), "recovery")
     except BackupError as exc:
+        if args.command == "capture-local" and storage is not None:
+            try:
+                log_local(storage, "ERROR backup failed")
+            except OSError:
+                pass
         print(f"MySQL: {exc}", file=sys.stderr)
         return 1
     except (KeyError, TypeError, ValueError, OSError, EOFError, zlib.error):
+        if args.command == "capture-local" and storage is not None:
+            try:
+                log_local(storage, "ERROR invalid config or I/O")
+            except OSError:
+                pass
         print("MySQL: недоступный файл, некорректная конфигурация или формат данных.", file=sys.stderr)
         return 1
     return 0
