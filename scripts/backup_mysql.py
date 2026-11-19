@@ -13,6 +13,8 @@ import tempfile
 import zlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 from uuid import UUID
 
 
@@ -259,6 +261,65 @@ def log_local(storage, message):
             log.write(f"{utc_now().isoformat()} {message}\n")
 
 
+def post_local_signal(url, message="", headers=None, *, heartbeat=False):
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("Требуется HTTPS без учётных данных в URL.")
+    if heartbeat and (parsed.hostname not in {"hc-ping.com", "hchk.io"}
+                      or not parsed.path.strip("/") or parsed.query or parsed.fragment):
+        raise ValueError("Нужен URL успешного запуска Healthchecks.io.")
+    request = Request(url, data=message.encode("utf-8"), headers=headers or {}, method="POST")
+    with urlopen(request, timeout=10):
+        pass
+
+
+def report_local(storage, config, *, bundle=None):
+    """Notification failures must not change the backup's exit status."""
+    from dotenv import dotenv_values
+
+    if config.get("ntfy_env_file"):
+        try:
+            env_file = absolute_path(config["ntfy_env_file"])
+            settings = dotenv_values(env_file, encoding="utf-8-sig", interpolate=False)
+            topic_url = urlsplit(settings.get("NTFY_URL") or "")
+            topic = topic_url.path.strip("/")
+            if (topic_url.scheme != "https" or not topic_url.hostname or topic_url.username
+                    or topic_url.password or topic_url.query or topic_url.fragment
+                    or not re.fullmatch(r"[a-zA-Z0-9_-]+", topic)):
+                raise ValueError("Ожидается HTTPS-адрес темы ntfy.")
+            ok = bundle is not None
+            title = "Dev-бэкап Красмарафона: готов" if ok else "Dev-бэкап Красмарафона: ошибка"
+            message = ("Локальный снимок создан и проверен." if ok
+                       else "Снимок локального MySQL не завершён. Проверьте local-backup.log.")
+            headers = {"Content-Type": "application/json; charset=utf-8"}
+            if settings.get("NTFY_TOKEN"):
+                headers["Authorization"] = "Bearer " + settings["NTFY_TOKEN"]
+            payload = {
+                "topic": topic, "title": title, "message": message,
+                "tags": ["white_check_mark" if ok else "warning"],
+                "priority": 3 if ok else 4,
+            }
+            post_local_signal(f"https://{topic_url.netloc}", json.dumps(payload), headers)
+            log_local(storage, "NTFY sent")
+        except (OSError, TypeError, ValueError, BackupError):
+            try:
+                log_local(storage, "NTFY delivery failed")
+            except OSError:
+                pass
+    if bundle is not None and config.get("heartbeat_file"):
+        try:
+            path = absolute_path(config["heartbeat_file"])
+            if not path.exists():
+                return
+            post_local_signal(path.read_text(encoding="utf-8-sig").strip(), heartbeat=True)
+            log_local(storage, "HEARTBEAT sent")
+        except (OSError, TypeError, ValueError, BackupError):
+            try:
+                log_local(storage, "HEARTBEAT delivery failed")
+            except OSError:
+                pass
+
+
 def pickup_rows(storage, config, output):
     output = output.resolve()
     if not output.is_relative_to(storage) or output == storage:
@@ -385,7 +446,7 @@ def main(argv=None):
             subparser.add_argument("--restore", action="store_true", required=(command == "recover"),
                                    help="Восстановить в заранее выделенный пустой локальный экземпляр.")
     args = parser.parse_args(argv)
-    storage = None
+    storage, config = None, None
     try:
         section = "local_backup" if args.command == "capture-local" else "mysql"
         storage, config = read_config(args.config, section)
@@ -394,6 +455,7 @@ def main(argv=None):
         elif args.command == "capture-local":
             bundle = capture_local(storage, config)
             log_local(storage, f"OK {bundle.name}")
+            report_local(storage, config, bundle=bundle)
             print(f"Снимок локальной базы сохранён: {bundle.name}")
         elif args.command == "pickup-rows":
             pickup_rows(storage, config, args.output)
@@ -412,6 +474,7 @@ def main(argv=None):
                 log_local(storage, "ERROR backup failed")
             except OSError:
                 pass
+            report_local(storage, config)
         print(f"MySQL: {exc}", file=sys.stderr)
         return 1
     except (KeyError, TypeError, ValueError, OSError, EOFError, zlib.error):
@@ -420,6 +483,8 @@ def main(argv=None):
                 log_local(storage, "ERROR invalid config or I/O")
             except OSError:
                 pass
+            if isinstance(config, dict):
+                report_local(storage, config)
         print("MySQL: недоступный файл, некорректная конфигурация или формат данных.", file=sys.stderr)
         return 1
     return 0
