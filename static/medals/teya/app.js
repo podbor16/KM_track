@@ -1,6 +1,6 @@
-import { createCrop, constrainCrop, zoomCrop, renderCertificate } from './composition.js?v=2';
+import { createCrop, constrainCrop, zoomCrop, renderCertificate } from './composition.js?v=3';
 import { attachPhotoGestures } from './gestures.js?v=3';
-import { attachFramePicker } from './frame-picker.js?v=5';
+import { attachFramePicker } from './frame-picker.js?v=6';
 
 const $ = (id) => document.getElementById(id);
 const ui = Object.fromEntries(['photo-input', 'choose-button', 'choose-text', 'selected-photo', 'thumbnail', 'filename', 'quality-note', 'error-message', 'error-text', 'retry-template', 'live-status', 'preview', 'certificate-frame', 'empty-preview', 'preview-state', 'preview-badge', 'crop-controls', 'zoom', 'reset-button', 'download-button', 'download-text', 'save-description', 'export-format', 'download-result', 'open-image', 'share-button', 'edit-toggle', 'edit-toggle-text', 'save-hint', 'result-where'].map(id => [id, $(id)]));
@@ -155,10 +155,10 @@ async function loadTemplate(index = selectedTemplate) {
       const response = await fetch('./certificate.config.json', { cache: 'no-cache' });
       if (!response.ok) throw new Error('config');
       const next = await response.json();
-      if (next.width !== 1080 || next.height !== 1920 || !next.overlay || next.maxFileBytes <= 0 || next.maxImageSide <= 0) throw new Error('config');
+      if (next.width !== 1080 || next.height !== 1528 || !next.overlay || next.maxFileBytes <= 0 || next.maxImageSide <= 0) throw new Error('config');
       config = next;
       if (!Array.isArray(config.templates) || !config.templates.length) {
-        config.templates = [{ id: 'medal', label: 'Медаль', src: config.overlay, width: config.width, height: config.height }];
+        config.templates = [{ id: 'khakassia-cup', label: 'Кубок Хакасии', src: config.overlay, width: config.width, height: config.height }];
       }
       selectedTemplate = Math.max(0, Math.min(config.templates.length - 1, selectedTemplate));
       $('frame-picker').hidden = false;
@@ -250,9 +250,9 @@ async function selectPhoto(file) {
     freeCanvas(photo);
     photo = working; working = null;
     filename = file.name;
-    crop = createCrop(photo.width, photo.height, config?.width ?? 1080, config?.height ?? 1920);
+    crop = createCrop(photo.width, photo.height, config?.width ?? 1080, config?.height ?? 1528);
     ui.filename.textContent = filename;
-    ui['quality-note'].hidden = iw >= 1080 && ih >= 1920;
+    ui['quality-note'].hidden = iw >= (config?.width ?? 1080) && ih >= (config?.height ?? 1528);
     const thumbnailContext = ui.thumbnail.getContext('2d');
     thumbnailContext.clearRect(0, 0, 112, 112);
     const thumbScale = Math.max(112 / photo.width, 112 / photo.height);
@@ -317,7 +317,7 @@ function showResult(file, where) {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl);
   downloadUrl = URL.createObjectURL(file);
   ui['open-image'].href = downloadUrl;
-  ui['export-format'].textContent = `${file.type === 'image/png' ? 'PNG' : 'JPG'} · 1080 × 1920 · бесплатно`;
+  ui['export-format'].textContent = `${file.type === 'image/png' ? 'PNG' : 'JPG'} · ${config.width} × ${config.height} · бесплатно`;
   ui['result-where'].textContent = where;
   ui['result-where'].hidden = !where;
   ui['download-result'].hidden = false;

@@ -80,7 +80,7 @@ export function attachFramePicker({ track, previous, next, counter, onSelect, is
         button.type = 'button'; button.className = 'frame-option';
         button.setAttribute('aria-label', `Рамка «${frame.label}», ${index + 1} из ${items.length}`);
         const image = document.createElement('img');
-        image.src = frame.thumbnail || frame.src; image.alt = ''; image.width = 72; image.height = 128;
+        image.src = frame.thumbnail || frame.src; image.alt = ''; image.width = 72; image.height = Math.round(72 * frame.height / frame.width);
         image.loading = 'lazy'; image.draggable = false;
         const label = document.createElement('span'); label.textContent = frame.label;
         button.append(image, label);

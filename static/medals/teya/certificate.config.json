@@ -1,7 +1,7 @@
 {
   "width": 1080,
-  "height": 1920,
-  "overlay": "./template/frame-1.svg",
+  "height": 1528,
+  "overlay": "./template/khakassia-cup.png",
   "quality": 0.94,
   "filename": "teya-certificate",
   "maxFileBytes": 31457280,
@@ -12,71 +12,71 @@
     {
       "id": "frame-1",
       "label": "Кубок Хакасии",
-      "src": "./template/frame-1.svg",
-      "thumbnail": "./template/frame-1.svg",
+      "src": "./template/khakassia-cup.png",
+      "thumbnail": "./template/khakassia-cup-preview.png",
       "width": 1080,
-      "height": 1920,
+      "height": 1528,
       "placeholder": {
         "x": 0.1,
         "y": 0.1,
         "width": 0.8,
-        "height": 0.55
+        "height": 0.46
       }
     },
     {
       "id": "frame-2",
       "label": "Тёя — девушка",
-      "src": "./template/frame-2.svg",
-      "thumbnail": "./template/frame-2.svg",
+      "src": "./template/teya-girl.png",
+      "thumbnail": "./template/teya-girl-preview.png",
       "width": 1080,
-      "height": 1920,
+      "height": 1528,
       "placeholder": {
         "x": 0.1,
         "y": 0.1,
         "width": 0.8,
-        "height": 0.55
+        "height": 0.46
       }
     },
     {
       "id": "frame-3",
       "label": "Кубок России",
-      "src": "./template/frame-3.svg",
-      "thumbnail": "./template/frame-3.svg",
+      "src": "./template/russia-cup.png",
+      "thumbnail": "./template/russia-cup-preview.png",
       "width": 1080,
-      "height": 1920,
+      "height": 1528,
       "placeholder": {
         "x": 0.1,
         "y": 0.1,
         "width": 0.8,
-        "height": 0.55
+        "height": 0.46
       }
     },
     {
       "id": "frame-4",
       "label": "Тёя — медвежонок",
-      "src": "./template/frame-4.svg",
-      "thumbnail": "./template/frame-4.svg",
+      "src": "./template/teya-bear.png",
+      "thumbnail": "./template/teya-bear-preview.png",
       "width": 1080,
-      "height": 1920,
+      "height": 1528,
       "placeholder": {
         "x": 0.1,
         "y": 0.1,
         "width": 0.8,
-        "height": 0.55
+        "height": 0.46
       }
     },
     {
       "id": "frame-5",
       "label": "Тёя — вместе",
-      "src": "./template/frame-5.svg",
-      "thumbnail": "./template/frame-5.svg",
+      "src": "./template/teya-together.png",
+      "thumbnail": "./template/teya-together-preview.png",
       "width": 1080,
-      "height": 1920,
+      "height": 1528,
       "placeholder": {
         "x": 0.1,
         "y": 0.1,
         "width": 0.8,
-        "height": 0.55
+        "height": 0.46
       }
     }
   ]

@@ -7,8 +7,8 @@
   <meta name="description" content="Создайте памятный сертификат Тёи: выберите своё фото и скачайте готовое изображение. Бесплатно, без регистрации.">
   <title>Ваш сертификат — Тёя</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=11">
-  <script type="module" src="./app.js?v=12"></script>
+  <link rel="stylesheet" href="./styles.css?v=12">
+  <script type="module" src="./app.js?v=13"></script>
 </head>
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -53,7 +53,7 @@
       <div class="preview-heading"><h2 id="preview-title">Ваш сертификат</h2><span id="preview-state">Осталось добавить фото</span></div>
       <span class="preview-badge" id="preview-badge" hidden><svg class="icon" aria-hidden="true"><use href="#check-icon"/></svg> Можно скачивать</span>
       <div class="certificate-frame" id="certificate-frame" aria-busy="true">
-        <canvas id="preview" width="540" height="960" role="img" aria-label="Предпросмотр сертификата. Выберите своё фото."></canvas>
+        <canvas id="preview" width="540" height="764" role="img" aria-label="Предпросмотр сертификата. Выберите своё фото."></canvas>
         <div class="empty-preview" id="empty-preview">
           <svg class="placeholder-icon" aria-hidden="true"><use href="#photo-icon"/></svg>
           <p><strong>Здесь будет<br>ваше фото</strong></p>
@@ -86,7 +86,7 @@
       <h2 id="save-title"><span class="step-number" aria-hidden="true">2</span> Сохраните сертификат</h2>
       <p class="section-copy" id="save-description">Сначала выберите фото — и сертификат будет готов.</p>
       <button class="button button-primary download-button" id="download-button" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#download-icon"/></svg><span id="download-text">Скачать сертификат</span></button>
-      <p class="format-note" id="export-format">JPG · 1080 × 1920 · бесплатно</p>
+      <p class="format-note" id="export-format">JPG · 1080 × 1528 · бесплатно</p>
       <p class="save-hint" id="save-hint" hidden>Откроется меню — выберите в нём «Сохранить изображение».</p>
       <button class="button button-secondary" id="share-button" type="button" hidden disabled><svg class="icon" aria-hidden="true"><use href="#share-icon"/></svg>Поделиться</button>
       <div class="download-result" id="download-result" hidden>

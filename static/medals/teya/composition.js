@@ -24,7 +24,7 @@ export function zoomCrop(crop, zoom, anchorX = crop.width / 2, anchorY = crop.he
 }
 
 // One composition for both the reduced preview and the full-size export.
-export function renderCertificate(canvas, photo, crop, overlay, width = 1080, height = 1920, emptyFill = '#f1f2f3') {
+export function renderCertificate(canvas, photo, crop, overlay, width = 1080, height = 1528, emptyFill = '#f1f2f3') {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas недоступен');
   ctx.save();
