@@ -312,7 +312,6 @@ def transform_tilda_payload(body: dict, first_race_date=None, purchased_on=None)
         "client_id": 0,
         "event_id": 0,
         "is_duplicate": 0,
-        "status": 0,
         "is_new": 0,
         "is_new_event": 0,
     }

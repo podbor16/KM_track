@@ -16,7 +16,7 @@ payment.products в вебхуке — переиспользуем parse_produc
 используются ТОЛЬКО при создании новой заявки (bulk_import_leads()), не при
 апдейте совпавшей: правки платёжных данных задним числом через CSV — не
 задача этого импорта, см. docstring bulk_import_leads(). Остальные колонки
-экспорта (Date, phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
+экспорта (phone_2, ma_email, Checkbox, utm_*, ma_id/ma_name/
 ma_phone, formid/formname, file_discount*, field13/field14, Stage) — в
 leads нет соответствующей колонки, см. _KNOWN_IGNORED_HEADERS. Заголовок
 файла, которого нет ни в алиасах, ни в _KNOWN_IGNORED_HEADERS, попадает в
@@ -68,7 +68,7 @@ class ImportRow:
                                  # организатором заранее (не результат гонки,
                                  # см. migrations/add_leads_start_number.sql).
                                  # Сырая строка, int-конвертация в bulk_import_leads()
-    registered_at: str = ""     # момент регистрации по красноярскому времени
+    registered_at: str = ""     # дата оплаты Tilda в часовом поясе Красноярска
     refund: bool = False        # Stage «Архивные»/«Завершенные» — возврат (выгрузка всех листов CRM Тильды)
     elite: bool = False         # Stage «Элита» — элитный кластер (Жара)
     products: str = ""          # состав заказа (колонка product) — для DataLens: доп. товары,
@@ -136,11 +136,9 @@ _HEADER_ALIASES = {
     "order_id": "order_id",
     "tranid": "transaction_id",
     "способ оплаты": "payment_system",
-    # Дата регистрации: без неё leads.created_at у импортных строк = момент
-    # импорта, что ломает чарты динамики регистраций в DataLens. "Дата оплаты"
-    # — по Москве (сверено с временем вебхука, 2026-09-24), "Date" CRM-выгрузки
-    # — UTC−7 (запасной источник). Обе переводятся в красноярское время —
-    # tilda_registered_at().
+    # Дата оплаты Tilda используется как временная отметка оплаченной заявки
+    # в leads.created_at. Если «Дата оплаты» отсутствует, берём «Date» CRM-
+    # выгрузки (также дата оплаты, UTC−7). Обе переводятся в Красноярск.
     "дата оплаты": "registered_at",
     "date": "registered_at_fallback",
     # Стартовый номер (bib) — не из штатной выгрузки Tilda, а из "обработанного"
@@ -206,7 +204,7 @@ _TILDA_DT_MIN = datetime(2013, 1, 1)  # раньше Красмарафона в
 
 
 def parse_tilda_datetime(raw) -> Optional[datetime]:
-    """Момент подачи заявки из колонки "Date" выгрузки Tilda.
+    """Дата оплаты из колонки "Date" выгрузки Tilda.
 
     Боевой формат — ISO "YYYY-MM-DD HH:MM:SS". Запасные форматы и unix-epoch —
     на случай другого экспорта. Значение вне разумного диапазона (до 2013 или
@@ -247,8 +245,11 @@ _TILDA_DATE_TZ = timezone(timedelta(hours=-7))   # "Date" CRM-выгрузки �
 
 
 def tilda_registered_at(paid_raw, date_raw) -> str:
-    """Момент регистрации по красноярскому времени, "YYYY-MM-DD HH:MM:SS"
-    (пул соединений работает в сессии +07:00), либо "" если дат нет."""
+    """Дата оплаченной заявки по красноярскому времени, либо "" если даты нет.
+
+    Tilda "Дата оплаты" приоритетнее поля "Date" CRM-выгрузки; обе сохраняются
+    в leads.created_at как временная отметка оплаченной регистрации.
+    """
     for raw, tz in ((paid_raw, _TILDA_PAID_TZ), (date_raw, _TILDA_DATE_TZ)):
         dt = parse_tilda_datetime(raw)
         if dt:
@@ -267,7 +268,7 @@ def _normalize_xlsx_cell(value):
     всегда текст.
 
     Дата рождения — всегда полночь → остаётся "YYYY-MM-DD" (поведение не
-    изменилось). Колонка "Date" (подача заявки) со временем — сохраняем время
+    изменилось). Колонка "Date" (дата оплаты) со временем — сохраняем время
     целиком, оно нужно только для parse_tilda_datetime()."""
     if isinstance(value, datetime):
         if (value.hour, value.minute, value.second) != (0, 0, 0):

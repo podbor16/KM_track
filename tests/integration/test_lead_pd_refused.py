@@ -65,10 +65,10 @@ def db():
 
 def add_lead(cur):
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, phone, event_name, event_distance,
-                   event_year, products, amount, client_id, event_id, is_duplicate, status, is_new, is_new_event,
+                   event_year, products, amount, client_id, event_id, is_duplicate, is_new, is_new_event,
                    is_name_suspicious, created_at)
                    VALUES ('Тестпд', 'Иван', 'Мужчина', '', '', '1990-01-01', 'pd@test.ru', '', %s, '5 км', 2099,
-                           '', 0, 0, 0, 0, 0, 0, 0, 0, NOW())""", (EV,))
+                           '', 0, 0, 0, 0, 0, 0, 0, NOW())""", (EV,))
     return cur.lastrowid
 
 

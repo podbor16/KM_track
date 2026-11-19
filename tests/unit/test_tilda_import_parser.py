@@ -734,7 +734,7 @@ def test_parse_detects_genuinely_unknown_header():
 
 
 # ---------------------------------------------------------------------------
-# Дата регистрации → ImportRow.registered_at → leads.created_at, по
+# Дата оплаты → ImportRow.registered_at → leads.created_at, по
 # красноярскому времени. "Дата оплаты" — по Москве, "Date" CRM-выгрузки — UTC−7
 # (сверено с временем вебхука 2026-09-24). Без даты created_at = момент
 # импорта, что ломает чарты динамики регистраций в DataLens.
@@ -762,7 +762,7 @@ def test_parse_paid_date_moscow_preferred_over_date_and_converted():
     )
     result = parse_tilda_export(_csv_bytes(csv_text), filename="export.csv")
     assert result.rows[0].registered_at == "2026-01-02 04:05:00"
-    assert result.rows[1].registered_at == "2026-01-02 02:00:00"  # нет оплаты — из Date
+    assert result.rows[1].registered_at == "2026-01-02 02:00:00"  # fallback Date — тоже дата оплаты
 
 
 def test_parse_missing_date_column_leaves_registered_at_empty():
@@ -816,7 +816,7 @@ def test_parse_xlsx_native_datetime_date_cell_preserves_time():
 
     assert result.errors == []
     assert result.rows[0].birthday == "1990-05-01"
-    assert result.rows[0].registered_at == "2026-01-03 00:30:15"  # Date: UTC−7 → +14 ч
+    assert result.rows[0].registered_at == "2026-01-03 00:30:15"  # Date оплаты: UTC−7 → Красноярск
 
 
 # ---------------------------------------------------------------------------

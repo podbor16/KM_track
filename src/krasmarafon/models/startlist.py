@@ -52,7 +52,6 @@ class LeadAdminItem(BaseModel):
     client_id: Optional[Any] = None
     event_id: Optional[int] = None
     is_duplicate: Optional[int] = None
-    status: Optional[Any] = None
     is_new: Optional[int] = None
     is_new_event: Optional[int] = None
     category: Optional[str] = None
@@ -98,7 +97,6 @@ class LeadPatch(BaseModel):
     surname: Optional[str] = None
     name: Optional[str] = None
     event_distance: Optional[str] = None
-    status: Optional[Any] = None
     birthday: Optional[str] = None
     email: Optional[str] = None
 

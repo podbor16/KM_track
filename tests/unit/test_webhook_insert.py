@@ -9,7 +9,7 @@ _MINIMAL_DATA = {
     "event_year": 2027, "products": "", "payment_system": "", "transaction_id": "",
     "order_id": None, "promocode": "", "discount": 0.0, "amount": 0.0,
     "is_name_suspicious": 0, "client_id": 0, "event_id": 0,
-    "is_duplicate": 0, "status": 0, "is_new": 0, "is_new_event": 0,
+    "is_duplicate": 0, "is_new": 0, "is_new_event": 0,
 }
 
 

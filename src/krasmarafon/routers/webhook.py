@@ -324,7 +324,7 @@ def _insert_lead(data: dict):
                 products, payment_system, transaction_id, order_id,
                 promocode, discount, amount,
                 is_name_suspicious, client_id, event_id,
-                is_duplicate, status, is_new, is_new_event, created_at
+                is_duplicate, is_new, is_new_event, created_at
             ) VALUES (
                 %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                 %(email)s, %(phone)s, %(ma_id)s, %(ma_email)s,
@@ -332,7 +332,7 @@ def _insert_lead(data: dict):
                 %(products)s, %(payment_system)s, %(transaction_id)s, %(order_id)s,
                 %(promocode)s, %(discount)s, %(amount)s,
                 %(is_name_suspicious)s, %(client_id)s, %(event_id)s,
-                %(is_duplicate)s, %(status)s, %(is_new)s, %(is_new_event)s, %(created_at)s
+                %(is_duplicate)s, %(is_new)s, %(is_new_event)s, %(created_at)s
             )
             """,
             data,

@@ -1054,7 +1054,7 @@
         {label:'Дистанция', col:'event_distance'}, {label:'Категория', col:'category'},
         {label:'Дата рожд.', col:'birthday'}, {label:'Email', col:'email'},
         {label:'Телефон', col:'phone'}, {label:'Order ID', col:'order_id'},
-        {label:'Дубликат', col:'is_duplicate'}, {label:'Дата заявки', col:'created_at'}, {label:'Статус', col:'status'},
+        {label:'Дубликат', col:'is_duplicate'}, {label:'Дата заявки', col:'created_at'},
         {label:'Действия', col:null},
     ];
 
@@ -1130,7 +1130,6 @@
             <td class="leads-col-orderid"></td>
             <td class="leads-col-dup"><span class="admin-badge"></span></td>
             <td class="leads-col-created"></td>
-            <td class="leads-col-status"></td>
             <td class="leads-col-actions"><button class="km-btn km-btn--secondary leads-btn-edit">Изменить</button></td>`;
 
         tr.querySelector('.leads-col-id').textContent = lead.id;
@@ -1149,7 +1148,6 @@
         tr.querySelector('.leads-col-orderid').textContent = lead.order_id ?? '—';
         _renderDupBadge(tr, lead);
         tr.querySelector('.leads-col-created').textContent = _fmtCreated(lead.created_at);
-        tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
 
         tr.querySelector('.leads-btn-edit').addEventListener('click', () => {
             if (tr.dataset.editing === '1') cancelLeadEdit(tr, lead);
@@ -1245,7 +1243,6 @@
         tr.querySelector('.leads-col-surname').replaceChildren(mkInput(lead.surname));
         tr.querySelector('.leads-col-name').replaceChildren(mkInput(lead.name));
         tr.querySelector('.leads-col-distance').replaceChildren(mkInput(lead.event_distance, '70px'));
-        tr.querySelector('.leads-col-status').replaceChildren(mkInput(lead.status, '70px'));
         const emailCell = tr.querySelector('.leads-col-email');
         const emailInp = mkInput(lead.email, '200px');
         emailInp.type = 'email';
@@ -1273,7 +1270,6 @@
         tr.querySelector('.leads-col-surname').textContent = lead.surname || '';
         tr.querySelector('.leads-col-name').textContent = lead.name || '';
         tr.querySelector('.leads-col-distance').textContent = lead.event_distance || '—';
-        tr.querySelector('.leads-col-status').textContent = lead.status ?? '—';
         tr.querySelector('.leads-col-birthday').textContent = _fmtBirthday(lead.birthday);
         tr.querySelector('.leads-col-email').textContent = lead.email || '—';
         _renderDupBadge(tr, lead);
@@ -1318,7 +1314,6 @@
             surname: tr.querySelector('.leads-col-surname input').value.trim() || null,
             name:    tr.querySelector('.leads-col-name input').value.trim() || null,
             event_distance: tr.querySelector('.leads-col-distance input').value.trim() || null,
-            status:  tr.querySelector('.leads-col-status input').value.trim() || null,
             birthday: tr.querySelector('.leads-col-birthday input').value || null,
         };
         // Почта: нормализуем как на сервере; пустую шлём как есть — сервер ответит 422, а не молча оставит прежнюю

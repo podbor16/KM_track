@@ -65,9 +65,9 @@ def db():
 
 def add_lead(cur, name, birthday, email, start_number):
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, ma_email, phone, event_name,
-                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, status, is_new,
+                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, is_new,
                    is_new_event, is_name_suspicious, start_number, created_at)
-                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, NULL, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0, 0,
+                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, NULL, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0,
                            %s, NOW())""", (SURNAME, name, birthday, email, EV, start_number))
     cur.execute("SELECT id, client_id, event_id FROM leads WHERE id = %s", (cur.lastrowid,))
     return cur.fetchone()
