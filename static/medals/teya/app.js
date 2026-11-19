@@ -1,6 +1,6 @@
 import { createCrop, constrainCrop, zoomCrop, renderCertificate } from './composition.js?v=3';
 import { attachPhotoGestures } from './gestures.js?v=3';
-import { attachFramePicker } from './frame-picker.js?v=6';
+import { attachFramePicker } from './frame-picker.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 const ui = Object.fromEntries(['photo-input', 'choose-button', 'choose-text', 'selected-photo', 'thumbnail', 'filename', 'quality-note', 'error-message', 'error-text', 'retry-template', 'live-status', 'preview', 'certificate-frame', 'empty-preview', 'preview-state', 'preview-badge', 'crop-controls', 'zoom', 'reset-button', 'download-button', 'download-text', 'save-description', 'export-format', 'download-result', 'open-image', 'share-button', 'edit-toggle', 'edit-toggle-text', 'save-hint', 'result-where'].map(id => [id, $(id)]));

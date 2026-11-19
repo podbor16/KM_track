@@ -82,8 +82,7 @@ export function attachFramePicker({ track, previous, next, counter, onSelect, is
         const image = document.createElement('img');
         image.src = frame.thumbnail || frame.src; image.alt = ''; image.width = 72; image.height = Math.round(72 * frame.height / frame.width);
         image.loading = 'lazy'; image.draggable = false;
-        const label = document.createElement('span'); label.textContent = frame.label;
-        button.append(image, label);
+        button.append(image);
         button.addEventListener('click', () => select(index));
         return button;
       }));
