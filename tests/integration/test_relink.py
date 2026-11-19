@@ -58,9 +58,9 @@ def db():
 def add_lead(cur, name, birthday, num, surname=SURNAME):
     """Карточку и событие заводят триггеры leads."""
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, ma_email, phone, event_name,
-                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, status, is_new,
+                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, is_new,
                    is_new_event, is_name_suspicious, start_number, created_at)
-                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, NULL, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0, 0,
+                   VALUES (%s, %s, 'Мужчина', '', '', %s, %s, NULL, '', %s, '5 км', 2099, '', 0, 0, 0, 0, 0, 0, 0,
                            %s, NOW())""", (surname, name, birthday, f"{num}@{DOMAIN}", EV, num))
     cur.execute("SELECT id, client_id, event_id FROM leads WHERE id = %s", (cur.lastrowid,))
     return cur.fetchone()
@@ -347,7 +347,7 @@ def test_patch_without_fio_change_does_not_relink(client, as_admin, db, world):
     conn, cur = db
     row = add_lead(cur, "Мама", BD_MAMA, 9500)
     conn.commit()
-    r = client.patch(f"/api/admin/leads/{row['id']}", json={"surname": SURNAME, "name": "Мама", "status": 1})
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"surname": SURNAME, "name": "Мама"})
     assert r.status_code == 200 and r.json()["relink"] is None
     assert journal(cur) == []
 
@@ -431,12 +431,11 @@ def test_patch_bad_email_is_422_and_not_saved(client, as_admin, db, world, bad):
     conn, cur = db
     row = add_lead(cur, "Мама", BD_MAMA, 9500)
     conn.commit()
-    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": bad, "status": 1})
+    r = client.patch(f"/api/admin/leads/{row['id']}", json={"email": bad})
     assert r.status_code == 422
     conn.commit()
     assert _lead_email(cur, row["id"])["email"] == f"9500@{DOMAIN}"
-    cur.execute("SELECT status FROM leads WHERE id = %s", (row["id"],))
-    assert cur.fetchone()["status"] == 0 and journal(cur) == []
+    assert journal(cur) == []
 
 
 def test_patch_same_email_writes_nothing(client, as_admin, db, world):

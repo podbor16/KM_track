@@ -1907,7 +1907,7 @@ def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Op
     # is_duplicate не правится руками — его считает recompute_duplicates() (основная заявка
     # выбирается кнопкой «Сделать основной»); is_name_suspicious — триггер trg_leads_name_flag_bu;
     # ma_email (почта кабинета Tilda) не правится
-    ALLOWED = {'surname', 'name', 'event_distance', 'status', 'birthday', 'email'}
+    ALLOWED = {'surname', 'name', 'event_distance', 'birthday', 'email'}
     safe = {k: v for k, v in fields.items() if k in ALLOWED}
     if not safe:
         return None
@@ -1930,9 +1930,6 @@ def update_lead(lead_id: int, fields: Dict[str, Any], user: str = "admin") -> Op
         changed = {k: v for k, v in edits.items() if str(old[k]) != v}
         if changed:
             edit_record(conn, 'leads', lead_id, changed, user, f"lead:{lead_id}")
-        if 'status' in safe:
-            cur.execute("UPDATE leads SET status = %s WHERE id = %s", (safe['status'], lead_id))
-            conn.commit()
         invalidate_start_list_cache()
         relink = None
         if {'surname', 'name', 'birthday'} & set(changed):
@@ -2443,13 +2440,13 @@ def bulk_import_leads(rows: list, failed_rows: list = None, scope: tuple = None,
                         event_name, event_distance, event_year, products,
                         amount, promocode, discount, order_id, transaction_id, payment_system,
                         is_name_suspicious, start_number, client_id, event_id, is_duplicate,
-                        status, is_new, is_new_event, source, created_at, refund, is_elite, is_pacer
+                        is_new, is_new_event, source, created_at, refund, is_elite, is_pacer
                     ) VALUES (
                         %(surname)s, %(name)s, %(sex)s, %(city)s, %(club)s, %(birthday)s,
                         %(email)s, %(phone)s, %(event_name)s, %(event_distance)s,
                         %(event_year)s, %(products)s,
                         %(amount)s, %(promocode)s, %(discount)s, %(order_id)s, %(transaction_id)s, %(payment_system)s,
-                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 0, 'import', %(created_at)s,
+                        %(is_name_suspicious)s, %(start_number)s, 0, 0, 0, 0, 0, 'import', %(created_at)s,
                         %(refund)s, %(is_elite)s, %(is_pacer)s
                     )
                     """,

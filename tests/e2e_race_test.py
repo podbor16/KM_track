@@ -170,8 +170,8 @@ async def run():
             # Вставляем регистрацию
             lid = sql_insert(
                 """INSERT INTO leads (surname, name, sex, city, birthday, event_name, event_distance,
-                   event_year, status, products, email, client_id, event_id)
-                   VALUES (%s,%s,%s,'Красноярск',%s,'Весна','5 км',2026,1,'5 км',
+                   event_year, products, email, client_id, event_id)
+                   VALUES (%s,%s,%s,'Красноярск',%s,'Весна','5 км',2026,'5 км',
                    'test@test.ru',%s,%s)""",
                 (r['surname'], r['name'], r['sex'], r['birthday'], cid, EVENT_ID)
             )

@@ -42,10 +42,10 @@ def db():
 
 def add(cur, name, created, surname=SUR, dist="5 км", phone="+70000000000"):
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, phone, event_name, event_distance,
-                   event_year, products, amount, client_id, event_id, is_duplicate, status, is_new, is_new_event,
+                   event_year, products, amount, client_id, event_id, is_duplicate, is_new, is_new_event,
                    is_name_suspicious, created_at)
                    VALUES (%s, %s, 'Мужчина', '', '', '1990-01-01', 'flags@test.ru', %s, %s, %s, 2099, '', 0, 0, 0,
-                           0, 0, 0, 0, 0, %s)""", (surname, name, phone, EV, dist, created))
+                           0, 0, 0, 0, %s)""", (surname, name, phone, EV, dist, created))
     return cur.lastrowid
 
 

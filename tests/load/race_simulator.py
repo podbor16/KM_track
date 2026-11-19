@@ -41,10 +41,10 @@ UPDATE_SQL = (
 )
 INSERT_SQL = (
     "INSERT INTO leads (surname, name, sex, city, birthday, event_name, event_distance, "
-    "event_year, client_id, event_id, email, phone, products, status, is_new, is_new_event) "
+    "event_year, client_id, event_id, email, phone, products, is_new, is_new_event) "
     "VALUES ('TEST_Sim', 'Runner', 'мужской', 'Красноярск', '1990-01-01', "
     "'Ночной забег', '5 км', 2026, %s, 104, "
-    "'test@test.ru', '+7-000-000-0000', '5 km Night run', 0, 0, 0)"
+    "'test@test.ru', '+7-000-000-0000', '5 km Night run', 0, 0)"
 )
 
 while time.time() - start < duration:

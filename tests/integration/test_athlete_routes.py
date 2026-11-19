@@ -61,10 +61,10 @@ def request_code(client, email):
 
 def add_lead(cur, surname, email="", ma_email=None):
     cur.execute("""INSERT INTO leads (surname, name, sex, city, club, birthday, email, ma_email, phone, event_name,
-                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, status, is_new,
+                   event_distance, event_year, products, amount, client_id, event_id, is_duplicate, is_new,
                    is_new_event, is_name_suspicious, created_at)
                    VALUES (%s, 'Тест', 'Мужчина', '', '', '1990-01-01', %s, %s, '', %s, '5 км', 2099,
-                           '', 0, NULL, NULL, 0, 0, 0, 0, 0, NOW())""", (surname, email, ma_email, EV))
+                           '', 0, NULL, NULL, 0, 0, 0, 0, NOW())""", (surname, email, ma_email, EV))
 
 
 def test_me_without_session_redirects_to_login(client):

@@ -36,18 +36,10 @@ def test_duplicate_flag_not_editable_by_hand(mock_get_conn):
     mock_get_conn.assert_not_called()
 
 
-@patch("src.analytics.dq_actions.edit_record")
 @patch("src.analytics.db_results.get_pooled_connection")
-def test_editing_status_is_plain_update_without_journal(mock_get_conn, mock_edit):
-    conn, cur = _mock_conn()
-    mock_get_conn.return_value = conn
-    cur.fetchone.return_value = {**OLD, "status": 1}
-
-    update_lead(1, {"status": 1})
-
-    mock_edit.assert_not_called()
-    update_call = next(c for c in cur.execute.call_args_list if c.args[0].startswith("UPDATE leads"))
-    assert update_call.args == ("UPDATE leads SET status = %s WHERE id = %s", (1, 1))
+def test_legacy_status_is_not_an_editable_lead_field(mock_get_conn):
+    assert update_lead(1, {"status": 1}) is None
+    mock_get_conn.assert_not_called()
 
 
 @patch("src.analytics.db_results.get_pooled_connection")
