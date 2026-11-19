@@ -78,8 +78,13 @@ def test_bulk_import_leads_does_not_invalidate_cache_without_connection(mock_get
 def test_update_lead_invalidates_cache_after_successful_commit(mock_get_conn, mock_invalidate):
     conn, cur = _mock_conn()
     mock_get_conn.return_value = conn
-    cur.fetchone.return_value = {"id": 1, "surname": "Иванов", "name": "Иван"}
+    cur.fetchone.side_effect = [
+        {"id": 1, "surname": "Иванов", "name": "Иван", "email": "old@example.test"},
+        {"id": 1, "surname": "Иванов", "name": "Иван", "email": "new@example.test"},
+    ]
 
-    update_lead(1, {"status": 1})
+    with patch("src.analytics.dq_actions.edit_record") as mock_edit:
+        update_lead(1, {"email": "new@example.test"})
+        mock_edit.assert_called_once_with(conn, "leads", 1, {"email": "new@example.test"}, "admin", "lead:1")
 
     mock_invalidate.assert_called_once()
