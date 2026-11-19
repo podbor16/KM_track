@@ -16,9 +16,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import UUID
+from zipfile import BadZipFile, ZipFile
 
 
 DATABASE = "krasmarafon"
+DEV_EXCEL_TABLES = ("events", "clients", "leads", "results", "result_segments")
+DEV_EXCEL_NAME = "krasmarafon.xlsx"
 DATE_KEY = "%Y%m%dT%H%M%S%fZ"
 TIMEOUT = 1800
 ROOT = Path(__file__).resolve().parents[1]
@@ -250,8 +253,89 @@ def capture_local(storage, config):
             "server_uuid": config["server_uuid"],
         }, local=True)
         bundle = capture_bundle(root, config, options, expected_uuid)
+    try:
+        export_dev_excel(bundle, user, password, expected_uuid)
+    except (OSError, ValueError, BadZipFile, OverflowError) as exc:
+        raise BackupError("Дамп сохранён, но файл Excel не сформирован полностью.") from exc
     prune_dev(storage, bundle.name)
     return bundle
+
+
+def export_dev_excel(bundle, user, password, expected_uuid):
+    import mysql.connector
+    from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    def xlsx_cell(sheet, value):
+        # All text remains text, including values with spreadsheet formula prefixes.
+        if isinstance(value, (bytes, bytearray)):
+            value = bytes(value).hex()
+        elif isinstance(value, int) and abs(value) >= 10**15:
+            value = str(value)
+        elif value is not None and not isinstance(value, (int, float, datetime)):
+            value = str(value)
+        if not isinstance(value, str):
+            return value
+        value = ILLEGAL_CHARACTERS_RE.sub("", value)
+        if len(value) > 32767:
+            raise ValueError("Значение превышает ограничение ячейки Excel.")
+        cell = WriteOnlyCell(sheet, value=value)
+        cell.data_type = "s"
+        return cell
+
+    book = Workbook(write_only=True)
+    counts = {}
+    sampled_at = utc_now()
+    with tempfile.TemporaryDirectory(prefix=".xlsx-", dir=bundle) as temporary:
+        stage = Path(temporary)
+        try:
+            with mysql.connector.connect(
+                host="127.0.0.1", port=3308, database=DATABASE, user=user,
+                password=password, connection_timeout=10,
+            ) as conn:
+                conn.start_transaction(
+                    consistent_snapshot=True, isolation_level="REPEATABLE READ", readonly=True,
+                )
+                sampled_at = utc_now()
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT @@server_uuid")
+                    if cursor.fetchall() != [(expected_uuid,)]:
+                        raise BackupError("Дамп сохранён, но UUID источника Excel не совпал.")
+                    for table in DEV_EXCEL_TABLES:
+                        # Identifiers come only from the module's fixed list.
+                        cursor.execute(f"SELECT * FROM `{DATABASE}`.`{table}`")
+                        sheet = book.create_sheet(table)
+                        sheet.freeze_panes = "A2"
+                        headers = [xlsx_cell(sheet, value) for value in cursor.column_names]
+                        for cell in headers:
+                            cell.font = Font(bold=True)
+                        sheet.append(headers)
+                        count = 0
+                        for count, row in enumerate(cursor, start=1):
+                            if count >= 1_048_576:
+                                raise ValueError("Таблица превышает ограничение листа Excel.")
+                            sheet.append([xlsx_cell(sheet, value) for value in row])
+                        sheet.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{count + 1}"
+                        counts[table] = count
+                conn.rollback()
+        except mysql.connector.Error:
+            raise BackupError("Дамп сохранён, но чтение локального MySQL для Excel завершилось ошибкой.") from None
+        path = stage / DEV_EXCEL_NAME
+        book.save(path)
+        with ZipFile(path) as archive:
+            if archive.testzip() is not None:
+                raise BackupError("Дамп сохранён, но файл Excel не прошёл проверку.")
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        manifest["excel"] = {
+            "file": DEV_EXCEL_NAME, "captured_at": sampled_at.isoformat(),
+            "sha256": digest(path), "size_bytes": path.stat().st_size, "rows": counts,
+        }
+        write_json(stage / "manifest.json", manifest)
+        path.replace(bundle / DEV_EXCEL_NAME)
+        (stage / "manifest.json").replace(bundle / "manifest.json")
 
 
 def log_local(storage, message):
@@ -289,8 +373,8 @@ def report_local(storage, config, *, bundle=None):
                 raise ValueError("Ожидается HTTPS-адрес темы ntfy.")
             ok = bundle is not None
             title = "Dev-бэкап Красмарафона: готов" if ok else "Dev-бэкап Красмарафона: ошибка"
-            message = ("Локальный снимок создан и проверен." if ok
-                       else "Снимок локального MySQL не завершён. Проверьте local-backup.log.")
+            message = ("Локальный снимок MySQL и Excel созданы и проверены." if ok
+                       else "Локальный бэкап MySQL и Excel завершён не полностью. Проверьте local-backup.log.")
             headers = {"Content-Type": "application/json; charset=utf-8"}
             if settings.get("NTFY_TOKEN"):
                 headers["Authorization"] = "Bearer " + settings["NTFY_TOKEN"]
