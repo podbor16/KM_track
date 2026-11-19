@@ -24,11 +24,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 [hidden] { display: none !important; }
 .icon-library { position: absolute; width: 0; height: 0; overflow: hidden; }
 .icon, .placeholder-icon { width: 24px; height: 24px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.site-header { max-width: 1200px; margin: 0 auto; padding: 30px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
-.wordmark { font-size: 17px; font-weight: 850; letter-spacing: .06em; text-decoration: none; }
-.wordmark span { color: var(--red); white-space: nowrap; }
-.event-info { font-size: 14px; color: var(--muted); margin: 0; }
-.event-info .dot { margin: 0 8px; }
 .workspace { width: min(100%, 1120px); margin: 0 auto; padding: 54px 40px 64px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); grid-template-rows: auto auto 1fr; column-gap: 92px; grid-template-areas: "intro preview" "choose preview" "save preview"; }
 .intro { grid-area: intro; }
 .intro-label { color: var(--red); font-size: 16px; font-weight: 650; margin: 0 0 16px; }
@@ -116,23 +111,15 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--red); curso
 .download-result { background: var(--surface); padding: 16px; border-radius: 8px; margin-top: 18px; font-size: 14px; line-height: 1.6; }
 .download-result p { margin: 0; }
 .download-result .result-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-.site-footer { max-width: 1120px; margin: 0 auto; padding: 24px 40px; display: flex; justify-content: space-between; gap: 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0; }
 .noscript { text-align: center; padding: 24px; }
 @media (max-width: 960px) and (min-width: 701px) {
   .workspace { column-gap: 40px; grid-template-columns: minmax(0, 1fr) minmax(0, 330px); padding-inline: 28px; }
   h1 { font-size: 38px; }
-  .event-info { font-size: 12px; }
-  .site-header { padding-inline: 28px; }
-  .wordmark { font-size: 14px; }
   .preview-heading { flex-wrap: wrap; gap: 3px; }
 }
 @media (max-width: 700px) {
   /* Phone: certificate, frames and both actions fit the first screen. */
-  .site-header { padding: 12px 16px; gap: 12px; }
-  .wordmark { font-size: 14px; white-space: nowrap; }
-  .event-info { font-size: 12px; white-space: nowrap; }
-  .event-city { display: none; }
   .workspace { padding: 12px 16px 32px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 10px; grid-template-areas: "preview preview" "choose save"; grid-template-rows: auto; }
   .intro, .choose-section > h2, .save-section > h2, .zoom-label label { position: absolute; width: 1px; height: 1px; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
   .choose-section, .save-section { display: contents; }
@@ -160,11 +147,10 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--red); curso
   .uses-edit-mode:not(.is-editing) .crop-controls, .is-editing .frame-picker { display: none; }
   .save-section > .error-message, .download-result, .button-secondary { margin-top: 12px; }
   .privacy-note { margin-top: 18px; }
-  .site-footer { padding: 22px 16px; flex-direction: column; gap: 7px; }
 }
 @media (max-width: 359px) {
-  .workspace, .site-header { padding-inline: 12px; }
-  .wordmark span, .button .icon { display: none; }
+  .workspace { padding-inline: 12px; }
+  .button .icon { display: none; }
   .button { font-size: 15px; padding-inline: 6px; }
   .frame-options { gap: 4px; padding-inline: 0; }
   .frame-option { flex-basis: 56px; padding: 2px 1px; }
