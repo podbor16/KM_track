@@ -56,6 +56,7 @@ class DrawUnavailable(DrawError):
 
 
 CACHE_TTL_S = 1.0
+RECENT_PICK_SECONDS = 30
 # 2000 прогонов: на VPS (3 ядра EPYC) ~0,9 с вместо ~2,2 с при 5000 — пересчёт идёт в каждом
 # из 3 воркеров и под GIL тормозит их ответы; погрешность ±1 п.п. (замер 2026-10-14).
 SIMS = 2000
@@ -1003,11 +1004,11 @@ def _last_row(snap: dict) -> dict | None:
     active = [p for p in snap["picks"] if p["cancelled_at"] is None]
     if not active:
         return None
-    last_id = max(p["id"] for p in active)
+    last_pick = max(active, key=lambda p: p["id"])
     for c, rows in snap["lists"].items():
         for r in rows:
-            if r["pick_id"] == last_id:
-                return {**r, "category": c}
+            if r["pick_id"] == last_pick["id"]:
+                return {**r, "category": c, "created_at_epoch": last_pick.get("created_at_epoch")}
     return None
 
 
@@ -1055,8 +1056,10 @@ def _build_public_state(year: int, snap: dict, done) -> dict:
     order = {k: i for i, k in enumerate(group_keys)}
     people.sort(key=lambda a: (order[_aquarium_group(a, rnd)], -a["chances"], a["surname"], a["name"]))
     last = _last_row(snap)
+    picked_at = last.get("created_at_epoch") if last else None
     return {
         "year": year, "round": rnd, "round_label": ROUND_LABELS[rnd],
+        "recent_pick_until_ms": (int(picked_at) + RECENT_PICK_SECONDS) * 1000 if picked_at is not None else None,
         "capacities": {c: cfg[f"capacity_{c}"] for c in CATEGORIES},
         "lists": {c: [{
             "position": r["position"], "surname": r["surname"], "name": r["name"], "city": r["city"],

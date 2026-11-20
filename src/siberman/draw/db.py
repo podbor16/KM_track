@@ -91,7 +91,8 @@ def load_chance_history(conn, before_year: int) -> dict:
 
 def load_picks(conn, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM draw_picks WHERE draw_year=%s ORDER BY id", (year,))
+    cur.execute("SELECT *, UNIX_TIMESTAMP(created_at) AS created_at_epoch "
+                "FROM draw_picks WHERE draw_year=%s ORDER BY id", (year,))
     return cur.fetchall()
 
 

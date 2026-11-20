@@ -22,32 +22,37 @@
 <script>
 const YEAR = {{ year }};
 let cat = 'men', state = null;
+let recentTimer;
 document.querySelectorAll('#tabs .tab').forEach(b => b.addEventListener('click', () => {
   cat = b.dataset.cat;
   document.querySelectorAll('#tabs .tab').forEach(x => x.classList.toggle('active', x === b));
   render();
 }));
 function sectionRow(cls, text) { return `<tr class="section-row ${cls}"><td colspan="3">${text}</td></tr>`; }
-function personRow(r) {
-  const just = r.is_last ? '<span class="just">только что</span>' : '';
-  return `<tr class="${r.is_last ? 'is-last' : ''}"><td class="num">${r.position}</td><td>${drawEscape(r.surname + ' ' + r.name)}${just}</td><td class="pay">${r.status}</td></tr>`;
+function personRow(r, isRecent) {
+  const just = isRecent ? '<span class="just">только что</span>' : '';
+  return `<tr class="${isRecent ? 'is-last' : ''}"><td class="num">${r.position}</td><td>${drawEscape(r.surname + ' ' + r.name)}${just}</td><td class="pay">${r.status}</td></tr>`;
 }
 function render() {
   if (!state) return;
+  clearTimeout(recentTimer);
+  const remaining = (state.recent_pick_until_ms ?? 0) - Date.now();
+  const renderPerson = r => personRow(r, r.is_last && remaining > 0);
   const rows = state.lists[cat], cap = state.capacities[cat];
   let html = '';
   if (cap == null) {
-    html = rows.length ? rows.map(personRow).join('') : '<tr><td class="state-msg">Жеребьёвка ещё не началась</td></tr>';
+    html = rows.length ? rows.map(renderPerson).join('') : '<tr><td class="state-msg">Жеребьёвка ещё не началась</td></tr>';
   } else {
     html += sectionRow('', `Победители · ${cap} мест`);
     for (let i = 1; i <= cap; i++) {
       const r = rows[i - 1];
-      html += r ? personRow(r) : `<tr class="empty"><td class="num">${i}</td><td>—</td><td class="pay"></td></tr>`;
+      html += r ? renderPerson(r) : `<tr class="empty"><td class="num">${i}</td><td>—</td><td class="pay"></td></tr>`;
     }
     const wait = rows.slice(cap);
-    if (wait.length) html += sectionRow('waitlist', 'Лист ожидания') + wait.map(personRow).join('');
+    if (wait.length) html += sectionRow('waitlist', 'Лист ожидания') + wait.map(renderPerson).join('');
   }
   document.getElementById('rows').innerHTML = html;
+  if (remaining > 0) recentTimer = setTimeout(render, remaining);
 }
 drawPoll(YEAR, s => { state = s; render(); });
 </script>
