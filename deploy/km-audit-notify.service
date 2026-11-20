@@ -1,0 +1,19 @@
+[Unit]
+Description=Send KM_track nginx worker audit notifications
+After=auditd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/libexec/km-audit-notify.py
+StateDirectory=km-audit-notify
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+TimeoutStartSec=30s

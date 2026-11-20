@@ -1,0 +1,10 @@
+[Unit]
+Description=Check nginx worker audit events every 15 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
