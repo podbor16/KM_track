@@ -1,9 +1,9 @@
 'use strict';
-// Вкладка «Заявки» админки жеребьёвки: заявки года по порядку прихода, статус и комментарий директора
+// Раздел «Заявки» админки Siberman: заявки года по порядку прихода, статус и комментарий директора
 // (сохраняются сразу), поиск, фильтр, карточка с журналом, Excel, загрузка CSV Тильды, адрес вебхука.
 
 // Год заявок — свой, не год жеребьёвки страницы: заявки собираются на гонку после разыгрываемой
-let entYear = DRAW_YEAR + 1;
+let entYear = Number(document.getElementById('entries-admin').dataset.year);
 const entApi = () => `/api/siberman/admin/entries/${entYear}`;
 const ENT_STATUS = { review: '⌛️ на изучении', admitted: '✅ допущена', rejected: '❌ не соответствует',
                      withdrawn: '🚫 отказ от жеребьёвки' };
@@ -16,7 +16,7 @@ const entDate = s => s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${
 
 async function entFetch(path, opt = {}) {
   const r = await fetch(entApi() + path, { cache: 'no-store', ...opt });
-  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search + '#entries'); throw new Error('нужен вход'); }
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); throw new Error('нужен вход'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail || `ошибка ${r.status}`);
   return data;
@@ -108,6 +108,10 @@ entEl('ent-q').addEventListener('input', () => ENT && entRender());
 entEl('ent-filter').addEventListener('change', () => ENT && entRender());
 entEl('ent-year').addEventListener('change', e => {
   entYear = +e.target.value;
+  const url = new URL(location.href);
+  url.searchParams.set('year', entYear);
+  history.replaceState(null, '', url);
+  entEl('ent-draw-link').href = `/admin/draw?year=${entYear - 1}`;
   entEl('ent-card').hidden = true;
   entEl('ent-import-report').innerHTML = '';
   entMsg('');
@@ -123,8 +127,4 @@ entEl('ent-rows').addEventListener('click', e => {
   if (tr) entOpenCard(+tr.dataset.id);
 });
 
-// Ссылка …#entries (вход после 401) открывает сразу вкладку «Заявки»
-if (location.hash === '#entries') {
-  const btn = [...document.querySelectorAll('.admin-tab')].find(b => b.textContent.trim() === 'Заявки');
-  if (btn) switchTab('entries', btn);
-}
+entriesLoad();
