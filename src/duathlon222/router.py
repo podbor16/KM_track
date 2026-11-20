@@ -15,6 +15,7 @@ from src.config.event_loader import (
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
+from src.core.request_security import request_uses_https
 from src.duathlon222.service import get_standings, get_participant, get_stage_mark_broadcast, get_available_marks
 
 _require_auth = require_auth_for("/duathlon222/login")
@@ -178,7 +179,7 @@ async def duathlon_login_page(request: Request):
 
 
 @router.post("/duathlon222/login")
-async def duathlon_login_submit(username: str = Form(...), password: str = Form(...)):
+async def duathlon_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     import hmac
     creds_ok = (
         username == settings.ADMIN_USERNAME
@@ -189,6 +190,7 @@ async def duathlon_login_submit(username: str = Form(...), password: str = Form(
         response = RedirectResponse("/duathlon222/admin", status_code=302)
         response.set_cookie(
             COOKIE_NAME, cookie_value, httponly=True,
+            secure=request_uses_https(request),
             max_age=EXPIRY_SECONDS, samesite="lax",
         )
         return response
@@ -200,9 +202,9 @@ async def duathlon_login_submit(username: str = Form(...), password: str = Form(
 
 
 @router.get("/duathlon222/logout")
-async def duathlon_logout():
+async def duathlon_logout(request: Request):
     response = RedirectResponse("/duathlon222/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, secure=request_uses_https(request), httponly=True)
     return response
 
 

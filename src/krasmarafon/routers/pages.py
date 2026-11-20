@@ -24,6 +24,7 @@ from src.core.auth import (
     require_auth,
     safe_next,
 )
+from src.core.request_security import request_uses_https
 
 logger = logging.getLogger(__name__)
 
@@ -309,6 +310,7 @@ async def login_submit(
             COOKIE_NAME,
             cookie_value,
             httponly=True,
+            secure=request_uses_https(request),
             max_age=EXPIRY_SECONDS,
             samesite="lax",
         )
@@ -322,9 +324,9 @@ async def login_submit(
 
 
 @router.get("/logout")
-async def logout():
+async def logout(request: Request):
     response = RedirectResponse("/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, secure=request_uses_https(request), httponly=True)
     return response
 
 
