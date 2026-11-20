@@ -12,6 +12,7 @@ from src.config import settings
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
+from src.core.request_security import request_uses_https
 from src.race_triatleta.service import get_standings, get_all_laps
 
 _require_auth = require_auth_for("/24h/login")
@@ -83,7 +84,7 @@ async def tri_login_page(request: Request):
 
 
 @router.post("/24h/login")
-async def tri_login_submit(username: str = Form(...), password: str = Form(...)):
+async def tri_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     creds_ok = (
         username == settings.ADMIN_USERNAME
         and hmac.compare_digest(password, settings.ADMIN_PASSWORD)
@@ -93,6 +94,7 @@ async def tri_login_submit(username: str = Form(...), password: str = Form(...))
         response = RedirectResponse("/24h/admin", status_code=302)
         response.set_cookie(
             COOKIE_NAME, cookie_value, httponly=True,
+            secure=request_uses_https(request),
             max_age=EXPIRY_SECONDS, samesite="lax",
         )
         return response
@@ -104,9 +106,9 @@ async def tri_login_submit(username: str = Form(...), password: str = Form(...))
 
 
 @router.get("/24h/logout")
-async def tri_logout():
+async def tri_logout(request: Request):
     response = RedirectResponse("/24h/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(COOKIE_NAME, secure=request_uses_https(request), httponly=True)
     return response
 
 

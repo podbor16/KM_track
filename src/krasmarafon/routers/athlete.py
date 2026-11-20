@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from src.krasmarafon.routers.pages import templates, _diploma_event_ids
 from src.common.emails import is_valid_email
 from src.config import settings
+from src.core.request_security import request_uses_https
 from src.krasmarafon.services import athlete_auth as aa
 from src.krasmarafon.services import athlete_claims as acl
 from src.krasmarafon.services import athlete_find as afd
@@ -69,8 +70,7 @@ def _foreign_origin(request: Request) -> bool:
 
 
 def _https(request: Request) -> bool:
-    # По схеме запроса (nginx: X-Forwarded-Proto), не по settings.DEBUG — на проде он True
-    return request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    return request_uses_https(request)
 
 
 def _client_ip(request: Request) -> str:
