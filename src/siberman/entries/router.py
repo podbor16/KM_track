@@ -154,7 +154,7 @@ async def entries_public_page(request: Request, year: int):
     _check_year(year)
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse("siberman/entries_public.html", {"request": request, "year": year})
+    return templates.TemplateResponse(request, "siberman/entries_public.html", {"request": request, "year": year})
 
 
 @router.get("/api/siberman/entries/{year}")

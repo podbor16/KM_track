@@ -121,7 +121,7 @@ async def _tracker_response(
 ):
     """Рендер страницы трекера с динамическим event_config."""
     event_cfg = _build_event_config(event_id=event_id, event_code=event_code)
-    return templates.TemplateResponse("krasmarafon/tracker.html", {
+    return templates.TemplateResponse(request, "krasmarafon/tracker.html", {
         "request": request,
         "event_title": event_cfg["title"],
         "event_config": event_cfg,
@@ -138,10 +138,10 @@ async def root(request: Request):
     """Главная страница — domain-aware. Выбирает страницу по домену."""
     domain = getattr(request.state, "domain", "krasmarafon")
     if domain == "triatleta":
-        return templates.TemplateResponse("race_triatleta/index.html",
+        return templates.TemplateResponse(request, "race_triatleta/index.html",
                                           {"request": request, "v": _get_deploy_version()})
     if domain == "siberman":
-        return templates.TemplateResponse("siberman/results.html", {"request": request})
+        return templates.TemplateResponse(request, "siberman/results.html", {"request": request})
     return await _tracker_response(request)
 
 
@@ -170,7 +170,7 @@ async def start_list_page(request: Request, user=Depends(require_auth)):
     решение 2026-10-26) — только после входа в админку."""
     if isinstance(user, RedirectResponse):
         return user
-    return templates.TemplateResponse("krasmarafon/start_list.html", {
+    return templates.TemplateResponse(request, "krasmarafon/start_list.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
         "participant_diploma_event_ids": _diploma_event_ids(participant_only=True),
@@ -199,7 +199,7 @@ def _diploma_event_ids(participant_only: bool = False) -> list[int]:
 @router.get("/results", response_class=HTMLResponse)
 async def results_page(request: Request):
     """Результаты забега."""
-    return templates.TemplateResponse("krasmarafon/results.html", {
+    return templates.TemplateResponse(request, "krasmarafon/results.html", {
         "request": request,
         "event": settings.CURRENT_EVENT,
         "diploma_event_ids": _diploma_event_ids(),
@@ -212,7 +212,7 @@ async def history_page(request: Request):
     историческая база 2013-2023 не загружена — см. get_history_enabled()."""
     if not get_history_enabled():
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse("krasmarafon/history.html", {"request": request})
+    return templates.TemplateResponse(request, "krasmarafon/history.html", {"request": request})
 
 
 @router.get("/athlete-profile")
@@ -220,7 +220,7 @@ async def athlete_profile_page(request: Request):
     """Профиль спортсмена со всеми его результатами. Временно скрыто, см. history_page()."""
     if not get_history_enabled():
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse("krasmarafon/athlete-profile.html", {
+    return templates.TemplateResponse(request, "krasmarafon/athlete-profile.html", {
         "request": request,
         "diploma_event_ids": _diploma_event_ids(),
     })
@@ -236,7 +236,7 @@ async def participant_diploma_page(request: Request, lead_id: int):
             or not distance_cfg.diploma.participant_only):
         raise HTTPException(status_code=404, detail="Диплом участника недоступен")
 
-    return templates.TemplateResponse("krasmarafon/diploma.html", {
+    return templates.TemplateResponse(request, "krasmarafon/diploma.html", {
         "request": request,
         "event": event_cfg,
         "distance": distance_cfg,
@@ -262,7 +262,7 @@ async def diploma_page(request: Request, event_id: int, bib: str):
     if data is None:
         raise HTTPException(status_code=404, detail="Результат участника не найден")
 
-    return templates.TemplateResponse("krasmarafon/diploma.html", {
+    return templates.TemplateResponse(request, "krasmarafon/diploma.html", {
         "request": request,
         "event": event_cfg,
         "distance": distance_cfg,
@@ -273,7 +273,7 @@ async def diploma_page(request: Request, event_id: int, bib: str):
 @router.get("/race-analysis", response_class=HTMLResponse)
 async def race_analysis_page(request: Request):
     """Анализ забегов с выбором события и года."""
-    return templates.TemplateResponse("krasmarafon/race-analysis.html", {"request": request})
+    return templates.TemplateResponse(request, "krasmarafon/race-analysis.html", {"request": request})
 
 
 
@@ -286,8 +286,8 @@ async def login_page(request: Request):
     domain = getattr(request.state, "domain", "krasmarafon")
     ctx = {"request": request, "error": None, "next": safe_next(request.query_params.get("next"))}
     if domain == "siberman":
-        return templates.TemplateResponse("siberman/login.html", ctx)
-    return templates.TemplateResponse("krasmarafon/login.html", ctx)
+        return templates.TemplateResponse(request, "siberman/login.html", ctx)
+    return templates.TemplateResponse(request, "krasmarafon/login.html", ctx)
 
 
 @router.post("/login")
@@ -317,8 +317,9 @@ async def login_submit(
         return response
     login_template = "siberman/login.html" if domain == "siberman" else "krasmarafon/login.html"
     return templates.TemplateResponse(
+        request,
         login_template,
-        {"request": {}, "error": "Неверный логин или пароль", "next": safe_next(next)},
+        {"request": request, "error": "Неверный логин или пароль", "next": safe_next(next)},
         status_code=401,
     )
 
@@ -338,5 +339,5 @@ async def admin_page(request: Request, user=Depends(require_auth)):
         return RedirectResponse("/24h/admin")
     domain = getattr(request.state, "domain", "krasmarafon")
     if domain == "siberman":
-        return templates.TemplateResponse("siberman/admin.html", {"request": request})
-    return templates.TemplateResponse("krasmarafon/admin.html", {"request": request})
+        return templates.TemplateResponse(request, "siberman/admin.html", {"request": request})
+    return templates.TemplateResponse(request, "krasmarafon/admin.html", {"request": request})

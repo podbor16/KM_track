@@ -91,6 +91,7 @@ async def participant_page(request: Request, bib: str, year: int = 2025):
     /api/siberman/results (тот же пул данных, что и у результатов), bib
     ищется среди individual/relay в JS."""
     return templates.TemplateResponse(
+        request,
         "siberman/participant.html", {"request": request, "bib": bib, "year": year}
     )
 

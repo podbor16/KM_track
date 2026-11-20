@@ -97,7 +97,7 @@ async def duathlon_participant_page_redirect(start_number: int):
 async def duathlon_home(request: Request, year: int):
     if not _year_exists(year):
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
-    return templates.TemplateResponse("race_triatleta/duathlon_results.html", {
+    return templates.TemplateResponse(request, "race_triatleta/duathlon_results.html", {
         "request": request,
         "year": year,
     })
@@ -107,7 +107,7 @@ async def duathlon_home(request: Request, year: int):
 async def duathlon_participant_page(request: Request, year: int, start_number: int):
     if not _year_exists(year):
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
-    return templates.TemplateResponse("race_triatleta/duathlon_participant.html", {
+    return templates.TemplateResponse(request, "race_triatleta/duathlon_participant.html", {
         "request": request,
         "year": year,
         "start_number": start_number,
@@ -175,7 +175,7 @@ async def duathlon_participant_api(year: int, start_number: int):
 
 @router.get("/duathlon222/login", response_class=HTMLResponse)
 async def duathlon_login_page(request: Request):
-    return templates.TemplateResponse("race_triatleta/duathlon_login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "race_triatleta/duathlon_login.html", {"request": request, "error": None})
 
 
 @router.post("/duathlon222/login")
@@ -195,8 +195,9 @@ async def duathlon_login_submit(request: Request, username: str = Form(...), pas
         )
         return response
     return templates.TemplateResponse(
+        request,
         "race_triatleta/duathlon_login.html",
-        {"request": {}, "error": "Неверный логин или пароль"},
+        {"request": request, "error": "Неверный логин или пароль"},
         status_code=401,
     )
 
@@ -212,7 +213,7 @@ async def duathlon_logout(request: Request):
 async def duathlon_admin_page(request: Request, user=Depends(_require_auth)):
     if isinstance(user, RedirectResponse):
         return user
-    return templates.TemplateResponse("race_triatleta/duathlon_admin.html", {"request": request})
+    return templates.TemplateResponse(request, "race_triatleta/duathlon_admin.html", {"request": request})
 
 
 # ---------------------------------------------------------------------------

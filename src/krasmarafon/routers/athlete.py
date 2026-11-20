@@ -78,7 +78,7 @@ def _client_ip(request: Request) -> str:
 
 
 def _login_page(request: Request, step: str, **ctx) -> HTMLResponse:
-    return templates.TemplateResponse("krasmarafon/me-login.html", {"request": request, "step": step, **ctx})
+    return templates.TemplateResponse(request, "krasmarafon/me-login.html", {"request": request, "step": step, **ctx})
 
 
 async def _start_session(request: Request, email: str, shared: bool) -> RedirectResponse:
@@ -199,7 +199,7 @@ async def me_page(request: Request, claim: str = "", rep: str = "", r: str = "",
     claim_error = CLAIM_ERRORS.get(r)
     shown = {p["client_id"] for p in people if p["can_claim"]}
     not_yours = None if {claim_id, rep_id} & shown or r != "not_yours" else claim_error
-    return templates.TemplateResponse("krasmarafon/me.html", {
+    return templates.TemplateResponse(request, "krasmarafon/me.html", {
         "request": request, "email": email, "people": people,
         "diploma_event_ids": set(_diploma_event_ids()),
         "claimed": set(claimed), "dropped": set(dropped), "reps": set(reps), "reps_dropped": set(reps_dropped),
@@ -328,7 +328,7 @@ async def athlete_page(request: Request, client_id: int, sent: str = "", req_err
     titles = await run_in_threadpool(card_titles, [client_id])
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
     history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
-    return templates.TemplateResponse("krasmarafon/me-history.html", {
+    return templates.TemplateResponse(request, "krasmarafon/me-history.html", {
         "request": request, "title": titles[client_id]["title"], "history": history, "card_ids": [client_id],
         "ward": True, "reps": [], "email": email, "sent": bool(sent), "req_error": REQUEST_ERRORS.get(req_err),
     })
@@ -347,7 +347,7 @@ async def history_page(request: Request, sent: str = "", req_err: str = "", km_a
     title = await run_in_threadpool(acl.history_title, claimed)
     codes = {ev.name: ev.code for ev in settings.EVENTS.values()}
     history = build_history(results, leads, dt.date.today(), codes, set(_diploma_event_ids()), email)
-    return templates.TemplateResponse("krasmarafon/me-history.html", {
+    return templates.TemplateResponse(request, "krasmarafon/me-history.html", {
         "request": request, "title": title, "history": history, "card_ids": claimed, "ward": False,
         "reps": await run_in_threadpool(arp.reps_of, email), "email": email, "sent": bool(sent),
         "req_error": REQUEST_ERRORS.get(req_err),
@@ -355,7 +355,7 @@ async def history_page(request: Request, sent: str = "", req_err: str = "", km_a
 
 
 def _find_page(request: Request, email: str, **ctx) -> HTMLResponse:
-    return templates.TemplateResponse("krasmarafon/me-find.html", {"request": request, "email": email, **ctx})
+    return templates.TemplateResponse(request, "krasmarafon/me-find.html", {"request": request, "email": email, **ctx})
 
 
 @router.get("/me/find", response_class=HTMLResponse)

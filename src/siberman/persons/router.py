@@ -65,7 +65,7 @@ async def people_admin_page(request: Request, user=Depends(_page_auth)):
         return user
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse("siberman/people_admin.html", {"request": request})
+    return templates.TemplateResponse(request, "siberman/people_admin.html", {"request": request})
 
 
 @router.get(f"{API}/reviews")
