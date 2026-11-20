@@ -52,7 +52,7 @@ templates.env.globals["v"] = _get_deploy_version()
 @router.get("/24h", response_class=HTMLResponse)
 @router.get("/24h/", response_class=HTMLResponse)
 async def tri_home(request: Request):
-    return templates.TemplateResponse("race_triatleta/tri_results.html", {
+    return templates.TemplateResponse(request, "race_triatleta/tri_results.html", {
         "request": request,
         "event_id": TRI_EVENT_ID,
     })
@@ -80,7 +80,7 @@ async def tri_laps():
 
 @router.get("/24h/login", response_class=HTMLResponse)
 async def tri_login_page(request: Request):
-    return templates.TemplateResponse("race_triatleta/login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "race_triatleta/login.html", {"request": request, "error": None})
 
 
 @router.post("/24h/login")
@@ -99,8 +99,9 @@ async def tri_login_submit(request: Request, username: str = Form(...), password
         )
         return response
     return templates.TemplateResponse(
+        request,
         "race_triatleta/login.html",
-        {"request": {}, "error": "Неверный логин или пароль"},
+        {"request": request, "error": "Неверный логин или пароль"},
         status_code=401,
     )
 
@@ -116,7 +117,7 @@ async def tri_logout(request: Request):
 async def tri_admin_page(request: Request, user=Depends(_require_auth)):
     if isinstance(user, RedirectResponse):
         return user
-    return templates.TemplateResponse("race_triatleta/tri_admin.html", {"request": request})
+    return templates.TemplateResponse(request, "race_triatleta/tri_admin.html", {"request": request})
 
 
 

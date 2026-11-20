@@ -78,7 +78,7 @@ def _siberman_page(request: Request, template: str, year: int):
     _check_year(year)
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(template, {"request": request, "year": year})
+    return templates.TemplateResponse(request, template, {"request": request, "year": year})
 
 
 # ── Страницы ────────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ async def draw_overlay_page(request: Request, year: int, name: str, page: int = 
     _check_year(year)
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse("siberman/draw_overlay.html",
+    return templates.TemplateResponse(request, "siberman/draw_overlay.html",
                                       {"request": request, "year": year, "name": name, "page": page})
 
 
@@ -134,7 +134,7 @@ async def draw_host_page(request: Request, year: int, token: str):
     _host_check(year, token)
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse("siberman/draw_host.html", {"request": request, "year": year, "token": token},
+    return templates.TemplateResponse(request, "siberman/draw_host.html", {"request": request, "year": year, "token": token},
                                       headers={"X-Robots-Tag": "noindex, nofollow"})
 
 

@@ -18,7 +18,7 @@ router = APIRouter(tags=["Siberman hall"])
 def _page(request: Request, template: str):
     if getattr(request.state, "domain", "") != "siberman":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse(template, {"request": request})
+    return templates.TemplateResponse(request, template, {"request": request})
 
 
 def _json(fn, *args) -> JSONResponse:
@@ -65,7 +65,7 @@ def athlete_page(request: Request, slug: str):
     if moved:
         return RedirectResponse(f"/athlete/{moved}", status_code=301)
     found = page is not None
-    return templates.TemplateResponse("siberman/athlete.html", {"request": request, "slug": slug, "found": found},
+    return templates.TemplateResponse(request, "siberman/athlete.html", {"request": request, "slug": slug, "found": found},
                                       status_code=200 if found else 404)
 
 
