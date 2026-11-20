@@ -13,7 +13,7 @@ from src.siberman.service import (
     build_preview, apply_to_db, convert_bike_times_to_elapsed, build_bike_day2_starts,
 )
 from src.siberman.db import (
-    get_siberman_connection, get_results_for_year, set_race_start,
+    get_siberman_connection, get_results_for_year, get_result_years, set_race_start,
     get_public_race_year, set_public_race_year, set_stage_starts, get_all_records,
     get_copernico_run_enabled, set_copernico_run_enabled,
     get_google_sheet_config, set_google_sheet_config,
@@ -114,11 +114,13 @@ async def api_results(year: Optional[int] = None):
     if conn is None:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
+        public_year = get_public_race_year(conn)
         if year is None:
-            year = get_public_race_year(conn)
+            year = public_year
             if year is None:
                 raise HTTPException(status_code=404, detail="Нет загруженных данных ни за один год")
         data = get_results_for_year(conn, year)
+        data["available_years"] = get_result_years(conn, public_year if public_year is not None else year)
         data["records"] = get_all_records(conn)
     finally:
         conn.close()

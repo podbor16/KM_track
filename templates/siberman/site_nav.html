@@ -1,0 +1,30 @@
+{% set sections = [
+    ('results', 'Результаты', '/'), ('rating', 'Рейтинг', '/hall/rating'),
+    ('records', 'Рекорды', '/hall/records'), ('geo', 'География', '/hall/geo'),
+    ('stats', 'Статистика', '/hall/stats')
+] %}
+{% set active = nav_section|default('results') %}
+<header class="sb-site-header" id="sb-site-header"{% if nav_detail %} data-siberman-detail{% endif %}>
+    <a class="sb-site-logo" href="/" aria-label="Siberman — результаты">
+        <img class="sb-site-logo-dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon" height="40">
+        <img class="sb-site-logo-light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon" height="40">
+    </a>
+    <nav class="sb-site-desktop" aria-label="Разделы Siberman">
+        {% for key, label, url in sections %}
+        <a href="{{ url }}" data-siberman-section="{{ key }}"{% if key == active %} aria-current="{{ 'location' if nav_detail else 'page' }}"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </nav>
+    <div class="sb-site-controls">
+        {% if nav_timer %}<div class="stage-timers" id="stageTimers" style="display:none"></div>{% endif %}
+        <details class="sb-site-menu">
+            <summary>{% for key, label, url in sections %}{% if key == active %}{{ label }}{% endif %}{% endfor %}</summary>
+            <nav aria-label="Разделы Siberman">
+                {% for key, label, url in sections %}
+                <a href="{{ url }}" data-siberman-section="{{ key }}"{% if key == active %} aria-current="{{ 'location' if nav_detail else 'page' }}"{% endif %}>{{ label }}</a>
+                {% endfor %}
+            </nav>
+        </details>
+        {% if nav_theme %}<button type="button" class="sb-site-theme" id="themeBtn" onclick="toggleTheme()" aria-label="Сменить тему">☀️</button>{% endif %}
+    </div>
+</header>
+<script src="/static/js/siberman-nav.js?v={{ v }}"></script>

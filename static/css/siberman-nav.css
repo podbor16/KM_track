@@ -1,0 +1,98 @@
+.sb-site-header {
+    --sb-header-bg: #0c2035;
+    --sb-header-text: #e4eef6;
+    --sb-header-muted: #7aaabf;
+    --sb-header-control: #112840;
+    --sb-header-border: rgba(106, 171, 215, .22);
+    --sb-header-red: #be0a21;
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 20px;
+    min-height: 70px;
+    padding: 10px 20px;
+    background: var(--sb-header-bg);
+    color: var(--sb-header-text);
+    border-bottom: 3px solid var(--sb-header-red);
+    font: 800 14px/1.4 Onest, system-ui, sans-serif;
+    box-sizing: border-box;
+}
+[data-theme="light"] .sb-site-header {
+    --sb-header-bg: #fff;
+    --sb-header-text: #003d62;
+    --sb-header-muted: #386684;
+    --sb-header-control: #e4eef6;
+    --sb-header-border: #b8d5e8;
+}
+.sb-site-header[hidden] { display: none; }
+.sb-site-logo img { display: block; width: auto; height: 40px; }
+.sb-site-logo .sb-site-logo-light,
+[data-theme="light"] .sb-site-logo .sb-site-logo-dark { display: none; }
+[data-theme="light"] .sb-site-logo .sb-site-logo-light { display: block; }
+.sb-site-desktop { display: flex; flex: 1; gap: 14px; flex-wrap: wrap; }
+.sb-site-header nav a {
+    color: var(--sb-header-muted);
+    text-decoration: none;
+    padding: 8px 0;
+    border-bottom: 2px solid transparent;
+}
+.sb-site-header nav a:hover { color: var(--sb-header-text); }
+.sb-site-header nav a[aria-current] {
+    color: var(--sb-header-text);
+    border-bottom-color: var(--sb-header-red);
+}
+.sb-site-controls { display: flex; align-items: center; gap: 8px; }
+.sb-site-menu { display: none; }
+.sb-site-theme, .sb-site-menu summary {
+    border: 1px solid var(--sb-header-border);
+    border-radius: 8px;
+    background: var(--sb-header-control);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.sb-site-theme { min-width: 34px; min-height: 34px; }
+.sb-site-context { padding: 8px 20px; }
+.sb-site-context a, .sb-athlete-link { color: inherit; text-decoration: underline; text-underline-offset: .2em; }
+.sb-season-bar, .sb-mobile-stage {
+    background: var(--bg2); color: var(--muted); border-bottom: 1px solid var(--border);
+    padding: 7px 20px;
+}
+.sb-season-bar label, .sb-mobile-stage label { margin-right: 8px; }
+.sb-season-bar select, .sb-mobile-stage select {
+    color: var(--text); background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; font: inherit; padding: 5px 8px;
+}
+.sb-mobile-stage { display: none; }
+.sb-mobile-columns { display: none; }
+@media (max-width: 720px) {
+    .sb-site-header { justify-content: space-between; padding: 8px 10px; gap: 5px; }
+    .sb-site-logo img { height: 32px; }
+    .sb-site-controls { display: contents; }
+    .sb-site-controls > .stage-timers { order: 3; max-width: 100%; flex-wrap: wrap; }
+    .sb-site-desktop, #tabs.sb-desktop-stages { display: none; }
+    .sb-site-menu { display: block; margin-left: auto; }
+    .sb-site-menu summary {
+        display: flex; align-items: center; gap: 6px;
+        min-height: 44px; padding: 0 8px; list-style: none; box-sizing: border-box;
+    }
+    .sb-site-menu summary::-webkit-details-marker { display: none; }
+    .sb-site-menu summary::after { content: "▾"; color: var(--sb-header-muted); }
+    .sb-site-menu[open] summary::after { content: "▴"; }
+    .sb-site-menu nav {
+        position: absolute; z-index: 20; top: 100%; inset-inline: 10px;
+        background: var(--sb-header-bg); border: 1px solid var(--sb-header-border);
+        border-radius: 8px; padding: 4px 10px;
+    }
+    .sb-site-menu nav a { display: flex; align-items: center; min-height: 44px; box-sizing: border-box; }
+    .sb-site-theme { min-width: 44px; min-height: 44px; }
+    .sb-season-bar, .sb-mobile-stage { padding-inline: 12px; }
+    .sb-mobile-stage { display: flex; align-items: center; }
+    .sb-mobile-stage select { flex: 1; min-width: 0; }
+    .sb-season-bar select, .sb-mobile-stage select { min-height: 44px; font-size: 16px; }
+    .sb-mobile-columns { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+    .sb-overall-table:not(.sb-full-columns) .sb-secondary-rank,
+    .sb-overall-table:not(.sb-full-columns) .sb-overall-total ~ * { display: none; }
+    .sb-overall-table:not(.sb-full-columns) .name-cell { position: static; min-width: 0; }
+}

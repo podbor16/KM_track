@@ -7,8 +7,10 @@
 <link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/images/siberman/favicon-32.png" sizes="32x32">
 <link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
+<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
 </head>
 <body>
+{% with nav_section="rating", nav_detail=false, nav_theme=false, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 <div class="hall">
   <div class="tabs" id="tabs">
     <button type="button" class="tab active" data-tab="abs">Абсолют</button>

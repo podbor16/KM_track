@@ -48,7 +48,6 @@
             --border:   rgba(106,171,215,.18);
             --text:     #e4eef6;
             --muted:    #7aaabf;
-            --header-bg:var(--bg2);
             --dnf-op:   .45;
         }
         [data-theme="light"] {
@@ -58,32 +57,12 @@
             --border:   #b8d5e8;
             --text:     var(--navy);
             --muted:    #4f7f9b;
-            --header-bg:var(--white);
             --dnf-op:   .4;
         }
         body {
             background: var(--bg); color: var(--text);
             font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
             font-size: 14px; line-height: 1.5;
-        }
-        .header {
-            background: var(--header-bg); border-bottom: 3px solid var(--red);
-            padding: 14px 20px; display: flex; align-items: center; gap: 16px;
-        }
-        .logo-block { display: flex; align-items: center; }
-        .logo-img { height: 30px; width: auto; display: none; }
-        [data-theme="dark"] .logo-img--dark { display: block; }
-        [data-theme="light"] .logo-img--light { display: block; }
-        .header-spacer { flex: 1; }
-        .back-link {
-            color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;
-            display: flex; align-items: center; gap: 6px;
-        }
-        .back-link:hover { color: var(--text); }
-        .theme-btn {
-            background: var(--bg3); border: 1px solid var(--border); color: var(--text);
-            width: 34px; height: 34px; border-radius: var(--radius); cursor: pointer;
-            font-size: 16px; display: flex; align-items: center; justify-content: center;
         }
         /* max-width поднят с 780 до 1200 (2026-08-06) — карточка КТ (9-10
            колонок) не помещалась и требовала горизонтального скролла даже
@@ -237,8 +216,6 @@
         [data-theme="dark"] .forecast-clock { color: #e0b23c; }
 
         @media (max-width: 640px) {
-            .header { padding: 10px 14px; }
-            .logo-img { height: 24px; }
             .content { padding: 14px; }
             .card-hdr, .stats-row { padding: 12px 14px; }
             .p-name { font-size: 17px; }
@@ -260,19 +237,12 @@
             .cp-table td { font-size: 11px; }
         }
     </style>
+<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
 </head>
 <body>
+{% with nav_section="results", nav_detail=true, nav_theme=true, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 
-<div class="header">
-    <a class="back-link" href="/?year={{ year }}">← Результаты</a>
-    <div class="header-spacer"></div>
-    <div class="logo-block">
-        <img class="logo-img logo-img--dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon">
-        <img class="logo-img logo-img--light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon">
-    </div>
-    <div class="header-spacer"></div>
-    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-</div>
+<div class="sb-site-context"><a href="/?year={{ year }}" data-siberman-back>← Результаты {{ year }}</a></div>
 
 <div class="content">
     <div class="loading" id="loading"></div>

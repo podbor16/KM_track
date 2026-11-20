@@ -416,15 +416,24 @@ def get_finished_years_by_person(conn) -> dict[int, set[int]]:
     return result
 
 
-def get_person_ids_for_year(conn, race_year: int) -> dict[str, int]:
-    """Личный номер года → человек реестра. Нет таблиц реестра — пусто."""
+def get_result_years(conn, public_year: int) -> list[int]:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT DISTINCT race_year FROM participants WHERE race_year <= %s ORDER BY race_year DESC",
+        (public_year,),
+    )
+    return [year for (year,) in cur.fetchall()]
+
+
+def get_person_ids_for_year(conn, race_year: int) -> dict[tuple[str, str], int]:
+    """Номер и роль в сезоне → человек реестра. Нет таблиц реестра — пусто."""
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT bib, person_id FROM siberman_person_links WHERE race_year=%s AND relay_stage='none'",
+        cur.execute("SELECT bib, relay_stage, person_id FROM siberman_person_links WHERE race_year=%s",
                     (race_year,))
     except mysql.connector.Error:
         return {}
-    return {str(r["bib"]): r["person_id"] for r in cur.fetchall()}
+    return {(str(r["bib"]), r["relay_stage"]): r["person_id"] for r in cur.fetchall()}
 
 
 def get_results_for_year(conn, race_year: int) -> dict:
@@ -466,7 +475,9 @@ def get_results_for_year(conn, race_year: int) -> dict:
         p["splits"] = split_by_pid.get(pid, {})
         # Только личный зачёт (запрошено пользователем 2026-08-05) — у
         # эстафетных команд свой "стаж" не считается.
-        p["finish_count"] = finish_count_for(person_ids.get(str(p["bib"])), p["surname"], p["name"],
+        person_id = person_ids.get((str(p["bib"]), "none"))
+        p["profile_slug"] = f"r{person_id}" if person_id else None
+        p["finish_count"] = finish_count_for(person_id, p["surname"], p["name"],
                                              race_year, finished_years_by_person, finished_years_by_name)
 
     # Эстафетные члены (все трое)
@@ -498,7 +509,9 @@ def get_results_for_year(conn, race_year: int) -> dict:
                 "team_name": row["relay_team_name"] or "",
                 "members": [],
             }
+        person_id = person_ids.get((str(bib), row["relay_stage"]))
         relay_teams[bib]["members"].append({
+            "profile_slug": f"r{person_id}" if person_id else None,
             "relay_stage": row["relay_stage"],
             "surname": row["surname"],
             "name": row["name"],
