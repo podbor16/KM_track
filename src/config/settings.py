@@ -55,6 +55,7 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+API_DOCS_ENABLED = os.getenv("API_DOCS_ENABLED", "true").lower() == "true"
 
 # CORS
 _cors_raw = os.getenv("CORS_ORIGINS", "*")

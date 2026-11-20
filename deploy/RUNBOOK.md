@@ -90,6 +90,7 @@ ADMIN_USERNAME=<логин>
 ADMIN_PASSWORD=<пароль>
 SECRET_KEY=<длинная случайная строка>
 DEBUG=False
+API_DOCS_ENABLED=False
 CORS_ORIGINS=https://results.krasmarafon.ru,https://krasmarafon.ru
 ```
 
