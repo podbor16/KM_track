@@ -1,12 +1,12 @@
 """Send a small ntfy notification for successful nginx worker exec events."""
 
 import argparse
+import base64
 from datetime import datetime
 import json
 import os
 from pathlib import Path
 import re
-import socket
 import sys
 import time
 import urllib.parse
@@ -78,42 +78,71 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def publish(title, event, count=1):
+def format_notification(kind, event=None, count=0):
+    if kind == "test":
+        return (
+            "KM_track — проверка уведомлений",
+            "Это контрольное сообщение. Оповещения безопасности подключены. Действий не требуется.",
+            "white_check_mark",
+            "default",
+        )
+
+    when = datetime.fromtimestamp(event["time"]).astimezone().strftime("%d.%m.%Y в %H:%M:%S")
+    if kind == "summary":
+        title = "KM_track — повторные запуски на сервере"
+        situation = (
+            f"За 10 минут после первого оповещения зафиксировано повторных запусков: {count}.\n"
+            f"Последняя программа: {event['name']}."
+        )
+    else:
+        title = "KM_track — неожиданный запуск на сервере"
+        situation = (
+            f"На рабочем сервере от имени пользователя nginx (www-data) "
+            f"запущена программа «{event['name']}»."
+        )
+    body = (
+        f"{situation}\n"
+        f"Время на сервере: {when}.\n\n"
+        "Если в это время шли работы на сервере, сверьте запуск с ними. "
+        "Если запуск вам неизвестен, попросите проверить журнал безопасности VPS."
+    )
+    return title, body, "warning", "high"
+
+
+def publish(kind, event=None, count=0):
     url = DESTINATION.read_text(encoding="utf-8").strip()
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username:
         raise ValueError("Ожидается HTTPS-адрес темы ntfy")
-    when = datetime.fromtimestamp(event["time"]).astimezone().isoformat(timespec="seconds")
-    body = f"Узел {socket.gethostname()}\nВремя {when}\nПрограмма {event['name']}"
-    if count > 1 or title.endswith("summary"):
-        body += f"\nПовторных событий {count}"
+    title, body, tags, priority = format_notification(kind, event, count)
+    encoded = base64.b64encode(title.encode("utf-8")).decode("ascii")
     request = urllib.request.Request(
         url,
         data=body.encode("utf-8"),
         headers={
-            "Title": title,
-            "Tags": "warning",
-            "Priority": "high",
+            "Title": f"=?UTF-8?B?{encoded}?=",
+            "Tags": tags,
+            "Priority": priority,
             "Content-Type": "text/plain; charset=utf-8",
         },
         method="POST",
     )
     with urllib.request.build_opener(NoRedirect).open(request, timeout=8) as response:
-        print(f"ntfy accepted {title}, HTTP {response.status}", flush=True)
+        print(f"ntfy accepted {kind}, HTTP {response.status}", flush=True)
 
 
 def deliver(state, now):
     repeats = state.get("repeats", 0)
     expired = "until" in state and now >= state["until"]
     if repeats and expired:
-        publish("KM_track audit summary", state["last_repeat"], repeats)
+        publish("summary", state["last_repeat"], repeats)
         state["repeats"] = 0
         state.pop("last_repeat")
         save(state)
     pending = state.get("pending")
     if not pending:
         return
-    publish("KM_track nginx worker exec", pending)
+    publish("alert", pending)
     state.pop("pending")
     state["until"] = now + WINDOW_SECONDS
     save(state)
@@ -121,8 +150,13 @@ def deliver(state, now):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--initialize", action="store_true")
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--initialize", action="store_true")
+    actions.add_argument("--test-notification", action="store_true", help="Send a labeled test to ntfy")
     args = parser.parse_args()
+    if args.test_notification:
+        publish("test")
+        return
     if args.initialize:
         if STATE.exists():
             raise FileExistsError(STATE)
