@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siberman — Заявки</title>
+<link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #f7f7f7; color: #1a1a1a; font-family: system-ui, sans-serif; }
+.header { background: #1a1a1a; color: #fff; padding: 14px 24px; display: flex; gap: 20px; align-items: center; }
+.header h1 { font-size: 18px; margin: 0; flex: 1; color: #fff; }
+.hlink { color: #ddd; text-decoration: none; font-size: 14px; }
+.container { max-width: 1280px; margin: 20px auto; padding: 0 20px; }
+.msg { display: none; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 15px; }
+.msg-ok { background: #eafaf1; color: #1e8449; border: 1px solid #a9dfbf; }
+.msg-error { background: #fdecea; color: #b71c1c; border: 1px solid #f5c6c2; }
+.search { width: 100%; padding: 12px 14px; font-size: 20px; background: #fff; color: #1a1a1a; border: 2px solid #1a1a1a; border-radius: 6px; }
+.btn-small { padding: 3px 8px; font-size: 12px; border: 1px solid #888; background: #fff; color: #1a1a1a; border-radius: 4px; cursor: pointer; }
+.card { background: #fff; color: #1a1a1a; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card h2 { font-size: 16px; margin: 0 0 12px; }
+input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border-radius: 6px; background: #fff; color: #1a1a1a; }
+.btn { padding: 9px 18px; border-radius: 6px; border: 1px solid #888; background: #fff; color: #1a1a1a; font-weight: 600; cursor: pointer; }
+.btn-primary { background: #c0392b; border-color: #c0392b; color: #fff; }
+.muted { color: #555; }
+.ent-head, .ent-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ent-tools .search { flex: 1 1 260px; width: auto; }
+.ent-table-wrap { overflow-x: auto; }
+.ent-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ent-table th, .ent-table td { padding: 6px 8px; border-bottom: 1px solid #e0e0e0; text-align: left; vertical-align: top; }
+.ent-table tbody tr { cursor: pointer; } .ent-table tbody tr:hover { background: #f7f7f7; }
+.ent-table textarea { width: 180px; min-height: 32px; font: inherit; }
+.ent-card { position: fixed; right: 16px; top: 80px; width: min(480px, calc(100% - 32px)); max-height: calc(100% - 100px);
+            overflow: auto; background: #fff; color: #1a1a1a; border: 1px solid #ccc; border-radius: 8px; padding: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.15); z-index: 20; font-size: 14px; line-height: 1.5; }
+.ent-card[hidden] { display: none; }
+.ent-card .text { white-space: pre-wrap; }
+#ent-webhook { overflow-wrap: anywhere; }
+</style>
+<link rel="stylesheet" href="/static/css/siberman-admin-mobile.css?v={{ v }}">
+</head>
+<body>
+<header class="header">
+  <h1>SIBERMAN · Заявки</h1>
+  <a href="/admin" class="hlink">← Админка</a>
+  <a href="/admin/draw?year={{ year - 1 }}" id="ent-draw-link" class="hlink">Жеребьёвка</a>
+  <a href="/logout" class="hlink">Выйти</a>
+</header>
+<main class="container" id="entries-admin" data-year="{{ year }}">
+    <div class="card">
+      <div class="ent-head">
+        <label>Год заявок <select id="ent-year"></select></label>
+        <span id="ent-counts" class="muted"></span>
+      </div>
+      <div class="ent-tools">
+        <input id="ent-q" class="search" placeholder="Поиск по фамилии и имени" autocomplete="off">
+        <select id="ent-filter">
+          <option value="">Все статусы</option><option value="review">⌛️ на изучении</option>
+          <option value="admitted">✅ допущена</option><option value="rejected">❌ не соответствует</option>
+          <option value="withdrawn">🚫 отказ от жеребьёвки</option>
+        </select>
+        <a class="btn btn-primary" id="ent-export">Скачать Excel</a>
+        <a class="btn" id="ent-chances-export">Черновик шансов для этой жеребьёвки</a>
+      </div>
+      <p class="muted">Черновик строится только по допущенным заявкам. Непроверенные источники будут отмечены в Excel; файл не загружается в жеребьёвку автоматически. <span id="ent-chances-year-note"></span></p>
+      <div id="ent-msg"></div>
+      <div class="ent-table-wrap"><table class="ent-table">
+        <thead><tr><th>№</th><th>Дата</th><th>Фамилия Имя</th><th>Формат</th><th>Пол</th><th>Город</th>
+          <th>E-mail</th><th>Телефон</th><th>Статус</th><th>Комментарий</th></tr></thead>
+        <tbody id="ent-rows"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Приём заявок из Тильды</h2>
+      <p class="muted">Адрес вебхука для формы заявок (Тильда → Формы → Webhook). Секрет в адресе — не публикуйте.</p>
+      <p><code id="ent-webhook"></code> <button class="btn-small" id="ent-webhook-copy">Скопировать адрес вебхука</button></p>
+      <p class="muted">Заявки, пришедшие до подключения вебхука, — CSV-выгрузкой Тильды (повторы не задваиваются).</p>
+      <input type="file" id="ent-file" accept=".csv,text/csv">
+      <button class="btn" id="ent-upload">Загрузить CSV из Тильды</button>
+      <div id="ent-import-report"></div>
+    </div>
+    <div id="ent-card" class="ent-card" hidden></div>
+</main>
+<script src="/static/js/siberman-entries-search.js?v={{ v }}"></script>
+<script src="/static/js/siberman-entries-admin.js?v={{ v }}"></script>
+</body>
+</html>

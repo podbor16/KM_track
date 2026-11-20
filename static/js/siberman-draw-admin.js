@@ -483,8 +483,6 @@ async function resetDraw() {
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === `tab-${name}`));
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('admin-tab--active', b === btn));
-  if (name === 'entries') { entriesLoad(); history.replaceState(null, '', '#entries'); return; }
-  if (location.hash === '#entries') history.replaceState(null, '', location.pathname + location.search);
   if (!S) return;
   if (name === 'payments') { renderPayments(); renderContactsInfo(); }
   if (name === 'settings') renderConfig();
@@ -501,7 +499,11 @@ search.addEventListener('keydown', e => {
   else if (e.key === 'Escape') { search.value = ''; cancelReplace(); }
 });
 
-load();
-// Оператор видит изменения директора (оплаты) и второй вкладки; другие вкладки не перерисовываем,
-// чтобы не затирать ввод.
-setInterval(() => { if ($('tab-operator').classList.contains('active') && !busy) load(); }, 3000);
+if (location.hash === '#entries') {
+  location.replace(`/admin/entries?year=${DRAW_YEAR + 1}`);
+} else {
+  load();
+  // Оператор видит изменения с других рабочих мест. Остальные вкладки не перерисовываем,
+  // чтобы не затирать ввод.
+  setInterval(() => { if ($('tab-operator').classList.contains('active') && !busy) load(); }, 3000);
+}

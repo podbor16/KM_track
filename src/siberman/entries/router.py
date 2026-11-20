@@ -1,5 +1,5 @@
 """
-Заявки Siberman: вебхук Тильды (POST /webhook/siberman/{секрет}/{год}), API вкладки «Заявки» админки
+Заявки Siberman: вебхук Тильды (POST /webhook/siberman/{секрет}/{год}), страница «Заявки» и её API
 (/api/siberman/admin/entries/{год}/…) и публичный список для iframe (/entries/{год}, /api/siberman/entries/{год}).
 """
 import hmac
@@ -8,12 +8,12 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from src.common import ntfy
 from src.config import settings
-from src.core.auth import api_require_auth
+from src.core.auth import api_require_auth, require_auth_for
 from src.krasmarafon.routers.webhook import parse_body
 from src.siberman.entries import service, spool
 from src.siberman.entries.parser import BadEntry, is_test_ping
@@ -21,6 +21,7 @@ from src.siberman.entries.service import EntriesUnavailable, EntryError
 from src.siberman.router import templates
 
 router = APIRouter(tags=["Siberman entries"])
+_page_auth = require_auth_for("/login")
 _log = logging.getLogger(__name__)
 YEARS = range(2020, 2101)
 NO_STORE = {"Cache-Control": "no-store"}
@@ -101,6 +102,18 @@ async def entries_webhook(token: str, year: int, request: Request):
 # ── Админка ─────────────────────────────────────────────────────────────────
 
 ADMIN = "/api/siberman/admin/entries/{year}"
+
+
+@router.get("/admin/entries", response_class=HTMLResponse)
+async def entries_admin_page(request: Request, year: int = 2029, user=Depends(_page_auth)):
+    if isinstance(user, RedirectResponse):
+        return user
+    if getattr(request.state, "domain", "") != "siberman":
+        raise HTTPException(status_code=404)
+    _check_year(year)
+    return templates.TemplateResponse(
+        request, "siberman/entries_admin.html", {"request": request, "year": year}, headers=NO_STORE,
+    )
 
 
 @router.get(ADMIN)
