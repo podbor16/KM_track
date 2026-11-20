@@ -61,7 +61,6 @@
             --accent2:  var(--red);
             --tab-act:  var(--bg);
             --rank-col: var(--blue);
-            --header-bg:var(--bg2);
             --dnf-op:   .45;
             --stat-val: var(--blue);
             --chart-context: rgba(106,171,215,.28);
@@ -79,7 +78,6 @@
             --accent2:  var(--red);
             --tab-act:  var(--bg);
             --rank-col: var(--navy);
-            --header-bg:var(--white);
             --dnf-op:   .4;
             --stat-val: var(--red);
             --chart-context: rgba(79,127,155,.28);
@@ -93,29 +91,6 @@
             line-height: 1.5;
             transition: background .2s, color .2s;
         }
-
-        /* ── Header ── */
-        .header {
-            background: var(--header-bg);
-            border-bottom: 3px solid var(--red);
-            padding: 14px 20px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .logo-block { display: flex; align-items: center; }
-        .logo-img { height: 40px; width: auto; display: none; }
-        [data-theme="dark"] .logo-img--dark { display: block; }
-        [data-theme="light"] .logo-img--light { display: block; }
-        .header-spacer { flex: 1; }
-        .header-controls { display: flex; align-items: center; gap: 10px; }
-        .theme-btn {
-            background: var(--bg3); border: 1px solid var(--border);
-            color: var(--text); width: 34px; height: 34px; border-radius: var(--radius);
-            cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
-            transition: background .15s;
-        }
-        .theme-btn:hover { background: var(--border); }
 
         /* ── Tabs ── */
         .tabs-bar {
@@ -534,8 +509,6 @@
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         @media (max-width: 640px) {
-            .header { padding: 10px 14px; flex-wrap: wrap; row-gap: 8px; }
-            .logo-img { height: 32px; }
             .stage-timer { padding: 4px 8px; gap: 4px; }
             .stage-timer-lbl { font-size: 9px; }
             .stage-timer-val { font-size: 13px; }
@@ -567,27 +540,22 @@
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
         }
     </style>
+<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
 </head>
 <body>
+{% with nav_section="results", nav_detail=false, nav_theme=true, nav_timer=true %}{% include "siberman/site_nav.html" %}{% endwith %}
 
-<!-- ── Header ── -->
-<div class="header">
-    <div class="logo-block">
-        <img class="logo-img logo-img--dark" src="/static/images/siberman/logo-dark.png" alt="Siberman Ultra Triathlon">
-        <img class="logo-img logo-img--light" src="/static/images/siberman/logo-light.png" alt="Siberman Ultra Triathlon">
-    </div>
-    <div class="header-spacer"></div>
-    <div class="header-controls">
-        <!-- Год больше не выбирается вручную (2026-08-04) — здесь теперь
-             живой секундомер этапа (или обратный отсчёт до старта, пока
-             гонка не началась), см. renderStageTimers(). -->
-        <div class="stage-timers" id="stageTimers" style="display:none"></div>
-        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Сменить тему">🌙</button>
-    </div>
+<div class="sb-season-bar" id="seasonBar" hidden>
+    <label for="resultSeason">Год гонки</label><select id="resultSeason"></select>
+</div>
+
+<div class="sb-mobile-stage">
+    <label for="resultStage">Этап</label>
+    <select id="resultStage"></select>
 </div>
 
 <!-- ── Tabs ── -->
-<div class="tabs-bar" id="tabs">
+<div class="tabs-bar sb-desktop-stages" id="tabs">
     <div class="tab active tab-pinned" data-tab="overall">Итоги гонки</div>
     <div class="tab" data-tab="swim">Плавание <span class="tab-dist">10 км</span></div>
     <div class="tab" data-tab="bike">Вело <span class="tab-dist">421 км</span></div>
@@ -686,7 +654,18 @@ siInitTheme();
 
 /* ──────────────── Переход на страницу участника ──────────────── */
 function participantLink(bib) {
-    return `/participant/${bib}?year=${_year}`;
+    return escapeAttr(sibermanContextHref(`/participant/${encodeURIComponent(bib)}?year=${_year}`));
+}
+
+function resultAthlete(person) {
+    const name = escapeAttr(`${person.surname} ${person.name}`);
+    if (!person.profile_slug) return name;
+    const href = sibermanContextHref(`/athlete/${encodeURIComponent(person.profile_slug)}`);
+    return `<a class="sb-athlete-link" href="${escapeAttr(href)}">${name}</a>`;
+}
+
+function resultCardLink(bib, html, label) {
+    return `<a class="sb-athlete-link" href="${participantLink(bib)}" title="${label}">${html}</a>`;
 }
 
 // Индикаторы — 2 карточки (Личники/Эстафеты, п.2 v5, 2026-07-23), каждая
@@ -745,6 +724,7 @@ function buildStats(individual, relayStats, stageKey, maxStage) {
 // перерисовку (poll каждые 20с/смена фильтра/таба) — значение вшито в
 // html при каждой сборке buildStats(), а не хранится в живом DOM-инпуте.
 let _searchQuery = '';
+let _fullMobileColumns = false;
 function escapeAttr(s) {
     return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
@@ -864,17 +844,17 @@ function overallLastCpHtml(dbStage, seq) {
 // больше не меняется (swap убран п.7 v6, 2026-08-02) — "Место" всегда
 // первая колонка, когда обе колонки вообще показаны.
 // Обе rank-колонки — class="r" (числовые, выравнивание по центру, как и
-// остальные числовые колонки). Мобильная версия показывает те же колонки,
-// что и десктоп — никакого (отменено 2026-07-23, п.1 v5).
+// остальные числовые колонки). На мобильных Итоги можно развернуть
+// до полной таблицы через переключатель.
 function rankHeaderCells(show2, secondaryLabel) {
     if (!show2) return '<th class="r">Место</th>';
-    return `<th class="r">Место</th><th class="r">${secondaryLabel}</th>`;
+    return `<th class="r">Место</th><th class="r sb-secondary-rank">${secondaryLabel}</th>`;
 }
 function rankBodyCells(show2, rankAbs, rankSecondary, secondaryBadge, rc) {
     const a = `<span class="rank-num ${rc}">${rankAbs ?? '—'}</span>`;
     if (!show2) return `<td class="r">${a}</td>`;
     const s = rankSecondary != null ? `<span class="rank-num ${rc}">${secondaryBadge}${rankSecondary}</span>` : '<span class="muted">—</span>';
-    return `<td class="r">${a}</td><td class="r">${s}</td>`;
+    return `<td class="r">${a}</td><td class="r sb-secondary-rank">${s}</td>`;
 }
 
 // Подпись второй колонки места на Итогах/Днях, когда она вообще
@@ -947,15 +927,15 @@ function buildIndividualOverallRow(r, overallGaps, combinedRanks, combinedGender
     // Прогноз финиша ГОНКИ ЦЕЛИКОМ — база экстраполяции строго беговая
     // (см. stageForecastCell), plavanie+вело1+вело2 добавлены как prefixS.
     const forecastCell = showForecast ? stageForecastCell(r, 'run', (r.swim_s ?? 0) + (r.bike1_s ?? 0) + (r.bike2_s ?? 0), stageStartEpochFor(r, 'run')) : '';
-    return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+    return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" data-race-href="${participantLink(r.bib)}">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[r.bib], combinedGenderRanks[r.gender]?.[r.bib], genderBadge(r.gender), rc)}
         <td class="bib-cell">${r.bib}</td>
         <td class="name-cell"><div class="name-stack">
-            <span class="name-main">${r.surname} ${r.name} ${finishStarBadge(r)}</span>
+            <span class="name-main">${resultAthlete(r)} ${finishStarBadge(r)}</span>
             ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
             <span class="badge badge-individual">Лично</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name, liveTotal))}</td>
+        <td class="r time-cell sb-overall-total" style="font-weight:800">${resultCardLink(r.bib, timeGapCell(fmtTime(liveTotal), overallGaps[r.bib], recordCategoriesFor(_recordsIndex, 'overall', r.surname, r.name, liveTotal)), "Карточка старта")}</td>
         ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.swim_s), stageGaps.swim[r.bib], recordCategoriesFor(_recordsIndex, 'swim', r.surname, r.name, r.swim_s))}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(r.bike1_s), stageGaps.bike1[r.bib])}</td>
@@ -992,14 +972,14 @@ function buildRelayOverallRow(team, overallGaps, combinedRanks, formatRanks, sta
     // См. buildIndividualOverallRow — та же формула, tr уже несёт
     // swim_s/bike1_s/bike2_s объединённые из соответствующих членов команды.
     const forecastCell = showForecast ? stageForecastCell(tr, 'run', (tr.swim_s ?? 0) + (tr.bike1_s ?? 0) + (tr.bike2_s ?? 0), stageStartEpochFor(tr, 'run')) : '';
-    return `<tr class="relay-row ${rc}${tr.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(team.bib)}','_blank')">
+    return `<tr class="relay-row ${rc}${tr.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" data-race-href="${participantLink(team.bib)}">
         ${rankBodyCells(showSecondaryRank(), combinedRanks[team.bib], formatRanks[team.bib], formatBadge(), rc)}
         <td class="bib-cell">${team.bib}</td>
         <td class="name-cell"><div class="name-stack">
-            <span class="name-main">${team.team_name}</span>
+            <span class="name-main">${resultCardLink(team.bib, escapeAttr(team.team_name), "Карточка команды")}</span>
             <span class="badge badge-relay">Эстафета</span>
         </div></td>
-        <td class="r time-cell" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
+        <td class="r time-cell sb-overall-total" style="font-weight:800">${timeGapCell(fmtTime(liveTotal), overallGaps[team.bib])}</td>
         ${showForecast ? `<td class="r">${forecastCell}</td>` : ''}
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.swim_s), stageGaps.swim[team.bib], swimM ? recordCategoriesFor(_recordsIndex, 'swim', swimM.surname, swimM.name, tr.swim_s) : [])}</td>
         <td class="r time-cell muted">${timeGapCell(fmtTime(tr.bike1_s), stageGaps.bike1[team.bib])}</td>
@@ -1063,7 +1043,7 @@ function buildMergedOverallEntries(individual, relay) {
 // с итоговым временем, а не в конце строки).
 const OVERALL_TABLE_HEAD = (showForecast) => `<thead><tr>
     ${rankHeaderCells(showSecondaryRank(), overallSecondaryLabel())}<th class="r">№</th><th class="name-cell">Участник</th>
-    <th class="r">Итого</th>
+    <th class="r sb-overall-total">Итого</th>
     ${showForecast ? '<th class="r">Прогноз финиша</th>' : ''}
     <th class="r">🏊 Плав.</th>
     <th class="r">🚴 Вело 1</th>
@@ -1159,7 +1139,8 @@ function renderOverall() {
     // Единый порядок отображения (интерливинг при _fmt==='all', иначе просто
     // один тип) — личники и эстафета теперь однородные строки одной таблицы.
     const merged = buildMergedOverallEntries(individual, relay);
-    html += `<div class="table-wrap"><table>${OVERALL_TABLE_HEAD(showForecast)}<tbody>`;
+    html += `<label class="sb-mobile-columns"><input type="checkbox" data-sb-show-columns${_fullMobileColumns ? ' checked' : ''}> Все колонки</label>
+        <div class="table-wrap sb-overall-table${_fullMobileColumns ? ' sb-full-columns' : ''}"><table>${OVERALL_TABLE_HEAD(showForecast)}<tbody>`;
     merged.forEach(item => {
         html += item.type === 'individual'
             ? buildIndividualOverallRow(item.entry, overallGaps, combinedRanks, combinedGenderRanks, stageGaps, showForecast)
@@ -1389,11 +1370,11 @@ function renderStage(stage) {
         // ещё не начали (например, все ещё плывут — колонка "Вело 1"),
         // и это НЕ повод их затемнять, они реально активны, просто ещё не
         // дошли до этого этапа (2026-08-03, тестовый прогон живых данных).
-        return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(r.bib)}','_blank')">
+        return `<tr class="${rc}${r.status !== 'active' ? ' dnf' : ''}" style="cursor:pointer" data-race-href="${participantLink(r.bib)}">
             ${rankCells}
             <td class="bib-cell">${r.bib}</td>
             <td class="name-cell"><div class="name-stack">
-                <span class="name-main">${r.surname} ${r.name} ${finishStarBadge(r)}</span>
+                <span class="name-main">${resultAthlete(r)} ${finishStarBadge(r)}</span>
                 ${cityLabel(r) ? `<span class="name-city">${cityLabel(r)}</span>` : ''}
                 <span class="badge badge-individual">Лично</span>
             </div></td>
@@ -1434,11 +1415,11 @@ function renderStage(stage) {
         // относительно полных кругов).
         const displayTime = t ?? (dbStage === 'run' ? lastCpPos?.value : null);
         const displayGap = t != null ? gaps[`${m._bib}:${m.relay_stage}`] : null;
-        return `<tr class="relay-row ${rc}" style="cursor:pointer" onclick="window.open('${participantLink(m._bib)}','_blank')">
+        return `<tr class="relay-row ${rc}" style="cursor:pointer" data-race-href="${participantLink(m._bib)}">
             ${rankCells}
             <td class="bib-cell">${m._bib}</td>
             <td class="name-cell"><div class="name-stack">
-                <span class="name-main">${m.surname} ${m.name}</span>
+                <span class="name-main">${resultAthlete(m)}</span>
                 <span class="name-city">${m._team}</span>
                 <span class="badge badge-relay">Эстафета</span>
             </div></td>
@@ -1650,7 +1631,7 @@ function renderRankedProgress(options = {}) {
         // с 0 на каждом этапе внутри дня (найдено пользователем 2026-08-04).
         const lastCpCell = cur ? cumulativeLastCpHtml(cur, pos?.seq) : '—';
         const nameCell = type === 'individual'
-            ? `<span class="name-main">${entry.surname} ${entry.name} ${finishStarBadge(entry)}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>`
+            ? `<span class="name-main">${resultAthlete(entry)} ${finishStarBadge(entry)}</span>${cityLabel(entry) ? `<span class="name-city">${cityLabel(entry)}</span>` : ''}<span class="badge badge-individual">Лично</span>`
             : `<span class="name-main">${entry.team_name}</span><span class="badge badge-relay">Эстафета</span>`;
         // "Финиш" в бейдже статуса — только если РЕАЛЬНО дошёл до конца
         // ИМЕННО этого дня (item._pos на границе maxStage), "—" — если ещё
@@ -1660,7 +1641,7 @@ function renderRankedProgress(options = {}) {
         // же грубой проверке "есть ли какое-то значение").
         const isFinishedDay = p => p.stageIdx === STAGE_ORDER.indexOf(maxStage) && p.seq === STAGE_MAX_SEQ[maxStage];
         // Блёклая строка — по ОБЩЕМУ статусу гонки (см. sortByRawStatus).
-        html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+        html += `<tr class="${type === 'relay' ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" data-race-href="${participantLink(entry.bib)}">
             ${rankBodyCells(showGenderCol, absRank, secondaryRank, secondaryBadge, rc)}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
@@ -1693,7 +1674,7 @@ function bikeCombinedRelayRider(team) {
     const swimS = swimMember?.swim_s ?? null;
     // cp.swim подмешан от пловца команды — нужен только stageHasStarted()
     // (велосипедист сам не плавает, его собственный cp.swim пуст).
-    return { bib: team.bib, surname: m.surname, name: m.name, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, bike2_start_s: m.bike2_start_s, cp: { ...m.cp, swim: m.cp?.swim ?? swimMember?.cp?.swim } };
+    return { bib: team.bib, surname: m.surname, name: m.name, profile_slug: m.profile_slug, gender: m.gender, team_name: team.team_name, status: m.status, swim_s: swimS, bike1_s: m.bike1_s, bike2_s: m.bike2_s, bike2_start_s: m.bike2_start_s, cp: { ...m.cp, swim: m.cp?.swim ?? swimMember?.cp?.swim } };
 }
 
 // Статус ИМЕННО вело-этапа (оба дня) — по факту достижения последней КТ
@@ -1795,7 +1776,7 @@ function renderBikeCombined() {
         const rc = absRank != null ? rankClass(absRank) : '';
         const subLine = isRelay ? entry.team_name : cityLabel(entry);
         const badgeHtml = isRelay ? '<span class="badge badge-relay">Эстафета</span>' : '<span class="badge badge-individual">Лично</span>';
-        const nameCell = `<span class="name-main">${entry.surname} ${entry.name} ${isRelay ? '' : finishStarBadge(entry)}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
+        const nameCell = `<span class="name-main">${resultAthlete(entry)} ${isRelay ? '' : finishStarBadge(entry)}</span>${subLine ? `<span class="name-city">${subLine}</span>` : ''}${badgeHtml}`;
         const rankCells = rankBodyCells(showGenderCol, absRank, genderRank, genderBadge(entry.gender), rc);
         const status = bikeCombinedStatus(entry);
         // "Финиш" — только если РЕАЛЬНО дошёл до конца ОБОИХ вело-дней
@@ -1811,7 +1792,7 @@ function renderBikeCombined() {
         // Блёклая строка — по ОБЩЕМУ статусу гонки (сошедший позже, напр.
         // на беге, "тонет" визуально даже если у него есть время и статус
         // "Финиш" на вело — см. sortByRawStatus).
-        html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" onclick="window.open('${participantLink(entry.bib)}','_blank')">
+        html += `<tr class="${isRelay ? 'relay-row ' : ''}${rc}${rawStatus !== 'active' ? ' dnf' : ''}" style="cursor:pointer" data-race-href="${participantLink(entry.bib)}">
             ${rankCells}
             <td class="bib-cell">${entry.bib}</td>
             <td class="name-cell"><div class="name-stack">${nameCell}</div></td>
@@ -3080,7 +3061,18 @@ function render() {
     if (!_data) return;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = '';
-    document.querySelector('#tabs [data-tab="startlist"]').style.display = startlistHasRiders() ? '' : 'none';
+    const showStartlist = startlistHasRiders();
+    document.querySelector('#tabs [data-tab="startlist"]').style.display = showStartlist ? '' : 'none';
+    if (_tab === 'startlist' && !showStartlist) {
+        _tab = 'overall';
+        syncStaticButtonClasses();
+    }
+    const startlistOption = resultStage.querySelector('[value="startlist"]');
+    startlistOption.hidden = !showStartlist;
+    startlistOption.disabled = !showStartlist;
+    resultStage.value = _tab;
+    resultStage.disabled = false;
+    syncUrlFromState();
     // Скрыть фильтр пола при выборе Эстафеты
     const genderGroup = document.getElementById('genderGroup');
     const genderLabel = document.getElementById('genderLabel');
@@ -3112,7 +3104,6 @@ function render() {
     }
     else renderStage(_tab);
     autoScrollTabs();
-    syncUrlFromState();
 }
 
 /* ──────────────── Состояние в URL (сохранение таба/фильтров при
@@ -3169,8 +3160,7 @@ function syncStaticButtonClasses() {
 }
 
 /* ──────────────── Data loading ──────────────── */
-// Год больше не выбирается вручную UI-селектом (year-select убран,
-// 2026-08-04) — без ?year= в URL первая загрузка не передаёт year вовсе,
+// Без ?year= в URL первая загрузка не передаёт year вовсе,
 // сервер сам берёт год, явно помеченный ПУБЛИЧНЫМ в админке
 // (get_public_race_year) — НЕ обязательно последний загруженный
 // (2026-08-05, см. set_public_race_year). ?year=2025 в URL (_urlYear,
@@ -3190,6 +3180,9 @@ async function loadResults() {
         _lastDataJson = raw;
         _data = JSON.parse(raw);
         _year = _data.race_year;
+        const years = [...new Set([_year, ...(_data.available_years || [])])].sort((a, b) => b - a);
+        resultSeason.replaceChildren(...years.map(year => new Option(year, year, false, year === _year)));
+        document.getElementById('seasonBar').hidden = false;
         _raceStartEpoch = _data.race_start ? new Date(_data.race_start).getTime() : null;
         _bike2StartEpoch = _data.bike2_start ? new Date(_data.bike2_start).getTime() : null;
         _runStartEpoch = _data.run_start ? new Date(_data.run_start).getTime() : null;
@@ -3234,6 +3227,28 @@ setInterval(refreshData, 20000);
 setInterval(tickStageTimers, 1000);
 
 /* ──────────────── Event listeners ──────────────── */
+const resultSeason = document.getElementById('resultSeason');
+const resultStage = document.getElementById('resultStage');
+const stageTabs = [...document.querySelectorAll('#tabs [data-tab]')];
+resultStage.replaceChildren(...stageTabs.map(tab => new Option(tab.textContent.trim(), tab.dataset.tab)));
+resultStage.disabled = true;
+resultStage.addEventListener('change', () => stageTabs.find(tab => tab.dataset.tab === resultStage.value)?.click());
+resultSeason.addEventListener('change', () => {
+    const url = new URL(location.href);
+    url.searchParams.set('year', resultSeason.value);
+    location.assign(url.href);
+});
+document.getElementById('app').addEventListener('click', event => {
+    if (event.defaultPrevented || event.target.closest('a, button, input, select, label')) return;
+    const row = event.target.closest('[data-race-href]');
+    if (row) location.assign(row.dataset.raceHref);
+});
+document.getElementById('app').addEventListener('change', event => {
+    if (!event.target.matches('[data-sb-show-columns]')) return;
+    _fullMobileColumns = event.target.checked;
+    document.querySelector('.sb-overall-table')?.classList.toggle('sb-full-columns', _fullMobileColumns);
+});
+
 document.querySelectorAll('#tabs .tab').forEach(t => {
     t.addEventListener('click', () => {
         document.querySelectorAll('#tabs .tab').forEach(x => x.classList.remove('active'));

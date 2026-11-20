@@ -4,6 +4,8 @@
 API — обычные def: блокирующий mysql-connector уходит в пул потоков. Страницы — только на домене
 Siberman.
 """
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -63,7 +65,9 @@ def athlete_page(request: Request, slug: str):
     except HallUnavailable:
         page, moved = True, None
     if moved:
-        return RedirectResponse(f"/athlete/{moved}", status_code=301)
+        back = request.query_params.get("back")
+        query = "?" + urlencode({"back": back}) if back else ""
+        return RedirectResponse(f"/athlete/{moved}{query}", status_code=301)
     found = page is not None
     return templates.TemplateResponse(request, "siberman/athlete.html", {"request": request, "slug": slug, "found": found},
                                       status_code=200 if found else 404)

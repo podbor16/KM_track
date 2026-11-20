@@ -22,7 +22,11 @@ function hallPlural(n, one, few, many) {
 const HALL_STAGE = { swim: 'плавание', bike: 'велосипед', run: 'бег', bike_day1: 'вело, 1 день', bike_day2: 'вело, 2 день' };
 
 // Ссылки из iframe — в новой вкладке: страница Тильды остаётся на месте.
-function hallLink(href, html) { return `<a href="${href}" target="_blank" rel="noopener">${html}</a>`; }
+function hallLink(href, html) {
+  if (window.self !== window.top) return `<a href="${hallEsc(href)}" target="_blank" rel="noopener">${html}</a>`;
+  const path = typeof sibermanContextHref === 'function' ? sibermanContextHref(href) : href;
+  return `<a href="${hallEsc(path)}">${html}</a>`;
+}
 // Страница спортсмена — по slug (личный стартовый номер или r{id}), его добавляет сервер к записям с person_id.
 function hallAthlete(slug, html) { return slug ? hallLink(`/athlete/${encodeURIComponent(slug)}`, html) : html; }
 function hallCard(bib, year, html) { return hallLink(`/participant/${encodeURIComponent(bib)}?year=${year}`, html); }

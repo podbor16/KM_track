@@ -7,8 +7,10 @@
 <link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/images/siberman/favicon-32.png" sizes="32x32">
 <link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
+<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
 </head>
 <body>
+{% with nav_section="stats", nav_detail=false, nav_theme=false, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 <div class="hall" id="stats"><div class="state-msg">Загрузка…</div></div>
 <script src="/static/js/siberman-hall.js?v={{ v }}"></script>
 <script src="/static/js/siberman-hall-stats.js?v={{ v }}"></script>
