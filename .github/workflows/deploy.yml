@@ -71,7 +71,9 @@ jobs:
             chmod +x /opt/km_track/run_loader.sh
 
             # Установить/обновить зависимости
+            packages_before=$(/opt/km_track/venv/bin/python -m pip list --format=freeze)
             /opt/km_track/venv/bin/pip install -r /opt/km_track/requirements.txt
+            packages_after=$(/opt/km_track/venv/bin/python -m pip list --format=freeze)
 
             # Загрузка статических библиотек (не в git, см. deploy/download_static_libs.py)
             cd /opt/km_track && /opt/km_track/venv/bin/python deploy/download_static_libs.py
@@ -80,7 +82,14 @@ jobs:
             # кодом и мягко гасит старых (restart давал ~5–10 с «Connection refused» — вебхук Tilda
             # в это окно получил бы 502 и потерялся бы мимо спула). Проверено 2026-10-01: 60/60 ответов 200.
             # Остановлен — обычный start; правки самого unit-файла требуют restart вручную.
-            if systemctl is-active --quiet km_track; then systemctl reload km_track; else systemctl restart km_track; fi
+            # A HUP preserves modules already imported into the Gunicorn master.
+            if [ "$packages_before" != "$packages_after" ]; then
+              systemctl restart km_track
+            elif systemctl is-active --quiet km_track; then
+              systemctl reload km_track
+            else
+              systemctl restart km_track
+            fi
             # Перезапустить загрузчик Triatleta если запущен
             systemctl is-active --quiet km_tri_loader@tri_24h && systemctl restart km_tri_loader@tri_24h || true
             # Перезапустить загрузчик Дуатлона 222 если запущен (иначе уже
