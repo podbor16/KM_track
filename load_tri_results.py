@@ -13,6 +13,7 @@ import urllib.parse
 import json
 import yaml
 from dotenv import load_dotenv
+from src.core.race_birthdate import parse_race_birthdate
 
 load_dotenv()
 
@@ -79,13 +80,27 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
         (event_id, start_number),
     )
     row = cursor.fetchone()
+    surname = p.get(field_map.get("surname", "surname"), "")
+    name = p.get(field_map.get("name", "name"), "")
+    category = p.get(field_map.get("category", "category"), "")
+    raw_gender = p.get(field_map.get("gender", "gender"), "") or ""
+    birthdate = parse_race_birthdate(p.get(field_map.get("birthdate", "birthdate")))
+    is_relay = (category or "").strip().lower() in {"эстафета", "relay"} or raw_gender.lower() == "mixed"
+    if not surname or not name or is_relay:
+        birthdate = None
     if row:
         pid = row[0]
         new_status = p.get(field_map.get("status", "status"), "") or ""
-        if new_status:
-            cursor.execute("UPDATE participants SET status=%s WHERE id=%s", (new_status, pid))
+        if new_status or birthdate is not None:
+            cursor.execute(
+                """UPDATE participants SET status=COALESCE(NULLIF(%s, ''), status),
+                   birthdate=CASE WHEN birthdate IS NULL
+                       AND LOWER(TRIM(COALESCE(category, ''))) NOT IN ('эстафета', 'relay')
+                       AND LOWER(COALESCE(gender, '')) <> 'mixed'
+                       AND surname=%s AND name=%s THEN %s ELSE birthdate END WHERE id=%s""",
+                (new_status, surname, name, birthdate, pid),
+            )
         return pid
-    raw_gender = p.get(field_map.get("gender", "gender"), "") or ""
     gender = _GENDER_NORM.get(raw_gender.lower(), raw_gender)
     team_name = (p.get(field_map.get("team_name", "team")) or
                  p.get("club") or "")
@@ -96,12 +111,12 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
         (
             event_id,
             start_number,
-            p.get(field_map.get("surname", "surname"), ""),
-            p.get(field_map.get("name", "name"), ""),
-            p.get(field_map.get("birthdate", "birthdate")),
+            surname,
+            name,
+            birthdate,
             gender,
             p.get(field_map.get("status", "status"), ""),
-            p.get(field_map.get("category", "category"), ""),
+            category,
             team_name,
         ),
     )

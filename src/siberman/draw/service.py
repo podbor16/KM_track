@@ -482,18 +482,18 @@ def _yes_no(raw: dict, key: str) -> int | None:
 
 
 def _known_duathlon_starts() -> list[dict] | None:
-    """Started 222 records in the connected DB; this table has no birth date, so matches need review."""
+    """Started 222 records with a birth date where the source provided one."""
     conn = get_duathlon_connection()
     if conn is None:
         return None
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.gender, p.status,
+            SELECT YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.gender, p.status, p.birthdate,
                    p.run1_s, p.bike_s, p.run2_s, COUNT(c.id) AS checkpoints
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN checkpoints c ON c.participant_id=p.id
-            GROUP BY p.id, e.gun_datetime, p.surname, p.name, p.gender, p.status,
+            GROUP BY p.id, e.gun_datetime, p.surname, p.name, p.gender, p.status, p.birthdate,
                      p.run1_s, p.bike_s, p.run2_s
         """)
         rows = cur.fetchall()
@@ -710,17 +710,21 @@ def chance_draft(year: int) -> bytes:
         duathlon_report = _chance_count(raw, "222_starts")
         race24_report = _chance_count(raw, "24h_starts")
         duathlon = race24 = None
+        birthdate = entry.get("birthdate")
         duathlon_matches = [r for r in duathlon_rows or []
                             if plain_key(r["surname"], r["name"]) == key]
-        race24_matches = [r for r in race24_rows or [] if r.get("birthdate") == entry.get("birthdate")
+        race24_matches = [r for r in race24_rows or [] if birthdate is not None and r["birthdate"] == birthdate
                           and plain_key(r["surname"], r["name"]) == key]
-        duathlon_known = len({int(r["race_year"]) for r in duathlon_matches})
+        duathlon_confirmed = {int(r["race_year"]) for r in duathlon_matches
+                              if birthdate is not None and r["birthdate"] == birthdate}
+        duathlon_unverified = {int(r["race_year"]) for r in duathlon_matches
+                               if birthdate is None or r["birthdate"] is None} - duathlon_confirmed
         race24_known = len({int(r["race_year"]) for r in race24_matches})
         duathlon_years = sorted({int(r["race_year"]) for r in duathlon_rows or []})
         race24_years = sorted({int(r["race_year"]) for r in race24_rows or []})
         sources["duathlon_222"] = (
-            f"БД 222: {duathlon_known} возможных стартовых годов по ФИО, без ДР ({duathlon_years}); "
-            "автосопоставление запрещено, архивы ожидаются"
+            f"БД 222 ({duathlon_years}): {len(duathlon_confirmed)} годов по ФИО + ДР, "
+            f"{len(duathlon_unverified)} возможных годов без полной даты; архивы требуют сверки"
             if duathlon_rows is not None else "БД 222 недоступна; архивные протоколы ожидаются"
         )
         sources["race_24h"] = (
@@ -729,7 +733,7 @@ def chance_draft(year: int) -> bytes:
             if race24_rows is not None else "БД 24ч недоступна; архивные протоколы ожидаются"
         )
         reported["duathlon_222"], reported["race_24h"] = duathlon_report, race24_report
-        issues.append("старты 222 Дуатлона не рассчитаны: записи БД не содержат ДР, архивные протоколы ещё не получены")
+        issues.append("старты 222 Дуатлона не рассчитаны полностью: требуется сверка полноты архива и дат рождения")
         issues.append("старты суточной гонки не рассчитаны полностью: архивные протоколы ранних лет ещё не получены")
         if race24_known and race24_report is not None and race24_known != race24_report:
             issues.append("число известных стартовых годов 24ч расходится с самоотчётом (архив неполный)")

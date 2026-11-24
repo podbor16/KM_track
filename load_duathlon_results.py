@@ -22,6 +22,7 @@ import urllib.parse
 import json
 import yaml
 from dotenv import load_dotenv
+from src.core.race_birthdate import parse_race_birthdate
 
 load_dotenv()
 
@@ -110,22 +111,23 @@ def _get_or_create_participant(cursor, event_id: int, p: dict, field_map: dict) 
     )
     row = cursor.fetchone()
     status = _normalize_status(p.get(field_map.get("status", "status")))
+    surname = p.get(field_map.get("surname", "surname"), "")
+    name = p.get(field_map.get("name", "name"), "")
+    birthdate = parse_race_birthdate(p.get(field_map.get("birthdate", "birthdate")))
     if row:
         pid = row[0]
-        cursor.execute("UPDATE participants SET status=%s WHERE id=%s", (status, pid))
+        cursor.execute(
+            """UPDATE participants SET status=%s,
+               birthdate=CASE WHEN birthdate IS NULL AND surname=%s AND name=%s THEN %s ELSE birthdate END
+               WHERE id=%s""",
+            (status, surname, name, birthdate if surname and name else None, pid),
+        )
         return pid
     gender = _normalize_gender(p.get(field_map.get("gender", "gender")))
     cursor.execute(
-        """INSERT INTO participants (event_id, start_number, surname, name, gender, status)
-           VALUES (%s,%s,%s,%s,%s,%s)""",
-        (
-            event_id,
-            start_number,
-            p.get(field_map.get("surname", "surname"), ""),
-            p.get(field_map.get("name", "name"), ""),
-            gender,
-            status,
-        ),
+        """INSERT INTO participants (event_id, start_number, surname, name, gender, status, birthdate)
+           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+        (event_id, start_number, surname, name, gender, status, birthdate if surname and name else None),
     )
     return cursor.lastrowid
 

@@ -15,6 +15,7 @@ fields:
   start_number: dorsal    # подтверждено 2026-09-03
   surname: surname        # подтверждено
   name: name              # подтверждено
+  birthdate: birthdate    # необязательное поле, если присутствует в источнике
   gender: gender          # подтверждено — 'male'/'female', нормализуется загрузчиком в M/F
   status: status          # подтверждено — 'notstarted' у всех до старта
 
