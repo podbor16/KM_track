@@ -2,6 +2,22 @@ from typing import Optional
 from src.race_triatleta.db import get_tri_connection
 
 
+def get_result_events() -> list[dict]:
+    """Гонки с сохранённым протоколом для публичного архива."""
+    conn = get_tri_connection()
+    if not conn:
+        return []
+    with conn, conn.cursor(dictionary=True) as cursor:
+        cursor.execute("""
+            SELECT id, code, gun_datetime, lap_distance_km, duration_hours,
+                   COALESCE(archive_year, YEAR(gun_datetime)) AS race_year
+            FROM events e
+            WHERE EXISTS (SELECT 1 FROM participants p WHERE p.event_id = e.id)
+            ORDER BY race_year DESC, duration_hours DESC, gun_datetime DESC, id DESC
+        """)
+        return cursor.fetchall()
+
+
 def calculate_gap(
     participant_laps: int,
     participant_elapsed_ms: int,
@@ -39,15 +55,16 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
         cursor.execute(f"""
             SELECT
                 p.id,
-                p.start_number,
+                CASE WHEN p.start_number > 0 THEN p.start_number END AS start_number,
                 p.surname,
                 p.name,
                 p.gender,
                 p.category,
                 p.team_name,
                 p.status,
+                TIME_FORMAT(p.start_local_time, '%H:%i') AS start_local_time,
                 COUNT(l.id) AS laps_completed,
-                ROUND(COUNT(l.id) * 4.040, 3) AS total_km,
+                ROUND(COUNT(l.id) * e.lap_distance_km, 3) AS total_km,
                 COALESCE(MAX(l.cumulative_ms), 0) AS elapsed_ms,
                 COALESCE((
                     SELECT l2.lap_ms FROM laps l2
@@ -65,13 +82,14 @@ def get_standings(event_id: int, category: Optional[str] = None) -> list[dict]:
                 ), 0) AS best_lap_number,
                 CASE
                     WHEN MAX(l.cumulative_ms) > 0
-                    THEN ROUND(COUNT(l.id) * 4.040 / (MAX(l.cumulative_ms) / 3600000.0), 2)
+                    THEN ROUND(COUNT(l.id) * e.lap_distance_km / (MAX(l.cumulative_ms) / 3600000.0), 2)
                     ELSE 0.0
                 END AS avg_speed_kmh
             FROM participants p
+            JOIN events e ON e.id = p.event_id
             LEFT JOIN laps l ON l.participant_id = p.id
             WHERE p.event_id = %s {cat_filter}
-            GROUP BY p.id
+            GROUP BY p.id, e.lap_distance_km
             ORDER BY laps_completed DESC, elapsed_ms ASC, p.start_number ASC
         """, params)
         rows = cursor.fetchall()
@@ -103,7 +121,7 @@ def get_all_laps(event_id: int) -> list[dict]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
             SELECT l.participant_id, l.lap_number, l.cumulative_ms, l.lap_ms,
-                   p.surname, p.name, p.start_number
+                   p.surname, p.name, CASE WHEN p.start_number > 0 THEN p.start_number END AS start_number
             FROM laps l
             JOIN participants p ON p.id = l.participant_id
             WHERE l.event_id = %s

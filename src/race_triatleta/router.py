@@ -2,6 +2,7 @@ import asyncio
 import hmac
 import subprocess
 import sys
+from datetime import timedelta, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -13,7 +14,7 @@ from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
 from src.core.request_security import request_uses_https
-from src.race_triatleta.service import get_standings, get_all_laps
+from src.race_triatleta.service import get_standings, get_all_laps, get_result_events
 
 _require_auth = require_auth_for("/24h/login")
 
@@ -49,13 +50,57 @@ templates.env.globals["v"] = _get_deploy_version()
 # Public pages
 # ---------------------------------------------------------------------------
 
+KRASNOYARSK_TZ = timezone(timedelta(hours=7))
+MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня",
+          "июля", "августа", "сентября", "октября", "ноября", "декабря")
+
+
+def _selected_event(events: list[dict], code: str | None) -> dict | None:
+    if code is None:
+        return next((item for item in events if item["id"] == TRI_EVENT_ID), None)
+    event = next((item for item in events if item["code"] == code), None)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Протокол велогонки не найден")
+    return event
+
+
+def _describe_event(event: dict) -> dict:
+    duration = event["duration_hours"]
+    year = event["race_year"]
+    start = event["gun_datetime"]
+    date_label = str(year)
+    if start is not None:
+        start = start.replace(tzinfo=timezone.utc)
+        local = start.astimezone(KRASNOYARSK_TZ)
+        end = local + timedelta(hours=duration)
+        first_day = f"{local.day} {MONTHS[local.month - 1]}"
+        if local.date() == end.date():
+            date_label = f"{first_day} {year}"
+        elif local.month == end.month and local.year == end.year:
+            date_label = f"{local.day}–{end.day} {MONTHS[end.month - 1]} {year}"
+        else:
+            date_label = f"{first_day} {year} — {end.day} {MONTHS[end.month - 1]} {end.year}"
+    return {
+        "code": event["code"],
+        "year": year,
+        "title": "Суточная велогонка" if duration == 24 else "Шестичасовая велогонка",
+        "duration": duration,
+        "date_label": date_label,
+        "start": start.isoformat() if start is not None else None,
+        "lap_km": float(event["lap_distance_km"]),
+        "live": event["id"] == TRI_EVENT_ID,
+    }
+
+
 @router.get("/24h", response_class=HTMLResponse)
 @router.get("/24h/", response_class=HTMLResponse)
-async def tri_home(request: Request):
-    return templates.TemplateResponse(request, "race_triatleta/tri_results.html", {
-        "request": request,
-        "event_id": TRI_EVENT_ID,
-    })
+def tri_home(request: Request, event: str | None = None):
+    events = get_result_events()
+    selected = _selected_event(events, event)
+    context = {"request": request, "races": [_describe_event(item) for item in events]}
+    if selected is not None:
+        context["race"] = _describe_event(selected)
+    return templates.TemplateResponse(request, "race_triatleta/tri_results.html", context)
 
 
 
@@ -64,14 +109,16 @@ async def tri_home(request: Request):
 # ---------------------------------------------------------------------------
 
 @router.get("/api/tri/standings")
-async def tri_standings(category: str = None):
-    rows = get_standings(TRI_EVENT_ID, category or None)
+def tri_standings(category: str = None, event: str | None = None):
+    event_id = TRI_EVENT_ID if event is None else _selected_event(get_result_events(), event)["id"]
+    rows = get_standings(event_id, category or None)
     return {"standings": rows}
 
 
 @router.get("/api/tri/laps")
-async def tri_laps():
-    return {"laps": get_all_laps(TRI_EVENT_ID)}
+def tri_laps(event: str | None = None):
+    event_id = TRI_EVENT_ID if event is None else _selected_event(get_result_events(), event)["id"]
+    return {"laps": get_all_laps(event_id)}
 
 
 # ---------------------------------------------------------------------------

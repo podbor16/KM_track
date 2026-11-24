@@ -1,9 +1,10 @@
 <!DOCTYPE html>
+{% set race = race|default({'code': 'tri_24h_2026', 'year': 2026, 'title': 'Суточная велогонка', 'duration': 24, 'date_label': '25–26 июня 2026', 'start': '2026-06-25T13:00:00Z', 'lap_km': 4.04, 'live': true}) %}
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Triatleta — Суточная велогонка 24ч</title>
+    <title>Triatleta — {{ race.title }} {{ race.year }}</title>
     <link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_dark.ico" media="(prefers-color-scheme: light)">
     <link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_light.ico" media="(prefers-color-scheme: dark)">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,9 +15,9 @@
 <body>
     <div class="tri-header">
         <div>
-            <div class="tri-header__eyebrow">Triatleta · 24 часа</div>
-            <div class="tri-header__title">Суточная велогонка<br>25–26 июня 2026</div>
-            <div class="tri-header__meta">Красноярск · Триатлон-центр · Круг: 4.04 км</div>
+            <div class="tri-header__eyebrow">Triatleta · {{ race.duration }} {{ 'часа' if race.duration == 24 else 'часов' }}</div>
+            <div class="tri-header__title">{{ race.title }}<br>{{ race.date_label }}</div>
+            <div class="tri-header__meta">Красноярск · Триатлон-центр · Круг: {{ race.lap_km|string|replace('.', ',') }} км</div>
         </div>
         <div class="tri-elapsed-wrap">
             <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
@@ -34,6 +35,19 @@
 
     <!-- Фильтры -->
     <div class="tri-toolbar">
+        {% if races %}
+        <form class="tri-filter-group" action="/24h" method="get">
+            <label class="tri-label" for="race-select">Протокол</label>
+            <select id="race-select" name="event" class="tri-select" onchange="this.form.submit()">
+                {% for item in races %}
+                <option value="{{ item.code }}"{% if item.code == race.code %} selected{% endif %}>
+                    {{ item.year }} · {{ item.duration }} {{ 'часа' if item.duration == 24 else 'часов' }}
+                </option>
+                {% endfor %}
+            </select>
+            <noscript><button type="submit">Открыть</button></noscript>
+        </form>
+        {% endif %}
         <div class="tri-filter-group">
             <label class="tri-label">Зачёт:</label>
             <select id="filter-category" class="tri-select" onchange="applyFilters()">
@@ -83,9 +97,9 @@
             </div>
             <div class="tri-refresh" id="refresh-label"></div>
             <div id="best-lap-banner" class="tri-record-banner" style="display:none"></div>
-            <div id="record-2025" class="tri-record-banner">
+            {% if race.live %}<div id="record-2025" class="tri-record-banner">
                 👑 Рекорд 2025: Артемьев Анатолий — 715.1 км · 177 кругов · 29.8 км/ч
-            </div>
+            </div>{% endif %}
         </div>
 
         <!-- Таб: Отрезки -->
@@ -94,11 +108,11 @@
                 <div class="tri-slider-wrap">
                     <label class="tri-slider-label">
                         С часа: <span id="from-val">1</span>
-                        <input type="range" id="from-slider" min="1" max="24" value="1" oninput="onSlider()">
+                        <input type="range" id="from-slider" min="1" max="{{ race.duration }}" value="1" oninput="onSlider()">
                     </label>
                     <label class="tri-slider-label">
-                        По час: <span id="to-val">24</span>
-                        <input type="range" id="to-slider" min="1" max="24" value="24" oninput="onSlider()">
+                        По час: <span id="to-val">{{ race.duration }}</span>
+                        <input type="range" id="to-slider" min="1" max="{{ race.duration }}" value="{{ race.duration }}" oninput="onSlider()">
                     </label>
                 </div>
                 <div class="tri-table-wrap">
@@ -220,8 +234,11 @@
 
     <script src="/static/lib/chart4/chart.umd.min.js"></script>
     <script>
-    const GUN_UTC_MS = new Date('2026-06-25T13:00:00Z').getTime();
-    const LAP_KM = 4.040;
+    const RACE = {{ race|tojson }};
+    const GUN_UTC_MS = RACE.start ? Date.parse(RACE.start) : null;
+    const LAP_KM = RACE.lap_km;
+    const EVENT_QUERY = RACE.live ? '' : '?' + new URLSearchParams({event: RACE.code});
+    const STORAGE_SUFFIX = RACE.live ? '' : '_' + RACE.code;
     // ?test_race_h=15 — подменяет "текущее время гонки" для тестирования питстопов
     const _testRaceH = parseFloat(new URLSearchParams(location.search).get('test_race_h') || '0');
     let allStandings = [];
@@ -261,8 +278,9 @@
 
     // Динамический max по оси X: текущее время гонки + 1ч буфер, не более 24ч
     function _chartXMax() {
+        if (!RACE.live) return RACE.duration;
         const elapsed = (Date.now() - GUN_UTC_MS) / 3600000;
-        return Math.min(24, Math.max(Math.ceil(elapsed) + 1, 4));
+        return Math.min(RACE.duration, Math.max(Math.ceil(elapsed) + 1, 4));
     }
 
     // Для эстафетных команд (gender==='mixed') показываем только название команды (surname)
@@ -423,11 +441,11 @@
     }
 
     // ---- Таймер: обратный отсчёт до старта / прошедшее время ----
-    const RACE_DURATION_MS = 24 * 3600000;
+    const RACE_DURATION_MS = RACE.duration * 3600000;
     function updateElapsed() {
         const diff = Date.now() - GUN_UTC_MS;
-        if (diff >= RACE_DURATION_MS) {
-            document.getElementById('elapsed').textContent = '24:00:00';
+        if (!RACE.live || diff >= RACE_DURATION_MS) {
+            document.getElementById('elapsed').textContent = fmtMs(RACE_DURATION_MS);
             document.getElementById('elapsed-label').textContent = 'Финиш';
             return;
         }
@@ -439,7 +457,7 @@
         document.getElementById('elapsed').textContent = str;
         document.getElementById('elapsed-label').textContent = diff < 0 ? 'До старта' : 'Прошло';
     }
-    setInterval(updateElapsed, 1000);
+    if (RACE.live) setInterval(updateElapsed, 1000);
     updateElapsed();
 
     function fmtMs(ms) {
@@ -581,7 +599,7 @@
             const summaryRow = `
             <tr class="${rowClass}" onclick="toggleLapsRow(${pid})" style="cursor:pointer">
                 <td class="tri-rank">${rank}</td>
-                <td class="tri-bib">${esc(st.start_number)}</td>
+                <td class="tri-bib">${esc(st.start_number ?? '—')}</td>
                 <td><span class="tri-name">${nameLabel}</span>${dnfBadge}</td>
                 <td>${agg.laps.length}</td>
                 <td class="tri-laps-best">${agg.best ? fmtLapMs(agg.best) : '—'}</td>
@@ -684,7 +702,7 @@
 
     async function loadStandings() {
         try {
-            const r = await fetch('/api/tri/standings');
+            const r = await fetch('/api/tri/standings' + EVENT_QUERY);
             const data = await r.json();
             allStandings = data.standings || [];
             updateSliderMax();
@@ -713,8 +731,8 @@
     function applyFilters() {
         const category = document.getElementById('filter-category').value;
         const genderEl = document.getElementById('filter-gender');
-        localStorage.setItem('tri_filter_category', category);
-        localStorage.setItem('tri_filter_gender', genderEl.value);
+        localStorage.setItem('tri_filter_category' + STORAGE_SUFFIX, category);
+        localStorage.setItem('tri_filter_gender' + STORAGE_SUFFIX, genderEl.value);
 
         // Когда выбрана «Эстафета» — сбрасываем и блокируем фильтр пола
         if (category === 'Эстафета') {
@@ -792,7 +810,7 @@
         document.getElementById('tab-laps').style.display     = name === 'laps'     ? '' : 'none';
         document.getElementById('filter-search').closest('.tri-filter-group').style.display =
             name === 'chart' ? 'none' : '';
-        localStorage.setItem('tri_tab', name);
+        localStorage.setItem('tri_tab' + STORAGE_SUFFIX, name);
         if (name === 'segments') renderSplits();
         if (name === 'laps') renderLapsTable();
         if (name === 'chart') {
@@ -1442,7 +1460,7 @@
             return `
             <tr id="p-${r.id}" class="tri-row-main" onclick="toggleDetail(this)">
                 <td class="tri-rank">${r.rank}</td>
-                <td class="tri-bib">${r.start_number}</td>
+                <td class="tri-bib">${r.start_number ?? '—'}</td>
                 <td class="tri-name">${r.surname} ${r.name}<span class="tri-chevron">▼</span>${isDnf ? '<br><span class="tri-dnf-badge">Финишировал</span>' : ''}</td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${parseFloat(r.total_km).toFixed(1)}</td>
@@ -1466,6 +1484,10 @@
                             <span class="tri-detail-label">Накопленное время</span>
                             <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.elapsed_ms)}</span>
                         </div>
+                        ${r.start_local_time ? `<div class="tri-detail-item">
+                            <span class="tri-detail-label">Старт по Красноярску</span>
+                            <span class="tri-detail-value">${r.start_local_time}</span>
+                        </div>` : ''}
                         <div class="tri-detail-item">
                             <span class="tri-detail-label">Время круга</span>
                             <span class="tri-detail-value" style="font-variant-numeric:tabular-nums">${fmtMs(r.last_lap_ms)}</span>
@@ -1531,7 +1553,7 @@
 
     async function loadLaps() {
         try {
-            const r = await fetch('/api/tri/laps');
+            const r = await fetch('/api/tri/laps' + EVENT_QUERY);
             const data = await r.json();
             allLaps = data.laps || [];
             updateSliderMax();
@@ -1547,10 +1569,11 @@
     }
 
     function currentRaceH() {
+        if (!RACE.live) return RACE.duration;
         if (_testRaceH > 0) return _testRaceH;
         const elapsedMs = Date.now() - GUN_UTC_MS;
         if (elapsedMs <= 0) return 1;
-        return Math.min(24, Math.max(1, Math.ceil(elapsedMs / 3600000)));
+        return Math.min(RACE.duration, Math.max(1, Math.ceil(elapsedMs / 3600000)));
     }
 
     function updateSliderMax() {
@@ -1683,7 +1706,7 @@
 
             return `<tr>
                 <td class="tri-rank">${i + 1}</td>
-                <td class="tri-bib">${r.start_number ?? ''}</td>
+                <td class="tri-bib">${r.start_number ?? '—'}</td>
                 <td class="tri-name">${r.surname} ${r.name}</td>
                 <td><span class="tri-badge ${badgeClass}">${categoryLabel}</span></td>
                 <td>${km}</td>
@@ -1697,13 +1720,13 @@
     // ---- Восстановление состояния после обновления страницы ----
     (function restoreState() {
         // Фильтры
-        const savedCat    = localStorage.getItem('tri_filter_category');
-        const savedGender = localStorage.getItem('tri_filter_gender');
+        const savedCat    = localStorage.getItem('tri_filter_category' + STORAGE_SUFFIX);
+        const savedGender = localStorage.getItem('tri_filter_gender' + STORAGE_SUFFIX);
         if (savedCat)    document.getElementById('filter-category').value = savedCat;
         if (savedGender) document.getElementById('filter-gender').value   = savedGender;
 
         // Таб
-        const savedTab = localStorage.getItem('tri_tab') || 'distance';
+        const savedTab = localStorage.getItem('tri_tab' + STORAGE_SUFFIX) || 'distance';
         if (savedTab !== 'distance') {
             const btn = document.querySelector(`.tri-page-tab[data-tab="${savedTab}"]`);
             if (btn) switchPageTab(savedTab, btn);
@@ -1712,7 +1735,7 @@
 
     loadStandings();
     loadLaps();
-    setInterval(() => { loadStandings(); loadLaps(); }, 30000);
+    if (RACE.live) setInterval(() => { loadStandings(); loadLaps(); }, 30000);
 
     // Принудительный ресайз чартов при смене ориентации / изменении окна
     window.addEventListener('resize', () => {

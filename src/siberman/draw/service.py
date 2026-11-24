@@ -515,11 +515,11 @@ def _known_24h_starts() -> list[dict] | None:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT YEAR(e.gun_datetime) AS race_year, e.duration_hours,
+            SELECT COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
                    p.surname, p.name, p.birthdate, p.status, p.category, COUNT(l.id) AS laps
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN laps l ON l.participant_id=p.id AND l.event_id=e.id
-            GROUP BY p.id, e.gun_datetime, e.duration_hours, p.surname, p.name, p.birthdate, p.status, p.category
+            GROUP BY p.id, e.archive_year, e.gun_datetime, e.duration_hours, p.surname, p.name, p.birthdate, p.status, p.category
         """)
         rows = cur.fetchall()
         def six_hour(r):
