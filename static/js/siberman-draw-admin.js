@@ -263,6 +263,18 @@ async function openSummary(id) {
     const a = d.applicant, h = d.history, p = d.placement;
     const yrs = arr => (arr.length ? arr.join(', ') : '—');
     const who = a.format === 'relay' ? 'эстафета (капитан)' : (a.gender === 'M' ? 'мужчина' : 'женщина');
+    const options = d.people.map(person => `<option value="${person.id}"${person.id === a.person_id ? ' selected' : ''}>
+      #${person.id} · ${esc(person.surname + ' ' + person.name)} · ${esc(person.city_manual || person.city || '—')} · ${esc(person.birthdate || 'ДР неизвестна')}</option>`).join('');
+    const identityControl = a.entry_id
+      ? `<a href="/admin/entries?year=${DRAW_YEAR + 1}&entry=${a.entry_id}">Открыть исходную заявку</a>`
+      : `
+        ${d.clean_name !== a.name ? '<label><input type="checkbox" id="draw-identity-clean"> Убрать служебную пометку из имени</label><br>' : ''}
+        <label>ID исходной заявки <input type="number" min="1" id="draw-identity-entry" placeholder="если известен"></label><br>
+        ${options ? `<label>Карточка <select id="draw-identity-person">${options}</select></label>
+          <button class="btn-small" onclick="saveDrawIdentity(${id}, 'link')">Привязать карточку</button>` : ''}
+        ${a.person_id ? `<button class="btn-small" onclick="saveDrawIdentity(${id}, 'review')">Вернуть на проверку</button>`
+          : `<label>ДР нового участника <input type="date" id="draw-identity-birthdate"></label>
+           <button class="btn-small" onclick="saveDrawIdentity(${id}, 'create')">Создать отдельную карточку</button>`}`;
     $('summary-body').innerHTML = `
       <h3>${esc(fio(a))}${a.is_wildcard ? ' <span class="wc">WC</span>' : ''}</h3>
       <div>${esc(a.city)} · ${who} · ${POOL[a.pool]}</div>
@@ -271,13 +283,42 @@ async function openSummary(id) {
         <span class="muted">(обнуляются после выигрыша)</span> · местный ${a.is_local} · Дуатлон 222 ${a.duathlon_222} · 24 часа ${a.race_24h} · тату ${a.tattoo}</div>
       <h4>Siberman</h4>
       <div>Старты лично: ${yrs(h.individual)}<br>Финиши лично: ${yrs(h.finished)}<br>Старты в эстафете: ${yrs(h.relay)}</div>
+      <h4>Личность</h4>
+      <div>${a.person_id ? `Карточка #${a.person_id}` : 'Требуется проверка личности'}</div>
+      <div>${identityControl}</div>
       ${a.format === 'relay' ? `<h4>Состав</h4><div>Плавание: ${esc(a.relay_swim)}<br>Вело: ${esc(a.relay_bike)}<br>Бег: ${esc(a.relay_run)}</div>` : ''}
       <h4>Жеребьёвка</h4>
       <div>${p ? `${catLabel(p.category)} №${p.position} · ${esc(S.round_labels[p.round])} · ${(p.created_at || '').slice(11, 19)}` : 'ещё не вытянут'}</div>
+      <div>Подтверждённые годы участия: ${yrs(h.draws)}</div>
+      ${a.person_id ? `<div><label>Архивный год <input type="number" min="2016" max="${DRAW_YEAR - 1}" id="draw-history-year"></label>
+         <label>Зачёт <select id="draw-history-category">${Object.entries(S.category_labels).map(([key, label]) =>
+           `<option value="${key}">${esc(label)}</option>`).join('')}</select></label>
+         <label>Позиция <input type="number" min="1" id="draw-history-position"></label>
+         <button class="btn-small" onclick="saveDrawArchive(${id})">Привязать архивную строку</button></div>` : ''}
       ${p ? `<h4>Оплата</h4>${payEditor(a, 'pay')}` : ''}
       ${a.wildcard_reason ? `<h4>Почему wild card</h4><div class="text">${esc(a.wildcard_reason)}</div>` : ''}
       ${a.results_text ? `<h4>О результатах</h4><div class="text">${esc(a.results_text)}</div>` : ''}`;
     $('summary').classList.add('open');
+  } catch (e) { fail(e); }
+}
+
+async function saveDrawIdentity(id, mode) {
+  try {
+    await api(`/applicant/${id}/identity`, {mode,
+      person_id: mode === 'link' ? Number($('draw-identity-person').value) : null,
+      birthdate: mode === 'create' ? $('draw-identity-birthdate').value || null : null,
+      entry_id: mode === 'link' ? Number($('draw-identity-entry').value) || null : null,
+      clean: mode !== 'review' && Boolean($('draw-identity-clean')?.checked)});
+    await load(true);
+    await openSummary(id);
+  } catch (e) { fail(e); }
+}
+
+async function saveDrawArchive(id) {
+  try {
+    await api(`/applicant/${id}/archive`, {year: Number($('draw-history-year').value),
+      category: $('draw-history-category').value, position: Number($('draw-history-position').value)});
+    await openSummary(id);
   } catch (e) { fail(e); }
 }
 
@@ -437,7 +478,7 @@ function reportHtml(d) {
 }
 
 function renderContactsInfo() {
-  $('contacts-info').textContent = S.contacts_count ? `Загружено контактов: ${S.contacts_count}` : 'Контакты ещё не загружены';
+  $('contacts-info').textContent = `Строк жеребьёвки с привязанными контактами: ${S.contacts_count}`;
 }
 
 async function uploadContacts() {
@@ -450,8 +491,8 @@ async function uploadContacts() {
     const miss = d.missing.length
       ? `<div class="msg msg-error" style="display:block">Нет контакта у ${d.missing.length}: ${d.missing.map(esc).join(', ')}</div>` : '';
     $('contacts-report').innerHTML = `${miss}<p>Строк в файле: ${d.rows}, людей: ${d.people} (повторных заявок: ${d.duplicates}`
-      + `${d.bad_format ? `, без формата: ${d.bad_format}` : ''}). Найдено в жеребьёвке: ${d.matched} из ${d.applicants}.</p>`;
-    msg('Контакты загружены');
+      + `${d.bad_format ? `, без формата: ${d.bad_format}` : ''}). Обновлено по ID заявок: ${d.updated}. Связанных строк: ${d.matched} из ${d.applicants}.</p>`;
+    msg('Выгрузка обработана');
     await load(true);
     renderContactsInfo();
   } catch (e) { fail(e); }

@@ -8,6 +8,8 @@ const entApi = () => `/api/siberman/admin/entries/${entYear}`;
 const ENT_STATUS = { review: '⌛️ на изучении', admitted: '✅ допущена', rejected: '❌ не соответствует',
                      withdrawn: '🚫 отказ от жеребьёвки' };
 const ENT_FORMAT = { individual: 'Личное', relay: 'Эстафета' };
+const ENT_IDENTITY = { review: 'Проверить личность', matched: 'ФИ и дата совпали',
+                       manual: 'Связь подтверждена', new: 'Новый участник подтверждён' };
 let ENT = null;
 const entEl = id => document.getElementById(id);
 const entEsc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -44,9 +46,11 @@ function entRender() {
   const c = ENT.counts;
   entEl('ent-counts').textContent = `Всего ${c.total} · ⌛️ ${c.review} · ✅ ${c.admitted} · ❌ ${c.rejected} · 🚫 ${c.withdrawn}`;
   const q = entEl('ent-q').value, f = entEl('ent-filter').value;
-  const rows = ENT.entries.filter(e => (!f || e.status === f) && entryMatches(`${e.surname} ${e.name}`, q));
+  const rows = ENT.entries.filter(e => (!f || (f === 'identity' ? e.identity.state === 'review' : e.status === f))
+    && entryMatches(`${e.surname} ${e.name}`, q));
   entEl('ent-rows').innerHTML = rows.map(e => `<tr data-id="${e.id}">
-    <td>${e.n}</td><td>${entDate(e.submitted_at)}</td><td><b>${entEsc(e.surname + ' ' + e.name)}</b></td>
+    <td>${e.n}</td><td>${entDate(e.submitted_at)}</td><td><b>${entEsc(e.surname + ' ' + e.name)}</b>
+      <br><small>${ENT_IDENTITY[e.identity.state]}</small></td>
     <td>${ENT_FORMAT[e.format]}</td><td>${{ M: 'М', F: 'Ж' }[e.gender] || ''}</td><td>${entEsc(e.city)}</td>
     <td>${entEsc(e.email)}</td><td>${entEsc(e.phone)}</td>
     <td><select data-status="${e.id}">${Object.entries(ENT_STATUS).map(([k, v]) => `<option value="${k}"${k === e.status ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
@@ -79,10 +83,22 @@ async function entOpenCard(id) {
   try {
     const e = await entFetch(`/${id}`);
     const relay = e.format === 'relay' ? `<p>Команда: <b>${entEsc(e.team_name)}</b><br>Плавание: ${entEsc(e.relay_swim)}<br>Велосипед: ${entEsc(e.relay_bike)}<br>Бег: ${entEsc(e.relay_run)}</p>` : '';
-    const audit = e.audit.map(a => `<li>${entDate(a.created_at)} · ${entEsc(a.admin_user)} · ${a.action === 'status' ? `${ENT_STATUS[a.old_value]} → ${ENT_STATUS[a.new_value]}` : `комментарий: «${entEsc(a.new_value)}»`}</li>`).join('');
+    const audit = e.audit.map(a => `<li>${entDate(a.created_at)} · ${entEsc(a.admin_user)} · ${a.action === 'status' ? `${ENT_STATUS[a.old_value]} → ${ENT_STATUS[a.new_value]}`
+      : a.action === 'identity' ? `личность: ${entEsc(a.old_value || 'проверка')} → ${entEsc(a.new_value || 'проверка')}`
+        : `комментарий: «${entEsc(a.new_value)}»`}</li>`).join('');
+    const options = e.identity.candidates.map(p => `<option value="${p.id}"${p.id === e.identity.person_id ? ' selected' : ''}>
+      #${p.id} · ${entEsc(p.surname + ' ' + p.name)} · ${entEsc(p.city_manual || p.city || '—')} · ${entEsc(p.birthdate || 'ДР неизвестна')}</option>`).join('');
     entEl('ent-card').innerHTML = `<button class="btn-small" style="float:right" onclick="entEl('ent-card').hidden = true">×</button>
       <h3>${entEsc(e.surname + ' ' + e.name)}</h3>
       <p>${ENT_FORMAT[e.format]} · ${entEsc(e.city)} · ДР ${e.birthdate ? e.birthdate.split('-').reverse().join('.') : '—'}<br>${entEsc(e.email)} · ${entEsc(e.phone)}</p>${relay}
+      <h4>Личность</h4>
+      <p>${ENT_IDENTITY[e.identity.state]}${e.identity.person_id ? ` · #${e.identity.person_id}` : ''}</p>
+      ${options ? `<label>Карточка <select id="ent-identity-person">${options}</select></label>
+        <button type="button" class="btn-small" onclick="entIdentity(${e.id}, 'link')">Подтвердить связь</button>` : ''}
+      ${e.birthdate && !e.identity.person_id ? `<button type="button" class="btn-small"
+        onclick="entIdentity(${e.id}, 'create')">Подтвердить нового участника</button>` : ''}
+      ${e.identity.person_id ? `<button type="button" class="btn-small"
+        onclick="entIdentity(${e.id}, 'review')">Вернуть на проверку</button>` : ''}
       ${e.wildcard_reason ? `<h4>Почему wild card</h4><div class="text">${entEsc(e.wildcard_reason)}</div>` : ''}
       ${e.results_text ? `<h4>О результатах</h4><div class="text">${entEsc(e.results_text)}</div>` : ''}
       ${entUrl(e.result_url) ? `<p><a href="${entEsc(entUrl(e.result_url))}" target="_blank" rel="noopener noreferrer">Ссылка на результаты</a></p>`
@@ -90,6 +106,17 @@ async function entOpenCard(id) {
       <h4>Журнал</h4><ul>${audit || '<li class="muted">изменений не было</li>'}</ul>`;
     entEl('ent-card').hidden = false;
   } catch (err) { entMsg(err.message, 'err'); }
+}
+
+async function entIdentity(id, mode) {
+  const person_id = mode === 'link' ? Number(entEl('ent-identity-person').value) : null;
+  try {
+    await entFetch(`/${id}/identity`, {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode, person_id})});
+    await entriesLoad();
+    await entOpenCard(id);
+    entMsg('Решение о личности сохранено');
+  } catch (e) { entMsg(e.message, 'err'); }
 }
 
 async function entUpload() {
@@ -127,4 +154,7 @@ entEl('ent-rows').addEventListener('click', e => {
   if (tr) entOpenCard(+tr.dataset.id);
 });
 
-entriesLoad();
+entriesLoad().then(() => {
+  const id = Number(new URLSearchParams(location.search).get('entry'));
+  if (id && ENT?.entries.some(e => e.id === id)) entOpenCard(id);
+});

@@ -50,6 +50,20 @@ class ResetIn(BaseModel):
     confirm: str
 
 
+class DrawIdentityIn(BaseModel):
+    mode: str
+    person_id: int | None = None
+    birthdate: datetime.date | None = None
+    clean: bool = False
+    entry_id: int | None = None
+
+
+class ArchiveIdentityIn(BaseModel):
+    year: int
+    category: str
+    position: int
+
+
 def _json(data, status: int = 200) -> JSONResponse:
     return JSONResponse(jsonable_encoder(data), status_code=status, headers=NO_STORE)
 
@@ -181,6 +195,17 @@ def draw_admin_state(year: int, user: str = Depends(api_require_auth)):
 @router.get(ADMIN + "/applicant/{applicant_id}", dependencies=_YEAR_OK)
 def draw_applicant(year: int, applicant_id: int, user: str = Depends(api_require_auth)):
     return _run(service.applicant_summary, year, applicant_id)
+
+
+@router.post(ADMIN + "/applicant/{applicant_id}/identity", dependencies=_YEAR_OK)
+def draw_applicant_identity(year: int, applicant_id: int, body: DrawIdentityIn, user: str = Depends(api_require_auth)):
+    return _run(service.set_legacy_identity, year, applicant_id, body.mode, body.person_id, body.birthdate,
+                body.clean, body.entry_id, user)
+
+
+@router.post(ADMIN + "/applicant/{applicant_id}/archive", dependencies=_YEAR_OK)
+def draw_applicant_archive(year: int, applicant_id: int, body: ArchiveIdentityIn, user: str = Depends(api_require_auth)):
+    return _run(service.link_archive_draw, year, applicant_id, body.year, body.category, body.position, user)
 
 
 @router.post(ADMIN + "/round", dependencies=_YEAR_OK)

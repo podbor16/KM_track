@@ -159,8 +159,7 @@ def test_backup_excel_has_whole_course(draw):
         ("Последний Тест", "Мужчины", 2, "в списке")]
     final = [[c.value for c in row] for row in wb["Итог"].iter_rows(min_row=2)]
     assert [(r[0], r[1], r[3]) for r in final] == [("Мужчины", 1, "Новиков Тест"), ("Мужчины", 2, "Последний Тест")]
-    assert [(r[5], r[6]) for r in final] == [(None, None), ("last@ex.ru", "=HYPERLINK(1)")]
-    assert wb["Итог"]["G3"].data_type == "s"                      # текст из формы — не формула
+    assert [(r[5], r[6]) for r in final] == [(None, None), (None, None)]
     log = [[c.value for c in row] for row in wb["Журнал действий"].iter_rows(min_row=2)]
     assert [(r[1], r[2], r[3], r[4]) for r in log] == [("исправление", "Новиков Тест", "Новикова Тест", "Новиков Тест")]
 
@@ -267,7 +266,7 @@ def test_summary_has_history_and_placement(draw):
     service.pick(YEAR, draw["Вайлдкардов"])
     s = service.applicant_summary(YEAR, draw["Вайлдкардов"])
     assert s["placement"]["category"] == "men" and s["placement"]["position"] == 1
-    assert set(s["history"]) == {"individual", "relay", "finished"}
+    assert s["history"] == {"individual": [], "relay": [], "finished": [], "draws": []}
 
 
 def test_routes(draw, client):
@@ -547,7 +546,7 @@ def _tilda_csv(rows, head="surname;Name;Email;Phone;Date;format"):
     return ("\ufeff" + "\n".join([head, *(";".join(r) for r in rows)])).encode("utf-8")
 
 
-def test_tilda_texts_reach_applicants_and_survive_table_reupload(draw, monkeypatch):
+def test_tilda_texts_are_not_assigned_to_legacy_rows_by_name(draw, monkeypatch):
     # \u0432 \u0442\u0430\u0431\u043b\u0438\u0446\u0435 \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0442\u043e\u0440\u043e\u0432 2028 \u0442\u0435\u043a\u0441\u0442\u043e\u0432 \u043d\u0435\u0442 \u2014 \u00ab\u041f\u043e\u0447\u0435\u043c\u0443 wild card\u00bb \u0438 \u00ab\u041e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u0445\u00bb \u0438\u0437 CSV \u0437\u0430\u044f\u0432\u043e\u043a \u0422\u0438\u043b\u044c\u0434\u044b
     service.import_contacts(YEAR, _tilda_csv(
         [("\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432", "\u0422\u0435\u0441\u0442", "wc@ex.ru", "1", "2026-09-02 10:00:00", "\u0418\u043d\u0434\u0438\u0432\u0438\u0434\u0443\u0430\u043b\u044c\u043d\u043e\u0435 \u0443\u0447\u0430\u0441\u0442\u0438\u0435", "10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440")],
@@ -556,10 +555,10 @@ def test_tilda_texts_reach_applicants_and_survive_table_reupload(draw, monkeypat
     def texts():
         service.clear_cache()
         return {a["surname"]: (a["wildcard_reason"], a["results_text"]) for a in service.admin_state(YEAR)["applicants"]}
-    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440") and texts()["\u041d\u043e\u0432\u0438\u043a\u043e\u0432"] == ("", "")
+    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("", "")
     monkeypatch.setattr(service, "parse_applicants", lambda b: (APPS, []))   # \u043d\u043e\u0432\u0430\u044f \u0432\u0435\u0440\u0441\u0438\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u044b \u2014 \u0431\u0435\u0437 \u0442\u0435\u043a\u0441\u0442\u043e\u0432
     assert service.import_applicants(YEAR, b"x", dry_run=False)["written"]
-    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("10 \u0441\u0442\u0430\u0440\u0442\u043e\u0432", "\u0424\u0438\u043d\u0438\u0448\u0435\u0440")
+    assert texts()["\u0412\u0430\u0439\u043b\u0434\u043a\u0430\u0440\u0434\u043e\u0432"] == ("", "")
 
 
 def test_contacts_and_payment_export(draw, client):
@@ -588,7 +587,7 @@ def test_contacts_and_payment_export(draw, client):
     service.set_payment(YEAR, ids["Последний"], "pending")    # приглашён из листа ожидания
     rows = {r["fio"]: r for r in service.payment_rows(YEAR)}
     assert set(rows) == {"Вайлдкардов Тест", "Новиков Тест", "Запасной Тест", "Последний Тест"}
-    assert (rows["Вайлдкардов Тест"]["email"], rows["Вайлдкардов Тест"]["wildcard"]) == ("wc@ex.ru", "да")
+    assert (rows["Вайлдкардов Тест"]["email"], rows["Вайлдкардов Тест"]["wildcard"]) == ("", "да")
     assert rows["Новиков Тест"]["email"] == "" and rows["Последний Тест"]["section"] == "Лист ожидания"
     assert "contacts" not in str(service.public_state(YEAR)) and "wc@ex.ru" not in str(service.public_state(YEAR))
     assert "wc@ex.ru" not in str(service.host_state(YEAR))
@@ -601,7 +600,7 @@ def test_contacts_and_payment_export(draw, client):
         ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
         table = [[c.value for c in row] for row in ws.iter_rows()]
         assert table[0][:7] == ["Зачёт", "№", "Раздел", "Фамилия Имя", "Город", "E-mail", "Телефон"]
-        assert ["wc@ex.ru"] == [row[5] for row in table[1:] if row[3] == "Вайлдкардов Тест"]
+        assert [None] == [row[5] for row in table[1:] if row[3] == "Вайлдкардов Тест"]
         assert client.post(f"/api/siberman/admin/draw/{YEAR}/contacts",
                            files={"file": ("z.csv", b"bad", "text/csv")}).status_code == 409
     finally:

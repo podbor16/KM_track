@@ -4,6 +4,7 @@ import openpyxl
 import pytest
 
 from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
+from src.siberman.draw.importer import COL_ENTRY_ID
 
 HEADER = [   # формат таблицы организаторов 2028 («Книга11.xlsx»)
     "Wildcard", "Формат участия", "Участник жеребьёвки", "Плавание", "Велосипед", "Бег", "Пол", "Город",
@@ -95,6 +96,18 @@ def test_report_counts_people_and_balls():
 
 
 IND = "Индивидуальное участие"
+
+
+def test_namesakes_in_the_same_format_are_distinct_by_source_entry():
+    row = _row(IND, "Тестовый Участник", "Мужской")
+    apps, errors = parse_applicants(_xlsx([row + [21], row + [22]], HEADER + [COL_ENTRY_ID]))
+    assert not errors
+    assert [a["entry_id"] for a in apps] == [21, 22]
+    assert len(diff_applicants([], apps)["added"]) == 2
+
+    apps, errors = parse_applicants(_xlsx([row + [21], row + [21]], HEADER + [COL_ENTRY_ID]))
+    assert len(apps) == 1
+    assert "повтор заявки" in errors[0]
 
 
 @pytest.mark.parametrize("wc", ["Wildcard", "wildcard", "Wild card", "WILDCARD", " wild  card "])

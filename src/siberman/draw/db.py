@@ -5,7 +5,7 @@ from typing import Optional
 import mysql.connector
 from mysql.connector import errorcode
 
-from src.siberman.db import get_finished_years_by_name
+from src.siberman.db import get_finished_years_by_name, get_finished_years_by_person
 from src.siberman.finish_counts import person_key
 from src.siberman.persons.linking import plain_key
 
@@ -13,7 +13,7 @@ CONFIG_INT_FIELDS = ("capacity_men", "capacity_women", "capacity_relay", "quota_
 APPLICANT_COLUMNS = ("format", "surname", "name", "gender", "city", "pool", "is_wildcard", "chances",
                      "starts_individual", "starts_relay", "draw_accumulated", "is_local",
                      "duathlon_222", "race_24h", "tattoo", "relay_swim", "relay_bike", "relay_run",
-                     "wildcard_reason", "results_text")
+                     "wildcard_reason", "results_text", "entry_id", "person_id")
 
 
 def ensure_config(conn, year: int) -> None:
@@ -54,20 +54,31 @@ def bump_version(conn, year: int) -> None:
     conn.cursor().execute("UPDATE draw_config SET version=version+1 WHERE draw_year=%s", (year,))
 
 
-def load_applicants(conn, year: int) -> list[dict]:
+def _linked_applicants(conn, condition: str, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM draw_applicants WHERE draw_year=%s ORDER BY surname, name", (year,))
+    cur.execute(f"""
+        SELECT a.*, CASE WHEN e.birthdate IS NOT NULL AND p.birthdate IS NOT NULL
+                         AND e.birthdate<>p.birthdate THEN NULL ELSE a.person_id END AS verified_person_id
+        FROM draw_applicants a
+        LEFT JOIN siberman_entries e ON e.id=a.entry_id
+        LEFT JOIN siberman_persons p ON p.id=a.person_id
+        WHERE a.draw_year {condition} %s ORDER BY a.draw_year, a.surname, a.name, a.id
+    """, (year,))
     rows = cur.fetchall()
     for r in rows:
         r["is_wildcard"] = bool(r["is_wildcard"])
+        r["person_id"] = r.pop("verified_person_id")
     return rows
+
+
+def load_applicants(conn, year: int) -> list[dict]:
+    return _linked_applicants(conn, "=", year)
 
 
 def load_chance_history(conn, before_year: int) -> dict:
     """Past draw snapshots needed for the accumulated-chance draft (read-only)."""
     cur = conn.cursor(dictionary=True, buffered=True)
-    cur.execute("SELECT * FROM draw_applicants WHERE draw_year < %s ORDER BY draw_year, id", (before_year,))
-    applicants = cur.fetchall()
+    applicants = _linked_applicants(conn, "<", before_year)
     cur.execute("SELECT * FROM draw_picks WHERE draw_year < %s ORDER BY draw_year, position_key, id", (before_year,))
     picks = cur.fetchall()
     cur.execute("SELECT draw_year, capacity_men, capacity_women, capacity_relay FROM draw_config "
@@ -188,7 +199,7 @@ def replace_applicants(conn, year: int, apps: list[dict]) -> None:
     cur.executemany(
         f"INSERT INTO draw_applicants (draw_year, {', '.join(APPLICANT_COLUMNS)}) "
         f"VALUES (%s, {', '.join(['%s'] * len(APPLICANT_COLUMNS))})",
-        [(year, *[a[c] for c in APPLICANT_COLUMNS]) for a in apps],
+        [(year, *[a.get(c) if c in ("entry_id", "person_id") else a[c] for c in APPLICANT_COLUMNS]) for a in apps],
     )
     cur.execute("UPDATE draw_config SET imported_at=NOW(), current_round=0 WHERE draw_year=%s", (year,))
 
@@ -224,6 +235,66 @@ def siberman_histories(conn, apps: list[dict]) -> dict:
         out[a["id"]] = {"individual": sorted(y["individual"]), "relay": sorted(y["relay"]),
                         "finished": sorted(finished.get(key, set()))}
     return out
+
+
+def linked_histories(conn, applicants: list[dict]) -> dict:
+    """Archive starts, finishes and participation in draws by the resolved person ID."""
+    histories = {a["id"]: {"individual": [], "relay": [], "finished": [], "draws": []} for a in applicants}
+    people = {a["person_id"] for a in applicants if a.get("person_id") is not None}
+    if not people:
+        return histories
+    marks = ", ".join(["%s"] * len(people))
+    args = sorted(people)
+    by_person = {pid: {"individual": set(), "relay": set(), "draws": set()} for pid in people}
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute(f"""
+            SELECT l.person_id,p.race_year,p.format
+            FROM siberman_person_links l JOIN participants p
+              ON p.race_year=l.race_year AND p.bib=l.bib AND p.relay_stage=l.relay_stage
+            WHERE l.person_id IN ({marks})
+              AND (p.status IN ('dnf','dsq') OR (p.status='active' AND EXISTS (
+                   SELECT 1 FROM checkpoint_times t WHERE t.participant_id=p.id AND t.cumulative_s IS NOT NULL)))
+        """, args)
+        for row in cur.fetchall():
+            by_person[row["person_id"]][row["format"]].add(row["race_year"])
+        cur.execute(f"""
+            SELECT a.person_id,a.draw_year FROM draw_applicants a
+            LEFT JOIN siberman_entries e ON e.id=a.entry_id
+            JOIN siberman_persons person ON person.id=a.person_id
+            WHERE a.person_id IN ({marks})
+              AND (e.birthdate IS NULL OR person.birthdate IS NULL OR e.birthdate=person.birthdate)
+              AND EXISTS (
+                SELECT 1 FROM draw_picks p WHERE p.draw_year=a.draw_year AND p.cancelled_at IS NULL)
+            UNION SELECT person_id,draw_year FROM siberman_draw_archive_links WHERE person_id IN ({marks})
+        """, args * 2)
+        for row in cur.fetchall():
+            by_person[row["person_id"]]["draws"].add(row["draw_year"])
+    finished = get_finished_years_by_person(conn)
+    for a in applicants:
+        pid = a.get("person_id")
+        if pid is not None:
+            histories[a["id"]] = {**{k: sorted(v) for k, v in by_person[pid].items()},
+                                   "finished": sorted(finished.get(pid, set()))}
+    return histories
+
+
+def entry_contacts(conn, year: int) -> dict:
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute("""
+            SELECT id,tranid,surname,name,format,email,phone,wildcard_reason,results_text
+            FROM siberman_entries WHERE race_year=%s
+        """, (year + 1,))
+        return {r["id"]: r for r in cur.fetchall()}
+
+
+def archive_draw_years(conn, before_year: int) -> dict:
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute("SELECT person_id, draw_year FROM siberman_draw_archive_links "
+                    "WHERE draw_year < %s AND person_id IS NOT NULL", (before_year,))
+        result = {}
+        for row in cur.fetchall():
+            result.setdefault(row["person_id"], []).append(row["draw_year"])
+        return result
 
 
 def person_ids_by_key(conn) -> dict:

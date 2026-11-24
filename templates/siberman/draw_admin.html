@@ -110,8 +110,8 @@ input, select { font: inherit; padding: 8px 10px; border: 1px solid #bbb; border
     <div class="card">
       <h2>Excel для счетов</h2>
       <p class="muted">Победители (с wild card) и приглашённые из листа ожидания (⏳) — с e-mail и телефонами.
-        Контакты (и тексты «Почему wild card» / «О результатах» для ведущих) берутся из CSV-выгрузки заявок Тильды: загрузите её один раз (новая выгрузка заменяет прошлую,
-        перезаливка таблицы шансов контакты не стирает). Контакты видны только здесь и в Excel.</p>
+        Контакты берутся из привязанных заявок. CSV из Тильды обновляет поля существующей заявки по её tranid.
+        Для старых строк укажите исходную заявку в карточке жеребьёвки. Контакты видны только здесь и в Excel.</p>
       <p id="contacts-info" class="muted"></p>
       <input type="file" id="contacts-file" accept=".csv,text/csv">
       <button class="btn" onclick="uploadContacts()">Загрузить контакты</button>

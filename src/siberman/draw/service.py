@@ -30,7 +30,7 @@ from src.siberman.draw import db as ddb
 from src.siberman.draw.chances import (
     build_workbook as build_chances_workbook, form_reported, load_localities, local_value, next_accumulated,
 )
-from src.siberman.draw.importer import contact_for, diff_applicants, import_report, parse_applicants, parse_contacts
+from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants, parse_contacts, source_contact_rows
 from src.siberman.draw.logic import (
     CATEGORIES, CATEGORY_LABELS, ROUND_LABELS, build_lists, category_of, check_pick,
     in_round_pool, placement, round_counters,
@@ -38,10 +38,12 @@ from src.siberman.draw.logic import (
 from src.siberman.draw.payments import PAYMENT_ICONS, auto_invite_allowed, next_invitee
 from src.siberman.draw.simulation import win_probabilities
 from src.siberman.entries import db as edb
+from src.siberman.entries import identity
 from src.siberman.hall import data as hall_data
 from src.siberman.hall import service as hall_service
 from src.siberman.hall.service import HallUnavailable
 from src.siberman.persons.linking import plain_key
+from src.siberman.persons import db as pdb
 
 
 log = logging.getLogger(__name__)
@@ -254,10 +256,40 @@ def _against(snap: dict, apps: list[dict]) -> dict:
     return {"diff": diff_applicants(snap["applicants"], apps) if loaded else None, "blocked": bool(snap["picks"])}
 
 
+def contact_for(applicant: dict, contacts: dict) -> dict | None:
+    return contacts.get(applicant.get("entry_id"))
+
+
 def _texts(a: dict, contacts: dict) -> dict:
     """Тексты «Почему wild card» и «О результатах» из заявки Тильды; нет заявки или текста — прежние."""
     c = contact_for(a, contacts) or {}
     return {k: c.get(k) or a[k] or "" for k in ("wildcard_reason", "results_text")}
+
+
+def _bind_sources(conn, year: int, apps: list[dict]) -> list[str]:
+    with_id = [a for a in apps if a.get("entry_id")]
+    if not with_id:
+        return []
+    entries = edb.admitted_for_draw(conn, year + 1)
+    by_id = {r["id"]: r for r in entries}
+    identities = identity.decisions(conn, entries)
+    errors = []
+    seen = set()
+    for a in with_id:
+        entry_id = a["entry_id"]
+        entry = by_id.get(entry_id)
+        if not entry or identity.name_key(a) != identity.name_key(entry) or a["format"] != entry["format"]:
+            errors.append(f"Заявка #{entry_id}: нужны совпадающие данные допущенной заявки на гонку {year + 1}")
+            continue
+        person_id = identities[entry_id]["person_id"]
+        if person_id is None:
+            errors.append(f"Заявка #{entry_id}: подтвердите личность в разделе «Заявки»")
+        elif person_id in seen:
+            errors.append(f"Заявка #{entry_id}: у этого человека уже есть строка в таблице")
+        else:
+            seen.add(person_id)
+            a["person_id"] = person_id
+    return errors
 
 
 def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: str = "") -> dict:
@@ -268,6 +300,8 @@ def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: 
     if dry_run or errors:
         conn = _connect()
         try:
+            if not errors:
+                errors = _bind_sources(conn, year, apps)
             snap = _snapshot(conn, year, create=False)
         finally:
             conn.close()
@@ -276,8 +310,11 @@ def import_applicants(year: int, file_bytes: bytes, dry_run: bool = True, user: 
     def op(conn, snap):
         if snap["picks"]:
             raise DrawError("жеребьёвка уже началась — загрузка таблицы запрещена (сначала «Очистить журнал»)")
+        errors = _bind_sources(conn, year, apps)
+        if errors:
+            return {"report": report, "errors": errors, "written": False, **_against(snap, apps)}
         result = {"report": report, "errors": [], "written": True, **_against(snap, apps)}
-        contacts = ddb.load_contacts(conn, year)
+        contacts = ddb.entry_contacts(conn, year)
         ddb.replace_applicants(conn, year, [{**a, **_texts(a, contacts)} for a in apps])
         return result
     return _write(year, op)
@@ -346,7 +383,9 @@ def admin_state(year: int) -> dict:
     conn = _connect()
     try:
         snap = _snapshot(conn, year)
-        contacts_count = len(ddb.load_contacts(conn, year))
+        contacts = ddb.entry_contacts(conn, year)
+        contacts_count = sum(bool(c and (c["email"] or c["phone"])) for c in (
+            contact_for(a, contacts) for a in snap["applicants"]))
     finally:
         conn.close()
     cfg, rnd = snap["config"], snap["config"]["current_round"]
@@ -375,7 +414,10 @@ def applicant_summary(year: int, applicant_id: int) -> dict:
     try:
         snap = _snapshot(conn, year)
         a = _applicant(snap, applicant_id)
-        history = ddb.siberman_history(conn, a["surname"], a["name"])
+        history = ddb.linked_histories(conn, [a])[applicant_id]
+        clean_name = _legacy_name(a["name"])
+        suggestions = pdb.search_persons(conn, f"{a['surname']} {clean_name}") if not a.get("entry_id") else []
+        people = list(pdb.get_persons(conn, [p["id"] for p in suggestions]).values())
         audit = ddb.load_audit(conn, year, applicant_id)
     finally:
         conn.close()
@@ -384,7 +426,88 @@ def applicant_summary(year: int, applicant_id: int) -> dict:
     if placed:
         row = next(r for r in snap["lists"][placed[0]] if r["applicant_id"] == applicant_id)
         where = {"category": placed[0], "position": placed[1], "round": row["round"], "created_at": row["created_at"]}
-    return {"applicant": a, "history": history, "placement": where, "audit": audit}
+    return {"applicant": a, "history": history, "placement": where, "audit": audit,
+            "people": people, "clean_name": clean_name}
+
+
+def _legacy_name(name: str) -> str:
+    """Old draw spreadsheets prefixed namesakes with (*YY). Strip only on explicit approval."""
+    return re.sub(r"^\(\*\d{2,4}\)\s+", "", name)
+
+
+def set_legacy_identity(year: int, applicant_id: int, mode: str, person_id: int | None,
+                        birthdate: datetime.date | None, clean: bool, entry_id: int | None, user: str) -> dict:
+    def op(conn, snap):
+        a = _applicant(snap, applicant_id)
+        if a.get("entry_id"):
+            raise DrawError("Подтвердите личность в карточке исходной заявки")
+        name = _legacy_name(a["name"])
+        canonical = dict(a, name=name)
+        if mode == "create":
+            if a.get("person_id") is not None:
+                raise DrawError("У этой строки уже есть связь с человеком")
+            if not birthdate or not datetime.date(1900, 1, 1) < birthdate < datetime.date.today():
+                raise DrawError("Укажите подтверждённую дату рождения")
+            possible = pdb.search_persons(conn, _fio(canonical))
+            candidates = pdb.get_persons(conn, [p["id"] for p in possible]).values()
+            if any(identity.name_key(p) == identity.name_key(canonical) and p["birthdate"] == birthdate
+                   for p in candidates):
+                raise DrawError("Такая личность уже есть. Привяжите её карточку")
+            target = identity.create_person(conn, dict(canonical, birthdate=birthdate))
+        elif mode == "link":
+            person = pdb.get_person(conn, person_id) if person_id is not None else None
+            if not person or identity.name_key(person) != identity.name_key(canonical):
+                raise DrawError("Выберите карточку с совпадающим именем и фамилией")
+            target = person["id"]
+        elif mode == "review" and not clean:
+            target = None
+        else:
+            raise DrawError("Выберите действие для связи")
+        if target is not None and any(row["id"] != applicant_id and row.get("person_id") == target
+                                      for row in snap["applicants"]):
+            raise DrawError("Этот человек уже привязан к другой строке жеребьёвки")
+        if entry_id is not None:
+            entry = edb.get(conn, entry_id)
+            if not entry or entry["race_year"] != year + 1 or entry["format"] != a["format"] \
+                    or identity.name_key(entry) != identity.name_key(canonical):
+                raise DrawError("ID должен относиться к заявке того же имени, формата и сезона")
+            decision = identity.decisions(conn, [entry])[entry_id]
+            if target is None or decision["person_id"] != target:
+                raise DrawError("Сначала подтвердите ту же личность в исходной заявке")
+            if any(row["id"] != applicant_id and row.get("entry_id") == entry_id for row in snap["applicants"]):
+                raise DrawError("Исходная заявка уже используется в этой жеребьёвке")
+        with conn.cursor() as cur:
+            cur.execute("UPDATE draw_applicants SET person_id=%s, name=%s, entry_id=%s WHERE id=%s AND draw_year=%s",
+                        (target, name if clean else a["name"], entry_id, applicant_id, year))
+        ddb.audit(conn, year, applicant_id, "identity", str(a.get("person_id") or ""),
+                  str(target or ""), None, user)
+        return {"ok": True}
+    return _write(year, op)
+
+
+def link_archive_draw(year: int, applicant_id: int, past_year: int, category: str, position: int, user: str) -> dict:
+    if not 2016 <= past_year < year or category not in CATEGORIES or position < 1:
+        raise DrawError("Проверьте год, зачёт и позицию архивной жеребьёвки")
+
+    def op(conn, snap):
+        person_id = _applicant(snap, applicant_id).get("person_id")
+        if person_id is None:
+            raise DrawError("Сначала привяжите эту строку к человеку")
+        with conn.cursor(buffered=True) as cur:
+            cur.execute("SELECT 1 FROM draw_applicants WHERE draw_year=%s LIMIT 1", (past_year,))
+            if cur.fetchone():
+                raise DrawError("Этот год есть в базе. Привяжите человека в записи самой жеребьёвки")
+            cur.execute("""
+                INSERT INTO siberman_draw_archive_links (draw_year,category,position,person_id)
+                VALUES (%s,%s,%s,%s) ON DUPLICATE KEY UPDATE person_id=COALESCE(person_id,VALUES(person_id))
+            """, (past_year, category, position, person_id))
+            cur.execute("SELECT person_id FROM siberman_draw_archive_links "
+                        "WHERE draw_year=%s AND category=%s AND position=%s", (past_year, category, position))
+            if cur.fetchone()[0] != person_id:
+                raise DrawError("Эта архивная позиция уже привязана к другому человеку")
+        ddb.audit(conn, year, applicant_id, "archive_identity", "", f"{past_year}/{category}/{position}", None, user)
+        return {"ok": True}
+    return _write(year, op)
 
 
 # ── Счета: контакты из заявок Тильды и Excel ───────────────────────────────
@@ -397,17 +520,25 @@ EXPORT_COLUMNS = (("category", "Зачёт", 12), ("position", "№", 5), ("sect
 
 
 def import_contacts(year: int, file_bytes: bytes, user: str = "") -> dict:
-    """CSV заявок Тильды → e-mail, телефоны и тексты «Почему wild card» / «О результатах» (заменяют прошлую
-    загрузку; тексты переносятся и в заявки). Отчёт: сколько людей и у каких победителей / приглашённых контакта нет."""
+    """Update contacts from Tilda only on existing source entries with the same tranid."""
     contacts, report = parse_contacts(file_bytes)
     if not contacts:
         raise DrawError("в файле нет заявок — нужна CSV-выгрузка заявок Тильды (столбцы surname, Name, Email, Phone, format)")
+    by_tranid = source_contact_rows(file_bytes)
 
     def op(conn, snap):
         ddb.replace_contacts(conn, year, contacts)
-        ddb.update_texts(conn, [{**_texts(a, contacts), "id": a["id"]} for a in snap["applicants"]])
-        rows = _payment_rows(snap, contacts)
-        return {**report, "matched": sum(1 for a in snap["applicants"] if contact_for(a, contacts)),
+        updated = 0
+        for entry_id, entry in ddb.entry_contacts(conn, year).items():
+            source = by_tranid.get(entry["tranid"])
+            if source and source["format"] == entry["format"] and identity.name_key(source) == identity.name_key(entry):
+                edb.update_source_contacts(conn, entry_id, source)
+                updated += 1
+        linked = ddb.entry_contacts(conn, year)
+        ddb.update_texts(conn, [{**_texts(a, linked), "id": a["id"]} for a in snap["applicants"]])
+        rows = _payment_rows(snap, linked)
+        return {**report, "updated": updated, "matched": sum(1 for a in snap["applicants"] if (
+                    (contact_for(a, linked) or {}).get("email") or (contact_for(a, linked) or {}).get("phone"))),
                 "applicants": len(snap["applicants"]),
                 "missing": [r["fio"] for r in rows if not r["email"] and not r["phone"]]}
     return _write(year, op)
@@ -435,7 +566,7 @@ def payment_rows(year: int) -> list[dict]:
     conn = _connect()
     try:
         snap = _snapshot(conn, year)
-        contacts = ddb.load_contacts(conn, year)
+        contacts = ddb.entry_contacts(conn, year)
     finally:
         conn.close()
     return _payment_rows(snap, contacts)
@@ -535,48 +666,27 @@ def _known_24h_starts() -> list[dict] | None:
         conn.close()
 
 
-def _candidate_person(entry: dict, persons: list, aliases: dict) -> tuple[int | None, list[int]]:
-    """Resolve registry identity by exact normalized FIO + birth date; never name-only auto-link."""
-    key = plain_key(entry["surname"], entry["name"])
-    dob = entry.get("birthdate")
-    same_name = {p.id for p in persons if key in aliases.get(p.id, set())}
-    if dob is None:
-        return None, sorted(same_name)
-    matches = {pid for pid in same_name if next((p.birthdate for p in persons if p.id == pid), None) == dob}
-    return (next(iter(matches)) if len(matches) == 1 else None), sorted(same_name)
-
-
-def _accumulated_for(entry: dict, year: int, current: list[dict], history: dict,
-                     identities: list[dict], persons: list, aliases: dict, started: set[tuple],
-                     archive_years: set[int]) -> tuple[int | None, str, list[str]]:
-    key = plain_key(entry["surname"], entry["name"])
-    same_name = [a for a in current if a["format"] == entry["format"]
-                 and plain_key(a["surname"], a["name"]) == key]
-    issues = []
-    if len(same_name) == 1:
-        return int(same_name[0]["draw_accumulated"]), "загруженная таблица текущей жеребьёвки (базовое значение)", issues
-    if len(same_name) > 1:
-        return None, "неоднозначная строка в текущей таблице", ["в текущей таблице найдено несколько совпадений ФИО/формата"]
-
+def _accumulated_for(history: dict, person_id: int | None, *, is_new: bool,
+                     archived_draws: list[int], started: set[tuple], archive_years: set[int]) -> tuple:
+    if person_id is None:
+        return None, "личность заявки на проверке", ["подтвердите личность в разделе «Заявки»"]
     previous = []
     for draw_year, batch in history.items():
-        found = [a for a in batch["applicants"] if plain_key(a["surname"], a["name"]) == key]
+        found = [a for a in batch["applicants"] if a.get("person_id") == person_id]
         if len(found) > 1:
-            return None, "история жеребьёвок: несколько совпадений ФИО", ["совпадение ФИО в истории жеребьёвок требует проверки"]
-        if not found:
-            continue
-        applicant = found[0]
-        dob_matches = [r for r in identities if int(r["race_year"]) == int(draw_year) + 1
-                       and plain_key(r["surname"], r["name"]) == key
-                       and r.get("birthdate") == entry.get("birthdate")]
-        if len(dob_matches) != 1:
-            return None, "история жеребьёвок: личность не подтверждена", [
-                "для исторического совпадения не найдено ровно одной записи с теми же ФИО и датой рождения"]
-        previous.append((int(draw_year), applicant, batch))
+            return None, "история жеребьёвок неоднозначна", ["несколько записей с одним ID человека"]
+        if found:
+            previous.append((int(draw_year), found[0], batch))
     if not previous:
+        if is_new and not archived_draws:
+            return 0, "организатор подтвердил новую личность", []
         return None, "нет исходного значения накопленных шансов", [
-            "нет загруженной базовой таблицы и подтверждённой истории предыдущей жеребьёвки"]
+            "нет подтверждённой предыдущей жеребьёвки с известным итогом"]
 
+    if archived_draws and max(archived_draws) > max(row[0] for row in previous):
+        return None, "есть более поздняя архивная жеребьёвка", ["уточните её исход и оплату"]
+
+    issues = []
     draw_year, applicant, batch = max(previous, key=lambda row: row[0])
     current_value = int(applicant["draw_accumulated"])
     by_id = {a["id"]: a for a in batch["applicants"]}
@@ -592,7 +702,6 @@ def _accumulated_for(entry: dict, year: int, current: list[dict], history: dict,
         section == "waitlist" and applicant["payment_status"] in ("pending", "unpaid", "paid"))
     paid_started = None
     if (section == "winner" or invited) and applicant["payment_status"] == "paid":
-        person_id, _ = _candidate_person(entry, persons, aliases)
         event_year = draw_year + 1
         if event_year not in archive_years or person_id is None:
             return None, "старт после оплаты не подтверждён", [
@@ -611,9 +720,9 @@ def chance_draft(year: int) -> bytes:
         applicants = edb.admitted_for_draw(conn, year + 1)
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
-        identities = edb.identity_rows(conn, [y + 1 for y in history])
+        identities = identity.decisions(conn, applicants)
+        archived_draws = ddb.archive_draw_years(conn, year)
         archive = hall_data.load_entries(conn)
-        persons, _ = hall_data.load_people(conn)
     finally:
         conn.close()
     if not applicants:
@@ -621,20 +730,10 @@ def chance_draft(year: int) -> bytes:
     duathlon_rows = _known_duathlon_starts()
     race24_rows = _known_24h_starts()
 
-    aliases: dict[int, set[str]] = defaultdict(set)
-    for person in persons:
-        aliases[person.id].add(plain_key(person.surname, person.name))
-    started: set[tuple] = set()
-    archive_names: dict[str, set[int]] = defaultdict(set)
-    for race in archive:
-        archive_names[plain_key(race.surname, race.name)].add(race.person_id or 0)
-        if race.person_id is not None:
-            aliases[race.person_id].add(plain_key(race.surname, race.name))
-        if hall_data.is_start(race) and race.person_id is not None:
-            started.add((race.person_id, race.year))
+    started = {(r.person_id, r.year) for r in archive if r.person_id is not None and hall_data.is_start(r)}
     archive_years = {race.year for race in archive if race.year <= year}
     regions = load_localities()
-    admission_keys = Counter((e["format"], plain_key(e["surname"], e["name"])) for e in applicants)
+    admission_keys = Counter(res["person_id"] for res in identities.values() if res["person_id"] is not None)
     rows, global_issues = [], [
         "Исторические протоколы 222 Дуатлона и суточной велогонки ещё не получены; значения формы не сверены с архивом."
     ]
@@ -643,13 +742,12 @@ def chance_draft(year: int) -> bytes:
         key = plain_key(entry["surname"], entry["name"])
         raw = entry.get("raw") or {}
         issues, sources, reported = [], {}, {}
-        if admission_keys[(entry["format"], key)] > 1:
-            issues.append("несколько допущенных заявок с одинаковыми ФИО и форматом")
-        person_id, same_name_ids = _candidate_person(entry, persons, aliases)
-        if len(same_name_ids) > 1:
-            issues.append("совпадающее ФИО в реестре: сопоставление проверено по дате рождения, требуется просмотр")
-        if person_id is None and key in archive_names:
-            issues.append("ФИО есть в архиве, но нет однозначной связки по ФИО + дате рождения")
+        resolved = identities[entry["id"]]
+        person_id = resolved["person_id"]
+        if person_id is None:
+            issues.append("подтвердите личность в разделе «Заявки»")
+        elif admission_keys[person_id] > 1:
+            issues.append("несколько допущенных заявок одного человека")
 
         own_starts = defaultdict(set)
         if person_id is not None:
@@ -666,9 +764,6 @@ def chance_draft(year: int) -> bytes:
             if person_id is not None:
                 value = len(own_starts[fmt])
                 sources[field] = "архив Siberman; старты участника, на которого оформлена заявка"
-            elif key not in archive_names and entry.get("birthdate") is not None:
-                value = 0
-                sources[field] = "архив Siberman: нет записей с таким ФИО"
             else:
                 value = None
                 possible_years = sorted({
@@ -686,15 +781,16 @@ def chance_draft(year: int) -> bytes:
             elif reported[field] is not None and reported[field] != value:
                 issues.append(f"ответ формы по {field} не совпал с архивом")
 
-        current_matches = [a for a in current if a["format"] == entry["format"]
-                           and plain_key(a["surname"], a["name"]) == key]
+        current_matches = [a for a in current if person_id is not None and a.get("person_id") == person_id
+                           and a["format"] == entry["format"] and a.get("entry_id") in (None, entry["id"])]
         current_row = current_matches[0] if len(current_matches) == 1 else None
         if current_row:
             acc_value = int(current_row["draw_accumulated"])
             sources["draw_accumulated"] = "загруженная таблица текущей жеребьёвки (начальное значение)"
         else:
             acc_value, source, acc_issues = _accumulated_for(
-                entry, year, current, history, identities, persons, aliases, started, archive_years)
+                history, person_id, is_new=resolved["state"] == "new",
+                archived_draws=archived_draws.get(person_id, []), started=started, archive_years=archive_years)
             sources["draw_accumulated"] = source
             issues.extend(acc_issues)
         past_draws = _chance_count(raw, "siberman_draw")
@@ -749,7 +845,8 @@ def chance_draft(year: int) -> bytes:
             issues.append("нет подтверждённого ответа о тату Siberman")
 
         rows.append({
-            "fio": fio, "format": entry["format"], "gender": entry.get("gender"), "city": entry.get("city"),
+            "entry_id": entry["id"], "fio": fio, "format": entry["format"],
+            "gender": entry.get("gender"), "city": entry.get("city"),
             "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
             "relay_run": entry.get("relay_run"),
             "extras": {**counts,
@@ -793,7 +890,7 @@ def draw_backup(year: int) -> bytes:
     try:
         snap = _snapshot(conn, year)
         audit = ddb.load_year_audit(conn, year)
-        contacts = ddb.load_contacts(conn, year)
+        contacts = ddb.entry_contacts(conn, year)
     finally:
         conn.close()
     by_id = {a["id"]: a for a in snap["applicants"]}
@@ -897,12 +994,11 @@ def _build_host_state(year: int, snap: dict) -> dict:
     drawn = [by_id[r["applicant_id"]] for rows in snap["lists"].values() for r in rows]
     conn = _connect()
     try:
-        histories = ddb.siberman_histories(conn, drawn)
-        persons = ddb.person_ids_by_key(conn)
+        histories = ddb.linked_histories(conn, drawn)
     finally:
         conn.close()
     people = {a["id"]: {**{k: a[k] for k in HOST_FIELDS}, "history": histories[a["id"]],
-                        "athlete": _athlete_brief(match_person(a, persons))} for a in drawn}
+                        "athlete": _athlete_brief(a.get("person_id"))} for a in drawn}
     active = [p for p in snap["picks"] if p["cancelled_at"] is None]
     return {
         "year": year, "current_round": snap["config"]["current_round"], "round_labels": ROUND_LABELS,

@@ -265,6 +265,8 @@ def merge(source_id: int, target_id: int, user: str, review_id: Optional[int] = 
         src, dst = persons.get(int(source_id)), persons.get(int(target_id))
         if not src or not dst:
             raise PersonsError("Человек не найден — обновите страницу")
+        if pdb.has_draw_identity_links(conn, source_id):
+            raise PersonsError("Сначала перенесите подтверждённые связи заявок и жеребьёвок")
         if src["bib_individual"] and dst["bib_individual"]:
             raise PersonsError(f"У обоих свой личный номер (№{src['bib_individual']} и №{dst['bib_individual']}) — "
                                "по правилам Siberman это разные люди")

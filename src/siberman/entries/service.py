@@ -17,7 +17,10 @@ from openpyxl.utils import get_column_letter
 from src.config import settings
 from src.siberman.db import get_siberman_connection
 from src.siberman.entries import db as edb
+from src.siberman.entries import identity
 from src.siberman.entries.parser import BadEntry, is_test_ping, parse_csv, parse_entry
+from src.siberman.persons import db as pdb
+from src.siberman.persons.service import PersonsBusy, _locked_tx as lock_people
 
 KRS = ZoneInfo("Asia/Krasnoyarsk")
 STATUSES = ("review", "admitted", "rejected", "withdrawn")
@@ -50,6 +53,8 @@ def _db():
         raise EntriesUnavailable("база данных временно недоступна")
     try:
         yield conn
+    except PersonsBusy as e:
+        raise EntryError(str(e)) from e
     except mysql.connector.Error as e:
         raise EntriesUnavailable("база данных временно недоступна") from e
     finally:
@@ -115,9 +120,11 @@ def webhook_path(year: int):
 def admin_list(year: int) -> dict:
     with _db() as conn:
         rows, years = edb.list_year(conn, year), edb.years(conn)
+        identities = identity.decisions(conn, rows)
     counts = {"total": len(rows), **{s: sum(1 for r in rows if r["status"] == s) for s in STATUSES}}
     for n, r in enumerate(rows, start=1):
         r["n"], r["comment"] = n, r["comment"] or ""
+        r["identity"] = identities[r["id"]]
     return {"year": year, "entries": rows, "counts": counts, "years": sorted(set(years) | {year}),
             "webhook_path": webhook_path(year)}
 
@@ -133,7 +140,36 @@ def entry_card(year: int, entry_id: int) -> dict:
     with _db() as conn:
         e = _entry(conn, year, entry_id)
         e["audit"] = edb.audit(conn, entry_id)
+        e["identity"] = identity.decisions(conn, [e], include_candidates=True)[entry_id]
     return e
+
+
+def set_identity(year: int, entry_id: int, mode: str, person_id: int | None, user: str) -> dict:
+    with _db() as conn, lock_people(conn):
+        e = _entry(conn, year, entry_id)
+        before = identity.decisions(conn, [e], include_candidates=True)[entry_id]
+        if mode == "create":
+            if not e["birthdate"] or not e["surname"].strip() or not e["name"].strip():
+                raise EntryError("Для новой записи нужны имя, фамилия и дата рождения в заявке")
+            if before["person_id"] is not None or any(
+                p["birthdate"] == e["birthdate"] for p in before["candidates"]
+            ):
+                raise EntryError("Такая личность уже есть. Выберите существующую карточку")
+            person_id = identity.create_person(conn, e)
+        elif mode == "link":
+            person = pdb.get_person(conn, person_id) if person_id is not None else None
+            if not person or person["id"] not in {p["id"] for p in before["candidates"]}:
+                raise EntryError("Выберите карточку из списка совпадений")
+            if e["birthdate"] and person["birthdate"] and e["birthdate"] != person["birthdate"]:
+                raise EntryError("Даты рождения различаются")
+        elif mode == "review":
+            person_id = None
+        else:
+            raise EntryError("Неизвестное действие проверки")
+        if person_id is not None and edb.draw_identity_conflict(conn, entry_id, person_id):
+            raise EntryError("У этого человека уже есть другая строка в этой жеребьёвке")
+        edb.record_identity(conn, entry_id, before["person_id"], person_id, mode == "create", user)
+    return {"ok": True}
 
 
 def set_status(year: int, entry_id: int, status: str, user: str) -> dict:

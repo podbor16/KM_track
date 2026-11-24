@@ -37,6 +37,11 @@ class CommentIn(BaseModel):
     comment: str = ""
 
 
+class IdentityIn(BaseModel):
+    mode: str
+    person_id: int | None = None
+
+
 def _check_year(year: int) -> None:
     if year not in YEARS:
         raise HTTPException(status_code=404)
@@ -158,6 +163,12 @@ def entries_status(year: int, entry_id: int, body: StatusIn, user: str = Depends
 def entries_comment(year: int, entry_id: int, body: CommentIn, user: str = Depends(api_require_auth)):
     _check_year(year)
     return _run(service.set_comment, year, entry_id, body.comment, user)
+
+
+@router.post(ADMIN + "/{entry_id}/identity")
+def entries_identity(year: int, entry_id: int, body: IdentityIn, user: str = Depends(api_require_auth)):
+    _check_year(year)
+    return _run(service.set_identity, year, entry_id, body.mode, body.person_id, user)
 
 
 # ── Публичный список ────────────────────────────────────────────────────────

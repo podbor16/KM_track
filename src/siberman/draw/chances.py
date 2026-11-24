@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from src.siberman.draw.importer import (
     CALCULATION_APPROVED, CALCULATION_CHECK, COL_CITY, COL_FORMAT, COL_NAME, COL_SEX, COL_TOTAL, COL_EXTRA, COL_WILDCARD,
-    EXTRA_COLS, RELAY_COLS,
+    COL_ENTRY_ID, EXTRA_COLS, RELAY_COLS,
 )
 
 READY_COLUMN = CALCULATION_CHECK
@@ -19,7 +19,7 @@ NOT_READY_VALUE = "ПРОВЕРИТЬ"
 LOCALITIES_PATH = Path(__file__).resolve().parents[3] / "data" / "siberman" / "draw_localities.json"
 
 MAIN_COLUMNS = (COL_FORMAT, COL_NAME, COL_SEX, COL_CITY, COL_WILDCARD,
-                *EXTRA_COLS.values(), COL_EXTRA, COL_TOTAL, *RELAY_COLS.values(), READY_COLUMN)
+                *EXTRA_COLS.values(), COL_EXTRA, COL_TOTAL, *RELAY_COLS.values(), READY_COLUMN, COL_ENTRY_ID)
 EXTRA_LABELS = {"starts_individual": EXTRA_COLS["starts_individual"],
                 "starts_relay": EXTRA_COLS["starts_relay"],
                 "draw_accumulated": EXTRA_COLS["draw_accumulated"],
@@ -118,7 +118,7 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
 
     review = wb.create_sheet("Проверка расчёта")
     review.append(["Участник", "Формат", "Показатель", "Расчёт", "Ответ в заявке / прежняя таблица",
-                   "Источник", "Результат проверки"])
+                   "Источник", "Результат проверки", COL_ENTRY_ID])
     for cell in review[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(wrap_text=True, vertical="top")
@@ -138,6 +138,7 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
             COL_NAME: item["fio"], COL_SEX: {"M": "Мужской", "F": "Женский"}.get(item.get("gender"), ""),
             COL_CITY: item.get("city") or "", COL_WILDCARD: "",
             READY_COLUMN: READY_VALUE if complete else NOT_READY_VALUE,
+            COL_ENTRY_ID: item.get("entry_id"),
         }
         values.update({EXTRA_COLS[k]: as_count(extras.get(k)) for k in EXTRA_COLS})
         values.update({RELAY_COLS[k]: item.get(f"relay_{k}") or "" for k in RELAY_COLS})
@@ -171,7 +172,8 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
             else:
                 verdict = "совпадает / рассчитано"
             review.append([item["fio"], values[COL_FORMAT], label, result if result is not None else "",
-                           reported if reported is not None else "", source, "; ".join(messages) or verdict])
+                           reported if reported is not None else "", source, "; ".join(messages) or verdict,
+                           item.get("entry_id")])
             row_no = review.max_row
             if result is None or messages or (reported is not None and reported != result):
                 for cell in review[row_no]:
@@ -179,7 +181,7 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
 
     for i, title in enumerate(MAIN_COLUMNS, start=1):
         ws.column_dimensions[get_column_letter(i)].width = min(42, max(14, len(title) + 3))
-    for i, width in enumerate((28, 22, 36, 14, 20, 32, 60), start=1):
+    for i, width in enumerate((28, 22, 36, 14, 20, 32, 60, 19), start=1):
         review.column_dimensions[get_column_letter(i)].width = width
     for sheet in (ws, review):
         sheet.freeze_panes = "A2"

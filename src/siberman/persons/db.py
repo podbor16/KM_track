@@ -78,6 +78,16 @@ def delete_person(conn, person_id: int) -> None:
     conn.cursor().execute("DELETE FROM siberman_persons WHERE id=%s", (int(person_id),))
 
 
+def has_draw_identity_links(conn, person_id: int) -> bool:
+    with conn.cursor(buffered=True) as cur:
+        cur.execute("""
+            SELECT EXISTS(SELECT 1 FROM siberman_entry_person_links WHERE person_id=%s)
+                OR EXISTS(SELECT 1 FROM draw_applicants WHERE person_id=%s)
+                OR EXISTS(SELECT 1 FROM siberman_draw_archive_links WHERE person_id=%s)
+        """, (person_id, person_id, person_id))
+        return bool(cur.fetchone()[0])
+
+
 def delete_orphans(conn, ids) -> list:
     """Удалить людей из ids, у которых не осталось выступлений. → удалённые id."""
     ids = sorted({int(i) for i in ids if i is not None})
@@ -88,7 +98,10 @@ def delete_orphans(conn, ids) -> list:
     cur.execute(f"SELECT s.id FROM siberman_persons s LEFT JOIN siberman_person_links l ON l.person_id=s.id "
                 f"WHERE s.id IN ({marks}) AND l.person_id IS NULL AND NOT EXISTS (SELECT 1 FROM "
                 "siberman_person_reviews r WHERE r.status <> 'resolved' AND "
-                "(r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids)))", args)
+                "(r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids))) "
+                "AND NOT EXISTS (SELECT 1 FROM siberman_entry_person_links e WHERE e.person_id=s.id) "
+                "AND NOT EXISTS (SELECT 1 FROM draw_applicants a WHERE a.person_id=s.id) "
+                "AND NOT EXISTS (SELECT 1 FROM siberman_draw_archive_links a WHERE a.person_id=s.id)", args)
     gone = [r["id"] for r in cur.fetchall()]
     for pid in gone:
         delete_person(conn, pid)

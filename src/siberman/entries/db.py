@@ -114,6 +114,42 @@ def audit(conn, entry_id: int) -> list[dict]:
     return cur.fetchall()
 
 
+def record_identity(conn, entry_id: int, previous: int | None, person_id: int | None, is_new: bool, user: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO siberman_entry_person_links (entry_id, person_id, is_new) VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE person_id=VALUES(person_id), is_new=VALUES(is_new)
+        """, (entry_id, person_id, is_new))
+        cur.execute("""
+            INSERT INTO siberman_entries_audit (entry_id, action, old_value, new_value, admin_user, created_at)
+            VALUES (%s, 'identity', %s, %s, %s, NOW())
+        """, (entry_id, None if previous is None else str(previous),
+              None if person_id is None else str(person_id), user[:64]))
+        # Rows survive until the next Excel import and see this decision immediately.
+        cur.execute("""
+            UPDATE draw_config c JOIN draw_applicants a ON a.draw_year=c.draw_year
+            SET c.version=c.version+1, a.person_id=%s WHERE a.entry_id=%s
+        """, (person_id, entry_id))
+
+
+def draw_identity_conflict(conn, entry_id: int, person_id: int) -> bool:
+    with conn.cursor(buffered=True) as cur:
+        cur.execute("""
+            SELECT 1 FROM draw_applicants a JOIN draw_applicants b ON a.draw_year=b.draw_year AND a.id<>b.id
+            WHERE a.entry_id=%s AND b.person_id=%s LIMIT 1
+        """, (entry_id, person_id))
+        return cur.fetchone() is not None
+
+
+def update_source_contacts(conn, entry_id: int, source: dict) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE siberman_entries SET email=COALESCE(NULLIF(%s,''),email),
+              phone=COALESCE(NULLIF(%s,''),phone), wildcard_reason=COALESCE(NULLIF(%s,''),wildcard_reason),
+              results_text=COALESCE(NULLIF(%s,''),results_text) WHERE id=%s
+        """, (source["email"], source["phone"], source["wildcard_reason"], source["results_text"], entry_id))
+
+
 def public_rows(conn, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, surname, name, format, status FROM siberman_entries WHERE race_year=%s", (year,))

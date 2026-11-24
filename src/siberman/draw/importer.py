@@ -18,6 +18,7 @@ import openpyxl
 SHEET = "Спец вставка"
 COL_FORMAT, COL_NAME, COL_SEX, COL_CITY = "Формат участия", "Участник жеребьёвки", "Пол", "Город"
 COL_WILDCARD, COL_TOTAL, COL_EXTRA = "Wildcard", "Общая сумма шансов", "Сумма дополнительных шансов"
+COL_ENTRY_ID = "ID исходной заявки"
 RELAY_COLS = {"swim": "Плавание", "bike": "Велосипед", "run": "Бег"}   # «Фамилия Имя» участника этапа
 EXTRA_COLS = {
     "starts_individual": "Старты на гонке (индивидуально)",
@@ -95,6 +96,8 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     apps: list[dict] = []
     errors: list[str] = []
     seen: set[tuple] = set()
+    legacy_names: set[tuple] = set()
+    all_names: set[tuple] = set()
     for n, row in enumerate(rows[1:], start=2):
         def get(col, _row=row):
             i = idx.get(col)
@@ -149,11 +152,23 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if not name:
             errors.append(f"{where}: нет имени")
             continue
-        key = (fmt, _fold(surname), _fold(name))
-        if key in seen:
+        try:
+            entry_id = _int(get(COL_ENTRY_ID)) or None
+        except ValueError as e:
+            errors.append(f"{where}: ID исходной заявки — {e}")
+            continue
+        if COL_ENTRY_ID in idx and entry_id is None:
+            errors.append(f"{where}: укажите ID исходной заявки")
+            continue
+        name_key = (fmt, _fold(surname), _fold(name))
+        key = ("entry", entry_id) if entry_id else name_key
+        if key in seen or name_key in legacy_names or (entry_id is None and name_key in all_names):
             errors.append(f"{where}: повтор заявки")
             continue
         seen.add(key)
+        all_names.add(name_key)
+        if entry_id is None:
+            legacy_names.add(name_key)
         is_wildcard = wc_raw == "wildcard"
         if is_wildcard:
             pool = "wildcard"
@@ -168,6 +183,7 @@ def parse_applicants(file_bytes: bytes) -> tuple[list[dict], list[str]]:
             "city": _norm(get(COL_CITY)), "pool": pool, "is_wildcard": is_wildcard,
             "chances": total, **extra, **relay,
             "wildcard_reason": "", "results_text": "",
+            **({"entry_id": entry_id} if entry_id else {}),
         })
     return apps, errors
 
@@ -184,7 +200,9 @@ def import_report(apps: list[dict]) -> dict:
 
 
 def applicant_key(a: dict) -> tuple:
-    """Одна и та же заявка в двух версиях таблицы: формат + фамилия + имя (без регистра и ё)."""
+    """В новых таблицах сравниваем исходные заявки по постоянному ID."""
+    if a.get("entry_id"):
+        return "entry", a["entry_id"]
     return a["format"], _fold(a["surname"]), _fold(a["name"])
 
 
@@ -262,3 +280,15 @@ def contact_for(a: dict, contacts: dict):
         if (a["format"], key) in contacts:
             return contacts[(a["format"], key)]
     return None
+
+
+def source_contact_rows(file_bytes: bytes) -> dict:
+    """Contacts keyed by the immutable submission identifier, for already imported applications."""
+    rows = csv.DictReader(io.StringIO(_decode_csv(file_bytes), newline=""), delimiter=";")
+    return {
+        _norm(r.get("tranid")): {"surname": _norm(r.get("surname")), "name": _norm(r.get("Name")),
+                                "format": _format_of(_norm(r.get("format"))),
+                                "email": _norm(r.get("Email")), "phone": _norm(r.get("Phone")),
+                                **{k: _norm(r.get(col)) for k, col in TILDA_TEXTS.items()}}
+        for r in rows if _norm(r.get("tranid"))
+    }
