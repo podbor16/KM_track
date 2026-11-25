@@ -1,6 +1,7 @@
 """Подготовка непишущего в БД черновика шансов жеребьёвки Siberman."""
 import io
 import json
+from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -12,6 +13,7 @@ from src.siberman.draw.importer import (
     CALCULATION_APPROVED, CALCULATION_CHECK, COL_CITY, COL_FORMAT, COL_NAME, COL_SEX, COL_TOTAL, COL_EXTRA, COL_WILDCARD,
     COL_ENTRY_ID, EXTRA_COLS, RELAY_COLS,
 )
+from src.siberman.persons.linking import plain_key
 
 READY_COLUMN = CALCULATION_CHECK
 READY_VALUE = CALCULATION_APPROVED
@@ -88,6 +90,35 @@ def form_reported(raw: dict, key: str) -> int | None:
     return as_count(raw.get(key))
 
 
+def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, birthdate: date | None,
+                         reported: int | None, through_year: int) -> tuple[int | None, str, str | None]:
+    if rows is None:
+        return None, race, f"{race}: база результатов недоступна"
+    history = [row for row in rows if row["race_year"] is not None and int(row["race_year"]) <= through_year]
+    years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in history}))
+    source = f"{race}, протоколы: {years}" if years else race
+    if not history:
+        return None, source, f"{race}: нет протоколов до года жеребьёвки включительно"
+    if birthdate is None:
+        return None, source, f"{race}: нужна подтверждённая личность с датой рождения"
+
+    matches = [row for row in history if plain_key(row["surname"], row["name"]) == name_key]
+    confirmed = {row["event_id"] for row in matches if row["birthdate"] == birthdate}
+    uncertain = [row for row in matches if row["birthdate"] is None and row["event_id"] not in confirmed]
+    count = len(confirmed)
+    source += f"; стартов по ФИО и дате рождения: {count}"
+    if uncertain:
+        pending_years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in uncertain}))
+        return None, source, f"{race}: возможные старты без даты рождения за {pending_years}"
+    if reported is not None and reported != count:
+        return (count or None), source, f"{race}: в заявке {reported}, в протоколах подтверждено {count}"
+    if count:
+        return count, source, None
+    if reported == 0:
+        return 0, source + "; в заявке указано 0", None
+    return None, source, f"{race}: совпадений нет и в заявке не указано число стартов"
+
+
 def next_accumulated(current: int, section: str | None, invited: bool, payment_status: str,
                      started: bool | None) -> tuple[int | None, str]:
     """Apply one completed lottery outcome. started=None means the race result is not covered."""
@@ -103,7 +134,7 @@ def next_accumulated(current: int, section: str | None, invited: bool, payment_s
     return current + 1, "не выиграл / слот не предложен — +1"
 
 
-def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
+def build_workbook(rows: list[dict]) -> bytes:
     """Create organizer-compatible main sheet plus a source/mismatch audit sheet."""
     wb = Workbook()
     ws = wb.active
@@ -130,7 +161,7 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
     extra_col = MAIN_COLUMNS.index(COL_EXTRA) + 1
     total_col = MAIN_COLUMNS.index(COL_TOTAL) + 1
     for item in rows:
-        checks = list(global_issues) + list(item.get("issues", []))
+        checks = item.get("issues", [])
         extras = item["extras"]
         complete = not checks and all(as_count(extras.get(k)) is not None for k in EXTRA_COLS)
         values = {
@@ -160,9 +191,7 @@ def build_workbook(rows: list[dict], global_issues: list[str]) -> bytes:
             result = as_count(extras.get(key))
             reported = item.get("reported", {}).get(key)
             source = item.get("sources", {}).get(key, "неизвестно")
-            messages = list(item.get("issues", []))
-            if global_issues:
-                messages.extend(global_issues)
+            messages = checks
             if result is None:
                 verdict = "НЕТ ДАННЫХ"
             elif reported is not None and reported != result:

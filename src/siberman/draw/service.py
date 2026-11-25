@@ -28,7 +28,8 @@ from src.race_triatleta.db import get_tri_connection
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
 from src.siberman.draw.chances import (
-    build_workbook as build_chances_workbook, form_reported, load_localities, local_value, next_accumulated,
+    build_workbook as build_chances_workbook, external_start_bonus, form_reported, load_localities,
+    local_value, next_accumulated,
 )
 from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants, parse_contacts, source_contact_rows
 from src.siberman.draw.logic import (
@@ -620,11 +621,11 @@ def _known_duathlon_starts() -> list[dict] | None:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.gender, p.status, p.birthdate,
+            SELECT e.id AS event_id, YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.status, p.birthdate,
                    p.run1_s, p.bike_s, p.run2_s, COUNT(c.id) AS checkpoints
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN checkpoints c ON c.participant_id=p.id
-            GROUP BY p.id, e.gun_datetime, p.surname, p.name, p.gender, p.status, p.birthdate,
+            GROUP BY p.id, e.id, e.gun_datetime, p.surname, p.name, p.status, p.birthdate,
                      p.run1_s, p.bike_s, p.run2_s
         """)
         rows = cur.fetchall()
@@ -646,11 +647,12 @@ def _known_24h_starts() -> list[dict] | None:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
+            SELECT e.id AS event_id, COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
                    p.surname, p.name, p.birthdate, p.status, p.category, COUNT(l.id) AS laps
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN laps l ON l.participant_id=p.id AND l.event_id=e.id
-            GROUP BY p.id, e.archive_year, e.gun_datetime, e.duration_hours, p.surname, p.name, p.birthdate, p.status, p.category
+            GROUP BY p.id, e.id, e.archive_year, e.gun_datetime, e.duration_hours,
+                     p.surname, p.name, p.birthdate, p.status, p.category
         """)
         rows = cur.fetchall()
         def six_hour(r):
@@ -720,7 +722,7 @@ def chance_draft(year: int) -> bytes:
         applicants = edb.admitted_for_draw(conn, year + 1)
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
-        identities = identity.decisions(conn, applicants)
+        identities = identity.decisions(conn, applicants, include_candidates=True)
         archived_draws = ddb.archive_draw_years(conn, year)
         archive = hall_data.load_entries(conn)
     finally:
@@ -734,9 +736,7 @@ def chance_draft(year: int) -> bytes:
     archive_years = {race.year for race in archive if race.year <= year}
     regions = load_localities()
     admission_keys = Counter(res["person_id"] for res in identities.values() if res["person_id"] is not None)
-    rows, global_issues = [], [
-        "Исторические протоколы 222 Дуатлона и суточной велогонки ещё не получены; значения формы не сверены с архивом."
-    ]
+    rows = []
     for entry in applicants:
         fio = f"{entry['surname']} {entry['name']}".strip()
         key = plain_key(entry["surname"], entry["name"])
@@ -803,36 +803,19 @@ def chance_draft(year: int) -> bytes:
         if local is None:
             issues.append(f"город «{entry.get('city') or '—'}» требует классификации")
 
-        duathlon_report = _chance_count(raw, "222_starts")
-        race24_report = _chance_count(raw, "24h_starts")
-        duathlon = race24 = None
-        birthdate = entry.get("birthdate")
-        duathlon_matches = [r for r in duathlon_rows or []
-                            if plain_key(r["surname"], r["name"]) == key]
-        race24_matches = [r for r in race24_rows or [] if birthdate is not None and r["birthdate"] == birthdate
-                          and plain_key(r["surname"], r["name"]) == key]
-        duathlon_confirmed = {int(r["race_year"]) for r in duathlon_matches
-                              if birthdate is not None and r["birthdate"] == birthdate}
-        duathlon_unverified = {int(r["race_year"]) for r in duathlon_matches
-                               if birthdate is None or r["birthdate"] is None} - duathlon_confirmed
-        race24_known = len({int(r["race_year"]) for r in race24_matches})
-        duathlon_years = sorted({int(r["race_year"]) for r in duathlon_rows or []})
-        race24_years = sorted({int(r["race_year"]) for r in race24_rows or []})
-        sources["duathlon_222"] = (
-            f"БД 222 ({duathlon_years}): {len(duathlon_confirmed)} годов по ФИО + ДР, "
-            f"{len(duathlon_unverified)} возможных годов без полной даты; архивы требуют сверки"
-            if duathlon_rows is not None else "БД 222 недоступна; архивные протоколы ожидаются"
-        )
-        sources["race_24h"] = (
-            f"БД 24ч: {race24_known} подтверждённых годов по ФИО + ДР ({race24_years}), 6ч исключены; "
-            "архивы ранних лет ожидаются"
-            if race24_rows is not None else "БД 24ч недоступна; архивные протоколы ожидаются"
-        )
-        reported["duathlon_222"], reported["race_24h"] = duathlon_report, race24_report
-        issues.append("старты 222 Дуатлона не рассчитаны полностью: требуется сверка полноты архива и дат рождения")
-        issues.append("старты суточной гонки не рассчитаны полностью: архивные протоколы ранних лет ещё не получены")
-        if race24_known and race24_report is not None and race24_known != race24_report:
-            issues.append("число известных стартовых годов 24ч расходится с самоотчётом (архив неполный)")
+        person = next((candidate for candidate in resolved["candidates"] if candidate["id"] == person_id), None)
+        birthdate = (person["birthdate"] or entry.get("birthdate")) if person else None
+        external = {}
+        for field, race, form_key, protocol in (
+            ("duathlon_222", "Дуатлон 222", "222_starts", duathlon_rows),
+            ("race_24h", "Суточная велогонка", "24h_starts", race24_rows),
+        ):
+            reported[field] = _chance_count(raw, form_key)
+            external[field], sources[field], issue = external_start_bonus(
+                protocol, race=race, name_key=key, birthdate=birthdate, reported=reported[field], through_year=year,
+            )
+            if issue:
+                issues.append(issue)
 
         tattoo = _yes_no(raw, "tattoo")
         if tattoo is None and current_row:
@@ -849,12 +832,10 @@ def chance_draft(year: int) -> bytes:
             "gender": entry.get("gender"), "city": entry.get("city"),
             "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
             "relay_run": entry.get("relay_run"),
-            "extras": {**counts,
-                       "draw_accumulated": acc_value, "is_local": local, "duathlon_222": duathlon,
-                       "race_24h": race24, "tattoo": tattoo},
+            "extras": {**counts, **external, "draw_accumulated": acc_value, "is_local": local, "tattoo": tattoo},
             "sources": sources, "reported": reported, "issues": issues,
         })
-    return build_chances_workbook(rows, global_issues)
+    return build_chances_workbook(rows)
 
 
 # ── Бэкап всей жеребьёвки в Excel ───────────────────────────────────────────
