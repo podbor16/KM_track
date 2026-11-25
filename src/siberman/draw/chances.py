@@ -103,10 +103,12 @@ def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, b
         return None, source, f"{race}: нужна подтверждённая личность с датой рождения"
 
     matches = [row for row in history if plain_key(row["surname"], row["name"]) == name_key]
-    confirmed = {row["event_id"] for row in matches if row["birthdate"] == birthdate}
+    confirmed = {row["event_id"]: int(row["race_year"]) for row in matches if row["birthdate"] == birthdate}
     uncertain = [row for row in matches if row["birthdate"] is None and row["event_id"] not in confirmed]
     count = len(confirmed)
     source += f"; стартов по ФИО и дате рождения: {count}"
+    if confirmed:
+        source += ". Подтверждены старты за " + ", ".join(map(str, sorted(confirmed.values())))
     if uncertain:
         pending_years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in uncertain}))
         return None, source, f"{race}: возможные старты без даты рождения за {pending_years}"
@@ -157,7 +159,9 @@ def build_workbook(rows: list[dict]) -> bytes:
     warn_fill = PatternFill("solid", fgColor="FFF2CC")
     bad_fill = PatternFill("solid", fgColor="FCE4D6")
     ready_fill = PatternFill("solid", fgColor="E2F0D9")
-    bonus_columns = [get_column_letter(MAIN_COLUMNS.index(label) + 1) for label in EXTRA_COLS.values()]
+    bonus_columns = {key: MAIN_COLUMNS.index(label) + 1 for key, label in EXTRA_COLS.items()}
+    first_bonus = get_column_letter(min(bonus_columns.values()))
+    last_bonus = get_column_letter(max(bonus_columns.values()))
     extra_col = MAIN_COLUMNS.index(COL_EXTRA) + 1
     total_col = MAIN_COLUMNS.index(COL_TOTAL) + 1
     for item in rows:
@@ -178,12 +182,16 @@ def build_workbook(rows: list[dict]) -> bytes:
             if cell.data_type == "f":
                 cell.data_type = "s"
         row_no = ws.max_row
-        bonus_range = f"{bonus_columns[0]}{row_no}:{bonus_columns[-1]}{row_no}"
+        bonus_range = f"{first_bonus}{row_no}:{last_bonus}{row_no}"
         extra_cell = ws.cell(row=row_no, column=extra_col)
         extra_cell.value = f'=IF(COUNT({bonus_range})={len(bonus_columns)},SUM({bonus_range}),"")'
-        ws.cell(row=row_no, column=total_col).value = (
-            f'=IF(ISNUMBER({extra_cell.coordinate}),{extra_cell.coordinate}+1,"")'
+        extra_cell.comment = Comment(
+            "Сумма дополнительных шансов. Формула считает сумму после заполнения всех колонок с бонусами.",
+            "KM_track",
         )
+        total_cell = ws.cell(row=row_no, column=total_col)
+        total_cell.value = f'=IF(ISNUMBER({extra_cell.coordinate}),{extra_cell.coordinate}+1,"")'
+        total_cell.comment = Comment("Один базовый шанс плюс сумма дополнительных шансов.", "KM_track")
         ready_cell = ws.cell(row=row_no, column=MAIN_COLUMNS.index(READY_COLUMN) + 1)
         ready_cell.fill = ready_fill if complete else bad_fill
 
@@ -192,6 +200,12 @@ def build_workbook(rows: list[dict]) -> bytes:
             reported = item.get("reported", {}).get(key)
             source = item.get("sources", {}).get(key, "неизвестно")
             messages = checks
+            note = source
+            if reason := item.get("field_issues", {}).get(key):
+                note += f"\nНа проверке — {reason}."
+            if reported is not None and reported != result:
+                note += f"\nВ заявке или прежней таблице указано {reported}."
+            ws.cell(row_no, bonus_columns[key]).comment = Comment(note, "KM_track", width=350, height=120)
             if result is None:
                 verdict = "НЕТ ДАННЫХ"
             elif reported is not None and reported != result:
@@ -203,9 +217,8 @@ def build_workbook(rows: list[dict]) -> bytes:
             review.append([item["fio"], values[COL_FORMAT], label, result if result is not None else "",
                            reported if reported is not None else "", source, "; ".join(messages) or verdict,
                            item.get("entry_id")])
-            row_no = review.max_row
             if result is None or messages or (reported is not None and reported != result):
-                for cell in review[row_no]:
+                for cell in review[review.max_row]:
                     cell.fill = bad_fill if result is None else warn_fill
 
     for i, title in enumerate(MAIN_COLUMNS, start=1):

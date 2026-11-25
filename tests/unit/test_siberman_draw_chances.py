@@ -46,9 +46,15 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     monkeypatch.setattr(service, "_connect", Mock())
     monkeypatch.setattr(service.edb, "admitted_for_draw", lambda conn, year: [entry])
     monkeypatch.setattr(service.ddb, "load_applicants", lambda conn, year: [])
-    monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {})
+    monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {
+        2026: {"applicants": [{"id": 9, "person_id": 7, "draw_accumulated": 2, "payment_status": ""}],
+               "picks": [], "config": {}, "offered": set()},
+    })
     monkeypatch.setattr(service.ddb, "archive_draw_years", lambda conn, year: {})
-    monkeypatch.setattr(service.hall_data, "load_entries", lambda conn: [])
+    monkeypatch.setattr(service.hall_data, "load_entries", lambda conn: [
+        service.hall_data.Entry(year=2025, bib="1", stage="bike", format="relay", gender="M", person_id=7,
+                                has_time=True, **NAME),
+    ])
     monkeypatch.setattr(service.identity, "decisions", lambda conn, entries, include_candidates: {
         3: {"person_id": 7, "state": "new", "candidates": [{"id": 7, "birthdate": DOB}]},
     })
@@ -61,6 +67,17 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
 
     assert cells[EXTRA_COLS["duathlon_222"]].value == 1
     assert cells[EXTRA_COLS["race_24h"]].value is None
+    assert cells[EXTRA_COLS["draw_accumulated"]].value == 3
     assert cells[COL_EXTRA].data_type == cells[COL_TOTAL].data_type == "f"
     assert cells[READY_COLUMN].value == "ПРОВЕРИТЬ"
+    assert sheet.max_row == 2
+    assert "2025" in cells[EXTRA_COLS["starts_relay"]].comment.text
+    assert "Подтверждены старты за 2026" in cells[EXTRA_COLS["duathlon_222"]].comment.text
+    assert "возможные старты без даты рождения за 2026" in cells[EXTRA_COLS["race_24h"]].comment.text
+    accumulated_note = cells[EXTRA_COLS["draw_accumulated"]].comment.text
+    assert "Жеребьёвка 2026" in accumulated_note
+    assert "Накоплено до неё — 2" in accumulated_note and "+1" in accumulated_note
+    assert "Красноярский край" in cells[EXTRA_COLS["is_local"]].comment.text
+    assert "тату Siberman нет" in cells[EXTRA_COLS["tattoo"]].comment.text
+    assert cells[COL_EXTRA].comment and cells[COL_TOTAL].comment
     assert parse_applicants(data)[1]

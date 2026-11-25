@@ -686,11 +686,12 @@ def _accumulated_for(history: dict, person_id: int | None, *, is_new: bool,
             "нет подтверждённой предыдущей жеребьёвки с известным итогом"]
 
     if archived_draws and max(archived_draws) > max(row[0] for row in previous):
-        return None, "есть более поздняя архивная жеребьёвка", ["уточните её исход и оплату"]
+        return None, f"есть более поздняя архивная жеребьёвка {max(archived_draws)}", ["уточните её исход и оплату"]
 
     issues = []
     draw_year, applicant, batch = max(previous, key=lambda row: row[0])
     current_value = int(applicant["draw_accumulated"])
+    source = f"Жеребьёвка {draw_year} (Siberman {draw_year + 1}). Накоплено до неё — {current_value}."
     by_id = {a["id"]: a for a in batch["applicants"]}
     lists = build_lists(by_id, batch["picks"], batch["config"])
     placed = placement(lists, applicant["id"])
@@ -699,20 +700,23 @@ def _accumulated_for(history: dict, person_id: int | None, *, is_new: bool,
         row = next(r for r in lists[placed[0]] if r["applicant_id"] == applicant["id"])
         section = row["section"]
         if section is None:
-            return None, "не заданы ёмкости прошлой жеребьёвки", ["нельзя определить победителя без ёмкости зачёта"]
+            return None, source, ["нельзя определить победителя без ёмкости зачёта"]
     invited = applicant["id"] in batch["offered"] or (
         section == "waitlist" and applicant["payment_status"] in ("pending", "unpaid", "paid"))
     paid_started = None
     if (section == "winner" or invited) and applicant["payment_status"] == "paid":
         event_year = draw_year + 1
         if event_year not in archive_years or person_id is None:
-            return None, "старт после оплаты не подтверждён", [
+            return None, source, [
                 f"нет достоверных данных о старте Siberman {event_year} после оплаты"]
         paid_started = (person_id, event_year) in started
     value, reason = next_accumulated(current_value, section, invited, applicant["payment_status"], paid_started)
     if value is None:
         issues.append(reason)
-    return value, f"жеребьёвка {draw_year}: {reason}", issues
+    source += f" {reason}."
+    if paid_started is not None:
+        source += f" Проверен протокол Siberman {draw_year + 1}."
+    return value, source, issues
 
 
 def chance_draft(year: int) -> bytes:
@@ -741,7 +745,7 @@ def chance_draft(year: int) -> bytes:
         fio = f"{entry['surname']} {entry['name']}".strip()
         key = plain_key(entry["surname"], entry["name"])
         raw = entry.get("raw") or {}
-        issues, sources, reported = [], {}, {}
+        issues, sources, reported, field_issues = [], {}, {}, {}
         resolved = identities[entry["id"]]
         person_id = resolved["person_id"]
         if person_id is None:
@@ -763,7 +767,12 @@ def chance_draft(year: int) -> bytes:
         ):
             if person_id is not None:
                 value = len(own_starts[fmt])
-                sources[field] = "архив Siberman; старты участника, на которого оформлена заявка"
+                category = "личный зачёт" if fmt == "individual" else "эстафета"
+                years = ", ".join(map(str, sorted(own_starts[fmt])))
+                sources[field] = (
+                    f"Архив Siberman, {category}. Зачтены старты за {years}."
+                    if years else f"Архив Siberman, {category}. Зачтённых стартов нет."
+                )
             else:
                 value = None
                 possible_years = sorted({
@@ -786,12 +795,17 @@ def chance_draft(year: int) -> bytes:
         current_row = current_matches[0] if len(current_matches) == 1 else None
         if current_row:
             acc_value = int(current_row["draw_accumulated"])
-            sources["draw_accumulated"] = "загруженная таблица текущей жеребьёвки (начальное значение)"
+            sources["draw_accumulated"] = (
+                f"Загруженная таблица жеребьёвки {year} (Siberman {year + 1}). "
+                f"В таблице указано {acc_value} накопленных шансов одной суммой."
+            )
         else:
             acc_value, source, acc_issues = _accumulated_for(
                 history, person_id, is_new=resolved["state"] == "new",
                 archived_draws=archived_draws.get(person_id, []), started=started, archive_years=archive_years)
             sources["draw_accumulated"] = source
+            if acc_issues:
+                field_issues["draw_accumulated"] = "; ".join(acc_issues)
             issues.extend(acc_issues)
         past_draws = _chance_count(raw, "siberman_draw")
         if past_draws is not None:
@@ -815,6 +829,7 @@ def chance_draft(year: int) -> bytes:
                 protocol, race=race, name_key=key, birthdate=birthdate, reported=reported[field], through_year=year,
             )
             if issue:
+                field_issues[field] = issue
                 issues.append(issue)
 
         tattoo = _yes_no(raw, "tattoo")
@@ -822,7 +837,11 @@ def chance_draft(year: int) -> bytes:
             tattoo = int(current_row["tattoo"])
             sources["tattoo"] = "загруженная таблица организаторов"
         else:
-            sources["tattoo"] = "ответ формы tattoo" if tattoo is not None else "ответ о тату не указан"
+            sources["tattoo"] = {
+                1: "В заявке указано, что есть тату Siberman.",
+                0: "В заявке указано, что тату Siberman нет.",
+                None: "Ответ о тату в заявке не указан.",
+            }[tattoo]
         reported["tattoo"] = tattoo
         if tattoo is None:
             issues.append("нет подтверждённого ответа о тату Siberman")
@@ -833,7 +852,7 @@ def chance_draft(year: int) -> bytes:
             "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
             "relay_run": entry.get("relay_run"),
             "extras": {**counts, **external, "draw_accumulated": acc_value, "is_local": local, "tattoo": tattoo},
-            "sources": sources, "reported": reported, "issues": issues,
+            "sources": sources, "reported": reported, "issues": issues, "field_issues": field_issues,
         })
     return build_chances_workbook(rows)
 
