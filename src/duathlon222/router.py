@@ -118,6 +118,7 @@ async def duathlon_home(request: Request, year: int):
         "request": request,
         "year": year,
         "years": years,
+        "is_archive": event.is_archive,
         "event_date": event.distances[0].event_date if event.distances else None,
         "rows": await _archive_results(event) if event.is_archive else [],
     })

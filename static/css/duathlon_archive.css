@@ -2,10 +2,6 @@
     --archive-line: #e8e8e8;
 }
 
-.duathlon-archive__header {
-    align-items: center;
-}
-
 .duathlon-archive__main {
     padding: 20px 16px 36px;
 }
@@ -193,11 +189,6 @@
 @media (max-width: 640px) {
     .duathlon-archive__main {
         padding: 16px 10px 28px;
-    }
-
-    .duathlon-archive__header {
-        align-items: flex-start;
-        padding: 16px;
     }
 
     .duathlon-archive__intro {

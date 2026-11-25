@@ -14,18 +14,7 @@
     <link rel="stylesheet" href="/static/css/duathlon_year_nav.css?v={{ v }}">
 </head>
 <body>
-    <div class="tri-header">
-        <div>
-            <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон</div>
-            <div class="tri-header__title">222 Дуатлон<br>5 сентября 2026</div>
-            <div class="tri-header__meta">Красноярск · Бег 10 км → Вело 170 км → Бег 42.2 км</div>
-            {% include 'race_triatleta/_duathlon_year_nav.html' %}
-        </div>
-        <div class="tri-elapsed-wrap">
-            <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
-            <div class="tri-elapsed" id="elapsed">—</div>
-        </div>
-    </div>
+    {% include 'race_triatleta/_duathlon_results_header.html' %}
 
     <!-- Табы: Итоги гонки / по этапам (чистое время, без транзита). Пульсирующая
          точка (.tab-live) появляется на этапе, где сейчас реально кто-то есть
@@ -445,13 +434,12 @@
         _lastTimerType = state.type;
         const label = document.getElementById('elapsed-label');
         const val = document.getElementById('elapsed');
+        val.classList.toggle('duathlon-results-header__finished', state.type === 'done');
         if (state.type === 'done') {
             label.textContent = '';
             val.textContent = 'Гонка завершена';
-            val.style.fontSize = '20px';
         } else {
             label.textContent = state.type === 'countdown' ? 'До старта' : 'Гонка';
-            val.style.fontSize = '';
             tickRaceTimer();
         }
     }

@@ -21,14 +21,7 @@
             {{- '%02d:%02d:%02d'|format(total // 3600, (total % 3600) // 60, total % 60) -}}
         {%- else -%}—{%- endif -%}
     {%- endmacro %}
-    <header class="tri-header duathlon-archive__header">
-        <div>
-            <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон · Архив</div>
-            <h1 class="tri-header__title">Результаты<br>{{ year }}</h1>
-            <div class="tri-header__meta">{% if event_date %}{{ event_date[8:10] }}.{{ event_date[5:7] }}.{{ event_date[0:4] }} · {% endif %}Красноярск · Бег 10 км → Вело 170 км → Бег 42 км</div>
-        </div>
-        {% include 'race_triatleta/_duathlon_year_nav.html' %}
-    </header>
+    {% include 'race_triatleta/_duathlon_results_header.html' %}
 
     <main class="duathlon-archive__main">
         <div class="duathlon-archive__intro">

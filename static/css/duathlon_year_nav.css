@@ -1,3 +1,16 @@
+.duathlon-results-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.duathlon-results-header__finished {
+    font-size: 20px;
+}
+
+.duathlon-results-header .tri-elapsed-label:empty {
+    display: none;
+}
+
 .duathlon-year-nav {
     display: flex;
     align-items: center;
@@ -34,6 +47,11 @@
 }
 
 @media (max-width: 640px) {
+    .duathlon-results-header {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 16px;
+    }
+
     .duathlon-year-nav {
         gap: 5px;
         flex-wrap: wrap;

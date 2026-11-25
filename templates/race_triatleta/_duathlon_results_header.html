@@ -1,0 +1,25 @@
+<header class="tri-header duathlon-results-header">
+    <div>
+        <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон</div>
+        <h1 class="tri-header__title">
+            222 Дуатлон<br>
+            {% if event_date %}
+                <time datetime="{{ event_date }}">{{ event_date.split('-')|reverse|join('.') }}</time>
+            {% else %}
+                {{ year }}
+            {% endif %}
+        </h1>
+        <div class="tri-header__meta">
+            Красноярск · Бег 10 км → Вело 170 км → Бег {{ '42' if is_archive else '42,2' }} км
+        </div>
+        {% include 'race_triatleta/_duathlon_year_nav.html' %}
+    </div>
+    <div class="tri-elapsed-wrap">
+        {% if is_archive %}
+            <div class="tri-elapsed duathlon-results-header__finished">Гонка завершена</div>
+        {% else %}
+            <div class="tri-elapsed-label" id="elapsed-label">До старта</div>
+            <div class="tri-elapsed" id="elapsed">—</div>
+        {% endif %}
+    </div>
+</header>
