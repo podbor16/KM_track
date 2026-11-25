@@ -40,6 +40,29 @@ def test_external_start_bonus(rows, reported, birthdate, expected, issue):
     assert bool(warning) == issue
 
 
+def test_cycling_relay_rosters_are_reviewed_even_when_application_reports_zero(monkeypatch):
+    team = {
+        "surname": "Команда", "name": "Тестов Алексей, Мария Примерова",
+        "category": "Эстафета", "birthdate": DOB, "status": "finished", "laps": 100,
+    }
+    conn = Mock()
+    conn.cursor.return_value.fetchall.return_value = [
+        dict(team, event_id=1, race_year=2025, duration_hours=24),
+        dict(team, event_id=2, race_year=2026, duration_hours=24),
+        dict(team, event_id=3, race_year=2027, duration_hours=6),
+    ]
+    monkeypatch.setattr(service, "get_tri_connection", lambda: conn)
+    rows = service._known_24h_starts()
+
+    value, _, issue = external_start_bonus(
+        rows, race="Суточная велогонка", name_key=plain_key(**NAME), birthdate=DOB,
+        reported=0, through_year=2028,
+    )
+    assert value is None
+    assert "в составе эстафеты за 2025, 2026" in issue
+    assert "2027" not in issue
+
+
 def test_chance_draft_writes_external_values_and_requires_review_for_unverified_starts(monkeypatch):
     entry = dict(NAME, id=3, birthdate=DOB, format="relay", city="Красноярск", gender="M",
                  raw={"222_starts": "1", "24h_starts": "2", "tattoo": "нет"})

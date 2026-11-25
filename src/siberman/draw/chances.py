@@ -111,6 +111,8 @@ def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, b
         source += ". Подтверждены старты за " + ", ".join(map(str, sorted(confirmed.values())))
     if uncertain:
         pending_years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in uncertain}))
+        if all(row.get("relay_member") for row in uncertain):
+            return None, source, f"{race}: найдено совпадение в составе эстафеты за {pending_years}; подтвердите личность"
         return None, source, f"{race}: возможные старты без даты рождения за {pending_years}"
     if reported is not None and reported != count:
         return (count or None), source, f"{race}: в заявке {reported}, в протоколах подтверждено {count}"

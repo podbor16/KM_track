@@ -659,8 +659,23 @@ def _known_24h_starts() -> list[dict] | None:
             category = str(r.get("category") or "").lower()
             return int(r.get("duration_hours") or 0) == 6 or bool(
                 re.search(r"(?:^|\D)6\s*(?:-?\s*(?:час(?:а|ов)?|h))", category))
-        return [r for r in rows if not six_hour(r)
-                and (int(r.get("laps") or 0) > 0 or r["status"] in ("finished", "dnf", "dsq"))]
+        starts = []
+        for row in rows:
+            if six_hour(row) or not (row["laps"] or row["status"] in ("finished", "dnf", "dsq")):
+                continue
+            roster = re.split(r"[,/;\n]", row["name"] or "")
+            if "эстафет" not in (row["category"] or "").lower() or len(roster) < 2:
+                starts.append(row)
+                continue
+            for member in roster:
+                parts = member.strip().split()
+                if len(parts) != 2:
+                    continue
+                surname, name = parts
+                # Team rows do not establish which athlete owns any stored birth date.
+                starts.append(dict(row, surname=surname, name=name, birthdate=None, relay_member=True))
+                starts.append(dict(row, surname=name, name=surname, birthdate=None, relay_member=True))
+        return starts
     except mysql.connector.Error as e:
         log.warning("[siberman/draw] 24h database unavailable for chance draft: %s", e)
         return None
