@@ -23,8 +23,6 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from src.config import settings
-from src.duathlon222.db import get_duathlon_connection
-from src.race_triatleta.db import get_tri_connection
 from src.siberman.db import get_siberman_connection
 from src.siberman.draw import db as ddb
 from src.siberman.draw.chances import (
@@ -40,6 +38,7 @@ from src.siberman.draw.payments import PAYMENT_ICONS, auto_invite_allowed, next_
 from src.siberman.draw.simulation import win_probabilities
 from src.siberman.entries import db as edb
 from src.siberman.entries import identity
+from src.siberman.external_starts import load_protocol
 from src.siberman.hall import data as hall_data
 from src.siberman.hall import service as hall_service
 from src.siberman.hall.service import HallUnavailable
@@ -614,75 +613,31 @@ def _yes_no(raw: dict, key: str) -> int | None:
 
 
 def _known_duathlon_starts() -> list[dict] | None:
-    """Started 222 records with a birth date where the source provided one."""
-    conn = get_duathlon_connection()
-    if conn is None:
-        return None
-    try:
-        cur = conn.cursor(dictionary=True, buffered=True)
-        cur.execute("""
-            SELECT e.id AS event_id, p.id AS result_id, YEAR(e.gun_datetime) AS race_year,
-                   p.surname, p.name, p.status, p.birthdate,
-                   p.run1_s, p.bike_s, p.run2_s, COUNT(c.id) AS checkpoints
-            FROM events e JOIN participants p ON p.event_id=e.id
-            LEFT JOIN checkpoints c ON c.participant_id=p.id
-            GROUP BY p.id, e.id, e.gun_datetime, p.surname, p.name, p.status, p.birthdate,
-                     p.run1_s, p.bike_s, p.run2_s
-        """)
-        rows = cur.fetchall()
-        return [r for r in rows if r["status"] in ("finished", "dnf", "dsq")
-                or any(r.get(k) is not None for k in ("run1_s", "bike_s", "run2_s"))
-                or int(r.get("checkpoints") or 0) > 0]
-    except mysql.connector.Error as e:
-        log.warning("[siberman/draw] 222 database unavailable for chance draft: %s", e)
-        return None
-    finally:
-        conn.close()
+    """Legacy-shaped started rows from the shared 222 protocol reader."""
+    return load_protocol("duathlon_222")
 
 
 def _known_24h_starts() -> list[dict] | None:
-    """Started 24h DB records; rows with six-hour event duration are excluded."""
-    conn = get_tri_connection()
-    if conn is None:
+    """Preserve legacy member expansion for the chance calculator."""
+    rows = load_protocol("race_24h")
+    if rows is None:
         return None
-    try:
-        cur = conn.cursor(dictionary=True, buffered=True)
-        cur.execute("""
-            SELECT e.id AS event_id, p.id AS result_id,
-                   COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
-                   p.surname, p.name, p.birthdate, p.status, p.category, COUNT(l.id) AS laps
-            FROM events e JOIN participants p ON p.event_id=e.id
-            LEFT JOIN laps l ON l.participant_id=p.id AND l.event_id=e.id
-            GROUP BY p.id, e.id, e.archive_year, e.gun_datetime, e.duration_hours,
-                     p.surname, p.name, p.birthdate, p.status, p.category
-        """)
-        rows = cur.fetchall()
-        def six_hour(r):
-            category = str(r.get("category") or "").lower()
-            return int(r.get("duration_hours") or 0) == 6 or bool(
-                re.search(r"(?:^|\D)6\s*(?:-?\s*(?:час(?:а|ов)?|h))", category))
-        starts = []
-        for row in rows:
-            if six_hour(row) or not (row["laps"] or row["status"] in ("finished", "dnf", "dsq")):
+    starts = []
+    for row in rows:
+        if not row["is_team"]:
+            starts.append(row)
+            continue
+        # Keep the original result addressable even if protocol spelling cannot be split into two names.
+        starts.append(row)
+        for member in row["roster"]:
+            parts = member.split()
+            if len(parts) != 2:
                 continue
-            roster = re.split(r"[,/;\n]", row["name"] or "")
-            if "эстафет" not in (row["category"] or "").lower() or len(roster) < 2:
-                starts.append(row)
-                continue
-            for member in roster:
-                parts = member.strip().split()
-                if len(parts) != 2:
-                    continue
-                surname, name = parts
-                # Team rows do not establish which athlete owns any stored birth date.
-                starts.append(dict(row, surname=surname, name=name, birthdate=None, relay_member=True))
-                starts.append(dict(row, surname=name, name=surname, birthdate=None, relay_member=True))
-        return starts
-    except mysql.connector.Error as e:
-        log.warning("[siberman/draw] 24h database unavailable for chance draft: %s", e)
-        return None
-    finally:
-        conn.close()
+            surname, name = parts
+            # Team rows do not establish which athlete owns any stored birth date.
+            starts.append(dict(row, surname=surname, name=name, birthdate=None, relay_member=True))
+            starts.append(dict(row, surname=name, name=surname, birthdate=None, relay_member=True))
+    return starts
 
 
 def _accumulated_for(history: dict, person_id: int | None, *, is_new: bool,
@@ -757,6 +712,10 @@ def chance_draft(year: int) -> bytes:
     started = {(r.person_id, r.year) for r in archive if r.person_id is not None and hall_data.is_start(r)}
     archive_years = {race.year for race in archive if race.year <= year}
     regions = load_localities()
+    assigned_starts = defaultdict(set)
+    for person_links in external_links.values():
+        for field, refs in person_links.items():
+            assigned_starts[field].update(refs)
     admission_keys = Counter(res["person_id"] for res in identities.values() if res["person_id"] is not None)
     rows = []
     for entry in applicants:
@@ -843,9 +802,10 @@ def chance_draft(year: int) -> bytes:
             ("race_24h", "Суточная велогонка", "24h_starts", race24_rows),
         ):
             reported[field] = _chance_count(raw, form_key)
+            links = external_links.get(person_id, {}).get(field, frozenset())
             external[field], sources[field], issue = external_start_bonus(
                 protocol, race=race, name_key=key, birthdate=birthdate, reported=reported[field], through_year=year,
-                links=external_links.get(person_id, {}).get(field, frozenset()),
+                links=links, assigned_elsewhere=assigned_starts[field] - links,
             )
             if issue:
                 field_issues[field] = issue

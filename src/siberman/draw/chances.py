@@ -93,7 +93,8 @@ def form_reported(raw: dict, key: str) -> int | None:
 
 def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, birthdate: date | None,
                          reported: int | None, through_year: int,
-                         links: Set[tuple[int, int]] = frozenset()) -> tuple[int | None, str, str | None]:
+                         links: Set[tuple[int, int]] = frozenset(),
+                         assigned_elsewhere: Set[tuple[int, int]] = frozenset()) -> tuple[int | None, str, str | None]:
     if rows is None:
         return None, race, f"{race}: база результатов недоступна"
     history = [row for row in rows if row["race_year"] is not None and int(row["race_year"]) <= through_year]
@@ -106,7 +107,15 @@ def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, b
     if birthdate is None and not linked:
         return None, source, f"{race}: нужна подтверждённая личность с датой рождения"
 
-    matches = [row for row in history if plain_key(row["surname"], row["name"]) == name_key]
+    matches = []
+    identity_conflict = False
+    for row in history:
+        if plain_key(row["surname"], row["name"]) != name_key:
+            continue
+        if not row.get("is_team") and (row["event_id"], row.get("result_id")) in assigned_elsewhere:
+            identity_conflict |= birthdate is not None and row["birthdate"] == birthdate
+        else:
+            matches.append(row)
     confirmed = {row["event_id"]: int(row["race_year"]) for row in matches
                  if birthdate is not None and row["birthdate"] == birthdate}
     confirmed.update(linked)
@@ -120,6 +129,8 @@ def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, b
         source += ". По подтверждённой связи с карточкой: " + ", ".join(map(str, sorted(linked.values())))
     if links - {(row["event_id"], row.get("result_id")) for row in rows}:
         return None, source, f"{race}: отсутствует ранее подтверждённый результат"
+    if identity_conflict:
+        return None, source, f"{race}: личный результат с совпадающей датой рождения привязан к другой карточке"
     if uncertain:
         pending_years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in uncertain}))
         if all(row.get("relay_member") for row in uncertain):

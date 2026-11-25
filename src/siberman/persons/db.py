@@ -89,6 +89,41 @@ def has_draw_identity_links(conn, person_id: int) -> bool:
         return bool(cur.fetchone()[0])
 
 
+def external_start_links(conn, person_id: int) -> list[dict]:
+    with _cur(conn) as cur:
+        cur.execute("""
+            SELECT source, event_id, result_id, confirmed_at FROM siberman_external_start_links
+            WHERE person_id=%s ORDER BY confirmed_at DESC, source, event_id, result_id
+        """, (person_id,))
+        return cur.fetchall()
+
+
+def external_start_owners(conn, source: str, event_id: int, result_id: int) -> dict:
+    with _cur(conn) as cur:
+        cur.execute("""
+            SELECT person_id, confirmed_at FROM siberman_external_start_links
+            WHERE source=%s AND event_id=%s AND result_id=%s
+        """, (source, event_id, result_id))
+        return {r["person_id"]: r["confirmed_at"] for r in cur.fetchall()}
+
+
+def add_external_start(conn, person_id: int, source: str, event_id: int, result_id: int,
+                       confirmed_at: datetime.datetime | None = None) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO siberman_external_start_links (person_id, source, event_id, result_id, confirmed_at)
+            VALUES (%s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP))
+        """, (person_id, source, event_id, result_id, confirmed_at))
+
+
+def delete_external_start(conn, person_id: int, source: str, event_id: int, result_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            DELETE FROM siberman_external_start_links
+            WHERE person_id=%s AND source=%s AND event_id=%s AND result_id=%s
+        """, (person_id, source, event_id, result_id))
+
+
 def delete_orphans(conn, ids) -> list:
     """Удалить людей из ids, у которых не осталось выступлений. → удалённые id."""
     ids = sorted({int(i) for i in ids if i is not None})

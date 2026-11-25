@@ -11,6 +11,7 @@ import logging
 from typing import Optional
 
 from src.siberman.db import get_siberman_connection
+from src.siberman.external_starts import load_protocol
 from src.siberman.hall import data as hdata
 from src.siberman.hall import geo as hgeo
 from src.siberman.persons import db as pdb
@@ -35,6 +36,7 @@ REVIEW_TITLES = {
     "manual_name_changed": "Ручная привязка, а ФИ в протоколе теперь другое",
 }
 APPLICANT_KINDS = ("bd_conflict", "applicant_ambiguous", "applicant_city_mismatch", "applicant_unconfirmed")
+EXTERNAL_SOURCE_LABELS = {"duathlon_222": "Дуатлон 222", "race_24h": "Суточная велогонка"}
 
 
 class PersonsError(Exception):
@@ -249,7 +251,15 @@ def undo(audit_id: int, user: str) -> dict:
             raise PersonsError("Сначала отмените более поздние действия по этим людям: "
                                + ", ".join(f"#{i}" for i in later))
         payload = a["payload"]
-        _restore(conn, json.loads(payload) if isinstance(payload, (str, bytes, bytearray)) else payload)
+        snapshot = json.loads(payload) if isinstance(payload, (str, bytes, bytearray)) else payload
+        external_start = snapshot.get("external_start")
+        if external_start is None:
+            _restore(conn, snapshot)
+        elif external_start["confirmed_at"]:
+            pdb.add_external_start(conn, *external_start["key"],
+                                   confirmed_at=datetime.datetime.fromisoformat(external_start["confirmed_at"]))
+        else:
+            pdb.delete_external_start(conn, *external_start["key"])
         pdb.mark_undone(conn, audit_id, user)
     return {"ok": True}
 
@@ -463,6 +473,105 @@ def person_card(person_id: int) -> dict:
         open_reviews = pdb.reviews_for_person(conn, person_id)
     return {"person": {"id": int(person_id), **_plain(p)}, "participations": [_start(r) for r in parts],
             "reviews": open_reviews}
+
+
+def _external_start_row(source: str, event_id: int, result_id: int, result: dict | None) -> dict:
+    result = result or {}
+    start_number = result.get("start_number")
+    return {
+        "source": source, "event_id": event_id, "result_id": result_id,
+        "year": result.get("race_year"),
+        "start_number": start_number if start_number is not None and start_number > 0 else None,
+        "participant": result.get("participant", ""),
+        "category": result.get("category", ""),
+        "roster": result.get("roster", []),
+        "available": bool(result),
+    }
+
+
+def person_external_starts(person_id: int) -> dict:
+    with _connection() as conn:
+        if not pdb.get_person(conn, person_id):
+            raise PersonsError("Человек не найден")
+        saved = pdb.external_start_links(conn, person_id)
+
+    protocols = {source: load_protocol(source) for source in EXTERNAL_SOURCE_LABELS}
+    lookup = {(source, r["event_id"], r["result_id"]): r
+              for source, rows in protocols.items() for r in rows or []}
+    links = []
+    for link in saved:
+        key = link["source"], link["event_id"], link["result_id"]
+        links.append({**_external_start_row(*key, lookup.get(key)), "confirmed_at": link["confirmed_at"]})
+    years = {source: sorted({r["race_year"] for r in rows or [] if r["race_year"] is not None}, reverse=True)
+             for source, rows in protocols.items()}
+    return {"links": links, "years": years, "unavailable": [s for s, rows in protocols.items() if rows is None]}
+
+
+def search_external_starts(person_id: int, source: str, year: int, q: str) -> dict:
+    with _connection() as conn:
+        if not pdb.get_person(conn, person_id):
+            raise PersonsError("Человек не найден")
+        linked = {(r["event_id"], r["result_id"]) for r in pdb.external_start_links(conn, person_id)
+                  if r["source"] == source}
+    protocol = load_protocol(source)
+    if protocol is None:
+        raise PersonsUnavailable("Протоколы этой гонки временно недоступны")
+
+    q = q.casefold().replace("ё", "е").strip()
+    number = q.removeprefix("№").strip()
+    terms = q.split()
+    results = []
+    for row in protocol:
+        if row["race_year"] != year:
+            continue
+        if number.isdecimal():
+            matches = row["start_number"] == int(number)
+        else:
+            text = " ".join([row["participant"], *row["roster"]]).casefold().replace("ё", "е")
+            matches = all(term in text for term in terms)
+        if matches:
+            key = row["event_id"], row["result_id"]
+            results.append({**_external_start_row(source, *key, row), "linked": key in linked})
+    return {"results": sorted(results, key=lambda r: (r["participant"].casefold(), r["result_id"]))[:50]}
+
+
+def set_external_start(person_id: int, source: str, event_id: int, result_id: int, linked: bool, user: str) -> dict:
+    result = None
+    if linked:
+        protocol = load_protocol(source)
+        if protocol is None:
+            raise PersonsUnavailable("Протоколы этой гонки временно недоступны")
+        result = next((r for r in protocol if (r["event_id"], r["result_id"]) == (event_id, result_id)), None)
+        if result is None:
+            raise PersonsError("Подходящий старт не найден")
+
+    key = person_id, source, event_id, result_id
+    with _connection() as conn, _locked_tx(conn):
+        person = pdb.get_person(conn, person_id)
+        if not person:
+            raise PersonsError("Человек не найден")
+        owners = pdb.external_start_owners(conn, source, event_id, result_id)
+        previous = owners.get(person_id)
+        if (previous is not None) == linked:
+            return {"ok": True}
+        if result is not None:
+            if owners and not result["is_team"]:
+                raise PersonsError("Личный старт уже привязан к другой карточке Siberman")
+            if (not result["is_team"] and result.get("birthdate") and person.get("birthdate")
+                    and result["birthdate"] != person["birthdate"]):
+                raise PersonsError("Дата рождения в протоколе отличается от даты в карточке Siberman")
+            pdb.add_external_start(conn, *key)
+            action = "external_start_link"
+            summary = (f"Привязан внешний старт к {_fio(person)} · {EXTERNAL_SOURCE_LABELS[source]} "
+                       f"{result['race_year']} · №{result['start_number']}")
+        else:
+            pdb.delete_external_start(conn, *key)
+            action = "external_start_unlink"
+            summary = f"Снята привязка внешнего старта у {_fio(person)} · {EXTERNAL_SOURCE_LABELS[source]}"
+        pdb.add_audit(conn, action, summary, {
+            "external_start": {"key": key, "confirmed_at": previous.isoformat() if previous else None},
+        }, {f"p:{person_id}", f"external:{source}/{event_id}/{result_id}"}, user)
+    return {"ok": True}
 
 
 def search(q: str) -> list:

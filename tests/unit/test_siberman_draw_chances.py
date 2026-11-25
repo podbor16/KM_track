@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 from src.siberman.draw import service
 from src.siberman.draw.chances import MAIN_COLUMNS, READY_COLUMN, external_start_bonus
 from src.siberman.draw.importer import COL_EXTRA, COL_TOTAL, EXTRA_COLS, parse_applicants
+from src.siberman import external_starts
 from src.siberman.persons.linking import plain_key
 
 
@@ -51,7 +52,7 @@ def test_cycling_relay_rosters_are_reviewed_even_when_application_reports_zero(m
         dict(team, event_id=2, race_year=2026, duration_hours=24),
         dict(team, event_id=3, race_year=2027, duration_hours=6),
     ]
-    monkeypatch.setattr(service, "get_tri_connection", lambda: conn)
+    monkeypatch.setattr(external_starts, "get_tri_connection", lambda: conn)
     rows = service._known_24h_starts()
 
     value, _, issue = external_start_bonus(

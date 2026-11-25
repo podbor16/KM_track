@@ -4,12 +4,12 @@ API — обычные def: блокирующий mysql-connector уходит 
 раньше /{person_id}, иначе FastAPI сопоставит 'search' с параметром.
 """
 import datetime
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.core.auth import api_require_auth, require_auth_for
 from src.siberman.persons import service
@@ -21,6 +21,7 @@ _page_auth = require_auth_for("/login")
 NO_STORE = {"Cache-Control": "no-store"}
 MAX_CSV_BYTES = 10 * 1024 * 1024
 API = "/api/siberman/admin/people"
+ExternalSource = Literal["duathlon_222", "race_24h"]
 
 
 class MergeIn(BaseModel):
@@ -46,6 +47,12 @@ class CityIn(BaseModel):
 
 class ReviewStatusIn(BaseModel):
     status: str
+
+
+class ExternalStartIn(BaseModel):
+    source: ExternalSource
+    event_id: int = Field(gt=0)
+    result_id: int = Field(gt=0)
 
 
 def _json(data, status: int = 200) -> JSONResponse:
@@ -129,6 +136,28 @@ def api_no_city(user: str = Depends(api_require_auth)):
 @router.get(f"{API}/{{person_id}}")
 def api_person(person_id: int, user: str = Depends(api_require_auth)):
     return _run(service.person_card, person_id)
+
+
+@router.get(f"{API}/{{person_id}}/external-starts")
+def api_external_starts(person_id: int, user: str = Depends(api_require_auth)):
+    return _run(service.person_external_starts, person_id)
+
+
+@router.get(f"{API}/{{person_id}}/external-starts/search")
+def api_search_external_starts(person_id: int, source: ExternalSource, year: int = Query(ge=1900, le=2100),
+                               q: str = Query(default="", max_length=120), user: str = Depends(api_require_auth)):
+    return _run(service.search_external_starts, person_id, source, year, q)
+
+
+@router.post(f"{API}/{{person_id}}/external-starts")
+def api_link_external_start(person_id: int, body: ExternalStartIn, user: str = Depends(api_require_auth)):
+    return _run(service.set_external_start, person_id, body.source, body.event_id, body.result_id, True, user)
+
+
+@router.delete(f"{API}/{{person_id}}/external-starts/{{source}}/{{event_id}}/{{result_id}}")
+def api_unlink_external_start(person_id: int, source: ExternalSource, event_id: int, result_id: int,
+                              user: str = Depends(api_require_auth)):
+    return _run(service.set_external_start, person_id, source, event_id, result_id, False, user)
 
 
 @router.post(f"{API}/{{person_id}}/birthdate")

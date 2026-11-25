@@ -9,6 +9,12 @@ let reviewsCache = [];
 let card = null;
 let searchTimer = null;
 let noCity = null;
+let externalLoadToken = 0;
+let externalSearchToken = 0;
+let externalLinks = [];
+let externalYears = {};
+let externalUnavailable = [];
+let externalTimer = null;
 const cityDrafts = {};
 
 function esc(s) {
@@ -124,12 +130,20 @@ async function onReviewAction(r, action) {
 }
 
 async function openCard(id) {
+  const requestId = ++externalLoadToken;
+  ++externalSearchToken;
+  clearTimeout(externalTimer);
+  card = null;
+  externalLinks = [];
+  document.getElementById('card').innerHTML = '<div class="card"><span class="muted">Загрузка карточки…</span></div>';
   try {
-    card = await api(`/${id}`);
+    const nextCard = await api(`/${id}`);
+    if (requestId !== externalLoadToken) return;
+    card = nextCard;
     showTab('search');
     renderCard();
   } catch (e) {
-    if (e.message !== 'auth') msg(e.message, 'error');
+    if (requestId === externalLoadToken && e.message !== 'auth') msg(e.message, 'error');
   }
 }
 
@@ -154,11 +168,23 @@ function renderCard() {
       <td>${x.format === 'individual' ? 'личный' : 'эстафета, ' + esc(STAGES[x.stage]) + ' «' + esc(x.team) + '»'}</td>
       <td>${esc(x.bib)}</td><td>${esc(x.fio)}${x.manual ? ' <span class="tag">вручную</span>' : ''}</td>
       <td>${esc(x.status)}</td><td>${esc(x.city)}</td></tr>`).join('')}</table>
+    <section class="people-external-starts" id="external-starts" aria-labelledby="external-starts-title">
+      <h3 id="external-starts-title">Внешние старты</h3>
+      <div id="external-links" class="external-links"><span class="muted">Загрузка привязанных стартов…</span></div>
+      <div class="external-search-controls">
+        <label>Источник <select id="external-source"><option value="duathlon_222">222 Дуатлон</option><option value="race_24h">Суточная велогонка</option></select></label>
+        <label>Год <select id="external-year" disabled><option value="">Загрузка…</option></select></label>
+        <label class="external-query-label">Поиск по ФИО или номеру <input id="external-query" type="search" autocomplete="off" maxlength="120" value="${esc(`${p.surname} ${p.name}`.trim().slice(0, 120))}" placeholder="Фамилия, имя или стартовый номер"></label>
+      </div>
+      <div class="muted" id="external-status" role="status" aria-live="polite"></div>
+      <div id="external-results" class="external-results"></div>
+    </section>
     <div class="row">Отмеченные выступления: <button class="btn-small" id="mv-new">в нового человека</button>
       или к человеку id <input id="mv-id" type="number" min="1" style="width:100px"> <button class="btn-small" id="mv-to">перенести</button></div>
     <div class="row">Слить этого человека с id <input id="mg-id" type="number" min="1" style="width:100px">
       <button class="btn-small danger" id="mg">слить</button>
       <span class="muted">выступления перейдут к указанному, этот человек исчезнет</span></div></div>`;
+  loadExternalStarts(p.id);
   document.getElementById('bd-save').onclick = () =>
     act(() => post(`/${p.id}/birthdate`, { birthdate: document.getElementById('bd').value || null }), 'Дата рождения сохранена');
   document.getElementById('city-save').onclick = () =>
@@ -179,6 +205,119 @@ function renderCard() {
     if (!confirm(`Слить «${p.surname} ${p.name}» (id ${p.id}) с id ${id}?`)) return;
     act(async () => { await post('/merge', { source_id: p.id, target_id: id }); card = await api(`/${id}`); }, 'Слито');
   };
+}
+
+let externalSearchResults = [];
+const EXTERNAL_SOURCE_LABELS = { duathlon_222: 'Дуатлон 222', race_24h: 'Суточная велогонка' };
+
+function externalIdentity(r) {
+  const details = [EXTERNAL_SOURCE_LABELS[r.source], r.year, r.start_number ? `№ ${r.start_number}` : '', r.category].filter(Boolean).join(' · ');
+  const roster = r.roster.length ? `<div class="muted">Состав команды — ${r.roster.map(esc).join(', ')}</div>` : '';
+  return `<div><b>${esc(r.participant || 'Участник не указан')}</b><div class="muted">${esc(details || 'Данные старта недоступны')}</div>${roster}</div>`;
+}
+
+function renderExternalLinks() {
+  const box = document.getElementById('external-links');
+  if (!box) return;
+  if (!externalLinks.length) { box.innerHTML = '<div class="muted">Привязанных внешних стартов пока нет.</div>'; return; }
+  box.innerHTML = `<h4>Привязанные старты (${externalLinks.length})</h4>` + externalLinks.map((r, i) => `<div class="external-item">${externalIdentity(r)}
+    <div class="external-item-actions">${r.available === false ? '<span class="tag">Архивная запись недоступна</span>' : ''}
+      ${r.confirmed_at ? `<span class="muted">Подтверждено ${esc(r.confirmed_at.replace('T', ' ').slice(0, 16))}</span>` : ''}<button class="btn-small danger" data-external-unlink="${i}">Отвязать</button></div></div>`).join('');
+}
+
+function updateExternalYears() {
+  const source = document.getElementById('external-source')?.value;
+  const select = document.getElementById('external-year');
+  if (!select) return;
+  const years = externalYears[source] || [];
+  const selectedYear = select.value;
+  select.innerHTML = years.length ? years.map(y => `<option value="${esc(y)}">${esc(y)}</option>`).join('') : '<option value="">Нет архивных лет</option>';
+  if (years.some(year => String(year) === selectedYear)) select.value = selectedYear;
+  select.disabled = !years.length || externalUnavailable.includes(source);
+}
+
+async function loadExternalStarts(personId) {
+  const token = ++externalLoadToken;
+  const status = document.getElementById('external-status');
+  if (status) status.textContent = 'Загрузка внешних стартов…';
+  try {
+    const data = await api(`/${personId}/external-starts`);
+    if (token !== externalLoadToken || !card || String(card.person.id) !== String(personId)) return;
+    externalLinks = data.links || [];
+    externalYears = data.years || {};
+    externalUnavailable = data.unavailable || [];
+    renderExternalLinks();
+    updateExternalYears();
+    const unavailable = externalUnavailable.map(source => EXTERNAL_SOURCE_LABELS[source] || source);
+    status.textContent = unavailable.length ? `Источник недоступен: ${unavailable.join(', ')}` : '';
+    bindExternalSearch(personId);
+    searchExternalStarts(personId);
+  } catch (e) {
+    if (token !== externalLoadToken) return;
+    if (status) status.textContent = `Не удалось загрузить внешние старты: ${e.message}`;
+    const links = document.getElementById('external-links');
+    if (links) links.textContent = 'Ошибка загрузки привязанных стартов.';
+  }
+}
+
+function bindExternalSearch(personId) {
+  document.getElementById('external-source').onchange = () => { updateExternalYears(); searchExternalStarts(personId); };
+  document.getElementById('external-year').onchange = () => searchExternalStarts(personId);
+  document.getElementById('external-query').oninput = () => {
+    clearTimeout(externalTimer);
+    externalTimer = setTimeout(() => searchExternalStarts(personId), 250);
+  };
+}
+
+async function searchExternalStarts(personId) {
+  const token = ++externalSearchToken;
+  const results = document.getElementById('external-results');
+  const status = document.getElementById('external-status');
+  const source = document.getElementById('external-source')?.value;
+  const year = document.getElementById('external-year')?.value;
+  const q = document.getElementById('external-query')?.value.trim() || '';
+  if (!results || !status) return;
+  results.innerHTML = '';
+  externalSearchResults = [];
+  if (!year || externalUnavailable.includes(source)) { status.textContent = externalUnavailable.includes(source) ? 'Этот источник пока недоступен.' : 'Для источника нет доступных архивных лет.'; return; }
+  status.textContent = 'Поиск…';
+  try {
+    const data = await api(`/${personId}/external-starts/search?source=${encodeURIComponent(source)}&year=${encodeURIComponent(year)}&q=${encodeURIComponent(q)}`);
+    if (token !== externalSearchToken || !card || String(card.person.id) !== String(personId)) return;
+    externalSearchResults = data.results || [];
+    status.textContent = externalSearchResults.length ? `Найдено ${externalSearchResults.length}` : 'Совпадений не найдено.';
+    results.innerHTML = externalSearchResults.map((r, i) => `<div class="external-item">${externalIdentity(r)}
+      <div class="external-item-actions">${r.linked ? '<span class="tag">Уже привязан</span>' : `<button class="btn-small btn-primary" data-external-link="${i}">Подтвердить привязку</button>`}</div></div>`).join('');
+  } catch (e) {
+    if (token !== externalSearchToken) return;
+    status.textContent = `Ошибка поиска: ${e.message}`;
+  }
+}
+
+async function confirmExternalLink(row) {
+  const person = card?.person;
+  if (!person) return;
+  const personId = person.id;
+  const result = [row.participant, EXTERNAL_SOURCE_LABELS[row.source], row.year,
+    row.start_number ? `№ ${row.start_number}` : ''].filter(Boolean).join(' · ');
+  if (!confirm(`Привязать результат «${result}» к карточке «${person.surname} ${person.name}»?`)) return;
+  const token = externalLoadToken;
+  try {
+    await post(`/${personId}/external-starts`, { source: row.source, event_id: row.event_id, result_id: row.result_id });
+    if (token !== externalLoadToken || !card || String(card.person.id) !== String(personId)) return;
+    await loadExternalStarts(personId);
+  } catch (e) { if (e.message !== 'auth') msg(`Не удалось привязать старт: ${e.message}`, 'error'); }
+}
+
+async function unlinkExternalStart(row) {
+  const personId = card?.person.id;
+  if (!personId || !confirm(`Отвязать внешний старт ${row.year || ''} № ${row.start_number || ''}?`)) return;
+  const token = externalLoadToken;
+  try {
+    await api(`/${personId}/external-starts/${encodeURIComponent(row.source)}/${encodeURIComponent(row.event_id)}/${encodeURIComponent(row.result_id)}`, { method: 'DELETE' });
+    if (token !== externalLoadToken || !card || String(card.person.id) !== String(personId)) return;
+    await loadExternalStarts(personId);
+  } catch (e) { if (e.message !== 'auth') msg(`Не удалось отвязать старт: ${e.message}`, 'error'); }
 }
 
 async function doSearch() {
@@ -240,6 +379,7 @@ async function refreshAll() {
 function showTab(name) {
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('admin-tab--active', b.dataset.tab === name));
   document.querySelectorAll('.tab-content').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  if (name === 'journal') loadJournal().catch(e => { if (e.message !== 'auth') msg(e.message, 'error'); });
 }
 
 function report(r) {
@@ -266,6 +406,10 @@ document.addEventListener('click', e => {
     loadReviews().catch(err => msg(err.message, 'error'));
     return;
   }
+  const externalLink = t.closest('[data-external-link]');
+  if (externalLink) { const row = externalSearchResults[+externalLink.dataset.externalLink]; if (row) confirmExternalLink(row); return; }
+  const externalUnlink = t.closest('[data-external-unlink]');
+  if (externalUnlink) { const row = externalLinks[+externalUnlink.dataset.externalUnlink]; if (row) unlinkExternalStart(row); return; }
   const cardLink = t.closest('[data-card]');
   if (cardLink) { e.preventDefault(); openCard(+cardLink.dataset.card); return; }
   if (t.matches('[data-act]')) {
