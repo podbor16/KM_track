@@ -1,0 +1,263 @@
+.duathlon-archive {
+    --archive-line: #e8e8e8;
+}
+
+.duathlon-archive__header {
+    align-items: center;
+}
+
+.duathlon-archive__main {
+    padding: 20px 16px 36px;
+}
+
+.duathlon-archive__intro,
+.duathlon-archive__filters {
+    max-width: 1440px;
+    margin: 0 auto;
+}
+
+.duathlon-archive__intro {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 4px 16px;
+}
+
+.duathlon-archive__intro h2 {
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 800;
+}
+
+.duathlon-archive__search input {
+    width: min(320px, 80vw);
+    padding: 9px 12px;
+    border: 1px solid #dedede;
+    border-radius: 8px;
+    background: #fff;
+    color: #050505;
+    font: inherit;
+}
+
+.duathlon-archive__search input:focus {
+    outline: 2px solid rgba(255, 133, 98, .35);
+    border-color: #ff8562;
+}
+
+.duathlon-archive__filters {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 4px 12px;
+}
+
+.duathlon-archive__filter {
+    padding: 7px 14px;
+    border: 1px solid #dedede;
+    border-radius: 999px;
+    background: transparent;
+    color: #777;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.duathlon-archive__filter:hover,
+.duathlon-archive__filter.is-active {
+    border-color: #ff8562;
+    background: #ff8562;
+    color: #111;
+}
+
+.duathlon-archive__count {
+    margin-left: auto;
+    color: #888;
+    font-size: 12px;
+}
+
+.duathlon-archive__table-wrap {
+    max-width: 1440px;
+    margin: 0 auto;
+    overflow-x: auto;
+    border: 1px solid var(--archive-line);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+}
+
+.duathlon-archive__table {
+    width: 100%;
+    min-width: 940px;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.duathlon-archive__table th,
+.duathlon-archive__table td {
+    padding: 12px 13px;
+    border-bottom: 1px solid #f0f0f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.duathlon-archive__table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    color: #263146;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.duathlon-archive__table th.is-name,
+.duathlon-archive__table td.is-name {
+    white-space: normal;
+}
+
+.duathlon-archive__table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.duathlon-archive__table tbody tr:hover td {
+    background: #fafafa;
+}
+
+.duathlon-archive__table .is-numeric {
+    text-align: center;
+}
+
+.duathlon-archive__table .is-bib {
+    color: #888;
+    text-align: center;
+}
+
+.duathlon-archive__rank {
+    color: #263146;
+    font-weight: 800;
+}
+
+.duathlon-archive__name {
+    font-weight: 700;
+}
+
+.duathlon-archive__total {
+    color: #111;
+    font-weight: 900;
+}
+
+.duathlon-archive__status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.duathlon-archive__status.is-finished {
+    background: #e7f5ed;
+    color: #137b43;
+}
+
+.duathlon-archive__status.is-out {
+    background: #fce9e8;
+    color: #a3231d;
+}
+
+.duathlon-archive__status.is-muted {
+    background: #f1f1f1;
+    color: #666;
+}
+
+.duathlon-archive__empty {
+    padding: 32px !important;
+    color: #777 !important;
+    text-align: center !important;
+}
+
+.duathlon-archive .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 640px) {
+    .duathlon-archive__main {
+        padding: 16px 10px 28px;
+    }
+
+    .duathlon-archive__header {
+        align-items: flex-start;
+        padding: 16px;
+    }
+
+    .duathlon-archive__intro {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 0 2px 12px;
+    }
+
+    .duathlon-archive__search input {
+        width: 100%;
+    }
+
+    .duathlon-archive__filters {
+        padding-right: 2px;
+        padding-left: 2px;
+    }
+
+    .duathlon-archive__filter {
+        padding: 7px 11px;
+        font-size: 12px;
+    }
+
+    .duathlon-archive__table {
+        --archive-name-width: 164px;
+        width: 100%;
+        min-width: 912px;
+        table-layout: fixed;
+        font-size: 13px;
+    }
+
+    .duathlon-archive__table th,
+    .duathlon-archive__table td {
+        padding: 10px 9px;
+    }
+
+    .duathlon-archive__table th {
+        white-space: normal;
+    }
+
+    .duathlon-archive__table th.is-name,
+    .duathlon-archive__table td.is-name {
+        position: sticky;
+        left: 0;
+        width: var(--archive-name-width);
+        z-index: 3;
+        background: #fff;
+    }
+
+    .duathlon-archive__table th.is-total,
+    .duathlon-archive__table td.is-total {
+        position: sticky;
+        left: var(--archive-name-width);
+        width: 82px;
+        z-index: 3;
+        background: #fff;
+        box-shadow: 1px 0 0 var(--archive-line);
+    }
+
+    .duathlon-archive__table th.is-name,
+    .duathlon-archive__table th.is-total {
+        z-index: 4;
+    }
+}

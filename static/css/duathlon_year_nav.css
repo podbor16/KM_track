@@ -1,0 +1,46 @@
+.duathlon-year-nav {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.tri-header__meta + .duathlon-year-nav {
+    margin-top: 12px;
+}
+
+.duathlon-year-nav__label {
+    color: rgba(255, 255, 255, .5);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.duathlon-year-nav__link {
+    min-width: 54px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, .2);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+    text-decoration: none;
+}
+
+.duathlon-year-nav__link:hover,
+.duathlon-year-nav__link.is-current {
+    border-color: #ff8562;
+    background: #ff8562;
+    color: #111;
+}
+
+@media (max-width: 640px) {
+    .duathlon-year-nav {
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .duathlon-year-nav__link {
+        min-width: 48px;
+        padding: 7px 10px;
+    }
+}

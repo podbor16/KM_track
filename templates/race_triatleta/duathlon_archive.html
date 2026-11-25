@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    {% include 'race_triatleta/duathlon222_analytics.html' %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>222 Дуатлон {{ year }} — архив результатов</title>
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_dark.ico" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon_tri_light.ico" media="(prefers-color-scheme: dark)">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/duathlon_archive.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/duathlon_year_nav.css?v={{ v }}">
+</head>
+<body class="duathlon-archive">
+    {% macro clock(seconds) -%}
+        {%- if seconds is not none -%}
+            {%- set total = seconds|int -%}
+            {{- '%02d:%02d:%02d'|format(total // 3600, (total % 3600) // 60, total % 60) -}}
+        {%- else -%}—{%- endif -%}
+    {%- endmacro %}
+    <header class="tri-header duathlon-archive__header">
+        <div>
+            <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон · Архив</div>
+            <h1 class="tri-header__title">Результаты<br>{{ year }}</h1>
+            <div class="tri-header__meta">{% if event_date %}{{ event_date[8:10] }}.{{ event_date[5:7] }}.{{ event_date[0:4] }} · {% endif %}Красноярск · Бег 10 км → Вело 170 км → Бег 42 км</div>
+        </div>
+        {% include 'race_triatleta/_duathlon_year_nav.html' %}
+    </header>
+
+    <main class="duathlon-archive__main">
+        <div class="duathlon-archive__intro">
+            <h2>Официальные результаты</h2>
+            <label class="duathlon-archive__search">
+                <span class="sr-only">Поиск участника</span>
+                <input id="archive-search" type="search" placeholder="Поиск по фамилии или номеру" autocomplete="off">
+            </label>
+        </div>
+
+        <div class="duathlon-archive__filters" role="group" aria-label="Фильтр по полу">
+            <button class="duathlon-archive__filter is-active" type="button" data-gender="" aria-pressed="true">Все</button>
+            <button class="duathlon-archive__filter" type="button" data-gender="M" aria-pressed="false">Мужчины</button>
+            <button class="duathlon-archive__filter" type="button" data-gender="F" aria-pressed="false">Женщины</button>
+            <span class="duathlon-archive__count" id="archive-count" aria-live="polite"></span>
+        </div>
+
+        <div class="duathlon-archive__table-wrap">
+            <table class="duathlon-archive__table">
+                <thead>
+                    <tr>
+                        <th class="is-name">Участник</th>
+                        <th class="is-numeric is-total">Итог</th>
+                        <th class="is-numeric">Место по полу</th>
+                        <th class="is-bib">№</th>
+                        <th>Статус</th>
+                        <th class="is-numeric">Бег 10 км</th>
+                        <th class="is-numeric">Т1</th>
+                        <th class="is-numeric">Вело 170 км</th>
+                        <th class="is-numeric">Т2</th>
+                        <th class="is-numeric">Бег 42 км</th>
+                    </tr>
+                </thead>
+                <tbody id="archive-results">
+                    {% for row in rows %}
+                    {% set status = row.status|string|lower %}
+                    <tr id="participant-{{ row.start_number }}"
+                        data-gender="{{ row.gender or '' }}"
+                        data-search="{{ (row.surname ~ ' ' ~ row.name ~ ' ' ~ row.start_number)|lower }}">
+                        <td class="duathlon-archive__name is-name">{{ row.surname }} {{ row.name }}</td>
+                        <td class="is-numeric is-total duathlon-archive__time duathlon-archive__total">{{ clock(row.total_s) }}</td>
+                        <td class="is-numeric duathlon-archive__rank">{{ row.rank if row.rank is not none else '—' }}</td>
+                        <td class="is-bib">{{ row.start_number if row.start_number is not none else '—' }}</td>
+                        <td>
+                            {% if status == 'finished' %}
+                                <span class="duathlon-archive__status is-finished">Финиш</span>
+                            {% elif status == 'dnf' %}
+                                <span class="duathlon-archive__status is-out">Сошёл</span>
+                            {% elif status == 'dsq' %}
+                                <span class="duathlon-archive__status is-out">Дисквалификация</span>
+                            {% elif status == 'notstarted' or status == 'dns' %}
+                                <span class="duathlon-archive__status is-muted">Не стартовал</span>
+                            {% else %}
+                                <span class="duathlon-archive__status is-muted">{{ row.status or '—' }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="is-numeric duathlon-archive__time">{{ clock(row.run1_s) }}</td>
+                        <td class="is-numeric duathlon-archive__time">{{ clock(row.t1_s) }}</td>
+                        <td class="is-numeric duathlon-archive__time">{{ clock(row.bike_s) }}</td>
+                        <td class="is-numeric duathlon-archive__time">{{ clock(row.t2_s) }}</td>
+                        <td class="is-numeric duathlon-archive__time">{{ clock(row.run2_s) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td class="duathlon-archive__empty" colspan="10">Результаты за этот год пока не загружены.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+    (() => {
+        const rows = [...document.querySelectorAll('#archive-results tr[data-gender]')];
+        const search = document.getElementById('archive-search');
+        const count = document.getElementById('archive-count');
+        const buttons = [...document.querySelectorAll('.duathlon-archive__filter')];
+        let gender = '';
+
+        function update() {
+            const query = search.value.trim().toLocaleLowerCase('ru');
+            let visible = 0;
+            rows.forEach(row => {
+                const matches = (!gender || row.dataset.gender === gender)
+                    && (!query || row.dataset.search.includes(query));
+                row.hidden = !matches;
+                if (matches) visible += 1;
+            });
+            count.textContent = `Найдено ${visible}`;
+        }
+
+        buttons.forEach(button => button.addEventListener('click', () => {
+            gender = button.dataset.gender;
+            buttons.forEach(item => {
+                item.classList.toggle('is-active', item === button);
+                item.setAttribute('aria-pressed', String(item === button));
+            });
+            update();
+        }));
+        search.addEventListener('input', update);
+        update();
+    })();
+    </script>
+</body>
+</html>

@@ -907,6 +907,45 @@ def _live_gap_map(entries: list[dict]) -> dict[int, float]:
     return gaps
 
 
+def get_archive_standings(event_id: int, gender: Optional[str] = None,
+                          tie_order: tuple[int, ...] = ()) -> list[dict]:
+    """Официальный протокол с местами по полу и порядком из протокола при равном времени."""
+    conn = get_duathlon_connection()
+    if conn is None:
+        return []
+    try:
+        gender_filter = "AND gender = %s" if gender else ""
+        params = (event_id, gender) if gender else (event_id,)
+        with conn.cursor(dictionary=True) as cursor:
+            cursor.execute(f"""
+                SELECT start_number, surname, name, gender, status,
+                       run1_s, t1_s, bike_s, t2_s, run2_s
+                FROM participants
+                WHERE event_id = %s {gender_filter}
+            """, params)
+            rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    tie_positions = {bib: position for position, bib in enumerate(tie_order)}
+    rows.sort(key=lambda row: (
+        row["status"] != "finished", row["run2_s"] is None, row["run2_s"] or 0,
+        tie_positions.get(row["start_number"], len(tie_positions)), row["start_number"],
+    ))
+    ranks = {}
+    for row in rows:
+        row["total_s"] = row["run2_s"] if row["status"] == "finished" else None
+        row["run1_s"], row["bike_s"], row["run2_s"] = _stage_times(
+            row["run1_s"], row["t1_s"], row["bike_s"], row["t2_s"], row["run2_s"],
+        )
+        row["rank"] = None
+        if row["total_s"] is not None:
+            gender = row["gender"]
+            ranks[gender] = ranks.get(gender, 0) + 1
+            row["rank"] = ranks[gender]
+    return rows
+
+
 def get_standings(event_id: int, gender: Optional[str] = None) -> list[dict]:
     """Таблица результатов: живое место по факту пройденной дистанции (не
     только по завершённым этапам целиком — см. _rank_standings_rows), статус

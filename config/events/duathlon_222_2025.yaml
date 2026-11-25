@@ -1,0 +1,12 @@
+name: "Дуатлон 222"
+display_name: "Дуатлон 222"
+code: "duathlon_222_2025"
+year: 2025
+is_archive: true
+
+distances:
+  - distance: "222 км (10 км бег + 170 км вело + 42 км бег)"
+    distance_km: 222.0
+    db_event_id: 2
+    event_date: "2025-09-27"
+    archive_tie_order: [23, 5]  # Официальные места 18 и 19 при одинаковом времени.

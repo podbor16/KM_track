@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/tri_results.css?v={{ v }}">
+    <link rel="stylesheet" href="/static/css/duathlon_year_nav.css?v={{ v }}">
 </head>
 <body>
     <div class="tri-header">
@@ -18,6 +19,7 @@
             <div class="tri-header__eyebrow">Triatleta · 222 Дуатлон</div>
             <div class="tri-header__title">222 Дуатлон<br>5 сентября 2026</div>
             <div class="tri-header__meta">Красноярск · Бег 10 км → Вело 170 км → Бег 42.2 км</div>
+            {% include 'race_triatleta/_duathlon_year_nav.html' %}
         </div>
         <div class="tri-elapsed-wrap">
             <div class="tri-elapsed-label" id="elapsed-label">До старта</div>

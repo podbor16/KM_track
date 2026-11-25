@@ -1,0 +1,9 @@
+{% if years|default([])|length > 1 %}
+<nav class="duathlon-year-nav" aria-label="Годы Дуатлона 222">
+    <span class="duathlon-year-nav__label">Год</span>
+    {% for nav_year in years %}
+    <a class="duathlon-year-nav__link{% if nav_year == year %} is-current{% endif %}"
+       href="/duathlon222_{{ nav_year }}"{% if nav_year == year %} aria-current="page"{% endif %}>{{ nav_year }}</a>
+    {% endfor %}
+</nav>
+{% endif %}

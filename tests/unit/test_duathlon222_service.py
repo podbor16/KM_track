@@ -1,3 +1,6 @@
+from unittest.mock import MagicMock
+
+from src.duathlon222 import service
 from src.duathlon222.service import (
     _stage_times, _speed_kmh, _current_stage, _forecast_stage_finish,
     _lap_ranks_from_rows, _build_stage_laps,
@@ -11,6 +14,28 @@ from src.duathlon222.service import (
     _stage_mark_finish_broadcast,
     _build_finish_point, FINISH_LAP_NUMBER,
 )
+
+
+def test_archive_keeps_official_tie_order_and_ranks_by_gender(monkeypatch):
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    recorded = {"status": "finished", "run1_s": 30, "t1_s": 2, "bike_s": 110, "t2_s": 4, "run2_s": 160}
+    cursor.fetchall.return_value = [
+        dict(recorded, start_number=5, gender="M"),
+        dict(recorded, start_number=7, gender="F"),
+        dict(recorded, start_number=23, gender="M"),
+        dict(recorded, start_number=13, gender="M", status="dnf", run2_s=None),
+    ]
+    monkeypatch.setattr(service, "get_duathlon_connection", lambda: conn)
+
+    rows = service.get_archive_standings(2, tie_order=(23, 5))
+    men = [row for row in rows if row["gender"] == "M"]
+    assert [(row["start_number"], row["rank"]) for row in men] == [(23, 1), (5, 2), (13, None)]
+    assert next(row for row in rows if row["gender"] == "F")["rank"] == 1
+    assert (men[0]["bike_s"], men[0]["run2_s"], men[0]["total_s"]) == (78, 46, 160)
+    assert men[-1]["run2_s"] is men[-1]["total_s"] is None
+    assert cursor.execute.call_args.args[1] == (2,)
+    conn.close.assert_called_once()
 
 
 def test_lap_distance_km_run1_uniform_no_offset():

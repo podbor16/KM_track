@@ -106,6 +106,7 @@ class DistanceConfig(BaseModel):
     diploma: Optional[DiplomaConfig] = None      # если не задано — диплом для этой дистанции недоступен
     gpx_file: Optional[str] = None
     event_date: Optional[str] = None
+    archive_tie_order: list[int] = []
     route: RouteConfig = RouteConfig()
     copernico: Optional[CopernicoConfig] = None
 
@@ -116,6 +117,7 @@ class EventConfig(BaseModel):
     display_name: str
     year: int
     is_active: bool = False
+    is_archive: bool = False
     start_lat: Optional[float] = None
     start_lon: Optional[float] = None
     gun_time: Optional[str] = None       # "21:00:00"

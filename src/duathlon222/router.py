@@ -10,13 +10,15 @@ from pydantic import BaseModel
 
 from src.config import settings
 from src.config.event_loader import (
-    load_events_cached, get_duathlon222_maintenance_enabled, set_duathlon222_maintenance_enabled,
+    EventConfig, load_events_cached, get_duathlon222_maintenance_enabled, set_duathlon222_maintenance_enabled,
 )
 from src.core.auth import (
     COOKIE_NAME, EXPIRY_SECONDS, create_session_cookie, require_auth_for, api_require_auth,
 )
 from src.core.request_security import request_uses_https
-from src.duathlon222.service import get_standings, get_participant, get_stage_mark_broadcast, get_available_marks
+from src.duathlon222.service import (
+    get_archive_standings, get_available_marks, get_participant, get_stage_mark_broadcast, get_standings,
+)
 
 _require_auth = require_auth_for("/duathlon222/login")
 
@@ -49,6 +51,15 @@ def _resolve_event_id(year: int) -> Optional[int]:
     if event is None or not event.distances:
         return None
     return event.distances[0].db_event_id
+
+
+async def _archive_results(event: EventConfig, gender: str | None = None) -> list[dict]:
+    if not event.distances or event.distances[0].db_event_id is None:
+        return []
+    distance = event.distances[0]
+    return await asyncio.to_thread(
+        get_archive_standings, distance.db_event_id, gender, tuple(distance.archive_tie_order),
+    )
 
 
 class YamlBody(BaseModel):
@@ -95,18 +106,30 @@ async def duathlon_participant_page_redirect(start_number: int):
 @router.get("/duathlon222_{year}", response_class=HTMLResponse)
 @router.get("/duathlon222_{year}/", response_class=HTMLResponse)
 async def duathlon_home(request: Request, year: int):
-    if not _year_exists(year):
+    events = load_events_cached()
+    event = events.get(f"duathlon_222_{year}")
+    if event is None:
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
-    return templates.TemplateResponse(request, "race_triatleta/duathlon_results.html", {
+    years = sorted((cfg.year for cfg in events.values()
+                    if cfg.code == f"duathlon_222_{cfg.year}" and cfg.distances
+                    and cfg.distances[0].db_event_id is not None), reverse=True)
+    template = "duathlon_archive.html" if event.is_archive else "duathlon_results.html"
+    return templates.TemplateResponse(request, f"race_triatleta/{template}", {
         "request": request,
         "year": year,
+        "years": years,
+        "event_date": event.distances[0].event_date if event.distances else None,
+        "rows": await _archive_results(event) if event.is_archive else [],
     })
 
 
 @router.get("/duathlon222_{year}/participant/{start_number}", response_class=HTMLResponse)
 async def duathlon_participant_page(request: Request, year: int, start_number: int):
-    if not _year_exists(year):
+    event = load_events_cached().get(f"duathlon_222_{year}")
+    if event is None:
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
+    if event.is_archive:
+        return RedirectResponse(f"/duathlon222_{year}#participant-{start_number}", status_code=307)
     return templates.TemplateResponse(request, "race_triatleta/duathlon_participant.html", {
         "request": request,
         "year": year,
@@ -120,9 +143,12 @@ async def duathlon_participant_page(request: Request, year: int, start_number: i
 
 @router.get("/api/duathlon222_{year}/standings")
 async def duathlon_standings(year: int, gender: str = None):
-    if not _year_exists(year):
+    event = load_events_cached().get(f"duathlon_222_{year}")
+    if event is None:
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
-    rows = get_standings(_resolve_event_id(year), gender or None)
+    rows = await _archive_results(event, gender or None) if event.is_archive else get_standings(
+        _resolve_event_id(year), gender or None,
+    )
     return {"standings": rows}
 
 
@@ -161,9 +187,14 @@ async def duathlon_stage_mark(
 
 @router.get("/api/duathlon222_{year}/participant/{start_number}")
 async def duathlon_participant_api(year: int, start_number: int):
-    if not _year_exists(year):
+    event = load_events_cached().get(f"duathlon_222_{year}")
+    if event is None:
         raise HTTPException(status_code=404, detail=f"222 Дуатлон за {year} год не найден")
-    data = get_participant(_resolve_event_id(year), start_number)
+    if event.is_archive:
+        rows = await _archive_results(event)
+        data = next((row for row in rows if row["start_number"] == start_number), None)
+    else:
+        data = get_participant(_resolve_event_id(year), start_number)
     if data is None:
         raise HTTPException(status_code=404, detail="Участник не найден")
     return data
