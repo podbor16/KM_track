@@ -75,6 +75,17 @@ def load_applicants(conn, year: int) -> list[dict]:
     return _linked_applicants(conn, "=", year)
 
 
+def load_external_start_links(conn) -> dict[int, dict[str, set[tuple[int, int]]]]:
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute("SELECT person_id, source, event_id, result_id FROM siberman_external_start_links")
+        rows = cur.fetchall()
+    links = {}
+    for row in rows:
+        sources = links.setdefault(row["person_id"], {})
+        sources.setdefault(row["source"], set()).add((row["event_id"], row["result_id"]))
+    return links
+
+
 def load_chance_history(conn, before_year: int) -> dict:
     """Past draw snapshots needed for the accumulated-chance draft (read-only)."""
     cur = conn.cursor(dictionary=True, buffered=True)

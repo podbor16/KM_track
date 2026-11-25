@@ -77,6 +77,10 @@ jobs:
             # Заявки на Siberman из формы Тильды и статусы директора
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/018_entries.sql
 
+            # Подтверждённые связи с реестром участников
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/019_draw_identities.sql
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/020_external_start_links.sql
+
             # Verify
             echo "=== Tables ==="
             mysql -u root siberman -e "SHOW TABLES;"

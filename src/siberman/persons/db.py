@@ -84,7 +84,8 @@ def has_draw_identity_links(conn, person_id: int) -> bool:
             SELECT EXISTS(SELECT 1 FROM siberman_entry_person_links WHERE person_id=%s)
                 OR EXISTS(SELECT 1 FROM draw_applicants WHERE person_id=%s)
                 OR EXISTS(SELECT 1 FROM siberman_draw_archive_links WHERE person_id=%s)
-        """, (person_id, person_id, person_id))
+                OR EXISTS(SELECT 1 FROM siberman_external_start_links WHERE person_id=%s)
+        """, (person_id, person_id, person_id, person_id))
         return bool(cur.fetchone()[0])
 
 
@@ -101,7 +102,8 @@ def delete_orphans(conn, ids) -> list:
                 "(r.person_id = s.id OR FIND_IN_SET(s.id, r.other_person_ids))) "
                 "AND NOT EXISTS (SELECT 1 FROM siberman_entry_person_links e WHERE e.person_id=s.id) "
                 "AND NOT EXISTS (SELECT 1 FROM draw_applicants a WHERE a.person_id=s.id) "
-                "AND NOT EXISTS (SELECT 1 FROM siberman_draw_archive_links a WHERE a.person_id=s.id)", args)
+                "AND NOT EXISTS (SELECT 1 FROM siberman_draw_archive_links a WHERE a.person_id=s.id) "
+                "AND NOT EXISTS (SELECT 1 FROM siberman_external_start_links a WHERE a.person_id=s.id)", args)
     gone = [r["id"] for r in cur.fetchall()]
     for pid in gone:
         delete_person(conn, pid)

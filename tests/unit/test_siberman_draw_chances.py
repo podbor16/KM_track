@@ -63,6 +63,26 @@ def test_cycling_relay_rosters_are_reviewed_even_when_application_reports_zero(m
     assert "2027" not in issue
 
 
+def test_confirmed_relay_links_count_once_per_event_without_assigning_team_birthdate():
+    rows = [
+        dict(start(1, None, 2025), result_id=11, relay_member=True),
+        dict(start(1, DOB, 2025), result_id=12),
+        dict(start(2, None, 2026), result_id=21, relay_member=True),
+        dict(start(3, None, 2029), result_id=31, relay_member=True),
+    ]
+    args = dict(race="Суточная велогонка", name_key=plain_key(**NAME), birthdate=DOB,
+                reported=2, through_year=2028)
+
+    value, source, issue = external_start_bonus(rows, links={(1, 11), (2, 21), (3, 31)}, **args)
+    assert value == 2 and issue is None
+    assert "связи с карточкой: 2025, 2026" in source
+    assert "2029" not in source
+
+    value, _, issue = external_start_bonus(rows, links={(1, 10), (2, 21)}, **args)
+    assert value is None
+    assert "отсутствует ранее подтверждённый результат" in issue
+
+
 def test_chance_draft_writes_external_values_and_requires_review_for_unverified_starts(monkeypatch):
     entry = dict(NAME, id=3, birthdate=DOB, format="relay", city="Красноярск", gender="M",
                  raw={"222_starts": "1", "24h_starts": "2", "tattoo": "нет"})
@@ -74,6 +94,7 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
                "picks": [], "config": {}, "offered": set()},
     })
     monkeypatch.setattr(service.ddb, "archive_draw_years", lambda conn, year: {})
+    monkeypatch.setattr(service.ddb, "load_external_start_links", lambda conn: {})
     monkeypatch.setattr(service.hall_data, "load_entries", lambda conn: [
         service.hall_data.Entry(year=2025, bib="1", stage="bike", format="relay", gender="M", person_id=7,
                                 has_time=True, **NAME),

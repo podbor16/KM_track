@@ -1,6 +1,7 @@
 """Подготовка непишущего в БД черновика шансов жеребьёвки Siberman."""
 import io
 import json
+from collections.abc import Set
 from datetime import date
 from pathlib import Path
 
@@ -91,7 +92,8 @@ def form_reported(raw: dict, key: str) -> int | None:
 
 
 def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, birthdate: date | None,
-                         reported: int | None, through_year: int) -> tuple[int | None, str, str | None]:
+                         reported: int | None, through_year: int,
+                         links: Set[tuple[int, int]] = frozenset()) -> tuple[int | None, str, str | None]:
     if rows is None:
         return None, race, f"{race}: база результатов недоступна"
     history = [row for row in rows if row["race_year"] is not None and int(row["race_year"]) <= through_year]
@@ -99,16 +101,25 @@ def external_start_bonus(rows: list[dict] | None, *, race: str, name_key: str, b
     source = f"{race}, протоколы: {years}" if years else race
     if not history:
         return None, source, f"{race}: нет протоколов до года жеребьёвки включительно"
-    if birthdate is None:
+    linked = {row["event_id"]: int(row["race_year"]) for row in history
+              if (row["event_id"], row.get("result_id")) in links}
+    if birthdate is None and not linked:
         return None, source, f"{race}: нужна подтверждённая личность с датой рождения"
 
     matches = [row for row in history if plain_key(row["surname"], row["name"]) == name_key]
-    confirmed = {row["event_id"]: int(row["race_year"]) for row in matches if row["birthdate"] == birthdate}
-    uncertain = [row for row in matches if row["birthdate"] is None and row["event_id"] not in confirmed]
+    confirmed = {row["event_id"]: int(row["race_year"]) for row in matches
+                 if birthdate is not None and row["birthdate"] == birthdate}
+    confirmed.update(linked)
+    uncertain = [row for row in matches if (birthdate is None or row["birthdate"] is None)
+                 and row["event_id"] not in confirmed]
     count = len(confirmed)
-    source += f"; стартов по ФИО и дате рождения: {count}"
+    source += f"; подтверждено стартов: {count}"
     if confirmed:
         source += ". Подтверждены старты за " + ", ".join(map(str, sorted(confirmed.values())))
+    if linked:
+        source += ". По подтверждённой связи с карточкой: " + ", ".join(map(str, sorted(linked.values())))
+    if links - {(row["event_id"], row.get("result_id")) for row in rows}:
+        return None, source, f"{race}: отсутствует ранее подтверждённый результат"
     if uncertain:
         pending_years = ", ".join(str(year) for year in sorted({int(row["race_year"]) for row in uncertain}))
         if all(row.get("relay_member") for row in uncertain):

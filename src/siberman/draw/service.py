@@ -621,7 +621,8 @@ def _known_duathlon_starts() -> list[dict] | None:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT e.id AS event_id, YEAR(e.gun_datetime) AS race_year, p.surname, p.name, p.status, p.birthdate,
+            SELECT e.id AS event_id, p.id AS result_id, YEAR(e.gun_datetime) AS race_year,
+                   p.surname, p.name, p.status, p.birthdate,
                    p.run1_s, p.bike_s, p.run2_s, COUNT(c.id) AS checkpoints
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN checkpoints c ON c.participant_id=p.id
@@ -647,7 +648,8 @@ def _known_24h_starts() -> list[dict] | None:
     try:
         cur = conn.cursor(dictionary=True, buffered=True)
         cur.execute("""
-            SELECT e.id AS event_id, COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
+            SELECT e.id AS event_id, p.id AS result_id,
+                   COALESCE(e.archive_year, YEAR(e.gun_datetime)) AS race_year, e.duration_hours,
                    p.surname, p.name, p.birthdate, p.status, p.category, COUNT(l.id) AS laps
             FROM events e JOIN participants p ON p.event_id=e.id
             LEFT JOIN laps l ON l.participant_id=p.id AND l.event_id=e.id
@@ -742,6 +744,7 @@ def chance_draft(year: int) -> bytes:
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
         identities = identity.decisions(conn, applicants, include_candidates=True)
+        external_links = ddb.load_external_start_links(conn)
         archived_draws = ddb.archive_draw_years(conn, year)
         archive = hall_data.load_entries(conn)
     finally:
@@ -842,6 +845,7 @@ def chance_draft(year: int) -> bytes:
             reported[field] = _chance_count(raw, form_key)
             external[field], sources[field], issue = external_start_bonus(
                 protocol, race=race, name_key=key, birthdate=birthdate, reported=reported[field], through_year=year,
+                links=external_links.get(person_id, {}).get(field, frozenset()),
             )
             if issue:
                 field_issues[field] = issue
