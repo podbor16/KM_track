@@ -73,7 +73,7 @@ function syncUrlFromState() {
     if (distance) params.set('distance', distance);
     const gender = getGenderFilterValue();
     if (gender) params.set('gender', gender);
-    const ageGroup = document.getElementById('ageGroupFilter').value;
+    const ageGroup = isSnow7Event() ? '' : document.getElementById('ageGroupFilter').value;
     if (ageGroup) params.set('ageGroup', ageGroup);
     const search = document.getElementById('surnameSearch').value;
     if (search) params.set('search', search);
@@ -89,6 +89,10 @@ function syncUrlFromState() {
 // (не по отображаемому имени) — он не зависит от года.
 function isZharaEvent() {
     return currentEvent === 'zhara';
+}
+
+function isSnow7Event() {
+    return currentEvent === 'snow7';
 }
 
 // Протоколы с одной колонкой времени (большинство 2024) — только официальное
@@ -115,7 +119,13 @@ function updateTimeColumnHeaders() {
     th1.textContent = first.label;
     th1.setAttribute('onclick', `sortTable('${first.key}')`);
     th2.textContent = second.label;
-    th2.setAttribute('onclick', `sortTable('${second.key}')`);
+    if (isSnow7Event()) {
+        th2.removeAttribute('onclick');
+        th2.classList.remove('km-th--sort');
+    } else {
+        th2.setAttribute('onclick', `sortTable('${second.key}')`);
+        th2.classList.add('km-th--sort');
+    }
     th2.style.display = hasCleanTimes() ? '' : 'none';
 }
 
@@ -550,6 +560,7 @@ function _computeLiveRanks(runners) {
         assignContinuing(group, maxField(finishedBySex.get(sex) || [], 'rank_sex' + officialSuffix), 'live_rank_sex');
     });
 
+    if (isSnow7Event()) return;
     const runningByCategory = groupBy(running, 'category');
     const finishedByCategory = groupBy(finished, 'category');
     runningByCategory.forEach((group, cat) => {
@@ -615,9 +626,12 @@ function populateGenderFilter(runners) {
     const container = document.getElementById('genderFilter');
     const savedValue = container.dataset.value || '';
 
+    const snow7 = isSnow7Event();
     const genders = new Set();
     runners.forEach(runner => {
-        if (runner.gender) genders.add(runner.gender);
+        if (runner.gender && (!snow7 || runner.gender === 'Женщина' || runner.gender === 'Мужчина')) {
+            genders.add(runner.gender);
+        }
     });
 
     // Женщина раньше Мужчины — соответствует порядку в остальном UI
@@ -659,6 +673,13 @@ function setGenderFilter(value) {
 // Заполняем опции возрастных групп
 function populateAgeGroups(runners) {
     const ageGroupSelect = document.getElementById('ageGroupFilter');
+    const snow7 = isSnow7Event();
+    document.getElementById('ageGroupFilterGroup').style.display = snow7 ? 'none' : '';
+    if (snow7) {
+        ageGroupSelect.innerHTML = '';
+        _urlAgeGroup = null;
+        return;
+    }
     const genderFilter = getGenderFilterValue(); // Получаем выбранный пол
     const savedValue = ageGroupSelect.value;
 
@@ -825,7 +846,7 @@ function onGenderChange() {
 // Применяем фильтры к данным
 function applyFilters() {
     const genderFilter = getGenderFilterValue();
-    const ageGroupFilter = document.getElementById('ageGroupFilter').value;
+    const ageGroupFilter = isSnow7Event() ? '' : document.getElementById('ageGroupFilter').value;
     const distanceFilter = document.getElementById('distanceFilter').value;
     const surnameSearch = KMUtils.searchNorm(document.getElementById('surnameSearch').value);
     
@@ -906,7 +927,7 @@ const calculatePace = KMUtils.calculatePace.bind(KMUtils);
 // gun/clean-различия (считаются по дистанции, не по времени финиша).
 function _rankFieldForScope(suffix, prefix = '') {
     const genderFilter = getGenderFilterValue();
-    const ageGroupFilter = document.getElementById('ageGroupFilter').value;
+    const ageGroupFilter = isSnow7Event() ? '' : document.getElementById('ageGroupFilter').value;
     if (ageGroupFilter !== '') return prefix + 'rank_category' + suffix;
     if (genderFilter !== '') return prefix + 'rank_sex' + suffix;
     return prefix + 'rank_absolute' + suffix;
@@ -921,11 +942,11 @@ function getActiveLiveRankField() {
 }
 
 // Применяет текущий sortState к массиву, возвращает отсортированную копию
-function _sortArray(arr) {
-    if (!sortState.column) return arr;
+function _sortArray(arr, { column, direction } = sortState) {
+    if (!column) return arr;
     return [...arr].sort((a, b) => {
         let valA, valB;
-        switch (sortState.column) {
+        switch (column) {
             case 'rank': {
                 const tierA = _liveRankTier(a), tierB = _liveRankTier(b);
                 if (tierA !== tierB) return tierA - tierB;
@@ -1009,14 +1030,15 @@ function _sortArray(arr) {
             default:
                 return 0;
         }
-        if (valA < valB) return sortState.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortState.direction === 'asc' ? 1 : -1;
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
         return 0;
     });
 }
 
 // Функция сортировки таблицы
 function sortTable(columnName) {
+    if (isSnow7Event() && columnName === 'rank') columnName = 'time_gun';
     sortState.direction = sortState.column === columnName
         ? (sortState.direction === 'asc' ? 'desc' : 'asc')
         : 'asc';
@@ -1029,17 +1051,19 @@ function renderResultsTable(runners) {
     const tbody = document.getElementById('resultsTableBody');
     tbody.innerHTML = '';
 
-    const rankField = getActiveRankField();
+    const snow7 = isSnow7Event();
+    const rankField = snow7 ? 'rank_sex' : getActiveRankField();
+    const liveRankField = snow7 ? 'live_rank_sex' : getActiveLiveRankField();
     const withClean = hasCleanTimes();
     const cleanFirst = cleanIsPrimary();
 
-    // Колонка "Категория" — только когда фильтр по возр. группе = "Все",
-    // иначе она видна на каждой строке одним и тем же значением и не несёт
-    // информации, а с фильтром "Все" помогает понять, к какой группе
-    // относится место в общем списке.
-    const showCategory = document.getElementById('ageGroupFilter').value === '';
+    // При общем просмотре Снежной показываем, к какому зачёту относится место.
+    const showGroup = snow7 ? !getGenderFilterValue() : document.getElementById('ageGroupFilter').value === '';
     const thCategory = document.getElementById('thCategory');
-    if (thCategory) thCategory.style.display = showCategory ? '' : 'none';
+    if (thCategory) {
+        thCategory.textContent = snow7 ? 'Зачёт' : 'Категория';
+        thCategory.style.display = showGroup ? '' : 'none';
+    }
 
     runners.forEach((runner, index) => {
         const row = document.createElement('tr');
@@ -1048,14 +1072,14 @@ function renderResultsTable(runners) {
         // До финиша, но с хотя бы одной пройденной КТ — показываем живое
         // место (по current_distance, см. _computeLiveRanks()) вместо "—".
         const rankTier = _liveRankTier(runner);
-        const rankAbs = rankTier === 0 ? runner[rankField]
-            : rankTier === 1 ? runner[getActiveLiveRankField()]
+        const rank = rankTier === 0 ? runner[rankField]
+            : rankTier === 1 ? runner[liveRankField]
             : null;
         let rankDisplay;
-        if (rankAbs === 1) rankDisplay = `<span class="km-rank-medal km-rank-medal--1">1</span>`;
-        else if (rankAbs === 2) rankDisplay = `<span class="km-rank-medal km-rank-medal--2">2</span>`;
-        else if (rankAbs === 3) rankDisplay = `<span class="km-rank-medal km-rank-medal--3">3</span>`;
-        else rankDisplay = rankAbs ? `<span class="km-rank-num">${rankAbs}</span>` : '—';
+        if (rank === 1) rankDisplay = `<span class="km-rank-medal km-rank-medal--1">1</span>`;
+        else if (rank === 2) rankDisplay = `<span class="km-rank-medal km-rank-medal--2">2</span>`;
+        else if (rank === 3) rankDisplay = `<span class="km-rank-medal km-rank-medal--3">3</span>`;
+        else rankDisplay = rank ? `<span class="km-rank-num">${rank}</span>` : '—';
 
         const fullName = `${runner.surname || ''} ${runner.name || ''}`.trim() || 'N/A';
         // Вместо времени — статус, если участник не финишировал (запрос
@@ -1074,7 +1098,7 @@ function renderResultsTable(runners) {
             : `<span class="km-time-net">${formatTime(runner.time_clear_finish) || '—'}</span>`;
         const [timeCol1, timeCol2] = cleanFirst ? [timeNetCell, timeGunCell] : [timeGunCell, timeNetCell];
         const rowBg = index % 2 === 0 ? 'km-td--even' : 'km-td--odd';
-        const categoryCell = showCategory
+        const categoryCell = showGroup
             ? `<td class="km-td km-td--l ${rowBg}">${KMUtils.normalizeCategory(runner.category) || '—'}</td>`
             : '';
 
@@ -1228,7 +1252,7 @@ async function openDetailPanel(runnerRow, resultId) {
     panelRow.classList.add('detail-panel-row');
     const cell = document.createElement('td');
     // Число видимых колонок меняется (напр. "Категория" скрывается/
-    // показывается — см. showCategory выше), фиксированное значение
+    // показывается — см. showGroup выше), фиксированное значение
     // оставляло панель уже таблицы, когда видимых колонок было 6.
     cell.colSpan = Array.from(document.querySelectorAll('#resultsTable thead th'))
         .filter(th => th.style.display !== 'none').length;
@@ -1310,14 +1334,15 @@ function buildDetailPanelHTML(runner) {
         ? `<a href="/diploma/${runner.event_id}/${runner.start_number}" class="km-btn-profile" target="_blank">🏅 Диплом</a>`
         : '';
 
+    const snow7 = isSnow7Event();
     const timeCol = (title, time, cls, pace, absR, sexR, catR) => `
         <div class="detail-time-col detail-time-col--${cls}">
             <div class="detail-time-col-title">${title}</div>
             <div class="detail-time-big detail-time-big--${cls}">${time}</div>
             <div class="detail-rank-row"><span class="detail-rank-label">Темп</span><span class="detail-rank-val">${pace}</span></div>
-            <div class="detail-rank-row"><span class="detail-rank-label">Место абс.</span><span class="detail-rank-val"><span class="detail-rank-num">${absR}</span></span></div>
-            <div class="detail-rank-row"><span class="detail-rank-label">По полу</span><span class="detail-rank-val">${sexR}</span></div>
-            <div class="detail-rank-row"><span class="detail-rank-label">По кат.</span><span class="detail-rank-val">${catR}</span></div>
+            ${snow7 ? "" : `<div class="detail-rank-row"><span class="detail-rank-label">Место абс.</span><span class="detail-rank-val"><span class="detail-rank-num">${absR}</span></span></div>`}
+            ${!snow7 || cls === "gun" ? `<div class="detail-rank-row"><span class="detail-rank-label">По полу</span><span class="detail-rank-val">${sexR}</span></div>` : ""}
+            ${snow7 ? "" : `<div class="detail-rank-row"><span class="detail-rank-label">По кат.</span><span class="detail-rank-val">${catR}</span></div>`}
         </div>`;
 
     return `
@@ -1742,6 +1767,7 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
     if (!rows.length) return;
     const useGun = timeMode === 'gun';
     const modeLabel = useGun ? 'офиц.' : 'чист.';
+    const showCategory = !isSnow7Event();
     const segKmName = code => {
         const { from, to } = parseSegmentCode(code);
         const fk = kmMap && kmMap[from] != null ? kmMap[from] : null;
@@ -1760,7 +1786,7 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
     table.innerHTML = `
         <colgroup>
             <col width="30%"/><col width="18%"/><col width="24%"/>
-            <col width="9%"/><col width="9%"/><col width="9%"/>
+            <col width="9%"/><col width="9%"/>${showCategory ? `<col width="9%"/>` : ""}
         </colgroup>
         <thead>
             <tr>
@@ -1769,7 +1795,7 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
                 <th>Темп</th>
                 <th title="Место абсолют">Абс.</th>
                 <th title="Место по полу">Пол</th>
-                <th title="Место в категории">Кат.</th>
+                ${showCategory ? `<th title="Место в категории">Кат.</th>` : ""}
             </tr>
         </thead>
     `;
@@ -1808,7 +1834,7 @@ function renderSegmentSection(container, title, color, rows, kmMap) {
             <td class="seg-pace">${paceHtml}</td>
             <td class="seg-rank">${rankBadge(rankAbsolute)}</td>
             <td class="seg-rank">${rankBadge(rankSex)}</td>
-            <td class="seg-rank">${rankBadge(rankCategory)}</td>
+            ${showCategory ? `<td class="seg-rank">${rankBadge(rankCategory)}</td>` : ""}
         `;
         tbody.appendChild(tr);
     });
@@ -1831,11 +1857,12 @@ function exportResultsPdf() {
     const title = document.getElementById('pageTitle').innerText.replace(/\n/g, ' ');
     const zhara = cleanIsPrimary();
     const withClean = hasCleanTimes();
+    const snow7 = isSnow7Event();
     const primaryTimeField = zhara ? 'time_clear_finish' : 'time_gun_finish';
 
     // Сортировка: финишёры по возрастанию основного (для Жары — чистого,
     // иначе официального) времени, остальные в конце
-    const sorted = [...filteredRunners].sort((a, b) => {
+    const sorted = snow7 ? _sortArray(filteredRunners, { column: 'time_gun', direction: 'asc' }) : [...filteredRunners].sort((a, b) => {
         const tA = KMUtils.parseTimeToSeconds(a[primaryTimeField]);
         const tB = KMUtils.parseTimeToSeconds(b[primaryTimeField]);
         const hasA = tA > 0;
@@ -1856,14 +1883,12 @@ function exportResultsPdf() {
         const noFinish = !r[primaryTimeField];
         const rowStyle = noFinish ? ' style="color:#999"' : '';
         return `<tr${rowStyle}>
-            <td>${noFinish ? '—' : i + 1}</td>
+            <td>${snow7 ? (r.start_number || '—') : (noFinish ? '—' : i + 1)}</td>
             <td>${(r.surname||'')} ${(r.name||'')}</td>
             <td>${r.distance||r.event_distance||'—'}</td>
             <td>${r.category||'—'}</td>
             ${timeCells}
-            <td>${rankAbs}</td>
-            <td>${rankSex}</td>
-            <td>${rankCat}</td>
+            ${snow7 ? `<td>${r.status === 'finished' ? rankSex : '—'}</td>` : `<td>${rankAbs}</td><td>${rankSex}</td><td>${rankCat}</td>`}
         </tr>`;
     }).join('');
     const timeHeaders = !withClean ? '<th>Офиц. время</th>' : zhara
@@ -1883,9 +1908,9 @@ function exportResultsPdf() {
 <h2>${title}</h2>
 <p>${filteredRunners.length} участников · ${new Date().toLocaleDateString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })}</p>
 <table><thead><tr>
-  <th>№</th><th>Участник</th><th>Дистанция</th><th>Категория</th>
+  <th>№</th><th>Участник</th><th>Дистанция</th><th>${snow7 ? 'Зачёт' : 'Категория'}</th>
   ${timeHeaders}
-  <th>Место абс.</th><th>Место пол</th><th>Место кат.</th>
+  ${snow7 ? '<th>Место по полу</th>' : '<th>Место абс.</th><th>Место пол</th><th>Место кат.</th>'}
 </tr></thead><tbody>${rows}</tbody></table>
 <script>window.onload=()=>window.print();<\/script>
 </body></html>`;

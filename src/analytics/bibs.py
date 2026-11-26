@@ -16,6 +16,7 @@ import json
 from datetime import datetime
 
 KIDS_EVENT = "Детский забег"
+SNOW7_2026 = ("Снежная семерка", 2026)
 NO_BIB_DISTANCES = {(KIDS_EVENT, "500 м")}
 
 
@@ -127,10 +128,12 @@ def plan(groups, ranges, taken):
 
 # ---------------------------------------------------------------- БД
 
-def load_leads(conn, event_name, event_year):
+def load_leads(conn, event_name, event_year, *, for_update=False):
     cur = conn.cursor(dictionary=True)
+    lock = " ORDER BY id FOR UPDATE" if for_update else ""
     cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main, is_elite
-                   FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""", (event_name, int(event_year)))
+                   FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""" + lock,
+                (event_name, int(event_year)))
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -154,6 +157,7 @@ def overview(conn, event_name, event_year):
                    for g in groups],
         "skipped": sorted(d for e, d in NO_BIB_DISTANCES if e == event_name),
         "taken": len(taken),
+        "snow7_starts": (event_name, event_year) == SNOW7_2026,
     }
 
 
@@ -179,15 +183,18 @@ def assign(conn, event_name, event_year, ranges, user):
     """Пересчитать план и записать одной транзакцией. Ошибка в любой группе — ничего не пишем.
     trg_leads_after_update переписывает телефон/email карточки контактами обновлённой заявки —
     контакты затронутых карточек сохраняются и возвращаются."""
-    groups, taken = build_groups(event_name, load_leads(conn, event_name, event_year))
-    result, assignments, ok = plan(groups, ranges, taken)
-    if not ok:
-        return {"groups": result, "ok": False, "assigned": 0}
     cur = conn.cursor(dictionary=True)
     try:
         if conn.in_transaction:                        # пул — autocommit=True: без явной транзакции
             conn.commit()                              # каждый UPDATE фиксировался бы сам по себе
         conn.start_transaction()
+        # Ручное назначение на Снежной блокирует тот же набор заявок.
+        leads = load_leads(conn, event_name, event_year, for_update=(event_name, event_year) == SNOW7_2026)
+        groups, taken = build_groups(event_name, leads)
+        result, assignments, ok = plan(groups, ranges, taken)
+        if not ok:
+            conn.rollback()
+            return {"groups": result, "ok": False, "assigned": 0}
         ids = [lead_id for lead_id, _ in assignments]
         contacts = {}
         if ids:

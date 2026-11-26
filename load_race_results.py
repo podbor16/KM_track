@@ -47,7 +47,7 @@ except ImportError:
 from src.analytics.db_connection_optimized import create_connection, calculate_age_group
 from src.common.names import normalize_person_name
 from src.analytics.elite import distance_label, is_elite, is_pacer, main_ranges
-from src.common.categories import canonical_category
+from src.common.categories import canonical_category, is_snow7_event, sex_standing_label
 
 # === КОНСТАНТЫ ===
 RACE_DATA_FILE = Path(os.getenv("RACE_DATA_FILE", "data/race_data.json"))   # тот же файл, что settings.RACE_DATA_FILE
@@ -338,6 +338,7 @@ class RaceLoader:
     # Класс-дефолт: страхует объекты, созданные через __new__ в обход __init__
     # (см. tests/unit/test_bulk_upsert.py::make_loader) от AttributeError.
     broadcast_json_path: Optional[str] = None
+    _snow7 = False
 
     def __init__(self, event_id: int, logger: logging.LoggerAdapter,
                  copernico_race_id: Optional[str] = None,
@@ -390,6 +391,11 @@ class RaceLoader:
         self._kt_reads_per_cycle: list = []  # [(timestamp, count), ...]
         self._last_stats_log: float = time.time()
 
+    def _result_category(self, runner: dict, sex: str) -> str:
+        if self._snow7:
+            return sex_standing_label(sex) or ''
+        return canonical_category(runner.get('category') or '') or 'Unknown'
+
     def connect(self) -> bool:
         """Подключиться к БД и получить данные о событии"""
         self.logger.info("🔌 Подключение к БД...")
@@ -407,6 +413,8 @@ class RaceLoader:
             if not event:
                 self.logger.error(f"❌ События ID {self.event_id} не найдено в БД")
                 return False
+
+            self._snow7 = is_snow7_event(event.get('event_name'))
 
             # Преобразуем дистанцию в число
             self.event_distance_km = float(event['event_distance']) if event['event_distance'] else None
@@ -693,14 +701,15 @@ class RaceLoader:
                     assigned_sweepers[key] = next_sweeper_number
                     next_sweeper_number += 1
 
+                sex = convert_gender(runner.get('gender'))
                 batch.append((
                     self.event_id,
                     stored_number,
                     surname,
                     name,
                     birthdate,
-                    convert_gender(runner.get('gender')),
-                    canonical_category(runner.get('category') or '') or 'Unknown',
+                    sex,
+                    self._result_category(runner, sex),
                     'Not started',
                     int(is_elite(dorsal, self.elite_ranges, surname)),
                     int(is_pacer(dorsal)),
@@ -1004,7 +1013,7 @@ class RaceLoader:
             birthdate = normalize_birthdate(runner.get('birthdate'))
             sex = convert_gender(runner.get('gender'))
             # Категория из Copernico — в едином кратком виде («М 49» → «М49», src/common/categories.py)
-            category = canonical_category(runner.get('category') or '') or 'Unknown'
+            category = self._result_category(runner, sex)
             race_status = convert_status(runner.get('status'))
 
             # Времена — поля из preset-конфига
@@ -1086,6 +1095,8 @@ class RaceLoader:
                 or (birthdate != '1900-01-01' and birthdate != prev_cp[2]))
             self._cp_fio[dorsal] = (surname, name, birthdate if birthdate != '1900-01-01'
                                     else (prev_cp[2] if prev_cp else birthdate))
+            if self._snow7 and (category != existing.get('category') or sex != existing.get('sex')):
+                changed_fields.append('Обновился зачёт по полу')
             if race_status != existing.get('race_status'):
                 changed_fields.append(f'race_status: "{existing.get("race_status")}" → "{race_status}"')
             if time_gun_finish != existing.get('time_gun_finish'):
@@ -1327,7 +1338,8 @@ class RaceLoader:
                 group = [r for r in finished if r.get('sex') == sex_val]
                 sex_gun[sex_val] = self._assign_ranks(group, '_gun_key')
 
-            for cat_val in set(r['category'] for r in finished if r.get('category')):
+            gun_categories = set() if self._snow7 else {r['category'] for r in finished if r.get('category')}
+            for cat_val in gun_categories:
                 group = [r for r in finished if r.get('category') == cat_val]
                 cat_gun[cat_val] = self._assign_ranks(group, '_gun_key')
 
@@ -1339,7 +1351,8 @@ class RaceLoader:
                 group = [r for r in with_clean if r.get('sex') == sex_val]
                 sex_clean[sex_val] = self._assign_ranks(group, '_clean_key')
 
-            for cat_val in set(r['category'] for r in with_clean if r.get('category')):
+            clean_categories = set() if self._snow7 else {r['category'] for r in with_clean if r.get('category')}
+            for cat_val in clean_categories:
                 group = [r for r in with_clean if r.get('category') == cat_val]
                 cat_clean[cat_val] = self._assign_ranks(group, '_clean_key')
 
@@ -1408,7 +1421,8 @@ class RaceLoader:
                     group = [r for r in kt_runners if r.get('sex') == sex_val]
                     kt_sex[sex_val] = self._assign_ranks(group, time_col)
 
-                for cat_val in set(r['category'] for r in kt_runners if r.get('category')):
+                kt_categories = set() if self._snow7 else {r['category'] for r in kt_runners if r.get('category')}
+                for cat_val in kt_categories:
                     group = [r for r in kt_runners if r.get('category') == cat_val]
                     kt_cat[cat_val] = self._assign_ranks(group, time_col)
 
@@ -1469,7 +1483,7 @@ class RaceLoader:
                     'sg_time_clear':         row['sg_time_clear'],
                     'sg_time_gun_effective': row['sg_time_gun'] or row['sg_time_clear'],
                     'sex':                   row['sex'],
-                    'category':              row['category'],
+                    'category':              None if self._snow7 else row['category'],
                 })
 
             batch = []

@@ -10,12 +10,29 @@ from typing import Optional
 from datetime import datetime, date, timedelta
 
 from src.common.cache import prune
+from src.common.categories import is_snow7_event, sex_standing_label
 from src.config.event_loader import EventConfig, get_event_by_name
 from src.config.settings import KRASNOYARSK_TZ
 from src.krasmarafon.models.analytics import RaceResultsResponse
 from src.krasmarafon.services.public_pd import mask_runner
 
 logger = logging.getLogger(__name__)
+
+
+def _official_finish_ms(runner: dict) -> float:
+    finish = runner.get('time_gun_finish')
+    if not finish or str(runner.get('race_status', '')).casefold() != 'finished':
+        return float('inf')
+    recorded_ms = runner.get('time_gun_finish_ms')
+    if recorded_ms is not None:
+        return recorded_ms
+    if isinstance(finish, timedelta):
+        return finish.total_seconds() * 1000
+    try:
+        hours, minutes, seconds = map(float, str(finish).split(':'))
+    except ValueError:
+        return float('inf')
+    return (hours * 3600 + minutes * 60 + seconds) * 1000
 
 
 def _fmt_distance_label(event_distance) -> str:
@@ -220,6 +237,9 @@ def assemble_event_results(
     ev_name = ev_info.get('event_name', event_name or '')
     ev_distance = ev_info.get('event_distance')
     ev_year = ev_info.get('event_year') or current_year
+    snow7 = is_snow7_event(ev_name)
+    if snow7:
+        results_data = sorted(results_data, key=_official_finish_ms)
 
     # --- gun_start_dt из gun_time_utc в БД (приоритет) или gun_time в YAML (fallback,
     # напр. когда Copernico не отдаёт gunTime для wave-based расписаний) ---
@@ -325,16 +345,16 @@ def assemble_event_results(
             'name': runner.get('name', ''),
             'full_name': f"{runner.get('surname', '')} {runner.get('name', '')}".strip(),
             'sex': runner.get('sex'),
-            'category': runner.get('category'),
+            'category': sex_standing_label(runner.get('sex')) if snow7 else runner.get('category'),
             'birthday': runner.get('birthday'),
             'race_status': runner.get('race_status'),
             'status': runner.get('race_status'),
             'rank_absolute': runner.get('rank_absolute'),
             'rank_sex': runner.get('rank_sex'),
-            'rank_category': runner.get('rank_category'),
+            'rank_category': None if snow7 else runner.get('rank_category'),
             'rank_absolute_clean': runner.get('rank_absolute_clean'),
             'rank_sex_clean': runner.get('rank_sex_clean'),
-            'rank_category_clean': runner.get('rank_category_clean'),
+            'rank_category_clean': None if snow7 else runner.get('rank_category_clean'),
             'time_gun_finish': runner.get('time_gun_finish'),
             'time_clear_finish': runner.get('time_clear_finish'),
             'finish_pace_avg': runner.get('finish_pace_avg'),

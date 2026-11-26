@@ -16,6 +16,14 @@ _KIDS = re.compile(r"^(мальчики|девочки)\s*(\d{4})\s*г\.?\s*р\.
 _AGE = re.compile(r"^(мужчины|женщины|м|ж|m)\s*(до\s*)?(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*(?:лет|года|год)?\s*(и\s*старше|\+)?$")
 
 
+def is_snow7_event(event_name: str) -> bool:
+    return (event_name or "").strip().casefold().replace("ё", "е") == "снежная семерка"
+
+
+def sex_standing_label(sex: str) -> str | None:
+    return {"Мужчина": "Мужчины", "Женщина": "Женщины"}.get(sex)
+
+
 def canonical_category(category) -> str:
     raw = str(category or "").strip()
     base = _PARENS.sub("", raw).strip()
