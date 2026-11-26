@@ -3,10 +3,10 @@ display_name: "Снежная семерка"
 year: 2026
 code: "snow7"
 is_active: false              # ← АКТИВНЫЙ забег: true у одного, false у остальных
-start_lat: null               # ← заполнить перед стартом
-start_lon: null               # ← заполнить перед стартом
-gun_time: null                # ← заполнить перед стартом
-description: "МСК \"Радуга\", Красноярск | Дистанция: 7 км (челночная)"
+start_lat: 56.029141          # старт/финиш — waypoint в GPX трассы 2026
+start_lon: 92.946724
+gun_time: "11:00:00"          # первый старт 06.12.2026, Красноярск
+description: "Татышев-парк, Триатлон-центр, Красноярск | Дистанция: 7 км"
 
 distances:
   - distance: "7 км"
@@ -14,10 +14,12 @@ distances:
     db_event_id: null         # ← заполнить перед стартом
     tracked: true
     has_start_list: true
-    checkpoint_distances: []
-    checkpoints: []           # ← заполнить перед стартом
-    gpx_file: "static/gpx/snow7.gpx"
-    event_date: null          # ← заполнить перед стартом
+    checkpoint_distances: [0, 7.0]  # промежуточных КТ нет
+    checkpoints:
+      - {name: "Старт", distance_km: 0.0, lat: 56.029141, lon: 92.946724}
+      - {name: "Финиш", distance_km: 7.0, lat: 56.029141, lon: 92.946724}
+    gpx_file: "static/map/2026/snow7.gpx"
+    event_date: "2026-12-06"
     route:
       laps: 4
       one_way_length_km: 1.75
@@ -34,6 +36,7 @@ distances:
     tracked: false
     has_start_list: true
     checkpoint_distances: []
+    event_date: "2026-12-06"
     route:
       laps: 1
       total_km: 2.0
