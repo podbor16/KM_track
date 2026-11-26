@@ -14,7 +14,7 @@ distances:
     db_event_id: 119
     tracked: true
     has_start_list: true
-    checkpoint_distances: [0, 7.0]  # промежуточных КТ нет
+    checkpoint_distances: [0, 3.5, 7.0]
     checkpoints:
       - {name: "Старт", distance_km: 0.0, lat: 56.029141, lon: 92.946724}
       - {name: "Финиш", distance_km: 7.0, lat: 56.029141, lon: 92.946724}
