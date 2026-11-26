@@ -3,6 +3,7 @@ HTML-страницы приложения KM_track.
 Все эндпоинты, возвращающие HTMLResponse (Jinja2 шаблоны).
 """
 
+import asyncio
 import hmac
 import logging
 from typing import Optional
@@ -15,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.config import settings
 from src.config.event_loader import get_event_by_name, get_event_by_db_id, get_history_enabled
+from src.krasmarafon.services.public_event_access import event_is_public
 from src.krasmarafon.services.diploma_service import get_diploma_data, get_participant_diploma_data, participant_phrase
 from src.krasmarafon.services.athlete_auth import cabinet_open
 from src.core.auth import (
@@ -121,6 +123,8 @@ async def _tracker_response(
 ):
     """Рендер страницы трекера с динамическим event_config."""
     event_cfg = _build_event_config(event_id=event_id, event_code=event_code)
+    if event_cfg["id"] and not await asyncio.to_thread(event_is_public, event_cfg["id"]):
+        raise HTTPException(status_code=404, detail="Результаты события недоступны")
     return templates.TemplateResponse(request, "krasmarafon/tracker.html", {
         "request": request,
         "event_title": event_cfg["title"],
@@ -231,6 +235,9 @@ async def participant_diploma_page(request: Request, lead_id: int):
     """Диплом участника дистанции без результатов (participant_only) — по
     заявке, а не по результату: только ФИ, остальное впечатано в фон."""
     lead = get_participant_diploma_data(lead_id)
+    if lead and (lead.get("event_id") is None
+                 or not await asyncio.to_thread(event_is_public, lead["event_id"])):
+        raise HTTPException(status_code=404, detail="Диплом недоступен")
     event_cfg, distance_cfg = get_event_by_db_id(settings.EVENTS, lead["event_id"]) if lead else (None, None)
     if (distance_cfg is None or distance_cfg.diploma is None
             or not distance_cfg.diploma.participant_only):
@@ -253,6 +260,8 @@ async def diploma_page(request: Request, event_id: int, bib: str):
     в конфиге события), поверх — ФИО/чистое время/места. Без авторизации
     и без общей шапки сайта — самостоятельная полноэкранная страница,
     можно переслать прямой ссылкой."""
+    if not await asyncio.to_thread(event_is_public, event_id):
+        raise HTTPException(status_code=404, detail="Диплом недоступен")
     event_cfg, distance_cfg = get_event_by_db_id(settings.EVENTS, event_id)
     if (event_cfg is None or distance_cfg is None or distance_cfg.diploma is None
             or distance_cfg.diploma.participant_only):

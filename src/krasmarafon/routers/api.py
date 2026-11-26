@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 
 from src.krasmarafon.services.notification_hub import tracker_hub, notification_hub
+from src.krasmarafon.services.public_event_access import event_is_public, event_name_year_is_public
 
 from src.config import settings
 from src.config.event_loader import (
@@ -46,6 +47,18 @@ from src.krasmarafon import services as _svc
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["API"])
+
+
+async def _require_public_event(event_id: int = None, event_name: str = None, year: int = None) -> None:
+    """Проверка перед публичной выдачей, включая ответы из кеша и SSE."""
+    if event_id is not None:
+        allowed = await asyncio.to_thread(event_is_public, event_id)
+    elif event_name and year is not None:
+        allowed = await asyncio.to_thread(event_name_year_is_public, event_name, year)
+    else:
+        raise HTTPException(status_code=400, detail="Укажите событие и год")
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Результаты события недоступны")
 
 
 # ============================================================================
@@ -105,6 +118,9 @@ async def get_current_event() -> CurrentEventResponse:
     event = events.get(code)
     if not event:
         raise HTTPException(status_code=404, detail=f"Event {code} not configured")
+    tracked = event.get_tracked()
+    if tracked and tracked.db_event_id is not None:
+        await _require_public_event(tracked.db_event_id)
     return build_current_event_response(event)
 
 
@@ -130,6 +146,9 @@ async def get_events() -> EventsListResponse:
     events_list = []
     for code, event in settings.EVENTS.items():
         tracked = event.get_tracked()
+        if tracked and tracked.db_event_id is not None:
+            if not await asyncio.to_thread(event_is_public, tracked.db_event_id):
+                continue
         events_list.append({
             "id": code,
             "name": event.name,
@@ -146,6 +165,8 @@ async def get_race_config(event: str = Query(settings.CURRENT_EVENT)) -> RaceCon
     if not event_cfg:
         raise HTTPException(status_code=404, detail=f"Event '{event}' not found")
     tracked = event_cfg.get_tracked()
+    if tracked and tracked.db_event_id is not None:
+        await _require_public_event(tracked.db_event_id)
     route = tracked.route if tracked else RouteConfig()
     route_type = 'shuttle' if route.laps > 1 else 'loop'
     return RaceConfig(
@@ -297,9 +318,12 @@ async def get_runner_segments(
     event: str = Query(settings.CURRENT_EVENT),
 ) -> SegmentsListResponse:
     """Все сегменты (контрольные точки) спортсмена."""
+    from src.krasmarafon.services.public_event_access import result_is_public
+    result_id = await asyncio.to_thread(_resolve_result_id, runner_id)
+    if not await asyncio.to_thread(result_is_public, result_id):
+        raise HTTPException(status_code=404, detail="Результат недоступен")
     try:
         from src.analytics.db_connection_optimized import get_result_segments
-        result_id = _resolve_result_id(runner_id)
         segments_data = get_result_segments(result_id) if result_id else []
         return _build_segments_response(runner_id, event, segments_data)
     except Exception as e:
@@ -313,9 +337,12 @@ async def get_runner_latest_segment(
     event: str = Query(settings.CURRENT_EVENT),
 ) -> SegmentsListResponse:
     """Последний завершённый сегмент спортсмена."""
+    from src.krasmarafon.services.public_event_access import result_is_public
+    result_id = await asyncio.to_thread(_resolve_result_id, runner_id)
+    if not await asyncio.to_thread(result_is_public, result_id):
+        raise HTTPException(status_code=404, detail="Результат недоступен")
     try:
         from src.analytics.db_connection_optimized import get_result_segments
-        result_id = _resolve_result_id(runner_id)
         segments_data = get_result_segments(result_id) if result_id else []
         last = [segments_data[-1]] if segments_data else []
         return _build_segments_response(runner_id, event, last)
@@ -439,6 +466,7 @@ async def get_event_results(
     from src.krasmarafon.services.results_service import (
         build_event_results, _json_cache, _response_cache_ts, RESPONSE_CACHE_TTL
     )
+    await _require_public_event(event_id, event_name, year)
     # Fast path: return pre-serialized JSON without Pydantic validation per-request
     _key = f"{event_id}|{event_name}|{year}"
     if _key in _json_cache and (time.time() - _response_cache_ts.get(_key, 0)) < RESPONSE_CACHE_TTL:
@@ -460,6 +488,9 @@ async def get_event_results(
 @router.get("/api/result-segments", response_model=list)
 async def get_result_segments_api(result_id: int = Query(...)) -> list:
     """Сегменты (контрольные точки) для конкретного result_id."""
+    from src.krasmarafon.services.public_event_access import result_is_public
+    if not await asyncio.to_thread(result_is_public, result_id):
+        raise HTTPException(status_code=404, detail="Результат недоступен")
     try:
         from src.analytics.db_connection_optimized import get_result_segments
         segments = await asyncio.get_event_loop().run_in_executor(
@@ -474,6 +505,7 @@ async def get_result_segments_api(result_id: int = Query(...)) -> list:
 @router.get("/api/event-segment-codes")
 async def get_event_segment_codes_api(event_id: int = Query(...)):
     """Список кодов сегментов для события (упорядочен по маршруту)."""
+    await _require_public_event(event_id)
     try:
         from src.analytics.db_results import get_event_segment_codes
         codes = get_event_segment_codes(event_id)
@@ -486,6 +518,7 @@ async def get_event_segment_codes_api(event_id: int = Query(...)):
 @router.get("/api/event-segment-rankings")
 async def get_event_segment_rankings_api(event_id: int = Query(...), segment_code: str = Query(...)):
     """Рейтинг участников по времени на конкретном сегменте маршрута."""
+    await _require_public_event(event_id)
     try:
         from src.analytics.db_results import get_event_segment_rankings
         rows = get_event_segment_rankings(event_id, segment_code)
@@ -520,6 +553,9 @@ async def get_race_stats_db(race_name: str = Query(None)):
 @router.get("/api/race-stats")
 async def get_race_stats(event_name: str = Query(None)):
     """Статистика по забегу из race_data.json (legacy)."""
+    from src.krasmarafon.services.public_event_access import event_name_is_public
+    if not await asyncio.to_thread(event_name_is_public, event_name):
+        raise HTTPException(status_code=404, detail="Статистика события недоступна")
     try:
         race_data_path = Path(settings.RACE_DATA_FILE)
         with open(race_data_path, 'r', encoding='utf-8') as f:
@@ -677,6 +713,7 @@ async def sse_tracker(request: Request, event_id: int = Query(..., description="
     поля, если оно уже попало в общую "базу сравнения" до его подключения.
     В Redis/tracker_hub гоняется полный снапшот (см. app.py: _build_full_payload).
     """
+    await _require_public_event(event_id)
     from src.krasmarafon.services.results_service import build_event_results
     queue = await tracker_hub.subscribe(event_id)
     prev_state: dict = {}

@@ -21,6 +21,7 @@ from .db_pool import (
 from src.common.cache import prune
 from src.krasmarafon.services.tilda_webhook import is_name_suspicious
 from src.krasmarafon.services.public_pd import mask_runner, PD_REFUSED_SQL
+from src.krasmarafon.services.public_event_access import PUBLIC_EVENT_SQL, local_today
 
 logger = logging.getLogger(__name__)
 
@@ -536,8 +537,9 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
     Группировка по дистанции (поддержка мультидистанционных событий типа «Жара»).
     """
     _now = time.time()
-    if event_name in _stats_cache and (_now - _stats_cache_ts.get(event_name, 0)) < STATS_CACHE_TTL:
-        return _stats_cache[event_name]
+    cache_key = (event_name, local_today())
+    if cache_key in _stats_cache and (_now - _stats_cache_ts.get(cache_key, 0)) < STATS_CACHE_TTL:
+        return _stats_cache[cache_key]
 
     logger.info(f"🔍 Получение статистики забега: {event_name}")
 
@@ -560,10 +562,10 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
                    {PD_REFUSED_SQL} AS pd_refused
             FROM results r
             INNER JOIN events e ON r.event_id = e.id
-            WHERE e.event_name = %s
+            WHERE e.event_name = %s AND {PUBLIC_EVENT_SQL}
             ORDER BY e.event_distance, e.event_year DESC
             """,
-            (event_name,)
+            (event_name, local_today())
         )
         all_results = cursor.fetchall()
         cursor.close()
@@ -692,8 +694,8 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
 
         logger.info(f"✅ Статистика загружена: {event_name}, дистанций: {len(distances_out)}")
         result = {'race_name': event_name, 'distances': distances_out}
-        _stats_cache[event_name] = result
-        _stats_cache_ts[event_name] = time.time()
+        _stats_cache[cache_key] = result
+        _stats_cache_ts[cache_key] = time.time()
         return result
 
     except Exception as e:
@@ -1738,10 +1740,11 @@ def get_results_years(event_name: str) -> List[Dict[str, Any]]:
         cur.execute(
             """
             SELECT e.event_year, e.id FROM events e
-            WHERE e.event_name = %s AND EXISTS (SELECT 1 FROM results r WHERE r.event_id = e.id)
+            WHERE e.event_name = %s AND (e.event_date IS NOT NULL AND DATE_ADD(e.event_date, INTERVAL 30 YEAR) > %s)
+              AND EXISTS (SELECT 1 FROM results r WHERE r.event_id = e.id)
             ORDER BY e.event_year DESC, e.event_distance ASC
             """,
-            (event_name,),
+            (event_name, local_today()),
         )
         years: Dict[int, List[int]] = {}
         for row in cur.fetchall():

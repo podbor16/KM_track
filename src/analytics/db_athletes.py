@@ -10,6 +10,7 @@ import logging
 from typing import Any, Dict, List, Tuple
 
 from src.krasmarafon.services.public_pd import PD_REFUSED_SQL
+from src.krasmarafon.services.public_event_access import PUBLIC_EVENT_SQL, local_today
 
 from .db_pool import get_pooled_connection
 
@@ -29,13 +30,15 @@ def search_clients_optimized(search_query: str, limit: int = 20) -> List[Dict[st
         cursor = connection.cursor(dictionary=True, buffered=True)
         cursor.execute(
             f"""SELECT c.id AS client_id, c.surname, c.name, c.birthday,
-                      (SELECT COUNT(*) FROM results r WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL}) AS events_count
+                      (SELECT COUNT(*) FROM results r JOIN events e ON e.id = r.event_id
+                       WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL} AND {PUBLIC_EVENT_SQL}) AS events_count
                FROM clients c
                WHERE c.id <> 0 AND (c.surname LIKE %s OR c.name LIKE %s)
-                 AND EXISTS (SELECT 1 FROM results r WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL})
+                 AND EXISTS (SELECT 1 FROM results r JOIN events e ON e.id = r.event_id
+                             WHERE r.client_id = c.id AND NOT {PD_REFUSED_SQL} AND {PUBLIC_EVENT_SQL})
                ORDER BY c.surname, c.name, c.birthday
                LIMIT %s""",
-            (term, term, int(limit)),
+            (local_today(), term, term, local_today(), int(limit)),
         )
         rows = cursor.fetchall()
         cursor.close()
@@ -68,10 +71,10 @@ def get_athlete_by_client(client_id: int) -> Tuple[Dict[str, Any], List[Dict[str
         cursor.execute(
             f"""SELECT r.*, e.event_name, e.event_distance, e.event_year, e.event_date
                FROM results r
-               LEFT JOIN events e ON r.event_id = e.id
-               WHERE r.client_id = %s AND NOT {PD_REFUSED_SQL}
+               INNER JOIN events e ON r.event_id = e.id
+               WHERE r.client_id = %s AND NOT {PD_REFUSED_SQL} AND {PUBLIC_EVENT_SQL}
                ORDER BY e.event_year DESC, e.event_date DESC, r.id DESC""",
-            (card["id"],),
+            (card["id"], local_today()),
         )
         results = [dict(r) for r in cursor.fetchall()]
         cursor.close()
