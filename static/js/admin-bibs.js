@@ -75,10 +75,10 @@ function renderBibsForm(data) {
             <button class="km-btn km-btn--secondary" onclick="closeBibsPanel()">Закрыть</button></div>
         <div class="dq-muted">Номер получает основная заявка человека (не дубль); уже присвоенные номера не меняются и не выдаются повторно.
             Диапазоны запоминаются для события. Если где-то не хватает номеров — ничего не записывается.</div>
-        ${data.snow7_starts ? `
-        <details id="snow7-starts" ontoggle="loadSnow7Starts(this)">
-            <summary>Номера и волны на 7 км</summary>
-            <div class="snow7-starts-content"></div>
+        ${data.snow7_bibs ? `
+        <details id="snow7-bibs" data-year="${bibsState.event_year}" ontoggle="loadSnow7Bibs(this)">
+            <summary>Назначить номер вручную на 7 км</summary>
+            <div class="snow7-bibs-content"></div>
         </details>` : ''}
         ${skipped}
         ${data.groups.length ? `
@@ -172,24 +172,20 @@ function closeBibsPanel() {
     adminSetExtra('bibs-open', null);
 }
 
-async function loadSnow7Starts(details) {
+async function loadSnow7Bibs(details) {
     if (!details.open) return;
-    const content = details.querySelector('.snow7-starts-content');
+    const content = details.querySelector('.snow7-bibs-content');
+    const eventYear = Number(details.dataset.year);
     content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
     try {
-        const { waves, entries } = await bibsRequest('/api/admin/bibs/snow7');
-        const options = waves.map(wave => ({
-            id: wave.id,
-            label: bibsEsc(`${wave.id} · ${wave.time} · ${wave.groups}`),
-        }));
+        const { entries } = await bibsRequest(`/api/admin/bibs/snow7?event_year=${eventYear}`);
         content.innerHTML = `
-            <p class="dq-muted">Выберите волну вручную. Время указано по Красноярску.</p>
             <label>Поиск по фамилии или номеру
                 <input type="search" class="admin-select snow7-search">
             </label>
             <div class="bibs-table-wrap">
                 <table class="admin-alerts-table bibs-table">
-                    <thead><tr><th>Участник</th><th>Пол</th><th>Год рождения</th><th>Номер</th><th>Волна</th><th></th></tr></thead>
+                    <thead><tr><th>Участник</th><th>Пол</th><th>Год рождения</th><th>Номер</th><th></th></tr></thead>
                     <tbody>${entries.map(entry => `
                         <tr data-lead-id="${entry.id}">
                             <td class="snow7-name">${bibsEsc([entry.surname, entry.name].filter(Boolean).join(' '))}</td>
@@ -197,11 +193,6 @@ async function loadSnow7Starts(details) {
                             <td>${bibsEsc(entry.birth_year || '—')}</td>
                             <td><input type="number" min="1" max="4294967295" class="admin-select snow7-number"
                                        aria-label="Стартовый номер" value="${bibsEsc(entry.start_number || '')}"></td>
-                            <td><select class="admin-select snow7-wave" aria-label="Стартовая волна">
-                                <option value="">Не назначена</option>
-                                ${options.map(({ id, label }) => `
-                                    <option value="${id}" ${id === entry.start_wave ? 'selected' : ''}>${label}</option>`).join('')}
-                            </select></td>
                             <td>
                                 <button type="button" class="km-btn km-btn--secondary snow7-save">Сохранить</button>
                                 <span class="dq-status" role="status"></span>
@@ -225,24 +216,23 @@ async function loadSnow7Starts(details) {
             content.querySelector('.snow7-empty').hidden = hasMatches;
         });
         for (const row of rows) {
-            row.querySelector('.snow7-save').addEventListener('click', () => saveSnow7Start(row));
+            row.querySelector('.snow7-save').addEventListener('click', () => saveSnow7Bib(row, eventYear));
         }
     } catch (err) {
         content.innerHTML = `<div class="admin-error">${bibsEsc(err.message)}</div>`;
     }
 }
 
-async function saveSnow7Start(row) {
+async function saveSnow7Bib(row, eventYear) {
     const number = row.querySelector('.snow7-number');
-    const wave = row.querySelector('.snow7-wave');
     const save = row.querySelector('.snow7-save');
     const status = row.querySelector('[role="status"]');
     if (!number.reportValidity()) return;
     const assignment = {
         start_number: number.value === '' ? null : Number(number.value),
-        start_wave: wave.value === '' ? null : Number(wave.value),
+        event_year: eventYear,
     };
-    number.disabled = wave.disabled = save.disabled = true;
+    number.disabled = save.disabled = true;
     status.className = 'dq-status';
     status.textContent = 'Сохранение…';
     try {
@@ -253,6 +243,6 @@ async function saveSnow7Start(row) {
     } catch (err) {
         status.textContent = err.message;
     } finally {
-        number.disabled = wave.disabled = save.disabled = false;
+        number.disabled = save.disabled = false;
     }
 }

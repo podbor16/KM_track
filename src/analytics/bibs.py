@@ -16,7 +16,7 @@ import json
 from datetime import datetime
 
 KIDS_EVENT = "Детский забег"
-SNOW7_2026 = ("Снежная семерка", 2026)
+SNOW7_EVENT = "Снежная семерка"
 NO_BIB_DISTANCES = {(KIDS_EVENT, "500 м")}
 
 
@@ -131,12 +131,14 @@ def plan(groups, ranges, taken):
 def load_leads(conn, event_name, event_year, *, for_update=False):
     cur = conn.cursor(dictionary=True)
     lock = " ORDER BY id FOR UPDATE" if for_update else ""
-    cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at, start_number, dup_main, is_elite
-                   FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""" + lock,
-                (event_name, int(event_year)))
-    rows = cur.fetchall()
-    cur.close()
-    return rows
+    try:
+        cur.execute("""SELECT id, client_id, event_id, event_distance, birthday, created_at,
+                              start_number, dup_main, is_elite, surname, name, sex
+                       FROM leads WHERE event_name = %s AND event_year = %s AND refund = 0""" + lock,
+                    (event_name, int(event_year)))
+        return cur.fetchall()
+    finally:
+        cur.close()
 
 
 def load_ranges(conn, event_name):
@@ -157,7 +159,7 @@ def overview(conn, event_name, event_year):
                    for g in groups],
         "skipped": sorted(d for e, d in NO_BIB_DISTANCES if e == event_name),
         "taken": len(taken),
-        "snow7_starts": (event_name, event_year) == SNOW7_2026,
+        "snow7_bibs": event_name == SNOW7_EVENT,
     }
 
 
@@ -189,7 +191,7 @@ def assign(conn, event_name, event_year, ranges, user):
             conn.commit()                              # каждый UPDATE фиксировался бы сам по себе
         conn.start_transaction()
         # Ручное назначение на Снежной блокирует тот же набор заявок.
-        leads = load_leads(conn, event_name, event_year, for_update=(event_name, event_year) == SNOW7_2026)
+        leads = load_leads(conn, event_name, event_year, for_update=event_name == SNOW7_EVENT)
         groups, taken = build_groups(event_name, leads)
         result, assignments, ok = plan(groups, ranges, taken)
         if not ok:

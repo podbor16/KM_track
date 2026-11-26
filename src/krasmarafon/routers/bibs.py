@@ -6,10 +6,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
-from mysql.connector import Error as MySQLError
 from pydantic import BaseModel, Field
 
-from src.analytics import bibs, snow7_starts
+from src.analytics import bibs, snow7_bibs
 from src.analytics.db_connection_optimized import get_pooled_connection
 from src.core.auth import api_require_auth
 
@@ -29,9 +28,9 @@ class BibsBody(BaseModel):
     ranges: list[RangeIn]
 
 
-class Snow7StartBody(BaseModel):
+class Snow7BibBody(BaseModel):
+    event_year: int
     start_number: int | None = Field(ge=1, le=4_294_967_295, strict=True)
-    start_wave: int | None = Field(ge=1, le=len(snow7_starts.WAVES), strict=True)
 
 
 def _ranges(body: BibsBody) -> dict:
@@ -44,12 +43,8 @@ def _with_conn(fn, *args):
         raise HTTPException(status_code=503, detail="Нет соединения с БД")
     try:
         return fn(conn, *args)
-    except snow7_starts.AssignmentConflict as exc:
+    except snow7_bibs.AssignmentConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except MySQLError as exc:
-        if exc.errno == 1054 and fn in (snow7_starts.overview, snow7_starts.assign):
-            raise HTTPException(status_code=503, detail="Для назначения волн нужна миграция базы данных.") from exc
-        raise
     finally:
         conn.close()
 
@@ -61,15 +56,13 @@ async def bibs_overview(event_name: str = Query(...), event_year: int = Query(..
 
 
 @router.get("/api/admin/bibs/snow7")
-async def snow7_start_overview(user: str = Depends(api_require_auth)) -> dict:
-    return await run_in_threadpool(_with_conn, snow7_starts.overview)
+async def snow7_bib_overview(event_year: int, user: str = Depends(api_require_auth)) -> dict:
+    return await run_in_threadpool(_with_conn, snow7_bibs.overview, event_year)
 
 
 @router.post("/api/admin/bibs/snow7/{lead_id}")
-async def snow7_start_assign(lead_id: int, body: Snow7StartBody, user: str = Depends(api_require_auth)) -> dict:
-    return await run_in_threadpool(
-        _with_conn, snow7_starts.assign, lead_id, body.start_number, body.start_wave, user,
-    )
+async def snow7_bib_assign(lead_id: int, body: Snow7BibBody, user: str = Depends(api_require_auth)) -> dict:
+    return await run_in_threadpool(_with_conn, snow7_bibs.assign, body.event_year, lead_id, body.start_number, user)
 
 
 @router.post("/api/admin/bibs/preview")
