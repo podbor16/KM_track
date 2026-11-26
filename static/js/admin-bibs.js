@@ -75,6 +75,11 @@ function renderBibsForm(data) {
             <button class="km-btn km-btn--secondary" onclick="closeBibsPanel()">Закрыть</button></div>
         <div class="dq-muted">Номер получает основная заявка человека (не дубль); уже присвоенные номера не меняются и не выдаются повторно.
             Диапазоны запоминаются для события. Если где-то не хватает номеров — ничего не записывается.</div>
+        ${data.snow7_bibs ? `
+        <details id="snow7-bibs" data-year="${bibsState.event_year}" ontoggle="loadSnow7Bibs(this)">
+            <summary>Назначить номер вручную на 7 км</summary>
+            <div class="snow7-bibs-content"></div>
+        </details>` : ''}
         ${skipped}
         ${data.groups.length ? `
         <div class="bibs-table-wrap"><table class="admin-alerts-table bibs-table">
@@ -165,4 +170,79 @@ function closeBibsPanel() {
     panel.innerHTML = '';
     bibsState = null;
     adminSetExtra('bibs-open', null);
+}
+
+async function loadSnow7Bibs(details) {
+    if (!details.open) return;
+    const content = details.querySelector('.snow7-bibs-content');
+    const eventYear = Number(details.dataset.year);
+    content.innerHTML = '<div class="admin-loading">Загрузка…</div>';
+    try {
+        const { entries } = await bibsRequest(`/api/admin/bibs/snow7?event_year=${eventYear}`);
+        content.innerHTML = `
+            <label>Поиск по фамилии или номеру
+                <input type="search" class="admin-select snow7-search">
+            </label>
+            <div class="bibs-table-wrap">
+                <table class="admin-alerts-table bibs-table">
+                    <thead><tr><th>Участник</th><th>Пол</th><th>Год рождения</th><th>Номер</th><th></th></tr></thead>
+                    <tbody>${entries.map(entry => `
+                        <tr data-lead-id="${entry.id}">
+                            <td class="snow7-name">${bibsEsc([entry.surname, entry.name].filter(Boolean).join(' '))}</td>
+                            <td>${bibsEsc(entry.sex || '—')}</td>
+                            <td>${bibsEsc(entry.birth_year || '—')}</td>
+                            <td><input type="number" min="1" max="4294967295" class="admin-select snow7-number"
+                                       aria-label="Стартовый номер" value="${bibsEsc(entry.start_number || '')}"></td>
+                            <td>
+                                <button type="button" class="km-btn km-btn--secondary snow7-save">Сохранить</button>
+                                <span class="dq-status" role="status"></span>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <p class="dq-muted snow7-empty" ${entries.length ? 'hidden' : ''}>Участники не найдены</p>`;
+        const rows = [...content.querySelectorAll('tbody tr')];
+        const search = content.querySelector('.snow7-search');
+        search.addEventListener('input', () => {
+            const term = search.value.trim().toLocaleLowerCase('ru');
+            let hasMatches = false;
+            for (const row of rows) {
+                const name = row.querySelector('.snow7-name').textContent.toLocaleLowerCase('ru');
+                const number = row.querySelector('.snow7-number').value;
+                row.hidden = !name.includes(term) && !number.includes(term);
+                hasMatches = hasMatches || !row.hidden;
+            }
+            content.querySelector('.snow7-empty').hidden = hasMatches;
+        });
+        for (const row of rows) {
+            row.querySelector('.snow7-save').addEventListener('click', () => saveSnow7Bib(row, eventYear));
+        }
+    } catch (err) {
+        content.innerHTML = `<div class="admin-error">${bibsEsc(err.message)}</div>`;
+    }
+}
+
+async function saveSnow7Bib(row, eventYear) {
+    const number = row.querySelector('.snow7-number');
+    const save = row.querySelector('.snow7-save');
+    const status = row.querySelector('[role="status"]');
+    if (!number.reportValidity()) return;
+    const assignment = {
+        start_number: number.value === '' ? null : Number(number.value),
+        event_year: eventYear,
+    };
+    number.disabled = save.disabled = true;
+    status.className = 'dq-status';
+    status.textContent = 'Сохранение…';
+    try {
+        await bibsRequest(`/api/admin/bibs/snow7/${row.dataset.leadId}`, assignment);
+        status.className = 'dq-status dq-status--ok';
+        status.textContent = 'Сохранено';
+        if (typeof loadLeads === 'function') loadLeads(true, _leadsData.length);
+    } catch (err) {
+        status.textContent = err.message;
+    } finally {
+        number.disabled = save.disabled = false;
+    }
 }

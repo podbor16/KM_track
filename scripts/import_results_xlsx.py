@@ -47,7 +47,7 @@ import openpyxl
 
 from scripts.import_boom_historical import get_connection
 from src.analytics.elite import ELITE_DISTANCES, distance_label, is_elite, is_pacer, main_ranges
-from src.common.categories import age_category, canonical_category
+from src.common.categories import age_category, canonical_category, is_snow7_event, sex_standing_label
 from src.common.names import normalize_person_name, normalize_sex
 
 SENTINEL = "1900-01-01"
@@ -384,15 +384,18 @@ def load_sportmaniacs(src):
     return json.loads(raw.decode("utf-8"))["data"]
 
 
-def rank(rows):
+def rank(rows, *, age_categories=True):
     fin = [r for r in rows if r["gun"]]
     for field, suffix in (("gun", ""), ("clean", "_clean")):
         order = sorted((r for r in fin if r[field]), key=lambda r: (r[field], r["start_number"]))
         by_sex, by_cat = collections.Counter(), collections.Counter()
         for n, r in enumerate(order, 1):
             by_sex[r["sex"]] += 1
-            by_cat[r["category"]] += 1
-            r["rank_absolute" + suffix], r["rank_sex" + suffix], r["rank_category" + suffix] = n, by_sex[r["sex"]], by_cat[r["category"]]
+            r["rank_absolute" + suffix] = n
+            r["rank_sex" + suffix] = by_sex[r["sex"]]
+            if age_categories:
+                by_cat[r["category"]] += 1
+                r["rank_category" + suffix] = by_cat[r["category"]]
 
 
 def _placeholder_bd(bd):
@@ -689,11 +692,15 @@ def main():
         if args.fio_cards:
             print(f"ДР из карточки клиента по ФИО: {fill_from_cards(cur, rows)}")
         year = int(ev[1])
+        snow7 = is_snow7_event(ev[0])
         bounds = tuple(int(x) for x in args.age_bounds.split(","))
         birth = lambda r: int(r["birthday"][:4]) if r["birthday"] != SENTINEL else r.get("birth_year")
         for r in rows:
             if args.sex and not r["sex"]:
                 r["sex"] = args.sex
+            if snow7:
+                r["category"] = sex_standing_label(r["sex"]) or ""
+                continue
             if args.kids_categories:                    # Детский на Sportmaniacs: группы по годам рождения
                 r["category"] = kids_category(r.get("raw_category", ""), r["sex"]) or r["category"]
             # Sportmaniacs: категория протокола заменяется, если есть чем — полом (Снежная) или возрастом по ДР;
@@ -714,7 +721,7 @@ def main():
             r["is_pacer"] = int(is_pacer(r["bib"]) or r["pacer_group"])
             if r["start_number"] is None:               # именной номер / «Элита» — служебный номер
                 r["start_number"], next_service = next_service, next_service + 1
-        rank(rows)
+        rank(rows, age_categories=not snow7)
         bibs = collections.Counter(r["start_number"] for r in rows)
         dup = [b for b, k in bibs.items() if k > 1]
         print(f"Строк: {len(rows)}, по статусам: {dict(collections.Counter(r['race_status'] for r in rows))}, "
