@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark" data-light-embed>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Siberman — спортсмен</title>
 <link rel="icon" href="/static/images/siberman/favicon.ico" sizes="any">
 <link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
-<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
+{% include "siberman/site_nav_head.html" %}
 </head>
 <body>
-{% with nav_section="rating", nav_detail=true, nav_theme=false, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
+{% with nav_section="rating", nav_detail=true, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 <div class="ath-top"><a href="/" data-siberman-back>← Результаты Siberman</a></div>
 {% if found %}
 <div class="hall ath" id="athlete" data-id="{{ slug }}"><div class="state-msg">Загрузка…</div></div>

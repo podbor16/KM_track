@@ -237,10 +237,10 @@
             .cp-table td { font-size: 11px; }
         }
     </style>
-<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
+{% include "siberman/site_nav_head.html" %}
 </head>
 <body>
-{% with nav_section="results", nav_detail=true, nav_theme=true, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
+{% with nav_section="results", nav_detail=true, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 
 <div class="sb-site-context"><a href="/?year={{ year }}" data-siberman-back>← Результаты {{ year }}</a></div>
 
@@ -251,8 +251,6 @@
 
 <script src="/static/js/siberman-common.js?v={{ v }}"></script>
 <script>
-siInitTheme();
-
 const BIB = {{ bib|tojson }};
 const YEAR = {{ year }};
 

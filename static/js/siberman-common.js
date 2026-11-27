@@ -7,23 +7,6 @@
  * между копиями (см. sessions/2026-07-09-siberman-gap.md).
  * ──────────────────────────────────────────────────────────────────────── */
 
-/* ──────────────── Theme ──────────────── */
-function siInitTheme() {
-    const saved = localStorage.getItem('siberman-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    const btn = document.getElementById('themeBtn');
-    if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
-}
-
-function toggleTheme() {
-    const cur = document.documentElement.getAttribute('data-theme');
-    const next = cur === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    const btn = document.getElementById('themeBtn');
-    if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
-    localStorage.setItem('siberman-theme', next);
-}
-
 /* ──────────────── Formatters ──────────────── */
 function fmtTime(s) {
     if (s == null) return '—';

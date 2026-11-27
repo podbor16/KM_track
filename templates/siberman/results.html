@@ -540,10 +540,10 @@
             .tabs-bar--sub .tab { padding: 7px 10px; font-size: 11px; }
         }
     </style>
-<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
+{% include "siberman/site_nav_head.html" %}
 </head>
 <body>
-{% with nav_section="results", nav_detail=false, nav_theme=true, nav_timer=true %}{% include "siberman/site_nav.html" %}{% endwith %}
+{% with nav_section="results", nav_detail=false, nav_timer=true %}{% include "siberman/site_nav.html" %}{% endwith %}
 
 <div class="sb-season-bar" id="seasonBar" hidden>
     <label for="resultSeason">Год гонки</label><select id="resultSeason"></select>
@@ -648,9 +648,6 @@ let _lastChartDatasets = []; // для лёгкого обновления сп�
 // _chartSheetOpen переживает render() так же, как _chartSelectedBibs, иначе
 // выбор чекбокса (который вызывает render()) закрывал бы шторку.
 let _chartSheetOpen = false;
-
-/* ──────────────── Theme ──────────────── */
-siInitTheme();
 
 /* ──────────────── Переход на страницу участника ──────────────── */
 function participantLink(bib) {

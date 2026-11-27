@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark" data-light-embed>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,10 +9,10 @@
 <link rel="stylesheet" href="/static/lib/leaflet-1.9.4/leaflet.css">
 <link rel="stylesheet" href="/static/lib/markercluster-1.5.3/MarkerCluster.css">
 <link rel="stylesheet" href="/static/css/siberman-hall.css?v={{ v }}">
-<link rel="stylesheet" href="/static/css/siberman-nav.css?v={{ v }}">
+{% include "siberman/site_nav_head.html" %}
 </head>
 <body>
-{% with nav_section="geo", nav_detail=false, nav_theme=false, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
+{% with nav_section="geo", nav_detail=false, nav_timer=false %}{% include "siberman/site_nav.html" %}{% endwith %}
 <div class="hall" id="geo">
   <h3>География участников</h3>
   <div class="geo-map"><div id="map"></div><div class="map-hint" id="map-hint">Двигайте карту двумя пальцами</div></div>
