@@ -91,6 +91,7 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     monkeypatch.setattr(service.edb, "admitted_for_draw", lambda conn, year: [entry])
     monkeypatch.setattr(service.ddb, "load_applicants", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_archive_results", lambda conn, year: [])
+    monkeypatch.setattr(service.ddb, "load_balance_decisions", lambda conn, ids: {})
     monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {
         2026: {"applicants": [{"id": 9, "person_id": 7, "draw_accumulated": 2, "payment_status": ""}],
                "picks": [], "config": {}, "offered": set()},

@@ -797,6 +797,7 @@ def chance_draft(year: int) -> bytes:
     conn = _connect()
     try:
         applicants = edb.admitted_for_draw(conn, year + 1)
+        balance_decisions = ddb.load_balance_decisions(conn, [entry["id"] for entry in applicants])
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
         archive_results = ddb.load_archive_results(conn, year)
@@ -889,6 +890,11 @@ def chance_draft(year: int) -> bytes:
                     person_id, archive_results, started, archive_years)
                 if archived_value is not None or any(r["person_id"] == person_id for r in archive_results):
                     acc_value, source, acc_issues = archived_value, archived_source, archived_issues
+            decision = balance_decisions.get(entry["id"])
+            if decision:
+                acc_value = int(decision["balance"])
+                source = f"Подтверждено организатором: {decision['reason']}"
+                acc_issues = []
             sources["draw_accumulated"] = source
             if acc_issues:
                 field_issues["draw_accumulated"] = "; ".join(acc_issues)
