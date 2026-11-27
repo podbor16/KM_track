@@ -506,6 +506,35 @@ def link_archive_draw(year: int, applicant_id: int, past_year: int, category: st
                         "WHERE draw_year=%s AND category=%s AND position=%s", (past_year, category, position))
             if cur.fetchone()[0] != person_id:
                 raise DrawError("Эта архивная позиция уже привязана к другому человеку")
+            source_group = category
+            if past_year == 2025:
+                person = pdb.get_person(conn, person_id)
+                cur.execute(
+                    "SELECT source_group, participant_name FROM siberman_draw_archive_results "
+                    "WHERE draw_year=2025 AND position=%s", (position,),
+                )
+                matching = [
+                    row[0] for row in cur.fetchall()
+                    if plain_key(*row[1].split()[:2]) == identity.name_key(person)
+                ]
+                if len(matching) != 1:
+                    raise DrawError("Проверьте раунд и личность архивной записи 2025")
+                source_group = matching[0]
+            if past_year in (2025, 2026, 2027):
+                cur.execute(
+                    "UPDATE siberman_draw_archive_results SET person_id=%s "
+                    "WHERE draw_year=%s AND source_group=%s AND position=%s "
+                    "AND (person_id IS NULL OR person_id=%s)",
+                    (person_id, past_year, source_group, position, person_id),
+                )
+                cur.execute(
+                    "SELECT person_id FROM siberman_draw_archive_results "
+                    "WHERE draw_year=%s AND source_group=%s AND position=%s",
+                    (past_year, source_group, position),
+                )
+                archived = cur.fetchone()
+                if not archived or archived[0] != person_id:
+                    raise DrawError("Архивная строка отсутствует или связана с другим человеком")
         ddb.audit(conn, year, applicant_id, "archive_identity", "", f"{past_year}/{category}/{position}", None, user)
         return {"ok": True}
     return _write(year, op)
