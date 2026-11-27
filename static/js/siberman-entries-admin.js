@@ -8,7 +8,7 @@ const entApi = () => `/api/siberman/admin/entries/${entYear}`;
 const ENT_STATUS = { review: '⌛️ на изучении', admitted: '✅ допущена', rejected: '❌ не соответствует',
                      withdrawn: '🚫 отказ от жеребьёвки' };
 const ENT_FORMAT = { individual: 'Личное', relay: 'Эстафета' };
-const ENT_IDENTITY = { review: 'Проверить личность', matched: 'ФИ и дата совпали',
+const ENT_IDENTITY = { review: 'Проверить личность', matched: 'Связано автоматически',
                        manual: 'Связь подтверждена', new: 'Новый участник подтверждён' };
 let ENT = null;
 const entEl = id => document.getElementById(id);
@@ -79,6 +79,33 @@ async function entSetComment(area) {
   } catch (err) { entMsg(`Комментарий не сохранён: ${err.message}`, 'err'); }
 }
 
+function entPersonLabel(p) {
+  return `#${p.id} · ${entEsc(p.surname + ' ' + p.name)} · ${entEsc(p.city_manual || p.city || '—')} · ${entEsc(p.birthdate || 'ДР неизвестна')}`;
+}
+
+function entIdentityPanel(e) {
+  const { candidates, person_id, state } = e.identity;
+  const current = candidates.find(p => p.id === person_id);
+  const selectable = candidates.filter(p => p.id !== person_id &&
+    (!e.birthdate || !p.birthdate || e.birthdate === p.birthdate));
+  const canCreate = e.birthdate && !person_id && !candidates.some(p => p.birthdate === e.birthdate);
+  const options = selectable.map(p => `<option value="${p.id}">${entPersonLabel(p)}</option>`).join('');
+  const action = options ? `<label>${current ? 'Другая карточка' : 'Карточка'}
+    <select id="ent-identity-person">${options}</select></label>
+    <button type="button" class="btn-small" onclick="entIdentity(${e.id}, 'link')">${current ? 'Сменить карточку' : 'Подтвердить связь'}</button>` : '';
+
+  return `<h4>Личность</h4>
+    <p>${ENT_IDENTITY[state]}${state === 'matched' ? ' · Имя, фамилия и дата рождения совпали' : ''}</p>
+    ${current ? `<p>Карточка ${entPersonLabel(current)}</p>` : ''}
+    ${!current && !candidates.length ? '<p class="muted">В реестре нет карточки с таким именем и фамилией.</p>' : ''}
+    ${!current && candidates.length && !options ? '<p class="muted">У найденных карточек другая дата рождения.</p>' : ''}
+    ${current && action ? `<details><summary>Выбрать другую карточку</summary>${action}</details>` : action}
+    ${canCreate ? `<button type="button" class="btn-small"
+      onclick="entIdentity(${e.id}, 'create')">Подтвердить нового участника</button>` : ''}
+    ${person_id ? `<button type="button" class="btn-small"
+      onclick="entIdentity(${e.id}, 'review')">Вернуть на проверку</button>` : ''}`;
+}
+
 async function entOpenCard(id) {
   try {
     const e = await entFetch(`/${id}`);
@@ -86,19 +113,10 @@ async function entOpenCard(id) {
     const audit = e.audit.map(a => `<li>${entDate(a.created_at)} · ${entEsc(a.admin_user)} · ${a.action === 'status' ? `${ENT_STATUS[a.old_value]} → ${ENT_STATUS[a.new_value]}`
       : a.action === 'identity' ? `личность: ${entEsc(a.old_value || 'проверка')} → ${entEsc(a.new_value || 'проверка')}`
         : `комментарий: «${entEsc(a.new_value)}»`}</li>`).join('');
-    const options = e.identity.candidates.map(p => `<option value="${p.id}"${p.id === e.identity.person_id ? ' selected' : ''}>
-      #${p.id} · ${entEsc(p.surname + ' ' + p.name)} · ${entEsc(p.city_manual || p.city || '—')} · ${entEsc(p.birthdate || 'ДР неизвестна')}</option>`).join('');
     entEl('ent-card').innerHTML = `<button class="btn-small" style="float:right" onclick="entEl('ent-card').hidden = true">×</button>
       <h3>${entEsc(e.surname + ' ' + e.name)}</h3>
       <p>${ENT_FORMAT[e.format]} · ${entEsc(e.city)} · ДР ${e.birthdate ? e.birthdate.split('-').reverse().join('.') : '—'}<br>${entEsc(e.email)} · ${entEsc(e.phone)}</p>${relay}
-      <h4>Личность</h4>
-      <p>${ENT_IDENTITY[e.identity.state]}${e.identity.person_id ? ` · #${e.identity.person_id}` : ''}</p>
-      ${options ? `<label>Карточка <select id="ent-identity-person">${options}</select></label>
-        <button type="button" class="btn-small" onclick="entIdentity(${e.id}, 'link')">Подтвердить связь</button>` : ''}
-      ${e.birthdate && !e.identity.person_id ? `<button type="button" class="btn-small"
-        onclick="entIdentity(${e.id}, 'create')">Подтвердить нового участника</button>` : ''}
-      ${e.identity.person_id ? `<button type="button" class="btn-small"
-        onclick="entIdentity(${e.id}, 'review')">Вернуть на проверку</button>` : ''}
+      ${entIdentityPanel(e)}
       ${e.wildcard_reason ? `<h4>Почему wild card</h4><div class="text">${entEsc(e.wildcard_reason)}</div>` : ''}
       ${e.results_text ? `<h4>О результатах</h4><div class="text">${entEsc(e.results_text)}</div>` : ''}
       ${entUrl(e.result_url) ? `<p><a href="${entEsc(entUrl(e.result_url))}" target="_blank" rel="noopener noreferrer">Ссылка на результаты</a></p>`

@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import date
 from io import BytesIO
 from unittest.mock import Mock
@@ -6,6 +7,7 @@ from openpyxl import load_workbook
 
 from src.siberman.draw import service
 from src.siberman.entries import identity
+from src.siberman.entries import service as entry_service
 
 
 def test_same_name_with_missing_or_conflicting_birthdate_is_not_linked():
@@ -19,6 +21,22 @@ def test_same_name_with_missing_or_conflicting_birthdate_is_not_linked():
     assert resolve(None) == {"person_id": None, "state": "review"}
     assert resolve(second["birthdate"], 1) == {"person_id": None, "state": "review"}
     assert resolve(second["birthdate"], 2) == {"person_id": 2, "state": "manual"}
+
+
+def test_confirming_an_already_saved_identity_is_a_noop(monkeypatch):
+    conn = object()
+    person = {"id": 7, "birthdate": date(1985, 1, 1)}
+    entry = {"id": 2, "birthdate": person["birthdate"]}
+    record = Mock()
+    monkeypatch.setattr(entry_service, "_db", lambda: nullcontext(conn))
+    monkeypatch.setattr(entry_service, "lock_people", lambda _: nullcontext())
+    monkeypatch.setattr(entry_service, "_entry", lambda *_: entry)
+    monkeypatch.setattr(entry_service.edb, "record_identity", record)
+    for state in ("manual", "new"):
+        decision = {2: {"person_id": 7, "state": state, "candidates": [person]}}
+        monkeypatch.setattr(identity, "decisions", lambda *_, **__: decision)
+        assert entry_service.set_identity(2029, 2, "link", 7, "test") == {"ok": True}
+    record.assert_not_called()
 
 
 def test_billing_uses_the_source_application_id_even_for_equal_names():

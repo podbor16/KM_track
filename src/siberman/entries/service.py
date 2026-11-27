@@ -157,6 +157,8 @@ def set_identity(year: int, entry_id: int, mode: str, person_id: int | None, use
                 raise EntryError("Такая личность уже есть. Выберите существующую карточку")
             person_id = identity.create_person(conn, e)
         elif mode == "link":
+            if person_id == before["person_id"] and before["state"] in ("manual", "new"):
+                return {"ok": True}
             person = pdb.get_person(conn, person_id) if person_id is not None else None
             if not person or person["id"] not in {p["id"] for p in before["candidates"]}:
                 raise EntryError("Выберите карточку из списка совпадений")
