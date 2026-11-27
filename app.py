@@ -320,8 +320,13 @@ async def lifespan(app: FastAPI):
                 async for message in pubsub.listen():
                     if message["type"] == "message":
                         payload = json.loads(message["data"].decode())
+                        if payload.get("type") == "pd_refused_changed":
+                            from src.krasmarafon.services.public_pd import invalidate_local_public_pd_caches
+                            invalidate_local_public_pd_caches()
                         await notification_hub.broadcast(
-                            payload["type"], payload.get("payload")
+                            payload["type"], payload.get("payload") or {
+                                key: value for key, value in payload.items() if key != "type"
+                            }
                         )
             except Exception as _e:
                 settings.logger.warning(f"[Redis] notification subscriber error, reconnecting: {_e}")

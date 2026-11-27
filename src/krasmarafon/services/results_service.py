@@ -60,6 +60,8 @@ CAT_SPEEDS_TTL = 600
 _response_cache: dict = {}
 _response_cache_ts: dict = {}
 _json_cache: dict = {}      # pre-serialized JSON string to avoid per-request Pydantic cost
+_public_pd_cache_epoch = 0
+_public_pd_cache_lock = threading.Lock()
 RESPONSE_CACHE_TTL = 5     # секунд до первого перестроения (live-режим: данные КТ должны быть свежими)
 STALE_TTL = 30             # секунд до принудительного синхронного перестроения
 
@@ -448,11 +450,15 @@ def _do_build(
 def _background_rebuild(resp_key: str, event_id, event_name, year, events):
     """Фоновое перестроение кеша без блокировки вызывающего потока."""
     try:
+        epoch = _public_pd_cache_epoch
         result = _do_build(event_id, event_name, year, events)
-        prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
-        _response_cache[resp_key] = result
-        _response_cache_ts[resp_key] = time.time()
-        _json_cache[resp_key] = result.model_dump_json()
+        with _public_pd_cache_lock:
+            if epoch != _public_pd_cache_epoch:
+                return
+            prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
+            _response_cache[resp_key] = result
+            _response_cache_ts[resp_key] = time.time()
+            _json_cache[resp_key] = result.model_dump_json()
         logger.info(f"Background rebuild done: {resp_key}")
     except Exception as e:
         logger.warning(f"Background rebuild error for {resp_key}: {e}")
@@ -509,9 +515,24 @@ def build_event_results(
         if _cached2 is not None and (_now2 - _response_cache_ts.get(_resp_key, 0)) < RESPONSE_CACHE_TTL:
             return _cached2
 
-        result = _do_build(event_id, event_name, year, events)
-        prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
-        _response_cache[_resp_key] = result
-        _response_cache_ts[_resp_key] = time.time()
-        _json_cache[_resp_key] = result.model_dump_json()
-        return result
+        while True:
+            epoch = _public_pd_cache_epoch
+            result = _do_build(event_id, event_name, year, events)
+            with _public_pd_cache_lock:
+                if epoch != _public_pd_cache_epoch:
+                    continue
+                prune(_response_cache_ts, STALE_TTL, _response_cache, _json_cache)
+                _response_cache[_resp_key] = result
+                _response_cache_ts[_resp_key] = time.time()
+                _json_cache[_resp_key] = result.model_dump_json()
+                return result
+
+
+def invalidate_public_pd_results_cache() -> None:
+    """Сброс публичных снимков после изменения согласия в этом воркере."""
+    global _public_pd_cache_epoch
+    with _public_pd_cache_lock:
+        _public_pd_cache_epoch += 1
+        _response_cache.clear()
+        _response_cache_ts.clear()
+        _json_cache.clear()

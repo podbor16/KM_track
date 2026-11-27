@@ -160,6 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 badge.style.display = 'block';
                 badge.textContent = '🟢 Появились новые финиши в текущем забеге';
             }
-        }
+        },
+        pd_refused_changed: () => window.location.reload()
     });
 });

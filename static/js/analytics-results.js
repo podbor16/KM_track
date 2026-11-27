@@ -208,6 +208,10 @@ async function initResultsPage() {
         results_updated: (msg) => {
             const ids = eventIdsFor(currentEvent, currentYear);
             if (!msg.event_id || ids.includes(msg.event_id)) loadRunnersData(true);
+        },
+        pd_refused_changed: (msg) => {
+            const ids = eventIdsFor(currentEvent, currentYear);
+            if (!msg.event_id || ids.includes(msg.event_id)) loadRunnersData(true);
         }
     });
 }

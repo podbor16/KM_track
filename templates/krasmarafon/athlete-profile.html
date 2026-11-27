@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="/static/css/athlete-profile.css?v={{ v }}">
     <link rel="stylesheet" href="/static/css/krasmarafon-footer.css?v={{ v }}">
     <script src="/static/lib/chart3/chart.min.js"></script>
+    <script src="/static/js/realtime.js?v={{ v }}"></script>
 </head>
 <body>
     {% include 'krasmarafon/header.html' %}
@@ -915,6 +916,9 @@
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', function() {
             loadAthleteProfile();
+            new SSEClient('/api/sse/notify', {
+                pd_refused_changed: () => window.location.reload()
+            });
         });
     </script>
 </body>

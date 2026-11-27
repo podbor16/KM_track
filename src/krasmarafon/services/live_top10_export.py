@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.krasmarafon.services.public_pd import PD_REFUSED_SQL, mask_runner
+from src.krasmarafon.services.public_event_access import is_within_publication_term
 
 _TOP_N = 3
 
@@ -93,11 +94,8 @@ def _build_checkpoint(connection, event_id: int, code: str, label: str, time_col
     }
 
 
-def generate_top10_json(connection, event_id: int, output_path: str) -> None:
-    """Собирает live-топ-3 (муж/жен) по всем отметкам события event_id и
-    атомарно перезаписывает JSON-файл по пути output_path (полностью
-    пишет во временный файл, затем os.replace() — читающая сторона
-    никогда не видит файл в момент записи наполовину)."""
+def build_top10_data(connection, event_id: int) -> Dict[str, Any]:
+    """Актуальный топ-3 из БД с учётом отказов от публикации ПД."""
     cur = connection.cursor(dictionary=True)
     try:
         cur.execute(
@@ -135,7 +133,8 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
         time_col="time_clear_finish",
     ))
 
-    data = {
+    return {
+        "event_id": event_id,
         "event_name": event["event_name"],
         "event_year": event["event_year"],
         "distance": distance_label,
@@ -143,8 +142,44 @@ def generate_top10_json(connection, event_id: int, output_path: str) -> None:
         "checkpoints": checkpoints,
     }
 
+
+def generate_top10_json(connection, event_id: int, output_path: str) -> None:
+    """Атомарно записывает снимок для загрузчика и внутренних потребителей."""
+    data = build_top10_data(connection, event_id)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     tmp_path = output_path + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, output_path)
+
+
+def current_public_top10(snapshot_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """Публичный ответ по текущему файлу трансляции: имена всегда читаются заново из БД."""
+    from src.analytics.db_pool import get_pooled_connection
+
+    snapshot = snapshot_path or Path(__file__).resolve().parents[3] / "live_data" / "zhara_top10.json"
+    if not snapshot.is_file():
+        return None
+    metadata = json.loads(snapshot.read_text(encoding="utf-8"))
+    conn = get_pooled_connection()
+    if not conn:
+        raise RuntimeError("БД недоступна")
+    try:
+        cur = conn.cursor(dictionary=True)
+        event_id = metadata.get("event_id")
+        if event_id is not None:
+            cur.execute("SELECT id, event_date FROM events WHERE id = %s", (event_id,))
+        else:  # файл, созданный до добавления event_id в JSON
+            distance = float(str(metadata.get("distance", "")).split()[0])
+            cur.execute(
+                "SELECT id, event_date FROM events WHERE event_name = %s AND event_year = %s "
+                "AND event_distance = %s LIMIT 1",
+                (metadata.get("event_name"), metadata.get("event_year"), distance),
+            )
+        event = cur.fetchone()
+        cur.close()
+        if not event or not is_within_publication_term(event["event_date"]):
+            return None
+        return build_top10_data(conn, event["id"])
+    finally:
+        conn.close()

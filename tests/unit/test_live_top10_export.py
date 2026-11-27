@@ -2,12 +2,48 @@
 отметкам для трансляции Жары. TIME-поля MySQL (mysql-connector) приходят
 как datetime.timedelta, не строки — см. _td_to_seconds()."""
 import json
-from datetime import timedelta
-from unittest.mock import MagicMock
+from datetime import date, timedelta
+from unittest.mock import MagicMock, patch
 
 from src.krasmarafon.services.live_top10_export import (
     _td_to_seconds, _seconds_to_time_str, _format_distance_label, _build_checkpoint,
 )
+
+
+def test_public_top10_rebuilds_from_db_instead_of_serving_stale_file(tmp_path):
+    from src.krasmarafon.services.live_top10_export import current_public_top10
+    snapshot = tmp_path / "zhara_top10.json"
+    snapshot.write_text(json.dumps({"event_id": 116, "checkpoints": [{"top3_male": [
+        {"full_name": "OLD NAME"}]}]}), encoding="utf-8")
+    conn = MagicMock()
+    conn.cursor.return_value.fetchone.return_value = {"id": 116, "event_date": date(2026, 8, 23)}
+    fresh = {"checkpoints": [{"top3_male": [{"full_name": "Спортсмен"}]}]}
+    with patch("src.analytics.db_pool.get_pooled_connection", return_value=conn), \
+         patch("src.krasmarafon.services.live_top10_export.build_top10_data", return_value=fresh):
+        assert current_public_top10(snapshot) == fresh
+
+
+def test_public_top10_hides_expired_event(tmp_path):
+    from src.krasmarafon.services.live_top10_export import current_public_top10
+    snapshot = tmp_path / "zhara_top10.json"
+    snapshot.write_text(json.dumps({"event_id": 116}), encoding="utf-8")
+    conn = MagicMock()
+    conn.cursor.return_value.fetchone.return_value = {"id": 116, "event_date": date(1990, 8, 23)}
+    with patch("src.analytics.db_pool.get_pooled_connection", return_value=conn):
+        assert current_public_top10(snapshot) is None
+
+
+def test_public_top10_accepts_older_snapshot_metadata(tmp_path):
+    from src.krasmarafon.services.live_top10_export import current_public_top10
+    snapshot = tmp_path / "zhara_top10.json"
+    snapshot.write_text(json.dumps({"event_name": "Жара", "event_year": 2026,
+                                    "distance": "21.1 км"}), encoding="utf-8")
+    conn = MagicMock()
+    conn.cursor.return_value.fetchone.return_value = {"id": 116, "event_date": date(2026, 8, 23)}
+    with patch("src.analytics.db_pool.get_pooled_connection", return_value=conn), \
+         patch("src.krasmarafon.services.live_top10_export.build_top10_data", return_value={"ok": True}):
+        assert current_public_top10(snapshot) == {"ok": True}
+    assert conn.cursor.return_value.execute.call_args.args[1] == ("Жара", 2026, 21.1)
 
 
 def test_td_to_seconds_converts_timedelta():

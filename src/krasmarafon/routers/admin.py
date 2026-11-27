@@ -565,9 +565,24 @@ async def mark_lead_elite(lead_id: int, elite: bool = True, user: str = Depends(
 async def mark_lead_pd_refused(lead_id: int, refused: bool = True, user: str = Depends(api_require_auth)) -> dict:
     """«Не согласен на ПД» / «Снять» (leads.pd_refused): на сайте вместо ФИ — «Спортсмен»."""
     from src.analytics.db_results import set_lead_pd_refused
+    from src.krasmarafon.services.public_pd import invalidate_local_public_pd_caches
 
-    if not await asyncio.get_event_loop().run_in_executor(None, lambda: set_lead_pd_refused(lead_id, refused, user)):
+    scope = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: set_lead_pd_refused(lead_id, refused, user))
+    if not scope:
         raise HTTPException(status_code=404, detail=f"Заявка {lead_id} не найдена")
+    invalidate_local_public_pd_caches()
+    try:
+        import redis.asyncio as aioredis
+        client = aioredis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
+        try:
+            await client.publish("tracker:notification", json.dumps({
+                "type": "pd_refused_changed", "event_id": scope["event_id"],
+            }))
+        finally:
+            await client.aclose()
+    except Exception as exc:
+        logger.warning("Не удалось разослать изменение согласия: %s", exc)
     return {"status": "ok"}
 
 

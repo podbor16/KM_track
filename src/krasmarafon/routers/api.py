@@ -20,7 +20,7 @@ _sse_initial_cache: dict[int, tuple[str, float]] = {}  # event_id → (json_str,
 _SSE_INITIAL_TTL = 3  # seconds
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException, Path as PathParam
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from src.krasmarafon.services.notification_hub import tracker_hub, notification_hub
@@ -278,13 +278,9 @@ async def get_selected_runners(
 # СЕГМЕНТЫ РЕЗУЛЬТАТОВ (SEGMENTS)
 # ============================================================================
 
-def _resolve_result_id(runner_id: int) -> Optional[int]:
-    """Конвертирует client_id в result_id через БД."""
-    from src.analytics.db_connection_optimized import find_result_by_client_id
-    result_row = find_result_by_client_id(runner_id)
-    if result_row:
-        return result_row.get('id') or result_row.get('result_id')
-    return int(runner_id)  # fallback: treat as result_id directly
+def _resolve_result_id(runner_id: int) -> int:
+    """Публичные сегменты принимают только result_id: client_id раскрыл бы скрытое участие."""
+    return int(runner_id)
 
 
 def _build_segments_response(runner_id: int, event: str, segments_data: list, success: bool = True, message: str = None):
@@ -632,6 +628,16 @@ async def get_race_stats(event_name: str = Query(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/live-top10")
+async def get_live_top10():
+    """Те же данные трансляции, но с актуальным флагом отказа и сроком публикации."""
+    from src.krasmarafon.services.live_top10_export import current_public_top10
+    data = await asyncio.to_thread(current_public_top10)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Трансляция недоступна")
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
 # ============================================================================
 # DATALENS
 # ============================================================================
@@ -695,7 +701,8 @@ async def fetch_race_data_now():
 _TRACKER_DELTA_KEYS = (
     'last_kt_unix_ms', 'race_status', 'status',
     'rank_absolute', 'rank_sex', 'rank_category', 'time_gun_finish',
-    'current_distance',
+    'current_distance', 'surname', 'name', 'full_name',
+    'birthday', 'birth_year', 'client_id', 'city', 'club',
 )
 
 

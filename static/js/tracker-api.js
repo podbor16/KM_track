@@ -767,7 +767,6 @@ function startAutoUpdate() {
     let isProcessing = false;
 
     source.onmessage = async (e) => {
-        updateSelectedList();
         const distLabel = CONFIG.CURRENT_DISTANCE ? ` | ${CONFIG.CURRENT_DISTANCE}` : '';
         updateStatus(`Обновлено ${new Date().toLocaleTimeString('ru-RU', { timeZone: 'Asia/Krasnoyarsk' })} | ${CONFIG.EVENT_DISPLAY_NAME || CONFIG.EVENT_DB_NAME} ${CONFIG.EVENT_YEAR}${distLabel}`);
 
@@ -775,7 +774,11 @@ function startAutoUpdate() {
         isProcessing = true;
         try {
             const data = JSON.parse(e.data);
+            const previousNames = new Map(allRunners.map(r => [String(r.id), r.full_name]));
             _applyRunnerData(data);
+            const identityChanged = (data.results || []).some(r =>
+                previousNames.has(String(r.id)) && previousNames.get(String(r.id)) !== r.full_name);
+            updateSelectedList();
             // Обновляем панель активного участника если он среди изменившихся
             if (activeRunnerId) {
                 const inDelta = data.initial !== false ||
@@ -791,7 +794,7 @@ function startAutoUpdate() {
             }
             // Обновляем аналитику не чаще раза в 10 сек
             const _now = Date.now();
-            if (_now - _lastAnalyticsRefresh > 10000) {
+            if (identityChanged || _now - _lastAnalyticsRefresh > 10000) {
                 _lastAnalyticsRefresh = _now;
                 refreshAnalyticsFromMemory();
             }
@@ -805,6 +808,20 @@ function startAutoUpdate() {
     source.onerror = () => {
         updateStatus('SSE: переподключение...');
     };
+
+    new SSEClient('/api/sse/notify', {
+        pd_refused_changed: async (msg) => {
+            if (msg.event_id && Number(msg.event_id) !== Number(CONFIG.EVENT_ID)) return;
+            await loadAllRunners();
+            updateSelectedList();
+            refreshAnalyticsFromMemory();
+            if (activeRunnerId) {
+                const runner = allRunners.find(r => String(r.id) === activeRunnerId);
+                const content = document.getElementById('runner-panel-content');
+                if (runner && content) content.innerHTML = buildPopupContent(runner);
+            }
+        }
+    });
 
     console.log(`[SSE] Трекер подключён: event_id=${CONFIG.EVENT_ID}`);
 }

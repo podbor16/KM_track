@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import datetime
+import threading
 from typing import Optional, List, Dict, Any
 
 from mysql.connector import Error
@@ -32,7 +33,20 @@ logger = logging.getLogger(__name__)
 
 _results_cache: dict = {}
 _results_cache_ts: dict = {}
+_pd_results_epoch = 0
+_pd_results_cache_lock = threading.Lock()
 RESULTS_CACHE_TTL = 5  # секунд — короткий TTL для live-данных КТ
+
+
+def invalidate_public_pd_result_rows() -> None:
+    """Сбрасывает сырые снимки; начатый до отказа SELECT не вернёт их в кеш."""
+    global _pd_results_epoch
+    with _pd_results_cache_lock:
+        _pd_results_epoch += 1
+        _results_cache.clear()
+        _results_cache_ts.clear()
+        _stats_cache.clear()
+        _stats_cache_ts.clear()
 
 _segments_cache: dict[int, list] = {}
 _segments_cache_ts: dict[int, float] = {}
@@ -59,6 +73,7 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
     _now = time.time()
     if event_id in _results_cache and (_now - _results_cache_ts.get(event_id, 0)) < RESULTS_CACHE_TTL:
         return _results_cache[event_id]
+    epoch = _pd_results_epoch
 
     logger.info(f"🔍 Загрузка результатов для event_id={event_id}")
 
@@ -134,10 +149,13 @@ def get_race_results_by_event_id(event_id: int) -> List[Dict[str, Any]]:
 
         results_list = [dict(r) for r in results] if results else []
         logger.info(f"✅ Найдено {len(results_list)} результатов для event_id={event_id}")
-        prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
-        _results_cache[event_id] = results_list
-        _results_cache_ts[event_id] = time.time()
-        return results_list
+        with _pd_results_cache_lock:
+            if epoch == _pd_results_epoch:
+                prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
+                _results_cache[event_id] = results_list
+                _results_cache_ts[event_id] = time.time()
+                return results_list
+        return get_race_results_by_event_id(event_id)
 
     except Exception as e:
         logger.error(f"❌ Ошибка при получении результатов: {e}")
@@ -160,6 +178,7 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
     _now = time.time()
     if _cache_key in _results_cache and (_now - _results_cache_ts.get(_cache_key, 0)) < RESULTS_CACHE_TTL:
         return _results_cache[_cache_key]
+    epoch = _pd_results_epoch
 
     logger.info(f"🔍 Загрузка результатов для {event_name} {year}")
 
@@ -230,10 +249,13 @@ def get_race_results_by_event_id_and_year(event_name: str, year: int) -> List[Di
         if results:
             results_list = [dict(r) for r in results]
             logger.info(f"✅ Найдено {len(results_list)} результатов для {event_name} {year}")
-            prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
-            _results_cache[_cache_key] = results_list
-            _results_cache_ts[_cache_key] = time.time()
-            return results_list
+            with _pd_results_cache_lock:
+                if epoch == _pd_results_epoch:
+                    prune(_results_cache_ts, RESULTS_CACHE_TTL, _results_cache)
+                    _results_cache[_cache_key] = results_list
+                    _results_cache_ts[_cache_key] = time.time()
+                    return results_list
+            return get_race_results_by_event_id_and_year(event_name, year)
         else:
             logger.warning(f"⚠️ Результаты не найдены для {event_name} {year}")
             return []
@@ -540,6 +562,7 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
     cache_key = (event_name, local_today())
     if cache_key in _stats_cache and (_now - _stats_cache_ts.get(cache_key, 0)) < STATS_CACHE_TTL:
         return _stats_cache[cache_key]
+    epoch = _pd_results_epoch
 
     logger.info(f"🔍 Получение статистики забега: {event_name}")
 
@@ -694,9 +717,12 @@ def get_race_stats_from_db(event_name: str) -> Dict[str, Any]:
 
         logger.info(f"✅ Статистика загружена: {event_name}, дистанций: {len(distances_out)}")
         result = {'race_name': event_name, 'distances': distances_out}
-        _stats_cache[cache_key] = result
-        _stats_cache_ts[cache_key] = time.time()
-        return result
+        with _pd_results_cache_lock:
+            if epoch == _pd_results_epoch:
+                _stats_cache[cache_key] = result
+                _stats_cache_ts[cache_key] = time.time()
+                return result
+        return get_race_stats_from_db(event_name)
 
     except Exception as e:
         logger.error(f"❌ Ошибка получения статистики: {e}\n{repr(e)}")
@@ -2073,16 +2099,17 @@ def set_lead_elite(lead_id: int, elite: bool) -> bool:
         conn.close()
 
 
-def set_lead_pd_refused(lead_id: int, refused: bool, user: str) -> bool:
+def set_lead_pd_refused(lead_id: int, refused: bool, user: str) -> dict | bool:
     """Кнопка «Не согласен на ПД» / «Снять» (leads.pd_refused): на публичных страницах этого события
-    вместо ФИ — «Спортсмен». Изменение — в журнал dq_actions. Кеши результатов истекают сами (до минуты)."""
+    вместо ФИ — «Спортсмен». Изменение — в журнал dq_actions."""
     conn = get_pooled_connection()
     if not conn:
         return False
     try:
         cur = conn.cursor()
-        cur.execute("SELECT 1 FROM leads WHERE id = %s", (lead_id,))
-        if cur.fetchone() is None:
+        cur.execute("SELECT event_id FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+        if row is None:
             return False
         cur.execute("UPDATE leads SET pd_refused = %s WHERE id = %s", (int(refused), lead_id))
         cur.execute("INSERT INTO dq_actions (action, finding_key, details, done_by) VALUES (%s, %s, %s, %s)",
@@ -2090,7 +2117,7 @@ def set_lead_pd_refused(lead_id: int, refused: bool, user: str) -> bool:
         conn.commit()
         cur.close()
         invalidate_start_list_cache()
-        return True
+        return {"event_id": row[0]}
     finally:
         conn.close()
 

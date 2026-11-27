@@ -2,13 +2,14 @@
 from src.krasmarafon.services.public_pd import PLACEHOLDER, mask_runner
 
 ROW = {"surname": "Иванов", "name": "Иван", "full_name": "Иванов Иван", "birthday": "1990-01-01",
-       "client_id": 5, "start_number": 101, "sex": "Мужчина", "category": "М", "rank_absolute": 3}
+       "client_id": 5, "city": "Город", "club": "Клуб", "start_number": 101,
+       "sex": "Мужчина", "category": "М", "rank_absolute": 3}
 
 
 def test_refused_hides_name_birthday_card():
     out = mask_runner(ROW, True)
     assert (out["surname"], out["name"], out["full_name"]) == (PLACEHOLDER, "", PLACEHOLDER)
-    assert out["birthday"] is None and out["client_id"] is None
+    assert all(out[key] is None for key in ("birthday", "client_id", "city", "club"))
     assert (out["start_number"], out["sex"], out["category"], out["rank_absolute"]) == (101, "Мужчина", "М", 3)
 
 
