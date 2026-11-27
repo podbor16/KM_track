@@ -730,6 +730,39 @@ def _accumulated_for(history: dict, person_id: int | None, *, is_new: bool,
     return value, source, issues
 
 
+def _archived_accumulated(person_id: int, rows: list[dict], started: set[tuple],
+                          archive_years: set[int]) -> tuple[int | None, str, list[str]]:
+    """Rebuild a balance from the first draw in 2025 when all outcomes are known."""
+    personal = [row for row in rows if row["person_id"] == person_id]
+    if not personal:
+        return None, "нет подтверждённой архивной жеребьёвки", [
+            "нет подтверждённой предыдущей жеребьёвки с известным итогом"]
+    by_year = defaultdict(list)
+    for row in personal:
+        by_year[int(row["draw_year"])].append(row)
+    if any(len(items) != 1 for items in by_year.values()):
+        return None, "несколько записей одного человека за год", [
+            "история архивных жеребьёвок неоднозначна"]
+    balance = 0
+    sources = ["До первой жеребьёвки 2025 накопленных шансов — 0."]
+    for year, items in sorted(by_year.items()):
+        outcome = items[0]["outcome"]
+        if outcome == "no_offer":
+            balance += 1
+            sources.append(f"Жеребьёвка {year}: слот не предложен, +1.")
+        elif outcome == "unpaid":
+            sources.append(f"Жеребьёвка {year}: не оплатил, без изменения.")
+        elif year not in archive_years:
+            return None, " ".join(sources), [f"нет результата Siberman {year} после оплаты"]
+        elif (person_id, year) in started:
+            balance = 0
+            sources.append(f"Жеребьёвка {year}: оплатил и стартовал, обнуление.")
+        else:
+            balance += 1
+            sources.append(f"Жеребьёвка {year}: оплатил и не стартовал, +1.")
+    return balance, " ".join(sources), []
+
+
 def chance_draft(year: int) -> bytes:
     """Excel-черновик для допущенных заявок race year N+1; ничего не записывает в draw_* таблицы."""
     conn = _connect()
@@ -737,6 +770,7 @@ def chance_draft(year: int) -> bytes:
         applicants = edb.admitted_for_draw(conn, year + 1)
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
+        archive_results = ddb.load_archive_results(conn, year)
         identities = identity.decisions(conn, applicants, include_candidates=True)
         external_links = ddb.load_external_start_links(conn)
         archived_draws = ddb.archive_draw_years(conn, year)
@@ -819,6 +853,13 @@ def chance_draft(year: int) -> bytes:
             acc_value, source, acc_issues = _accumulated_for(
                 history, person_id, is_new=resolved["state"] == "new",
                 archived_draws=archived_draws.get(person_id, []), started=started, archive_years=archive_years)
+            if acc_value is None and person_id is not None and not any(
+                a.get("person_id") == person_id for batch in history.values() for a in batch["applicants"]
+            ):
+                archived_value, archived_source, archived_issues = _archived_accumulated(
+                    person_id, archive_results, started, archive_years)
+                if archived_value is not None or any(r["person_id"] == person_id for r in archive_results):
+                    acc_value, source, acc_issues = archived_value, archived_source, archived_issues
             sources["draw_accumulated"] = source
             if acc_issues:
                 field_issues["draw_accumulated"] = "; ".join(acc_issues)

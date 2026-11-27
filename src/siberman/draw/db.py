@@ -111,6 +111,16 @@ def load_chance_history(conn, before_year: int) -> dict:
     return by_year
 
 
+def load_archive_results(conn, before_year: int) -> list[dict]:
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute(
+            "SELECT draw_year, source_group, position, participant_name, outcome, person_id "
+            "FROM siberman_draw_archive_results WHERE draw_year < %s "
+            "ORDER BY draw_year, source_group, position", (before_year,)
+        )
+        return cur.fetchall()
+
+
 def load_picks(conn, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT *, UNIX_TIMESTAMP(created_at) AS created_at_epoch "

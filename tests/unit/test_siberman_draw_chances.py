@@ -90,6 +90,7 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     monkeypatch.setattr(service, "_connect", Mock())
     monkeypatch.setattr(service.edb, "admitted_for_draw", lambda conn, year: [entry])
     monkeypatch.setattr(service.ddb, "load_applicants", lambda conn, year: [])
+    monkeypatch.setattr(service.ddb, "load_archive_results", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {
         2026: {"applicants": [{"id": 9, "person_id": 7, "draw_accumulated": 2, "payment_status": ""}],
                "picks": [], "config": {}, "offered": set()},
@@ -126,3 +127,18 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     assert "тату Siberman нет" in cells[EXTRA_COLS["tattoo"]].comment.text
     assert cells[COL_EXTRA].comment and cells[COL_TOTAL].comment
     assert parse_applicants(data)[1]
+
+
+def test_archive_balance_starts_at_zero_and_waits_for_paid_race_result():
+    rows = [
+        {"person_id": 7, "draw_year": 2025, "outcome": "no_offer"},
+        {"person_id": 7, "draw_year": 2026, "outcome": "unpaid"},
+        {"person_id": 7, "draw_year": 2027, "outcome": "paid"},
+    ]
+    balance, _, issues = service._archived_accumulated(7, rows, set(), {2025, 2026})
+    assert balance is None
+    assert issues == ["нет результата Siberman 2027 после оплаты"]
+
+    balance, _, issues = service._archived_accumulated(7, rows, {(7, 2027)}, {2025, 2026, 2027})
+    assert balance == 0
+    assert issues == []
