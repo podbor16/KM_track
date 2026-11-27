@@ -802,6 +802,9 @@ def chance_draft(year: int) -> bytes:
         history = ddb.load_chance_history(conn, year)
         archive_results = ddb.load_archive_results(conn, year)
         identities = identity.decisions(conn, applicants, include_candidates=True)
+        people = pdb.get_persons(
+            conn, [result["person_id"] for result in identities.values() if result["person_id"] is not None]
+        )
         external_links = ddb.load_external_start_links(conn)
         archived_draws = ddb.archive_draw_years(conn, year)
         archive = hall_data.load_entries(conn)
@@ -903,11 +906,15 @@ def chance_draft(year: int) -> bytes:
         if past_draws is not None:
             sources["draw_accumulated"] += f"; число участий в жеребьёвках по анкете: {past_draws}"
 
-        local, local_source = local_value(entry.get("city") or "", regions)
+        confirmed_city = (people.get(person_id) or {}).get("city_manual") or ""
+        city = confirmed_city or entry.get("city") or ""
+        local, local_source = local_value(city, regions)
+        if confirmed_city:
+            local_source += "; город подтверждён в карточке участника"
         sources["is_local"] = local_source
         reported["is_local"] = _chance_count(raw, "is_local")
         if local is None:
-            issues.append(f"город «{entry.get('city') or '—'}» требует классификации")
+            issues.append(f"город «{city or '—'}» требует классификации")
 
         person = next((candidate for candidate in resolved["candidates"] if candidate["id"] == person_id), None)
         birthdate = (person["birthdate"] or entry.get("birthdate")) if person else None
@@ -942,7 +949,7 @@ def chance_draft(year: int) -> bytes:
 
         rows.append({
             "entry_id": entry["id"], "fio": fio, "format": entry["format"],
-            "gender": entry.get("gender"), "city": entry.get("city"),
+            "gender": entry.get("gender"), "city": city,
             "relay_swim": entry.get("relay_swim"), "relay_bike": entry.get("relay_bike"),
             "relay_run": entry.get("relay_run"),
             "extras": {**counts, **external, "draw_accumulated": acc_value, "is_local": local, "tattoo": tattoo},

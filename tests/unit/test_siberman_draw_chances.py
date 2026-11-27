@@ -7,7 +7,7 @@ from openpyxl import load_workbook
 
 from src.siberman.draw import service
 from src.siberman.draw.chances import MAIN_COLUMNS, READY_COLUMN, external_start_bonus
-from src.siberman.draw.importer import COL_EXTRA, COL_TOTAL, EXTRA_COLS, parse_applicants
+from src.siberman.draw.importer import COL_CITY, COL_EXTRA, COL_TOTAL, EXTRA_COLS, parse_applicants
 from src.siberman import external_starts
 from src.siberman.persons.linking import plain_key
 
@@ -85,13 +85,14 @@ def test_confirmed_relay_links_count_once_per_event_without_assigning_team_birth
 
 
 def test_chance_draft_writes_external_values_and_requires_review_for_unverified_starts(monkeypatch):
-    entry = dict(NAME, id=3, birthdate=DOB, format="relay", city="Красноярск", gender="M",
+    entry = dict(NAME, id=3, birthdate=DOB, format="relay", city="Красноярск - Москва", gender="M",
                  raw={"222_starts": "1", "24h_starts": "2", "tattoo": "нет"})
     monkeypatch.setattr(service, "_connect", Mock())
     monkeypatch.setattr(service.edb, "admitted_for_draw", lambda conn, year: [entry])
     monkeypatch.setattr(service.ddb, "load_applicants", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_archive_results", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_balance_decisions", lambda conn, ids: {})
+    monkeypatch.setattr(service.pdb, "get_persons", lambda conn, ids: {7: {"city_manual": "Красноярск"}})
     monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {
         2026: {"applicants": [{"id": 9, "person_id": 7, "draw_accumulated": 2, "payment_status": ""}],
                "picks": [], "config": {}, "offered": set()},
@@ -115,6 +116,7 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     assert cells[EXTRA_COLS["duathlon_222"]].value == 1
     assert cells[EXTRA_COLS["race_24h"]].value is None
     assert cells[EXTRA_COLS["draw_accumulated"]].value == 3
+    assert cells[COL_CITY].value == "Красноярск"
     assert cells[COL_EXTRA].data_type == cells[COL_TOTAL].data_type == "f"
     assert cells[READY_COLUMN].value == "ПРОВЕРИТЬ"
     assert sheet.max_row == 2
