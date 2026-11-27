@@ -798,6 +798,7 @@ def chance_draft(year: int) -> bytes:
     try:
         applicants = edb.admitted_for_draw(conn, year + 1)
         balance_decisions = ddb.load_balance_decisions(conn, [entry["id"] for entry in applicants])
+        chance_reviews = ddb.load_entry_chance_reviews(conn, [entry["id"] for entry in applicants])
         current = ddb.load_applicants(conn, year)
         history = ddb.load_chance_history(conn, year)
         archive_results = ddb.load_archive_results(conn, year)
@@ -828,7 +829,7 @@ def chance_draft(year: int) -> bytes:
         fio = f"{entry['surname']} {entry['name']}".strip()
         key = plain_key(entry["surname"], entry["name"])
         raw = entry.get("raw") or {}
-        issues, sources, reported, field_issues = [], {}, {}, {}
+        issues, sources, reported, field_issues, review_notes = [], {}, {}, {}, {}
         resolved = identities[entry["id"]]
         person_id = resolved["person_id"]
         if person_id is None:
@@ -871,7 +872,13 @@ def chance_draft(year: int) -> bytes:
             if value is None:
                 issues.append(f"не удалось подтвердить историю стартов Siberman ({fmt})")
             elif reported[field] is not None and reported[field] != value:
-                issues.append(f"ответ формы по {field} не совпал с архивом")
+                review = chance_reviews.get((entry["id"], field))
+                if review and int(review["confirmed_value"]) == value:
+                    review_notes[field] = review["note"]
+                else:
+                    reason = f"ответ формы по {field} не совпал с архивом"
+                    field_issues[field] = reason
+                    issues.append(reason)
 
         current_matches = [a for a in current if person_id is not None and a.get("person_id") == person_id
                            and a["format"] == entry["format"] and a.get("entry_id") in (None, entry["id"])]
@@ -954,6 +961,7 @@ def chance_draft(year: int) -> bytes:
             "relay_run": entry.get("relay_run"),
             "extras": {**counts, **external, "draw_accumulated": acc_value, "is_local": local, "tattoo": tattoo},
             "sources": sources, "reported": reported, "issues": issues, "field_issues": field_issues,
+            "review_notes": review_notes,
         })
     return build_chances_workbook(rows)
 

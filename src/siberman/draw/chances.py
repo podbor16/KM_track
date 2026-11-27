@@ -218,30 +218,39 @@ def build_workbook(rows: list[dict]) -> bytes:
         total_cell.comment = Comment("Один базовый шанс плюс сумма дополнительных шансов.", "KM_track")
         ready_cell = ws.cell(row=row_no, column=MAIN_COLUMNS.index(READY_COLUMN) + 1)
         ready_cell.fill = ready_fill if complete else bad_fill
+        ready_cell.comment = Comment(
+            "Все показатели рассчитаны и сверены." if complete else "\n".join(checks) or "Заполните недостающие показатели.",
+            "KM_track",
+        )
 
         for key, label in EXTRA_LABELS.items():
             result = as_count(extras.get(key))
             reported = item.get("reported", {}).get(key)
             source = item.get("sources", {}).get(key, "неизвестно")
-            messages = checks
+            reason = item.get("field_issues", {}).get(key)
+            confirmation = item.get("review_notes", {}).get(key)
             note = source
-            if reason := item.get("field_issues", {}).get(key):
+            if reason:
                 note += f"\nНа проверке — {reason}."
             if reported is not None and reported != result:
-                note += f"\nВ заявке или прежней таблице указано {reported}."
+                note += f"\nСверка с анкетой: указано {reported}, в базе подтверждено {result if result is not None else 'нет данных'}."
+            if confirmation:
+                note += f"\nРешение организатора: {confirmation}."
             ws.cell(row_no, bonus_columns[key]).comment = Comment(note, "KM_track", width=350, height=120)
             if result is None:
-                verdict = "НЕТ ДАННЫХ"
+                verdict = "НЕТ ДАННЫХ" + (f": {reason}" if reason else "")
+            elif confirmation:
+                verdict = f"ПОДТВЕРЖДЕНО: в анкете {reported}, по БД {result}. {confirmation}"
             elif reported is not None and reported != result:
                 verdict = f"РАСХОЖДЕНИЕ: {reported} → {result}"
-            elif messages:
-                verdict = "ПРОВЕРИТЬ"
+            elif reason:
+                verdict = f"ПРОВЕРИТЬ: {reason}"
             else:
                 verdict = "совпадает / рассчитано"
             review.append([item["fio"], values[COL_FORMAT], label, result if result is not None else "",
-                           reported if reported is not None else "", source, "; ".join(messages) or verdict,
+                           reported if reported is not None else "", source, verdict,
                            item.get("entry_id")])
-            if result is None or messages or (reported is not None and reported != result):
+            if result is None or reason or (reported is not None and reported != result):
                 for cell in review[review.max_row]:
                     cell.fill = bad_fill if result is None else warn_fill
 

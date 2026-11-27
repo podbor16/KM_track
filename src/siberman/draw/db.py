@@ -133,6 +133,18 @@ def load_balance_decisions(conn, entry_ids: list[int]) -> dict[int, dict]:
         return {row["entry_id"]: row for row in cur.fetchall()}
 
 
+def load_entry_chance_reviews(conn, entry_ids: list[int]) -> dict[tuple[int, str], dict]:
+    if not entry_ids:
+        return {}
+    marks = ", ".join(["%s"] * len(entry_ids))
+    with conn.cursor(dictionary=True, buffered=True) as cur:
+        cur.execute(
+            f"SELECT entry_id, field, confirmed_value, note FROM siberman_entry_chance_reviews "
+            f"WHERE entry_id IN ({marks})", entry_ids
+        )
+        return {(row["entry_id"], row["field"]): row for row in cur.fetchall()}
+
+
 def load_picks(conn, year: int) -> list[dict]:
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT *, UNIX_TIMESTAMP(created_at) AS created_at_epoch "

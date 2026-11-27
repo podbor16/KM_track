@@ -82,6 +82,7 @@ jobs:
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/020_external_start_links.sql
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/021_draw_archive_results.sql
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/022_draw_balance_decisions.sql
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/023_entry_chance_reviews.sql
 
             # Verify
             echo "=== Tables ==="

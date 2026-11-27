@@ -86,12 +86,16 @@ def test_confirmed_relay_links_count_once_per_event_without_assigning_team_birth
 
 def test_chance_draft_writes_external_values_and_requires_review_for_unverified_starts(monkeypatch):
     entry = dict(NAME, id=3, birthdate=DOB, format="relay", city="Красноярск - Москва", gender="M",
-                 raw={"222_starts": "1", "24h_starts": "2", "tattoo": "нет"})
+                 raw={"222_starts": "1", "24h_starts": "2", "tattoo": "нет",
+                      "siberman_relay_starts": "2"})
     monkeypatch.setattr(service, "_connect", Mock())
     monkeypatch.setattr(service.edb, "admitted_for_draw", lambda conn, year: [entry])
     monkeypatch.setattr(service.ddb, "load_applicants", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_archive_results", lambda conn, year: [])
     monkeypatch.setattr(service.ddb, "load_balance_decisions", lambda conn, ids: {})
+    monkeypatch.setattr(service.ddb, "load_entry_chance_reviews", lambda conn, ids: {
+        (3, "starts_relay"): {"confirmed_value": 1, "note": "Подтверждён старт по протоколу"}
+    })
     monkeypatch.setattr(service.pdb, "get_persons", lambda conn, ids: {7: {"city_manual": "Красноярск"}})
     monkeypatch.setattr(service.ddb, "load_chance_history", lambda conn, year: {
         2026: {"applicants": [{"id": 9, "person_id": 7, "draw_accumulated": 2, "payment_status": ""}],
@@ -121,6 +125,8 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     assert cells[READY_COLUMN].value == "ПРОВЕРИТЬ"
     assert sheet.max_row == 2
     assert "2025" in cells[EXTRA_COLS["starts_relay"]].comment.text
+    assert "Сверка с анкетой: указано 2, в базе подтверждено 1" in cells[EXTRA_COLS["starts_relay"]].comment.text
+    assert "Решение организатора" in cells[EXTRA_COLS["starts_relay"]].comment.text
     assert "Подтверждены старты за 2026" in cells[EXTRA_COLS["duathlon_222"]].comment.text
     assert "возможные старты без даты рождения за 2026" in cells[EXTRA_COLS["race_24h"]].comment.text
     accumulated_note = cells[EXTRA_COLS["draw_accumulated"]].comment.text
@@ -130,6 +136,9 @@ def test_chance_draft_writes_external_values_and_requires_review_for_unverified_
     assert "тату Siberman нет" in cells[EXTRA_COLS["tattoo"]].comment.text
     assert cells[COL_EXTRA].comment and cells[COL_TOTAL].comment
     assert parse_applicants(data)[1]
+    review_rows = list(load_workbook(BytesIO(data), data_only=True)["Проверка расчёта"].values)
+    relay_review = next(row for row in review_rows if row[2] == EXTRA_COLS["starts_relay"])
+    assert "ПОДТВЕРЖДЕНО: в анкете 2, по БД 1" in relay_review[6]
 
 
 def test_archive_balance_starts_at_zero_and_waits_for_paid_race_result():
