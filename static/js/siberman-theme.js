@@ -10,9 +10,10 @@
 
     function restoreTheme() {
         try {
-            root.dataset.theme = localStorage.getItem(storageKey) === 'light' ? 'light' : 'dark';
+            root.dataset.theme = localStorage.getItem(storageKey) === 'dark' ? 'dark' : 'light';
         } catch {
             // Хранилище может быть отключено настройками браузера.
+            root.dataset.theme = 'light';
         }
     }
     restoreTheme();
