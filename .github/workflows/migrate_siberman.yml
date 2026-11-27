@@ -80,6 +80,7 @@ jobs:
             # Подтверждённые связи с реестром участников
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/019_draw_identities.sql
             mysql -u root siberman < /opt/km_track/src/siberman/migrations/020_external_start_links.sql
+            mysql -u root siberman < /opt/km_track/src/siberman/migrations/021_draw_archive_results.sql
 
             # Verify
             echo "=== Tables ==="
