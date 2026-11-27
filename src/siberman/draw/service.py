@@ -29,7 +29,9 @@ from src.siberman.draw.chances import (
     build_workbook as build_chances_workbook, external_start_bonus, form_reported, load_localities,
     local_value, next_accumulated,
 )
-from src.siberman.draw.importer import diff_applicants, import_report, parse_applicants, parse_contacts, source_contact_rows
+from src.siberman.draw.importer import (
+    diff_applicants, fio_key, import_report, parse_applicants, parse_contacts, source_contact_rows,
+)
 from src.siberman.draw.logic import (
     CATEGORIES, CATEGORY_LABELS, ROUND_LABELS, build_lists, category_of, check_pick,
     in_round_pool, placement, round_counters,
@@ -383,9 +385,8 @@ def admin_state(year: int) -> dict:
     conn = _connect()
     try:
         snap = _snapshot(conn, year)
-        contacts = ddb.entry_contacts(conn, year)
-        contacts_count = sum(bool(c and (c["email"] or c["phone"])) for c in (
-            contact_for(a, contacts) for a in snap["applicants"]))
+        contacts = _billing_contacts(conn, year, snap["applicants"])
+        contacts_count = sum(bool(c["email"] or c["phone"]) for c in contacts.values())
     finally:
         conn.close()
     cfg, rnd = snap["config"], snap["config"]["current_round"]
@@ -519,6 +520,41 @@ EXPORT_COLUMNS = (("category", "Зачёт", 12), ("position", "№", 5), ("sect
                   ("round", "Раунд", 14))
 
 
+def _billing_contacts(conn, year: int, applicants: list[dict]) -> dict:
+    """Контакты по ID строки. Для 2028 доступен архив CSV, загруженный до появления ID заявок."""
+    entries = ddb.entry_contacts(conn, year)
+    contacts = {a["id"]: entries[a["entry_id"]] for a in applicants if a.get("entry_id") in entries}
+    if year != 2028 or not any(a.get("entry_id") is None for a in applicants):
+        return contacts
+
+    archive = ddb.load_contacts(conn, year)
+    if not archive:
+        return contacts
+
+    keys_by_id = {
+        a["id"]: {(a["format"], fio_key(a["surname"], a["name"])),
+                  (a["format"], fio_key(a["name"], a["surname"]))}
+        for a in applicants
+    }
+    counts = Counter(key for keys in keys_by_id.values() for key in keys)
+    people = ddb.person_ids_by_key(conn)
+    for a in applicants:
+        if a.get("entry_id") is not None:
+            continue
+        person_keys = {plain_key(a["surname"], a["name"]), plain_key(a["name"], a["surname"])}
+        person_ids = {people[key] for key in person_keys & people.keys()}
+        if None in person_ids or len(person_ids) > 1:
+            continue
+        if a.get("person_id") is not None and person_ids and a["person_id"] not in person_ids:
+            continue
+        matches = keys_by_id[a["id"]] & archive.keys()
+        if len(matches) == 1:
+            key = next(iter(matches))
+            if counts[key] == 1:
+                contacts[a["id"]] = archive[key]
+    return contacts
+
+
 def import_contacts(year: int, file_bytes: bytes, user: str = "") -> dict:
     """Update contacts from Tilda only on existing source entries with the same tranid."""
     contacts, report = parse_contacts(file_bytes)
@@ -536,9 +572,9 @@ def import_contacts(year: int, file_bytes: bytes, user: str = "") -> dict:
                 updated += 1
         linked = ddb.entry_contacts(conn, year)
         ddb.update_texts(conn, [{**_texts(a, linked), "id": a["id"]} for a in snap["applicants"]])
-        rows = _payment_rows(snap, linked)
-        return {**report, "updated": updated, "matched": sum(1 for a in snap["applicants"] if (
-                    (contact_for(a, linked) or {}).get("email") or (contact_for(a, linked) or {}).get("phone"))),
+        billing = _billing_contacts(conn, year, snap["applicants"])
+        rows = _payment_rows(snap, billing)
+        return {**report, "updated": updated, "matched": sum(bool(c["email"] or c["phone"]) for c in billing.values()),
                 "applicants": len(snap["applicants"]),
                 "missing": [r["fio"] for r in rows if not r["email"] and not r["phone"]]}
     return _write(year, op)
@@ -553,7 +589,7 @@ def _payment_rows(snap: dict, contacts: dict) -> list[dict]:
             if r["section"] == "waitlist" and r["payment_status"] != "pending":
                 continue
             a = by_id[r["applicant_id"]]
-            ct = contact_for(a, contacts) or {"email": "", "phone": ""}
+            ct = contacts.get(a["id"], {"email": "", "phone": ""})
             out.append({"category": CATEGORY_LABELS[c], "position": r["position"],
                         "section": SECTION_LABELS[r["section"]], "fio": _fio(a), "city": a["city"],
                         "email": ct["email"], "phone": ct["phone"], "payment": PAYMENT_LABELS[a["payment_status"]],
@@ -566,7 +602,7 @@ def payment_rows(year: int) -> list[dict]:
     conn = _connect()
     try:
         snap = _snapshot(conn, year)
-        contacts = ddb.entry_contacts(conn, year)
+        contacts = _billing_contacts(conn, year, snap["applicants"])
     finally:
         conn.close()
     return _payment_rows(snap, contacts)
@@ -581,12 +617,15 @@ def payment_export(year: int) -> bytes:
     for cell in ws[1]:
         cell.font = Font(bold=True)
     keys = [k for k, _, _ in EXPORT_COLUMNS]
+    contact_columns = [keys.index(k) + 1 for k in ("email", "phone")]
     missing = PatternFill("solid", fgColor="FFF3C4")
     for r in payment_rows(year):
         ws.append([r[k] for k in keys])
-        if not r["email"] and not r["phone"]:
-            for k in ("email", "phone"):
-                ws.cell(row=ws.max_row, column=keys.index(k) + 1).fill = missing
+        for column in contact_columns:
+            cell = ws.cell(row=ws.max_row, column=column)
+            cell.data_type = "s"
+            if not r["email"] and not r["phone"]:
+                cell.fill = missing
     for i, (_, _, width) in enumerate(EXPORT_COLUMNS, start=1):
         ws.column_dimensions[get_column_letter(i)].width = width
     ws.freeze_panes = "A2"

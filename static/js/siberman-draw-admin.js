@@ -478,7 +478,7 @@ function reportHtml(d) {
 }
 
 function renderContactsInfo() {
-  $('contacts-info').textContent = `Строк жеребьёвки с привязанными контактами: ${S.contacts_count}`;
+  $('contacts-info').textContent = `Строк жеребьёвки с контактами для счетов: ${S.contacts_count}`;
 }
 
 async function uploadContacts() {
@@ -491,7 +491,7 @@ async function uploadContacts() {
     const miss = d.missing.length
       ? `<div class="msg msg-error" style="display:block">Нет контакта у ${d.missing.length}: ${d.missing.map(esc).join(', ')}</div>` : '';
     $('contacts-report').innerHTML = `${miss}<p>Строк в файле: ${d.rows}, людей: ${d.people} (повторных заявок: ${d.duplicates}`
-      + `${d.bad_format ? `, без формата: ${d.bad_format}` : ''}). Обновлено по ID заявок: ${d.updated}. Связанных строк: ${d.matched} из ${d.applicants}.</p>`;
+      + `${d.bad_format ? `, без формата: ${d.bad_format}` : ''}). Обновлено по ID заявок: ${d.updated}. Строк с контактами для счетов: ${d.matched} из ${d.applicants}.</p>`;
     msg('Выгрузка обработана');
     await load(true);
     renderContactsInfo();
